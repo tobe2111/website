@@ -57,14 +57,27 @@ export function getUserByEmail(email) {
   return db.prepare("SELECT * FROM users WHERE email = ?").get(email);
 }
 
-export function createUser({ email, password, name, role = "MERCHANT" }) {
+export function createUser({ email, password, name, role = "MERCHANT", associationId = null }) {
   const { hash, salt } = hashPassword(password);
   const info = db
     .prepare(
-      "INSERT INTO users (email, password_hash, salt, name, role) VALUES (?, ?, ?, ?, ?)"
+      "INSERT INTO users (email, password_hash, salt, name, role, association_id) VALUES (?, ?, ?, ?, ?, ?)"
     )
-    .run(email.toLowerCase().trim(), hash, salt, name.trim(), role);
+    .run(email.toLowerCase().trim(), hash, salt, name.trim(), role, associationId);
   return getUserById(info.lastInsertRowid);
+}
+
+// 역할 상수 및 판별 헬퍼
+export const ROLES = { SUPERADMIN: "SUPERADMIN", ADMIN: "ADMIN", MERCHANT: "MERCHANT" };
+export const isSuperAdmin = (u) => !!u && u.role === ROLES.SUPERADMIN;
+export const isAdmin = (u) => !!u && (u.role === ROLES.ADMIN || u.role === ROLES.SUPERADMIN);
+
+// 사용자가 특정 상인회를 관리할 수 있는지 (슈퍼관리자는 전체, 관리자는 소속만)
+export function canManageAssociation(user, associationId) {
+  if (!user) return false;
+  if (user.role === ROLES.SUPERADMIN) return true;
+  if (user.role === ROLES.ADMIN) return user.association_id === associationId;
+  return false;
 }
 
 // 요청에서 현재 사용자 해석 (라우터가 req.user 로 주입)
