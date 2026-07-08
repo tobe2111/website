@@ -12,12 +12,34 @@ import { esc } from "./util.js";
 const GLOBAL = [
   ["GET", "/login", pages.loginForm],
   ["POST", "/login", api.login],
-  ["POST", "/logout", api.logout],
+  ["POST", "/logout", api.logout, "USER"],
+  ["GET", "/account", pages.account, "USER"],
+  ["POST", "/account/password", api.changePassword, "USER"],
 ];
 const TENANT = [
   ["GET", "/", pages.home],
   ["GET", "/businesses", pages.businesses],
   ["GET", "/business/:slug", pages.businessDetail],
+  ["GET", "/map", pages.mapPage],
+  ["GET", "/notices", pages.notices],
+  ["GET", "/notices/:id", pages.noticeDetail],
+  ["GET", "/events", pages.events],
+  ["GET", "/register", pages.registerForm],
+  ["POST", "/register", api.register],
+  ["GET", "/board", pages.board, "MEMBER"],
+  ["POST", "/board", api.createPost, "MEMBER"],
+  ["GET", "/board/:id", pages.postDetail, "MEMBER"],
+  ["GET", "/board/:id/edit", pages.editPost, "MEMBER"],
+  ["POST", "/board/:id/edit", api.updatePost, "MEMBER"],
+  ["POST", "/board/:id/comment", api.createComment, "MEMBER"],
+  ["POST", "/board/:id/comment/:cid/delete", api.deleteComment, "MEMBER"],
+  ["POST", "/board/:id/delete", api.deletePost, "MEMBER"],
+  ["POST", "/board/:id/pin", api.pinPost, "MEMBER"],
+  ["GET", "/dashboard", pages.dashboard, "MERCHANT"],
+  ["POST", "/dashboard/business", api.updateBusiness, "MERCHANT"],
+  ["POST", "/dashboard/media", api.uploadMedia, "MERCHANT"],
+  ["POST", "/dashboard/media/embed", api.addVideoEmbed, "MERCHANT"],
+  ["POST", "/dashboard/media/:id/delete", api.deleteMedia, "MERCHANT"],
 ];
 
 function matchRoute(routes, method, path) {

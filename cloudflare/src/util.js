@@ -30,3 +30,15 @@ export const clip = (s, n = 160) => {
   s = String(s || "").replace(/\s+/g, " ").trim();
   return s.length > n ? s.slice(0, n - 1) + "…" : s;
 };
+
+// 매직바이트로 이미지 형식 판별 (선언 MIME 불신). Uint8Array 입력.
+export function sniffImage(b) {
+  if (!b || b.length < 12) return null;
+  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return "image/png";
+  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "image/jpeg";
+  if (b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x38) return "image/gif";
+  if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) return "image/webp";
+  return null;
+}
+export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+export const MAX_IMAGE_BYTES = 8 * 1024 * 1024;

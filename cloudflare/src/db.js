@@ -99,6 +99,91 @@ export async function addMedia(db, { businessId, kind, filename = "", poster = "
   return getMedia(db, await lastId(db));
 }
 
+// ----- Notices -----
+export const listNotices = (db, aid, limit = null) =>
+  all(db, "SELECT * FROM notices WHERE association_id=? ORDER BY pinned DESC, created_at DESC" + (limit ? ` LIMIT ${Number(limit)}` : ""), aid);
+export const getNotice = (db, id) => first(db, "SELECT * FROM notices WHERE id=?", id);
+export const distinctNoticeTags = (db, aid) =>
+  all(db, "SELECT tag, COUNT(*) AS n FROM notices WHERE association_id=? GROUP BY tag ORDER BY n DESC, tag", aid);
+export async function createNotice(db, { associationId, title, body, tag, image = "", pinned }) {
+  await run(db, "INSERT INTO notices (association_id, title, body, tag, image, pinned) VALUES (?,?,?,?,?,?)",
+    associationId, title, body || "", tag || "안내", image || "", pinned ? 1 : 0);
+  return getNotice(db, await lastId(db));
+}
+export const deleteNotice = (db, id) => run(db, "DELETE FROM notices WHERE id=?", id);
+export async function listNoticesPaged(db, aid, { page = 1, perPage = 20, q = null, tag = null } = {}) {
+  let w = " WHERE association_id = ?"; const a = [aid];
+  if (tag) { w += " AND tag = ?"; a.push(tag); }
+  if (q) { const l = likeParam(q); w += " AND (title LIKE ? ESCAPE '\\' OR body LIKE ? ESCAPE '\\')"; a.push(l, l); }
+  const total = (await first(db, "SELECT COUNT(*) AS n FROM notices" + w, ...a)).n;
+  const pages = Math.max(1, Math.ceil(total / perPage));
+  const p = Math.min(Math.max(1, page | 0 || 1), pages);
+  const items = await all(db, "SELECT * FROM notices" + w + " ORDER BY pinned DESC, created_at DESC LIMIT ? OFFSET ?", ...a, perPage, (p - 1) * perPage);
+  return { items, total, page: p, pages };
+}
+
+// ----- Events -----
+export const listEvents = (db, aid, upcomingOnly = false) => upcomingOnly
+  ? all(db, "SELECT * FROM events WHERE association_id=? AND event_date >= date('now') ORDER BY event_date ASC", aid)
+  : all(db, "SELECT * FROM events WHERE association_id=? ORDER BY event_date DESC", aid);
+export const getEvent = (db, id) => first(db, "SELECT * FROM events WHERE id=?", id);
+export async function createEvent(db, { associationId, title, event_date, place, description }) {
+  await run(db, "INSERT INTO events (association_id, title, event_date, place, description) VALUES (?,?,?,?,?)",
+    associationId, title, event_date, place || "", description || "");
+  return getEvent(db, await lastId(db));
+}
+export const deleteEvent = (db, id) => run(db, "DELETE FROM events WHERE id=?", id);
+
+// ----- Board -----
+export const getPost = (db, id) =>
+  first(db, "SELECT p.*, u.name AS author_name FROM posts p LEFT JOIN users u ON u.id=p.author_id WHERE p.id=?", id);
+export async function createPost(db, { associationId, authorId, title, body, image = "" }) {
+  await run(db, "INSERT INTO posts (association_id, author_id, title, body, image) VALUES (?,?,?,?,?)",
+    associationId, authorId, title, body || "", image || "");
+  return getPost(db, await lastId(db));
+}
+export const updatePost = (db, id, { title, body, image }) =>
+  run(db, "UPDATE posts SET title=?, body=?, image=?, updated_at=datetime('now') WHERE id=?", title, body || "", image || "", id);
+export const setPostPinned = (db, id, p) => run(db, "UPDATE posts SET pinned=? WHERE id=?", p ? 1 : 0, id);
+export const deletePost = (db, id) => run(db, "DELETE FROM posts WHERE id=?", id);
+export async function listPostsPaged(db, aid, { page = 1, perPage = 15, q = null } = {}) {
+  let w = " WHERE p.association_id = ?"; const a = [aid];
+  let cw = " WHERE association_id = ?"; const ca = [aid];
+  if (q) { const l = likeParam(q); w += " AND (p.title LIKE ? ESCAPE '\\' OR p.body LIKE ? ESCAPE '\\')"; a.push(l, l); cw += " AND (title LIKE ? ESCAPE '\\' OR body LIKE ? ESCAPE '\\')"; ca.push(l, l); }
+  const total = (await first(db, "SELECT COUNT(*) AS n FROM posts" + cw, ...ca)).n;
+  const pages = Math.max(1, Math.ceil(total / perPage));
+  const p = Math.min(Math.max(1, page | 0 || 1), pages);
+  const items = await all(db, `SELECT p.*, u.name AS author_name,
+      (SELECT COUNT(*) FROM comments c WHERE c.post_id=p.id) AS comment_count,
+      (SELECT COUNT(*) FROM post_images pi WHERE pi.post_id=p.id) AS image_count,
+      (SELECT pi.thumb FROM post_images pi WHERE pi.post_id=p.id ORDER BY pi.id LIMIT 1) AS pi_thumb,
+      (SELECT pi.filename FROM post_images pi WHERE pi.post_id=p.id ORDER BY pi.id LIMIT 1) AS pi_file
+    FROM posts p LEFT JOIN users u ON u.id=p.author_id` + w + " ORDER BY p.pinned DESC, p.created_at DESC LIMIT ? OFFSET ?", ...a, perPage, (p - 1) * perPage);
+  return { items, total, page: p, pages };
+}
+export async function addPostImages(db, postId, images) {
+  for (const im of images) await run(db, "INSERT INTO post_images (post_id, filename, thumb) VALUES (?,?,?)", postId, im.filename, im.thumb || "");
+}
+export const listPostImages = (db, postId) => all(db, "SELECT * FROM post_images WHERE post_id=? ORDER BY id ASC", postId);
+export const deletePostImage = (db, id) => run(db, "DELETE FROM post_images WHERE id=?", id);
+export const listComments = (db, postId) =>
+  all(db, "SELECT c.*, u.name AS author_name FROM comments c LEFT JOIN users u ON u.id=c.author_id WHERE c.post_id=? ORDER BY c.created_at ASC", postId);
+export const getComment = (db, id) => first(db, "SELECT * FROM comments WHERE id=?", id);
+export async function createComment(db, { postId, authorId, body }) {
+  await run(db, "INSERT INTO comments (post_id, author_id, body) VALUES (?,?,?)", postId, authorId, body);
+  return getComment(db, await lastId(db));
+}
+export const deleteComment = (db, id) => run(db, "DELETE FROM comments WHERE id=?", id);
+
+// ----- Notifications -----
+export async function createNotification(db, { associationId = null, kind, message, link = "" }) {
+  await run(db, "INSERT INTO notifications (association_id, kind, message, link) VALUES (?,?,?,?)", associationId, kind, message, link);
+}
+export const listNotifications = (db, aid, limit = 20) =>
+  all(db, "SELECT * FROM notifications WHERE association_id=? ORDER BY is_read ASC, created_at DESC LIMIT ?", aid, limit);
+export const unreadCount = async (db, aid) => (await first(db, "SELECT COUNT(*) AS n FROM notifications WHERE association_id=? AND is_read=0", aid)).n;
+export const markAllNotificationsRead = (db, aid) => run(db, "UPDATE notifications SET is_read=1 WHERE association_id=?", aid);
+
 // ----- Stats -----
 export async function stats(db, aid) {
   const q = async (sql) => (await first(db, sql, aid)).n;

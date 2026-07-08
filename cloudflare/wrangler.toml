@@ -27,7 +27,10 @@ bucket_name = "seocho-media"
 [vars]
 PUBLIC_SCHEME = "https"
 # BASE_DOMAIN = "example.com"        # 서브도메인 방식 쓸 때
-# NAVER_MAP_CLIENT_ID = ""            # 지도 키(공개 도메인 화이트리스트로 보호)
-# NAVER_MAP_PARAM = "ncpClientId"
+# 네이버 지도 Client ID (도메인 화이트리스트로 보호되는 공개 값 — 콘솔에 배포 도메인 등록 필요).
+# ⚠️ Client Secret 은 지도에 불필요하며 여기에 절대 넣지 마세요.
+NAVER_MAP_CLIENT_ID = "8nkkau8yrp"
+# 지도가 안 뜨면 ncpClientId <-> ncpKeyId 로 바꿔보세요(콘솔 버전 차이).
+NAVER_MAP_PARAM = "ncpClientId"
 # R2 퍼블릭 URL(사진 공개 접근). R2 버킷에 공개 도메인 연결 후 넣으세요.
 # MEDIA_PUBLIC_BASE = "https://media.example.com"
