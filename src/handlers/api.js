@@ -8,7 +8,11 @@ import * as M from "../models.js";
 import * as A from "../associations.js";
 import * as storage from "../storage.js";
 import * as media from "../media.js";
+import { makeSemaphore } from "../semaphore.js";
 import { config } from "../config.js";
+
+// 동시 업로드 제한 (대용량 바디 버퍼링의 메모리 사용을 바운드)
+const uploadSem = makeSemaphore(config.maxConcurrentUploads);
 import { SECTION_CATALOG, parseLayout } from "../homeLayout.js";
 import { postLoginPath } from "./pages.js";
 
@@ -104,6 +108,16 @@ export async function uploadMedia(req, res, { assoc }) {
   const base = baseOf(assoc);
   const b = M.getBusinessByOwner(req.user.id);
   if (!b || b.association_id !== assoc.id) return back(res, base + "/dashboard", "업체를 찾을 수 없습니다.", true);
+
+  await uploadSem.acquire();
+  try {
+    return await doUpload(req, res, { assoc, base, b });
+  } finally {
+    uploadSem.release();
+  }
+}
+
+async function doUpload(req, res, { assoc, base, b }) {
   let buf;
   try { buf = await readBody(req, config.maxVideoBytes + 1024 * 1024); }
   catch { return back(res, base + "/dashboard", "파일이 너무 큽니다. (영상 최대 120MB)", true); }

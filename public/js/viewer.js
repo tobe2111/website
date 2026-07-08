@@ -77,18 +77,24 @@
     overlay.querySelector(".viewer-next").style.display = multi ? "" : "none";
   }
 
+  var lastFocused = null;
+  var closeBtn = overlay.querySelector(".viewer-close");
+
   function open(i) {
     idx = i;
+    lastFocused = document.activeElement;
     overlay.classList.add("open");
     overlay.setAttribute("aria-hidden", "false");
     document.body.style.overflow = "hidden";
     render();
+    closeBtn.focus();
   }
   function close() {
     overlay.classList.remove("open");
     overlay.setAttribute("aria-hidden", "true");
     document.body.style.overflow = "";
     clearStage();
+    if (lastFocused && lastFocused.focus) lastFocused.focus(); // 포커스 복원
   }
   function go(delta) {
     idx = (idx + delta + items.length) % items.length;
@@ -106,9 +112,19 @@
   });
   document.addEventListener("keydown", function (e) {
     if (!overlay.classList.contains("open")) return;
-    if (e.key === "Escape") close();
-    else if (e.key === "ArrowLeft") go(-1);
-    else if (e.key === "ArrowRight") go(1);
+    if (e.key === "Escape") { close(); return; }
+    if (e.key === "ArrowLeft") { go(-1); return; }
+    if (e.key === "ArrowRight") { go(1); return; }
+    if (e.key === "Tab") {
+      // 포커스 트랩: 오버레이 내부 포커스 가능한 요소 순환
+      var f = Array.prototype.slice
+        .call(overlay.querySelectorAll("button, video, [href], [tabindex]"))
+        .filter(function (el) { return el.offsetParent !== null || el.tagName === "VIDEO"; });
+      if (!f.length) return;
+      var first = f[0], last = f[f.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
   });
 
   // 모바일 스와이프
