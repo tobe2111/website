@@ -12,7 +12,12 @@ export function layout({ title, assoc, base = "", user = null, body, activeNav =
   return `<!doctype html><html lang="ko"><head>
 <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>${esc(title ? title + " · " : "")}${brand}</title>${meta}
-<link rel="stylesheet" href="/css/app.css" /></head>
+<link rel="stylesheet" href="/css/app.css" />
+<link rel="manifest" href="/manifest.webmanifest" />
+<meta name="theme-color" content="${esc(assoc && assoc.brand_color ? assoc.brand_color : "#0b6e4f")}" />
+<link rel="icon" href="/img/icon.svg" />
+<link rel="apple-touch-icon" href="/img/icon.svg" />
+<meta name="apple-mobile-web-app-capable" content="yes" /></head>
 <body>
 <header class="site-header" id="siteHeader">
   <div class="container header-inner">

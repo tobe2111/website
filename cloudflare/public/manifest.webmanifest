@@ -1,0 +1,14 @@
+{
+  "name": "상인회 플랫폼",
+  "short_name": "상인회",
+  "description": "우리 동네 상인회 — 점포 안내·지도·공지·게시판·전자서명",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0b6e4f",
+  "lang": "ko",
+  "icons": [
+    { "src": "/img/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

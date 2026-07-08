@@ -32,5 +32,8 @@ PUBLIC_SCHEME = "https"
 NAVER_MAP_CLIENT_ID = "8nkkau8yrp"
 # 지도가 안 뜨면 ncpClientId <-> ncpKeyId 로 바꿔보세요(콘솔 버전 차이).
 NAVER_MAP_PARAM = "ncpClientId"
+# Turnstile(무료 봇 차단) — 대시보드에서 발급한 사이트키를 넣으면 자동 활성화.
+# 시크릿은 `wrangler secret put TURNSTILE_SECRET` 로 등록. 둘 다 없으면 캡차 비활성.
+# TURNSTILE_SITE_KEY = "0x4AAAAAAA..."
 # R2 퍼블릭 URL(사진 공개 접근). R2 버킷에 공개 도메인 연결 후 넣으세요.
 # MEDIA_PUBLIC_BASE = "https://media.example.com"

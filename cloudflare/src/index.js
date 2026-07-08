@@ -15,6 +15,11 @@ const GLOBAL = [
   ["POST", "/logout", api.logout, "USER"],
   ["GET", "/account", pages.account, "USER"],
   ["POST", "/account/password", api.changePassword, "USER"],
+  ["POST", "/account/logout-all", api.logoutAll, "USER"],
+  ["GET", "/forgot", pages.forgotForm],
+  ["POST", "/forgot", api.forgotPassword],
+  ["GET", "/sitemap.xml", pages.sitemap],
+  ["GET", "/robots.txt", pages.robots],
   ["GET", "/verify", pages.verifyPage],
   ["GET", "/verify/:code", pages.verifyPage],
   ["GET", "/super", pages.superConsole, "SUPERADMIN"],
@@ -55,6 +60,8 @@ const TENANT = [
   ["POST", "/admin/event", api.adminCreateEvent, "ADMIN"],
   ["POST", "/admin/event/:id/delete", api.adminDeleteEvent, "ADMIN"],
   ["POST", "/admin/settings", api.adminSettings, "ADMIN"],
+  ["POST", "/admin/layout", api.adminSaveLayout, "ADMIN"],
+  ["POST", "/admin/layout/reset", api.adminResetLayout, "ADMIN"],
   ["POST", "/admin/notifications/read", api.adminReadNotifications, "ADMIN"],
   ["POST", "/admin/user/:id/reset-password", api.adminResetUserPassword, "ADMIN"],
   ["GET", "/admin/members.csv", pages.adminExportMembers, "ADMIN"],
@@ -97,12 +104,13 @@ function resolveTenant(env, hostname, pathname) {
 function securityHeaders(env) {
   const naver = env.NAVER_MAP_CLIENT_ID ? " https://oapi.map.naver.com" : "";
   const naverImg = env.NAVER_MAP_CLIENT_ID ? " https://*.pstatic.net https://*.map.naver.com" : "";
+  const ts = env.TURNSTILE_SITE_KEY ? " https://challenges.cloudflare.com" : "";
   const csp = [
     "default-src 'self'", "base-uri 'self'", "object-src 'none'", "frame-ancestors 'self'", "form-action 'self'",
-    `script-src 'self'${naver}`, "style-src 'self' 'unsafe-inline'",
+    `script-src 'self'${naver}${ts}`, "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: https:", "media-src 'self' https:",
-    "frame-src 'self' https://www.youtube-nocookie.com https://www.youtube.com https://www.instagram.com https://tv.naver.com",
-    `connect-src 'self'${naver}${naverImg}`, "font-src 'self'",
+    `frame-src 'self' https://www.youtube-nocookie.com https://www.youtube.com https://www.instagram.com https://tv.naver.com${ts}`,
+    `connect-src 'self'${naver}${naverImg}${ts}`, "font-src 'self'",
   ].join("; ");
   return {
     "X-Content-Type-Options": "nosniff", "X-Frame-Options": "SAMEORIGIN",
@@ -140,8 +148,8 @@ async function handle(request, env) {
   const isProd = (env.PUBLIC_SCHEME || "https") === "https";
   setMediaBase(env.MEDIA_PUBLIC_BASE || "");
 
-  // 정적 자산 (css/js/favicon 등)
-  if (/^\/(css|js|img|favicon)/.test(pathname) || pathname === "/robots.txt") {
+  // 정적 자산 (css/js/img/아이콘/PWA)
+  if (/^\/(css|js|img|favicon)/.test(pathname) || pathname === "/manifest.webmanifest" || pathname === "/sw.js") {
     if (env.ASSETS) return env.ASSETS.fetch(request);
   }
   // R2 미디어 서빙 (퍼블릭 base 미설정 시 워커 경유)

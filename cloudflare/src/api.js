@@ -7,6 +7,7 @@ import * as storage from "./storage.js";
 import { parseEmbed } from "./embed.js";
 import { cap, sniffImage, EMAIL_RE, MAX_IMAGE_BYTES, slugify } from "./util.js";
 import { contentHash, sealRecord, newVerifyCode } from "./esign.js";
+import { turnstileVerify } from "./turnstile.js";
 
 const BOARD_MAX_IMAGES = 6;
 const MAX_EMBEDS = 30;
@@ -51,6 +52,7 @@ function recordFail(ip) {
 export async function login(ctx) {
   const { db, form, env, addCookie, isProd, ip } = ctx;
   if (rateLimited(ip)) return back("/login", "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해 주세요.", true);
+  if (!(await turnstileVerify(env, form.get("cf-turnstile-response"), ip))) return back("/login", "봇 방지 확인에 실패했습니다. 다시 시도해 주세요.", true);
   const email = (form.get("email") || "").toLowerCase().trim();
   const user = email ? await D.getUserByEmail(db, email) : null;
   if (!user || !(await verifyPassword(form.get("password") || "", user.salt, user.password_hash))) {
@@ -69,7 +71,8 @@ export async function logout(ctx) {
 
 // ---------- 회원가입 ----------
 export async function register(ctx) {
-  const { db, env, form, addCookie, isProd, base, assoc } = ctx;
+  const { db, env, form, addCookie, isProd, base, assoc, ip } = ctx;
+  if (!(await turnstileVerify(env, form.get("cf-turnstile-response"), ip))) return back(base + "/register", "봇 방지 확인에 실패했습니다. 다시 시도해 주세요.", true);
   const name = cap((form.get("name") || "").trim(), 60);
   const email = cap((form.get("email") || "").toLowerCase().trim(), 120);
   const password = form.get("password") || "";
@@ -354,4 +357,48 @@ export async function superToggleAssociation(ctx) {
   if (!a) return back("/super", "상인회를 찾을 수 없습니다.", true);
   await D.setAssociationActive(db, a.id, a.active ? 0 : 1);
   return back("/super", `'${a.name}' 상태를 변경했습니다.`);
+}
+
+// ---------- 비밀번호 찾기 (내부 알림, 이메일 없이) ----------
+export async function forgotPassword(ctx) {
+  const { db, form } = ctx;
+  const email = (form.get("email") || "").toLowerCase().trim();
+  const user = email ? await D.getUserByEmail(db, email) : null;
+  if (user && user.association_id) {
+    const a = await D.getAssociationById(db, user.association_id);
+    await D.createNotification(db, { associationId: user.association_id, kind: "password_reset", message: `비밀번호 재설정 요청: ${user.name} (${user.email})`, link: a ? `/t/${a.slug}/admin` : "" });
+  }
+  return back("/forgot", "요청이 접수되었습니다. 관리자가 확인 후 임시 비밀번호를 안내해 드립니다.");
+}
+
+// ---------- 전 기기 로그아웃 ----------
+export async function logoutAll(ctx) {
+  await D.bumpSessionVersion(ctx.db, ctx.user.id);
+  ctx.addCookie(clearSessionCookie());
+  return redirect("/login?msg=" + encodeURIComponent("모든 기기에서 로그아웃되었습니다."));
+}
+
+// ---------- 홈페이지 구성 저장/초기화 ----------
+export async function adminSaveLayout(ctx) {
+  const { db, form, base, assoc } = ctx;
+  const { SECTION_CATALOG } = await import("./homeLayout.js");
+  const order = (form.get("order") || "").split(",").map((s) => parseInt(s, 10)).filter((n) => !isNaN(n));
+  const built = [];
+  for (const i of order) {
+    const type = form.get(`ty_${i}`); const catFields = SECTION_CATALOG[type];
+    if (!catFields) continue;
+    const sec = { type, enabled: form.get(`en_${i}`) === "1" };
+    for (const f of catFields.fields) {
+      const key = `f_${i}_${f.key}`;
+      sec[f.key] = f.type === "bool" ? form.get(key) === "1" : cap(form.get(key) != null ? form.get(key) : "", 600);
+    }
+    built.push(sec);
+  }
+  if (!built.length) return back(base + "/admin", "구성을 해석할 수 없습니다.", true);
+  await D.saveHomeLayout(db, assoc.id, JSON.stringify(built));
+  return back(base + "/admin", "홈페이지 구성이 저장되었습니다.");
+}
+export async function adminResetLayout(ctx) {
+  await D.resetHomeLayout(ctx.db, ctx.assoc.id);
+  return back(ctx.base + "/admin", "홈페이지 구성을 기본값으로 초기화했습니다.");
 }

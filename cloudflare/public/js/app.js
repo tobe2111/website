@@ -45,3 +45,8 @@
     if (pr) { e.preventDefault(); window.print(); }
   });
 })();
+
+// PWA: 서비스 워커 등록 (실패해도 무해)
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", function () { navigator.serviceWorker.register("/sw.js").catch(function () {}); });
+}

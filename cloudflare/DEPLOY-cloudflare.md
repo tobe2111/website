@@ -88,7 +88,20 @@ R2 파일은 기본적으로 워커를 거쳐 `/media/...` 로 제공됩니다(�
 더 빠르게 하려면 R2 버킷에 **공개 도메인**을 연결하고 `wrangler.toml` 의
 `MEDIA_PUBLIC_BASE` 를 그 주소로 설정하세요(선택).
 
-## 6. 네이버 지도
+## 6. 봇 차단 (Turnstile · 선택, 무료)
+
+Cloudflare 대시보드 → **Turnstile** 에서 위젯을 만들어 **사이트키/시크릿**을 발급받으세요.
+- `wrangler.toml [vars]` 의 `TURNSTILE_SITE_KEY` 에 사이트키 입력
+- `wrangler secret put TURNSTILE_SECRET` 로 시크릿 등록
+
+설정하면 회원가입·로그인에 캡차가 **자동 활성화**됩니다(미설정 시 비활성, 정상 동작).
+
+## 7. PWA (설치형 앱)
+
+별도 설정 없이 이미 동작합니다. 모바일에서 사이트 접속 → "홈 화면에 추가" 하면
+앱처럼 실행되고, 정적 자산은 오프라인 캐시됩니다. 아이콘·매니페스트는 `public/` 에 포함.
+
+## 8. 네이버 지도
 
 `wrangler.toml [vars]` 의 `NAVER_MAP_CLIENT_ID` 는 이미 설정돼 있습니다.
 **네이버 클라우드 콘솔에서 배포된 도메인(위 workers.dev 또는 연결한 도메인)을

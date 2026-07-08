@@ -7,6 +7,8 @@ import { galleryItem } from "./media-render.js";
 import { providerLabel } from "./embed.js";
 import { verifySignature, publicKeyJwk, algorithm } from "./esign.js";
 import { text } from "./http.js";
+import { parseLayout, renderHome, SECTION_CATALOG } from "./homeLayout.js";
+import { turnstileWidget, turnstileScript } from "./turnstile.js";
 
 const CATEGORIES = ["음식점", "카페·디저트", "생활·서비스", "패션·잡화", "농수축산", "교육·문화", "기타"];
 const NOTICE_CATEGORIES = ["안내", "공지", "소식", "행사", "혜택", "긴급"];
@@ -27,24 +29,41 @@ async function businessCard(db, base, b) {
 
 export async function home(ctx) {
   const { db, assoc, base, user, csrf } = ctx;
+  const lay = parseLayout(assoc.home_layout, assoc.name);
   const { items } = await D.listBusinessesPaged(db, assoc.id, { perPage: 6 });
-  const cards = (await Promise.all(items.map((b) => businessCard(db, base, b)))).join("") || `<p class="empty">등록된 점포가 곧 표시됩니다.</p>`;
-  const body = `
-  <section class="hero"><div class="container">
-    <p class="hero-eyebrow">${esc(assoc.name)}</p>
-    <h1 class="hero-title">${esc(assoc.tagline)}</h1>
-    <p class="hero-lead">우리 동네 상권을 한곳에서. 가입 점포 안내·지도, 공지·소식, 회원 게시판, 전자서명까지.</p>
-    <div class="hero-actions">
-      <a href="${base}/businesses" class="btn btn-primary">가입 점포 보기</a>
-      <a href="${base}/map" class="btn btn-ghost">점포 지도</a>
-    </div>
-  </div></section>
-  <section class="section"><div class="container">
-    <div class="section-head"><p class="section-eyebrow">MEMBERS</p><h2 class="section-title">새로 가입한 점포</h2></div>
-    <div class="market-grid">${cards}</div>
-    <div class="section-more"><a href="${base}/businesses" class="btn btn-ghost btn-sm">전체 점포 보기 →</a></div>
-  </div></section>`;
+  const businessesHtml = (await Promise.all(items.map((b) => businessCard(db, base, b)))).join("") || `<p class="empty">등록된 점포가 곧 표시됩니다.</p>`;
+  const notices = await D.listNotices(db, assoc.id, 5);
+  const events = await D.listEvents(db, assoc.id, true);
+  const stats = await D.stats(db, assoc.id);
+  const eventsHtml = events.length ? events.map((e) => {
+    const d = e.event_date.slice(8, 10), mo = Number(e.event_date.slice(5, 7)) + "월";
+    return `<article class="event-card"><div class="event-date"><span class="d">${d}</span><span class="m">${mo}</span></div>
+      <div class="event-info"><h3>${esc(e.title)}</h3><p>${esc(e.description)}</p><span class="event-place">📍 ${esc(e.place)}</span></div></article>`;
+  }).join("") : `<p class="empty">예정된 행사가 없습니다.</p>`;
+  const body = renderHome(lay, { assoc, base, stats, businessesHtml, noticesHtml: noticeRows(base, notices), eventsHtml, loggedIn: !!user });
   return html(layout({ title: "", assoc, base, user, body, activeNav: `${base}/`, csrf, description: assoc.tagline }));
+}
+
+function layoutEditor(base, layoutArr) {
+  const rows = layoutArr.map((sec, i) => {
+    const cat = SECTION_CATALOG[sec.type];
+    const fields = cat.fields.map((f) => {
+      const val = sec[f.key], name = `f_${i}_${f.key}`;
+      if (f.type === "bool") return `<label class="check"><input type="checkbox" name="${name}" value="1"${val ? " checked" : ""} /> ${esc(f.label)}</label>`;
+      if (f.type === "textarea") return `<label class="mini-label">${esc(f.label)}<textarea name="${name}" rows="2">${esc(val || "")}</textarea></label>`;
+      return `<label class="mini-label">${esc(f.label)}<input type="text" name="${name}" value="${esc(val || "")}" /></label>`;
+    }).join("");
+    return `<div class="layout-row" data-index="${i}"><div class="layout-row-head">
+      <label class="check"><input type="checkbox" name="en_${i}" value="1"${sec.enabled ? " checked" : ""} /> <strong>${esc(cat.label)}</strong></label>
+      <input type="hidden" name="ty_${i}" value="${esc(sec.type)}" />
+      <span class="layout-move"><button type="button" class="move-btn" data-dir="up" aria-label="위로">▲</button><button type="button" class="move-btn" data-dir="down" aria-label="아래로">▼</button></span>
+    </div><div class="layout-fields">${fields}</div></div>`;
+  }).join("");
+  return `<form method="post" action="${base}/admin/layout" class="layout-editor" id="layoutEditor">
+    <input type="hidden" name="order" id="layoutOrder" value="${layoutArr.map((_, i) => i).join(",")}" />
+    <div id="layoutRows">${rows}</div>
+    <div class="layout-actions"><button type="submit" class="btn btn-primary btn-sm">홈페이지 구성 저장</button>
+      <button type="submit" formaction="${base}/admin/layout/reset" class="btn btn-ghost btn-sm" data-confirm="기본 구성으로 되돌릴까요?">기본 구성으로 초기화</button></div></form>`;
 }
 
 export async function businesses(ctx) {
@@ -96,16 +115,18 @@ export async function businessDetail(ctx) {
 }
 
 export function loginForm(ctx) {
-  const { query, csrf } = ctx;
+  const { env, query, csrf } = ctx;
   const body = `<section class="section page-top"><div class="container auth-wrap"><div class="auth-card">
     <h1 class="auth-title">로그인</h1><p class="auth-sub">상인회 회원·관리자 로그인</p>
     ${flash(query.get("msg") ? decodeURIComponent(query.get("msg")) : "", query.get("err") ? "err" : "ok")}
     <form method="post" action="/login" class="stack-form">
       <label>이메일<input type="email" name="email" required /></label>
       <label>비밀번호<input type="password" name="password" required /></label>
+      ${turnstileWidget(env)}
       <button class="btn btn-primary btn-block">로그인</button>
-    </form></div></div></section>`;
-  return html(layout({ title: "로그인", assoc: ctx.assoc, base: ctx.base, body, csrf }));
+    </form>
+    <p class="auth-note"><a href="/forgot">비밀번호를 잊으셨나요?</a></p></div></div></section>`;
+  return html(layout({ title: "로그인", assoc: ctx.assoc, base: ctx.base, body, csrf, scripts: turnstileScript(env) }));
 }
 
 const flashOf = (q) => flash(q.get("msg") ? decodeURIComponent(q.get("msg")) : "", q.get("err") ? "err" : "ok");
@@ -218,7 +239,7 @@ export async function board(ctx) {
         <button class="btn btn-primary btn-sm">등록</button></form></section>
     <ul class="board-list">${rows}</ul>
     ${pager((i) => `${base}/board${qs({ q, page: i })}`, cur, pages)}</div></section>`;
-  return html(layout({ title: "회원 게시판", assoc, base, user, body, activeNav: `${base}/board`, csrf }));
+  return html(layout({ title: "회원 게시판", assoc, base, user, body, activeNav: `${base}/board`, csrf, scripts: `<script src="/js/upload-resize.js" defer></script>` }));
 }
 export async function postDetail(ctx) {
   const { db, assoc, base, user, params, query, csrf } = ctx;
@@ -271,12 +292,12 @@ export async function editPost(ctx) {
       <label class="file-inline">📷 사진 추가 (총 6장까지)<input type="file" name="images" accept="image/*" multiple /></label>
       <div class="post-actions"><button class="btn btn-primary">저장</button><a href="${base}/board/${p.id}" class="btn btn-ghost">취소</a></div>
     </form></div></section>`;
-  return html(layout({ title: "글 수정", assoc, base, user, body, activeNav: `${base}/board`, csrf }));
+  return html(layout({ title: "글 수정", assoc, base, user, body, activeNav: `${base}/board`, csrf, scripts: `<script src="/js/upload-resize.js" defer></script>` }));
 }
 
 // ================= 회원가입 =================
 export function registerForm(ctx) {
-  const { assoc, base, query, csrf } = ctx;
+  const { env, assoc, base, query, csrf } = ctx;
   const opts = CATEGORIES.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
   const body = `<section class="section page-top"><div class="container auth-wrap"><div class="auth-card">
     <h1 class="auth-title">${esc(assoc.name)} 가입</h1><p class="auth-sub">점포 정보를 등록하고 사진·소식을 공유하세요.</p>${flashOf(query)}
@@ -286,9 +307,10 @@ export function registerForm(ctx) {
       <label>비밀번호 (8자 이상)<input type="password" name="password" required minlength="8" /></label>
       <label>점포명<input type="text" name="business_name" required maxlength="100" /></label>
       <label>업종<select name="category">${opts}</select></label>
+      ${turnstileWidget(env)}
       <button class="btn btn-primary btn-block">가입 신청</button>
     </form><p class="auth-note">가입 후 관리자 승인 시 일반에 공개됩니다.</p></div></div></section>`;
-  return html(layout({ title: "가입", assoc, base, body, csrf }));
+  return html(layout({ title: "가입", assoc, base, body, csrf, scripts: turnstileScript(env) }));
 }
 
 // ================= 대시보드 (내 업체) =================
@@ -332,7 +354,7 @@ export async function dashboard(ctx) {
         <h3 class="panel-subtitle">등록된 미디어 (${media.length})</h3><div class="media-grid">${grid}</div></section>
     </div></div></section>`;
   const picker = naver ? `<script src="https://oapi.map.naver.com/openapi/v3/maps.js?${esc(env.NAVER_MAP_PARAM || "ncpClientId")}=${esc(naver)}"></script><script src="/js/map.js" defer></script>` : "";
-  return html(layout({ title: "내 업체 관리", assoc, base, user, body, csrf, scripts: `<script src="/js/viewer.js" defer></script>${picker}` }));
+  return html(layout({ title: "내 업체 관리", assoc, base, user, body, csrf, scripts: `<script src="/js/viewer.js" defer></script><script src="/js/upload-resize.js" defer></script>${picker}` }));
 }
 
 const docBody = (b) => esc(b).replace(/\n/g, "<br />");
@@ -349,6 +371,7 @@ export async function admin(ctx) {
   const notifs = await D.listNotifications(db, assoc.id, 15);
   const unread = await D.unreadCount(db, assoc.id);
   const today = new Date().toISOString().slice(0, 10);
+  const lay = parseLayout(assoc.home_layout, assoc.name);
 
   const bizRows = all.length ? all.map((b) => `<tr><td><a href="${base}/business/${esc(b.slug)}" target="_blank">${esc(b.name)}</a><br /><small>${esc(b.category)}</small></td>
     <td>${esc(b.owner_name)}<br /><small>${esc(b.owner_email)}</small></td><td>${statusBadge(b.status)}</td>
@@ -380,6 +403,9 @@ export async function admin(ctx) {
     <section class="panel"><div class="panel-head"><h2 class="panel-title">회원 관리 <span class="badge badge-muted">${members.length}명</span></h2>
       ${members.length ? `<a class="btn btn-xs btn-ghost" href="${base}/admin/members.csv">⬇ 명단 CSV</a>` : ""}</div>
       <div class="table-scroll"><table class="admin-table"><thead><tr><th>회원</th><th>업체</th><th>비밀번호</th></tr></thead><tbody>${memberRows}</tbody></table></div></section>
+    <section class="panel"><h2 class="panel-title">홈페이지 구성 편집</h2>
+      <p class="panel-hint">섹션을 켜고 끄거나 순서(▲▼)를 바꾸고 문구를 직접 수정할 수 있습니다.</p>
+      ${layoutEditor(base, lay)}</section>
     <section class="panel"><h2 class="panel-title">상인회 정보 · 브랜딩</h2>
       <form method="post" action="${base}/admin/settings" enctype="multipart/form-data" class="stack-form">
         <div class="form-two"><label>상인회 이름<input type="text" name="name" value="${esc(assoc.name)}" required /></label><label>대표 색상<input type="color" name="brand_color" value="${esc(assoc.brand_color)}" /></label></div>
@@ -405,7 +431,7 @@ export async function admin(ctx) {
           <button class="btn btn-primary btn-sm">등록</button></form>
         <ul class="admin-mini-list">${eventRows}</ul></section>
     </div></div></section>`;
-  return html(layout({ title: "관리자", assoc, base, user, body, activeNav: `${base}/admin`, csrf }));
+  return html(layout({ title: "관리자", assoc, base, user, body, activeNav: `${base}/admin`, csrf, scripts: `<script src="/js/layout-editor.js" defer></script><script src="/js/upload-resize.js" defer></script>` }));
 }
 
 export async function adminExportMembers(ctx) {
@@ -579,6 +605,47 @@ export function account(ctx) {
         <label>현재 비밀번호<input type="password" name="current" required /></label>
         <label>새 비밀번호 (8자 이상)<input type="password" name="new" required minlength="8" /></label>
         <label>새 비밀번호 확인<input type="password" name="confirm" required /></label>
-        <button class="btn btn-primary btn-sm">변경</button></form></section></div></section>`;
+        <button class="btn btn-primary btn-sm">변경</button></form></section>
+    <section class="panel"><h2 class="panel-title">보안</h2>
+      <p class="panel-hint">다른 기기·브라우저의 로그인 세션을 모두 종료합니다.</p>
+      <form method="post" action="/account/logout-all" data-confirm="모든 기기에서 로그아웃할까요?"><button class="btn btn-ghost btn-sm">전 기기 로그아웃</button></form></section>
+  </div></section>`;
   return html(layout({ title: "계정", assoc, base, user, body, csrf }));
+}
+
+// ================= 비밀번호 찾기 (내부 처리) =================
+export function forgotForm(ctx) {
+  const { query, csrf } = ctx;
+  const body = `<section class="section page-top"><div class="container auth-wrap"><div class="auth-card">
+    <h1 class="auth-title">비밀번호 찾기</h1><p class="auth-sub">가입한 이메일을 입력하면 상인회 관리자에게 재설정 요청이 전달됩니다.</p>
+    ${flashOf(query)}
+    <form method="post" action="/forgot" class="stack-form"><label>이메일<input type="email" name="email" required /></label>
+      <button class="btn btn-primary btn-block">재설정 요청</button></form>
+    <p class="auth-note">보안을 위해 이메일 존재 여부와 관계없이 동일하게 안내됩니다. 관리자가 확인 후 임시 비밀번호를 발급합니다.</p></div></div></section>`;
+  return html(layout({ title: "비밀번호 찾기", assoc: ctx.assoc, base: ctx.base, body, csrf }));
+}
+
+// ================= SEO: sitemap · robots =================
+function originOf(ctx) {
+  const scheme = ctx.request.headers.get("x-forwarded-proto") || ctx.env.PUBLIC_SCHEME || "https";
+  return `${scheme}://${ctx.url.host}`;
+}
+export async function sitemap(ctx) {
+  const { db } = ctx;
+  const o = originOf(ctx);
+  const urls = [];
+  const add = (loc) => urls.push(`<url><loc>${esc(loc)}</loc></url>`);
+  add(o + "/");
+  for (const a of await D.listActiveAssociations(db)) {
+    const base = `${o}/t/${encodeURIComponent(a.slug)}`;
+    ["", "/businesses", "/map", "/notices", "/events"].forEach((p) => add(base + p));
+    for (const b of await D.listBusinessesPaged(db, a.id, { perPage: 200 }).then((r) => r.items)) add(`${base}/business/${encodeURIComponent(b.slug)}`);
+    for (const n of await D.listNotices(db, a.id, 200)) add(`${base}/notices/${n.id}`);
+  }
+  const xml = `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls.join("")}</urlset>`;
+  return new Response(xml, { headers: { "content-type": "application/xml; charset=utf-8", "cache-control": "public, max-age=3600" } });
+}
+export function robots(ctx) {
+  const o = originOf(ctx);
+  return text(`User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /super\nDisallow: /dashboard\nSitemap: ${o}/sitemap.xml\n`);
 }
