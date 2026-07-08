@@ -104,6 +104,29 @@ CREATE TABLE IF NOT EXISTS notifications (
   created_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- 회원 게시판: 글
+CREATE TABLE IF NOT EXISTS posts (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
+  author_id      INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  title          TEXT NOT NULL,
+  body           TEXT NOT NULL DEFAULT '',
+  pinned         INTEGER NOT NULL DEFAULT 0,
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- 회원 게시판: 댓글
+CREATE TABLE IF NOT EXISTS comments (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  post_id    INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+  author_id  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  body       TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_posts_assoc ON posts(association_id, pinned, created_at);
+CREATE INDEX IF NOT EXISTS idx_comments_post ON comments(post_id);
+
 -- 전자서명: 서명 대상 문서
 CREATE TABLE IF NOT EXISTS documents (
   id             INTEGER PRIMARY KEY AUTOINCREMENT,

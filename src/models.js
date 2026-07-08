@@ -232,6 +232,48 @@ export function listAdmins() {
                      WHERE u.role = 'ADMIN' ORDER BY a.name`).all();
 }
 
+// ----- 회원 게시판 -----
+export function createPost({ associationId, authorId, title, body }) {
+  const info = db.prepare("INSERT INTO posts (association_id, author_id, title, body) VALUES (?, ?, ?, ?)")
+    .run(associationId, authorId, title, body || "");
+  return getPost(info.lastInsertRowid);
+}
+export function getPost(id) {
+  return db.prepare(`SELECT p.*, u.name AS author_name FROM posts p
+    LEFT JOIN users u ON u.id = p.author_id WHERE p.id = ?`).get(id);
+}
+export function listPostsPaged(associationId, { page = 1, perPage = 15 } = {}) {
+  const total = db.prepare("SELECT COUNT(*) AS n FROM posts WHERE association_id = ?").get(associationId).n;
+  const pages = Math.max(1, Math.ceil(total / perPage));
+  const p = Math.min(Math.max(1, page | 0 || 1), pages);
+  const items = db.prepare(`SELECT p.*, u.name AS author_name,
+      (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id) AS comment_count
+    FROM posts p LEFT JOIN users u ON u.id = p.author_id
+    WHERE p.association_id = ? ORDER BY p.pinned DESC, p.created_at DESC LIMIT ? OFFSET ?`)
+    .all(associationId, perPage, (p - 1) * perPage);
+  return { items, total, page: p, pages };
+}
+export function setPostPinned(id, pinned) {
+  db.prepare("UPDATE posts SET pinned = ? WHERE id = ?").run(pinned ? 1 : 0, id);
+}
+export function deletePost(id) {
+  db.prepare("DELETE FROM posts WHERE id = ?").run(id);
+}
+export function createComment({ postId, authorId, body }) {
+  const info = db.prepare("INSERT INTO comments (post_id, author_id, body) VALUES (?, ?, ?)").run(postId, authorId, body);
+  return db.prepare("SELECT * FROM comments WHERE id = ?").get(info.lastInsertRowid);
+}
+export function listComments(postId) {
+  return db.prepare(`SELECT c.*, u.name AS author_name FROM comments c
+    LEFT JOIN users u ON u.id = c.author_id WHERE c.post_id = ? ORDER BY c.created_at ASC`).all(postId);
+}
+export function getComment(id) {
+  return db.prepare("SELECT * FROM comments WHERE id = ?").get(id);
+}
+export function deleteComment(id) {
+  db.prepare("DELETE FROM comments WHERE id = ?").run(id);
+}
+
 // ----- 전자서명: 문서 -----
 export function createDocument({ associationId, title, body, contentHash, createdBy }) {
   const info = db

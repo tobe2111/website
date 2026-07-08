@@ -55,6 +55,14 @@ const tenantRoutes = [
   mk("GET", "/events", pages.events),
   mk("GET", "/register", pages.registerForm),
   mk("POST", "/register", api.register),
+  // 회원 게시판 (회원 전용)
+  mk("GET", "/board", pages.board, "MEMBER"),
+  mk("POST", "/board", api.createPost, "MEMBER"),
+  mk("GET", "/board/:id", pages.postDetail, "MEMBER"),
+  mk("POST", "/board/:id/comment", api.createComment, "MEMBER"),
+  mk("POST", "/board/:id/comment/:cid/delete", api.deleteComment, "MEMBER"),
+  mk("POST", "/board/:id/delete", api.deletePost, "MEMBER"),
+  mk("POST", "/board/:id/pin", api.pinPost, "MEMBER"),
   mk("GET", "/dashboard", pages.dashboard, "MERCHANT"),
   mk("POST", "/dashboard/business", api.updateBusiness, "MERCHANT"),
   mk("POST", "/dashboard/media", api.uploadMedia, "MERCHANT"),
@@ -128,6 +136,11 @@ function authorize(user, auth, assoc) {
     return user.role === ROLES.ADMIN && assoc && user.association_id === assoc.id;
   }
   if (auth === "MERCHANT") return user.role === ROLES.MERCHANT && assoc && user.association_id === assoc.id;
+  if (auth === "MEMBER") {
+    // 해당 상인회 소속(회원/관리자) 또는 슈퍼관리자
+    if (user.role === ROLES.SUPERADMIN) return true;
+    return assoc && user.association_id === assoc.id && (user.role === ROLES.MERCHANT || user.role === ROLES.ADMIN);
+  }
   return false;
 }
 

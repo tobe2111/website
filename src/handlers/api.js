@@ -330,6 +330,69 @@ export async function adminDeleteEvent(req, res, { assoc, params }) {
   back(res, base + "/admin", "행사를 삭제했습니다.");
 }
 
+// ---------- 회원 게시판 ----------
+const canModerateBoard = (req, assoc) => req.user && (req.user.role === ROLES.SUPERADMIN || (req.user.role === ROLES.ADMIN && req.user.association_id === assoc.id));
+
+export async function createPost(req, res, { assoc }) {
+  const base = baseOf(assoc);
+  const f = await readForm(req, res, 64 * 1024);
+  if (!f) return;
+  const title = cap((f.title || "").trim(), 200);
+  const bodyText = cap((f.body || "").trim(), 10000);
+  if (!title || !bodyText) return back(res, base + "/board", "제목과 내용을 입력하세요.", true);
+  const p = M.createPost({ associationId: assoc.id, authorId: req.user.id, title, body: bodyText });
+  back(res, base + "/board/" + p.id, "글을 등록했습니다.");
+}
+
+export async function createComment(req, res, { assoc, params }) {
+  const base = baseOf(assoc);
+  const f = await readForm(req, res, 16 * 1024);
+  if (!f) return;
+  const p = M.getPost(Number(params.id));
+  if (!p || p.association_id !== assoc.id) return back(res, base + "/board", "게시글을 찾을 수 없습니다.", true);
+  const bodyText = cap((f.body || "").trim(), 3000);
+  if (!bodyText) return back(res, base + "/board/" + p.id, "댓글 내용을 입력하세요.", true);
+  M.createComment({ postId: p.id, authorId: req.user.id, body: bodyText });
+  back(res, base + "/board/" + p.id, "댓글을 등록했습니다.");
+}
+
+export async function deletePost(req, res, { assoc, params }) {
+  const base = baseOf(assoc);
+  const f = await readForm(req, res, 8 * 1024);
+  if (!f) return;
+  const p = M.getPost(Number(params.id));
+  if (!p || p.association_id !== assoc.id) return back(res, base + "/board", "게시글을 찾을 수 없습니다.", true);
+  if (!(canModerateBoard(req, assoc) || p.author_id === req.user.id))
+    return back(res, base + "/board/" + p.id, "삭제 권한이 없습니다.", true);
+  M.deletePost(p.id);
+  back(res, base + "/board", "게시글을 삭제했습니다.");
+}
+
+export async function pinPost(req, res, { assoc, params }) {
+  const base = baseOf(assoc);
+  const f = await readForm(req, res, 8 * 1024);
+  if (!f) return;
+  if (!canModerateBoard(req, assoc)) return back(res, base + "/board", "권한이 없습니다.", true);
+  const p = M.getPost(Number(params.id));
+  if (!p || p.association_id !== assoc.id) return back(res, base + "/board", "게시글을 찾을 수 없습니다.", true);
+  M.setPostPinned(p.id, p.pinned ? 0 : 1);
+  back(res, base + "/board/" + p.id, p.pinned ? "고정을 해제했습니다." : "상단에 고정했습니다.");
+}
+
+export async function deleteComment(req, res, { assoc, params }) {
+  const base = baseOf(assoc);
+  const f = await readForm(req, res, 8 * 1024);
+  if (!f) return;
+  const p = M.getPost(Number(params.id));
+  const c = M.getComment(Number(params.cid));
+  if (!p || p.association_id !== assoc.id || !c || c.post_id !== p.id)
+    return back(res, base + "/board", "댓글을 찾을 수 없습니다.", true);
+  if (!(canModerateBoard(req, assoc) || c.author_id === req.user.id))
+    return back(res, base + "/board/" + p.id, "삭제 권한이 없습니다.", true);
+  M.deleteComment(c.id);
+  back(res, base + "/board/" + p.id, "댓글을 삭제했습니다.");
+}
+
 // ---------- 전자서명: 관리자 문서 생성 ----------
 export async function adminCreateDocument(req, res, { assoc }) {
   const base = baseOf(assoc);

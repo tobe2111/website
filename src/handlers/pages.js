@@ -367,6 +367,78 @@ export function events(req, res, { assoc }) {
   html(res, layout({ title: "행사·이벤트", user: req.user, assoc, base, activeNav: base + "/events", body }));
 }
 
+// ================= 회원 게시판 =================
+const canModerate = (req, assoc) => req.user && (req.user.role === ROLES.SUPERADMIN || (req.user.role === ROLES.ADMIN && req.user.association_id === assoc.id));
+
+export function board(req, res, { assoc, query }) {
+  const base = baseOf(assoc);
+  const page = parseInt(query.get("page") || "1", 10) || 1;
+  const { items, total, page: cur, pages } = M.listPostsPaged(assoc.id, { page });
+  const urlFor = (i) => `${base}/board${qsBuild({ page: i })}`;
+
+  const rows = items.length
+    ? items.map((p) => `<li class="board-row${p.pinned ? " pinned" : ""}">
+        ${p.pinned ? `<span class="board-pin" title="고정됨">📌</span>` : ""}
+        <a href="${base}/board/${p.id}" class="board-title">${esc(p.title)}</a>
+        <span class="board-meta">${esc(p.author_name || "(탈퇴)")} · ${esc(p.created_at.slice(0, 10).replace(/-/g, "."))}${p.comment_count ? ` · 💬 ${p.comment_count}` : ""}</span>
+      </li>`).join("")
+    : `<li class="empty">아직 게시글이 없습니다. 첫 글을 남겨보세요.</li>`;
+
+  const body = `<section class="section page-top"><div class="container">
+    <div class="section-head"><p class="section-eyebrow">BOARD</p><h2 class="section-title">회원 게시판</h2>
+      <p class="section-lead">${esc(assoc.name)} 회원 전용 소통 공간입니다. (글 ${total})</p></div>
+    ${flash(query.get("msg") ? decodeURIComponent(query.get("msg")) : "", query.get("err") ? "err" : "ok")}
+    <section class="panel"><h2 class="panel-title">새 글 쓰기</h2>
+      <form method="post" action="${base}/board" class="stack-form compact">
+        <input type="text" name="title" placeholder="제목" required maxlength="200" />
+        <textarea name="body" rows="4" placeholder="내용을 입력하세요." required></textarea>
+        <button class="btn btn-primary btn-sm">등록</button>
+      </form>
+    </section>
+    <ul class="board-list">${rows}</ul>
+    ${pager(urlFor, cur, pages)}
+  </div></section>`;
+  html(res, layout({ title: "회원 게시판", user: req.user, assoc, base, activeNav: base + "/board", body }));
+}
+
+export function postDetail(req, res, { assoc, params, query }) {
+  const base = baseOf(assoc);
+  const p = M.getPost(Number(params.id));
+  if (!p || p.association_id !== assoc.id) return notFound(req, res, { assoc });
+  const comments = M.listComments(p.id);
+  const mod = canModerate(req, assoc);
+  const isAuthor = req.user && p.author_id === req.user.id;
+
+  const commentRows = comments.length
+    ? comments.map((c) => `<li class="comment">
+        <div class="comment-head"><strong>${esc(c.author_name || "(탈퇴)")}</strong>
+          <time>${esc(c.created_at.slice(0, 16).replace("T", " "))}</time>
+          ${(mod || (req.user && c.author_id === req.user.id)) ? `<form method="post" action="${base}/board/${p.id}/comment/${c.id}/delete" data-confirm="댓글을 삭제할까요?"><button class="link-danger">삭제</button></form>` : ""}
+        </div>
+        <div class="comment-body">${esc(c.body).replace(/\n/g, "<br />")}</div></li>`).join("")
+    : `<li class="empty">첫 댓글을 남겨보세요.</li>`;
+
+  const body = `<section class="section page-top"><div class="container narrow">
+    <a href="${base}/board" class="back-link">← 게시판</a>
+    <div class="article-head">${p.pinned ? `<span class="notice-tag tag-important">고정</span>` : ""}
+      <time>${esc(p.created_at.slice(0, 16).replace("T", " "))}</time></div>
+    <h1 class="article-title">${esc(p.title)}</h1>
+    <p class="post-author">작성자: ${esc(p.author_name || "(탈퇴)")}</p>
+    <div class="article-body">${esc(p.body).replace(/\n/g, "<br />")}</div>
+    <div class="post-actions">
+      ${mod ? `<form method="post" action="${base}/board/${p.id}/pin"><button class="btn btn-ghost btn-xs">${p.pinned ? "고정 해제" : "상단 고정"}</button></form>` : ""}
+      ${(mod || isAuthor) ? `<form method="post" action="${base}/board/${p.id}/delete" data-confirm="게시글을 삭제할까요?"><button class="btn btn-ghost btn-xs link-danger">삭제</button></form>` : ""}
+    </div>
+    <h2 class="biz-section-title" style="margin-top:32px">댓글 (${comments.length})</h2>
+    <ul class="comment-list">${commentRows}</ul>
+    <form method="post" action="${base}/board/${p.id}/comment" class="stack-form compact comment-form">
+      <textarea name="body" rows="3" placeholder="댓글을 입력하세요." required maxlength="3000"></textarea>
+      <button class="btn btn-primary btn-sm">댓글 등록</button>
+    </form>
+  </div></section>`;
+  html(res, layout({ title: p.title, user: req.user, assoc, base, activeNav: base + "/board", body }));
+}
+
 // ================= 인증 폼 =================
 export function loginForm(req, res, { query }) {
   if (req.user) return redirect(res, postLoginPath(req.user, req));

@@ -143,6 +143,36 @@ test("SEO: sitemap.xml + robots.txt", async () => {
   assert.match(await rb.text(), /Sitemap:/);
 });
 
+test("회원 게시판: 비회원 차단, 회원 글·댓글 작성", async () => {
+  // 비로그인 → 로그인 리다이렉트
+  let r = await fetch(`${BASE}/t/seocho/board`, { redirect: "manual" });
+  assert.equal(r.status, 303);
+  assert.match(r.headers.get("location"), /\/login/);
+
+  // 회원 글 작성
+  const { jar } = await loginAs("jung@ex.kr", "merchant1234");
+  r = await fetch(`${BASE}/t/seocho/board`, {
+    method: "POST", redirect: "manual",
+    headers: { "content-type": "application/x-www-form-urlencoded", cookie: cookieHeader(jar) },
+    body: new URLSearchParams({ _csrf: jar.sc_csrf, title: "테스트 게시글", body: "본문 내용" }),
+  });
+  assert.equal(r.status, 303);
+  const loc = r.headers.get("location");
+  const postId = /\/board\/(\d+)/.exec(loc)[1];
+  const detail = await (await fetch(`${BASE}/t/seocho/board/${postId}`, { headers: { cookie: cookieHeader(jar) } })).text();
+  assert.match(detail, /테스트 게시글/);
+
+  // 댓글
+  r = await fetch(`${BASE}/t/seocho/board/${postId}/comment`, {
+    method: "POST", redirect: "manual",
+    headers: { "content-type": "application/x-www-form-urlencoded", cookie: cookieHeader(jar) },
+    body: new URLSearchParams({ _csrf: jar.sc_csrf, body: "테스트 댓글입니다" }),
+  });
+  assert.equal(r.status, 303);
+  const withComment = await (await fetch(`${BASE}/t/seocho/board/${postId}`, { headers: { cookie: cookieHeader(jar) } })).text();
+  assert.match(withComment, /테스트 댓글입니다/);
+});
+
 test("점포 지도: 페이지 렌더 + 좌표 저장 후 마커 데이터 노출", async () => {
   // 지도 페이지 접근
   let r = await fetch(`${BASE}/t/seocho/map`);
