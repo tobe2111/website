@@ -340,7 +340,7 @@ export function dashboard(req, res, { assoc, query }) {
   const mediaGrid = media.length
     ? media.map((m) => `<figure class="media-tile">${galleryItem(m, { showCaption: false })}<figcaption>
         <span class="media-kind">${m.kind === "video" ? "🎬 영상" : "🖼 사진"}</span>
-        <form method="post" action="${base}/dashboard/media/${m.id}/delete" onsubmit="return confirm('삭제하시겠습니까?')"><button class="link-danger" type="submit">삭제</button></form>
+        <form method="post" action="${base}/dashboard/media/${m.id}/delete" data-confirm="삭제하시겠습니까?"><button class="link-danger" type="submit">삭제</button></form>
       </figcaption></figure>`).join("")
     : `<p class="empty">아직 업로드한 사진·영상이 없습니다.</p>`;
   const body = `
@@ -402,10 +402,10 @@ export function admin(req, res, { assoc, query }) {
 
   const noticeRows = notices.map((n) => `<li><span class="notice-tag${n.pinned ? " tag-important" : ""}">${esc(n.tag)}</span>
     <span class="notice-title">${esc(n.title)}</span>
-    <form method="post" action="${base}/admin/notice/${n.id}/delete" onsubmit="return confirm('삭제하시겠습니까?')"><button class="link-danger">삭제</button></form></li>`).join("") || `<li class="empty">공지가 없습니다.</li>`;
+    <form method="post" action="${base}/admin/notice/${n.id}/delete" data-confirm="삭제하시겠습니까?"><button class="link-danger">삭제</button></form></li>`).join("") || `<li class="empty">공지가 없습니다.</li>`;
   const eventRows = events.map((e) => `<li><span class="event-mini-date">${esc(e.event_date)}</span>
     <span class="notice-title">${esc(e.title)}</span>
-    <form method="post" action="${base}/admin/event/${e.id}/delete" onsubmit="return confirm('삭제하시겠습니까?')"><button class="link-danger">삭제</button></form></li>`).join("") || `<li class="empty">행사가 없습니다.</li>`;
+    <form method="post" action="${base}/admin/event/${e.id}/delete" data-confirm="삭제하시겠습니까?"><button class="link-danger">삭제</button></form></li>`).join("") || `<li class="empty">행사가 없습니다.</li>`;
 
   const superNote = req.user.role === ROLES.SUPERADMIN
     ? `<div class="flash flash-warn">슈퍼 관리자로 <strong>${esc(assoc.name)}</strong>의 관리 화면을 보고 있습니다. <a href="/super">← 슈퍼 관리자</a></div>` : "";
@@ -511,7 +511,7 @@ function layoutEditor(base, layoutArr) {
     <div id="layoutRows">${rows}</div>
     <div class="layout-actions">
       <button type="submit" class="btn btn-primary btn-sm">홈페이지 구성 저장</button>
-      <button type="submit" formaction="${base}/admin/layout/reset" class="btn btn-ghost btn-sm" onclick="return confirm('기본 구성으로 되돌리시겠습니까?')">기본 구성으로 초기화</button>
+      <button type="submit" formaction="${base}/admin/layout/reset" class="btn btn-ghost btn-sm" data-confirm="기본 구성으로 되돌리시겠습니까?">기본 구성으로 초기화</button>
     </div>
   </form>`;
 }

@@ -32,4 +32,14 @@
     window.addEventListener("scroll", onScroll, { passive: true });
     onScroll();
   }
+
+  // data-confirm: CSP 안전한 확인 다이얼로그 (인라인 onsubmit/onclick 대체)
+  document.addEventListener("submit", function (e) {
+    var el = e.target.closest && e.target.closest("form[data-confirm]");
+    if (el && !window.confirm(el.getAttribute("data-confirm"))) e.preventDefault();
+  });
+  document.addEventListener("click", function (e) {
+    var btn = e.target.closest && e.target.closest("button[data-confirm]");
+    if (btn && !window.confirm(btn.getAttribute("data-confirm"))) { e.preventDefault(); e.stopPropagation(); }
+  });
 })();

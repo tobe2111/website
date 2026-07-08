@@ -115,6 +115,29 @@ function forbidden(res) {
   res.end('<h1>403 접근 권한이 없습니다.</h1><p><a href="/">홈으로</a></p>');
 }
 
+// 모든 응답에 보안 헤더 적용
+const CSP = [
+  "default-src 'self'",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "frame-ancestors 'self'",
+  "form-action 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: https:",
+  "media-src 'self' https:",
+  "font-src 'self'",
+].join("; ");
+function setSecurityHeaders(res) {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "SAMEORIGIN");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Permissions-Policy", "geolocation=(), microphone=(), camera=()");
+  res.setHeader("Content-Security-Policy", CSP);
+  res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
+  if (config.isProd) res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+}
+
 async function dispatch(route, req, res, { params, query, assoc }) {
   const decision = authorize(req.user, route.auth, assoc);
   if (decision !== true) {
@@ -128,6 +151,7 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
   const pathname = decodeURIComponent(url.pathname);
   const hostname = (req.headers.host || "").split(":")[0].toLowerCase();
+  setSecurityHeaders(res);
   req.cookies = parseCookies(req.headers.cookie || "");
   req.user = resolveUser(req);
   csrf.ensure(req, res);
