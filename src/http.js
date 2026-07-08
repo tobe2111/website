@@ -1,5 +1,6 @@
 // HTTP 요청/응답 유틸리티
 import { config } from "./config.js";
+import * as csrf from "./csrf.js";
 
 export function parseCookies(header = "") {
   const out = {};
@@ -47,7 +48,29 @@ export function send(res, status, body, headers = {}) {
 }
 
 export function html(res, body, status = 200, headers = {}) {
-  send(res, status, body, { "Content-Type": "text/html; charset=utf-8", ...headers });
+  // 모든 POST 폼에 CSRF 히든 필드 자동 주입 (res.csrfToken 은 서버에서 주입)
+  const token = res.csrfToken;
+  let out = body;
+  if (token) {
+    out = String(body).replace(
+      /(<form\b[^>]*\bmethod\s*=\s*["']post["'][^>]*>)/gi,
+      `$1<input type="hidden" name="_csrf" value="${token}">`
+    );
+  }
+  send(res, status, out, { "Content-Type": "text/html; charset=utf-8", ...headers });
+}
+
+// urlencoded 폼 본문을 읽고 CSRF 를 검증. 실패 시 403 전송 후 null 반환.
+export async function readForm(req, res, limitBytes = 64 * 1024) {
+  let buf;
+  try { buf = await readBody(req, limitBytes); }
+  catch { send(res, 413, "요청이 너무 큽니다.", { "Content-Type": "text/plain; charset=utf-8" }); return null; }
+  const fields = parseUrlEncoded(buf.toString("utf8"));
+  if (!csrf.valid(req, fields._csrf)) {
+    send(res, 403, "<h1>403 잘못된 요청(CSRF)</h1><p><a href=\"/\">홈으로</a></p>", { "Content-Type": "text/html; charset=utf-8" });
+    return null;
+  }
+  return fields;
 }
 
 export function json(res, obj, status = 200, headers = {}) {

@@ -80,6 +80,16 @@ export function canManageAssociation(user, associationId) {
   return false;
 }
 
+// 사용자용 세션 토큰 (세션 버전 포함 → 버전 증가 시 무효화)
+export function sessionTokenForUser(user) {
+  return createSessionToken({ uid: user.id, sv: user.session_version || 0 });
+}
+
+// 모든 세션 무효화(로그아웃 전체/비밀번호 변경 시)
+export function bumpSessionVersion(userId) {
+  db.prepare("UPDATE users SET session_version = session_version + 1 WHERE id = ?").run(userId);
+}
+
 // 요청에서 현재 사용자 해석 (라우터가 req.user 로 주입)
 export function resolveUser(req) {
   const token = req.cookies[config.sessionCookie];
@@ -87,5 +97,7 @@ export function resolveUser(req) {
   if (!payload) return null;
   const user = getUserById(payload.uid);
   if (!user) return null;
+  // 세션 버전 불일치 → 무효화된 토큰
+  if ((payload.sv || 0) !== (user.session_version || 0)) return null;
   return user;
 }

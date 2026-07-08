@@ -35,9 +35,10 @@ CREATE TABLE IF NOT EXISTS users (
   email          TEXT NOT NULL UNIQUE,
   password_hash  TEXT NOT NULL,
   salt           TEXT NOT NULL,
-  name           TEXT NOT NULL,
-  role           TEXT NOT NULL DEFAULT 'MERCHANT',   -- 'SUPERADMIN' | 'ADMIN' | 'MERCHANT'
-  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+  name            TEXT NOT NULL,
+  role            TEXT NOT NULL DEFAULT 'MERCHANT',   -- 'SUPERADMIN' | 'ADMIN' | 'MERCHANT'
+  session_version INTEGER NOT NULL DEFAULT 0,          -- 값 증가 시 기존 세션 전부 무효화(revocation)
+  created_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS businesses (
@@ -110,6 +111,9 @@ function columnExists(table, col) {
   }
   if (!columnExists("media", "poster")) {
     db.exec("ALTER TABLE media ADD COLUMN poster TEXT NOT NULL DEFAULT ''");
+  }
+  if (!columnExists("users", "session_version")) {
+    db.exec("ALTER TABLE users ADD COLUMN session_version INTEGER NOT NULL DEFAULT 0");
   }
 })();
 

@@ -5,6 +5,7 @@ import path from "node:path";
 import { config } from "./config.js";
 import { parseCookies, redirect } from "./http.js";
 import { resolveUser, ROLES } from "./auth.js";
+import * as csrf from "./csrf.js";
 import * as A from "./associations.js";
 import * as storage from "./storage.js";
 import * as media from "./media.js";
@@ -127,6 +128,8 @@ const server = http.createServer(async (req, res) => {
   const hostname = (req.headers.host || "").split(":")[0].toLowerCase();
   req.cookies = parseCookies(req.headers.cookie || "");
   req.user = resolveUser(req);
+  csrf.ensure(req, res);
+  res.csrfToken = req.csrfToken; // html() 가 폼에 자동 주입
 
   try {
     // 업로드 미디어 (로컬 모드 서빙, Range 지원)
@@ -180,6 +183,23 @@ const server = http.createServer(async (req, res) => {
     if (!res.headersSent) { res.writeHead(500, { "Content-Type": "text/html; charset=utf-8" }); res.end("<h1>500 서버 오류</h1>"); }
   }
 });
+
+// ----- 시작 시 설정 검증 -----
+(function validateConfig() {
+  const errs = [], warns = [];
+  if (config.isProd && config.sessionSecret === "dev-secret-change-me-in-production")
+    errs.push("운영 환경에서 SESSION_SECRET 을 반드시 설정하세요.");
+  if (config.storageDriver === "s3") {
+    for (const k of ["bucket", "accessKeyId", "secretAccessKey"])
+      if (!config.s3[k]) errs.push(`STORAGE_DRIVER=s3 인데 S3_${k.replace(/[A-Z]/g, (m) => "_" + m).toUpperCase()} 가 비어 있습니다.`);
+  }
+  if (config.baseDomain && /[\/:]/.test(config.baseDomain))
+    warns.push("BASE_DOMAIN 에는 프로토콜/경로 없이 도메인만 입력하세요 (예: example.com).");
+  if (!config.isProd && config.sessionSecret === "dev-secret-change-me-in-production")
+    warns.push("개발용 SESSION_SECRET 사용 중 — 운영 배포 전 변경 필요.");
+  warns.forEach((w) => console.warn("  ⚠ " + w));
+  if (errs.length) { errs.forEach((e) => console.error("  ✖ " + e)); process.exit(1); }
+})();
 
 server.listen(config.port, config.host, () => {
   console.log(`\n  서초구 상인회 플랫폼 실행 중`);

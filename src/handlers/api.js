@@ -1,7 +1,9 @@
-// 폼 액션 핸들러 (POST) — 멀티테넌트 + 슈퍼관리자
-import { redirect, readBody, parseUrlEncoded, setSessionCookie, clearSessionCookie } from "../http.js";
-import { getUserByEmail, createUser, verifyPassword, createSessionToken, ROLES } from "../auth.js";
+// 폼 액션 핸들러 (POST) — 멀티테넌트 + 슈퍼관리자 + 보안 하드닝
+import { redirect, readBody, parseUrlEncoded, readForm, setSessionCookie, clearSessionCookie } from "../http.js";
+import { getUserByEmail, createUser, verifyPassword, sessionTokenForUser, ROLES } from "../auth.js";
 import { parseMultipart } from "../multipart.js";
+import * as csrf from "../csrf.js";
+import { sniff } from "../filetype.js";
 import * as M from "../models.js";
 import * as A from "../associations.js";
 import * as storage from "../storage.js";
@@ -17,11 +19,34 @@ function back(res, to, msg, err = false) {
   const q = msg ? `?${err ? "err=1&" : ""}msg=${encodeURIComponent(msg)}` : "";
   redirect(res, to + q);
 }
+function clientIp(req) {
+  return (req.headers["x-forwarded-for"] || "").split(",")[0].trim() || req.socket.remoteAddress || "?";
+}
+
+// ---------- 로그인 시도 제한 (in-memory 슬라이딩 윈도우) ----------
+const attempts = new Map(); // ip -> { count, first }
+const RL_WINDOW = 15 * 60 * 1000;
+const RL_MAX = 8;
+function rateLimited(ip) {
+  const rec = attempts.get(ip);
+  if (!rec) return false;
+  if (Date.now() - rec.first > RL_WINDOW) { attempts.delete(ip); return false; }
+  return rec.count >= RL_MAX;
+}
+function recordFail(ip) {
+  const rec = attempts.get(ip);
+  const now = Date.now();
+  if (!rec || now - rec.first > RL_WINDOW) attempts.set(ip, { count: 1, first: now });
+  else rec.count++;
+  if (attempts.size > 5000) for (const [k, v] of attempts) if (now - v.first > RL_WINDOW) attempts.delete(k);
+}
+function clearFails(ip) { attempts.delete(ip); }
 
 // ---------- 회원가입 (테넌트) ----------
 export async function register(req, res, { assoc }) {
   const base = baseOf(assoc);
-  const f = parseUrlEncoded((await readBody(req, 64 * 1024)).toString("utf8"));
+  const f = await readForm(req, res, 64 * 1024);
+  if (!f) return;
   const name = (f.name || "").trim();
   const email = (f.email || "").toLowerCase().trim();
   const password = f.password || "";
@@ -32,22 +57,32 @@ export async function register(req, res, { assoc }) {
 
   const user = createUser({ email, password, name, role: ROLES.MERCHANT, associationId: assoc.id });
   M.createBusiness({ associationId: assoc.id, ownerId: user.id, name: businessName, category: f.category });
-  setSessionCookie(res, createSessionToken({ uid: user.id }));
+  setSessionCookie(res, sessionTokenForUser(user));
   back(res, base + "/dashboard", "가입이 완료되었습니다! 업체 정보를 입력하고 사진·영상을 올려보세요.");
 }
 
-// ---------- 로그인 (전역) ----------
+// ---------- 로그인 (전역, 시도 제한) ----------
 export async function login(req, res) {
-  const f = parseUrlEncoded((await readBody(req, 16 * 1024)).toString("utf8"));
+  const ip = clientIp(req);
+  const f = await readForm(req, res, 16 * 1024);
+  if (!f) return;
+  if (rateLimited(ip))
+    return back(res, "/login", "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해 주세요.", true);
+
   const email = (f.email || "").toLowerCase().trim();
   const user = getUserByEmail(email);
-  if (!user || !verifyPassword(f.password || "", user.salt, user.password_hash))
+  if (!user || !verifyPassword(f.password || "", user.salt, user.password_hash)) {
+    recordFail(ip);
     return back(res, "/login", "이메일 또는 비밀번호가 올바르지 않습니다.", true);
-  setSessionCookie(res, createSessionToken({ uid: user.id }));
+  }
+  clearFails(ip);
+  setSessionCookie(res, sessionTokenForUser(user));
   redirect(res, postLoginPath(user, req));
 }
 
-export function logout(req, res) {
+export async function logout(req, res) {
+  const f = await readForm(req, res, 8 * 1024); // CSRF 검증
+  if (!f) return;
   clearSessionCookie(res);
   redirect(res, "/");
 }
@@ -57,13 +92,14 @@ export async function updateBusiness(req, res, { assoc }) {
   const base = baseOf(assoc);
   const b = M.getBusinessByOwner(req.user.id);
   if (!b || b.association_id !== assoc.id) return back(res, base + "/dashboard", "업체를 찾을 수 없습니다.", true);
-  const f = parseUrlEncoded((await readBody(req, 64 * 1024)).toString("utf8"));
+  const f = await readForm(req, res, 64 * 1024);
+  if (!f) return;
   if (!(f.name || "").trim()) return back(res, base + "/dashboard", "업체명을 입력하세요.", true);
   M.updateBusiness(b.id, { name: f.name.trim(), category: f.category, description: f.description, phone: f.phone, address: f.address, hours: f.hours });
   back(res, base + "/dashboard", "업체 정보가 저장되었습니다.");
 }
 
-// ---------- 미디어 업로드 ----------
+// ---------- 미디어 업로드 (멀티파트) ----------
 export async function uploadMedia(req, res, { assoc }) {
   const base = baseOf(assoc);
   const b = M.getBusinessByOwner(req.user.id);
@@ -75,25 +111,30 @@ export async function uploadMedia(req, res, { assoc }) {
   try { parsed = parseMultipart(buf, req.headers["content-type"] || ""); }
   catch { return back(res, base + "/dashboard", "업로드 형식이 올바르지 않습니다.", true); }
 
+  if (!csrf.valid(req, parsed.fields._csrf)) {
+    res.writeHead(403, { "Content-Type": "text/html; charset=utf-8" }); return res.end("<h1>403 잘못된 요청(CSRF)</h1>");
+  }
+
   const caption = (parsed.fields.caption || "").trim();
   const files = parsed.files.filter((x) => x.data && x.data.length > 0);
   if (!files.length) return back(res, base + "/dashboard", "선택된 파일이 없습니다.", true);
 
   let ok = 0; const errs = [];
   for (const file of files) {
-    const isImage = config.allowedImageTypes.includes(file.contentType);
-    const isVideo = config.allowedVideoTypes.includes(file.contentType);
+    // 매직바이트로 실제 형식 판별 (선언 MIME 불신)
+    const real = sniff(file.data);
+    const isImage = real && config.allowedImageTypes.includes(real);
+    const isVideo = real && config.allowedVideoTypes.includes(real);
     if (!isImage && !isVideo) { errs.push(`${file.filename}: 지원하지 않는 형식`); continue; }
     if (file.data.length > (isVideo ? config.maxVideoBytes : config.maxImageBytes)) { errs.push(`${file.filename}: 용량 초과`); continue; }
     if (isVideo) {
-      // 미디어 파이프라인: ffmpeg 있으면 mp4 정규화 + 포스터 추출, 없으면 원본 통과
-      const processed = await media.processVideo(file.data, file.contentType);
+      const processed = await media.processVideo(file.data, real);
       const filename = await storage.save(processed.buffer, processed.contentType);
       let posterKey = "";
       if (processed.poster) posterKey = await storage.save(processed.poster, "image/jpeg");
       M.addMedia({ businessId: b.id, kind: "video", filename, poster: posterKey, originalName: file.filename, size: processed.buffer.length, caption });
     } else {
-      const filename = await storage.save(file.data, file.contentType);
+      const filename = await storage.save(file.data, real);
       M.addMedia({ businessId: b.id, kind: "image", filename, originalName: file.filename, size: file.data.length, caption });
     }
     ok++;
@@ -103,6 +144,8 @@ export async function uploadMedia(req, res, { assoc }) {
 
 export async function deleteMedia(req, res, { assoc, params }) {
   const base = baseOf(assoc);
+  const f = await readForm(req, res, 8 * 1024);
+  if (!f) return;
   const b = M.getBusinessByOwner(req.user.id);
   const m = M.getMedia(Number(params.id));
   if (!b || !m || m.business_id !== b.id) return back(res, base + "/dashboard", "삭제할 수 없습니다.", true);
@@ -115,7 +158,8 @@ export async function deleteMedia(req, res, { assoc, params }) {
 // ---------- 관리자: 업체 상태 ----------
 export async function adminBusinessStatus(req, res, { assoc, params }) {
   const base = baseOf(assoc);
-  const f = parseUrlEncoded((await readBody(req, 8 * 1024)).toString("utf8"));
+  const f = await readForm(req, res, 8 * 1024);
+  if (!f) return;
   if (!["approved", "rejected", "pending"].includes(f.status)) return back(res, base + "/admin", "잘못된 상태값", true);
   const b = M.getBusinessById(Number(params.id));
   if (!b || b.association_id !== assoc.id) return back(res, base + "/admin", "업체를 찾을 수 없습니다.", true);
@@ -126,13 +170,16 @@ export async function adminBusinessStatus(req, res, { assoc, params }) {
 // ---------- 관리자: 공지 ----------
 export async function adminCreateNotice(req, res, { assoc }) {
   const base = baseOf(assoc);
-  const f = parseUrlEncoded((await readBody(req, 64 * 1024)).toString("utf8"));
+  const f = await readForm(req, res, 64 * 1024);
+  if (!f) return;
   if (!(f.title || "").trim()) return back(res, base + "/admin", "공지 제목을 입력하세요.", true);
   M.createNotice({ associationId: assoc.id, title: f.title.trim(), body: f.body, tag: f.tag || "안내", pinned: f.pinned === "1" });
   back(res, base + "/admin", "공지를 등록했습니다.");
 }
 export async function adminDeleteNotice(req, res, { assoc, params }) {
   const base = baseOf(assoc);
+  const f = await readForm(req, res, 8 * 1024);
+  if (!f) return;
   const n = M.getNotice(Number(params.id));
   if (n && n.association_id === assoc.id) M.deleteNotice(n.id);
   back(res, base + "/admin", "공지를 삭제했습니다.");
@@ -141,19 +188,22 @@ export async function adminDeleteNotice(req, res, { assoc, params }) {
 // ---------- 관리자: 행사 ----------
 export async function adminCreateEvent(req, res, { assoc }) {
   const base = baseOf(assoc);
-  const f = parseUrlEncoded((await readBody(req, 64 * 1024)).toString("utf8"));
+  const f = await readForm(req, res, 64 * 1024);
+  if (!f) return;
   if (!(f.title || "").trim() || !(f.event_date || "").trim()) return back(res, base + "/admin", "행사명과 날짜를 입력하세요.", true);
   M.createEvent({ associationId: assoc.id, title: f.title.trim(), event_date: f.event_date, place: f.place, description: f.description });
   back(res, base + "/admin", "행사를 등록했습니다.");
 }
 export async function adminDeleteEvent(req, res, { assoc, params }) {
   const base = baseOf(assoc);
+  const f = await readForm(req, res, 8 * 1024);
+  if (!f) return;
   const e = M.getEvent(Number(params.id));
   if (e && e.association_id === assoc.id) M.deleteEvent(e.id);
   back(res, base + "/admin", "행사를 삭제했습니다.");
 }
 
-// ---------- 관리자: 상인회 브랜딩 설정 (+ 로고 업로드) ----------
+// ---------- 관리자: 상인회 브랜딩 설정 (+ 로고 업로드, 멀티파트) ----------
 export async function adminSettings(req, res, { assoc }) {
   const base = baseOf(assoc);
   let buf;
@@ -168,19 +218,22 @@ export async function adminSettings(req, res, { assoc }) {
   } else {
     fields = parseUrlEncoded(buf.toString("utf8"));
   }
+  if (!csrf.valid(req, fields._csrf)) {
+    res.writeHead(403, { "Content-Type": "text/html; charset=utf-8" }); return res.end("<h1>403 잘못된 요청(CSRF)</h1>");
+  }
 
   if (!(fields.name || "").trim()) return back(res, base + "/admin", "상인회 이름을 입력하세요.", true);
   const color = /^#[0-9a-fA-F]{6}$/.test(fields.brand_color || "") ? fields.brand_color : assoc.brand_color;
 
-  // 로고 처리
   let logoKey = assoc.logo;
   const logoFile = files.find((x) => x.field === "logo" && x.data && x.data.length > 0);
   if (logoFile) {
-    if (!config.allowedImageTypes.includes(logoFile.contentType))
+    const real = sniff(logoFile.data);
+    if (!real || !config.allowedImageTypes.includes(real))
       return back(res, base + "/admin", "로고는 이미지 파일만 가능합니다.", true);
     if (logoFile.data.length > config.maxLogoBytes)
       return back(res, base + "/admin", "로고 용량이 큽니다. (최대 2MB)", true);
-    const newKey = await storage.save(logoFile.data, logoFile.contentType);
+    const newKey = await storage.save(logoFile.data, real);
     if (assoc.logo) await storage.remove(assoc.logo);
     logoKey = newKey;
   } else if (fields.remove_logo === "1" && assoc.logo) {
@@ -198,7 +251,8 @@ export async function adminSettings(req, res, { assoc }) {
 // ---------- 관리자: 홈페이지 구성 저장 ----------
 export async function adminSaveLayout(req, res, { assoc }) {
   const base = baseOf(assoc);
-  const f = parseUrlEncoded((await readBody(req, 128 * 1024)).toString("utf8"));
+  const f = await readForm(req, res, 128 * 1024);
+  if (!f) return;
   const order = (f.order || "").split(",").map((s) => parseInt(s, 10)).filter((n) => !isNaN(n));
   const built = [];
   for (const i of order) {
@@ -219,14 +273,16 @@ export async function adminSaveLayout(req, res, { assoc }) {
 }
 export async function adminResetLayout(req, res, { assoc }) {
   const base = baseOf(assoc);
-  await readBody(req, 8 * 1024).catch(() => {});
+  const f = await readForm(req, res, 8 * 1024);
+  if (!f) return;
   A.resetHomeLayout(assoc.id);
   back(res, base + "/admin", "홈페이지 구성을 기본값으로 초기화했습니다.");
 }
 
 // ---------- 슈퍼관리자: 새 상인회 생성(사이트 복제) ----------
 export async function superCreateAssociation(req, res) {
-  const f = parseUrlEncoded((await readBody(req, 32 * 1024)).toString("utf8"));
+  const f = await readForm(req, res, 32 * 1024);
+  if (!f) return;
   const name = (f.name || "").trim();
   const adminEmail = (f.admin_email || "").toLowerCase().trim();
   const adminPassword = f.admin_password || "";
@@ -244,7 +300,8 @@ export async function superCreateAssociation(req, res) {
 }
 
 export async function superToggleAssociation(req, res, { params }) {
-  await readBody(req, 8 * 1024).catch(() => {});
+  const f = await readForm(req, res, 8 * 1024);
+  if (!f) return;
   const a = A.getAssociationById(Number(params.id));
   if (!a) return back(res, "/super", "상인회를 찾을 수 없습니다.", true);
   A.setActive(a.id, a.active ? 0 : 1);
