@@ -5,16 +5,46 @@
 
 ---
 
-## 0. 준비물 체크리스트 (운영자가 마련)
+## 0. 준비물 체크리스트
 
-- [ ] **서버 1대** — Node.js 22+ 또는 Docker 가 돌아가는 리눅스 (네이버 클라우드·카페24·AWS Lightsail 등, 월 1~2만 원대면 충분)
-- [ ] **도메인** — 구매 후 DNS **A 레코드**를 서버 IP로 연결
-- [ ] (선택) **네이버 지도 Client ID** — 콘솔에 도메인 등록
-- [ ] (선택) **Cloudflare R2** — 사진이 많아질 때(영상은 링크 임베드라 비용 없음)
+- **가장 쉬운 길(추천): Render** — 서버를 따로 빌릴 필요 없음. 깃허브 연결 → 자동 배포·URL·HTTPS. → **아래 1번**
+- (선택) **네이버 지도 Client ID** — 콘솔에 도메인 등록
+- (선택) **Cloudflare R2** — 사진이 많아질 때(영상은 링크 임베드라 비용 없음)
+- (선택) **직접 도메인** — Render 는 기본 `*.onrender.com` 주소를 무료로 주며, 원하면 내 도메인 연결 가능
+
+> 직접 서버(VPS)를 운영하고 싶으면 아래 **대안 A(Docker)** / **대안 B(systemd)** 참고.
 
 ---
 
-## 1. 가장 쉬운 방법 — Docker + 자동 HTTPS
+## 1. Render 로 배포 (서버 관리 없음 · 추천)
+
+이 저장소에는 `render.yaml`(Blueprint)이 포함되어 있어 클릭 몇 번으로 뜹니다.
+
+1. [render.com](https://render.com) 가입 → 깃허브 계정 연결.
+2. **New + → Blueprint** → 이 저장소 선택 → `render.yaml` 자동 인식.
+3. 생성 화면에서 **환경 변수**를 채웁니다 (⚠️ **최초 배포 전에** 입력해야 그 비밀번호로 계정이 만들어집니다):
+   - `SUPERADMIN_EMAIL`, `SUPERADMIN_PASSWORD`
+   - `ADMIN_EMAIL`, `ADMIN_PASSWORD`
+   - (선택) `NAVER_MAP_CLIENT_ID`
+   - `SESSION_SECRET` 은 Render 가 자동 생성하므로 비워두세요.
+4. **Apply** → 빌드·배포가 끝나면 `https://seocho-website.onrender.com` 같은 **주소가 자동으로** 나옵니다. HTTPS 도 자동.
+
+### 꼭 알아둘 점 (정직하게)
+- 이 앱은 DB·업로드 사진·서명키를 **파일로 저장**하므로 **영속 디스크(disk)** 가 필요합니다.
+  `render.yaml` 에 `disk` 를 1GB 로 정의해 뒀고, 이는 **유료 플랜(Starter, ~$7/월 + 디스크 약 $0.25/월)** 에서 동작합니다.
+- **무료 플랜은 부적합**합니다: 일정 시간 후 잠들고(첫 접속이 느려짐), 재배포 때 디스크가 없어 **데이터가 사라집니다.**
+- 최초 부팅 시 `render.yaml` 의 시작 명령이 **시드를 자동 실행**(이미 있으면 건너뜀)하므로 별도 시드 작업이 필요 없습니다.
+
+### 내 도메인 연결(선택)
+Render 대시보드 → 서비스 → **Settings → Custom Domains** 에 도메인 추가 →
+안내되는 DNS 레코드(CNAME)를 도메인 구매처에 등록하면 인증서까지 자동 발급됩니다.
+
+### 배포 후
+로그인 → 초기 비밀번호가 걱정되면 계정에서 변경. 이후 **깃허브에 push 하면 자동 재배포**됩니다.
+
+---
+
+## 대안 A. 직접 서버 — Docker + 자동 HTTPS
 
 서버에 Docker / Docker Compose 만 설치돼 있으면 됩니다.
 
@@ -47,7 +77,7 @@ DOMAIN=your-domain.kr docker compose --profile edge up -d
 
 ---
 
-## 2. Docker 없이 — systemd 로 직접 구동
+## 대안 B. Docker 없이 — systemd 로 직접 구동
 
 ```bash
 # Node 22+ 설치 후
@@ -78,7 +108,7 @@ your-domain.kr {
 
 ---
 
-## 3. 배포 후 필수 조치
+## 배포 후 공통 조치 (모든 방식)
 
 1. **초기 비밀번호 변경** — 시드로 만들어진 슈퍼/관리자 계정 로그인 후 즉시 변경.
 2. **네이버 지도 키**(쓸 경우) — `.env` 의 `NAVER_MAP_CLIENT_ID` 설정 + 콘솔에 도메인 등록.
@@ -87,7 +117,7 @@ your-domain.kr {
 
 ---
 
-## 4. 사진 저장을 R2/S3 로 (선택, 사진 많을 때)
+## 사진 저장을 R2/S3 로 (선택, 사진 많을 때)
 
 `.env` 에서:
 
@@ -105,7 +135,7 @@ S3_PUBLIC_BASE_URL=https://cdn.your-domain.kr   # 퍼블릭/CDN
 
 ---
 
-## 5. 문제 해결
+## 문제 해결
 
 | 증상 | 확인 |
 | --- | --- |

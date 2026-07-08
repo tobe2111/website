@@ -50,9 +50,11 @@ npm start        # http://localhost:3000
 
 ### 실서비스 배포
 
-도메인 연결·HTTPS·서버 구동은 **[DEPLOY.md](./DEPLOY.md)** 참고. 준비물:
-`Dockerfile`(ffmpeg 포함) · `docker-compose.yml` · `Caddyfile`(HTTPS 자동) · `deploy/website.service`(systemd) · `.env.example`.
-가장 쉬운 길: `cp .env.example .env` → 값 채우기 → `docker compose run --rm app npm run seed` → `DOMAIN=your.kr docker compose --profile edge up -d`.
+도메인 연결·HTTPS·서버 구동은 **[DEPLOY.md](./DEPLOY.md)** 참고.
+
+- **가장 쉬운 길(서버 관리 없음): Render** — 저장소의 `render.yaml` 로 깃허브 연결 → 자동 배포·URL·HTTPS. 영속 디스크(유료 플랜) 필요.
+- **직접 서버(VPS)**: `Dockerfile`(ffmpeg 포함) · `docker-compose.yml` · `Caddyfile`(HTTPS 자동) · `deploy/website.service`(systemd) · `.env.example`.
+  `cp .env.example .env` → 값 채우기 → `docker compose run --rm app npm run seed` → `DOMAIN=your.kr docker compose --profile edge up -d`.
 
 ## 사용 흐름
 
