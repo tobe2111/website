@@ -171,6 +171,57 @@ export function deleteEvent(id) {
   db.prepare("DELETE FROM events WHERE id = ?").run(id);
 }
 
+// ----- Notifications (앱 내 알림 — 이메일 대체) -----
+export function createNotification({ associationId = null, kind, message, link = "" }) {
+  const info = db
+    .prepare("INSERT INTO notifications (association_id, kind, message, link) VALUES (?, ?, ?, ?)")
+    .run(associationId, kind, message, link);
+  return db.prepare("SELECT * FROM notifications WHERE id = ?").get(info.lastInsertRowid);
+}
+export function listNotifications(associationId, { limit = 20 } = {}) {
+  return db
+    .prepare("SELECT * FROM notifications WHERE association_id = ? ORDER BY is_read ASC, created_at DESC LIMIT ?")
+    .all(associationId, limit);
+}
+export function listAllNotifications({ limit = 30 } = {}) {
+  return db
+    .prepare(`SELECT n.*, a.name AS assoc_name FROM notifications n
+              LEFT JOIN associations a ON a.id = n.association_id
+              ORDER BY n.is_read ASC, n.created_at DESC LIMIT ?`)
+    .all(limit);
+}
+export function unreadCount(associationId) {
+  return db.prepare("SELECT COUNT(*) AS n FROM notifications WHERE association_id = ? AND is_read = 0").get(associationId).n;
+}
+export function unreadCountAll() {
+  return db.prepare("SELECT COUNT(*) AS n FROM notifications WHERE is_read = 0").get().n;
+}
+export function markNotificationRead(id, associationId) {
+  // associationId 가 주어지면 소속 확인(테넌트 격리)
+  if (associationId != null) db.prepare("UPDATE notifications SET is_read = 1 WHERE id = ? AND association_id = ?").run(id, associationId);
+  else db.prepare("UPDATE notifications SET is_read = 1 WHERE id = ?").run(id);
+}
+export function markAllNotificationsRead(associationId) {
+  if (associationId != null) db.prepare("UPDATE notifications SET is_read = 1 WHERE association_id = ?").run(associationId);
+  else db.prepare("UPDATE notifications SET is_read = 1").run();
+}
+
+// ----- 사용자 목록 (비밀번호 재설정 등 관리용) -----
+export function listUsersByAssociation(associationId, role = null) {
+  let sql = `SELECT u.id, u.email, u.name, u.role, b.name AS business_name
+             FROM users u LEFT JOIN businesses b ON b.owner_id = u.id
+             WHERE u.association_id = ?`;
+  const args = [associationId];
+  if (role) { sql += " AND u.role = ?"; args.push(role); }
+  sql += " ORDER BY u.role, u.created_at DESC";
+  return db.prepare(sql).all(...args);
+}
+export function listAdmins() {
+  return db.prepare(`SELECT u.id, u.email, u.name, u.association_id, a.name AS assoc_name
+                     FROM users u JOIN associations a ON a.id = u.association_id
+                     WHERE u.role = 'ADMIN' ORDER BY a.name`).all();
+}
+
 // ----- 통계 -----
 export function stats(associationId) {
   const q = (sql) => db.prepare(sql).get(associationId).n;

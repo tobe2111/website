@@ -329,9 +329,25 @@ export function loginForm(req, res, { query }) {
       <label>비밀번호<input type="password" name="password" required autocomplete="current-password" /></label>
       <button type="submit" class="btn btn-primary btn-block">로그인</button>
     </form>
-    <p class="auth-alt"><a href="/">← 상인회 목록으로</a></p>
+    <p class="auth-alt"><a href="/forgot">비밀번호를 잊으셨나요?</a> · <a href="/">상인회 목록</a></p>
   </div></div></section>`;
   html(res, layout({ title: "로그인", user: req.user, body }));
+}
+
+export function forgotForm(req, res, { query }) {
+  if (req.user) return redirect(res, postLoginPath(req.user, req));
+  const body = `<section class="section page-top"><div class="container auth-wrap"><div class="auth-card">
+    <h1 class="auth-title">비밀번호 찾기</h1>
+    <p class="auth-sub">가입한 이메일을 입력하면 상인회 관리자에게 재설정 요청이 전달됩니다.</p>
+    ${flash(query.get("msg") ? decodeURIComponent(query.get("msg")) : "", query.get("err") ? "err" : "ok")}
+    <form method="post" action="/forgot" class="stack-form">
+      <label>이메일<input type="email" name="email" required autocomplete="email" placeholder="you@example.com" /></label>
+      <button type="submit" class="btn btn-primary btn-block">재설정 요청</button>
+    </form>
+    <p class="auth-note">보안을 위해 관리자가 임시 비밀번호를 발급해 안내합니다. 로그인 후 <b>계정 → 비밀번호 변경</b>에서 바꿔 주세요.</p>
+    <p class="auth-alt"><a href="/login">← 로그인으로</a></p>
+  </div></div></section>`;
+  html(res, layout({ title: "비밀번호 찾기", user: req.user, body }));
 }
 
 export function registerForm(req, res, { assoc, query }) {
@@ -444,6 +460,24 @@ export function admin(req, res, { assoc, query }) {
     <span class="notice-title">${esc(e.title)}</span>
     <form method="post" action="${base}/admin/event/${e.id}/delete" data-confirm="삭제하시겠습니까?"><button class="link-danger">삭제</button></form></li>`).join("") || `<li class="empty">행사가 없습니다.</li>`;
 
+  const notifs = M.listNotifications(assoc.id, { limit: 15 });
+  const unread = M.unreadCount(assoc.id);
+  const notifRows = notifs.length
+    ? notifs.map((n) => `<li class="${n.is_read ? "" : "unread"}">
+        <span class="notif-dot" aria-hidden="true"></span>
+        <a href="${esc(n.link || base + "/admin")}" class="notif-msg">${esc(n.message)}</a>
+        <time>${esc(n.created_at.slice(5, 16).replace("T", " "))}</time></li>`).join("")
+    : `<li class="empty">알림이 없습니다.</li>`;
+
+  const members = M.listUsersByAssociation(assoc.id, "MERCHANT");
+  const memberRows = members.length
+    ? members.map((m) => `<tr>
+        <td>${esc(m.name)}<br /><small>${esc(m.email)}</small></td>
+        <td>${esc(m.business_name || "-")}</td>
+        <td class="actions-cell"><form method="post" action="${base}/admin/user/${m.id}/reset-password" data-confirm="${esc(m.name)}님의 임시 비밀번호를 발급하시겠습니까?"><button class="btn btn-xs btn-ghost">임시 비밀번호 발급</button></form></td>
+      </tr>`).join("")
+    : `<tr><td colspan="3" class="empty">회원이 없습니다.</td></tr>`;
+
   const superNote = req.user.role === ROLES.SUPERADMIN
     ? `<div class="flash flash-warn">슈퍼 관리자로 <strong>${esc(assoc.name)}</strong>의 관리 화면을 보고 있습니다. <a href="/super">← 슈퍼 관리자</a></div>` : "";
 
@@ -463,6 +497,21 @@ export function admin(req, res, { assoc, query }) {
       <div class="stat-card"><span class="stat-num">${s.events}</span><span class="stat-label">행사</span></div>
       <div class="stat-card"><span class="stat-num">${s.mediaCount}</span><span class="stat-label">미디어</span></div>
     </div>
+
+    <section class="panel"><div class="panel-head">
+      <h2 class="panel-title">알림함${unread ? ` <span class="badge badge-wait">${unread} 새 알림</span>` : ""}</h2>
+      ${unread ? `<form method="post" action="${base}/admin/notifications/read"><button class="btn btn-xs btn-ghost">모두 읽음</button></form>` : ""}
+    </div>
+      <p class="panel-hint">신규 업체 가입·비밀번호 재설정 요청 등이 여기에 표시됩니다(이메일 대체).</p>
+      <ul class="notif-list">${notifRows}</ul>
+    </section>
+
+    <section class="panel"><h2 class="panel-title">회원 관리</h2>
+      <p class="panel-hint">비밀번호를 잊은 회원에게 임시 비밀번호를 발급할 수 있습니다. 발급 시 회원의 기존 로그인은 모두 해제됩니다.</p>
+      <div class="table-scroll"><table class="admin-table">
+        <thead><tr><th>회원</th><th>업체</th><th>비밀번호</th></tr></thead>
+        <tbody>${memberRows}</tbody></table></div>
+    </section>
 
     <section class="panel"><h2 class="panel-title">홈페이지 구성 편집</h2>
       <p class="panel-hint">각 섹션을 켜고 끄거나, 순서를 바꾸고, 문구를 직접 수정할 수 있습니다. 상인회마다 다른 구조를 가질 수 있습니다.</p>
@@ -568,6 +617,24 @@ export function superConsole(req, res, { query }) {
       </td></tr>`).join("")
     : `<tr><td colspan="5" class="empty">아직 상인회가 없습니다.</td></tr>`;
 
+  const notifs = M.listAllNotifications({ limit: 20 });
+  const unread = M.unreadCountAll();
+  const notifRows = notifs.length
+    ? notifs.map((n) => `<li class="${n.is_read ? "" : "unread"}">
+        <span class="notif-dot" aria-hidden="true"></span>
+        <a href="${esc(n.link || "/super")}" class="notif-msg">${n.assoc_name ? `<b>[${esc(n.assoc_name)}]</b> ` : ""}${esc(n.message)}</a>
+        <time>${esc(n.created_at.slice(5, 16).replace("T", " "))}</time></li>`).join("")
+    : `<li class="empty">알림이 없습니다.</li>`;
+
+  const admins = M.listAdmins();
+  const adminRows = admins.length
+    ? admins.map((a) => `<tr>
+        <td>${esc(a.name)}<br /><small>${esc(a.email)}</small></td>
+        <td>${esc(a.assoc_name)}</td>
+        <td class="actions-cell"><form method="post" action="/super/user/${a.id}/reset-password" data-confirm="${esc(a.name)} 관리자의 임시 비밀번호를 발급하시겠습니까?"><button class="btn btn-xs btn-ghost">임시 비밀번호 발급</button></form></td>
+      </tr>`).join("")
+    : `<tr><td colspan="3" class="empty">관리자가 없습니다.</td></tr>`;
+
   const body = `
   <section class="dash"><div class="container">
     <div class="dash-head"><div>
@@ -576,6 +643,17 @@ export function superConsole(req, res, { query }) {
       <p class="dash-sub">플랫폼 전체와 상인회 사이트 복제를 관리합니다.</p>
     </div></div>
     ${flash(query.get("msg") ? decodeURIComponent(query.get("msg")) : "", query.get("err") ? "err" : "ok")}
+    <section class="panel"><div class="panel-head">
+      <h2 class="panel-title">알림함${unread ? ` <span class="badge badge-wait">${unread} 새 알림</span>` : ""}</h2>
+      ${unread ? `<form method="post" action="/super/notifications/read"><button class="btn btn-xs btn-ghost">모두 읽음</button></form>` : ""}
+    </div>
+      <ul class="notif-list">${notifRows}</ul>
+    </section>
+    <section class="panel"><h2 class="panel-title">관리자 계정 · 비밀번호 재설정</h2>
+      <div class="table-scroll"><table class="admin-table">
+        <thead><tr><th>관리자</th><th>상인회</th><th>비밀번호</th></tr></thead>
+        <tbody>${adminRows}</tbody></table></div>
+    </section>
     <div class="stat-cards">
       <div class="stat-card"><span class="stat-num">${ps.associations}</span><span class="stat-label">상인회</span></div>
       <div class="stat-card"><span class="stat-num">${ps.activeAssociations}</span><span class="stat-label">운영중</span></div>

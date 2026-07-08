@@ -1,8 +1,10 @@
 // 폼 액션 핸들러 (POST) — 멀티테넌트 + 슈퍼관리자 + 보안 하드닝
 import { redirect, readBody, parseUrlEncoded, readForm, setSessionCookie, clearSessionCookie, cap } from "../http.js";
-import { getUserByEmail, createUser, verifyPassword, sessionTokenForUser, updatePassword, bumpSessionVersion, ROLES } from "../auth.js";
+import { getUserByEmail, getUserById, createUser, verifyPassword, sessionTokenForUser, updatePassword, bumpSessionVersion, ROLES } from "../auth.js";
+import crypto from "node:crypto";
 import { parseMultipart } from "../multipart.js";
 import * as csrf from "../csrf.js";
+import * as mailer from "../mailer.js";
 import { sniff } from "../filetype.js";
 import * as M from "../models.js";
 import * as A from "../associations.js";
@@ -61,6 +63,9 @@ export async function register(req, res, { assoc }) {
 
   const user = createUser({ email, password, name, role: ROLES.MERCHANT, associationId: assoc.id });
   M.createBusiness({ associationId: assoc.id, ownerId: user.id, name: businessName, category: cap(f.category, 40) });
+  // 관리자에게 앱 내 알림(+ 메일 훅) — 승인 대기
+  M.createNotification({ associationId: assoc.id, kind: "new_business", message: `${name}님이 '${businessName}' 업체로 가입했습니다. 승인 대기 중입니다.`, link: base + "/admin" });
+  mailer.send({ to: assoc.email || "관리자", subject: `[${assoc.name}] 새 업체 가입 신청`, text: `${name} / ${businessName} — 승인 대기` });
   setSessionCookie(res, sessionTokenForUser(user));
   back(res, base + "/dashboard", "가입이 완료되었습니다! 업체 정보를 입력하고 사진·영상을 올려보세요.");
 }
@@ -89,6 +94,74 @@ export async function logout(req, res) {
   if (!f) return;
   clearSessionCookie(res);
   redirect(res, "/");
+}
+
+// ---------- 비밀번호 찾기(내부 처리): 관리자에게 재설정 요청 알림 ----------
+export async function forgotPassword(req, res) {
+  const f = await readForm(req, res, 8 * 1024);
+  if (!f) return;
+  const email = (f.email || "").toLowerCase().trim();
+  const user = email ? getUserByEmail(email) : null;
+  if (user) {
+    const link = user.association_id
+      ? (() => { const a = A.getAssociationById(user.association_id); return a ? `/t/${a.slug}/admin` : "/super"; })()
+      : "/super";
+    M.createNotification({
+      associationId: user.association_id, kind: "password_reset",
+      message: `비밀번호 재설정 요청: ${user.name} (${user.email})`, link,
+    });
+    mailer.send({ to: "관리자", subject: "비밀번호 재설정 요청", text: `${user.email} 회원이 재설정을 요청했습니다.` });
+  }
+  // 이메일 존재 여부를 노출하지 않도록 항상 동일 응답
+  back(res, "/forgot", "요청이 접수되었습니다. 상인회 관리자가 확인 후 임시 비밀번호를 안내해 드립니다.");
+}
+
+// 임시 비밀번호 생성 (읽기 쉬운 형태)
+function tempPassword() {
+  return crypto.randomBytes(6).toString("base64url"); // 8자 내외
+}
+
+// ---------- 관리자: 소속 회원 비밀번호 재설정 ----------
+export async function adminResetUserPassword(req, res, { assoc, params }) {
+  const base = baseOf(assoc);
+  const f = await readForm(req, res, 8 * 1024);
+  if (!f) return;
+  const target = getUserById(Number(params.id));
+  // 관리자는 자기 상인회의 회원(MERCHANT)만 재설정 가능
+  if (!target || target.association_id !== assoc.id || target.role !== ROLES.MERCHANT)
+    return back(res, base + "/admin", "대상 회원을 찾을 수 없습니다.", true);
+  const temp = tempPassword();
+  updatePassword(target.id, temp);
+  mailer.send({ to: target.email, subject: "임시 비밀번호 발급", text: `임시 비밀번호: ${temp}` });
+  back(res, base + "/admin", `${target.name}님 임시 비밀번호: ${temp} — 회원에게 전달하고 로그인 후 변경하도록 안내하세요.`);
+}
+
+// ---------- 슈퍼: 관리자/회원 비밀번호 재설정 ----------
+export async function superResetUserPassword(req, res, { params }) {
+  const f = await readForm(req, res, 8 * 1024);
+  if (!f) return;
+  const target = getUserById(Number(params.id));
+  if (!target || target.role === ROLES.SUPERADMIN)
+    return back(res, "/super", "대상을 찾을 수 없습니다.", true);
+  const temp = tempPassword();
+  updatePassword(target.id, temp);
+  mailer.send({ to: target.email, subject: "임시 비밀번호 발급", text: `임시 비밀번호: ${temp}` });
+  back(res, "/super", `${target.name}(${target.email}) 임시 비밀번호: ${temp} — 전달 후 변경 안내하세요.`);
+}
+
+// ---------- 알림 읽음 처리 ----------
+export async function adminReadNotifications(req, res, { assoc }) {
+  const base = baseOf(assoc);
+  const f = await readForm(req, res, 8 * 1024);
+  if (!f) return;
+  M.markAllNotificationsRead(assoc.id);
+  back(res, base + "/admin", "알림을 모두 읽음 처리했습니다.");
+}
+export async function superReadNotifications(req, res) {
+  const f = await readForm(req, res, 8 * 1024);
+  if (!f) return;
+  M.markAllNotificationsRead(null);
+  back(res, "/super", "알림을 모두 읽음 처리했습니다.");
 }
 
 // ---------- 계정: 비밀번호 변경 ----------

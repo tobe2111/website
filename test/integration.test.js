@@ -148,3 +148,41 @@ test("헬스체크 /healthz", async () => {
   assert.equal(r.status, 200);
   assert.deepEqual(await r.json(), { status: "ok" });
 });
+
+test("비밀번호 찾기: 요청이 관리자 알림으로 전달(내부 처리)", async () => {
+  // 폼 + csrf
+  const jar = {};
+  let r = await fetch(`${BASE}/forgot`);
+  jarUpdate(r, jar);
+  await r.text();
+  r = await fetch(`${BASE}/forgot`, {
+    method: "POST", redirect: "manual",
+    headers: { "content-type": "application/x-www-form-urlencoded", cookie: cookieHeader(jar) },
+    body: new URLSearchParams({ _csrf: jar.sc_csrf, email: "jung@ex.kr" }),
+  });
+  assert.equal(r.status, 303); // 항상 접수 응답(이메일 존재 비노출)
+
+  // 관리자 대시보드에 알림 표시
+  const { jar: aj } = await loginAs("admin@seocho-merchants.kr", "admin1234");
+  const dash = await (await fetch(`${BASE}/t/seocho/admin`, { headers: { cookie: cookieHeader(aj) } })).text();
+  assert.match(dash, /알림함/);
+  assert.match(dash, /비밀번호 재설정 요청/);
+});
+
+test("관리자: 회원 임시 비밀번호 발급 → 새 비밀번호로 로그인", async () => {
+  const { jar } = await loginAs("admin@seocho-merchants.kr", "admin1234");
+  // cafe 회원 id 조회 (models 직접)
+  const { getUserByEmail } = await import("../src/auth.js");
+  const cafe = getUserByEmail("cafe@ex.kr");
+  const r = await fetch(`${BASE}/t/seocho/admin/user/${cafe.id}/reset-password`, {
+    method: "POST", redirect: "manual",
+    headers: { "content-type": "application/x-www-form-urlencoded", cookie: cookieHeader(jar) },
+    body: new URLSearchParams({ _csrf: jar.sc_csrf }),
+  });
+  assert.equal(r.status, 303);
+  const msg = decodeURIComponent(new URL(r.headers.get("location"), BASE).searchParams.get("msg") || "");
+  const temp = /임시 비밀번호: (\S+)/.exec(msg)[1];
+  const login = await loginAs("cafe@ex.kr", temp);
+  assert.equal(login.status, 303);
+  assert.match(login.location, /dashboard$/);
+});

@@ -89,6 +89,17 @@ CREATE TABLE IF NOT EXISTS events (
   created_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS notifications (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  association_id INTEGER REFERENCES associations(id) ON DELETE CASCADE,  -- 관련 상인회 (NULL=플랫폼/슈퍼)
+  kind           TEXT NOT NULL,                         -- 'new_business' | 'password_reset' | ...
+  message        TEXT NOT NULL,
+  link           TEXT NOT NULL DEFAULT '',
+  is_read        INTEGER NOT NULL DEFAULT 0,
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_notif_assoc ON notifications(association_id, is_read);
 CREATE INDEX IF NOT EXISTS idx_media_business ON media(business_id);
 CREATE INDEX IF NOT EXISTS idx_business_assoc ON businesses(association_id, status);
 CREATE INDEX IF NOT EXISTS idx_notices_assoc ON notices(association_id);

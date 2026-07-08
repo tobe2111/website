@@ -30,12 +30,16 @@ const globalRoutes = [
   mk("GET", "/login", pages.loginForm),
   mk("POST", "/login", api.login),
   mk("POST", "/logout", api.logout),
+  mk("GET", "/forgot", pages.forgotForm),
+  mk("POST", "/forgot", api.forgotPassword),
   mk("GET", "/account", pages.account, "USER"),
   mk("POST", "/account/password", api.changePassword, "USER"),
   mk("POST", "/account/logout-all", api.logoutAll, "USER"),
   mk("GET", "/super", pages.superConsole, "SUPERADMIN"),
   mk("POST", "/super/association", api.superCreateAssociation, "SUPERADMIN"),
   mk("POST", "/super/association/:id/toggle", api.superToggleAssociation, "SUPERADMIN"),
+  mk("POST", "/super/user/:id/reset-password", api.superResetUserPassword, "SUPERADMIN"),
+  mk("POST", "/super/notifications/read", api.superReadNotifications, "SUPERADMIN"),
 ];
 
 // 테넌트 라우트 — 서브패스로 매칭 (경로 모드는 /t/:slug 를 벗겨낸 뒤, 서브도메인 모드는 전체 경로)
@@ -61,6 +65,8 @@ const tenantRoutes = [
   mk("POST", "/admin/settings", api.adminSettings, "ADMIN"),
   mk("POST", "/admin/layout", api.adminSaveLayout, "ADMIN"),
   mk("POST", "/admin/layout/reset", api.adminResetLayout, "ADMIN"),
+  mk("POST", "/admin/user/:id/reset-password", api.adminResetUserPassword, "ADMIN"),
+  mk("POST", "/admin/notifications/read", api.adminReadNotifications, "ADMIN"),
 ];
 
 // 테넌트 컨텍스트 해석: {slug, subpath, base} 또는 null
