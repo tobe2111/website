@@ -63,7 +63,7 @@ function galleryItem(m, { showCaption = true } = {}) {
 function businessCard(assoc, b) {
   const base = baseOf(assoc);
   const hue = hueFor(b.category + b.name);
-  const cover = M.listMedia(b.id).find((m) => m.kind === "image");
+  const cover = M.getCoverImage(b.id);
   const thumb = cover
     ? `<img src="${storage.publicUrl(cover.filename)}" alt="${esc(b.name)}" loading="lazy" />`
     : `<span>${esc(b.name.slice(0, 2))}</span>`;

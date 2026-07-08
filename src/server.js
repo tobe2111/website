@@ -2,6 +2,7 @@
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
+import zlib from "node:zlib";
 import { config } from "./config.js";
 import { db } from "./db.js";
 import { parseCookies, redirect } from "./http.js";
@@ -123,6 +124,12 @@ function serveStatic(res, filePath, { allowRange = false, req = null } = {}) {
       res.writeHead(206, { "Content-Type": type, "Content-Range": `bytes ${start}-${end}/${stat.size}`, "Accept-Ranges": "bytes", "Content-Length": end - start + 1 });
       return fs.createReadStream(filePath, { start, end }).pipe(res);
     }
+    // 텍스트 정적 자산(css/js/svg)은 gzip 압축 스트리밍
+    const compressible = /\.(css|js|svg)$/i.test(filePath);
+    if (compressible && req && /\bgzip\b/.test(req.headers["accept-encoding"] || "")) {
+      res.writeHead(200, { "Content-Type": type, "Content-Encoding": "gzip", Vary: "Accept-Encoding", "Cache-Control": "public, max-age=3600" });
+      return fs.createReadStream(filePath).pipe(zlib.createGzip()).pipe(res);
+    }
     res.writeHead(200, { "Content-Type": type, "Content-Length": stat.size, "Cache-Control": "public, max-age=3600", ...(allowRange ? { "Accept-Ranges": "bytes" } : {}) });
     fs.createReadStream(filePath).pipe(res);
   });
@@ -206,6 +213,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   setSecurityHeaders(res);
+  res.acceptsGzip = /\bgzip\b/.test(req.headers["accept-encoding"] || "");
   req.cookies = parseCookies(req.headers.cookie || "");
   req.user = resolveUser(req);
   csrf.ensure(req, res);

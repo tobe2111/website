@@ -125,6 +125,10 @@ export function distinctCategories(associationId) {
 export function listMedia(businessId) {
   return db.prepare("SELECT * FROM media WHERE business_id = ? ORDER BY created_at DESC").all(businessId);
 }
+// 대표 이미지 1건만 (목록 카드용 — 전체 미디어를 불러오지 않도록 최적화)
+export function getCoverImage(businessId) {
+  return db.prepare("SELECT filename FROM media WHERE business_id = ? AND kind = 'image' ORDER BY created_at DESC LIMIT 1").get(businessId);
+}
 export function addMedia({ businessId, kind, filename, poster = "", originalName, size, caption = "" }) {
   const info = db
     .prepare(

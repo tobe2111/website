@@ -1,6 +1,10 @@
 // HTTP 요청/응답 유틸리티
+import zlib from "node:zlib";
 import { config } from "./config.js";
 import * as csrf from "./csrf.js";
+
+// 텍스트 응답 압축 대상
+const COMPRESSIBLE = /^(text\/|application\/(json|xml|javascript|ld\+json)|image\/svg)/i;
 
 export function parseCookies(header = "") {
   const out = {};
@@ -43,6 +47,13 @@ export function parseUrlEncoded(str = "") {
 
 // ----- 응답 헬퍼 -----
 export function send(res, status, body, headers = {}) {
+  // Accept-Encoding: gzip 이고 텍스트 응답이면 압축 (res.acceptsGzip 은 서버가 주입)
+  const ct = headers["Content-Type"] || headers["content-type"] || "";
+  if (res.acceptsGzip && typeof body === "string" && Buffer.byteLength(body) > 1024 && COMPRESSIBLE.test(ct)) {
+    const gz = zlib.gzipSync(body);
+    res.writeHead(status, { ...headers, "Content-Encoding": "gzip", Vary: "Accept-Encoding", "Content-Length": gz.length });
+    return res.end(gz);
+  }
   res.writeHead(status, headers);
   res.end(body);
 }
