@@ -1,5 +1,5 @@
 // 폼 액션 핸들러 (POST) — 멀티테넌트 + 슈퍼관리자 + 보안 하드닝
-import { redirect, readBody, parseUrlEncoded, readForm, setSessionCookie, clearSessionCookie } from "../http.js";
+import { redirect, readBody, parseUrlEncoded, readForm, setSessionCookie, clearSessionCookie, cap } from "../http.js";
 import { getUserByEmail, createUser, verifyPassword, sessionTokenForUser, updatePassword, bumpSessionVersion, ROLES } from "../auth.js";
 import { parseMultipart } from "../multipart.js";
 import * as csrf from "../csrf.js";
@@ -51,16 +51,16 @@ export async function register(req, res, { assoc }) {
   const base = baseOf(assoc);
   const f = await readForm(req, res, 64 * 1024);
   if (!f) return;
-  const name = (f.name || "").trim();
-  const email = (f.email || "").toLowerCase().trim();
+  const name = cap((f.name || "").trim(), 60);
+  const email = cap((f.email || "").toLowerCase().trim(), 120);
   const password = f.password || "";
-  const businessName = (f.business_name || "").trim();
-  if (!name || !EMAIL_RE.test(email) || password.length < 8 || !businessName)
-    return back(res, base + "/register", "입력값을 확인해 주세요. (비밀번호 8자 이상)", true);
+  const businessName = cap((f.business_name || "").trim(), 100);
+  if (!name || !EMAIL_RE.test(email) || password.length < 8 || password.length > 200 || !businessName)
+    return back(res, base + "/register", "입력값을 확인해 주세요. (비밀번호 8~200자)", true);
   if (getUserByEmail(email)) return back(res, base + "/register", "이미 가입된 이메일입니다.", true);
 
   const user = createUser({ email, password, name, role: ROLES.MERCHANT, associationId: assoc.id });
-  M.createBusiness({ associationId: assoc.id, ownerId: user.id, name: businessName, category: f.category });
+  M.createBusiness({ associationId: assoc.id, ownerId: user.id, name: businessName, category: cap(f.category, 40) });
   setSessionCookie(res, sessionTokenForUser(user));
   back(res, base + "/dashboard", "가입이 완료되었습니다! 업체 정보를 입력하고 사진·영상을 올려보세요.");
 }
@@ -123,7 +123,11 @@ export async function updateBusiness(req, res, { assoc }) {
   const f = await readForm(req, res, 64 * 1024);
   if (!f) return;
   if (!(f.name || "").trim()) return back(res, base + "/dashboard", "업체명을 입력하세요.", true);
-  M.updateBusiness(b.id, { name: f.name.trim(), category: f.category, description: f.description, phone: f.phone, address: f.address, hours: f.hours });
+  M.updateBusiness(b.id, {
+    name: cap(f.name.trim(), 100), category: cap(f.category, 40),
+    description: cap(f.description, 2000), phone: cap(f.phone, 40),
+    address: cap(f.address, 200), hours: cap(f.hours, 100),
+  });
   back(res, base + "/dashboard", "업체 정보가 저장되었습니다.");
 }
 
@@ -153,7 +157,7 @@ async function doUpload(req, res, { assoc, base, b }) {
     res.writeHead(403, { "Content-Type": "text/html; charset=utf-8" }); return res.end("<h1>403 잘못된 요청(CSRF)</h1>");
   }
 
-  const caption = (parsed.fields.caption || "").trim();
+  const caption = cap((parsed.fields.caption || "").trim(), 200);
   const files = parsed.files.filter((x) => x.data && x.data.length > 0);
   if (!files.length) return back(res, base + "/dashboard", "선택된 파일이 없습니다.", true);
 
@@ -211,7 +215,7 @@ export async function adminCreateNotice(req, res, { assoc }) {
   const f = await readForm(req, res, 64 * 1024);
   if (!f) return;
   if (!(f.title || "").trim()) return back(res, base + "/admin", "공지 제목을 입력하세요.", true);
-  M.createNotice({ associationId: assoc.id, title: f.title.trim(), body: f.body, tag: f.tag || "안내", pinned: f.pinned === "1" });
+  M.createNotice({ associationId: assoc.id, title: cap(f.title.trim(), 200), body: cap(f.body, 10000), tag: cap(f.tag || "안내", 20), pinned: f.pinned === "1" });
   back(res, base + "/admin", "공지를 등록했습니다.");
 }
 export async function adminDeleteNotice(req, res, { assoc, params }) {
@@ -229,7 +233,7 @@ export async function adminCreateEvent(req, res, { assoc }) {
   const f = await readForm(req, res, 64 * 1024);
   if (!f) return;
   if (!(f.title || "").trim() || !(f.event_date || "").trim()) return back(res, base + "/admin", "행사명과 날짜를 입력하세요.", true);
-  M.createEvent({ associationId: assoc.id, title: f.title.trim(), event_date: f.event_date, place: f.place, description: f.description });
+  M.createEvent({ associationId: assoc.id, title: cap(f.title.trim(), 200), event_date: cap(f.event_date, 10), place: cap(f.place, 120), description: cap(f.description, 2000) });
   back(res, base + "/admin", "행사를 등록했습니다.");
 }
 export async function adminDeleteEvent(req, res, { assoc, params }) {
@@ -280,8 +284,8 @@ export async function adminSettings(req, res, { assoc }) {
   }
 
   A.updateAssociation(assoc.id, {
-    name: fields.name.trim(), tagline: fields.tagline, brand_color: color,
-    phone: fields.phone, email: fields.email, address: fields.address, logo: logoKey,
+    name: cap(fields.name.trim(), 100), tagline: cap(fields.tagline, 200), brand_color: color,
+    phone: cap(fields.phone, 40), email: cap(fields.email, 120), address: cap(fields.address, 200), logo: logoKey,
   });
   back(res, base + "/admin", "상인회 정보가 저장되었습니다.");
 }
@@ -301,7 +305,7 @@ export async function adminSaveLayout(req, res, { assoc }) {
     for (const field of cat.fields) {
       const key = `f_${i}_${field.key}`;
       if (field.type === "bool") sec[field.key] = f[key] === "1";
-      else sec[field.key] = f[key] != null ? f[key] : "";
+      else sec[field.key] = cap(f[key] != null ? f[key] : "", 600);
     }
     built.push(sec);
   }
@@ -321,17 +325,17 @@ export async function adminResetLayout(req, res, { assoc }) {
 export async function superCreateAssociation(req, res) {
   const f = await readForm(req, res, 32 * 1024);
   if (!f) return;
-  const name = (f.name || "").trim();
-  const adminEmail = (f.admin_email || "").toLowerCase().trim();
+  const name = cap((f.name || "").trim(), 100);
+  const adminEmail = cap((f.admin_email || "").toLowerCase().trim(), 120);
   const adminPassword = f.admin_password || "";
-  if (!name || !EMAIL_RE.test(adminEmail) || adminPassword.length < 8)
-    return back(res, "/super", "상인회 이름과 관리자 계정을 확인해 주세요. (비밀번호 8자 이상)", true);
+  if (!name || !EMAIL_RE.test(adminEmail) || adminPassword.length < 8 || adminPassword.length > 200)
+    return back(res, "/super", "상인회 이름과 관리자 계정을 확인해 주세요. (비밀번호 8~200자)", true);
   if (getUserByEmail(adminEmail)) return back(res, "/super", "이미 사용 중인 관리자 이메일입니다.", true);
   const color = /^#[0-9a-fA-F]{6}$/.test(f.brand_color || "") ? f.brand_color : "#0b6e4f";
 
   const { association } = A.provisionAssociation({
-    name, brandColor: color, tagline: f.tagline,
-    adminName: f.admin_name, adminEmail, adminPassword,
+    name, brandColor: color, tagline: cap(f.tagline, 200),
+    adminName: cap(f.admin_name, 60), adminEmail, adminPassword,
     seedSamples: f.seed === "1",
   });
   back(res, "/super", `'${name}' 상인회 사이트가 생성되었습니다. (주소: /t/${association.slug}, 관리자: ${adminEmail})`);

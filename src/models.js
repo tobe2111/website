@@ -65,6 +65,34 @@ export function listBusinesses(associationId, { status = "approved", category = 
   sql += " ORDER BY created_at DESC";
   return db.prepare(sql).all(...args);
 }
+// 검색 + 페이지네이션 (LIKE 와일드카드 이스케이프 포함)
+function bizWhere(associationId, { status = "approved", category = null, q = null }) {
+  let sql = " WHERE association_id = ? AND status = ?";
+  const args = [associationId, status];
+  if (category) { sql += " AND category = ?"; args.push(category); }
+  if (q) {
+    const like = "%" + String(q).replace(/[%_\\]/g, (c) => "\\" + c) + "%";
+    sql += " AND (name LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\' OR category LIKE ? ESCAPE '\\')";
+    args.push(like, like, like);
+  }
+  return { sql, args };
+}
+export function listBusinessesPaged(associationId, { status = "approved", category = null, q = null, page = 1, perPage = 12 } = {}) {
+  const { sql, args } = bizWhere(associationId, { status, category, q });
+  const total = db.prepare("SELECT COUNT(*) AS n FROM businesses" + sql).get(...args).n;
+  const pages = Math.max(1, Math.ceil(total / perPage));
+  const p = Math.min(Math.max(1, page | 0 || 1), pages);
+  const items = db.prepare("SELECT * FROM businesses" + sql + " ORDER BY created_at DESC LIMIT ? OFFSET ?").all(...args, perPage, (p - 1) * perPage);
+  return { items, total, page: p, pages, perPage };
+}
+export function listNoticesPaged(associationId, { page = 1, perPage = 20 } = {}) {
+  const total = db.prepare("SELECT COUNT(*) AS n FROM notices WHERE association_id = ?").get(associationId).n;
+  const pages = Math.max(1, Math.ceil(total / perPage));
+  const p = Math.min(Math.max(1, page | 0 || 1), pages);
+  const items = db.prepare("SELECT * FROM notices WHERE association_id = ? ORDER BY pinned DESC, created_at DESC LIMIT ? OFFSET ?").all(associationId, perPage, (p - 1) * perPage);
+  return { items, total, page: p, pages, perPage };
+}
+
 export function listAllBusinesses(associationId) {
   return db
     .prepare(

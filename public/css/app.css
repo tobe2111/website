@@ -290,6 +290,16 @@ img,video{max-width:100%;display:block}
 .free-text{font-size:1.05rem;color:var(--ink-soft);line-height:1.9}
 .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:7px;vertical-align:middle}
 
+/* ---------- Search bar & pager ---------- */
+.search-bar{display:flex;gap:8px;max-width:560px;margin:0 auto 20px;flex-wrap:wrap}
+.search-bar input[type="search"]{flex:1;min-width:180px;font:inherit;padding:11px 15px;border:1.5px solid var(--line);border-radius:999px;background:#fbfdfc}
+.search-bar input[type="search"]:focus{outline:none;border-color:var(--green-500);box-shadow:0 0 0 4px rgba(23,160,111,.14)}
+.pager{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:36px}
+.pager .pg{min-width:40px;text-align:center;padding:9px 13px;border:1px solid var(--line);border-radius:9px;font-weight:600;color:var(--ink-soft);background:#fff;transition:all .2s}
+.pager a.pg:hover{border-color:var(--green-500);color:var(--green-700)}
+.pager .pg.cur{background:var(--green-700);color:#fff;border-color:var(--green-700)}
+.pager .pg.disabled{opacity:.4;pointer-events:none}
+
 /* ---------- Logo ---------- */
 .brand-mark.has-logo{background:none;box-shadow:none;overflow:hidden;padding:0}
 .brand-mark.has-logo img{width:100%;height:100%;object-fit:contain}

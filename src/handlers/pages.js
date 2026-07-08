@@ -173,21 +173,54 @@ export function home(req, res, { assoc }) {
   }));
 }
 
-// ================= 업체 목록 =================
+// 페이지 네비게이션 렌더러
+function pager(urlFor, page, pages) {
+  if (pages <= 1) return "";
+  let out = '<nav class="pager" aria-label="페이지 이동">';
+  out += page > 1 ? `<a class="pg" href="${urlFor(page - 1)}" rel="prev">‹ 이전</a>` : `<span class="pg disabled">‹ 이전</span>`;
+  for (let i = 1; i <= pages; i++) {
+    out += i === page ? `<span class="pg cur" aria-current="page">${i}</span>` : `<a class="pg" href="${urlFor(i)}">${i}</a>`;
+  }
+  out += page < pages ? `<a class="pg" href="${urlFor(page + 1)}" rel="next">다음 ›</a>` : `<span class="pg disabled">다음 ›</span>`;
+  return out + "</nav>";
+}
+function qsBuild(obj) {
+  const p = new URLSearchParams();
+  for (const [k, v] of Object.entries(obj)) if (v != null && v !== "" && !(k === "page" && v === 1)) p.set(k, v);
+  const s = p.toString();
+  return s ? "?" + s : "";
+}
+
+// ================= 업체 목록 (검색 + 페이지네이션) =================
 export function businesses(req, res, { assoc, query }) {
   const base = baseOf(assoc);
   const cat = query.get("category");
-  const list = M.listBusinesses(assoc.id, { category: cat });
+  const q = (query.get("q") || "").trim().slice(0, 60);
+  const page = parseInt(query.get("page") || "1", 10) || 1;
+  const { items, total, page: cur, pages } = M.listBusinessesPaged(assoc.id, { category: cat, q, page });
   const cats = M.distinctCategories(assoc.id);
+
   const filterChips =
-    `<a href="${base}/businesses" class="chip-filter${!cat ? " active" : ""}">전체</a>` +
-    cats.map((c) => `<a href="${base}/businesses?category=${encodeURIComponent(c.category)}" class="chip-filter${cat === c.category ? " active" : ""}">${esc(c.category)} <em>${c.n}</em></a>`).join("");
-  const grid = list.length ? list.map((b) => businessCard(assoc, b)).join("") : `<p class="empty">해당 조건의 업체가 없습니다.</p>`;
+    `<a href="${base}/businesses${qsBuild({ q })}" class="chip-filter${!cat ? " active" : ""}">전체</a>` +
+    cats.map((c) => `<a href="${base}/businesses${qsBuild({ category: c.category, q })}" class="chip-filter${cat === c.category ? " active" : ""}">${esc(c.category)} <em>${c.n}</em></a>`).join("");
+
+  const grid = items.length ? items.map((b) => businessCard(assoc, b)).join("")
+    : `<p class="empty">${q ? `'${esc(q)}' 검색 결과가 없습니다.` : "해당 조건의 업체가 없습니다."}</p>`;
+  const urlFor = (i) => `${base}/businesses${qsBuild({ category: cat, q, page: i })}`;
+
   const body = `<section class="section page-top"><div class="container">
     <div class="section-head"><p class="section-eyebrow">MEMBERS</p><h2 class="section-title">업체 안내</h2>
-      <p class="section-lead">${esc(assoc.name)} 소속 업체 ${list.length}곳을 소개합니다.</p></div>
+      <p class="section-lead">${esc(assoc.name)} 소속 업체 ${total}곳${q ? ` · '${esc(q)}' 검색` : ""}</p></div>
+    <form class="search-bar" method="get" action="${base}/businesses" role="search">
+      ${cat ? `<input type="hidden" name="category" value="${esc(cat)}" />` : ""}
+      <input type="search" name="q" value="${esc(q)}" placeholder="업체명·소개·업종 검색" aria-label="업체 검색" />
+      <button class="btn btn-primary btn-sm" type="submit">검색</button>
+      ${q ? `<a class="btn btn-ghost btn-sm" href="${base}/businesses${qsBuild({ category: cat })}">초기화</a>` : ""}
+    </form>
     <div class="chip-filters">${filterChips}</div>
-    <div class="market-grid">${grid}</div></div></section>`;
+    <div class="market-grid">${grid}</div>
+    ${pager(urlFor, cur, pages)}
+  </div></section>`;
   html(res, layout({ title: "업체 안내", user: req.user, assoc, base, activeNav: base + "/businesses", body }));
 }
 
@@ -243,11 +276,15 @@ export function businessDetail(req, res, { assoc, params }) {
 }
 
 // ================= 공지 =================
-export function notices(req, res, { assoc }) {
+export function notices(req, res, { assoc, query }) {
   const base = baseOf(assoc);
+  const page = parseInt(query.get("page") || "1", 10) || 1;
+  const { items, page: cur, pages } = M.listNoticesPaged(assoc.id, { page });
+  const urlFor = (i) => `${base}/notices${qsBuild({ page: i })}`;
   const body = `<section class="section page-top"><div class="container">
     <div class="section-head"><p class="section-eyebrow">NOTICE</p><h2 class="section-title">공지사항</h2></div>
-    <ul class="notice-list">${noticeRowsHtml(assoc, M.listNotices(assoc.id))}</ul></div></section>`;
+    <ul class="notice-list">${noticeRowsHtml(assoc, items)}</ul>
+    ${pager(urlFor, cur, pages)}</div></section>`;
   html(res, layout({ title: "공지사항", user: req.user, assoc, base, activeNav: base + "/notices", body }));
 }
 export function noticeDetail(req, res, { assoc, params }) {

@@ -121,6 +121,11 @@ export function esc(s) {
     .replace(/'/g, "&#39;");
 }
 
+// 입력 길이 제한 (초장문 입력 방지)
+export function cap(s, n) {
+  return String(s == null ? "" : s).slice(0, n);
+}
+
 // 슬러그 생성 (한글 보존, 공백/특수문자 정리)
 export function slugify(name) {
   const base = String(name)
