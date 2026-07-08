@@ -184,6 +184,63 @@ export const listNotifications = (db, aid, limit = 20) =>
 export const unreadCount = async (db, aid) => (await first(db, "SELECT COUNT(*) AS n FROM notifications WHERE association_id=? AND is_read=0", aid)).n;
 export const markAllNotificationsRead = (db, aid) => run(db, "UPDATE notifications SET is_read=1 WHERE association_id=?", aid);
 
+// ----- 전자서명: 문서 -----
+export async function createDocument(db, { associationId, title, body, contentHash, createdBy, ordered = 0, dueDate = "" }) {
+  await run(db, "INSERT INTO documents (association_id, title, body, content_hash, created_by, ordered, due_date) VALUES (?,?,?,?,?,?,?)",
+    associationId, title, body, contentHash, createdBy, ordered ? 1 : 0, dueDate || "");
+  return getDocument(db, await lastId(db));
+}
+export const getDocument = (db, id) => first(db, "SELECT * FROM documents WHERE id=?", id);
+export const listDocuments = (db, aid) =>
+  all(db, "SELECT d.*, (SELECT COUNT(*) FROM signatures s WHERE s.document_id=d.id) AS sign_count FROM documents d WHERE d.association_id=? ORDER BY d.created_at DESC", aid);
+export const closeDocument = (db, id) => run(db, "UPDATE documents SET closed=1 WHERE id=?", id);
+
+const TURN_OK = `(d.ordered = 0 OR NOT EXISTS (
+  SELECT 1 FROM signature_requests rp JOIN signature_requests rme ON rme.document_id=d.id AND rme.user_id=?
+  WHERE rp.document_id=d.id AND rp.sign_order < rme.sign_order
+    AND NOT EXISTS (SELECT 1 FROM signatures sp WHERE sp.document_id=rp.document_id AND sp.user_id=rp.user_id)))`;
+const TO_SIGN = `d.association_id=? AND d.closed=0 AND (d.due_date='' OR d.due_date >= date('now'))
+  AND NOT EXISTS (SELECT 1 FROM signatures s WHERE s.document_id=d.id AND s.user_id=?)
+  AND (EXISTS (SELECT 1 FROM signature_requests r WHERE r.document_id=d.id AND r.user_id=?)
+       OR NOT EXISTS (SELECT 1 FROM signature_requests r2 WHERE r2.document_id=d.id))
+  AND ${TURN_OK}`;
+export const listDocumentsToSign = (db, aid, uid) => all(db, `SELECT d.* FROM documents d WHERE ${TO_SIGN} ORDER BY d.created_at DESC`, aid, uid, uid, uid);
+export const countDocumentsToSign = async (db, aid, uid) => (await first(db, `SELECT COUNT(*) AS n FROM documents d WHERE ${TO_SIGN}`, aid, uid, uid, uid)).n;
+export async function canSignNow(db, doc, uid) {
+  if (!doc.ordered) return true;
+  const mine = await first(db, "SELECT sign_order FROM signature_requests WHERE document_id=? AND user_id=?", doc.id, uid);
+  if (!mine) return true;
+  const pending = (await first(db, `SELECT COUNT(*) AS n FROM signature_requests r WHERE r.document_id=? AND r.sign_order<?
+    AND NOT EXISTS (SELECT 1 FROM signatures s WHERE s.document_id=r.document_id AND s.user_id=r.user_id)`, doc.id, mine.sign_order)).n;
+  return pending === 0;
+}
+export function isPastDue(doc) {
+  if (!doc.due_date) return false;
+  return doc.due_date < new Date().toISOString().slice(0, 10);
+}
+export async function createSignatureRequests(db, documentId, userIds) {
+  let i = 0; for (const uid of userIds) { i++; await run(db, "INSERT OR IGNORE INTO signature_requests (document_id, user_id, sign_order) VALUES (?,?,?)", documentId, uid, i); }
+}
+export const listRequestStatus = (db, documentId) =>
+  all(db, `SELECT u.id, u.name, u.email, r.sign_order,
+    EXISTS (SELECT 1 FROM signatures s WHERE s.document_id=r.document_id AND s.user_id=u.id) AS signed
+    FROM signature_requests r JOIN users u ON u.id=r.user_id WHERE r.document_id=? ORDER BY r.sign_order ASC, u.name`, documentId);
+export async function requestCounts(db, documentId) {
+  const total = (await first(db, "SELECT COUNT(*) AS n FROM signature_requests WHERE document_id=?", documentId)).n;
+  const signed = (await first(db, `SELECT COUNT(*) AS n FROM signature_requests r WHERE r.document_id=?
+    AND EXISTS (SELECT 1 FROM signatures s WHERE s.document_id=r.document_id AND s.user_id=r.user_id)`, documentId)).n;
+  return { total, signed };
+}
+export const hasSigned = async (db, documentId, uid) => !!(await first(db, "SELECT 1 FROM signatures WHERE document_id=? AND user_id=?", documentId, uid));
+export async function createSignature(db, r) {
+  await run(db, `INSERT INTO signatures (document_id, user_id, signer_name, signature_image, content_hash, ip, user_agent, verify_code, record_hash, signed_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?)`, r.documentId, r.userId, r.signerName, r.signatureImage, r.contentHash, r.ip, r.userAgent, r.verifyCode, r.recordHash, r.signedAt);
+  return first(db, "SELECT * FROM signatures WHERE id=?", await lastId(db));
+}
+export const listSignatures = (db, documentId) =>
+  all(db, "SELECT s.*, u.email AS signer_email FROM signatures s JOIN users u ON u.id=s.user_id WHERE s.document_id=? ORDER BY s.signed_at DESC", documentId);
+export const getSignatureByCode = (db, code) => first(db, "SELECT * FROM signatures WHERE verify_code=?", code);
+
 // ----- Stats -----
 export async function stats(db, aid) {
   const q = async (sql) => (await first(db, sql, aid)).n;
@@ -193,5 +250,15 @@ export async function stats(db, aid) {
     events: await q("SELECT COUNT(*) AS n FROM events WHERE association_id=?"),
     notices: await q("SELECT COUNT(*) AS n FROM notices WHERE association_id=?"),
     mediaCount: (await first(db, "SELECT COUNT(*) AS n FROM media m JOIN businesses b ON b.id=m.business_id WHERE b.association_id=?", aid)).n,
+  };
+}
+export async function platformStats(db) {
+  const one = async (sql) => (await first(db, sql)).n;
+  return {
+    associations: await one("SELECT COUNT(*) AS n FROM associations"),
+    activeAssociations: await one("SELECT COUNT(*) AS n FROM associations WHERE active=1"),
+    businesses: await one("SELECT COUNT(*) AS n FROM businesses WHERE status='approved'"),
+    users: await one("SELECT COUNT(*) AS n FROM users"),
+    media: await one("SELECT COUNT(*) AS n FROM media"),
   };
 }

@@ -15,6 +15,11 @@ const GLOBAL = [
   ["POST", "/logout", api.logout, "USER"],
   ["GET", "/account", pages.account, "USER"],
   ["POST", "/account/password", api.changePassword, "USER"],
+  ["GET", "/verify", pages.verifyPage],
+  ["GET", "/verify/:code", pages.verifyPage],
+  ["GET", "/super", pages.superConsole, "SUPERADMIN"],
+  ["POST", "/super/association", api.superCreateAssociation, "SUPERADMIN"],
+  ["POST", "/super/association/:id/toggle", api.superToggleAssociation, "SUPERADMIN"],
 ];
 const TENANT = [
   ["GET", "/", pages.home],
@@ -40,6 +45,23 @@ const TENANT = [
   ["POST", "/dashboard/media", api.uploadMedia, "MERCHANT"],
   ["POST", "/dashboard/media/embed", api.addVideoEmbed, "MERCHANT"],
   ["POST", "/dashboard/media/:id/delete", api.deleteMedia, "MERCHANT"],
+  ["GET", "/sign", pages.signList, "MERCHANT"],
+  ["GET", "/sign/:id", pages.signForm, "MERCHANT"],
+  ["POST", "/sign/:id", api.memberSign, "MERCHANT"],
+  ["GET", "/admin", pages.admin, "ADMIN"],
+  ["POST", "/admin/business/:id/status", api.adminBusinessStatus, "ADMIN"],
+  ["POST", "/admin/notice", api.adminCreateNotice, "ADMIN"],
+  ["POST", "/admin/notice/:id/delete", api.adminDeleteNotice, "ADMIN"],
+  ["POST", "/admin/event", api.adminCreateEvent, "ADMIN"],
+  ["POST", "/admin/event/:id/delete", api.adminDeleteEvent, "ADMIN"],
+  ["POST", "/admin/settings", api.adminSettings, "ADMIN"],
+  ["POST", "/admin/notifications/read", api.adminReadNotifications, "ADMIN"],
+  ["POST", "/admin/user/:id/reset-password", api.adminResetUserPassword, "ADMIN"],
+  ["GET", "/admin/members.csv", pages.adminExportMembers, "ADMIN"],
+  ["GET", "/admin/documents", pages.adminDocuments, "ADMIN"],
+  ["POST", "/admin/documents", api.adminCreateDocument, "ADMIN"],
+  ["GET", "/admin/documents/:id", pages.adminDocumentDetail, "ADMIN"],
+  ["POST", "/admin/documents/:id/close", api.adminCloseDocument, "ADMIN"],
 ];
 
 function matchRoute(routes, method, path) {
@@ -141,7 +163,7 @@ async function handle(request, env) {
       return finalize(html("<h1>403 잘못된 요청(CSRF)</h1>", 403), setCookies, env);
   }
 
-  const baseCtx = { env, db, url, query: url.searchParams, user, csrf, form, addCookie, isProd, ip };
+  const baseCtx = { env, db, url, query: url.searchParams, user, csrf, form, addCookie, isProd, ip, request };
 
   // 테넌트 라우트
   const t = resolveTenant(env, url.hostname, pathname);

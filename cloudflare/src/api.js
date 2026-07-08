@@ -5,7 +5,8 @@ import { sessionTokenForUser, sessionCookie, clearSessionCookie } from "./auth.j
 import { back, redirect } from "./http.js";
 import * as storage from "./storage.js";
 import { parseEmbed } from "./embed.js";
-import { cap, sniffImage, EMAIL_RE, MAX_IMAGE_BYTES } from "./util.js";
+import { cap, sniffImage, EMAIL_RE, MAX_IMAGE_BYTES, slugify } from "./util.js";
+import { contentHash, sealRecord, newVerifyCode } from "./esign.js";
 
 const BOARD_MAX_IMAGES = 6;
 const MAX_EMBEDS = 30;
@@ -220,4 +221,137 @@ export async function deleteComment(ctx) {
   if (!(canModerateBoard(user, assoc) || c.author_id === user.id)) return back(base + "/board/" + p.id, "삭제 권한이 없습니다.", true);
   await D.deleteComment(db, c.id);
   return back(base + "/board/" + p.id, "댓글을 삭제했습니다.");
+}
+
+// ---------- 관리자 ----------
+const isAdmin = (user, assoc) => user && (user.role === "SUPERADMIN" || (user.role === "ADMIN" && user.association_id === assoc.id));
+
+export async function adminBusinessStatus(ctx) {
+  const { db, form, base, assoc, params } = ctx;
+  if (!["approved", "rejected", "pending"].includes(form.get("status"))) return back(base + "/admin", "잘못된 상태값", true);
+  const b = await D.getBusinessById(db, Number(params.id));
+  if (!b || b.association_id !== assoc.id) return back(base + "/admin", "업체를 찾을 수 없습니다.", true);
+  await D.setBusinessStatus(db, b.id, form.get("status"));
+  return back(base + "/admin", `'${b.name}' 상태를 변경했습니다.`);
+}
+export async function adminCreateNotice(ctx) {
+  const { db, env, form, base, assoc } = ctx;
+  const title = cap((form.get("title") || "").trim(), 200);
+  if (!title) return back(base + "/admin", "공지 제목을 입력하세요.", true);
+  const up = await saveImages(env, form.getAll("image"), 1);
+  if (up.error) return back(base + "/admin", up.error, true);
+  await D.createNotice(db, { associationId: assoc.id, title, body: cap(form.get("body"), 10000), tag: cap(form.get("tag") || "안내", 20), image: up.images[0] ? up.images[0].filename : "", pinned: form.get("pinned") === "1" });
+  return back(base + "/admin", "공지를 등록했습니다.");
+}
+export async function adminDeleteNotice(ctx) {
+  const { db, env, base, assoc, params } = ctx;
+  const n = await D.getNotice(db, Number(params.id));
+  if (n && n.association_id === assoc.id) { if (n.image) await storage.remove(env, n.image); await D.deleteNotice(db, n.id); }
+  return back(base + "/admin", "공지를 삭제했습니다.");
+}
+export async function adminCreateEvent(ctx) {
+  const { db, form, base, assoc } = ctx;
+  if (!(form.get("title") || "").trim() || !(form.get("event_date") || "").trim()) return back(base + "/admin", "행사명과 날짜를 입력하세요.", true);
+  await D.createEvent(db, { associationId: assoc.id, title: cap(form.get("title").trim(), 200), event_date: cap(form.get("event_date"), 10), place: cap(form.get("place"), 120), description: cap(form.get("description"), 2000) });
+  return back(base + "/admin", "행사를 등록했습니다.");
+}
+export async function adminDeleteEvent(ctx) {
+  const { db, base, assoc, params } = ctx;
+  const e = await D.getEvent(db, Number(params.id));
+  if (e && e.association_id === assoc.id) await D.deleteEvent(db, e.id);
+  return back(base + "/admin", "행사를 삭제했습니다.");
+}
+export async function adminSettings(ctx) {
+  const { db, env, form, base, assoc } = ctx;
+  if (!(form.get("name") || "").trim()) return back(base + "/admin", "상인회 이름을 입력하세요.", true);
+  const color = /^#[0-9a-fA-F]{6}$/.test(form.get("brand_color") || "") ? form.get("brand_color") : assoc.brand_color;
+  let logo = assoc.logo;
+  const up = await saveImages(env, form.getAll("logo"), 1);
+  if (up.error) return back(base + "/admin", "로고는 이미지만 가능합니다.", true);
+  if (up.images[0]) { if (assoc.logo) await storage.remove(env, assoc.logo); logo = up.images[0].filename; }
+  await D.updateAssociation(db, assoc.id, { name: cap(form.get("name").trim(), 100), tagline: cap(form.get("tagline"), 200), brand_color: color, phone: cap(form.get("phone"), 40), email: cap(form.get("email"), 120), address: cap(form.get("address"), 200), logo });
+  return back(base + "/admin", "상인회 정보가 저장되었습니다.");
+}
+export async function adminReadNotifications(ctx) {
+  await D.markAllNotificationsRead(ctx.db, ctx.assoc.id);
+  return back(ctx.base + "/admin", "알림을 모두 읽음 처리했습니다.");
+}
+export async function adminResetUserPassword(ctx) {
+  const { db, base, assoc, params } = ctx;
+  const target = await D.getUserById(db, Number(params.id));
+  if (!target || target.association_id !== assoc.id || target.role !== "MERCHANT") return back(base + "/admin", "대상 회원을 찾을 수 없습니다.", true);
+  const temp = Math.random().toString(36).slice(2, 10); // 임시 비밀번호
+  const { hash, salt } = await hashPassword(temp);
+  await D.updateUserPassword(db, target.id, hash, salt);
+  return back(base + "/admin", `${target.name}님 임시 비밀번호: ${temp} — 전달 후 변경 안내하세요.`);
+}
+
+// ---------- 전자서명 ----------
+export async function adminCreateDocument(ctx) {
+  const { db, form, base, assoc, user } = ctx;
+  const title = cap((form.get("title") || "").trim(), 200), body = cap((form.get("body") || "").trim(), 20000);
+  if (!title || !body) return back(base + "/admin/documents", "제목과 본문을 입력하세요.", true);
+  const ordered = form.get("ordered") === "1" ? 1 : 0;
+  let dueDate = ""; const rawDue = (form.get("due_date") || "").trim();
+  if (rawDue) { if (!/^\d{4}-\d{2}-\d{2}$/.test(rawDue)) return back(base + "/admin/documents", "기한 형식(YYYY-MM-DD)을 확인하세요.", true);
+    if (rawDue < new Date().toISOString().slice(0, 10)) return back(base + "/admin/documents", "기한은 오늘 이후여야 합니다.", true); dueDate = rawDue; }
+  const doc = await D.createDocument(db, { associationId: assoc.id, title, body, contentHash: await contentHash(body), createdBy: user.id, ordered, dueDate });
+  const target = form.get("target");
+  const members = await D.listUsersByAssociation(db, assoc.id, "MERCHANT");
+  if (target === "all") await D.createSignatureRequests(db, doc.id, members.map((m) => m.id));
+  else if (target === "select") { const valid = new Set(members.map((m) => m.id)); const chosen = form.getAll("members").map(Number).filter((id) => valid.has(id)); await D.createSignatureRequests(db, doc.id, chosen); }
+  return back(base + "/admin/documents", ordered ? "순차 서명 문서를 생성했습니다." : "문서를 생성했습니다.");
+}
+export async function adminCloseDocument(ctx) {
+  const { db, base, assoc, params } = ctx;
+  const d = await D.getDocument(db, Number(params.id));
+  if (d && d.association_id === assoc.id) await D.closeDocument(db, d.id);
+  return back(base + "/admin/documents", "문서를 마감했습니다.");
+}
+export async function memberSign(ctx) {
+  const { db, env, form, base, assoc, user, ip, request } = ctx;
+  const d = await D.getDocument(db, Number(ctx.params.id));
+  if (!d || d.association_id !== assoc.id) return back(base + "/sign", "문서를 찾을 수 없습니다.", true);
+  if (d.closed) return back(base + "/sign", "마감된 문서입니다.", true);
+  if (D.isPastDue(d)) return back(base + "/sign", "서명 기한이 지난 문서입니다.", true);
+  if (await D.hasSigned(db, d.id, user.id)) return back(base + "/sign", "이미 서명한 문서입니다.", true);
+  if (!(await D.canSignNow(db, d, user.id))) return back(base + "/sign", "앞 순번의 서명이 완료된 후 서명할 수 있습니다.", true);
+  if (form.get("consent") !== "1") return back(base + "/sign/" + d.id, "동의 확인란에 체크해 주세요.", true);
+  const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(form.get("signature") || "");
+  if (!m) return back(base + "/sign/" + d.id, "서명을 입력해 주세요.", true);
+  let bytes; try { bytes = Uint8Array.from(atob(m[1]), (c) => c.charCodeAt(0)); } catch { bytes = null; }
+  if (!bytes || bytes.length < 64 || bytes.length > 500 * 1024 || sniffImage(bytes) !== "image/png") return back(base + "/sign/" + d.id, "서명 이미지가 올바르지 않습니다.", true);
+  const sigKey = await storage.save(env, bytes, "image/png");
+  const signerName = cap((form.get("signer_name") || "").trim(), 60) || user.name;
+  const signedAt = new Date().toISOString();
+  const recordHash = await sealRecord(env, { documentId: d.id, userId: user.id, signerName, contentHash: d.content_hash, signedAt, ip });
+  const verifyCode = newVerifyCode();
+  await D.createSignature(db, { documentId: d.id, userId: user.id, signerName, signatureImage: sigKey, contentHash: d.content_hash, ip, userAgent: cap(request.headers.get("user-agent") || "", 200), verifyCode, recordHash, signedAt });
+  await D.createNotification(db, { associationId: assoc.id, kind: "signed", message: `${signerName}님이 '${d.title}'에 전자서명했습니다.`, link: base + "/admin/documents/" + d.id });
+  return back(base + "/sign", `전자서명이 완료되었습니다. 검증 코드: ${verifyCode}`);
+}
+
+// ---------- 슈퍼관리자 ----------
+export async function superCreateAssociation(ctx) {
+  const { db, form } = ctx;
+  const name = cap((form.get("name") || "").trim(), 100);
+  const adminEmail = cap((form.get("admin_email") || "").toLowerCase().trim(), 120);
+  const adminPassword = form.get("admin_password") || "";
+  if (!name || !EMAIL_RE.test(adminEmail) || adminPassword.length < 8 || adminPassword.length > 200) return back("/super", "상인회 이름과 관리자 계정을 확인하세요. (비밀번호 8~200자)", true);
+  if (await D.getUserByEmail(db, adminEmail)) return back("/super", "이미 사용 중인 관리자 이메일입니다.", true);
+  const color = /^#[0-9a-fA-F]{6}$/.test(form.get("brand_color") || "") ? form.get("brand_color") : "#0b6e4f";
+  // 고유 slug
+  let slug = slugify(name), n = 1;
+  while (await D.getAssociationBySlug(db, slug)) slug = slugify(name) + "-" + (++n);
+  const assoc = await D.createAssociation(db, { slug, name, brandColor: color, tagline: cap(form.get("tagline"), 200) || undefined });
+  const { hash, salt } = await hashPassword(adminPassword);
+  await D.createUser(db, { email: adminEmail, passwordHash: hash, salt, name: cap(form.get("admin_name"), 60) || "관리자", role: "ADMIN", associationId: assoc.id });
+  return back("/super", `'${name}' 상인회가 생성되었습니다. (주소: /t/${assoc.slug}, 관리자: ${adminEmail})`);
+}
+export async function superToggleAssociation(ctx) {
+  const { db, params } = ctx;
+  const a = await D.getAssociationById(db, Number(params.id));
+  if (!a) return back("/super", "상인회를 찾을 수 없습니다.", true);
+  await D.setAssociationActive(db, a.id, a.active ? 0 : 1);
+  return back("/super", `'${a.name}' 상태를 변경했습니다.`);
 }
