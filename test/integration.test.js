@@ -143,6 +143,35 @@ test("SEO: sitemap.xml + robots.txt", async () => {
   assert.match(await rb.text(), /Sitemap:/);
 });
 
+test("점포 지도: 페이지 렌더 + 좌표 저장 후 마커 데이터 노출", async () => {
+  // 지도 페이지 접근
+  let r = await fetch(`${BASE}/t/seocho/map`);
+  assert.equal(r.status, 200);
+  assert.match(await r.text(), /가입 점포 지도/);
+
+  // 회원이 좌표 저장 → 지도 마커 데이터에 반영
+  const { jar } = await loginAs("jung@ex.kr", "merchant1234");
+  r = await fetch(`${BASE}/t/seocho/dashboard/business`, {
+    method: "POST", redirect: "manual",
+    headers: { "content-type": "application/x-www-form-urlencoded", cookie: cookieHeader(jar) },
+    body: new URLSearchParams({ _csrf: jar.sc_csrf, name: "서초정육점", category: "농수축산", lat: "37.4919", lng: "127.0079" }),
+  });
+  assert.equal(r.status, 303);
+  const map = await (await fetch(`${BASE}/t/seocho/map`)).text();
+  assert.match(map, /"lat":37\.4919/);
+  assert.match(map, /map\.naver\.com/); // 폴백 딥링크
+});
+
+test("점포 지도: 잘못된 좌표 거부", async () => {
+  const { jar } = await loginAs("jung@ex.kr", "merchant1234");
+  const r = await fetch(`${BASE}/t/seocho/dashboard/business`, {
+    method: "POST", redirect: "manual",
+    headers: { "content-type": "application/x-www-form-urlencoded", cookie: cookieHeader(jar) },
+    body: new URLSearchParams({ _csrf: jar.sc_csrf, name: "서초정육점", lat: "999", lng: "127" }),
+  });
+  assert.match(new URL(r.headers.get("location"), BASE).search, /err=1/);
+});
+
 test("헬스체크 /healthz", async () => {
   const r = await fetch(`${BASE}/healthz`);
   assert.equal(r.status, 200);

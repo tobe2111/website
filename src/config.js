@@ -18,6 +18,12 @@ export const config = {
   // 데이터베이스
   dbFile: process.env.DB_FILE || path.join(ROOT, "data", "app.db"),
 
+  // ----- 지도 (네이버 지도 API) -----
+  // 네이버 클라우드 플랫폼 Maps 의 클라이언트 ID. 없으면 폴백(주소·딥링크 목록).
+  naverMapClientId: process.env.NAVER_MAP_CLIENT_ID || "",
+  // 로더 파라미터명: 신규 콘솔은 ncpKeyId, 구형은 ncpClientId
+  naverMapParam: process.env.NAVER_MAP_PARAM || "ncpClientId",
+
   // ----- 멀티테넌트 주소 방식 -----
   // BASE_DOMAIN 설정 시 서브도메인 라우팅 활성화 (예: seocho.example.com).
   // 미설정 시 경로 기반(/t/:slug)만 사용.

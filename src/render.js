@@ -57,6 +57,7 @@ export function layout({ title, user, assoc = null, base = "", body, activeNav =
     ? [
         [base + "/", "홈"],
         [base + "/businesses", "업체 안내"],
+        [base + "/map", "점포 지도"],
         [base + "/notices", "공지사항"],
         [base + "/events", "행사·이벤트"],
       ]

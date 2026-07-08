@@ -276,6 +276,54 @@ export function businessDetail(req, res, { assoc, params }) {
   }));
 }
 
+// ================= 점포 지도 =================
+export function mapPage(req, res, { assoc, query }) {
+  const base = baseOf(assoc);
+  const cat = query.get("category");
+  const markers = M.listBusinessMarkers(assoc.id).filter((m) => !cat || m.category === cat);
+  const cats = M.distinctCategories(assoc.id);
+  const naverEnabled = !!config.naverMapClientId;
+
+  const markerData = markers.map((m) => ({
+    name: m.name, slug: m.slug, category: m.category,
+    lat: m.lat, lng: m.lng, address: m.address || "", phone: m.phone || "",
+  }));
+
+  const filterChips =
+    `<a href="${base}/map" class="chip-filter${!cat ? " active" : ""}">전체</a>` +
+    cats.map((c) => `<a href="${base}/map?category=${encodeURIComponent(c.category)}" class="chip-filter${cat === c.category ? " active" : ""}">${esc(c.category)}</a>`).join("");
+
+  // 목록(폴백 + 프로그레시브): 지도 미지원/키 없음에도 항상 유용
+  const listRows = markers.length
+    ? markers.map((m) => `<li class="map-store" data-lat="${m.lat}" data-lng="${m.lng}">
+        <a href="${base}/business/${esc(m.slug)}" class="map-store-name">${esc(m.name)}</a>
+        <span class="chip">${esc(m.category)}</span>
+        ${m.address ? `<span class="map-store-addr">📍 ${esc(m.address)}</span>` : ""}
+        <a class="map-store-link" href="https://map.naver.com/p/search/${encodeURIComponent(m.address || m.name)}" target="_blank" rel="noopener">네이버 지도에서 열기 →</a>
+      </li>`).join("")
+    : `<li class="empty">지도에 표시할 좌표가 등록된 업체가 없습니다. (업체가 대시보드에서 위치를 지정하면 표시됩니다)</li>`;
+
+  const mapEl = naverEnabled
+    ? `<div id="storeMap" class="store-map"
+         data-center-lat="${assoc.map_lat}" data-center-lng="${assoc.map_lng}" data-zoom="${assoc.map_zoom}"
+         data-base="${esc(base)}"></div>`
+    : `<div class="map-fallback"><p>🗺️ 인터랙티브 지도는 관리자가 <b>네이버 지도 API 키</b>를 설정하면 표시됩니다. 아래 목록에서 각 점포의 네이버 지도를 열 수 있습니다.</p></div>`;
+
+  const naverLoader = naverEnabled
+    ? `<script src="https://oapi.map.naver.com/openapi/v3/maps.js?${esc(config.naverMapParam)}=${esc(config.naverMapClientId)}"></script><script src="/js/map.js" defer></script>`
+    : "";
+
+  const body = `<section class="section page-top"><div class="container">
+    <div class="section-head"><p class="section-eyebrow">MAP</p><h2 class="section-title">가입 점포 지도</h2>
+      <p class="section-lead">${esc(assoc.name)} 가입 점포 ${markers.length}곳을 지도에서 확인하세요.</p></div>
+    <div class="chip-filters">${filterChips}</div>
+    ${mapEl}
+    <ul class="map-list">${listRows}</ul>
+    <script type="application/json" id="mapData">${JSON.stringify(markerData).replace(/</g, "\\u003c")}</script>
+  </div></section>`;
+  html(res, layout({ title: "점포 지도", user: req.user, assoc, base, activeNav: base + "/map", body, scripts: naverLoader }));
+}
+
 // ================= 공지 =================
 export function notices(req, res, { assoc, query }) {
   const base = baseOf(assoc);
@@ -421,6 +469,12 @@ export function dashboard(req, res, { assoc, query }) {
             <label>영업시간<input type="text" name="hours" value="${esc(b.hours)}" placeholder="매일 10:00 - 22:00" /></label>
           </div>
           <label>주소<input type="text" name="address" value="${esc(b.address)}" /></label>
+          <div class="form-divider">지도 위치 (점포 지도에 표시)</div>
+          ${config.naverMapClientId ? `<div id="pickMap" class="pick-map" data-center-lat="${b.lat ?? assoc.map_lat}" data-center-lng="${b.lng ?? assoc.map_lng}" data-zoom="16"></div><p class="panel-hint">지도를 클릭하면 아래 좌표가 자동 입력됩니다.</p>` : `<p class="panel-hint">위도·경도를 입력하면 점포 지도에 표시됩니다. (<a href="https://map.naver.com" target="_blank" rel="noopener">네이버 지도</a>에서 내 위치 우클릭 → 좌표 확인)</p>`}
+          <div class="form-two">
+            <label>위도(lat)<input type="text" inputmode="decimal" name="lat" id="latInput" value="${b.lat != null ? esc(String(b.lat)) : ""}" placeholder="37.4837" /></label>
+            <label>경도(lng)<input type="text" inputmode="decimal" name="lng" id="lngInput" value="${b.lng != null ? esc(String(b.lng)) : ""}" placeholder="127.0324" /></label>
+          </div>
           <button type="submit" class="btn btn-primary">정보 저장</button>
         </form></section>
       <section class="panel"><h2 class="panel-title">사진·영상 업로드</h2>
@@ -436,7 +490,10 @@ export function dashboard(req, res, { assoc, query }) {
         <h3 class="panel-subtitle">등록된 미디어 (${media.length})</h3>
         <div class="media-grid">${mediaGrid}</div></section>
     </div></div></section>`;
-  html(res, layout({ title: "내 업체 관리", user: req.user, assoc, base, body, scripts: `<script src="/js/dashboard.js" defer></script><script src="/js/viewer.js" defer></script>` }));
+  const naverPicker = config.naverMapClientId
+    ? `<script src="https://oapi.map.naver.com/openapi/v3/maps.js?${esc(config.naverMapParam)}=${esc(config.naverMapClientId)}"></script><script src="/js/map.js" defer></script>`
+    : "";
+  html(res, layout({ title: "내 업체 관리", user: req.user, assoc, base, body, scripts: `<script src="/js/dashboard.js" defer></script><script src="/js/viewer.js" defer></script>${naverPicker}` }));
 }
 
 // ================= 상인회 관리자 대시보드 =================

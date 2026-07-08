@@ -290,6 +290,16 @@ img,video{max-width:100%;display:block}
 .free-text{font-size:1.05rem;color:var(--ink-soft);line-height:1.9}
 .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:7px;vertical-align:middle}
 
+/* ---------- Map ---------- */
+.store-map{width:100%;height:clamp(340px,60vh,560px);border-radius:var(--radius);border:1px solid var(--line);box-shadow:var(--shadow);overflow:hidden;margin-bottom:22px;background:var(--bg-alt)}
+.map-fallback{background:var(--green-50);border:1px solid var(--line);border-radius:var(--radius);padding:20px 22px;margin-bottom:20px;color:var(--ink-soft)}
+.map-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.map-store{background:#fff;border:1px solid var(--line);border-radius:var(--radius-sm);padding:16px 18px;display:grid;gap:6px;box-shadow:var(--shadow)}
+.map-store-name{font-weight:700;font-size:1.05rem;color:var(--ink)}
+.map-store-addr{font-size:.9rem;color:var(--muted)}
+.map-store-link{font-size:.88rem;font-weight:600;color:var(--green-700)}
+.pick-map{width:100%;height:260px;border-radius:var(--radius-sm);border:1px solid var(--line);overflow:hidden;background:var(--bg-alt)}
+
 /* ---------- E-sign ---------- */
 .dash-head-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .doc-body{white-space:normal;background:var(--bg-alt);border:1px solid var(--line);border-radius:12px;padding:20px 22px;line-height:1.9;color:var(--ink-soft);max-height:420px;overflow:auto}

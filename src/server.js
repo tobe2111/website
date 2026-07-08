@@ -49,6 +49,7 @@ const tenantRoutes = [
   mk("GET", "/", pages.home),
   mk("GET", "/businesses", pages.businesses),
   mk("GET", "/business/:slug", pages.businessDetail),
+  mk("GET", "/map", pages.mapPage),
   mk("GET", "/notices", pages.notices),
   mk("GET", "/notices/:id", pages.noticeDetail),
   mk("GET", "/events", pages.events),
@@ -136,16 +137,20 @@ function forbidden(res) {
 }
 
 // 모든 응답에 보안 헤더 적용
+// 네이버 지도 사용 시 필요한 도메인만 조건부 허용
+const NAVER_SCRIPT = config.naverMapClientId ? " https://oapi.map.naver.com" : "";
+const NAVER_CONNECT = config.naverMapClientId ? " https://oapi.map.naver.com https://*.pstatic.net https://*.map.naver.com" : "";
 const CSP = [
   "default-src 'self'",
   "base-uri 'self'",
   "object-src 'none'",
   "frame-ancestors 'self'",
   "form-action 'self'",
-  "script-src 'self'",
+  `script-src 'self'${NAVER_SCRIPT}`,
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: https:",
+  "img-src 'self' data: https:", // https: 로 네이버 타일(pstatic.net) 포함
   "media-src 'self' https:",
+  `connect-src 'self'${NAVER_CONNECT}`,
   "font-src 'self'",
 ].join("; ");
 function setSecurityHeaders(res) {

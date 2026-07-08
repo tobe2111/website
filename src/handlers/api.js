@@ -197,10 +197,21 @@ export async function updateBusiness(req, res, { assoc }) {
   const f = await readForm(req, res, 64 * 1024);
   if (!f) return;
   if (!(f.name || "").trim()) return back(res, base + "/dashboard", "업체명을 입력하세요.", true);
+  // 좌표 파싱 (범위 검증, 빈 값이면 null)
+  const parseCoord = (v, min, max) => {
+    const s = (v ?? "").trim();
+    if (s === "") return null;
+    const n = Number(s);
+    return Number.isFinite(n) && n >= min && n <= max ? n : undefined; // undefined = 유지
+  };
+  const lat = parseCoord(f.lat, -90, 90);
+  const lng = parseCoord(f.lng, -180, 180);
+  if (lat === undefined || lng === undefined) return back(res, base + "/dashboard", "좌표(위도/경도) 형식을 확인해 주세요.", true);
   M.updateBusiness(b.id, {
     name: cap(f.name.trim(), 100), category: cap(f.category, 40),
     description: cap(f.description, 2000), phone: cap(f.phone, 40),
     address: cap(f.address, 200), hours: cap(f.hours, 100),
+    lat, lng,
   });
   back(res, base + "/dashboard", "업체 정보가 저장되었습니다.");
 }
