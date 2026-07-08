@@ -574,6 +574,36 @@ export function superConsole(req, res, { query }) {
   html(res, layout({ title: "슈퍼 관리자", user: req.user, body }));
 }
 
+// ================= 계정 보안 =================
+export function account(req, res, { query }) {
+  const u = req.user;
+  const roleLabel = u.role === ROLES.SUPERADMIN ? "슈퍼 관리자" : u.role === ROLES.ADMIN ? "상인회 관리자" : "업체 회원";
+  const backTo = postLoginPath(u, req);
+  const body = `<section class="section page-top"><div class="container narrow">
+    <a href="${esc(backTo)}" class="back-link">← 대시보드</a>
+    <div class="section-head" style="text-align:left;margin-bottom:28px">
+      <p class="section-eyebrow">ACCOUNT</p><h1 class="section-title">계정 보안</h1>
+      <p class="section-lead">${esc(u.name)} · ${esc(u.email)} · ${roleLabel}</p></div>
+    ${flash(query.get("msg") ? decodeURIComponent(query.get("msg")) : "", query.get("err") ? "err" : "ok")}
+    <div class="panel"><h2 class="panel-title">비밀번호 변경</h2>
+      <form method="post" action="/account/password" class="stack-form">
+        <label>현재 비밀번호<input type="password" name="current" required autocomplete="current-password" /></label>
+        <label>새 비밀번호 <small>(8자 이상)</small><input type="password" name="new" required minlength="8" autocomplete="new-password" /></label>
+        <label>새 비밀번호 확인<input type="password" name="confirm" required minlength="8" autocomplete="new-password" /></label>
+        <button class="btn btn-primary">비밀번호 변경</button>
+      </form>
+      <p class="panel-hint" style="margin-top:14px">변경 시 다른 모든 기기의 로그인 세션이 자동 해제됩니다.</p>
+    </div>
+    <div class="panel"><h2 class="panel-title">모든 기기에서 로그아웃</h2>
+      <p class="panel-hint">공용 PC 사용 또는 계정 도용이 의심될 때, 모든 기기의 세션을 즉시 무효화합니다.</p>
+      <form method="post" action="/account/logout-all" data-confirm="모든 기기에서 로그아웃하시겠습니까?">
+        <button class="btn btn-ghost">모든 기기에서 로그아웃</button>
+      </form>
+    </div>
+  </div></section>`;
+  html(res, layout({ title: "계정 보안", user: u, body }));
+}
+
 // ================= SEO: sitemap.xml / robots.txt =================
 export function sitemap(req, res) {
   const o = origin(req);

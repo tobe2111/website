@@ -90,6 +90,14 @@ export function bumpSessionVersion(userId) {
   db.prepare("UPDATE users SET session_version = session_version + 1 WHERE id = ?").run(userId);
 }
 
+// 비밀번호 변경 → 재해시 + 모든 세션 무효화
+export function updatePassword(userId, password) {
+  const { hash, salt } = hashPassword(password);
+  db.prepare("UPDATE users SET password_hash = ?, salt = ?, session_version = session_version + 1 WHERE id = ?")
+    .run(hash, salt, userId);
+  return getUserById(userId);
+}
+
 // 요청에서 현재 사용자 해석 (라우터가 req.user 로 주입)
 export function resolveUser(req) {
   const token = req.cookies[config.sessionCookie];

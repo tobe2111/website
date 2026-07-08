@@ -29,6 +29,9 @@ const globalRoutes = [
   mk("GET", "/login", pages.loginForm),
   mk("POST", "/login", api.login),
   mk("POST", "/logout", api.logout),
+  mk("GET", "/account", pages.account, "USER"),
+  mk("POST", "/account/password", api.changePassword, "USER"),
+  mk("POST", "/account/logout-all", api.logoutAll, "USER"),
   mk("GET", "/super", pages.superConsole, "SUPERADMIN"),
   mk("POST", "/super/association", api.superCreateAssociation, "SUPERADMIN"),
   mk("POST", "/super/association/:id/toggle", api.superToggleAssociation, "SUPERADMIN"),
@@ -101,6 +104,7 @@ function serveStatic(res, filePath, { allowRange = false, req = null } = {}) {
 function authorize(user, auth, assoc) {
   if (!auth) return true;
   if (!user) return "/login?err=1&msg=" + encodeURIComponent("로그인이 필요합니다.");
+  if (auth === "USER") return true;
   if (auth === "SUPERADMIN") return user.role === ROLES.SUPERADMIN;
   if (auth === "ADMIN") {
     if (user.role === ROLES.SUPERADMIN) return true;

@@ -1,6 +1,6 @@
 // 폼 액션 핸들러 (POST) — 멀티테넌트 + 슈퍼관리자 + 보안 하드닝
 import { redirect, readBody, parseUrlEncoded, readForm, setSessionCookie, clearSessionCookie } from "../http.js";
-import { getUserByEmail, createUser, verifyPassword, sessionTokenForUser, ROLES } from "../auth.js";
+import { getUserByEmail, createUser, verifyPassword, sessionTokenForUser, updatePassword, bumpSessionVersion, ROLES } from "../auth.js";
 import { parseMultipart } from "../multipart.js";
 import * as csrf from "../csrf.js";
 import { sniff } from "../filetype.js";
@@ -89,6 +89,30 @@ export async function logout(req, res) {
   if (!f) return;
   clearSessionCookie(res);
   redirect(res, "/");
+}
+
+// ---------- 계정: 비밀번호 변경 ----------
+export async function changePassword(req, res) {
+  const f = await readForm(req, res, 16 * 1024);
+  if (!f) return;
+  const u = req.user;
+  if (!verifyPassword(f.current || "", u.salt, u.password_hash))
+    return back(res, "/account", "현재 비밀번호가 올바르지 않습니다.", true);
+  const next = f.new || "";
+  if (next.length < 8) return back(res, "/account", "새 비밀번호는 8자 이상이어야 합니다.", true);
+  if (next !== (f.confirm || "")) return back(res, "/account", "새 비밀번호 확인이 일치하지 않습니다.", true);
+  const updated = updatePassword(u.id, next);
+  setSessionCookie(res, sessionTokenForUser(updated)); // 현재 세션 유지
+  back(res, "/account", "비밀번호가 변경되었습니다. 다른 기기의 세션은 모두 로그아웃되었습니다.");
+}
+
+// ---------- 계정: 모든 기기 로그아웃 ----------
+export async function logoutAll(req, res) {
+  const f = await readForm(req, res, 8 * 1024);
+  if (!f) return;
+  bumpSessionVersion(req.user.id);
+  clearSessionCookie(res);
+  redirect(res, "/login?msg=" + encodeURIComponent("모든 기기에서 로그아웃되었습니다."));
 }
 
 // ---------- 업체 정보 수정 ----------

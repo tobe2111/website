@@ -75,6 +75,7 @@ export function layout({ title, user, assoc = null, base = "", body, activeNav =
     else { dash = (assoc ? base : "") + "/dashboard"; dashLabel = "내 업체 관리"; }
     userArea = `<div class="user-area">
         <a href="${dash}" class="btn btn-sm btn-ghost">${dashLabel}</a>
+        <a href="/account" class="btn btn-sm btn-ghost" aria-label="계정 보안">계정</a>
         <form method="post" action="/logout" class="inline-form"><button type="submit" class="btn btn-sm btn-primary">로그아웃</button></form>
       </div>`;
   } else {
