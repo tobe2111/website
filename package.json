@@ -1,0 +1,15 @@
+{
+  "name": "seocho-merchants",
+  "version": "1.0.0",
+  "description": "서초구 상인회 웹사이트 — 로그인 · 미디어 업로드 · 관리자 대시보드 · 업체별 페이지 (외부 의존성 0)",
+  "type": "module",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "start": "node --experimental-sqlite src/server.js",
+    "seed": "node --experimental-sqlite src/seed.js",
+    "reset": "node --experimental-sqlite src/seed.js --reset"
+  },
+  "license": "MIT"
+}

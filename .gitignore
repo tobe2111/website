@@ -1,0 +1,14 @@
+# 데이터 및 업로드 (런타임 생성물 — 저장소에 커밋하지 않음)
+/data/app.db
+/data/app.db-*
+/data/uploads/*
+!/data/uploads/.gitkeep
+
+# 환경 변수
+.env
+.env.local
+
+# 로그 / 시스템
+*.log
+.DS_Store
+node_modules/
