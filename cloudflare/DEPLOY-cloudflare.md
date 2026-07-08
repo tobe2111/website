@@ -110,6 +110,28 @@ Cloudflare 대시보드 → **Turnstile** 에서 위젯을 만들어 **사이트
 
 ---
 
+## 기능 스위치 (모두 선택 · 무료)
+
+`wrangler.toml [vars]` 또는 `wrangler secret put` 으로 켜면 자동 활성화됩니다.
+| 기능 | 설정 |
+| --- | --- |
+| 봇 차단(Turnstile) | `TURNSTILE_SITE_KEY` + secret `TURNSTILE_SECRET` |
+| 방문 통계(Web Analytics) | `CF_ANALYTICS_TOKEN` |
+| 네이버 지도 | `NAVER_MAP_CLIENT_ID` (+ 콘솔 도메인 등록) |
+| 2단계 인증(2FA) | 별도 설정 불필요 — 계정 화면에서 사용자가 켬 |
+
+## 기존 배포 업그레이드 (스키마 변경 시)
+
+새 컬럼/표가 추가된 버전으로 올릴 때 한 번 실행:
+
+```bash
+wrangler d1 execute seocho-db --remote --command "ALTER TABLE users ADD COLUMN totp_secret TEXT NOT NULL DEFAULT ''"
+wrangler d1 execute seocho-db --remote --command "ALTER TABLE users ADD COLUMN totp_enabled INTEGER NOT NULL DEFAULT 0"
+wrangler d1 execute seocho-db --remote --command "CREATE TABLE IF NOT EXISTS audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, association_id INTEGER, user_id INTEGER, actor_name TEXT NOT NULL DEFAULT '', action TEXT NOT NULL, detail TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT (datetime('now')))"
+```
+
+(새로 배포하는 경우엔 `schema.sql` 에 이미 포함되어 있어 불필요합니다.)
+
 ## 로컬에서 미리보기(선택)
 
 ```bash

@@ -42,3 +42,22 @@ export function sniffImage(b) {
 }
 export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+
+// 영업시간 문자열에서 "HH:MM - HH:MM" 을 찾아 현재(KST) 영업 여부 판단. 없으면 null.
+export function openNow(hours, nowMs = Date.now()) {
+  const s = String(hours || "");
+  if (/휴무|휴점|closed/i.test(s) && !/\d/.test(s)) return false;
+  const m = /(\d{1,2}):(\d{2})\s*[-~–—]\s*(\d{1,2}):(\d{2})/.exec(s);
+  if (!m) return null;
+  const start = (+m[1]) * 60 + (+m[2]);
+  let end = (+m[3]) * 60 + (+m[4]);
+  const kst = new Date(nowMs + 9 * 3600 * 1000); // UTC+9
+  const cur = kst.getUTCHours() * 60 + kst.getUTCMinutes();
+  if (end <= start) return cur >= start || cur < end; // 자정 넘김
+  return cur >= start && cur < end;
+}
+export function openBadge(hours) {
+  const st = openNow(hours);
+  if (st === null) return "";
+  return st ? '<span class="badge badge-open">영업중</span>' : '<span class="badge badge-muted">영업종료</span>';
+}

@@ -35,6 +35,14 @@ export const updateUserPassword = (db, id, hash, salt) =>
   run(db, "UPDATE users SET password_hash=?, salt=?, session_version = session_version + 1 WHERE id=?", hash, salt, id);
 export const bumpSessionVersion = (db, id) => run(db, "UPDATE users SET session_version = session_version + 1 WHERE id=?", id);
 export const resetHomeLayout = (db, id) => run(db, "UPDATE associations SET home_layout=NULL WHERE id=?", id);
+export const setUserTotp = (db, id, secret, enabled) => run(db, "UPDATE users SET totp_secret=?, totp_enabled=? WHERE id=?", secret, enabled ? 1 : 0, id);
+
+// ----- 감사 로그 -----
+export function logAudit(db, { associationId = null, userId = null, actorName = "", action, detail = "" }) {
+  return run(db, "INSERT INTO audit_log (association_id, user_id, actor_name, action, detail) VALUES (?,?,?,?,?)", associationId, userId, actorName, action, detail);
+}
+export const listAudit = (db, associationId, limit = 20) =>
+  all(db, "SELECT * FROM audit_log WHERE association_id " + (associationId == null ? "IS NULL" : "= ?") + " ORDER BY created_at DESC, id DESC LIMIT ?", ...(associationId == null ? [limit] : [associationId, limit]));
 export function listUsersByAssociation(db, associationId, role = null) {
   const sql = `SELECT u.id, u.email, u.name, u.role, b.name AS business_name
     FROM users u LEFT JOIN businesses b ON b.owner_id = u.id

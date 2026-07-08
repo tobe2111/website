@@ -28,8 +28,22 @@ CREATE TABLE IF NOT EXISTS users (
   name            TEXT NOT NULL,
   role            TEXT NOT NULL DEFAULT 'MERCHANT',
   session_version INTEGER NOT NULL DEFAULT 0,
+  totp_secret     TEXT NOT NULL DEFAULT '',    -- 2FA base32 시크릿(빈 값=미설정)
+  totp_enabled    INTEGER NOT NULL DEFAULT 0,  -- 2FA 활성화 여부
   created_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- 관리자 감사 로그
+CREATE TABLE IF NOT EXISTS audit_log (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  association_id INTEGER REFERENCES associations(id) ON DELETE CASCADE,  -- NULL=플랫폼(슈퍼)
+  user_id        INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  actor_name     TEXT NOT NULL DEFAULT '',
+  action         TEXT NOT NULL,
+  detail         TEXT NOT NULL DEFAULT '',
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_audit_assoc ON audit_log(association_id, created_at);
 
 CREATE TABLE IF NOT EXISTS businesses (
   id             INTEGER PRIMARY KEY AUTOINCREMENT,

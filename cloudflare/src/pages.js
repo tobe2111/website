@@ -1,6 +1,6 @@
 // 공개/인증 페이지 핸들러 (async). ctx = { env, db, assoc, base, user, url, query, csrf, params }
 import * as D from "./db.js";
-import { esc, clip } from "./util.js";
+import { esc, clip, openBadge } from "./util.js";
 import { layout, flash, statusBadge, pager, mediaUrl } from "./render.js";
 import { html, notFoundResponse, back } from "./http.js";
 import { galleryItem } from "./media-render.js";
@@ -9,6 +9,7 @@ import { verifySignature, publicKeyJwk, algorithm } from "./esign.js";
 import { text } from "./http.js";
 import { parseLayout, renderHome, SECTION_CATALOG } from "./homeLayout.js";
 import { turnstileWidget, turnstileScript } from "./turnstile.js";
+import { otpauthUri } from "./totp.js";
 
 const CATEGORIES = ["음식점", "카페·디저트", "생활·서비스", "패션·잡화", "농수축산", "교육·문화", "기타"];
 const NOTICE_CATEGORIES = ["안내", "공지", "소식", "행사", "혜택", "긴급"];
@@ -20,7 +21,7 @@ async function businessCard(db, base, b) {
   const thumb = cover ? `<img src="${esc(mediaUrl(cover.thumb || cover.filename))}" alt="${esc(b.name)}" loading="lazy" />` : `<span>${esc(b.name.slice(0, 2))}</span>`;
   return `<article class="market-card">
     <a href="${base}/business/${esc(b.slug)}" class="market-thumb">${thumb}</a>
-    <div class="market-body"><span class="chip">${esc(b.category)}</span>
+    <div class="market-body"><span class="chip">${esc(b.category)}</span>${openBadge(b.hours)}
       <h3><a href="${base}/business/${esc(b.slug)}">${esc(b.name)}</a></h3>
       <p>${esc(b.description || "소개가 곧 등록됩니다.")}</p>
       <ul class="market-meta">${b.address ? `<li>📍 ${esc(b.address)}</li>` : ""}${b.phone ? `<li>☎ ${esc(b.phone)}</li>` : ""}</ul>
@@ -98,7 +99,7 @@ export async function businessDetail(ctx) {
   const pending = b.status !== "approved" ? `<div class="flash flash-warn">이 페이지는 ${statusBadge(b.status)} 상태입니다.</div>` : "";
   const body = `
   <section class="biz-hero"><div class="container">${pending}
-    <span class="chip chip-light">${esc(b.category)}</span><h1>${esc(b.name)}</h1>
+    <span class="chip chip-light">${esc(b.category)}</span>${openBadge(b.hours)}<h1>${esc(b.name)}</h1>
     <p class="biz-desc">${esc(b.description || "소개가 곧 등록됩니다.")}</p>
     <ul class="biz-contact">
       ${b.address ? `<li>📍 ${esc(b.address)}</li>` : ""}${b.phone ? `<li>☎️ <a href="tel:${esc(b.phone)}">${esc(b.phone)}</a></li>` : ""}${b.hours ? `<li>🕘 ${esc(b.hours)}</li>` : ""}
@@ -122,6 +123,7 @@ export function loginForm(ctx) {
     <form method="post" action="/login" class="stack-form">
       <label>이메일<input type="email" name="email" required /></label>
       <label>비밀번호<input type="password" name="password" required /></label>
+      <label class="totp-login">2단계 인증 코드 <small>(설정한 경우만)</small><input type="text" name="totp" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" placeholder="000000" /></label>
       ${turnstileWidget(env)}
       <button class="btn btn-primary btn-block">로그인</button>
     </form>
@@ -372,6 +374,9 @@ export async function admin(ctx) {
   const unread = await D.unreadCount(db, assoc.id);
   const today = new Date().toISOString().slice(0, 10);
   const lay = parseLayout(assoc.home_layout, assoc.name);
+  const auditLog = await D.listAudit(db, assoc.id, 12);
+  const auditPanel = `<section class="panel"><h2 class="panel-title">감사 로그 <span class="badge badge-muted">최근 ${auditLog.length}</span></h2>
+    <ul class="audit-list">${auditLog.length ? auditLog.map((a) => `<li><span class="audit-action">${esc(a.action)}</span> <span class="audit-detail">${esc(a.detail)}</span><span class="audit-meta">${esc(a.actor_name)} · ${esc(a.created_at.slice(5, 16).replace("T", " "))}</span></li>`).join("") : `<li class="empty">기록이 없습니다.</li>`}</ul></section>`;
 
   const bizRows = all.length ? all.map((b) => `<tr><td><a href="${base}/business/${esc(b.slug)}" target="_blank">${esc(b.name)}</a><br /><small>${esc(b.category)}</small></td>
     <td>${esc(b.owner_name)}<br /><small>${esc(b.owner_email)}</small></td><td>${statusBadge(b.status)}</td>
@@ -403,6 +408,7 @@ export async function admin(ctx) {
     <section class="panel"><div class="panel-head"><h2 class="panel-title">회원 관리 <span class="badge badge-muted">${members.length}명</span></h2>
       ${members.length ? `<a class="btn btn-xs btn-ghost" href="${base}/admin/members.csv">⬇ 명단 CSV</a>` : ""}</div>
       <div class="table-scroll"><table class="admin-table"><thead><tr><th>회원</th><th>업체</th><th>비밀번호</th></tr></thead><tbody>${memberRows}</tbody></table></div></section>
+    ${auditPanel}
     <section class="panel"><h2 class="panel-title">홈페이지 구성 편집</h2>
       <p class="panel-hint">섹션을 켜고 끄거나 순서(▲▼)를 바꾸고 문구를 직접 수정할 수 있습니다.</p>
       ${layoutEditor(base, lay)}</section>
@@ -571,6 +577,7 @@ export async function superConsole(ctx) {
   const { db, user, query, csrf } = ctx;
   const ps = await D.platformStats(db);
   const list = await D.listAllAssociations(db);
+  const auditLog = await D.listAudit(db, null, 15);
   const rows = list.map((a) => `<tr><td><a href="/t/${esc(a.slug)}" target="_blank">${esc(a.name)}</a><br /><small>/t/${esc(a.slug)}</small></td>
     <td>${a.active ? '<span class="badge badge-ok">활성</span>' : '<span class="badge badge-no">비활성</span>'}</td>
     <td class="actions-cell"><a class="btn btn-xs btn-ghost" href="/t/${esc(a.slug)}/admin">관리</a>
@@ -591,13 +598,35 @@ export async function superConsole(ctx) {
         <label>관리자 비밀번호 (8자 이상)<input type="password" name="admin_password" required minlength="8" /></label>
         <button class="btn btn-primary">상인회 생성</button></form></section>
     <section class="panel"><h2 class="panel-title">상인회 목록</h2><div class="table-scroll"><table class="admin-table">
-      <thead><tr><th>상인회</th><th>상태</th><th>관리</th></tr></thead><tbody>${rows}</tbody></table></div></section></div></section>`;
+      <thead><tr><th>상인회</th><th>상태</th><th>관리</th></tr></thead><tbody>${rows}</tbody></table></div></section>
+    <section class="panel"><h2 class="panel-title">감사 로그 (플랫폼)</h2>
+      <ul class="audit-list">${auditLog.length ? auditLog.map((a) => `<li><span class="audit-action">${esc(a.action)}</span> <span class="audit-detail">${esc(a.detail)}</span><span class="audit-meta">${esc(a.actor_name)} · ${esc(a.created_at.slice(5, 16).replace("T", " "))}</span></li>`).join("") : `<li class="empty">기록이 없습니다.</li>`}</ul></section></div></section>`;
   return html(layout({ title: "슈퍼 관리자", user, body, csrf }));
 }
 
 // ================= 계정 =================
 export function account(ctx) {
   const { assoc, base, user, query, csrf } = ctx;
+  // 2FA 상태별 UI
+  let twofa;
+  if (user.totp_enabled) {
+    twofa = `<p class="panel-hint">✅ 2단계 인증이 <b>사용 중</b>입니다. 로그인 시 인증 앱의 6자리 코드가 필요합니다.</p>
+      <form method="post" action="/account/2fa/disable" class="stack-form compact">
+        <label>해제하려면 현재 인증 코드 입력<input type="text" name="code" inputmode="numeric" pattern="[0-9]{6}" placeholder="000000" required /></label>
+        <button class="btn btn-ghost btn-sm">2단계 인증 해제</button></form>`;
+  } else if (user.totp_secret) {
+    const uri = otpauthUri(user.totp_secret, user.email, assoc ? assoc.name : "상인회");
+    twofa = `<p class="panel-hint">인증 앱(Google Authenticator, Authy 등)에 아래 키를 등록한 뒤, 앱에 표시된 6자리 코드를 입력해 <b>활성화</b>하세요.</p>
+      <div class="totp-setup"><p>설정 키: <code class="totp-key">${esc(user.totp_secret)}</code></p>
+      <details><summary>otpauth 링크(수동 등록용)</summary><code class="totp-uri">${esc(uri)}</code></details></div>
+      <form method="post" action="/account/2fa/enable" class="stack-form compact">
+        <label>앱에 표시된 6자리 코드<input type="text" name="code" inputmode="numeric" pattern="[0-9]{6}" placeholder="000000" required /></label>
+        <button class="btn btn-primary btn-sm">2단계 인증 활성화</button></form>
+      <form method="post" action="/account/2fa/setup" class="stack-form compact"><button class="btn btn-ghost btn-xs">키 새로 생성</button></form>`;
+  } else {
+    twofa = `<p class="panel-hint">인증 앱으로 로그인을 한 단계 더 보호합니다. (관리자 계정 권장)</p>
+      <form method="post" action="/account/2fa/setup"><button class="btn btn-primary btn-sm">2단계 인증 설정 시작</button></form>`;
+  }
   const body = `<section class="section page-top"><div class="container narrow">
     <h1 class="article-title">계정 설정</h1>${flashOf(query)}
     <section class="panel"><h2 class="panel-title">비밀번호 변경</h2>
@@ -606,6 +635,7 @@ export function account(ctx) {
         <label>새 비밀번호 (8자 이상)<input type="password" name="new" required minlength="8" /></label>
         <label>새 비밀번호 확인<input type="password" name="confirm" required /></label>
         <button class="btn btn-primary btn-sm">변경</button></form></section>
+    <section class="panel"><h2 class="panel-title">2단계 인증 (2FA)</h2>${twofa}</section>
     <section class="panel"><h2 class="panel-title">보안</h2>
       <p class="panel-hint">다른 기기·브라우저의 로그인 세션을 모두 종료합니다.</p>
       <form method="post" action="/account/logout-all" data-confirm="모든 기기에서 로그아웃할까요?"><button class="btn btn-ghost btn-sm">전 기기 로그아웃</button></form></section>

@@ -35,5 +35,7 @@ NAVER_MAP_PARAM = "ncpClientId"
 # Turnstile(무료 봇 차단) — 대시보드에서 발급한 사이트키를 넣으면 자동 활성화.
 # 시크릿은 `wrangler secret put TURNSTILE_SECRET` 로 등록. 둘 다 없으면 캡차 비활성.
 # TURNSTILE_SITE_KEY = "0x4AAAAAAA..."
+# Cloudflare Web Analytics(무료 방문 통계) — 대시보드에서 발급한 토큰. 넣으면 자동 삽입.
+# CF_ANALYTICS_TOKEN = "xxxxxxxx"
 # R2 퍼블릭 URL(사진 공개 접근). R2 버킷에 공개 도메인 연결 후 넣으세요.
 # MEDIA_PUBLIC_BASE = "https://media.example.com"

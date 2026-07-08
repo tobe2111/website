@@ -16,6 +16,9 @@ const GLOBAL = [
   ["GET", "/account", pages.account, "USER"],
   ["POST", "/account/password", api.changePassword, "USER"],
   ["POST", "/account/logout-all", api.logoutAll, "USER"],
+  ["POST", "/account/2fa/setup", api.twofaSetup, "USER"],
+  ["POST", "/account/2fa/enable", api.twofaEnable, "USER"],
+  ["POST", "/account/2fa/disable", api.twofaDisable, "USER"],
   ["GET", "/forgot", pages.forgotForm],
   ["POST", "/forgot", api.forgotPassword],
   ["GET", "/sitemap.xml", pages.sitemap],
@@ -105,12 +108,14 @@ function securityHeaders(env) {
   const naver = env.NAVER_MAP_CLIENT_ID ? " https://oapi.map.naver.com" : "";
   const naverImg = env.NAVER_MAP_CLIENT_ID ? " https://*.pstatic.net https://*.map.naver.com" : "";
   const ts = env.TURNSTILE_SITE_KEY ? " https://challenges.cloudflare.com" : "";
+  const cfa = env.CF_ANALYTICS_TOKEN ? " https://static.cloudflareinsights.com" : "";
+  const cfaConn = env.CF_ANALYTICS_TOKEN ? " https://cloudflareinsights.com" : "";
   const csp = [
     "default-src 'self'", "base-uri 'self'", "object-src 'none'", "frame-ancestors 'self'", "form-action 'self'",
-    `script-src 'self'${naver}${ts}`, "style-src 'self' 'unsafe-inline'",
+    `script-src 'self'${naver}${ts}${cfa}`, "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: https:", "media-src 'self' https:",
     `frame-src 'self' https://www.youtube-nocookie.com https://www.youtube.com https://www.instagram.com https://tv.naver.com${ts}`,
-    `connect-src 'self'${naver}${naverImg}${ts}`, "font-src 'self'",
+    `connect-src 'self'${naver}${naverImg}${ts}${cfaConn}`, "font-src 'self'",
   ].join("; ");
   return {
     "X-Content-Type-Options": "nosniff", "X-Frame-Options": "SAMEORIGIN",
@@ -224,11 +229,18 @@ async function serveMedia(env, key) {
   return new Response(obj.body, { headers });
 }
 
-// 보안 헤더 + 쿠키 부착
-function finalize(res, setCookies, env) {
+// 보안 헤더 + 쿠키 부착 (+ 선택: Cloudflare Web Analytics 주입)
+async function finalize(res, setCookies, env) {
   const headers = new Headers(res.headers);
   const sec = securityHeaders(env);
   for (const [k, v] of Object.entries(sec)) headers.set(k, v);
   for (const c of setCookies) headers.append("set-cookie", c);
-  return new Response(res.body, { status: res.status, headers });
+  let body = res.body;
+  if (env.CF_ANALYTICS_TOKEN && (headers.get("content-type") || "").includes("text/html")) {
+    const beacon = `<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token":"${env.CF_ANALYTICS_TOKEN}"}'></script>`;
+    const t = await res.text();
+    body = t.includes("</body>") ? t.replace("</body>", beacon + "</body>") : t + beacon;
+    headers.delete("content-length");
+  }
+  return new Response(body, { status: res.status, headers });
 }

@@ -59,6 +59,13 @@ export async function login(ctx) {
     recordFail(ip);
     return back("/login", "이메일 또는 비밀번호가 올바르지 않습니다.", true);
   }
+  if (user.totp_enabled) {
+    const { totpVerify } = await import("./totp.js");
+    if (!(await totpVerify(user.totp_secret, form.get("totp")))) {
+      recordFail(ip);
+      return back("/login", "2단계 인증 코드가 올바르지 않습니다.", true);
+    }
+  }
   const token = await sessionTokenForUser(user, env.SESSION_SECRET);
   addCookie(sessionCookie(token, isProd));
   return redirect(await postLoginPath(db, user));
@@ -228,6 +235,9 @@ export async function deleteComment(ctx) {
 
 // ---------- 관리자 ----------
 const isAdmin = (user, assoc) => user && (user.role === "SUPERADMIN" || (user.role === "ADMIN" && user.association_id === assoc.id));
+// 감사 로그 기록 (assoc=null 이면 플랫폼/슈퍼)
+const audit = (ctx, action, detail = "", assocId) =>
+  D.logAudit(ctx.db, { associationId: assocId !== undefined ? assocId : (ctx.assoc ? ctx.assoc.id : null), userId: ctx.user.id, actorName: ctx.user.name, action, detail });
 
 export async function adminBusinessStatus(ctx) {
   const { db, form, base, assoc, params } = ctx;
@@ -235,6 +245,7 @@ export async function adminBusinessStatus(ctx) {
   const b = await D.getBusinessById(db, Number(params.id));
   if (!b || b.association_id !== assoc.id) return back(base + "/admin", "업체를 찾을 수 없습니다.", true);
   await D.setBusinessStatus(db, b.id, form.get("status"));
+  await audit(ctx, "업체상태", `${b.name} → ${form.get("status")}`);
   return back(base + "/admin", `'${b.name}' 상태를 변경했습니다.`);
 }
 export async function adminCreateNotice(ctx) {
@@ -244,12 +255,13 @@ export async function adminCreateNotice(ctx) {
   const up = await saveImages(env, form.getAll("image"), 1);
   if (up.error) return back(base + "/admin", up.error, true);
   await D.createNotice(db, { associationId: assoc.id, title, body: cap(form.get("body"), 10000), tag: cap(form.get("tag") || "안내", 20), image: up.images[0] ? up.images[0].filename : "", pinned: form.get("pinned") === "1" });
+  await audit(ctx, "공지등록", title);
   return back(base + "/admin", "공지를 등록했습니다.");
 }
 export async function adminDeleteNotice(ctx) {
   const { db, env, base, assoc, params } = ctx;
   const n = await D.getNotice(db, Number(params.id));
-  if (n && n.association_id === assoc.id) { if (n.image) await storage.remove(env, n.image); await D.deleteNotice(db, n.id); }
+  if (n && n.association_id === assoc.id) { if (n.image) await storage.remove(env, n.image); await D.deleteNotice(db, n.id); await audit(ctx, "공지삭제", n.title); }
   return back(base + "/admin", "공지를 삭제했습니다.");
 }
 export async function adminCreateEvent(ctx) {
@@ -273,6 +285,7 @@ export async function adminSettings(ctx) {
   if (up.error) return back(base + "/admin", "로고는 이미지만 가능합니다.", true);
   if (up.images[0]) { if (assoc.logo) await storage.remove(env, assoc.logo); logo = up.images[0].filename; }
   await D.updateAssociation(db, assoc.id, { name: cap(form.get("name").trim(), 100), tagline: cap(form.get("tagline"), 200), brand_color: color, phone: cap(form.get("phone"), 40), email: cap(form.get("email"), 120), address: cap(form.get("address"), 200), logo });
+  await audit(ctx, "브랜딩수정", "");
   return back(base + "/admin", "상인회 정보가 저장되었습니다.");
 }
 export async function adminReadNotifications(ctx) {
@@ -286,6 +299,7 @@ export async function adminResetUserPassword(ctx) {
   const temp = Math.random().toString(36).slice(2, 10); // 임시 비밀번호
   const { hash, salt } = await hashPassword(temp);
   await D.updateUserPassword(db, target.id, hash, salt);
+  await audit(ctx, "비밀번호재설정", target.email);
   return back(base + "/admin", `${target.name}님 임시 비밀번호: ${temp} — 전달 후 변경 안내하세요.`);
 }
 
@@ -303,12 +317,13 @@ export async function adminCreateDocument(ctx) {
   const members = await D.listUsersByAssociation(db, assoc.id, "MERCHANT");
   if (target === "all") await D.createSignatureRequests(db, doc.id, members.map((m) => m.id));
   else if (target === "select") { const valid = new Set(members.map((m) => m.id)); const chosen = form.getAll("members").map(Number).filter((id) => valid.has(id)); await D.createSignatureRequests(db, doc.id, chosen); }
+  await audit(ctx, "서명문서생성", title);
   return back(base + "/admin/documents", ordered ? "순차 서명 문서를 생성했습니다." : "문서를 생성했습니다.");
 }
 export async function adminCloseDocument(ctx) {
   const { db, base, assoc, params } = ctx;
   const d = await D.getDocument(db, Number(params.id));
-  if (d && d.association_id === assoc.id) await D.closeDocument(db, d.id);
+  if (d && d.association_id === assoc.id) { await D.closeDocument(db, d.id); await audit(ctx, "서명문서마감", d.title); }
   return back(base + "/admin/documents", "문서를 마감했습니다.");
 }
 export async function memberSign(ctx) {
@@ -349,6 +364,7 @@ export async function superCreateAssociation(ctx) {
   const assoc = await D.createAssociation(db, { slug, name, brandColor: color, tagline: cap(form.get("tagline"), 200) || undefined });
   const { hash, salt } = await hashPassword(adminPassword);
   await D.createUser(db, { email: adminEmail, passwordHash: hash, salt, name: cap(form.get("admin_name"), 60) || "관리자", role: "ADMIN", associationId: assoc.id });
+  await audit(ctx, "상인회생성", `${name} (/t/${assoc.slug})`, null);
   return back("/super", `'${name}' 상인회가 생성되었습니다. (주소: /t/${assoc.slug}, 관리자: ${adminEmail})`);
 }
 export async function superToggleAssociation(ctx) {
@@ -356,6 +372,7 @@ export async function superToggleAssociation(ctx) {
   const a = await D.getAssociationById(db, Number(params.id));
   if (!a) return back("/super", "상인회를 찾을 수 없습니다.", true);
   await D.setAssociationActive(db, a.id, a.active ? 0 : 1);
+  await audit(ctx, "상인회상태", `${a.name} → ${a.active ? "비활성" : "활성"}`, null);
   return back("/super", `'${a.name}' 상태를 변경했습니다.`);
 }
 
@@ -396,9 +413,36 @@ export async function adminSaveLayout(ctx) {
   }
   if (!built.length) return back(base + "/admin", "구성을 해석할 수 없습니다.", true);
   await D.saveHomeLayout(db, assoc.id, JSON.stringify(built));
+  await audit(ctx, "홈구성저장", "");
   return back(base + "/admin", "홈페이지 구성이 저장되었습니다.");
 }
 export async function adminResetLayout(ctx) {
   await D.resetHomeLayout(ctx.db, ctx.assoc.id);
   return back(ctx.base + "/admin", "홈페이지 구성을 기본값으로 초기화했습니다.");
+}
+
+// ---------- 2단계 인증 (TOTP) ----------
+export async function twofaSetup(ctx) {
+  const { db, user } = ctx;
+  const { generateSecret } = await import("./totp.js");
+  await D.setUserTotp(db, user.id, generateSecret(), 0); // 비활성 상태로 시크릿 발급
+  return back("/account", "인증 앱에 키를 등록한 뒤 코드로 활성화하세요.");
+}
+export async function twofaEnable(ctx) {
+  const { db, user, form } = ctx;
+  if (!user.totp_secret) return back("/account", "먼저 2단계 인증 설정을 시작하세요.", true);
+  const { totpVerify } = await import("./totp.js");
+  if (!(await totpVerify(user.totp_secret, form.get("code")))) return back("/account", "코드가 올바르지 않습니다. 다시 시도해 주세요.", true);
+  await D.setUserTotp(db, user.id, user.totp_secret, 1);
+  await D.bumpSessionVersion(db, user.id);
+  ctx.addCookie(sessionCookie(await sessionTokenForUser(await D.getUserById(db, user.id), ctx.env.SESSION_SECRET), ctx.isProd));
+  return back("/account", "2단계 인증이 활성화되었습니다.");
+}
+export async function twofaDisable(ctx) {
+  const { db, user, form } = ctx;
+  if (!user.totp_enabled) return back("/account", "2단계 인증이 설정되어 있지 않습니다.", true);
+  const { totpVerify } = await import("./totp.js");
+  if (!(await totpVerify(user.totp_secret, form.get("code")))) return back("/account", "코드가 올바르지 않습니다.", true);
+  await D.setUserTotp(db, user.id, "", 0);
+  return back("/account", "2단계 인증이 해제되었습니다.");
 }
