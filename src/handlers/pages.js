@@ -1,5 +1,5 @@
 // 서버 사이드 렌더링 페이지 핸들러 (GET) — 멀티테넌트
-import { html, esc, redirect } from "../http.js";
+import { html, esc, redirect, send } from "../http.js";
 import { layout, flash, statusBadge, hueFor } from "../render.js";
 import { ROLES } from "../auth.js";
 import * as M from "../models.js";
@@ -20,6 +20,19 @@ export function tenantBase(assoc, req) {
 const CATEGORIES = ["음식점", "카페·디저트", "생활·서비스", "패션·잡화", "농수축산", "교육·문화", "기타"];
 // 서버가 요청별로 assoc._base 를 주입 (서브도메인 모드는 "", 경로 모드는 "/t/:slug").
 const baseOf = (assoc) => (assoc && assoc._base != null ? assoc._base : `/t/${assoc.slug}`);
+
+// 절대 URL (SEO/OG용)
+function origin(req) {
+  const scheme = req.headers["x-forwarded-proto"] || (config.baseDomain ? config.publicScheme : "http");
+  return `${scheme}://${req.headers.host || "localhost"}`;
+}
+const absUrl = (req, p) => origin(req) + p;
+function absMedia(req, key) {
+  if (!key) return "";
+  const u = storage.publicUrl(key);
+  return /^https?:\/\//.test(u) ? u : absUrl(req, u);
+}
+const clip = (s, n = 160) => { s = String(s || "").replace(/\s+/g, " ").trim(); return s.length > n ? s.slice(0, n - 1) + "…" : s; };
 
 function mediaThumb(m) {
   const url = storage.publicUrl(m.filename);
@@ -142,7 +155,22 @@ export function home(req, res, { assoc }) {
     noticesHtml: noticeRowsHtml(assoc, notices),
     eventsHtml: eventCardsHtml(events),
   });
-  html(res, layout({ title: "홈", user: req.user, assoc, base, activeNav: base + "/", body }));
+  const canonical = absUrl(req, base + "/");
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    name: assoc.name,
+    description: assoc.tagline,
+    url: canonical,
+    logo: absMedia(req, assoc.logo) || undefined,
+    telephone: assoc.phone || undefined,
+    email: assoc.email || undefined,
+    address: assoc.address ? { "@type": "PostalAddress", streetAddress: assoc.address, addressCountry: "KR" } : undefined,
+  };
+  html(res, layout({
+    title: "홈", user: req.user, assoc, base, activeNav: base + "/", body,
+    description: assoc.tagline, canonical, ogImage: absMedia(req, assoc.logo), jsonLd,
+  }));
 }
 
 // ================= 업체 목록 =================
@@ -192,7 +220,26 @@ export function businessDetail(req, res, { assoc, params }) {
     ${!media.length ? `<p class="empty">아직 등록된 사진·영상이 없습니다.</p>` : ""}
     <div class="section-more"><a href="${base}/businesses" class="btn btn-ghost btn-sm">← 다른 업체 보기</a></div>
   </div></section>`;
-  html(res, layout({ title: b.name, user: req.user, assoc, base, activeNav: base + "/businesses", body, scripts: `<script src="/js/viewer.js" defer></script>` }));
+  const canonical = absUrl(req, `${base}/business/${b.slug}`);
+  const cover = images[0] || null;
+  const ogImage = cover ? absMedia(req, cover.filename) : absMedia(req, assoc.logo);
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "LocalBusiness",
+    name: b.name,
+    description: clip(b.description, 300) || undefined,
+    telephone: b.phone || undefined,
+    address: b.address ? { "@type": "PostalAddress", streetAddress: b.address, addressCountry: "KR" } : undefined,
+    image: ogImage || undefined,
+    url: canonical,
+    memberOf: { "@type": "Organization", name: assoc.name },
+  };
+  html(res, layout({
+    title: b.name, user: req.user, assoc, base, activeNav: base + "/businesses", body,
+    description: clip(b.description) || `${assoc.name} 소속 ${b.category} · ${b.name}`,
+    ogImage, canonical, jsonLd,
+    scripts: `<script src="/js/viewer.js" defer></script>`,
+  }));
 }
 
 // ================= 공지 =================
@@ -525,6 +572,52 @@ export function superConsole(req, res, { query }) {
         <tbody>${rows}</tbody></table></div></section>
   </div></section>`;
   html(res, layout({ title: "슈퍼 관리자", user: req.user, body }));
+}
+
+// ================= SEO: sitemap.xml / robots.txt =================
+export function sitemap(req, res) {
+  const o = origin(req);
+  const urls = [];
+  const push = (loc) => urls.push(`<url><loc>${esc(loc)}</loc></url>`);
+  const addAssoc = (a, b) => {
+    push(o + b + "/");
+    push(o + b + "/businesses");
+    push(o + b + "/notices");
+    push(o + b + "/events");
+    for (const biz of M.listBusinesses(a.id, {})) push(o + b + "/business/" + encodeURIComponent(biz.slug));
+    for (const n of M.listNotices(a.id)) push(o + b + "/notices/" + n.id);
+  };
+
+  const host = (req.headers.host || "").split(":")[0].toLowerCase();
+  let tenant = null;
+  if (config.baseDomain && host.endsWith("." + config.baseDomain)) {
+    const label = host.slice(0, host.length - config.baseDomain.length - 1).split(".")[0];
+    if (label && label !== "www") tenant = A.getAssociationBySlug(label);
+  }
+  if (tenant) { if (tenant.active) addAssoc(tenant, ""); }
+  else {
+    push(o + "/");
+    for (const a of A.listActiveAssociations()) addAssoc(a, "/t/" + a.slug);
+  }
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.join("\n")}\n</urlset>`;
+  send(res, 200, xml, { "Content-Type": "application/xml; charset=utf-8" });
+}
+
+export function robots(req, res) {
+  const o = origin(req);
+  const body = [
+    "User-agent: *",
+    "Allow: /",
+    "Disallow: /login",
+    "Disallow: /super",
+    "Disallow: /*/admin",
+    "Disallow: /*/dashboard",
+    "Disallow: /admin",
+    "Disallow: /dashboard",
+    `Sitemap: ${o}/sitemap.xml`,
+    "",
+  ].join("\n");
+  send(res, 200, body, { "Content-Type": "text/plain; charset=utf-8" });
 }
 
 // ================= 404 =================

@@ -42,10 +42,16 @@ export function brandStyle(color) {
   return `<style>:root{${decl}}</style>`;
 }
 
-export function layout({ title, user, assoc = null, base = "", body, activeNav = "", head = "", scripts = "" }) {
+export function layout({ title, user, assoc = null, base = "", body, activeNav = "", head = "", scripts = "", description = "", ogImage = "", canonical = "", jsonLd = null }) {
   const brandName = assoc ? assoc.name : "상인회 플랫폼";
   const brandSub = assoc ? "Merchants Association" : "Merchants Platform";
   const homeHref = assoc ? base || "/" : "/";
+  const desc = description || (assoc ? assoc.tagline : "여러 상인회가 각자의 홈페이지로 지역 상권을 운영하는 웹사이트 플랫폼");
+  const fullTitle = `${title} | ${brandName}`;
+  const jsonLdArr = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
+  const jsonLdHtml = jsonLdArr
+    .map((o) => `<script type="application/ld+json">${JSON.stringify(o).replace(/</g, "\\u003c")}</script>`)
+    .join("\n  ");
 
   const navItems = assoc
     ? [
@@ -87,9 +93,22 @@ export function layout({ title, user, assoc = null, base = "", body, activeNav =
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="${assoc ? esc(assoc.brand_color) : "#0b6e4f"}" />
-  <title>${esc(title)} | ${esc(brandName)}</title>
+  <title>${esc(fullTitle)}</title>
+  <meta name="description" content="${esc(desc)}" />
+  ${canonical ? `<link rel="canonical" href="${esc(canonical)}" />` : ""}
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="${esc(brandName)}" />
+  <meta property="og:title" content="${esc(fullTitle)}" />
+  <meta property="og:description" content="${esc(desc)}" />
+  ${canonical ? `<meta property="og:url" content="${esc(canonical)}" />` : ""}
+  ${ogImage ? `<meta property="og:image" content="${esc(ogImage)}" />` : ""}
+  <meta name="twitter:card" content="${ogImage ? "summary_large_image" : "summary"}" />
+  <meta name="twitter:title" content="${esc(fullTitle)}" />
+  <meta name="twitter:description" content="${esc(desc)}" />
+  ${ogImage ? `<meta name="twitter:image" content="${esc(ogImage)}" />` : ""}
   <link rel="stylesheet" href="/css/app.css" />
   ${brandCss}
+  ${jsonLdHtml}
   ${head}
 </head>
 <body>

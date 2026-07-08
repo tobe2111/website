@@ -24,6 +24,8 @@ function mk(method, pattern, handler, auth = null) {
 
 // 전역(플랫폼) 라우트 — 호스트와 무관하게 pathname 으로 매칭
 const globalRoutes = [
+  mk("GET", "/sitemap.xml", pages.sitemap),
+  mk("GET", "/robots.txt", pages.robots),
   mk("GET", "/login", pages.loginForm),
   mk("POST", "/login", api.login),
   mk("POST", "/logout", api.logout),
