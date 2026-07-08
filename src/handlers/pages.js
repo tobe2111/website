@@ -28,6 +28,17 @@ function mediaThumb(m) {
     : `<img src="${url}" alt="${esc(m.caption || "업체 사진")}" loading="lazy" />`;
 }
 
+// 뷰어(라이트박스)로 열리는 클릭 가능한 갤러리 타일. 세로/가로 자동 대응.
+function galleryItem(m) {
+  const url = storage.publicUrl(m.filename);
+  const cap = esc(m.caption || "");
+  const inner = m.kind === "video"
+    ? `<video src="${url}#t=0.1" preload="metadata" muted playsinline></video><span class="play-badge" aria-hidden="true">▶</span>`
+    : `<img src="${url}" alt="${cap || "업체 사진"}" loading="lazy" />`;
+  return `<button type="button" class="gallery-item${m.kind === "video" ? " is-video" : ""}" data-src="${url}" data-kind="${m.kind}" data-caption="${cap}" aria-label="${cap || (m.kind === "video" ? "영상 보기" : "사진 보기")}">
+    ${inner}${cap ? `<figcaption>${cap}</figcaption>` : ""}</button>`;
+}
+
 function businessCard(assoc, b) {
   const base = baseOf(assoc);
   const hue = hueFor(b.category + b.name);
@@ -156,7 +167,7 @@ export function businessDetail(req, res, { assoc, params }) {
   const videos = media.filter((m) => m.kind === "video");
   const hue = hueFor(b.category + b.name);
   const gallery = (items) => items.length
-    ? `<div class="gallery">${items.map((m) => `<figure class="gallery-item">${mediaThumb(m)}${m.caption ? `<figcaption>${esc(m.caption)}</figcaption>` : ""}</figure>`).join("")}</div>` : "";
+    ? `<div class="gallery">${items.map(galleryItem).join("")}</div>` : "";
   const pending = b.status !== "approved" ? `<div class="flash flash-warn">이 페이지는 ${statusBadge(b.status)} 상태입니다. 관리자 승인 후 일반에 공개됩니다.</div>` : "";
   const body = `
   <section class="biz-hero" style="--hue:${hue}"><div class="container">${pending}
@@ -174,7 +185,7 @@ export function businessDetail(req, res, { assoc, params }) {
     ${!media.length ? `<p class="empty">아직 등록된 사진·영상이 없습니다.</p>` : ""}
     <div class="section-more"><a href="${base}/businesses" class="btn btn-ghost btn-sm">← 다른 업체 보기</a></div>
   </div></section>`;
-  html(res, layout({ title: b.name, user: req.user, assoc, base, activeNav: base + "/businesses", body }));
+  html(res, layout({ title: b.name, user: req.user, assoc, base, activeNav: base + "/businesses", body, scripts: `<script src="/js/viewer.js" defer></script>` }));
 }
 
 // ================= 공지 =================
