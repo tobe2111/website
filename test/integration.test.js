@@ -198,6 +198,38 @@ test("영상 임베드: 유튜브 링크 추가 + 잘못된 링크 거부 + 상�
   assert.match(detail, /youtube-nocookie\.com\/embed\/dQw4w9WgXcQ/);
 });
 
+test("관리자: 회원 명단 CSV 내보내기", async () => {
+  const { jar } = await loginAs("admin@seocho-merchants.kr", "admin1234");
+  const r = await fetch(`${BASE}/t/seocho/admin/members.csv`, { headers: { cookie: cookieHeader(jar) } });
+  assert.equal(r.status, 200);
+  assert.match(r.headers.get("content-type"), /text\/csv/);
+  assert.match(r.headers.get("content-disposition") || "", /attachment/);
+  const csv = await r.text();
+  assert.match(csv, /이름,이메일,업체명,역할/);
+  assert.match(csv, /cafe@ex\.kr/);
+});
+
+test("공지: 카테고리 필터 + 검색", async () => {
+  const { jar } = await loginAs("admin@seocho-merchants.kr", "admin1234");
+  // 카테고리가 다른 공지 2건 생성 (urlencoded 허용)
+  for (const [title, body, tag] of [["여름 바자회", "7월 바자회 열립니다", "행사"], ["주차 안내문", "주차장 이용 방법", "공지"]]) {
+    const r = await fetch(`${BASE}/t/seocho/admin/notice`, {
+      method: "POST", redirect: "manual",
+      headers: { "content-type": "application/x-www-form-urlencoded", cookie: cookieHeader(jar) },
+      body: new URLSearchParams({ _csrf: jar.sc_csrf, title, body, tag }),
+    });
+    assert.equal(r.status, 303);
+  }
+  // 검색
+  let html = await (await fetch(`${BASE}/t/seocho/notices?${new URLSearchParams({ q: "바자회" })}`)).text();
+  assert.match(html, /여름 바자회/);
+  assert.doesNotMatch(html, /주차 안내문/);
+  // 카테고리 필터
+  html = await (await fetch(`${BASE}/t/seocho/notices?${new URLSearchParams({ tag: "공지" })}`)).text();
+  assert.match(html, /주차 안내문/);
+  assert.doesNotMatch(html, /여름 바자회/);
+});
+
 test("영상 임베드: CSP frame-src 로 유튜브·인스타·네이버TV 허용", async () => {
   const r = await fetch(`${BASE}/t/seocho`);
   const csp = r.headers.get("content-security-policy") || "";

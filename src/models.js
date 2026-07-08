@@ -95,12 +95,22 @@ export function listBusinessesPaged(associationId, { status = "approved", catego
   const items = db.prepare("SELECT * FROM businesses" + sql + " ORDER BY created_at DESC LIMIT ? OFFSET ?").all(...args, perPage, (p - 1) * perPage);
   return { items, total, page: p, pages, perPage };
 }
-export function listNoticesPaged(associationId, { page = 1, perPage = 20 } = {}) {
-  const total = db.prepare("SELECT COUNT(*) AS n FROM notices WHERE association_id = ?").get(associationId).n;
+export function listNoticesPaged(associationId, { page = 1, perPage = 20, q = null, tag = null } = {}) {
+  let where = " WHERE association_id = ?"; const args = [associationId];
+  if (tag) { where += " AND tag = ?"; args.push(tag); }
+  if (q) {
+    const like = "%" + String(q).replace(/[%_\\]/g, (c) => "\\" + c) + "%";
+    where += " AND (title LIKE ? ESCAPE '\\' OR body LIKE ? ESCAPE '\\')"; args.push(like, like);
+  }
+  const total = db.prepare("SELECT COUNT(*) AS n FROM notices" + where).get(...args).n;
   const pages = Math.max(1, Math.ceil(total / perPage));
   const p = Math.min(Math.max(1, page | 0 || 1), pages);
-  const items = db.prepare("SELECT * FROM notices WHERE association_id = ? ORDER BY pinned DESC, created_at DESC LIMIT ? OFFSET ?").all(associationId, perPage, (p - 1) * perPage);
+  const items = db.prepare("SELECT * FROM notices" + where + " ORDER BY pinned DESC, created_at DESC LIMIT ? OFFSET ?").all(...args, perPage, (p - 1) * perPage);
   return { items, total, page: p, pages, perPage };
+}
+// 공지 카테고리(태그) 목록 + 건수
+export function distinctNoticeTags(associationId) {
+  return db.prepare("SELECT tag, COUNT(*) AS n FROM notices WHERE association_id = ? GROUP BY tag ORDER BY n DESC, tag").all(associationId);
 }
 
 export function listAllBusinesses(associationId) {
@@ -268,11 +278,25 @@ export function listPostsPaged(associationId, { page = 1, perPage = 15, q = null
   const pages = Math.max(1, Math.ceil(total / perPage));
   const p = Math.min(Math.max(1, page | 0 || 1), pages);
   const items = db.prepare(`SELECT p.*, u.name AS author_name,
-      (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id) AS comment_count
+      (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id) AS comment_count,
+      (SELECT COUNT(*) FROM post_images pi WHERE pi.post_id = p.id) AS image_count,
+      (SELECT pi.thumb FROM post_images pi WHERE pi.post_id = p.id ORDER BY pi.id LIMIT 1) AS pi_thumb,
+      (SELECT pi.filename FROM post_images pi WHERE pi.post_id = p.id ORDER BY pi.id LIMIT 1) AS pi_file
     FROM posts p LEFT JOIN users u ON u.id = p.author_id` + where +
     ` ORDER BY p.pinned DESC, p.created_at DESC LIMIT ? OFFSET ?`)
     .all(...args, perPage, (p - 1) * perPage);
   return { items, total, page: p, pages };
+}
+// ----- 게시판 첨부 이미지(다중) -----
+export function addPostImages(postId, images) {
+  const stmt = db.prepare("INSERT INTO post_images (post_id, filename, thumb) VALUES (?, ?, ?)");
+  for (const im of images) stmt.run(postId, im.filename, im.thumb || "");
+}
+export function listPostImages(postId) {
+  return db.prepare("SELECT * FROM post_images WHERE post_id = ? ORDER BY id ASC").all(postId);
+}
+export function deletePostImage(id) {
+  db.prepare("DELETE FROM post_images WHERE id = ?").run(id);
 }
 export function setPostPinned(id, pinned) {
   db.prepare("UPDATE posts SET pinned = ? WHERE id = ?").run(pinned ? 1 : 0, id);

@@ -381,6 +381,11 @@ img,video{max-width:100%;display:block}
 .edit-image{display:grid;gap:8px;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--bg-alt)}
 .edit-image img{max-width:200px;border-radius:8px}
 .post-edited{color:var(--muted);font-size:.86rem}
+.post-gallery{margin:18px 0}
+.edit-images{padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--bg-alt)}
+.edit-thumbs{display:flex;flex-wrap:wrap;gap:12px;margin-top:8px}
+.edit-thumb{display:grid;gap:6px;justify-items:center;font-size:.82rem}
+.edit-thumb img{width:96px;height:96px;object-fit:cover;border-radius:8px;border:1px solid var(--line)}
 
 /* ---------- 도움말 아코디언 (영상 링크 안내) ---------- */
 .help-box{border:1px solid var(--line);border-radius:12px;background:var(--bg-alt);margin:0 0 14px;overflow:hidden}

@@ -130,8 +130,18 @@ CREATE TABLE IF NOT EXISTS comments (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- 회원 게시판: 글 첨부 이미지(다중)
+CREATE TABLE IF NOT EXISTS post_images (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  post_id    INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+  filename   TEXT NOT NULL,
+  thumb      TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_posts_assoc ON posts(association_id, pinned, created_at);
 CREATE INDEX IF NOT EXISTS idx_comments_post ON comments(post_id);
+CREATE INDEX IF NOT EXISTS idx_postimg_post ON post_images(post_id);
 
 -- 전자서명: 서명 대상 문서
 CREATE TABLE IF NOT EXISTS documents (

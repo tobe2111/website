@@ -48,15 +48,24 @@ async function readFormOrMultipart(req, res, backTo, limitBytes) {
   return { fields, files };
 }
 
-// 첨부 이미지 1개 검증·저장 → { key, present } 또는 { error }
-async function saveUploadedImage(files, field) {
-  const f = files.find((x) => x.field === field && x.data && x.data.length > 0);
-  if (!f) return { key: "", present: false };
-  const real = sniff(f.data);
-  if (!real || !config.allowedImageTypes.includes(real)) return { error: "이미지 파일만 첨부할 수 있습니다." };
-  if (f.data.length > config.maxImageBytes) return { error: "이미지 용량이 큽니다. (최대 8MB)" };
-  const key = await storage.save(f.data, real);
-  return { key, present: true };
+// 게시글 첨부 이미지 최대 장수
+const BOARD_MAX_IMAGES = 6;
+
+// 첨부 이미지 여러 장 검증·저장(썸네일 포함) → { images:[{filename,thumb}] } 또는 { error }
+async function saveUploadedImages(files, field, max) {
+  const picked = files.filter((x) => x.field === field && x.data && x.data.length > 0).slice(0, max);
+  const out = [];
+  for (const f of picked) {
+    const real = sniff(f.data);
+    if (!real || !config.allowedImageTypes.includes(real)) return { error: "이미지 파일만 첨부할 수 있습니다." };
+    if (f.data.length > config.maxImageBytes) return { error: "이미지 용량이 큽니다. (최대 8MB)" };
+    const key = await storage.save(f.data, real);
+    let thumb = "";
+    const pr = await media.processImage(f.data, real);
+    if (pr.thumb) thumb = await storage.save(pr.thumb, pr.thumbType);
+    out.push({ filename: key, thumb });
+  }
+  return { images: out };
 }
 
 // ---------- 로그인 시도 제한 (in-memory 슬라이딩 윈도우) ----------
@@ -401,36 +410,55 @@ const canModerateBoard = (req, assoc) => req.user && (req.user.role === ROLES.SU
 
 export async function createPost(req, res, { assoc }) {
   const base = baseOf(assoc);
-  const form = await readFormOrMultipart(req, res, base + "/board", config.maxImageBytes + 128 * 1024);
+  const form = await readFormOrMultipart(req, res, base + "/board", config.maxImageBytes * BOARD_MAX_IMAGES + 512 * 1024);
   if (!form) return;
   const { fields, files } = form;
   const title = cap((fields.title || "").trim(), 200);
   const bodyText = cap((fields.body || "").trim(), 10000);
   if (!title || !bodyText) return back(res, base + "/board", "제목과 내용을 입력하세요.", true);
-  const img = await saveUploadedImage(files, "image");
-  if (img.error) return back(res, base + "/board", img.error, true);
-  const p = M.createPost({ associationId: assoc.id, authorId: req.user.id, title, body: bodyText, image: img.key });
+  const up = await saveUploadedImages(files, "images", BOARD_MAX_IMAGES);
+  if (up.error) return back(res, base + "/board", up.error, true);
+  const p = M.createPost({ associationId: assoc.id, authorId: req.user.id, title, body: bodyText });
+  if (up.images.length) M.addPostImages(p.id, up.images);
   back(res, base + "/board/" + p.id, "글을 등록했습니다.");
 }
 
-// 글 수정 (작성자 또는 관리자)
+// 글 수정 (작성자 또는 관리자) — 기존 사진 선택 삭제 + 새 사진 추가
 export async function updatePost(req, res, { assoc, params }) {
   const base = baseOf(assoc);
   const p = M.getPost(Number(params.id));
   if (!p || p.association_id !== assoc.id) return back(res, base + "/board", "게시글을 찾을 수 없습니다.", true);
   if (!(canModerateBoard(req, assoc) || p.author_id === req.user.id))
     return back(res, base + "/board/" + p.id, "수정 권한이 없습니다.", true);
-  const form = await readFormOrMultipart(req, res, base + "/board/" + p.id + "/edit", config.maxImageBytes + 128 * 1024);
+  const editUrl = base + "/board/" + p.id + "/edit";
+  const form = await readFormOrMultipart(req, res, editUrl, config.maxImageBytes * BOARD_MAX_IMAGES + 512 * 1024);
   if (!form) return;
   const { fields, files } = form;
   const title = cap((fields.title || "").trim(), 200);
   const bodyText = cap((fields.body || "").trim(), 10000);
-  if (!title || !bodyText) return back(res, base + "/board/" + p.id + "/edit", "제목과 내용을 입력하세요.", true);
+  if (!title || !bodyText) return back(res, editUrl, "제목과 내용을 입력하세요.", true);
+
+  const existing = M.listPostImages(p.id);
+  // 개별 사진 삭제 체크박스(del_<id>=1) — JS 없이도 동작하도록 고유 필드명 사용
+  const removeIds = new Set(existing.filter((im) => fields["del_" + im.id] === "1").map((im) => im.id));
+  const keepCount = existing.filter((im) => !removeIds.has(im.id)).length;
+  const up = await saveUploadedImages(files, "images", BOARD_MAX_IMAGES);
+  if (up.error) return back(res, editUrl, up.error, true);
+  if (keepCount + up.images.length > BOARD_MAX_IMAGES)
+    return back(res, editUrl, `사진은 최대 ${BOARD_MAX_IMAGES}장까지 첨부할 수 있습니다.`, true);
+
+  // 선택된 기존 사진 삭제
+  for (const im of existing) {
+    if (removeIds.has(im.id)) {
+      await storage.remove(im.filename);
+      if (im.thumb) await storage.remove(im.thumb);
+      M.deletePostImage(im.id);
+    }
+  }
+  // 레거시 단일 image 컬럼 제거 옵션
   let imageKey = p.image;
-  const img = await saveUploadedImage(files, "image");
-  if (img.error) return back(res, base + "/board/" + p.id + "/edit", img.error, true);
-  if (img.present) { if (p.image) await storage.remove(p.image); imageKey = img.key; }
-  else if (fields.remove_image === "1" && p.image) { await storage.remove(p.image); imageKey = ""; }
+  if (fields.remove_image === "1" && p.image) { await storage.remove(p.image); imageKey = ""; }
+  if (up.images.length) M.addPostImages(p.id, up.images);
   M.updatePost(p.id, { title, body: bodyText, image: imageKey });
   back(res, base + "/board/" + p.id, "글을 수정했습니다.");
 }
@@ -455,6 +483,10 @@ export async function deletePost(req, res, { assoc, params }) {
   if (!p || p.association_id !== assoc.id) return back(res, base + "/board", "게시글을 찾을 수 없습니다.", true);
   if (!(canModerateBoard(req, assoc) || p.author_id === req.user.id))
     return back(res, base + "/board/" + p.id, "삭제 권한이 없습니다.", true);
+  for (const im of M.listPostImages(p.id)) { // 첨부 이미지 파일 정리 (행은 CASCADE)
+    await storage.remove(im.filename);
+    if (im.thumb) await storage.remove(im.thumb);
+  }
   if (p.image) await storage.remove(p.image);
   M.deletePost(p.id);
   back(res, base + "/board", "게시글을 삭제했습니다.");

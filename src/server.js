@@ -85,6 +85,7 @@ const tenantRoutes = [
   mk("POST", "/admin/settings", api.adminSettings, "ADMIN"),
   mk("POST", "/admin/layout", api.adminSaveLayout, "ADMIN"),
   mk("POST", "/admin/layout/reset", api.adminResetLayout, "ADMIN"),
+  mk("GET", "/admin/members.csv", pages.adminExportMembers, "ADMIN"),
   mk("POST", "/admin/user/:id/reset-password", api.adminResetUserPassword, "ADMIN"),
   mk("POST", "/admin/notifications/read", api.adminReadNotifications, "ADMIN"),
   mk("GET", "/admin/documents", pages.adminDocuments, "ADMIN"),

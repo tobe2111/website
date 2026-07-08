@@ -1,0 +1,41 @@
+# 서초구 상인회 플랫폼 — Docker Compose
+# 사용법:
+#   1) cp .env.example .env  후 값 채우기 (특히 SESSION_SECRET)
+#   2) docker compose run --rm app npm run seed   # 최초 1회 시드(초기 계정 생성)
+#   3) docker compose up -d
+# HTTPS 까지 자동으로 붙이려면 caddy 프로파일 사용:  docker compose --profile edge up -d
+
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DB_FILE: /app/data/app.db
+      UPLOAD_DIR: /app/data/uploads
+    volumes:
+      - app-data:/app/data          # DB·업로드·서명키 영속
+    # 리버스 프록시(caddy) 뒤에 두면 아래 ports 는 주석 처리 가능
+    ports:
+      - "3000:3000"
+
+  # HTTPS 자동(Let's Encrypt). DOMAIN 환경변수에 실제 도메인을 넣고 --profile edge 로 기동.
+  caddy:
+    image: caddy:2
+    profiles: ["edge"]
+    restart: unless-stopped
+    depends_on: [app]
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  app-data:
+  caddy-data:
+  caddy-config:

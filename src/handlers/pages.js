@@ -20,6 +20,7 @@ export function tenantBase(assoc, req) {
 }
 
 const CATEGORIES = ["음식점", "카페·디저트", "생활·서비스", "패션·잡화", "농수축산", "교육·문화", "기타"];
+const NOTICE_CATEGORIES = ["안내", "공지", "소식", "행사", "혜택", "긴급"];
 // 서버가 요청별로 assoc._base 를 주입 (서브도메인 모드는 "", 경로 모드는 "/t/:slug").
 const baseOf = (assoc) => (assoc && assoc._base != null ? assoc._base : `/t/${assoc.slug}`);
 
@@ -343,11 +344,27 @@ export function mapPage(req, res, { assoc, query }) {
 export function notices(req, res, { assoc, query }) {
   const base = baseOf(assoc);
   const page = parseInt(query.get("page") || "1", 10) || 1;
-  const { items, page: cur, pages } = M.listNoticesPaged(assoc.id, { page });
-  const urlFor = (i) => `${base}/notices${qsBuild({ page: i })}`;
+  const q = (query.get("q") || "").trim().slice(0, 60);
+  const tag = (query.get("tag") || "").trim().slice(0, 20);
+  const { items, total, page: cur, pages } = M.listNoticesPaged(assoc.id, { page, q: q || null, tag: tag || null });
+  const tags = M.distinctNoticeTags(assoc.id);
+  const urlFor = (i) => `${base}/notices${qsBuild({ q, tag, page: i })}`;
+
+  const filterChips =
+    `<a href="${base}/notices${qsBuild({ q })}" class="chip-filter${!tag ? " active" : ""}">전체</a>` +
+    tags.map((t) => `<a href="${base}/notices${qsBuild({ tag: t.tag, q })}" class="chip-filter${tag === t.tag ? " active" : ""}">${esc(t.tag)} <em>${t.n}</em></a>`).join("");
+
   const body = `<section class="section page-top"><div class="container">
-    <div class="section-head"><p class="section-eyebrow">NOTICE</p><h2 class="section-title">공지사항</h2></div>
-    <ul class="notice-list">${noticeRowsHtml(assoc, items)}</ul>
+    <div class="section-head"><p class="section-eyebrow">NOTICE</p><h2 class="section-title">공지사항</h2>
+      <p class="section-lead">${esc(assoc.name)}의 공지·소식입니다. (총 ${total})</p></div>
+    <form method="get" action="${base}/notices" class="board-search" role="search">
+      ${tag ? `<input type="hidden" name="tag" value="${esc(tag)}" />` : ""}
+      <input type="search" name="q" value="${esc(q)}" placeholder="제목·내용 검색" maxlength="60" aria-label="공지 검색" />
+      <button class="btn btn-ghost btn-sm">검색</button>
+      ${q ? `<a href="${base}/notices${qsBuild({ tag })}" class="btn btn-ghost btn-sm">전체</a>` : ""}
+    </form>
+    ${tags.length > 1 ? `<div class="chip-filters">${filterChips}</div>` : ""}
+    <ul class="notice-list">${items.length ? noticeRowsHtml(assoc, items) : `<li class="empty">${q || tag ? "조건에 맞는 공지가 없습니다." : "등록된 공지가 없습니다."}</li>`}</ul>
     ${pager(urlFor, cur, pages)}</div></section>`;
   html(res, layout({ title: "공지사항", user: req.user, assoc, base, activeNav: base + "/notices", body }));
 }
@@ -395,12 +412,16 @@ export function board(req, res, { assoc, query }) {
   const urlFor = (i) => `${base}/board${qsBuild({ q, page: i })}`;
 
   const rows = items.length
-    ? items.map((p) => `<li class="board-row${p.pinned ? " pinned" : ""}">
+    ? items.map((p) => {
+        const thumbKey = p.pi_thumb || p.pi_file || p.image;
+        const imgCount = (p.image_count || 0) + (p.image ? 1 : 0);
+        return `<li class="board-row${p.pinned ? " pinned" : ""}">
         ${p.pinned ? `<span class="board-pin" title="고정됨">📌</span>` : ""}
-        ${p.image ? `<a href="${base}/board/${p.id}" class="board-thumb"><img src="${esc(storage.publicUrl(p.image))}" alt="" loading="lazy" /></a>` : ""}
-        <a href="${base}/board/${p.id}" class="board-title">${esc(p.title)}${p.image ? ' <span class="board-clip" aria-label="사진 첨부">📎</span>' : ""}</a>
+        ${thumbKey ? `<a href="${base}/board/${p.id}" class="board-thumb"><img src="${esc(storage.publicUrl(thumbKey))}" alt="" loading="lazy" /></a>` : ""}
+        <a href="${base}/board/${p.id}" class="board-title">${esc(p.title)}${imgCount ? ` <span class="board-clip" aria-label="사진 ${imgCount}장">📎${imgCount > 1 ? imgCount : ""}</span>` : ""}</a>
         <span class="board-meta">${esc(p.author_name || "(탈퇴)")} · ${esc(p.created_at.slice(0, 10).replace(/-/g, "."))}${p.comment_count ? ` · 💬 ${p.comment_count}` : ""}</span>
-      </li>`).join("")
+      </li>`;
+      }).join("")
     : `<li class="empty">${q ? `‘${esc(q)}’ 검색 결과가 없습니다.` : "아직 게시글이 없습니다. 첫 글을 남겨보세요."}</li>`;
 
   const body = `<section class="section page-top"><div class="container">
@@ -416,7 +437,7 @@ export function board(req, res, { assoc, query }) {
       <form method="post" action="${base}/board" class="stack-form compact" enctype="multipart/form-data">
         <input type="text" name="title" placeholder="제목" required maxlength="200" />
         <textarea name="body" rows="4" placeholder="내용을 입력하세요." required></textarea>
-        <label class="file-inline">📷 사진 첨부 (선택)<input type="file" name="image" accept="image/*" /></label>
+        <label class="file-inline">📷 사진 첨부 (선택, 최대 6장)<input type="file" name="images" accept="image/*" multiple /></label>
         <button class="btn btn-primary btn-sm">등록</button>
       </form>
     </section>
@@ -433,6 +454,16 @@ export function postDetail(req, res, { assoc, params, query }) {
   const comments = M.listComments(p.id);
   const mod = canModerate(req, assoc);
   const isAuthor = req.user && p.author_id === req.user.id;
+  const postImages = M.listPostImages(p.id);
+  // 첨부 사진 갤러리 (뷰어 라이트박스로 열림). 레거시 단일 image 도 포함.
+  const galleryTiles = [
+    ...(p.image ? [{ filename: p.image, thumb: "" }] : []),
+    ...postImages,
+  ].map((im) => {
+    const full = storage.publicUrl(im.filename);
+    const thumb = im.thumb ? storage.publicUrl(im.thumb) : full;
+    return `<button type="button" class="gallery-item" data-src="${full}" data-kind="image" data-poster="" data-caption="" aria-label="사진 보기"><img src="${thumb}" alt="게시글 사진" loading="lazy" /></button>`;
+  }).join("");
 
   const commentRows = comments.length
     ? comments.map((c) => `<li class="comment">
@@ -449,8 +480,8 @@ export function postDetail(req, res, { assoc, params, query }) {
       <time>${esc(p.created_at.slice(0, 16).replace("T", " "))}</time></div>
     <h1 class="article-title">${esc(p.title)}</h1>
     <p class="post-author">작성자: ${esc(p.author_name || "(탈퇴)")}${p.updated_at ? ` · <span class="post-edited">수정됨 ${esc(p.updated_at.slice(0, 16).replace("T", " "))}</span>` : ""}</p>
-    ${p.image ? `<img class="article-image" src="${esc(storage.publicUrl(p.image))}" alt="${esc(p.title)}" loading="lazy" />` : ""}
     <div class="article-body">${esc(p.body).replace(/\n/g, "<br />")}</div>
+    ${galleryTiles ? `<div class="gallery post-gallery">${galleryTiles}</div>` : ""}
     <div class="post-actions">
       ${(mod || isAuthor) ? `<a href="${base}/board/${p.id}/edit" class="btn btn-ghost btn-xs">수정</a>` : ""}
       ${mod ? `<form method="post" action="${base}/board/${p.id}/pin"><button class="btn btn-ghost btn-xs">${p.pinned ? "고정 해제" : "상단 고정"}</button></form>` : ""}
@@ -463,7 +494,7 @@ export function postDetail(req, res, { assoc, params, query }) {
       <button class="btn btn-primary btn-sm">댓글 등록</button>
     </form>
   </div></section>`;
-  html(res, layout({ title: p.title, user: req.user, assoc, base, activeNav: base + "/board", body }));
+  html(res, layout({ title: p.title, user: req.user, assoc, base, activeNav: base + "/board", body, scripts: galleryTiles ? `<script src="/js/viewer.js" defer></script>` : "" }));
 }
 
 // 게시글 수정 폼 (작성자 또는 관리자)
@@ -475,16 +506,25 @@ export function editPost(req, res, { assoc, params, query }) {
   if (!(canModerate(req, assoc) || isAuthor))
     return redirect(res, base + "/board/" + p.id + "?err=1&msg=" + encodeURIComponent("수정 권한이 없습니다."));
 
+  const postImages = M.listPostImages(p.id);
+  const existingUI = (postImages.length || p.image)
+    ? `<div class="edit-images">
+        <p class="mini-label">현재 사진 <small>(삭제할 사진을 체크하세요)</small></p>
+        <div class="edit-thumbs">
+          ${p.image ? `<label class="edit-thumb"><img src="${esc(storage.publicUrl(p.image))}" alt="첨부 사진" /><span class="check"><input type="checkbox" name="remove_image" value="1" /> 삭제</span></label>` : ""}
+          ${postImages.map((im) => `<label class="edit-thumb"><img src="${esc(storage.publicUrl(im.thumb || im.filename))}" alt="첨부 사진" /><span class="check"><input type="checkbox" name="del_${im.id}" value="1" /> 삭제</span></label>`).join("")}
+        </div>
+      </div>` : "";
+
   const body = `<section class="section page-top"><div class="container narrow">
     <a href="${base}/board/${p.id}" class="back-link">← 게시글로</a>
     <h1 class="article-title">글 수정</h1>
     ${flash(query.get("err") ? decodeURIComponent(query.get("msg") || "입력을 확인하세요.") : "", "err")}
-    <form method="post" action="${base}/board/${p.id}/edit" class="stack-form" enctype="multipart/form-data">
+    <form method="post" action="${base}/board/${p.id}/edit" class="stack-form" enctype="multipart/form-data" id="editPostForm">
       <label>제목<input type="text" name="title" value="${esc(p.title)}" required maxlength="200" /></label>
       <label>내용<textarea name="body" rows="8" required>${esc(p.body)}</textarea></label>
-      ${p.image ? `<div class="edit-image"><img src="${esc(storage.publicUrl(p.image))}" alt="현재 첨부 이미지" />
-        <label class="check"><input type="checkbox" name="remove_image" value="1" /> 현재 사진 삭제</label></div>` : ""}
-      <label class="file-inline">📷 ${p.image ? "사진 교체" : "사진 첨부"} (선택)<input type="file" name="image" accept="image/*" /></label>
+      ${existingUI}
+      <label class="file-inline">📷 사진 추가 (선택, 총 6장까지)<input type="file" name="images" accept="image/*" multiple /></label>
       <div class="post-actions">
         <button type="submit" class="btn btn-primary">저장</button>
         <a href="${base}/board/${p.id}" class="btn btn-ghost">취소</a>
@@ -664,6 +704,24 @@ export function dashboard(req, res, { assoc, query }) {
   html(res, layout({ title: "내 업체 관리", user: req.user, assoc, base, body, scripts: `<script src="/js/dashboard.js" defer></script><script src="/js/viewer.js" defer></script>${naverPicker}` }));
 }
 
+// CSV 셀 이스케이프 (쉼표·따옴표·개행 포함 시 큰따옴표로 감쌈)
+function csvCell(v) {
+  const s = String(v == null ? "" : v);
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+// 관리자: 회원 명단 CSV 다운로드 (엑셀 한글 대응 BOM 포함)
+export function adminExportMembers(req, res, { assoc }) {
+  const members = M.listUsersByAssociation(assoc.id, "MERCHANT");
+  const header = ["이름", "이메일", "업체명", "역할"];
+  const lines = [header, ...members.map((m) => [m.name, m.email, m.business_name || "", m.role])];
+  const csv = "﻿" + lines.map((r) => r.map(csvCell).join(",")).join("\r\n");
+  send(res, 200, csv, {
+    "Content-Type": "text/csv; charset=utf-8",
+    "Content-Disposition": `attachment; filename="members_${assoc.slug}.csv"`,
+    "Cache-Control": "no-store",
+  });
+}
+
 // ================= 상인회 관리자 대시보드 =================
 export function admin(req, res, { assoc, query }) {
   const base = baseOf(assoc);
@@ -739,8 +797,11 @@ export function admin(req, res, { assoc, query }) {
       <ul class="notif-list">${notifRows}</ul>
     </section>
 
-    <section class="panel"><h2 class="panel-title">회원 관리</h2>
-      <p class="panel-hint">비밀번호를 잊은 회원에게 임시 비밀번호를 발급할 수 있습니다. 발급 시 회원의 기존 로그인은 모두 해제됩니다.</p>
+    <section class="panel"><div class="panel-head">
+      <h2 class="panel-title">회원 관리 <span class="badge badge-muted">${members.length}명</span></h2>
+      ${members.length ? `<a class="btn btn-xs btn-ghost" href="${base}/admin/members.csv">⬇ 명단 CSV 내보내기</a>` : ""}
+    </div>
+      <p class="panel-hint">비밀번호를 잊은 회원에게 임시 비밀번호를 발급할 수 있습니다. 발급 시 회원의 기존 로그인은 모두 해제됩니다. CSV 는 엑셀에서 바로 열립니다.</p>
       <div class="table-scroll"><table class="admin-table">
         <thead><tr><th>회원</th><th>업체</th><th>비밀번호</th></tr></thead>
         <tbody>${memberRows}</tbody></table></div>
@@ -785,7 +846,7 @@ export function admin(req, res, { assoc, query }) {
         <form method="post" action="${base}/admin/notice" enctype="multipart/form-data" class="stack-form compact">
           <input type="text" name="title" placeholder="제목" required />
           <textarea name="body" rows="3" placeholder="내용"></textarea>
-          <div class="form-two"><input type="text" name="tag" placeholder="태그 (공지·소식·행사 등)" value="안내" />
+          <div class="form-two"><label class="mini-label">카테고리<select name="tag">${NOTICE_CATEGORIES.map((c) => `<option value="${esc(c)}"${c === "안내" ? " selected" : ""}>${esc(c)}</option>`).join("")}</select></label>
             <label class="check"><input type="checkbox" name="pinned" value="1" /> 상단 고정</label></div>
           <label class="mini-label">대표 이미지 <small>(선택·최대 8MB)</small><input type="file" name="image" accept="image/*" /></label>
           <button class="btn btn-primary btn-sm">등록</button>
@@ -1121,7 +1182,8 @@ export function adminDocumentDetail(req, res, { assoc, params, query }) {
   const body = `<section class="dash"><div class="container">
     <div class="dash-head"><div><p class="section-eyebrow">E-SIGN</p>
       <h1 class="dash-title">${esc(d.title)} ${d.closed ? '<span class="badge badge-no">마감</span>' : ""}${d.ordered ? ' <span class="badge badge-info">순차</span>' : ""}${d.due_date ? `<span class="badge ${M.isPastDue(d) ? "badge-no" : "badge-wait"}">기한 ${esc(d.due_date)}</span>` : ""}</h1>
-      <p class="dash-sub"><a href="${base}/admin/documents">← 문서 목록</a> · 서명 ${sigs.length}명</p></div></div>
+      <p class="dash-sub"><a href="${base}/admin/documents">← 문서 목록</a> · 서명 ${sigs.length}명</p></div>
+      <div class="dash-head-actions"><button type="button" class="btn btn-ghost btn-sm" data-print>🖨 인쇄 / PDF 저장</button></div></div>
     ${reqPanel}
     <section class="panel"><h2 class="panel-title">문서 본문</h2>
       <div class="doc-body">${docBody(d.body)}</div>
