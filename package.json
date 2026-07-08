@@ -10,7 +10,8 @@
     "start": "node --experimental-sqlite src/server.js",
     "seed": "node --experimental-sqlite src/seed.js",
     "reset": "node --experimental-sqlite src/seed.js --reset",
-    "test:s3": "node src/s3.selftest.js"
+    "test:s3": "node src/s3.selftest.js",
+    "test": "node --experimental-sqlite --test test/*.test.js"
   },
   "license": "MIT"
 }
