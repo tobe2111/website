@@ -4,6 +4,8 @@
 
 > **외부 의존성 0개.** Node.js 22 내장 기능(`node:sqlite`, `node:crypto`, `node:http`)만 사용합니다. `npm install` 없이 Node만 있으면 바로 실행됩니다.
 
+> ☁️ **무료로 배포하고 싶다면 → [`cloudflare/`](./cloudflare/README.md)** 폴더에 **Cloudflare Workers + D1 + R2** 이식 버전이 있습니다. 깃허브 push → 자동 배포, HTTPS 자동, **영구 무료 티어**로 운영 가능(영상은 링크 임베드라 트래픽 비용 0). 배포법: [`cloudflare/DEPLOY-cloudflare.md`](./cloudflare/DEPLOY-cloudflare.md).
+
 ## 핵심 개념
 
 - **상인회(Association / 테넌트)**: 각 상인회는 `/t/:slug` 주소의 독립 사이트를 가집니다. 업체·공지·행사·회원·브랜딩·홈 구조가 모두 분리됩니다.
