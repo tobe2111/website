@@ -222,6 +222,59 @@ export function listAdmins() {
                      WHERE u.role = 'ADMIN' ORDER BY a.name`).all();
 }
 
+// ----- 전자서명: 문서 -----
+export function createDocument({ associationId, title, body, contentHash, createdBy }) {
+  const info = db
+    .prepare("INSERT INTO documents (association_id, title, body, content_hash, created_by) VALUES (?, ?, ?, ?, ?)")
+    .run(associationId, title, body, contentHash, createdBy);
+  return getDocument(info.lastInsertRowid);
+}
+export function getDocument(id) {
+  return db.prepare("SELECT * FROM documents WHERE id = ?").get(id);
+}
+export function listDocuments(associationId) {
+  return db
+    .prepare(`SELECT d.*, (SELECT COUNT(*) FROM signatures s WHERE s.document_id = d.id) AS sign_count
+              FROM documents d WHERE d.association_id = ? ORDER BY d.created_at DESC`)
+    .all(associationId);
+}
+export function listDocumentsToSign(associationId, userId) {
+  return db
+    .prepare(`SELECT d.* FROM documents d
+              WHERE d.association_id = ? AND d.closed = 0
+                AND NOT EXISTS (SELECT 1 FROM signatures s WHERE s.document_id = d.id AND s.user_id = ?)
+              ORDER BY d.created_at DESC`)
+    .all(associationId, userId);
+}
+export function countDocumentsToSign(associationId, userId) {
+  return db.prepare(`SELECT COUNT(*) AS n FROM documents d
+    WHERE d.association_id = ? AND d.closed = 0
+      AND NOT EXISTS (SELECT 1 FROM signatures s WHERE s.document_id = d.id AND s.user_id = ?)`).get(associationId, userId).n;
+}
+export function closeDocument(id) {
+  db.prepare("UPDATE documents SET closed = 1 WHERE id = ?").run(id);
+}
+
+// ----- 전자서명: 서명 기록 -----
+export function hasSigned(documentId, userId) {
+  return !!db.prepare("SELECT 1 FROM signatures WHERE document_id = ? AND user_id = ?").get(documentId, userId);
+}
+export function createSignature(row) {
+  const info = db.prepare(`INSERT INTO signatures
+    (document_id, user_id, signer_name, signature_image, content_hash, ip, user_agent, verify_code, record_hash, signed_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    row.documentId, row.userId, row.signerName, row.signatureImage, row.contentHash,
+    row.ip, row.userAgent, row.verifyCode, row.recordHash, row.signedAt);
+  return db.prepare("SELECT * FROM signatures WHERE id = ?").get(info.lastInsertRowid);
+}
+export function listSignatures(documentId) {
+  return db.prepare(`SELECT s.*, u.email AS signer_email FROM signatures s
+    JOIN users u ON u.id = s.user_id WHERE s.document_id = ? ORDER BY s.signed_at DESC`).all(documentId);
+}
+export function getSignatureByCode(code) {
+  return db.prepare("SELECT * FROM signatures WHERE verify_code = ?").get(code);
+}
+
 // ----- 통계 -----
 export function stats(associationId) {
   const q = (sql) => db.prepare(sql).get(associationId).n;

@@ -290,6 +290,23 @@ img,video{max-width:100%;display:block}
 .free-text{font-size:1.05rem;color:var(--ink-soft);line-height:1.9}
 .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:7px;vertical-align:middle}
 
+/* ---------- E-sign ---------- */
+.dash-head-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.doc-body{white-space:normal;background:var(--bg-alt);border:1px solid var(--line);border-radius:12px;padding:20px 22px;line-height:1.9;color:var(--ink-soft);max-height:420px;overflow:auto}
+.doc-hash{margin-top:12px;font-size:.8rem;color:var(--muted);word-break:break-all}
+.doc-hash code,.verify-table code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--bg-alt);padding:2px 6px;border-radius:5px;font-size:.85em}
+.sign-pad-wrap{position:relative;margin-top:8px}
+.sign-pad{width:100%;max-width:600px;height:auto;aspect-ratio:3/1;border:2px dashed var(--green-500);border-radius:12px;background:#fff;touch-action:none;cursor:crosshair;display:block}
+.sign-clear{position:absolute;top:8px;right:8px}
+.sign-form .check{align-items:flex-start;line-height:1.5}
+.verify-table{width:100%;border-collapse:collapse;margin:8px 0 18px}
+.verify-table th,.verify-table td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top;font-size:.92rem}
+.verify-table th{width:110px;color:var(--muted);font-weight:600;white-space:nowrap}
+.verify-table td{word-break:break-all}
+.verify-sig{border:1px solid var(--line);border-radius:12px;padding:10px;background:#fff;display:inline-block}
+.verify-sig img{max-width:100%;height:auto;display:block}
+.sig-thumb{width:120px;height:40px;object-fit:contain;background:#fff;border:1px solid var(--line);border-radius:6px}
+
 /* ---------- Notifications ---------- */
 .panel-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
 .panel-head .panel-title{margin-bottom:0}

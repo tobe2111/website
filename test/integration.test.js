@@ -169,6 +169,50 @@ test("비밀번호 찾기: 요청이 관리자 알림으로 전달(내부 처리
   assert.match(dash, /비밀번호 재설정 요청/);
 });
 
+// 최소 유효 PNG 생성 (서명 이미지 대용)
+function makePng() {
+  const zlib = require("node:zlib");
+  const crc = (buf) => { let c = ~0; for (const b of buf) { c ^= b; for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xEDB88320 & -(c & 1)); } return ~c >>> 0; };
+  const chunk = (type, data) => { const t = Buffer.from(type); const len = Buffer.alloc(4); len.writeUInt32BE(data.length); const cc = Buffer.alloc(4); cc.writeUInt32BE(crc(Buffer.concat([t, data]))); return Buffer.concat([len, t, data, cc]); };
+  const w = 60, h = 30, ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = 2;
+  const row = Buffer.alloc(1 + w * 3); const raw = Buffer.concat(Array.from({ length: h }, () => row));
+  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk("IHDR", ihdr), chunk("IDAT", zlib.deflateSync(raw)), chunk("IEND", Buffer.alloc(0))]);
+}
+
+test("전자서명: 문서 생성 → 서명 → 검증(유효)", async () => {
+  const { createRequire } = await import("node:module");
+  global.require = createRequire(import.meta.url);
+  const { jar: aj } = await loginAs("admin@seocho-merchants.kr", "admin1234");
+  // 문서 생성
+  let r = await fetch(`${BASE}/t/seocho/admin/documents`, {
+    method: "POST", redirect: "manual",
+    headers: { "content-type": "application/x-www-form-urlencoded", cookie: cookieHeader(aj) },
+    body: new URLSearchParams({ _csrf: aj.sc_csrf, title: "테스트 동의서", body: "동의 내용 본문" }),
+  });
+  assert.equal(r.status, 303);
+  const { getDocument, listDocuments } = await import("../src/models.js");
+  const { getAssociationBySlug } = await import("../src/associations.js");
+  const assoc = getAssociationBySlug("seocho");
+  const docId = listDocuments(assoc.id)[0].id;
+
+  // 회원 서명
+  const { jar: mj } = await loginAs("flower@ex.kr", "merchant1234");
+  const dataUrl = "data:image/png;base64," + makePng().toString("base64");
+  r = await fetch(`${BASE}/t/seocho/sign/${docId}`, {
+    method: "POST", redirect: "manual",
+    headers: { "content-type": "application/x-www-form-urlencoded", cookie: cookieHeader(mj) },
+    body: new URLSearchParams({ _csrf: mj.sc_csrf, consent: "1", signer_name: "최반포", signature: dataUrl }),
+  });
+  assert.equal(r.status, 303);
+  const msg = decodeURIComponent(new URL(r.headers.get("location"), BASE).searchParams.get("msg") || "");
+  const code = /검증 코드: (\w+)/.exec(msg)[1];
+
+  // 공개 검증
+  const vr = await fetch(`${BASE}/verify/${code}`);
+  assert.equal(vr.status, 200);
+  assert.match(await vr.text(), /유효한 서명/);
+});
+
 test("관리자: 회원 임시 비밀번호 발급 → 새 비밀번호로 로그인", async () => {
   const { jar } = await loginAs("admin@seocho-merchants.kr", "admin1234");
   // cafe 회원 id 조회 (models 직접)

@@ -6,6 +6,7 @@ import { parseMultipart } from "../multipart.js";
 import * as csrf from "../csrf.js";
 import * as mailer from "../mailer.js";
 import { sniff } from "../filetype.js";
+import { contentHash, sealRecord, newVerifyCode } from "../esign.js";
 import * as M from "../models.js";
 import * as A from "../associations.js";
 import * as storage from "../storage.js";
@@ -316,6 +317,61 @@ export async function adminDeleteEvent(req, res, { assoc, params }) {
   const e = M.getEvent(Number(params.id));
   if (e && e.association_id === assoc.id) M.deleteEvent(e.id);
   back(res, base + "/admin", "행사를 삭제했습니다.");
+}
+
+// ---------- 전자서명: 관리자 문서 생성 ----------
+export async function adminCreateDocument(req, res, { assoc }) {
+  const base = baseOf(assoc);
+  const f = await readForm(req, res, 128 * 1024);
+  if (!f) return;
+  const title = cap((f.title || "").trim(), 200);
+  const bodyText = cap((f.body || "").trim(), 20000);
+  if (!title || !bodyText) return back(res, base + "/admin/documents", "제목과 본문을 입력하세요.", true);
+  M.createDocument({ associationId: assoc.id, title, body: bodyText, contentHash: contentHash(bodyText), createdBy: req.user.id });
+  back(res, base + "/admin/documents", "문서를 생성했습니다. 회원 대시보드에 서명 요청으로 표시됩니다.");
+}
+export async function adminCloseDocument(req, res, { assoc, params }) {
+  const base = baseOf(assoc);
+  const f = await readForm(req, res, 8 * 1024);
+  if (!f) return;
+  const d = M.getDocument(Number(params.id));
+  if (d && d.association_id === assoc.id) M.closeDocument(d.id);
+  back(res, base + "/admin/documents", "문서를 마감했습니다.");
+}
+
+// ---------- 전자서명: 회원 서명 제출 ----------
+export async function memberSign(req, res, { assoc, params }) {
+  const base = baseOf(assoc);
+  const d = M.getDocument(Number(params.id));
+  if (!d || d.association_id !== assoc.id) return back(res, base + "/sign", "문서를 찾을 수 없습니다.", true);
+  const f = await readForm(req, res, 2 * 1024 * 1024); // 서명 이미지(dataURL) 수용
+  if (!f) return;
+  if (d.closed) return back(res, base + "/sign", "마감된 문서입니다.", true);
+  if (M.hasSigned(d.id, req.user.id)) return back(res, base + "/sign", "이미 서명한 문서입니다.", true);
+  if (f.consent !== "1") return back(res, base + "/sign/" + d.id, "동의 확인란에 체크해 주세요.", true);
+
+  const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(f.signature || "");
+  if (!m) return back(res, base + "/sign/" + d.id, "서명을 입력해 주세요.", true);
+  let imgBuf;
+  try { imgBuf = Buffer.from(m[1], "base64"); } catch { imgBuf = null; }
+  if (!imgBuf || imgBuf.length < 64 || imgBuf.length > 500 * 1024 || sniff(imgBuf) !== "image/png")
+    return back(res, base + "/sign/" + d.id, "서명 이미지가 올바르지 않습니다.", true);
+
+  const signerName = cap((f.signer_name || "").trim(), 60) || req.user.name;
+  const sigKey = await storage.save(imgBuf, "image/png");
+  const signedAt = new Date().toISOString();
+  const ip = clientIp(req);
+  const ch = d.content_hash; // 서명 시점 문서 해시(불변 본문)
+  const recordHash = sealRecord({ documentId: d.id, userId: req.user.id, signerName, contentHash: ch, signedAt, ip });
+  const verifyCode = newVerifyCode();
+  M.createSignature({
+    documentId: d.id, userId: req.user.id, signerName, signatureImage: sigKey,
+    contentHash: ch, ip, userAgent: cap(req.headers["user-agent"] || "", 200),
+    verifyCode, recordHash, signedAt,
+  });
+  // 관리자 알림
+  M.createNotification({ associationId: assoc.id, kind: "signed", message: `${signerName}님이 '${d.title}'에 전자서명했습니다.`, link: base + "/admin/documents/" + d.id });
+  back(res, base + "/sign", `전자서명이 완료되었습니다. 검증 코드: ${verifyCode}`);
 }
 
 // ---------- 관리자: 상인회 브랜딩 설정 (+ 로고 업로드, 멀티파트) ----------

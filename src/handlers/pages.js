@@ -7,6 +7,7 @@ import * as A from "../associations.js";
 import * as storage from "../storage.js";
 import { parseLayout, defaultLayout, SECTION_CATALOG, renderHome } from "../homeLayout.js";
 import { config } from "../config.js";
+import { verifySignature } from "../esign.js";
 
 // 테넌트의 절대/상대 베이스 URL (서브도메인 모드 지원). 호스트 간 이동(로그인 후 리다이렉트)에 사용.
 export function tenantBase(assoc, req) {
@@ -389,6 +390,7 @@ export function dashboard(req, res, { assoc, query }) {
     return html(res, layout({ title: "대시보드", user: req.user, assoc, base, body: `<section class="section page-top"><div class="container"><p class="empty">연결된 업체가 없습니다.</p></div></section>` }));
   }
   const media = M.listMedia(b.id);
+  const signCount = M.countDocumentsToSign(assoc.id, req.user.id);
   const opts = CATEGORIES.map((c) => `<option value="${esc(c)}"${c === b.category ? " selected" : ""}>${esc(c)}</option>`).join("");
   const mediaGrid = media.length
     ? media.map((m) => `<figure class="media-tile">${galleryItem(m, { showCaption: false })}<figcaption>
@@ -402,8 +404,12 @@ export function dashboard(req, res, { assoc, query }) {
       <p class="section-eyebrow">MY BUSINESS</p>
       <h1 class="dash-title">${esc(b.name)} ${statusBadge(b.status)}</h1>
       <p class="dash-sub">공개 주소: <a href="${base}/business/${esc(b.slug)}" target="_blank">${base}/business/${esc(b.slug)}</a></p>
-    </div><a href="${base}/business/${esc(b.slug)}" class="btn btn-ghost btn-sm" target="_blank">내 페이지 보기</a></div>
+    </div><div class="dash-head-actions">
+      <a href="${base}/sign" class="btn btn-ghost btn-sm">전자서명${signCount ? ` <span class="badge badge-wait">${signCount}</span>` : ""}</a>
+      <a href="${base}/business/${esc(b.slug)}" class="btn btn-ghost btn-sm" target="_blank">내 페이지 보기</a>
+    </div></div>
     ${flash(query.get("msg") ? decodeURIComponent(query.get("msg")) : "", query.get("err") ? "err" : "ok")}
+    ${signCount ? `<div class="flash flash-warn">서명이 필요한 문서가 <b>${signCount}건</b> 있습니다. <a href="${base}/sign">전자서명 하러 가기 →</a></div>` : ""}
     <div class="dash-grid">
       <section class="panel"><h2 class="panel-title">업체 정보</h2>
         <form method="post" action="${base}/dashboard/business" class="stack-form">
@@ -487,6 +493,8 @@ export function admin(req, res, { assoc, query }) {
       <p class="section-eyebrow">ADMIN · ${esc(assoc.name)}</p>
       <h1 class="dash-title">관리자 대시보드</h1>
       <p class="dash-sub">홈페이지 주소: <a href="${base}" target="_blank">${base}</a></p>
+    </div><div class="dash-head-actions">
+      <a href="${base}/admin/documents" class="btn btn-ghost btn-sm">전자서명 문서</a>
     </div></div>
     ${superNote}
     ${flash(query.get("msg") ? decodeURIComponent(query.get("msg")) : "", query.get("err") ? "err" : "ok")}
@@ -717,6 +725,172 @@ export function account(req, res, { query }) {
     </div>
   </div></section>`;
   html(res, layout({ title: "계정 보안", user: u, body }));
+}
+
+// ================= 전자서명 =================
+const docBody = (b) => esc(b).replace(/\n/g, "<br />");
+
+// 회원: 서명할 문서 목록 + 내 서명 내역
+export function signList(req, res, { assoc, query }) {
+  const base = baseOf(assoc);
+  const b = M.getBusinessByOwner(req.user.id);
+  const todo = M.listDocumentsToSign(assoc.id, req.user.id);
+  const all = M.listDocuments(assoc.id);
+  const signedIds = new Set(all.filter((d) => M.hasSigned(d.id, req.user.id)).map((d) => d.id));
+
+  const todoRows = todo.length
+    ? todo.map((d) => `<li><a href="${base}/sign/${d.id}"><span class="notice-tag tag-important">서명 필요</span>
+        <span class="notice-title">${esc(d.title)}</span><time>${esc(d.created_at.slice(0, 10).replace(/-/g, "."))}</time></a></li>`).join("")
+    : `<li class="empty">서명할 문서가 없습니다.</li>`;
+  const doneRows = all.filter((d) => signedIds.has(d.id))
+    .map((d) => `<li><span class="notice-tag badge-ok">서명 완료</span><span class="notice-title">${esc(d.title)}</span></li>`).join("") || `<li class="empty">서명 내역이 없습니다.</li>`;
+
+  const body = `<section class="section page-top"><div class="container narrow">
+    <a href="${base}/dashboard" class="back-link">← 내 업체 관리</a>
+    <div class="section-head" style="text-align:left"><p class="section-eyebrow">E-SIGN</p><h1 class="section-title">전자서명</h1>
+      <p class="section-lead">상인회 동의서·계약 등에 전자서명합니다.</p></div>
+    ${flash(query.get("msg") ? decodeURIComponent(query.get("msg")) : "", query.get("err") ? "err" : "ok")}
+    <h2 class="biz-section-title">서명 대기 (${todo.length})</h2>
+    <ul class="notice-list">${todoRows}</ul>
+    <h2 class="biz-section-title" style="margin-top:32px">서명 완료</h2>
+    <ul class="notice-list">${doneRows}</ul>
+  </div></section>`;
+  html(res, layout({ title: "전자서명", user: req.user, assoc, base, body }));
+}
+
+// 회원: 서명 폼
+export function signForm(req, res, { assoc, params, query }) {
+  const base = baseOf(assoc);
+  const d = M.getDocument(Number(params.id));
+  if (!d || d.association_id !== assoc.id) return notFound(req, res, { assoc });
+  if (M.hasSigned(d.id, req.user.id)) return redirect(res, base + "/sign?msg=" + encodeURIComponent("이미 서명한 문서입니다."));
+  if (d.closed) return redirect(res, base + "/sign?err=1&msg=" + encodeURIComponent("마감된 문서입니다."));
+
+  const body = `<section class="section page-top"><div class="container narrow">
+    <a href="${base}/sign" class="back-link">← 서명 목록</a>
+    <h1 class="article-title">${esc(d.title)}</h1>
+    <div class="doc-body">${docBody(d.body)}</div>
+    <p class="doc-hash">문서 해시(SHA-256): <code>${esc(d.content_hash)}</code></p>
+    ${flash(query.get("err") ? decodeURIComponent(query.get("msg") || "입력을 확인하세요.") : "", "err")}
+    <form method="post" action="${base}/sign/${d.id}" class="stack-form sign-form" id="signForm">
+      <label>서명 (아래 칸에 마우스/손가락으로 서명)
+        <div class="sign-pad-wrap">
+          <canvas id="signPad" class="sign-pad" width="600" height="200" aria-label="서명 입력란"></canvas>
+          <button type="button" class="btn btn-ghost btn-xs sign-clear" id="signClear">지우기</button>
+        </div>
+      </label>
+      <input type="hidden" name="signature" id="signatureData" />
+      <label>서명자 성명<input type="text" name="signer_name" value="${esc(req.user.name)}" required /></label>
+      <label class="check"><input type="checkbox" name="consent" value="1" required /> 위 문서 내용을 확인했으며, 본인이 전자서명하는 데 동의합니다.</label>
+      <button type="submit" class="btn btn-primary btn-block" id="signSubmit">전자서명 제출</button>
+    </form>
+    <p class="auth-note">서명 시 서명자·시각·IP·기기 정보와 문서 해시가 기록되고, HMAC로 봉인되어 위변조를 방지합니다.</p>
+  </div></section>`;
+  html(res, layout({ title: `서명: ${d.title}`, user: req.user, assoc, base, body, scripts: `<script src="/js/sign.js" defer></script>` }));
+}
+
+// 관리자: 문서 목록 + 생성
+export function adminDocuments(req, res, { assoc, query }) {
+  const base = baseOf(assoc);
+  const docs = M.listDocuments(assoc.id);
+  const rows = docs.length
+    ? docs.map((d) => `<tr>
+        <td><a href="${base}/admin/documents/${d.id}">${esc(d.title)}</a><br /><small>${esc(d.created_at.slice(0, 16).replace("T", " "))}</small></td>
+        <td>${d.sign_count}명</td>
+        <td>${d.closed ? '<span class="badge badge-no">마감</span>' : '<span class="badge badge-ok">진행중</span>'}</td>
+        <td class="actions-cell">
+          <a class="btn btn-xs btn-ghost" href="${base}/admin/documents/${d.id}">서명 보기</a>
+          ${d.closed ? "" : `<form method="post" action="${base}/admin/documents/${d.id}/close" data-confirm="더 이상 서명을 받지 않도록 마감할까요?"><button class="btn btn-xs btn-ghost">마감</button></form>`}
+        </td></tr>`).join("")
+    : `<tr><td colspan="4" class="empty">문서가 없습니다.</td></tr>`;
+
+  const body = `<section class="dash"><div class="container">
+    <div class="dash-head"><div><p class="section-eyebrow">E-SIGN · ${esc(assoc.name)}</p>
+      <h1 class="dash-title">전자서명 문서</h1>
+      <p class="dash-sub"><a href="${base}/admin">← 관리자 대시보드</a></p></div></div>
+    ${flash(query.get("msg") ? decodeURIComponent(query.get("msg")) : "", query.get("err") ? "err" : "ok")}
+    <section class="panel panel-accent"><h2 class="panel-title">➕ 서명 문서 만들기</h2>
+      <p class="panel-hint">생성 후 본문은 무결성을 위해 변경할 수 없습니다. 회원 대시보드에 서명 요청으로 표시됩니다.</p>
+      <form method="post" action="${base}/admin/documents" class="stack-form">
+        <label>제목<input type="text" name="title" required placeholder="예: 2026년도 상인회 가입 동의서" /></label>
+        <label>본문(약관·동의 내용)<textarea name="body" rows="10" required placeholder="동의 내용을 입력하세요."></textarea></label>
+        <button class="btn btn-primary">문서 생성 및 서명 요청</button>
+      </form>
+    </section>
+    <section class="panel"><h2 class="panel-title">문서 목록</h2>
+      <div class="table-scroll"><table class="admin-table">
+        <thead><tr><th>문서</th><th>서명</th><th>상태</th><th>관리</th></tr></thead>
+        <tbody>${rows}</tbody></table></div>
+    </section>
+  </div></section>`;
+  html(res, layout({ title: "전자서명 문서", user: req.user, assoc, base, body }));
+}
+
+// 관리자: 문서별 서명 내역 + 검증
+export function adminDocumentDetail(req, res, { assoc, params, query }) {
+  const base = baseOf(assoc);
+  const d = M.getDocument(Number(params.id));
+  if (!d || d.association_id !== assoc.id) return notFound(req, res, { assoc });
+  const sigs = M.listSignatures(d.id);
+  const rows = sigs.length
+    ? sigs.map((s) => {
+        const v = verifySignature(s, d);
+        const badge = v.valid ? '<span class="badge badge-ok">유효</span>' : '<span class="badge badge-no">위변조 의심</span>';
+        return `<tr>
+          <td>${esc(s.signer_name)}<br /><small>${esc(s.signer_email)}</small></td>
+          <td>${s.signature_image ? `<img src="${esc(storage.publicUrl(s.signature_image))}" alt="서명" class="sig-thumb" />` : "-"}</td>
+          <td><small>${esc(s.signed_at.slice(0, 16).replace("T", " "))}<br />IP ${esc(s.ip)}</small></td>
+          <td>${badge}<br /><a href="/verify/${esc(s.verify_code)}" target="_blank"><small>검증 ${esc(s.verify_code.slice(0, 8))}…</small></a></td>
+        </tr>`;
+      }).join("")
+    : `<tr><td colspan="4" class="empty">아직 서명이 없습니다.</td></tr>`;
+
+  const body = `<section class="dash"><div class="container">
+    <div class="dash-head"><div><p class="section-eyebrow">E-SIGN</p>
+      <h1 class="dash-title">${esc(d.title)} ${d.closed ? '<span class="badge badge-no">마감</span>' : ""}</h1>
+      <p class="dash-sub"><a href="${base}/admin/documents">← 문서 목록</a> · 서명 ${sigs.length}명</p></div></div>
+    <section class="panel"><h2 class="panel-title">문서 본문</h2>
+      <div class="doc-body">${docBody(d.body)}</div>
+      <p class="doc-hash">문서 해시: <code>${esc(d.content_hash)}</code></p>
+    </section>
+    <section class="panel"><h2 class="panel-title">서명 내역</h2>
+      <div class="table-scroll"><table class="admin-table">
+        <thead><tr><th>서명자</th><th>서명</th><th>일시·IP</th><th>검증</th></tr></thead>
+        <tbody>${rows}</tbody></table></div>
+    </section>
+  </div></section>`;
+  html(res, layout({ title: d.title, user: req.user, assoc, base, body }));
+}
+
+// 공개: 서명 검증 페이지
+export function verifyPage(req, res, { params, query }) {
+  const code = params.code || query.get("code") || "";
+  const sig = code ? M.getSignatureByCode(code) : null;
+  let inner;
+  if (!sig) {
+    inner = `<div class="flash flash-err">해당 검증 코드의 서명 기록을 찾을 수 없습니다.</div>
+      <form method="get" action="/verify" class="stack-form"><label>검증 코드<input type="text" name="code" value="${esc(code)}" placeholder="검증 코드 입력" /></label><button class="btn btn-primary btn-sm">검증</button></form>`;
+  } else {
+    const d = M.getDocument(sig.document_id);
+    const v = verifySignature(sig, d);
+    const status = v.valid
+      ? `<div class="flash flash-ok"><b>✓ 유효한 서명</b> — 봉인과 문서 본문이 서명 시점과 일치합니다.</div>`
+      : `<div class="flash flash-err"><b>✗ 검증 실패</b> — ${v.sealOk ? "" : "봉인 불일치. "}${v.contentOk ? "" : "문서 본문이 변경되었습니다. "}위변조 가능성이 있습니다.</div>`;
+    inner = `${status}
+      <table class="verify-table">
+        <tr><th>문서</th><td>${esc(d ? d.title : "(삭제됨)")}</td></tr>
+        <tr><th>서명자</th><td>${esc(sig.signer_name)}</td></tr>
+        <tr><th>서명 일시</th><td>${esc(sig.signed_at.replace("T", " "))} (UTC)</td></tr>
+        <tr><th>문서 해시</th><td><code>${esc(sig.content_hash)}</code></td></tr>
+        <tr><th>봉인(HMAC)</th><td><code>${esc(sig.record_hash.slice(0, 32))}…</code></td></tr>
+        <tr><th>검증 코드</th><td><code>${esc(sig.verify_code)}</code></td></tr>
+      </table>
+      ${sig.signature_image ? `<div class="verify-sig"><img src="${esc(storage.publicUrl(sig.signature_image))}" alt="서명 이미지" /></div>` : ""}`;
+  }
+  const body = `<section class="section page-top"><div class="container narrow">
+    <div class="section-head" style="text-align:left"><p class="section-eyebrow">VERIFY</p><h1 class="section-title">전자서명 검증</h1></div>
+    ${inner}</div></section>`;
+  html(res, layout({ title: "서명 검증", user: req.user, body }));
 }
 
 // ================= SEO: sitemap.xml / robots.txt =================

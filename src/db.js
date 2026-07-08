@@ -99,6 +99,36 @@ CREATE TABLE IF NOT EXISTS notifications (
   created_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- 전자서명: 서명 대상 문서
+CREATE TABLE IF NOT EXISTS documents (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
+  title          TEXT NOT NULL,
+  body           TEXT NOT NULL,                         -- 서명 대상 본문(약관/동의 내용). 생성 후 불변.
+  content_hash   TEXT NOT NULL,                         -- sha256(body) — 서명 대상 고정 해시
+  created_by     INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  closed         INTEGER NOT NULL DEFAULT 0,
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- 전자서명: 서명 기록 (감사추적 + 봉인)
+CREATE TABLE IF NOT EXISTS signatures (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  document_id     INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+  user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  signer_name     TEXT NOT NULL,
+  signature_image TEXT NOT NULL DEFAULT '',             -- 캔버스 서명 이미지 스토리지 키
+  content_hash    TEXT NOT NULL,                        -- 서명 시점 문서 해시(스냅샷)
+  ip              TEXT NOT NULL DEFAULT '',
+  user_agent      TEXT NOT NULL DEFAULT '',
+  verify_code     TEXT NOT NULL UNIQUE,                 -- 공개 검증 코드
+  record_hash     TEXT NOT NULL,                        -- HMAC 봉인(위변조 방지)
+  signed_at       TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (document_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_doc_assoc ON documents(association_id);
+CREATE INDEX IF NOT EXISTS idx_sig_doc ON signatures(document_id);
 CREATE INDEX IF NOT EXISTS idx_notif_assoc ON notifications(association_id, is_read);
 CREATE INDEX IF NOT EXISTS idx_media_business ON media(business_id);
 CREATE INDEX IF NOT EXISTS idx_business_assoc ON businesses(association_id, status);

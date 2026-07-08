@@ -32,6 +32,8 @@ const globalRoutes = [
   mk("POST", "/logout", api.logout),
   mk("GET", "/forgot", pages.forgotForm),
   mk("POST", "/forgot", api.forgotPassword),
+  mk("GET", "/verify", pages.verifyPage),
+  mk("GET", "/verify/:code", pages.verifyPage),
   mk("GET", "/account", pages.account, "USER"),
   mk("POST", "/account/password", api.changePassword, "USER"),
   mk("POST", "/account/logout-all", api.logoutAll, "USER"),
@@ -56,6 +58,9 @@ const tenantRoutes = [
   mk("POST", "/dashboard/business", api.updateBusiness, "MERCHANT"),
   mk("POST", "/dashboard/media", api.uploadMedia, "MERCHANT"),
   mk("POST", "/dashboard/media/:id/delete", api.deleteMedia, "MERCHANT"),
+  mk("GET", "/sign", pages.signList, "MERCHANT"),
+  mk("GET", "/sign/:id", pages.signForm, "MERCHANT"),
+  mk("POST", "/sign/:id", api.memberSign, "MERCHANT"),
   mk("GET", "/admin", pages.admin, "ADMIN"),
   mk("POST", "/admin/business/:id/status", api.adminBusinessStatus, "ADMIN"),
   mk("POST", "/admin/notice", api.adminCreateNotice, "ADMIN"),
@@ -67,6 +72,10 @@ const tenantRoutes = [
   mk("POST", "/admin/layout/reset", api.adminResetLayout, "ADMIN"),
   mk("POST", "/admin/user/:id/reset-password", api.adminResetUserPassword, "ADMIN"),
   mk("POST", "/admin/notifications/read", api.adminReadNotifications, "ADMIN"),
+  mk("GET", "/admin/documents", pages.adminDocuments, "ADMIN"),
+  mk("POST", "/admin/documents", api.adminCreateDocument, "ADMIN"),
+  mk("GET", "/admin/documents/:id", pages.adminDocumentDetail, "ADMIN"),
+  mk("POST", "/admin/documents/:id/close", api.adminCloseDocument, "ADMIN"),
 ];
 
 // 테넌트 컨텍스트 해석: {slug, subpath, base} 또는 null
