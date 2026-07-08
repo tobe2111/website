@@ -7,7 +7,7 @@ import * as A from "../associations.js";
 import * as storage from "../storage.js";
 import { parseLayout, defaultLayout, SECTION_CATALOG, renderHome } from "../homeLayout.js";
 import { config } from "../config.js";
-import { verifySignature } from "../esign.js";
+import { verifySignature, algorithm, publicKeyPem, canonicalFromSig } from "../esign.js";
 
 // 테넌트의 절대/상대 베이스 URL (서브도메인 모드 지원). 호스트 간 이동(로그인 후 리다이렉트)에 사용.
 export function tenantBase(assoc, req) {
@@ -1015,15 +1015,80 @@ export function verifyPage(req, res, { params, query }) {
         <tr><th>서명자</th><td>${esc(sig.signer_name)}</td></tr>
         <tr><th>서명 일시</th><td>${esc(sig.signed_at.replace("T", " "))} (UTC)</td></tr>
         <tr><th>문서 해시</th><td><code>${esc(sig.content_hash)}</code></td></tr>
-        <tr><th>봉인(HMAC)</th><td><code>${esc(sig.record_hash.slice(0, 32))}…</code></td></tr>
+        <tr><th>서명 알고리즘</th><td>${esc(algorithm)} (공개키 검증 가능)</td></tr>
+        <tr><th>디지털 서명</th><td><code>${esc(sig.record_hash.slice(0, 40))}…</code></td></tr>
         <tr><th>검증 코드</th><td><code>${esc(sig.verify_code)}</code></td></tr>
       </table>
-      ${sig.signature_image ? `<div class="verify-sig"><img src="${esc(storage.publicUrl(sig.signature_image))}" alt="서명 이미지" /></div>` : ""}`;
+      ${sig.signature_image ? `<div class="verify-sig"><img src="${esc(storage.publicUrl(sig.signature_image))}" alt="서명 이미지" /></div>` : ""}
+      <div class="verify-actions">
+        <a class="btn btn-primary btn-sm" href="/verify/${esc(sig.verify_code)}/certificate">증명서 인쇄</a>
+        <a class="btn btn-ghost btn-sm" href="/verify/${esc(sig.verify_code)}/receipt.json">검증 파일(JSON) 다운로드</a>
+      </div>`;
   }
   const body = `<section class="section page-top"><div class="container narrow">
     <div class="section-head" style="text-align:left"><p class="section-eyebrow">VERIFY</p><h1 class="section-title">전자서명 검증</h1></div>
     ${inner}</div></section>`;
   html(res, layout({ title: "서명 검증", user: req.user, body }));
+}
+
+// 서명 완료 증명서 (인쇄/PDF 저장용)
+export function verifyCertificate(req, res, { params }) {
+  const sig = M.getSignatureByCode(params.code || "");
+  if (!sig) return notFound(req, res);
+  const d = M.getDocument(sig.document_id);
+  const v = verifySignature(sig, d);
+  const row = (k, val) => `<tr><th>${esc(k)}</th><td>${val}</td></tr>`;
+  const body = `<section class="section page-top cert-page"><div class="container narrow">
+    <div class="cert">
+      <div class="cert-head">
+        <h1>전자서명 완료 증명서</h1>
+        <p class="cert-sub">Electronic Signature Certificate</p>
+        <span class="cert-badge ${v.valid ? "ok" : "no"}">${v.valid ? "✓ 유효 (VALID)" : "✗ 검증 실패"}</span>
+      </div>
+      <table class="verify-table">
+        ${row("문서 제목", esc(d ? d.title : "(삭제됨)"))}
+        ${row("서명자", esc(sig.signer_name))}
+        ${row("서명 일시", esc(sig.signed_at.replace("T", " ")) + " (UTC)")}
+        ${row("서명자 IP", esc(sig.ip || "-"))}
+        ${row("문서 해시(SHA-256)", `<code>${esc(sig.content_hash)}</code>`)}
+        ${row("서명 알고리즘", esc(algorithm))}
+        ${row("디지털 서명(Base64)", `<code class="cert-sig">${esc(sig.record_hash)}</code>`)}
+        ${row("검증 코드", `<code>${esc(sig.verify_code)}</code>`)}
+      </table>
+      ${sig.signature_image ? `<div class="cert-sig-img"><span>서명</span><img src="${esc(storage.publicUrl(sig.signature_image))}" alt="서명" /></div>` : ""}
+      <div class="cert-doc"><h2>문서 본문</h2><div class="doc-body">${d ? esc(d.body).replace(/\n/g, "<br />") : "(삭제됨)"}</div></div>
+      <p class="cert-foot">이 증명서는 ${esc(absUrl(req, "/verify/" + sig.verify_code))} 에서 공개키(${esc(algorithm)})로 언제든 검증할 수 있습니다. 발급: ${esc(origin(req))}</p>
+      <div class="cert-print no-print"><button class="btn btn-primary" data-print>인쇄 / PDF로 저장</button> <a class="btn btn-ghost" href="/verify/${esc(sig.verify_code)}">← 검증 화면</a></div>
+    </div>
+  </div></section>`;
+  html(res, layout({ title: "서명 증명서", user: req.user, body }));
+}
+
+// 검증 파일(JSON 영수증) — 공개키로 독립 검증 가능
+export function verifyReceipt(req, res, { params }) {
+  const sig = M.getSignatureByCode(params.code || "");
+  if (!sig) return notFound(req, res);
+  const d = M.getDocument(sig.document_id);
+  const receipt = {
+    type: "seocho-merchants.esign.receipt",
+    algorithm,
+    document: { title: d ? d.title : null, contentHash: sig.content_hash },
+    signer: { name: sig.signer_name },
+    signedAt: sig.signed_at,
+    ip: sig.ip,
+    verifyCode: sig.verify_code,
+    signature: sig.record_hash,
+    // 봉인 대상 정규화 문자열 — canonicalFields 를 SEP('\n')로 join 하면 재현됨
+    canonical: canonicalFromSig(sig),
+    canonicalSeparator: "\\n",
+    canonicalFields: ["documentId", "userId", "signerName", "contentHash", "signedAt", "ip"],
+    publicKey: publicKeyPem(),
+    verifyUrl: absUrl(req, "/verify/" + sig.verify_code),
+  };
+  send(res, 200, JSON.stringify(receipt, null, 2), {
+    "Content-Type": "application/json; charset=utf-8",
+    "Content-Disposition": `attachment; filename="esign-${sig.verify_code}.json"`,
+  });
 }
 
 // ================= SEO: sitemap.xml / robots.txt =================

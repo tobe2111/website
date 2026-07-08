@@ -270,6 +270,14 @@ test("전자서명: 문서 생성 → 서명 → 검증(유효)", async () => {
   const vr = await fetch(`${BASE}/verify/${code}`);
   assert.equal(vr.status, 200);
   assert.match(await vr.text(), /유효한 서명/);
+
+  // 증명서 + 독립 검증(공개키만으로 재현)
+  assert.equal((await fetch(`${BASE}/verify/${code}/certificate`)).status, 200);
+  const receipt = await (await fetch(`${BASE}/verify/${code}/receipt.json`)).json();
+  const crypto = await import("node:crypto");
+  const ok = crypto.verify(null, Buffer.from(receipt.canonical, "utf8"),
+    crypto.createPublicKey(receipt.publicKey), Buffer.from(receipt.signature, "base64"));
+  assert.equal(ok, true); // 서버 비밀 없이 공개키만으로 검증됨(Ed25519)
 });
 
 test("관리자: 회원 임시 비밀번호 발급 → 새 비밀번호로 로그인", async () => {

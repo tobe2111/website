@@ -34,6 +34,8 @@ const globalRoutes = [
   mk("POST", "/forgot", api.forgotPassword),
   mk("GET", "/verify", pages.verifyPage),
   mk("GET", "/verify/:code", pages.verifyPage),
+  mk("GET", "/verify/:code/certificate", pages.verifyCertificate),
+  mk("GET", "/verify/:code/receipt.json", pages.verifyReceipt),
   mk("GET", "/account", pages.account, "USER"),
   mk("POST", "/account/password", api.changePassword, "USER"),
   mk("POST", "/account/logout-all", api.logoutAll, "USER"),

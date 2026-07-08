@@ -41,5 +41,7 @@
   document.addEventListener("click", function (e) {
     var btn = e.target.closest && e.target.closest("button[data-confirm]");
     if (btn && !window.confirm(btn.getAttribute("data-confirm"))) { e.preventDefault(); e.stopPropagation(); }
+    var pr = e.target.closest && e.target.closest("[data-print]");
+    if (pr) { e.preventDefault(); window.print(); }
   });
 })();

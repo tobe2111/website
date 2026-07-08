@@ -342,6 +342,29 @@ img,video{max-width:100%;display:block}
 .verify-sig{border:1px solid var(--line);border-radius:12px;padding:10px;background:#fff;display:inline-block}
 .verify-sig img{max-width:100%;height:auto;display:block}
 .sig-thumb{width:120px;height:40px;object-fit:contain;background:#fff;border:1px solid var(--line);border-radius:6px}
+.verify-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+/* 증명서 */
+.cert{background:#fff;border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:clamp(24px,4vw,40px)}
+.cert-head{text-align:center;border-bottom:2px solid var(--green-700);padding-bottom:18px;margin-bottom:22px}
+.cert-head h1{font-size:1.7rem;font-weight:900}
+.cert-sub{color:var(--muted);letter-spacing:.08em;font-size:.82rem;margin-top:2px}
+.cert-badge{display:inline-block;margin-top:12px;font-weight:800;padding:6px 16px;border-radius:999px}
+.cert-badge.ok{background:#e6f6ee;color:#0b7a4f}
+.cert-badge.no{background:#fdecec;color:#c22}
+.cert-sig{word-break:break-all}
+.cert-sig-img{display:flex;align-items:center;gap:12px;margin:16px 0;border:1px solid var(--line);border-radius:10px;padding:10px 14px;background:#fff}
+.cert-sig-img span{color:var(--muted);font-size:.85rem;font-weight:700}
+.cert-sig-img img{max-height:60px;object-fit:contain;background:#fff}
+.cert-doc{margin-top:20px}
+.cert-doc h2{font-size:1.1rem;font-weight:800;margin-bottom:10px}
+.cert-foot{margin-top:20px;font-size:.82rem;color:var(--muted);border-top:1px solid var(--line);padding-top:14px;word-break:break-all}
+.cert-print{margin-top:22px;display:flex;gap:10px;justify-content:center}
+@media print{
+  .site-header,.site-footer,.to-top,.no-print{display:none!important}
+  .dash,.section{padding:0!important}
+  .cert{border:none;box-shadow:none}
+  body{background:#fff}
+}
 
 /* ---------- Notifications ---------- */
 .panel-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
