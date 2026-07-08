@@ -615,10 +615,44 @@ export function dashboard(req, res, { assoc, query }) {
           <button type="submit" class="btn btn-primary btn-block" id="uploadBtn">업로드</button>
         </form>
         <h3 class="panel-subtitle">🎬 영상 링크 추가</h3>
-        <p class="panel-hint">영상은 <b>유튜브·유튜브 쇼츠·인스타그램 릴스·네이버TV</b>에 올린 뒤 <b>주소만 붙여넣으세요.</b> (직접 업로드보다 빠르고 비용이 들지 않습니다) · 업체당 ${config.maxEmbedsPerBusiness}개까지</p>
+        <p class="panel-hint">영상은 <b>유튜브·유튜브 쇼츠·인스타그램 릴스·네이버TV</b>에 올린 뒤 <b>주소(링크)만 붙여넣으면</b> 됩니다. 우리 사이트가 영상을 직접 저장하지 않아 <b>빠르고 비용이 들지 않아요.</b> (업체당 ${config.maxEmbedsPerBusiness}개까지)</p>
+        <details class="help-box">
+          <summary>📖 영상 링크(주소) 복사하는 방법 — 처음이면 눌러보세요</summary>
+          <div class="help-body">
+            <p class="help-lead">먼저 영상을 유튜브·인스타그램·네이버TV 중 <b>편한 곳 한 군데에 올린 뒤</b>, 아래 방법으로 <b>주소를 복사</b>해서 위 칸에 붙여넣으세요.</p>
+            <div class="help-step">
+              <h4>▶ 유튜브 · 유튜브 쇼츠</h4>
+              <ol>
+                <li>유튜브 앱(또는 사이트)에서 <b>내 영상</b>을 엽니다.</li>
+                <li>영상 아래 <b>[공유]</b> 버튼을 누릅니다.</li>
+                <li><b>[복사]</b>(링크 복사)를 누릅니다.</li>
+                <li>위 칸을 길게 눌러 <b>[붙여넣기]</b> → <b>영상 링크 추가</b>.</li>
+              </ol>
+            </div>
+            <div class="help-step">
+              <h4>📸 인스타그램 릴스</h4>
+              <ol>
+                <li>인스타그램에서 올린 <b>릴스</b>를 엽니다.</li>
+                <li>오른쪽 아래 <b>종이비행기(공유)</b> 아이콘을 누릅니다.</li>
+                <li><b>[링크 복사]</b>를 누릅니다.</li>
+                <li>위 칸에 <b>붙여넣기</b> → <b>영상 링크 추가</b>.</li>
+              </ol>
+              <p class="help-note">⚠️ 인스타그램 계정이 <b>공개(비공개 아님)</b>여야 사이트에 보입니다.</p>
+            </div>
+            <div class="help-step">
+              <h4>🟢 네이버TV</h4>
+              <ol>
+                <li>네이버TV에서 <b>내 영상</b>을 엽니다.</li>
+                <li>영상 아래 <b>[공유]</b> → <b>[URL 복사]</b>.</li>
+                <li>위 칸에 <b>붙여넣기</b> → <b>영상 링크 추가</b>.</li>
+              </ol>
+            </div>
+            <p class="help-note">💡 잘 안 되면 상인회 관리자에게 문의하세요. 링크 주소만 알려주시면 대신 등록해 드릴 수도 있습니다.</p>
+          </div>
+        </details>
         <form method="post" action="${base}/dashboard/media/embed" class="stack-form compact">
-          <input type="url" name="url" placeholder="https://youtu.be/... 또는 인스타 릴스·네이버TV 주소" required />
-          <input type="text" name="caption" placeholder="설명 (선택)" maxlength="200" />
+          <input type="url" name="url" placeholder="여기에 영상 주소(링크)를 붙여넣으세요" required />
+          <input type="text" name="caption" placeholder="영상 설명 (선택)" maxlength="200" />
           <button type="submit" class="btn btn-primary btn-sm">영상 링크 추가</button>
         </form>
         <h3 class="panel-subtitle">등록된 미디어 (${media.length})</h3>

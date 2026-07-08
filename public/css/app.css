@@ -381,6 +381,19 @@ img,video{max-width:100%;display:block}
 .edit-image{display:grid;gap:8px;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--bg-alt)}
 .edit-image img{max-width:200px;border-radius:8px}
 .post-edited{color:var(--muted);font-size:.86rem}
+
+/* ---------- 도움말 아코디언 (영상 링크 안내) ---------- */
+.help-box{border:1px solid var(--line);border-radius:12px;background:var(--bg-alt);margin:0 0 14px;overflow:hidden}
+.help-box summary{cursor:pointer;padding:12px 16px;font-weight:700;color:var(--green-700);list-style:none;user-select:none}
+.help-box summary::-webkit-details-marker{display:none}
+.help-box summary:hover{background:rgba(0,0,0,.03)}
+.help-box[open] summary{border-bottom:1px solid var(--line)}
+.help-body{padding:14px 16px;display:grid;gap:16px}
+.help-lead{margin:0;color:var(--ink-soft);font-size:.94rem;line-height:1.6}
+.help-step h4{margin:0 0 6px;font-size:.98rem;font-weight:800}
+.help-step ol{margin:0;padding-left:22px;display:grid;gap:5px;line-height:1.55;font-size:.93rem}
+.help-step ol b{color:var(--green-700)}
+.help-note{margin:8px 0 0;font-size:.86rem;color:var(--muted);background:#fff;border:1px dashed var(--line);border-radius:8px;padding:8px 11px}
 /* 증명서 */
 .cert{background:#fff;border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:clamp(24px,4vw,40px)}
 .cert-head{text-align:center;border-bottom:2px solid var(--green-700);padding-bottom:18px;margin-bottom:22px}
