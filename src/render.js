@@ -1,6 +1,15 @@
 // 공용 HTML 레이아웃 렌더러 (테넌트 브랜딩 지원)
 import { esc } from "./http.js";
 import { ROLES } from "./auth.js";
+import * as storage from "./storage.js";
+
+// 로고 이미지 또는 이니셜
+export function brandMark(assoc, name) {
+  if (assoc && assoc.logo) {
+    return `<span class="brand-mark has-logo" aria-hidden="true"><img src="${esc(storage.publicUrl(assoc.logo))}" alt="" /></span>`;
+  }
+  return `<span class="brand-mark" aria-hidden="true">${esc((name || "상").slice(0, 1))}</span>`;
+}
 
 // ----- 브랜드 색상 유틸 -----
 function clamp(n) { return Math.max(0, Math.min(255, Math.round(n))); }
@@ -88,7 +97,7 @@ export function layout({ title, user, assoc = null, base = "", body, activeNav =
   <header class="site-header" id="siteHeader">
     <div class="container header-inner">
       <a href="${homeHref}" class="brand" aria-label="${esc(brandName)} 홈">
-        <span class="brand-mark" aria-hidden="true">${esc(brandName.slice(0, 1))}</span>
+        ${brandMark(assoc, brandName)}
         <span class="brand-text"><strong>${esc(brandName)}</strong><em>${esc(brandSub)}</em></span>
       </a>
       <nav class="main-nav" id="mainNav" aria-label="주요 메뉴"><ul>${nav}</ul></nav>
@@ -102,7 +111,7 @@ export function layout({ title, user, assoc = null, base = "", body, activeNav =
   <footer class="site-footer">
     <div class="container footer-inner">
       <div class="footer-brand">
-        <span class="brand-mark" aria-hidden="true">${esc(brandName.slice(0, 1))}</span>
+        ${brandMark(assoc, brandName)}
         <div><strong>${esc(brandName)}</strong><p>${esc(assoc ? assoc.tagline : "여러 상인회를 위한 웹사이트 플랫폼")}</p></div>
       </div>
       <nav class="footer-nav" aria-label="바닥글 메뉴">

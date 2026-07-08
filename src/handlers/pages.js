@@ -6,9 +6,20 @@ import * as M from "../models.js";
 import * as A from "../associations.js";
 import * as storage from "../storage.js";
 import { parseLayout, defaultLayout, SECTION_CATALOG, renderHome } from "../homeLayout.js";
+import { config } from "../config.js";
+
+// 테넌트의 절대/상대 베이스 URL (서브도메인 모드 지원). 호스트 간 이동(로그인 후 리다이렉트)에 사용.
+export function tenantBase(assoc, req) {
+  if (config.baseDomain) {
+    const scheme = (req && req.headers["x-forwarded-proto"]) || config.publicScheme;
+    return `${scheme}://${assoc.slug}.${config.baseDomain}`;
+  }
+  return `/t/${assoc.slug}`;
+}
 
 const CATEGORIES = ["음식점", "카페·디저트", "생활·서비스", "패션·잡화", "농수축산", "교육·문화", "기타"];
-const baseOf = (assoc) => `/t/${assoc.slug}`;
+// 서버가 요청별로 assoc._base 를 주입 (서브도메인 모드는 "", 경로 모드는 "/t/:slug").
+const baseOf = (assoc) => (assoc && assoc._base != null ? assoc._base : `/t/${assoc.slug}`);
 
 function mediaThumb(m) {
   const url = storage.publicUrl(m.filename);
@@ -67,8 +78,11 @@ export function platformIndex(req, res) {
     ? assocs
         .map((a) => {
           const hue = hueFor(a.name);
+          const badge = a.logo
+            ? `<span class="assoc-badge has-logo"><img src="${esc(storage.publicUrl(a.logo))}" alt="" /></span>`
+            : `<span class="assoc-badge" style="background:${esc(a.brand_color)}">${esc(a.name.slice(0, 1))}</span>`;
           return `<a class="assoc-card" href="/t/${esc(a.slug)}" style="--hue:${hue}">
-        <span class="assoc-badge" style="background:${esc(a.brand_color)}">${esc(a.name.slice(0, 1))}</span>
+        ${badge}
         <h3>${esc(a.name)}</h3>
         <p>${esc(a.tagline)}</p>
         <span class="assoc-meta">등록 업체 ${a.biz_count}곳 →</span></a>`;
@@ -204,7 +218,7 @@ export function events(req, res, { assoc }) {
 
 // ================= 인증 폼 =================
 export function loginForm(req, res, { query }) {
-  if (req.user) return redirect(res, postLoginPath(req.user));
+  if (req.user) return redirect(res, postLoginPath(req.user, req));
   const body = `<section class="section page-top"><div class="container auth-wrap"><div class="auth-card">
     <h1 class="auth-title">로그인</h1><p class="auth-sub">상인회 회원·관리자 로그인</p>
     ${flash(query.get("msg") ? decodeURIComponent(query.get("msg")) : "", query.get("err") ? "err" : "ok")}
@@ -220,7 +234,7 @@ export function loginForm(req, res, { query }) {
 
 export function registerForm(req, res, { assoc, query }) {
   const base = baseOf(assoc);
-  if (req.user) return redirect(res, postLoginPath(req.user));
+  if (req.user) return redirect(res, postLoginPath(req.user, req));
   const opts = CATEGORIES.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
   const body = `<section class="section page-top"><div class="container auth-wrap"><div class="auth-card">
     <h1 class="auth-title">업체 등록</h1><p class="auth-sub">${esc(assoc.name)} 회원 가입 및 업체 페이지 개설</p>
@@ -240,12 +254,12 @@ export function registerForm(req, res, { assoc, query }) {
   html(res, layout({ title: "업체 등록", user: req.user, assoc, base, body }));
 }
 
-export function postLoginPath(user) {
+export function postLoginPath(user, req) {
   if (user.role === ROLES.SUPERADMIN) return "/super";
   if (!user.association_id) return "/";
   const a = A.getAssociationById(user.association_id);
   if (!a) return "/";
-  const base = `/t/${a.slug}`;
+  const base = tenantBase(a, req);
   return user.role === ROLES.ADMIN ? base + "/admin" : base + "/dashboard";
 }
 
@@ -354,7 +368,15 @@ export function admin(req, res, { assoc, query }) {
     </section>
 
     <section class="panel"><h2 class="panel-title">상인회 정보 · 브랜딩</h2>
-      <form method="post" action="${base}/admin/settings" class="stack-form">
+      <form method="post" action="${base}/admin/settings" enctype="multipart/form-data" class="stack-form">
+        <div class="logo-setting">
+          <div class="logo-preview">${assoc.logo ? `<img src="${esc(storage.publicUrl(assoc.logo))}" alt="현재 로고" />` : `<span class="logo-placeholder" style="background:${esc(assoc.brand_color)}">${esc(assoc.name.slice(0, 1))}</span>`}</div>
+          <div class="logo-fields">
+            <label class="mini-label">로고 이미지 <small>(PNG·JPG·최대 2MB, 미선택 시 유지)</small>
+              <input type="file" name="logo" accept="image/*" /></label>
+            ${assoc.logo ? `<label class="check"><input type="checkbox" name="remove_logo" value="1" /> 로고 삭제(이니셜로 표시)</label>` : ""}
+          </div>
+        </div>
         <div class="form-two">
           <label>상인회 이름<input type="text" name="name" value="${esc(assoc.name)}" required /></label>
           <label>대표 색상<input type="color" name="brand_color" value="${esc(assoc.brand_color)}" /></label>

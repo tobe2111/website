@@ -80,9 +80,55 @@ website/
 └── data/                  # app.db + uploads/ (런타임 생성, .gitignore)
 ```
 
-## 확장 · 운영 메모
+## 주소 방식: 경로 vs 서브도메인
 
-- **클라우드 스토리지 전환**: 업로드는 로컬(`data/uploads`) 저장. `src/storage.js`의 `save/remove/publicUrl` 세 함수만 교체하면 S3/R2로 전환됩니다.
-- **서브도메인 전환**: 현재는 경로 기반(`/t/:slug`). 서브도메인(`seocho.example.com`)으로 바꾸려면 `server.js`의 테넌트 해석부만 호스트 기반으로 수정하면 됩니다.
-- **영속성**: `data/` (DB·업로드)는 재시작 시 유지되도록 영속 볼륨에 두세요.
-- **보안**: scrypt 해시, HMAC 서명 httpOnly 쿠키, 전 출력 HTML 이스케이프(XSS 방지), 업로드 MIME 화이트리스트·용량 제한, 테넌트 간 데이터 접근 차단.
+기본은 경로 기반(`/t/:slug`)이며, `BASE_DOMAIN` 환경 변수를 설정하면 **서브도메인 라우팅**이 자동 활성화됩니다.
+
+| 모드 | 설정 | 상인회 주소 | 플랫폼(루트) |
+| --- | --- | --- | --- |
+| 경로 (기본) | — | `example.com/t/seocho` | `example.com/` |
+| 서브도메인 | `BASE_DOMAIN=example.com` | `seocho.example.com` | `example.com/` (apex) |
+
+서브도메인 모드에서는 내부 링크가 루트 상대경로로 바뀌고, 로그인 후 리다이렉트는 해당 상인회의 절대 URL(`https://seocho.example.com/admin`)로 이동합니다. DNS 는 와일드카드 레코드(`*.example.com`)를 서버로 향하게 설정하세요.
+
+## 클라우드 스토리지 (S3 / R2 / MinIO)
+
+기본은 로컬 저장(`data/uploads`)입니다. `STORAGE_DRIVER=s3` 로 전환하면 **외부 SDK 없이** AWS Signature V4 를 직접 구현한 클라이언트(`src/s3.js`)로 S3 호환 스토리지에 업로드합니다. 서명 로직은 AWS 공식 테스트 벡터로 검증됩니다.
+
+```bash
+npm run test:s3   # SigV4 서명 자체 검증 (네트워크 불필요)
+```
+
+| 변수 | 설명 |
+| --- | --- |
+| `STORAGE_DRIVER` | `local`(기본) 또는 `s3` |
+| `S3_BUCKET` / `S3_REGION` | 버킷 이름 / 리전 |
+| `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | 자격 증명 |
+| `S3_ENDPOINT` | R2/MinIO 커스텀 엔드포인트 (AWS 는 비워둠) |
+| `S3_PUBLIC_BASE_URL` | 퍼블릭/CDN URL 베이스 (예: `https://cdn.example.com`) |
+| `S3_FORCE_PATH_STYLE` | MinIO 등에서 `true` |
+
+스토리지 인터페이스(`save/remove/publicUrl`)는 동일하므로 미디어·로고 업로드 코드는 드라이버와 무관하게 동작합니다.
+
+## 상인회별 로고
+
+각 상인회 관리자는 대시보드의 **브랜딩** 패널에서 로고 이미지를 업로드할 수 있습니다(PNG·JPG, 최대 2MB). 업로드 시 헤더·푸터·플랫폼 카드의 이니셜이 로고로 대체되며, 삭제하면 다시 이니셜로 표시됩니다.
+
+## 운영 · 보안 메모
+
+- **영속성**: `data/`(DB·로컬 업로드)는 재시작 시 유지되도록 영속 볼륨에 두세요. S3 모드에서는 미디어가 클라우드에 저장되므로 DB만 영속화하면 됩니다.
+- **보안**: scrypt 해시, HMAC 서명 httpOnly 쿠키, 전 출력 HTML 이스케이프(XSS 방지), 업로드 MIME 화이트리스트·용량 제한, 테넌트 간 데이터 접근 차단, 정적 경로 이탈 방지.
+
+## 환경 변수 요약
+
+| 변수 | 기본값 | 설명 |
+| --- | --- | --- |
+| `PORT` / `HOST` | `3000` / `0.0.0.0` | 서버 바인딩 |
+| `SESSION_SECRET` | (개발용) | 세션 서명 키 — **운영 필수 변경** |
+| `BASE_DOMAIN` | — | 설정 시 서브도메인 라우팅 활성화 |
+| `PUBLIC_SCHEME` | `https` | 서브도메인 절대 URL 스킴 |
+| `STORAGE_DRIVER` | `local` | `local` 또는 `s3` |
+| `S3_*` | — | 위 스토리지 표 참고 |
+| `SUPERADMIN_EMAIL/PASSWORD` | 시드 기본값 | 슈퍼관리자 계정 |
+| `ADMIN_EMAIL/PASSWORD` | 시드 기본값 | 기본 상인회 관리자 |
+| `NODE_ENV` | — | `production` 시 쿠키 `Secure` 부여 |

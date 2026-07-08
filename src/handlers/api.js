@@ -10,7 +10,7 @@ import { SECTION_CATALOG, parseLayout } from "../homeLayout.js";
 import { postLoginPath } from "./pages.js";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const baseOf = (assoc) => `/t/${assoc.slug}`;
+const baseOf = (assoc) => (assoc && assoc._base != null ? assoc._base : `/t/${assoc.slug}`);
 
 function back(res, to, msg, err = false) {
   const q = msg ? `?${err ? "err=1&" : ""}msg=${encodeURIComponent(msg)}` : "";
@@ -43,7 +43,7 @@ export async function login(req, res) {
   if (!user || !verifyPassword(f.password || "", user.salt, user.password_hash))
     return back(res, "/login", "이메일 또는 비밀번호가 올바르지 않습니다.", true);
   setSessionCookie(res, createSessionToken({ uid: user.id }));
-  redirect(res, postLoginPath(user));
+  redirect(res, postLoginPath(user, req));
 }
 
 export function logout(req, res) {
@@ -84,7 +84,7 @@ export async function uploadMedia(req, res, { assoc }) {
     const isVideo = config.allowedVideoTypes.includes(file.contentType);
     if (!isImage && !isVideo) { errs.push(`${file.filename}: 지원하지 않는 형식`); continue; }
     if (file.data.length > (isVideo ? config.maxVideoBytes : config.maxImageBytes)) { errs.push(`${file.filename}: 용량 초과`); continue; }
-    const filename = storage.save(file.data, file.contentType);
+    const filename = await storage.save(file.data, file.contentType);
     M.addMedia({ businessId: b.id, kind: isVideo ? "video" : "image", filename, originalName: file.filename, size: file.data.length, caption });
     ok++;
   }
@@ -96,7 +96,7 @@ export async function deleteMedia(req, res, { assoc, params }) {
   const b = M.getBusinessByOwner(req.user.id);
   const m = M.getMedia(Number(params.id));
   if (!b || !m || m.business_id !== b.id) return back(res, base + "/dashboard", "삭제할 수 없습니다.", true);
-  storage.remove(m.filename);
+  await storage.remove(m.filename);
   M.deleteMedia(m.id);
   back(res, base + "/dashboard", "삭제되었습니다.");
 }
@@ -142,15 +142,44 @@ export async function adminDeleteEvent(req, res, { assoc, params }) {
   back(res, base + "/admin", "행사를 삭제했습니다.");
 }
 
-// ---------- 관리자: 상인회 브랜딩 설정 ----------
+// ---------- 관리자: 상인회 브랜딩 설정 (+ 로고 업로드) ----------
 export async function adminSettings(req, res, { assoc }) {
   const base = baseOf(assoc);
-  const f = parseUrlEncoded((await readBody(req, 16 * 1024)).toString("utf8"));
-  if (!(f.name || "").trim()) return back(res, base + "/admin", "상인회 이름을 입력하세요.", true);
-  const color = /^#[0-9a-fA-F]{6}$/.test(f.brand_color || "") ? f.brand_color : assoc.brand_color;
+  let buf;
+  try { buf = await readBody(req, config.maxLogoBytes + 64 * 1024); }
+  catch { return back(res, base + "/admin", "로고 파일이 너무 큽니다. (최대 2MB)", true); }
+
+  let fields = {}, files = [];
+  const ct = req.headers["content-type"] || "";
+  if (ct.includes("multipart/form-data")) {
+    try { const p = parseMultipart(buf, ct); fields = p.fields; files = p.files; }
+    catch { return back(res, base + "/admin", "폼 형식이 올바르지 않습니다.", true); }
+  } else {
+    fields = parseUrlEncoded(buf.toString("utf8"));
+  }
+
+  if (!(fields.name || "").trim()) return back(res, base + "/admin", "상인회 이름을 입력하세요.", true);
+  const color = /^#[0-9a-fA-F]{6}$/.test(fields.brand_color || "") ? fields.brand_color : assoc.brand_color;
+
+  // 로고 처리
+  let logoKey = assoc.logo;
+  const logoFile = files.find((x) => x.field === "logo" && x.data && x.data.length > 0);
+  if (logoFile) {
+    if (!config.allowedImageTypes.includes(logoFile.contentType))
+      return back(res, base + "/admin", "로고는 이미지 파일만 가능합니다.", true);
+    if (logoFile.data.length > config.maxLogoBytes)
+      return back(res, base + "/admin", "로고 용량이 큽니다. (최대 2MB)", true);
+    const newKey = await storage.save(logoFile.data, logoFile.contentType);
+    if (assoc.logo) await storage.remove(assoc.logo);
+    logoKey = newKey;
+  } else if (fields.remove_logo === "1" && assoc.logo) {
+    await storage.remove(assoc.logo);
+    logoKey = "";
+  }
+
   A.updateAssociation(assoc.id, {
-    name: f.name.trim(), tagline: f.tagline, brand_color: color,
-    phone: f.phone, email: f.email, address: f.address,
+    name: fields.name.trim(), tagline: fields.tagline, brand_color: color,
+    phone: fields.phone, email: fields.email, address: fields.address, logo: logoKey,
   });
   back(res, base + "/admin", "상인회 정보가 저장되었습니다.");
 }

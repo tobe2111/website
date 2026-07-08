@@ -1,4 +1,4 @@
-// HTTP 서버 + 멀티테넌트 라우터 (외부 의존성 없음)
+// HTTP 서버 + 멀티테넌트 라우터 (경로 기반 /t/:slug + 서브도메인 기반, 외부 의존성 없음)
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
@@ -10,54 +10,62 @@ import * as storage from "./storage.js";
 import * as pages from "./handlers/pages.js";
 import * as api from "./handlers/api.js";
 
-// ----- 라우트 정의 -----
-// auth: null | 'MERCHANT' | 'ADMIN' | 'SUPERADMIN'
-// tenant 라우트는 pattern 이 "/t/:assoc" 로 시작합니다.
-const routes = [];
-function route(method, pattern, handler, { auth = null } = {}) {
-  const tenant = pattern.startsWith("/t/:assoc");
+// ----- 라우트 컴파일 -----
+function compile(pattern) {
   const keys = [];
-  const rx = new RegExp(
-    "^" + pattern.replace(/:[a-zA-Z]+/g, (m) => { keys.push(m.slice(1)); return "([^/]+)"; }) + "/?$"
-  );
-  routes.push({ method, rx, keys, handler, auth, tenant });
+  const rx = new RegExp("^" + pattern.replace(/:[a-zA-Z]+/g, (m) => { keys.push(m.slice(1)); return "([^/]+)"; }) + "/?$");
+  return { rx, keys };
+}
+function mk(method, pattern, handler, auth = null) {
+  return { method, ...compile(pattern), handler, auth };
 }
 
-// 전역(플랫폼) 라우트
-route("GET", "/", pages.platformIndex);
-route("GET", "/login", pages.loginForm);
-route("POST", "/login", api.login);
-route("POST", "/logout", api.logout);
-route("GET", "/super", pages.superConsole, { auth: "SUPERADMIN" });
-route("POST", "/super/association", api.superCreateAssociation, { auth: "SUPERADMIN" });
-route("POST", "/super/association/:id/toggle", api.superToggleAssociation, { auth: "SUPERADMIN" });
+// 전역(플랫폼) 라우트 — 호스트와 무관하게 pathname 으로 매칭
+const globalRoutes = [
+  mk("GET", "/login", pages.loginForm),
+  mk("POST", "/login", api.login),
+  mk("POST", "/logout", api.logout),
+  mk("GET", "/super", pages.superConsole, "SUPERADMIN"),
+  mk("POST", "/super/association", api.superCreateAssociation, "SUPERADMIN"),
+  mk("POST", "/super/association/:id/toggle", api.superToggleAssociation, "SUPERADMIN"),
+];
 
-// 테넌트 공개 페이지
-route("GET", "/t/:assoc", pages.home);
-route("GET", "/t/:assoc/businesses", pages.businesses);
-route("GET", "/t/:assoc/business/:slug", pages.businessDetail);
-route("GET", "/t/:assoc/notices", pages.notices);
-route("GET", "/t/:assoc/notices/:id", pages.noticeDetail);
-route("GET", "/t/:assoc/events", pages.events);
-route("GET", "/t/:assoc/register", pages.registerForm);
-route("POST", "/t/:assoc/register", api.register);
+// 테넌트 라우트 — 서브패스로 매칭 (경로 모드는 /t/:slug 를 벗겨낸 뒤, 서브도메인 모드는 전체 경로)
+const tenantRoutes = [
+  mk("GET", "/", pages.home),
+  mk("GET", "/businesses", pages.businesses),
+  mk("GET", "/business/:slug", pages.businessDetail),
+  mk("GET", "/notices", pages.notices),
+  mk("GET", "/notices/:id", pages.noticeDetail),
+  mk("GET", "/events", pages.events),
+  mk("GET", "/register", pages.registerForm),
+  mk("POST", "/register", api.register),
+  mk("GET", "/dashboard", pages.dashboard, "MERCHANT"),
+  mk("POST", "/dashboard/business", api.updateBusiness, "MERCHANT"),
+  mk("POST", "/dashboard/media", api.uploadMedia, "MERCHANT"),
+  mk("POST", "/dashboard/media/:id/delete", api.deleteMedia, "MERCHANT"),
+  mk("GET", "/admin", pages.admin, "ADMIN"),
+  mk("POST", "/admin/business/:id/status", api.adminBusinessStatus, "ADMIN"),
+  mk("POST", "/admin/notice", api.adminCreateNotice, "ADMIN"),
+  mk("POST", "/admin/notice/:id/delete", api.adminDeleteNotice, "ADMIN"),
+  mk("POST", "/admin/event", api.adminCreateEvent, "ADMIN"),
+  mk("POST", "/admin/event/:id/delete", api.adminDeleteEvent, "ADMIN"),
+  mk("POST", "/admin/settings", api.adminSettings, "ADMIN"),
+  mk("POST", "/admin/layout", api.adminSaveLayout, "ADMIN"),
+  mk("POST", "/admin/layout/reset", api.adminResetLayout, "ADMIN"),
+];
 
-// 테넌트 회원(업체)
-route("GET", "/t/:assoc/dashboard", pages.dashboard, { auth: "MERCHANT" });
-route("POST", "/t/:assoc/dashboard/business", api.updateBusiness, { auth: "MERCHANT" });
-route("POST", "/t/:assoc/dashboard/media", api.uploadMedia, { auth: "MERCHANT" });
-route("POST", "/t/:assoc/dashboard/media/:id/delete", api.deleteMedia, { auth: "MERCHANT" });
-
-// 테넌트 관리자
-route("GET", "/t/:assoc/admin", pages.admin, { auth: "ADMIN" });
-route("POST", "/t/:assoc/admin/business/:id/status", api.adminBusinessStatus, { auth: "ADMIN" });
-route("POST", "/t/:assoc/admin/notice", api.adminCreateNotice, { auth: "ADMIN" });
-route("POST", "/t/:assoc/admin/notice/:id/delete", api.adminDeleteNotice, { auth: "ADMIN" });
-route("POST", "/t/:assoc/admin/event", api.adminCreateEvent, { auth: "ADMIN" });
-route("POST", "/t/:assoc/admin/event/:id/delete", api.adminDeleteEvent, { auth: "ADMIN" });
-route("POST", "/t/:assoc/admin/settings", api.adminSettings, { auth: "ADMIN" });
-route("POST", "/t/:assoc/admin/layout", api.adminSaveLayout, { auth: "ADMIN" });
-route("POST", "/t/:assoc/admin/layout/reset", api.adminResetLayout, { auth: "ADMIN" });
+// 테넌트 컨텍스트 해석: {slug, subpath, base} 또는 null
+function resolveTenant(hostname, pathname) {
+  if (config.baseDomain && hostname.endsWith("." + config.baseDomain)) {
+    const label = hostname.slice(0, hostname.length - config.baseDomain.length - 1);
+    const first = label.split(".")[0];
+    if (first && first !== "www") return { slug: first, subpath: pathname || "/", base: "" };
+  }
+  const m = /^\/t\/([^/]+)(\/.*)?$/.exec(pathname);
+  if (m) return { slug: decodeURIComponent(m[1]), subpath: m[2] || "/", base: "/t/" + m[1] };
+  return null;
+}
 
 // ----- 정적 파일 -----
 const MIME = {
@@ -86,29 +94,41 @@ function serveStatic(res, filePath, { allowRange = false, req = null } = {}) {
   });
 }
 
-// 권한 검사: true 통과, 문자열 반환 시 그 경로로 리다이렉트, false 는 403
 function authorize(user, auth, assoc) {
   if (!auth) return true;
   if (!user) return "/login?err=1&msg=" + encodeURIComponent("로그인이 필요합니다.");
-  if (auth === "SUPERADMIN") return user.role === ROLES.SUPERADMIN ? true : false;
+  if (auth === "SUPERADMIN") return user.role === ROLES.SUPERADMIN;
   if (auth === "ADMIN") {
     if (user.role === ROLES.SUPERADMIN) return true;
-    return user.role === ROLES.ADMIN && assoc && user.association_id === assoc.id ? true : false;
+    return user.role === ROLES.ADMIN && assoc && user.association_id === assoc.id;
   }
-  if (auth === "MERCHANT") {
-    return user.role === ROLES.MERCHANT && assoc && user.association_id === assoc.id ? true : false;
-  }
+  if (auth === "MERCHANT") return user.role === ROLES.MERCHANT && assoc && user.association_id === assoc.id;
   return false;
+}
+
+function forbidden(res) {
+  res.writeHead(403, { "Content-Type": "text/html; charset=utf-8" });
+  res.end('<h1>403 접근 권한이 없습니다.</h1><p><a href="/">홈으로</a></p>');
+}
+
+async function dispatch(route, req, res, { params, query, assoc }) {
+  const decision = authorize(req.user, route.auth, assoc);
+  if (decision !== true) {
+    if (typeof decision === "string") return redirect(res, decision);
+    return forbidden(res);
+  }
+  return route.handler(req, res, { params, query, assoc });
 }
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
   const pathname = decodeURIComponent(url.pathname);
+  const hostname = (req.headers.host || "").split(":")[0].toLowerCase();
   req.cookies = parseCookies(req.headers.cookie || "");
   req.user = resolveUser(req);
 
   try {
-    // 업로드 미디어 서빙 (Range 지원)
+    // 업로드 미디어 (로컬 모드 서빙, Range 지원)
     if (pathname.startsWith(config.uploadUrlPrefix + "/")) {
       return serveStatic(res, storage.resolvePath(pathname.slice(config.uploadUrlPrefix.length + 1)), { allowRange: true, req });
     }
@@ -120,35 +140,38 @@ const server = http.createServer(async (req, res) => {
       return serveStatic(res, filePath, { req });
     }
 
-    for (const r of routes) {
+    // 1) 전역 라우트 (호스트 무관)
+    for (const r of globalRoutes) {
       if (r.method !== req.method) continue;
       const match = r.rx.exec(pathname);
       if (!match) continue;
-
       const params = {};
       r.keys.forEach((k, i) => (params[k] = match[i + 1]));
-
-      // 테넌트 해석
-      let assoc = null;
-      if (r.tenant) {
-        assoc = A.getAssociationBySlug(params.assoc);
-        if (!assoc) return pages.notFound(req, res);
-        // 중지된 상인회는 관리자/슈퍼관리자만 접근 가능
-        const privileged = req.user && (req.user.role === ROLES.SUPERADMIN || (req.user.role === ROLES.ADMIN && req.user.association_id === assoc.id));
-        if (!assoc.active && !privileged) return pages.notFound(req, res, { assoc: null });
-        delete params.assoc;
-      }
-
-      // 권한
-      const decision = authorize(req.user, r.auth, assoc);
-      if (decision !== true) {
-        if (typeof decision === "string") return redirect(res, decision);
-        res.writeHead(403, { "Content-Type": "text/html; charset=utf-8" });
-        return res.end("<h1>403 접근 권한이 없습니다.</h1><p><a href=\"/\">홈으로</a></p>");
-      }
-
-      return await r.handler(req, res, { params, query: url.searchParams, assoc });
+      return await dispatch(r, req, res, { params, query: url.searchParams, assoc: null });
     }
+
+    // 2) 테넌트 컨텍스트
+    const tenant = resolveTenant(hostname, pathname);
+    if (tenant) {
+      const assoc = A.getAssociationBySlug(tenant.slug);
+      if (!assoc) return pages.notFound(req, res);
+      const privileged = req.user && (req.user.role === ROLES.SUPERADMIN || (req.user.role === ROLES.ADMIN && req.user.association_id === assoc.id));
+      if (!assoc.active && !privileged) return pages.notFound(req, res);
+      assoc._base = tenant.base; // 렌더링용 베이스 주입
+
+      for (const r of tenantRoutes) {
+        if (r.method !== req.method) continue;
+        const match = r.rx.exec(tenant.subpath);
+        if (!match) continue;
+        const params = {};
+        r.keys.forEach((k, i) => (params[k] = match[i + 1]));
+        return await dispatch(r, req, res, { params, query: url.searchParams, assoc });
+      }
+      return pages.notFound(req, res, { assoc });
+    }
+
+    // 3) 플랫폼 루트
+    if (pathname === "/" && req.method === "GET") return pages.platformIndex(req, res);
 
     return pages.notFound(req, res);
   } catch (err) {
@@ -159,5 +182,6 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(config.port, config.host, () => {
   console.log(`\n  서초구 상인회 플랫폼 실행 중`);
-  console.log(`  ▶ http://localhost:${config.port}\n`);
+  console.log(`  ▶ http://localhost:${config.port}`);
+  console.log(`  스토리지: ${storage.driver}${config.baseDomain ? ` · 서브도메인: *.${config.baseDomain}` : " · 경로 기반(/t/:slug)"}\n`);
 });

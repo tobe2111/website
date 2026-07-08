@@ -49,11 +49,17 @@ export function updateAssociation(id, fields) {
     phone: fields.phone ?? a.phone,
     address: fields.address ?? a.address,
     email: fields.email ?? a.email,
+    logo: fields.logo ?? a.logo,
     active: fields.active ?? a.active,
   };
   db.prepare(
-    "UPDATE associations SET name=?, tagline=?, brand_color=?, phone=?, address=?, email=?, active=? WHERE id=?"
-  ).run(next.name, next.tagline, next.brand_color, next.phone, next.address, next.email, next.active, id);
+    "UPDATE associations SET name=?, tagline=?, brand_color=?, phone=?, address=?, email=?, logo=?, active=? WHERE id=?"
+  ).run(next.name, next.tagline, next.brand_color, next.phone, next.address, next.email, next.logo, next.active, id);
+  return getAssociationById(id);
+}
+
+export function setLogo(id, logoKey) {
+  db.prepare("UPDATE associations SET logo = ? WHERE id = ?").run(logoKey || "", id);
   return getAssociationById(id);
 }
 

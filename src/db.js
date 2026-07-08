@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS associations (
   phone       TEXT NOT NULL DEFAULT '',
   address     TEXT NOT NULL DEFAULT '',
   email       TEXT NOT NULL DEFAULT '',
+  logo        TEXT NOT NULL DEFAULT '',              -- 상인회 로고 (스토리지 키). 비어있으면 이니셜 표시
   active      INTEGER NOT NULL DEFAULT 1,
   home_layout TEXT,                                  -- 홈페이지 구성(JSON). NULL 이면 기본 구성 사용
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
@@ -99,9 +100,12 @@ function columnExists(table, col) {
   return db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === col);
 }
 
-(function migrateHomeLayout() {
+(function migrateAssociationCols() {
   if (!columnExists("associations", "home_layout")) {
     db.exec("ALTER TABLE associations ADD COLUMN home_layout TEXT");
+  }
+  if (!columnExists("associations", "logo")) {
+    db.exec("ALTER TABLE associations ADD COLUMN logo TEXT NOT NULL DEFAULT ''");
   }
 })();
 
