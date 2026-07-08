@@ -3,6 +3,7 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { config } from "./config.js";
+import { db } from "./db.js";
 import { parseCookies, redirect } from "./http.js";
 import { resolveUser, ROLES } from "./auth.js";
 import * as csrf from "./csrf.js";
@@ -151,10 +152,24 @@ async function dispatch(route, req, res, { params, query, assoc }) {
   return route.handler(req, res, { params, query, assoc });
 }
 
+const LOG_REQUESTS = /^(1|true|yes|on)$/i.test(process.env.LOG_REQUESTS || "1");
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
   const pathname = decodeURIComponent(url.pathname);
   const hostname = (req.headers.host || "").split(":")[0].toLowerCase();
+
+  // 헬스체크 — DB/세션 없이 즉시 응답 (로드밸런서/컨테이너용)
+  if (pathname === "/healthz") {
+    res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+    return res.end('{"status":"ok"}');
+  }
+  // 접근 로그
+  if (LOG_REQUESTS) {
+    const start = Date.now();
+    res.on("finish", () => console.log(`${res.statusCode} ${req.method} ${pathname}${url.search} ${Date.now() - start}ms`));
+  }
+
   setSecurityHeaders(res);
   req.cookies = parseCookies(req.headers.cookie || "");
   req.user = resolveUser(req);
@@ -237,3 +252,20 @@ server.listen(config.port, config.host, () => {
   console.log(`  스토리지: ${storage.driver}${config.baseDomain ? ` · 서브도메인: *.${config.baseDomain}` : " · 경로 기반(/t/:slug)"}`);
   console.log(`  미디어: ${media.info()}\n`);
 });
+
+// ----- 그레이스풀 셧다운 (컨테이너 SIGTERM 대응) -----
+let shuttingDown = false;
+function shutdown(sig) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`\n  ${sig} 수신 — 새 연결 차단 후 종료합니다...`);
+  server.close(() => {
+    try { db.close(); } catch {}
+    console.log("  정상 종료 완료.");
+    process.exit(0);
+  });
+  // 강제 종료 타임아웃 (기존 연결이 오래 끌면)
+  setTimeout(() => { console.error("  강제 종료(타임아웃)."); process.exit(1); }, 10000).unref();
+}
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
