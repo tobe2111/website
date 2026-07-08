@@ -80,6 +80,7 @@ CREATE TABLE IF NOT EXISTS notices (
   title          TEXT NOT NULL,
   body           TEXT NOT NULL DEFAULT '',
   tag            TEXT NOT NULL DEFAULT '안내',
+  image          TEXT NOT NULL DEFAULT '',              -- 대표 이미지(소식 카드용) 스토리지 키
   pinned         INTEGER NOT NULL DEFAULT 0,
   created_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -189,6 +190,7 @@ function columnExists(table, col) {
   if (!columnExists("associations", "map_lat")) db.exec("ALTER TABLE associations ADD COLUMN map_lat REAL NOT NULL DEFAULT 37.4837");
   if (!columnExists("associations", "map_lng")) db.exec("ALTER TABLE associations ADD COLUMN map_lng REAL NOT NULL DEFAULT 127.0324");
   if (!columnExists("associations", "map_zoom")) db.exec("ALTER TABLE associations ADD COLUMN map_zoom INTEGER NOT NULL DEFAULT 14");
+  if (!columnExists("notices", "image")) db.exec("ALTER TABLE notices ADD COLUMN image TEXT NOT NULL DEFAULT ''");
 })();
 
 (function migrate() {

@@ -294,13 +294,30 @@ export async function adminBusinessStatus(req, res, { assoc, params }) {
   back(res, base + "/admin", `'${b.name}' 상태를 변경했습니다.`);
 }
 
-// ---------- 관리자: 공지 ----------
+// ---------- 관리자: 공지/소식 (대표 이미지 옵션, 멀티파트) ----------
 export async function adminCreateNotice(req, res, { assoc }) {
   const base = baseOf(assoc);
-  const f = await readForm(req, res, 64 * 1024);
-  if (!f) return;
-  if (!(f.title || "").trim()) return back(res, base + "/admin", "공지 제목을 입력하세요.", true);
-  M.createNotice({ associationId: assoc.id, title: cap(f.title.trim(), 200), body: cap(f.body, 10000), tag: cap(f.tag || "안내", 20), pinned: f.pinned === "1" });
+  let buf;
+  try { buf = await readBody(req, config.maxImageBytes + 128 * 1024); }
+  catch { return back(res, base + "/admin", "이미지가 너무 큽니다.", true); }
+  let fields = {}, files = [];
+  const ct = req.headers["content-type"] || "";
+  if (ct.includes("multipart/form-data")) {
+    try { const p = parseMultipart(buf, ct); fields = p.fields; files = p.files; }
+    catch { return back(res, base + "/admin", "폼 형식이 올바르지 않습니다.", true); }
+  } else fields = parseUrlEncoded(buf.toString("utf8"));
+  if (!csrf.valid(req, fields._csrf)) { res.writeHead(403, { "Content-Type": "text/html; charset=utf-8" }); return res.end("<h1>403 잘못된 요청(CSRF)</h1>"); }
+
+  if (!(fields.title || "").trim()) return back(res, base + "/admin", "공지 제목을 입력하세요.", true);
+  let imageKey = "";
+  const imgFile = files.find((x) => x.field === "image" && x.data && x.data.length > 0);
+  if (imgFile) {
+    const real = sniff(imgFile.data);
+    if (!real || !config.allowedImageTypes.includes(real)) return back(res, base + "/admin", "대표 이미지는 이미지 파일만 가능합니다.", true);
+    if (imgFile.data.length > config.maxImageBytes) return back(res, base + "/admin", "이미지 용량이 큽니다. (최대 8MB)", true);
+    imageKey = await storage.save(imgFile.data, real);
+  }
+  M.createNotice({ associationId: assoc.id, title: cap(fields.title.trim(), 200), body: cap(fields.body, 10000), tag: cap(fields.tag || "안내", 20), image: imageKey, pinned: fields.pinned === "1" });
   back(res, base + "/admin", "공지를 등록했습니다.");
 }
 export async function adminDeleteNotice(req, res, { assoc, params }) {
@@ -308,7 +325,10 @@ export async function adminDeleteNotice(req, res, { assoc, params }) {
   const f = await readForm(req, res, 8 * 1024);
   if (!f) return;
   const n = M.getNotice(Number(params.id));
-  if (n && n.association_id === assoc.id) M.deleteNotice(n.id);
+  if (n && n.association_id === assoc.id) {
+    if (n.image) await storage.remove(n.image);
+    M.deleteNotice(n.id);
+  }
   back(res, base + "/admin", "공지를 삭제했습니다.");
 }
 

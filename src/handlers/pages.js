@@ -82,13 +82,14 @@ function noticeRowsHtml(assoc, notices) {
   return notices.length
     ? notices
         .map(
-          (n) => `<li><a href="${base}/notices/${n.id}">
+          (n) => `<li${n.image ? ' class="has-thumb"' : ""}><a href="${base}/notices/${n.id}">
+        ${n.image ? `<img class="notice-thumb" src="${esc(storage.publicUrl(n.image))}" alt="" loading="lazy" />` : ""}
         <span class="notice-tag${n.pinned ? " tag-important" : ""}">${esc(n.tag)}</span>
         <span class="notice-title">${esc(n.title)}</span>
         <time>${esc(n.created_at.slice(0, 10).replace(/-/g, "."))}</time></a></li>`
         )
         .join("")
-    : `<li class="empty">등록된 공지가 없습니다.</li>`;
+    : `<li class="empty">등록된 소식이 없습니다.</li>`;
 }
 function eventCardsHtml(events) {
   return events.length
@@ -345,8 +346,10 @@ export function noticeDetail(req, res, { assoc, params }) {
     <div class="article-head"><span class="notice-tag${n.pinned ? " tag-important" : ""}">${esc(n.tag)}</span>
       <time>${esc(n.created_at.slice(0, 10).replace(/-/g, "."))}</time></div>
     <h1 class="article-title">${esc(n.title)}</h1>
+    ${n.image ? `<img class="article-image" src="${esc(storage.publicUrl(n.image))}" alt="${esc(n.title)}" />` : ""}
     <div class="article-body">${esc(n.body).replace(/\n/g, "<br />")}</div></div></section>`;
-  html(res, layout({ title: n.title, user: req.user, assoc, base, activeNav: base + "/notices", body }));
+  const ogImage = n.image ? absMedia(req, n.image) : "";
+  html(res, layout({ title: n.title, user: req.user, assoc, base, activeNav: base + "/notices", body, description: clip(n.body) || n.title, ogImage }));
 }
 
 // ================= 행사 =================
@@ -685,13 +688,14 @@ export function admin(req, res, { assoc, query }) {
         <tbody>${bizRows}</tbody></table></div></section>
 
     <div class="dash-grid">
-      <section class="panel"><h2 class="panel-title">공지사항 관리</h2>
-        <form method="post" action="${base}/admin/notice" class="stack-form compact">
-          <input type="text" name="title" placeholder="공지 제목" required />
+      <section class="panel"><h2 class="panel-title">공지·소식 관리</h2>
+        <form method="post" action="${base}/admin/notice" enctype="multipart/form-data" class="stack-form compact">
+          <input type="text" name="title" placeholder="제목" required />
           <textarea name="body" rows="3" placeholder="내용"></textarea>
-          <div class="form-two"><input type="text" name="tag" placeholder="태그" value="안내" />
+          <div class="form-two"><input type="text" name="tag" placeholder="태그 (공지·소식·행사 등)" value="안내" />
             <label class="check"><input type="checkbox" name="pinned" value="1" /> 상단 고정</label></div>
-          <button class="btn btn-primary btn-sm">공지 등록</button>
+          <label class="mini-label">대표 이미지 <small>(선택·최대 8MB)</small><input type="file" name="image" accept="image/*" /></label>
+          <button class="btn btn-primary btn-sm">등록</button>
         </form><ul class="admin-list">${noticeRows}</ul></section>
       <section class="panel"><h2 class="panel-title">행사 관리</h2>
         <form method="post" action="${base}/admin/event" class="stack-form compact">

@@ -149,10 +149,10 @@ export function listNotices(associationId, limit = null) {
 export function getNotice(id) {
   return db.prepare("SELECT * FROM notices WHERE id = ?").get(id);
 }
-export function createNotice({ associationId, title, body, tag, pinned }) {
+export function createNotice({ associationId, title, body, tag, pinned, image = "" }) {
   const info = db
-    .prepare("INSERT INTO notices (association_id, title, body, tag, pinned) VALUES (?, ?, ?, ?, ?)")
-    .run(associationId, title, body || "", tag || "안내", pinned ? 1 : 0);
+    .prepare("INSERT INTO notices (association_id, title, body, tag, image, pinned) VALUES (?, ?, ?, ?, ?, ?)")
+    .run(associationId, title, body || "", tag || "안내", image || "", pinned ? 1 : 0);
   return getNotice(info.lastInsertRowid);
 }
 export function deleteNotice(id) {
