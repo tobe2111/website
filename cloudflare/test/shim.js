@@ -4,15 +4,16 @@ import { DatabaseSync } from "node:sqlite";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { SCHEMA_SQL } from "../src/schema.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
 
-// ----- D1 흉내 -----
-export function makeD1() {
+// ----- D1 흉내 -----  (bare=true 면 스키마 미적용 → 자동 마이그레이션 테스트용)
+export function makeD1(bare = false) {
   const db = new DatabaseSync(":memory:");
   db.exec("PRAGMA foreign_keys = ON;");
-  db.exec(fs.readFileSync(path.join(ROOT, "schema.sql"), "utf8"));
+  if (!bare) db.exec(SCHEMA_SQL);
   const wrap = (stmt, args) => ({
     async first() { const r = stmt.get(...args); return r === undefined ? null : r; },
     async all() { return { results: stmt.all(...args) }; },
@@ -61,9 +62,10 @@ export function makeAssets() {
 }
 
 export function makeEnv(extra = {}) {
+  const { bare, ...rest } = extra;
   return {
-    DB: makeD1(), MEDIA: makeR2(), ASSETS: makeAssets(),
+    DB: makeD1(bare), MEDIA: makeR2(), ASSETS: makeAssets(),
     SESSION_SECRET: "test-secret-cf", PUBLIC_SCHEME: "https",
-    ...extra,
+    ...rest,
   };
 }

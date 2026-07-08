@@ -4,7 +4,9 @@
 깃허브 push → 자동 배포, HTTPS 자동, **영구 무료** 운영이 가능합니다.
 
 - **배포 방법**: [DEPLOY-cloudflare.md](./DEPLOY-cloudflare.md) 참고
-- **로직 테스트**: `node --experimental-sqlite --test cloudflare/test/*.test.js` (22건)
+  - **거의 클릭만**: 깃허브 저장소를 Cloudflare 대시보드에서 Import → 접속하면 `/setup` 설치 화면.
+    표 생성·시크릿(세션/서명 키)·초기 계정이 **전부 자동**(첫 실행 시 스스로 준비).
+- **로직 테스트**: `node --experimental-sqlite --test cloudflare/test/*.test.js` (34건)
   - wrangler 없이도 D1/R2/ASSETS 를 에뮬레이션해 워커 로직을 검증합니다.
 
 ## 기능 (Node 버전과 동일)

@@ -23,7 +23,12 @@ export function updateAssociation(db, id, f) {
 export const setAssociationActive = (db, id, a) => run(db, "UPDATE associations SET active=? WHERE id=?", a ? 1 : 0, id);
 export const saveHomeLayout = (db, id, json) => run(db, "UPDATE associations SET home_layout=? WHERE id=?", json, id);
 
+// ----- Settings (자동 생성 키·설정 저장) -----
+export const getSetting = async (db, key) => { const r = await first(db, "SELECT value FROM settings WHERE key=?", key); return r ? r.value : null; };
+export const setSetting = (db, key, value) => run(db, "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", key, value);
+
 // ----- Users -----
+export const countUsers = async (db) => (await first(db, "SELECT COUNT(*) AS n FROM users")).n;
 export const getUserByEmail = (db, email) => first(db, "SELECT * FROM users WHERE email = ?", email);
 export const getUserById = (db, id) => first(db, "SELECT * FROM users WHERE id = ?", id);
 export async function createUser(db, { email, passwordHash, salt, name, role = "MERCHANT", associationId = null }) {

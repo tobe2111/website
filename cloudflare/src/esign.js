@@ -17,8 +17,17 @@ export const algorithm = "Ed25519";
 
 let cache = null;
 async function keys(env) {
-  const secret = env.SIGN_PRIVATE_KEY;
-  if (!secret) throw new Error("SIGN_PRIVATE_KEY 미설정");
+  // env 우선, 없으면 D1 settings 에 자동 생성·영속 (배포 시 수동 등록 불필요)
+  let secret = env.SIGN_PRIVATE_KEY;
+  if (!secret) {
+    const { getSetting, setSetting } = await import("./db.js");
+    secret = await getSetting(env.DB, "sign_key");
+    if (!secret) {
+      const kp = await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]);
+      secret = JSON.stringify(await crypto.subtle.exportKey("jwk", kp.privateKey));
+      await setSetting(env.DB, "sign_key", secret);
+    }
+  }
   if (cache && cache.secret === secret) return cache;
   const jwk = JSON.parse(secret);
   const priv = await crypto.subtle.importKey("jwk", jwk, { name: "Ed25519" }, false, ["sign"]);

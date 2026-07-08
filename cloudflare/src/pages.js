@@ -655,6 +655,27 @@ export function forgotForm(ctx) {
   return html(layout({ title: "비밀번호 찾기", assoc: ctx.assoc, base: ctx.base, body, csrf }));
 }
 
+// ================= 설치 마법사 (최초 1회) =================
+export async function setupForm(ctx) {
+  const { db, query, csrf } = ctx;
+  if ((await D.countUsers(db)) > 0) {
+    return html(layout({ title: "설치 완료", body: `<section class="section page-top"><div class="container narrow"><h1 class="article-title">이미 설정되었습니다</h1><p>관리자 계정이 이미 존재합니다. <a href="/login">로그인</a> 하세요.</p></div></section>`, csrf }));
+  }
+  const body = `<section class="section page-top"><div class="container auth-wrap"><div class="auth-card">
+    <h1 class="auth-title">첫 설정</h1><p class="auth-sub">상인회와 관리자 계정을 만들어 시작하세요. (최초 1회)</p>${flashOf(query)}
+    <form method="post" action="/setup" class="stack-form">
+      <label>상인회 이름<input type="text" name="assoc_name" required maxlength="100" placeholder="예: 서초구 상인회" /></label>
+      <div class="form-divider">상인회 관리자 (ADMIN)</div>
+      <label>관리자 이메일<input type="email" name="admin_email" required /></label>
+      <label>관리자 비밀번호 (8자 이상)<input type="password" name="admin_password" required minlength="8" /></label>
+      <div class="form-divider">슈퍼 관리자 (플랫폼 전체 · 사이트 복제 권한)</div>
+      <label>슈퍼 이메일<input type="email" name="super_email" required /></label>
+      <label>슈퍼 비밀번호 (8자 이상)<input type="password" name="super_password" required minlength="8" /></label>
+      <button class="btn btn-primary btn-block">설정 완료하고 시작</button>
+    </form><p class="auth-note">이 화면은 계정이 하나도 없을 때만 열립니다. 설정 후에는 자동으로 닫힙니다.</p></div></div></section>`;
+  return html(layout({ title: "첫 설정", body, csrf }));
+}
+
 // ================= SEO: sitemap · robots =================
 function originOf(ctx) {
   const scheme = ctx.request.headers.get("x-forwarded-proto") || ctx.env.PUBLIC_SCHEME || "https";

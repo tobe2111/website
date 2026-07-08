@@ -12,7 +12,10 @@ export function json(obj, status = 200, headers = {}) {
   return new Response(JSON.stringify(obj), { status, headers: { "content-type": "application/json; charset=utf-8", ...headers } });
 }
 export function redirect(location, status = 303, headers = {}) {
-  return new Response("", { status, headers: { Location: location, ...headers } });
+  // Location 헤더는 ByteString 이라 비ASCII(한글 슬러그 등)를 퍼센트 인코딩해야 함.
+  // encodeURI 는 기존 %xx·쿼리(? & =)는 보존하고 한글만 인코딩.
+  const loc = /[^\x00-\x7F]/.test(location) ? encodeURI(location) : location;
+  return new Response("", { status, headers: { Location: loc, ...headers } });
 }
 // msg 알림과 함께 뒤로 (PRG 패턴)
 export function back(to, msg, err = false) {

@@ -446,3 +446,26 @@ export async function twofaDisable(ctx) {
   await D.setUserTotp(db, user.id, "", 0);
   return back("/account", "2단계 인증이 해제되었습니다.");
 }
+
+// ---------- 설치 마법사 제출 (계정이 없을 때만) ----------
+export async function setupSubmit(ctx) {
+  const { db, form } = ctx;
+  if ((await D.countUsers(db)) > 0) return back("/login", "이미 설정이 완료되었습니다.");
+  const assocName = cap((form.get("assoc_name") || "").trim(), 100);
+  const adminEmail = cap((form.get("admin_email") || "").toLowerCase().trim(), 120);
+  const adminPw = form.get("admin_password") || "";
+  const superEmail = cap((form.get("super_email") || "").toLowerCase().trim(), 120);
+  const superPw = form.get("super_password") || "";
+  if (!assocName || !EMAIL_RE.test(adminEmail) || !EMAIL_RE.test(superEmail) || adminPw.length < 8 || superPw.length < 8)
+    return back("/setup", "입력값을 확인해 주세요. (비밀번호 8자 이상)", true);
+  if (adminEmail === superEmail) return back("/setup", "관리자와 슈퍼 이메일은 서로 달라야 합니다.", true);
+  // 상인회 + 슈퍼 + 관리자 생성
+  let slug = slugify(assocName), n = 1;
+  while (await D.getAssociationBySlug(db, slug)) slug = slugify(assocName) + "-" + (++n);
+  const assoc = await D.createAssociation(db, { slug, name: assocName });
+  const su = await hashPassword(superPw);
+  await D.createUser(db, { email: superEmail, passwordHash: su.hash, salt: su.salt, name: "플랫폼 운영자", role: "SUPERADMIN", associationId: null });
+  const ad = await hashPassword(adminPw);
+  await D.createUser(db, { email: adminEmail, passwordHash: ad.hash, salt: ad.salt, name: assocName + " 관리자", role: "ADMIN", associationId: assoc.id });
+  return redirect("/login?msg=" + encodeURIComponent("설정이 완료되었습니다! 관리자 계정으로 로그인하세요."));
+}

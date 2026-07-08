@@ -92,7 +92,9 @@ export function json(res, obj, status = 200, headers = {}) {
 }
 
 export function redirect(res, location, status = 303) {
-  send(res, status, "", { Location: location });
+  // 한글 슬러그 등 비ASCII 는 퍼센트 인코딩(헤더는 ASCII만 허용)
+  const loc = /[^\x00-\x7F]/.test(location) ? encodeURI(location) : location;
+  send(res, status, "", { Location: loc });
 }
 
 export function setSessionCookie(res, token) {

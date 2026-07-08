@@ -1,4 +1,6 @@
--- Cloudflare D1 스키마 (SQLite 호환) — 멀티테넌트 상인회 플랫폼
+// 자동 마이그레이션용 스키마 (canonical). schema.sql 은 이 파일에서 생성된 사본.
+// Workers 는 파일을 못 읽으므로 DDL 을 인라인으로 보관하고 첫 실행 때 적용.
+export const SCHEMA_SQL = `-- Cloudflare D1 스키마 (SQLite 호환) — 멀티테넌트 상인회 플랫폼
 -- 적용: wrangler d1 execute <DB> --file=schema.sql  (원격은 --remote)
 
 CREATE TABLE IF NOT EXISTS associations (
@@ -191,3 +193,13 @@ CREATE TABLE IF NOT EXISTS settings (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL DEFAULT ''
 );
+`;
+
+// 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 건너뜀.
+export async function ensureSchema(db) {
+  const has = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='associations'").first();
+  if (has) return false;
+  const clean = SCHEMA_SQL.replace(/--[^\n]*\n/g, "\n");
+  for (const st of clean.split(";").map((s) => s.trim()).filter(Boolean)) await db.prepare(st).run();
+  return true;
+}

@@ -67,7 +67,9 @@ test("2FA: 설정 → 활성화 → 로그인에 코드 필요", async () => {
 
 test("웹 분석: 토큰 설정 시 beacon 주입 + CSP 허용", async () => {
   const env = makeEnv({ CF_ANALYTICS_TOKEN: "tok123" });
-  await D.createAssociation(env.DB, { slug: "seocho", name: "서초" });
+  const a = await D.createAssociation(env.DB, { slug: "seocho", name: "서초" });
+  const pw = await hashPassword("x12345678");
+  await D.createUser(env.DB, { email: "a@a.kr", passwordHash: pw.hash, salt: pw.salt, name: "관리자", role: "ADMIN", associationId: a.id });
   const r = await worker.fetch(new Request(BASE + "/t/seocho"), env);
   const html = await r.text();
   assert.match(html, /static\.cloudflareinsights\.com\/beacon\.min\.js/);

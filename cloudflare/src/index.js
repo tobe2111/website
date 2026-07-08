@@ -7,6 +7,11 @@ import * as api from "./api.js";
 import { setMediaBase, layout } from "./render.js";
 import { html, text, redirect, notFoundResponse, forbidden } from "./http.js";
 import { esc } from "./util.js";
+import { ensureSchema } from "./schema.js";
+import { resolveSessionSecret } from "./secrets.js";
+
+const _schemaReady = new WeakSet(); // DB 별 스키마 준비 캐시
+const _usersConfirmed = new WeakSet(); // DB 별 "계정 존재" 확인 캐시
 
 // 라우트: [method, pattern, handler, auth]
 const GLOBAL = [
@@ -19,6 +24,8 @@ const GLOBAL = [
   ["POST", "/account/2fa/setup", api.twofaSetup, "USER"],
   ["POST", "/account/2fa/enable", api.twofaEnable, "USER"],
   ["POST", "/account/2fa/disable", api.twofaDisable, "USER"],
+  ["GET", "/setup", pages.setupForm],
+  ["POST", "/setup", api.setupSubmit],
   ["GET", "/forgot", pages.forgotForm],
   ["POST", "/forgot", api.forgotPassword],
   ["GET", "/sitemap.xml", pages.sitemap],
@@ -159,6 +166,16 @@ async function handle(request, env) {
   }
   // R2 미디어 서빙 (퍼블릭 base 미설정 시 워커 경유)
   if (pathname.startsWith("/media/")) return serveMedia(env, pathname.slice("/media/".length));
+
+  // 최초 실행: 표 자동 생성 + 세션 시크릿 자동 확보 (시크릿·스키마 명령 불필요)
+  if (!_schemaReady.has(db)) { await ensureSchema(db); _schemaReady.add(db); }
+  env = { ...env, SESSION_SECRET: await resolveSessionSecret(env) };
+
+  // 설치 마법사 게이트: 계정이 하나도 없으면 /setup 으로 유도
+  if (!_usersConfirmed.has(db)) {
+    if ((await D.countUsers(db)) > 0) _usersConfirmed.add(db);
+    else if (pathname !== "/setup") return finalize(redirect("/setup"), [], env);
+  }
 
   const cookies = parseCookies(request.headers.get("cookie") || "");
   const setCookies = [];
