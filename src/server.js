@@ -7,6 +7,7 @@ import { parseCookies, redirect } from "./http.js";
 import { resolveUser, ROLES } from "./auth.js";
 import * as A from "./associations.js";
 import * as storage from "./storage.js";
+import * as media from "./media.js";
 import * as pages from "./handlers/pages.js";
 import * as api from "./handlers/api.js";
 
@@ -183,5 +184,6 @@ const server = http.createServer(async (req, res) => {
 server.listen(config.port, config.host, () => {
   console.log(`\n  서초구 상인회 플랫폼 실행 중`);
   console.log(`  ▶ http://localhost:${config.port}`);
-  console.log(`  스토리지: ${storage.driver}${config.baseDomain ? ` · 서브도메인: *.${config.baseDomain}` : " · 경로 기반(/t/:slug)"}\n`);
+  console.log(`  스토리지: ${storage.driver}${config.baseDomain ? ` · 서브도메인: *.${config.baseDomain}` : " · 경로 기반(/t/:slug)"}`);
+  console.log(`  미디어: ${media.info()}\n`);
 });

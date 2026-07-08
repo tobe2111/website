@@ -5,7 +5,12 @@
   if (!tiles.length) return;
 
   var items = tiles.map(function (t) {
-    return { src: t.getAttribute("data-src"), kind: t.getAttribute("data-kind"), caption: t.getAttribute("data-caption") || "" };
+    return {
+      src: t.getAttribute("data-src"),
+      kind: t.getAttribute("data-kind"),
+      poster: t.getAttribute("data-poster") || "",
+      caption: t.getAttribute("data-caption") || "",
+    };
   });
 
   // 오버레이 DOM 구성
@@ -34,6 +39,7 @@
 
   function render() {
     clearStage();
+    stage.classList.remove("portrait", "landscape");
     var it = items[idx];
     var el;
     if (it.kind === "video") {
@@ -44,19 +50,25 @@
       el.playsInline = true;
       el.setAttribute("playsinline", "");
       el.preload = "metadata";
+      if (it.poster) el.poster = it.poster;
     } else {
       el = document.createElement("img");
       el.src = it.src;
       el.alt = it.caption || "사진";
     }
     // 세로/가로 판별 → 클래스 부여 (세로=릴스 스타일)
-    el.addEventListener(it.kind === "video" ? "loadedmetadata" : "load", function () {
+    function orient() {
       var w = it.kind === "video" ? el.videoWidth : el.naturalWidth;
       var h = it.kind === "video" ? el.videoHeight : el.naturalHeight;
+      if (!w || !h) return;
       stage.classList.toggle("portrait", h > w);
       stage.classList.toggle("landscape", w >= h);
-    });
+    }
+    el.addEventListener(it.kind === "video" ? "loadedmetadata" : "load", orient);
     stage.appendChild(el);
+    // 이미 로드된(캐시된) 경우 즉시 적용
+    if (it.kind === "video") { if (el.readyState >= 1) orient(); }
+    else if (el.complete) orient();
     capEl.textContent = it.caption || "";
     capEl.style.display = it.caption ? "" : "none";
     countEl.textContent = (idx + 1) + " / " + items.length;

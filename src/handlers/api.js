@@ -5,6 +5,7 @@ import { parseMultipart } from "../multipart.js";
 import * as M from "../models.js";
 import * as A from "../associations.js";
 import * as storage from "../storage.js";
+import * as media from "../media.js";
 import { config } from "../config.js";
 import { SECTION_CATALOG, parseLayout } from "../homeLayout.js";
 import { postLoginPath } from "./pages.js";
@@ -84,8 +85,17 @@ export async function uploadMedia(req, res, { assoc }) {
     const isVideo = config.allowedVideoTypes.includes(file.contentType);
     if (!isImage && !isVideo) { errs.push(`${file.filename}: 지원하지 않는 형식`); continue; }
     if (file.data.length > (isVideo ? config.maxVideoBytes : config.maxImageBytes)) { errs.push(`${file.filename}: 용량 초과`); continue; }
-    const filename = await storage.save(file.data, file.contentType);
-    M.addMedia({ businessId: b.id, kind: isVideo ? "video" : "image", filename, originalName: file.filename, size: file.data.length, caption });
+    if (isVideo) {
+      // 미디어 파이프라인: ffmpeg 있으면 mp4 정규화 + 포스터 추출, 없으면 원본 통과
+      const processed = await media.processVideo(file.data, file.contentType);
+      const filename = await storage.save(processed.buffer, processed.contentType);
+      let posterKey = "";
+      if (processed.poster) posterKey = await storage.save(processed.poster, "image/jpeg");
+      M.addMedia({ businessId: b.id, kind: "video", filename, poster: posterKey, originalName: file.filename, size: processed.buffer.length, caption });
+    } else {
+      const filename = await storage.save(file.data, file.contentType);
+      M.addMedia({ businessId: b.id, kind: "image", filename, originalName: file.filename, size: file.data.length, caption });
+    }
     ok++;
   }
   back(res, base + "/dashboard", `${ok}개 업로드 완료.` + (errs.length ? ` 실패: ${errs.join(", ")}` : ""), errs.length > 0 && ok === 0);
@@ -97,6 +107,7 @@ export async function deleteMedia(req, res, { assoc, params }) {
   const m = M.getMedia(Number(params.id));
   if (!b || !m || m.business_id !== b.id) return back(res, base + "/dashboard", "삭제할 수 없습니다.", true);
   await storage.remove(m.filename);
+  if (m.poster) await storage.remove(m.poster);
   M.deleteMedia(m.id);
   back(res, base + "/dashboard", "삭제되었습니다.");
 }

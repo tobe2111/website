@@ -29,14 +29,21 @@ function mediaThumb(m) {
 }
 
 // 뷰어(라이트박스)로 열리는 클릭 가능한 갤러리 타일. 세로/가로 자동 대응.
-function galleryItem(m) {
+function galleryItem(m, { showCaption = true } = {}) {
   const url = storage.publicUrl(m.filename);
+  const posterUrl = m.poster ? storage.publicUrl(m.poster) : "";
   const cap = esc(m.caption || "");
-  const inner = m.kind === "video"
-    ? `<video src="${url}#t=0.1" preload="metadata" muted playsinline></video><span class="play-badge" aria-hidden="true">▶</span>`
-    : `<img src="${url}" alt="${cap || "업체 사진"}" loading="lazy" />`;
-  return `<button type="button" class="gallery-item${m.kind === "video" ? " is-video" : ""}" data-src="${url}" data-kind="${m.kind}" data-caption="${cap}" aria-label="${cap || (m.kind === "video" ? "영상 보기" : "사진 보기")}">
-    ${inner}${cap ? `<figcaption>${cap}</figcaption>` : ""}</button>`;
+  let inner;
+  if (m.kind === "video") {
+    const thumb = posterUrl
+      ? `<img src="${posterUrl}" alt="${cap || "영상 미리보기"}" loading="lazy" />`
+      : `<video src="${url}#t=0.1" preload="metadata" muted playsinline></video>`;
+    inner = `${thumb}<span class="play-badge" aria-hidden="true">▶</span>`;
+  } else {
+    inner = `<img src="${url}" alt="${cap || "업체 사진"}" loading="lazy" />`;
+  }
+  return `<button type="button" class="gallery-item${m.kind === "video" ? " is-video" : ""}" data-src="${url}" data-kind="${m.kind}" data-poster="${posterUrl}" data-caption="${cap}" aria-label="${cap || (m.kind === "video" ? "영상 보기" : "사진 보기")}">
+    ${inner}${showCaption && cap ? `<figcaption>${cap}</figcaption>` : ""}</button>`;
 }
 
 function businessCard(assoc, b) {
@@ -284,7 +291,7 @@ export function dashboard(req, res, { assoc, query }) {
   const media = M.listMedia(b.id);
   const opts = CATEGORIES.map((c) => `<option value="${esc(c)}"${c === b.category ? " selected" : ""}>${esc(c)}</option>`).join("");
   const mediaGrid = media.length
-    ? media.map((m) => `<figure class="media-tile">${mediaThumb(m)}<figcaption>
+    ? media.map((m) => `<figure class="media-tile">${galleryItem(m, { showCaption: false })}<figcaption>
         <span class="media-kind">${m.kind === "video" ? "🎬 영상" : "🖼 사진"}</span>
         <form method="post" action="${base}/dashboard/media/${m.id}/delete" onsubmit="return confirm('삭제하시겠습니까?')"><button class="link-danger" type="submit">삭제</button></form>
       </figcaption></figure>`).join("")
@@ -323,7 +330,7 @@ export function dashboard(req, res, { assoc, query }) {
         <h3 class="panel-subtitle">등록된 미디어 (${media.length})</h3>
         <div class="media-grid">${mediaGrid}</div></section>
     </div></div></section>`;
-  html(res, layout({ title: "내 업체 관리", user: req.user, assoc, base, body, scripts: `<script src="/js/dashboard.js" defer></script>` }));
+  html(res, layout({ title: "내 업체 관리", user: req.user, assoc, base, body, scripts: `<script src="/js/dashboard.js" defer></script><script src="/js/viewer.js" defer></script>` }));
 }
 
 // ================= 상인회 관리자 대시보드 =================

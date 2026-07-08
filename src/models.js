@@ -87,12 +87,12 @@ export function distinctCategories(associationId) {
 export function listMedia(businessId) {
   return db.prepare("SELECT * FROM media WHERE business_id = ? ORDER BY created_at DESC").all(businessId);
 }
-export function addMedia({ businessId, kind, filename, originalName, size, caption = "" }) {
+export function addMedia({ businessId, kind, filename, poster = "", originalName, size, caption = "" }) {
   const info = db
     .prepare(
-      "INSERT INTO media (business_id, kind, filename, original_name, size, caption) VALUES (?, ?, ?, ?, ?, ?)"
+      "INSERT INTO media (business_id, kind, filename, poster, original_name, size, caption) VALUES (?, ?, ?, ?, ?, ?, ?)"
     )
-    .run(businessId, kind, filename, originalName, size, caption);
+    .run(businessId, kind, filename, poster, originalName, size, caption);
   return db.prepare("SELECT * FROM media WHERE id = ?").get(info.lastInsertRowid);
 }
 export function getMedia(id) {

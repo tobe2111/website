@@ -43,6 +43,10 @@ export const config = {
     forcePathStyle: bool(process.env.S3_FORCE_PATH_STYLE, false),
   },
 
+  // ----- 미디어 처리 (ffmpeg 존재 시 자동 동작) -----
+  mediaTranscode: bool(process.env.MEDIA_TRANSCODE, true), // 영상 → H.264 mp4 정규화
+  mediaPoster: bool(process.env.MEDIA_POSTER, true),       // 영상 포스터(썸네일) 프레임 추출
+
   // 업로드 제한
   maxImageBytes: 8 * 1024 * 1024,
   maxVideoBytes: 120 * 1024 * 1024,

@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS media (
   business_id   INTEGER NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
   kind          TEXT NOT NULL,
   filename      TEXT NOT NULL,
+  poster        TEXT NOT NULL DEFAULT '',              -- 영상 포스터(썸네일) 스토리지 키
   original_name TEXT NOT NULL DEFAULT '',
   caption       TEXT NOT NULL DEFAULT '',
   size          INTEGER NOT NULL DEFAULT 0,
@@ -106,6 +107,9 @@ function columnExists(table, col) {
   }
   if (!columnExists("associations", "logo")) {
     db.exec("ALTER TABLE associations ADD COLUMN logo TEXT NOT NULL DEFAULT ''");
+  }
+  if (!columnExists("media", "poster")) {
+    db.exec("ALTER TABLE media ADD COLUMN poster TEXT NOT NULL DEFAULT ''");
   }
 })();
 
