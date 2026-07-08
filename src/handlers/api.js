@@ -30,6 +30,34 @@ function clientIp(req) {
   return (req.headers["x-forwarded-for"] || "").split(",")[0].trim() || req.socket.remoteAddress || "?";
 }
 
+// multipart 또는 urlencoded 폼을 읽고 CSRF 검증. 실패 시 응답 전송 후 null 반환.
+async function readFormOrMultipart(req, res, backTo, limitBytes) {
+  let buf;
+  try { buf = await readBody(req, limitBytes); }
+  catch { back(res, backTo, "요청이 너무 큽니다.", true); return null; }
+  let fields = {}, files = [];
+  const ct = req.headers["content-type"] || "";
+  if (ct.includes("multipart/form-data")) {
+    try { const p = parseMultipart(buf, ct); fields = p.fields; files = p.files; }
+    catch { back(res, backTo, "폼 형식이 올바르지 않습니다.", true); return null; }
+  } else fields = parseUrlEncoded(buf.toString("utf8"));
+  if (!csrf.valid(req, fields._csrf)) {
+    res.writeHead(403, { "Content-Type": "text/html; charset=utf-8" }); res.end("<h1>403 잘못된 요청(CSRF)</h1>"); return null;
+  }
+  return { fields, files };
+}
+
+// 첨부 이미지 1개 검증·저장 → { key, present } 또는 { error }
+async function saveUploadedImage(files, field) {
+  const f = files.find((x) => x.field === field && x.data && x.data.length > 0);
+  if (!f) return { key: "", present: false };
+  const real = sniff(f.data);
+  if (!real || !config.allowedImageTypes.includes(real)) return { error: "이미지 파일만 첨부할 수 있습니다." };
+  if (f.data.length > config.maxImageBytes) return { error: "이미지 용량이 큽니다. (최대 8MB)" };
+  const key = await storage.save(f.data, real);
+  return { key, present: true };
+}
+
 // ---------- 로그인 시도 제한 (in-memory 슬라이딩 윈도우) ----------
 const attempts = new Map(); // ip -> { count, first }
 const RL_WINDOW = 15 * 60 * 1000;
@@ -262,7 +290,10 @@ async function doUpload(req, res, { assoc, base, b }) {
       M.addMedia({ businessId: b.id, kind: "video", filename, poster: posterKey, originalName: file.filename, size: processed.buffer.length, caption });
     } else {
       const filename = await storage.save(file.data, real);
-      M.addMedia({ businessId: b.id, kind: "image", filename, originalName: file.filename, size: file.data.length, caption });
+      let thumbKey = "";
+      const pr = await media.processImage(file.data, real);
+      if (pr.thumb) thumbKey = await storage.save(pr.thumb, pr.thumbType);
+      M.addMedia({ businessId: b.id, kind: "image", filename, thumb: thumbKey, originalName: file.filename, size: file.data.length, caption });
     }
     ok++;
   }
@@ -278,6 +309,7 @@ export async function deleteMedia(req, res, { assoc, params }) {
   if (!b || !m || m.business_id !== b.id) return back(res, base + "/dashboard", "삭제할 수 없습니다.", true);
   await storage.remove(m.filename);
   if (m.poster) await storage.remove(m.poster);
+  if (m.thumb) await storage.remove(m.thumb);
   M.deleteMedia(m.id);
   back(res, base + "/dashboard", "삭제되었습니다.");
 }
@@ -355,13 +387,38 @@ const canModerateBoard = (req, assoc) => req.user && (req.user.role === ROLES.SU
 
 export async function createPost(req, res, { assoc }) {
   const base = baseOf(assoc);
-  const f = await readForm(req, res, 64 * 1024);
-  if (!f) return;
-  const title = cap((f.title || "").trim(), 200);
-  const bodyText = cap((f.body || "").trim(), 10000);
+  const form = await readFormOrMultipart(req, res, base + "/board", config.maxImageBytes + 128 * 1024);
+  if (!form) return;
+  const { fields, files } = form;
+  const title = cap((fields.title || "").trim(), 200);
+  const bodyText = cap((fields.body || "").trim(), 10000);
   if (!title || !bodyText) return back(res, base + "/board", "제목과 내용을 입력하세요.", true);
-  const p = M.createPost({ associationId: assoc.id, authorId: req.user.id, title, body: bodyText });
+  const img = await saveUploadedImage(files, "image");
+  if (img.error) return back(res, base + "/board", img.error, true);
+  const p = M.createPost({ associationId: assoc.id, authorId: req.user.id, title, body: bodyText, image: img.key });
   back(res, base + "/board/" + p.id, "글을 등록했습니다.");
+}
+
+// 글 수정 (작성자 또는 관리자)
+export async function updatePost(req, res, { assoc, params }) {
+  const base = baseOf(assoc);
+  const p = M.getPost(Number(params.id));
+  if (!p || p.association_id !== assoc.id) return back(res, base + "/board", "게시글을 찾을 수 없습니다.", true);
+  if (!(canModerateBoard(req, assoc) || p.author_id === req.user.id))
+    return back(res, base + "/board/" + p.id, "수정 권한이 없습니다.", true);
+  const form = await readFormOrMultipart(req, res, base + "/board/" + p.id + "/edit", config.maxImageBytes + 128 * 1024);
+  if (!form) return;
+  const { fields, files } = form;
+  const title = cap((fields.title || "").trim(), 200);
+  const bodyText = cap((fields.body || "").trim(), 10000);
+  if (!title || !bodyText) return back(res, base + "/board/" + p.id + "/edit", "제목과 내용을 입력하세요.", true);
+  let imageKey = p.image;
+  const img = await saveUploadedImage(files, "image");
+  if (img.error) return back(res, base + "/board/" + p.id + "/edit", img.error, true);
+  if (img.present) { if (p.image) await storage.remove(p.image); imageKey = img.key; }
+  else if (fields.remove_image === "1" && p.image) { await storage.remove(p.image); imageKey = ""; }
+  M.updatePost(p.id, { title, body: bodyText, image: imageKey });
+  back(res, base + "/board/" + p.id, "글을 수정했습니다.");
 }
 
 export async function createComment(req, res, { assoc, params }) {
@@ -384,6 +441,7 @@ export async function deletePost(req, res, { assoc, params }) {
   if (!p || p.association_id !== assoc.id) return back(res, base + "/board", "게시글을 찾을 수 없습니다.", true);
   if (!(canModerateBoard(req, assoc) || p.author_id === req.user.id))
     return back(res, base + "/board/" + p.id, "삭제 권한이 없습니다.", true);
+  if (p.image) await storage.remove(p.image);
   M.deletePost(p.id);
   back(res, base + "/board", "게시글을 삭제했습니다.");
 }
@@ -425,7 +483,17 @@ export async function adminCreateDocument(req, res, { assoc }) {
   const bodyText = cap((params.get("body") || "").trim(), 20000);
   if (!title || !bodyText) return back(res, base + "/admin/documents", "제목과 본문을 입력하세요.", true);
 
-  const doc = M.createDocument({ associationId: assoc.id, title, body: bodyText, contentHash: contentHash(bodyText), createdBy: req.user.id });
+  const ordered = params.get("ordered") === "1" ? 1 : 0;
+  // 서명 기한 (YYYY-MM-DD, 오늘 이후만 유효)
+  let dueDate = "";
+  const rawDue = (params.get("due_date") || "").trim();
+  if (rawDue) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(rawDue)) return back(res, base + "/admin/documents", "서명 기한 형식(YYYY-MM-DD)을 확인해 주세요.", true);
+    if (rawDue < new Date().toISOString().slice(0, 10)) return back(res, base + "/admin/documents", "서명 기한은 오늘 이후여야 합니다.", true);
+    dueDate = rawDue;
+  }
+
+  const doc = M.createDocument({ associationId: assoc.id, title, body: bodyText, contentHash: contentHash(bodyText), createdBy: req.user.id, ordered, dueDate });
 
   // 서명 대상 지정 (전체 회원 / 선택 회원 / 미지정=전체공개)
   const target = params.get("target");
@@ -434,10 +502,11 @@ export async function adminCreateDocument(req, res, { assoc }) {
     M.createSignatureRequests(doc.id, members.map((m) => m.id));
   } else if (target === "select") {
     const validIds = new Set(members.map((m) => m.id));
+    // 선택 순서(체크박스 DOM 순서 = 회원 목록 순서)대로 순번 부여
     const chosen = params.getAll("members").map(Number).filter((id) => validIds.has(id));
     M.createSignatureRequests(doc.id, chosen);
   }
-  back(res, base + "/admin/documents", "문서를 생성했습니다. 대상 회원 대시보드에 서명 요청으로 표시됩니다.");
+  back(res, base + "/admin/documents", ordered ? "순차 서명 문서를 생성했습니다. 지정 순서대로 서명 요청이 진행됩니다." : "문서를 생성했습니다. 대상 회원 대시보드에 서명 요청으로 표시됩니다.");
 }
 export async function adminCloseDocument(req, res, { assoc, params }) {
   const base = baseOf(assoc);
@@ -456,7 +525,9 @@ export async function memberSign(req, res, { assoc, params }) {
   const f = await readForm(req, res, 2 * 1024 * 1024); // 서명 이미지(dataURL) 수용
   if (!f) return;
   if (d.closed) return back(res, base + "/sign", "마감된 문서입니다.", true);
+  if (M.isPastDue(d)) return back(res, base + "/sign", "서명 기한이 지난 문서입니다.", true);
   if (M.hasSigned(d.id, req.user.id)) return back(res, base + "/sign", "이미 서명한 문서입니다.", true);
+  if (!M.canSignNow(d, req.user.id)) return back(res, base + "/sign", "앞 순번의 서명이 완료된 후 서명할 수 있습니다.", true);
   if (f.consent !== "1") return back(res, base + "/sign/" + d.id, "동의 확인란에 체크해 주세요.", true);
 
   const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(f.signature || "");

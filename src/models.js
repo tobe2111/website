@@ -127,14 +127,14 @@ export function listMedia(businessId) {
 }
 // 대표 이미지 1건만 (목록 카드용 — 전체 미디어를 불러오지 않도록 최적화)
 export function getCoverImage(businessId) {
-  return db.prepare("SELECT filename FROM media WHERE business_id = ? AND kind = 'image' ORDER BY created_at DESC LIMIT 1").get(businessId);
+  return db.prepare("SELECT filename, thumb FROM media WHERE business_id = ? AND kind = 'image' ORDER BY created_at DESC LIMIT 1").get(businessId);
 }
-export function addMedia({ businessId, kind, filename, poster = "", originalName, size, caption = "" }) {
+export function addMedia({ businessId, kind, filename, poster = "", thumb = "", originalName, size, caption = "" }) {
   const info = db
     .prepare(
-      "INSERT INTO media (business_id, kind, filename, poster, original_name, size, caption) VALUES (?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO media (business_id, kind, filename, poster, thumb, original_name, size, caption) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
     )
-    .run(businessId, kind, filename, poster, originalName, size, caption);
+    .run(businessId, kind, filename, poster, thumb, originalName, size, caption);
   return db.prepare("SELECT * FROM media WHERE id = ?").get(info.lastInsertRowid);
 }
 export function getMedia(id) {
@@ -237,24 +237,37 @@ export function listAdmins() {
 }
 
 // ----- 회원 게시판 -----
-export function createPost({ associationId, authorId, title, body }) {
-  const info = db.prepare("INSERT INTO posts (association_id, author_id, title, body) VALUES (?, ?, ?, ?)")
-    .run(associationId, authorId, title, body || "");
+export function createPost({ associationId, authorId, title, body, image = "" }) {
+  const info = db.prepare("INSERT INTO posts (association_id, author_id, title, body, image) VALUES (?, ?, ?, ?, ?)")
+    .run(associationId, authorId, title, body || "", image || "");
   return getPost(info.lastInsertRowid);
+}
+// 글 수정 (image: 최종 스토리지 키 문자열. 유지/교체/제거는 호출부에서 결정)
+export function updatePost(id, { title, body, image }) {
+  db.prepare("UPDATE posts SET title = ?, body = ?, image = ?, updated_at = datetime('now') WHERE id = ?")
+    .run(title, body || "", image || "", id);
+  return getPost(id);
 }
 export function getPost(id) {
   return db.prepare(`SELECT p.*, u.name AS author_name FROM posts p
     LEFT JOIN users u ON u.id = p.author_id WHERE p.id = ?`).get(id);
 }
-export function listPostsPaged(associationId, { page = 1, perPage = 15 } = {}) {
-  const total = db.prepare("SELECT COUNT(*) AS n FROM posts WHERE association_id = ?").get(associationId).n;
+export function listPostsPaged(associationId, { page = 1, perPage = 15, q = null } = {}) {
+  let where = " WHERE p.association_id = ?"; const args = [associationId];
+  let cwhere = " WHERE association_id = ?"; const cargs = [associationId];
+  if (q) {
+    const like = "%" + String(q).replace(/[%_\\]/g, (c) => "\\" + c) + "%";
+    where += " AND (p.title LIKE ? ESCAPE '\\' OR p.body LIKE ? ESCAPE '\\')"; args.push(like, like);
+    cwhere += " AND (title LIKE ? ESCAPE '\\' OR body LIKE ? ESCAPE '\\')"; cargs.push(like, like);
+  }
+  const total = db.prepare("SELECT COUNT(*) AS n FROM posts" + cwhere).get(...cargs).n;
   const pages = Math.max(1, Math.ceil(total / perPage));
   const p = Math.min(Math.max(1, page | 0 || 1), pages);
   const items = db.prepare(`SELECT p.*, u.name AS author_name,
       (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id) AS comment_count
-    FROM posts p LEFT JOIN users u ON u.id = p.author_id
-    WHERE p.association_id = ? ORDER BY p.pinned DESC, p.created_at DESC LIMIT ? OFFSET ?`)
-    .all(associationId, perPage, (p - 1) * perPage);
+    FROM posts p LEFT JOIN users u ON u.id = p.author_id` + where +
+    ` ORDER BY p.pinned DESC, p.created_at DESC LIMIT ? OFFSET ?`)
+    .all(...args, perPage, (p - 1) * perPage);
   return { items, total, page: p, pages };
 }
 export function setPostPinned(id, pinned) {
@@ -279,10 +292,10 @@ export function deleteComment(id) {
 }
 
 // ----- 전자서명: 문서 -----
-export function createDocument({ associationId, title, body, contentHash, createdBy }) {
+export function createDocument({ associationId, title, body, contentHash, createdBy, ordered = 0, dueDate = "" }) {
   const info = db
-    .prepare("INSERT INTO documents (association_id, title, body, content_hash, created_by) VALUES (?, ?, ?, ?, ?)")
-    .run(associationId, title, body, contentHash, createdBy);
+    .prepare("INSERT INTO documents (association_id, title, body, content_hash, created_by, ordered, due_date) VALUES (?, ?, ?, ?, ?, ?, ?)")
+    .run(associationId, title, body, contentHash, createdBy, ordered ? 1 : 0, dueDate || "");
   return getDocument(info.lastInsertRowid);
 }
 export function getDocument(id) {
@@ -294,30 +307,58 @@ export function listDocuments(associationId) {
               FROM documents d WHERE d.association_id = ? ORDER BY d.created_at DESC`)
     .all(associationId);
 }
-// 서명해야 할 문서: 미마감 + 미서명 + (나에게 요청됨 OR 지정 대상이 아예 없음=전체공개)
+// 순차 서명에서 "내 차례" 조건: 순차가 아니거나(ordered=0), 나보다 앞 순번이 모두 서명 완료
+const TURN_OK = `(d.ordered = 0 OR NOT EXISTS (
+    SELECT 1 FROM signature_requests rp
+      JOIN signature_requests rme ON rme.document_id = d.id AND rme.user_id = ?
+    WHERE rp.document_id = d.id AND rp.sign_order < rme.sign_order
+      AND NOT EXISTS (SELECT 1 FROM signatures sp WHERE sp.document_id = rp.document_id AND sp.user_id = rp.user_id)
+  ))`;
+// 서명해야 할 문서: 미마감 + 기한 내 + 미서명 + (나에게 요청됨 OR 지정 대상 없음=전체공개) + 내 차례
+// 파라미터 순서: associationId, userId(미서명), userId(요청대상), userId(내 차례)
 const TO_SIGN_WHERE = `d.association_id = ? AND d.closed = 0
+  AND (d.due_date = '' OR d.due_date >= date('now'))
   AND NOT EXISTS (SELECT 1 FROM signatures s WHERE s.document_id = d.id AND s.user_id = ?)
   AND (EXISTS (SELECT 1 FROM signature_requests r WHERE r.document_id = d.id AND r.user_id = ?)
-       OR NOT EXISTS (SELECT 1 FROM signature_requests r2 WHERE r2.document_id = d.id))`;
+       OR NOT EXISTS (SELECT 1 FROM signature_requests r2 WHERE r2.document_id = d.id))
+  AND ${TURN_OK}`;
 export function listDocumentsToSign(associationId, userId) {
   return db.prepare(`SELECT d.* FROM documents d WHERE ${TO_SIGN_WHERE} ORDER BY d.created_at DESC`)
-    .all(associationId, userId, userId);
+    .all(associationId, userId, userId, userId);
 }
 export function countDocumentsToSign(associationId, userId) {
-  return db.prepare(`SELECT COUNT(*) AS n FROM documents d WHERE ${TO_SIGN_WHERE}`).get(associationId, userId, userId).n;
+  return db.prepare(`SELECT COUNT(*) AS n FROM documents d WHERE ${TO_SIGN_WHERE}`).get(associationId, userId, userId, userId).n;
+}
+// 순차 서명: 현재 사용자가 지금 서명할 수 있는지(앞 순번 완료 여부). 지정 대상이 아니면 제약 없음.
+export function canSignNow(doc, userId) {
+  if (!doc.ordered) return true;
+  const mine = db.prepare("SELECT sign_order FROM signature_requests WHERE document_id = ? AND user_id = ?").get(doc.id, userId);
+  if (!mine) return true;
+  const pending = db.prepare(`SELECT COUNT(*) AS n FROM signature_requests r
+    WHERE r.document_id = ? AND r.sign_order < ?
+      AND NOT EXISTS (SELECT 1 FROM signatures s WHERE s.document_id = r.document_id AND s.user_id = r.user_id)`)
+    .get(doc.id, mine.sign_order).n;
+  return pending === 0;
+}
+// 서명 기한 경과 여부
+export function isPastDue(doc) {
+  if (!doc.due_date) return false;
+  const today = new Date().toISOString().slice(0, 10);
+  return doc.due_date < today;
 }
 
 // ----- 전자서명: 서명 요청 대상 -----
+// userIds 순서대로 sign_order(1..N) 부여 → 순차 서명 순번
 export function createSignatureRequests(documentId, userIds) {
-  const stmt = db.prepare("INSERT OR IGNORE INTO signature_requests (document_id, user_id) VALUES (?, ?)");
-  for (const uid of userIds) stmt.run(documentId, uid);
+  const stmt = db.prepare("INSERT OR IGNORE INTO signature_requests (document_id, user_id, sign_order) VALUES (?, ?, ?)");
+  userIds.forEach((uid, i) => stmt.run(documentId, uid, i + 1));
 }
-// 요청 대상 목록 + 서명 여부 (완료 추적)
+// 요청 대상 목록 + 서명 여부 (완료 추적). 순번(sign_order) 순 정렬.
 export function listRequestStatus(documentId) {
-  return db.prepare(`SELECT u.id, u.name, u.email,
+  return db.prepare(`SELECT u.id, u.name, u.email, r.sign_order,
       EXISTS (SELECT 1 FROM signatures s WHERE s.document_id = r.document_id AND s.user_id = u.id) AS signed
     FROM signature_requests r JOIN users u ON u.id = r.user_id
-    WHERE r.document_id = ? ORDER BY signed ASC, u.name`).all(documentId);
+    WHERE r.document_id = ? ORDER BY r.sign_order ASC, u.name`).all(documentId);
 }
 export function requestCounts(documentId) {
   const total = db.prepare("SELECT COUNT(*) AS n FROM signature_requests WHERE document_id = ?").get(documentId).n;

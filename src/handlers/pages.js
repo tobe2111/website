@@ -54,7 +54,9 @@ function galleryItem(m, { showCaption = true } = {}) {
       : `<video src="${url}#t=0.1" preload="metadata" muted playsinline></video>`;
     inner = `${thumb}<span class="play-badge" aria-hidden="true">▶</span>`;
   } else {
-    inner = `<img src="${url}" alt="${cap || "업체 사진"}" loading="lazy" />`;
+    // 그리드에는 축소 썸네일, 뷰어(data-src)는 원본을 연다
+    const gridUrl = m.thumb ? storage.publicUrl(m.thumb) : url;
+    inner = `<img src="${gridUrl}" alt="${cap || "업체 사진"}" loading="lazy" />`;
   }
   return `<button type="button" class="gallery-item${m.kind === "video" ? " is-video" : ""}" data-src="${url}" data-kind="${m.kind}" data-poster="${posterUrl}" data-caption="${cap}" aria-label="${cap || (m.kind === "video" ? "영상 보기" : "사진 보기")}">
     ${inner}${showCaption && cap ? `<figcaption>${cap}</figcaption>` : ""}</button>`;
@@ -65,7 +67,7 @@ function businessCard(assoc, b) {
   const hue = hueFor(b.category + b.name);
   const cover = M.getCoverImage(b.id);
   const thumb = cover
-    ? `<img src="${storage.publicUrl(cover.filename)}" alt="${esc(b.name)}" loading="lazy" />`
+    ? `<img src="${storage.publicUrl(cover.thumb || cover.filename)}" alt="${esc(b.name)}" loading="lazy" />`
     : `<span>${esc(b.name.slice(0, 2))}</span>`;
   return `<article class="market-card">
     <a href="${base}/business/${esc(b.slug)}" class="market-thumb" style="--hue:${hue}">${thumb}</a>
@@ -376,25 +378,33 @@ const canModerate = (req, assoc) => req.user && (req.user.role === ROLES.SUPERAD
 export function board(req, res, { assoc, query }) {
   const base = baseOf(assoc);
   const page = parseInt(query.get("page") || "1", 10) || 1;
-  const { items, total, page: cur, pages } = M.listPostsPaged(assoc.id, { page });
-  const urlFor = (i) => `${base}/board${qsBuild({ page: i })}`;
+  const q = (query.get("q") || "").trim().slice(0, 60);
+  const { items, total, page: cur, pages } = M.listPostsPaged(assoc.id, { page, q: q || null });
+  const urlFor = (i) => `${base}/board${qsBuild({ q, page: i })}`;
 
   const rows = items.length
     ? items.map((p) => `<li class="board-row${p.pinned ? " pinned" : ""}">
         ${p.pinned ? `<span class="board-pin" title="고정됨">📌</span>` : ""}
-        <a href="${base}/board/${p.id}" class="board-title">${esc(p.title)}</a>
+        ${p.image ? `<a href="${base}/board/${p.id}" class="board-thumb"><img src="${esc(storage.publicUrl(p.image))}" alt="" loading="lazy" /></a>` : ""}
+        <a href="${base}/board/${p.id}" class="board-title">${esc(p.title)}${p.image ? ' <span class="board-clip" aria-label="사진 첨부">📎</span>' : ""}</a>
         <span class="board-meta">${esc(p.author_name || "(탈퇴)")} · ${esc(p.created_at.slice(0, 10).replace(/-/g, "."))}${p.comment_count ? ` · 💬 ${p.comment_count}` : ""}</span>
       </li>`).join("")
-    : `<li class="empty">아직 게시글이 없습니다. 첫 글을 남겨보세요.</li>`;
+    : `<li class="empty">${q ? `‘${esc(q)}’ 검색 결과가 없습니다.` : "아직 게시글이 없습니다. 첫 글을 남겨보세요."}</li>`;
 
   const body = `<section class="section page-top"><div class="container">
     <div class="section-head"><p class="section-eyebrow">BOARD</p><h2 class="section-title">회원 게시판</h2>
       <p class="section-lead">${esc(assoc.name)} 회원 전용 소통 공간입니다. (글 ${total})</p></div>
     ${flash(query.get("msg") ? decodeURIComponent(query.get("msg")) : "", query.get("err") ? "err" : "ok")}
+    <form method="get" action="${base}/board" class="board-search" role="search">
+      <input type="search" name="q" value="${esc(q)}" placeholder="제목·내용 검색" maxlength="60" aria-label="게시판 검색" />
+      <button class="btn btn-ghost btn-sm">검색</button>
+      ${q ? `<a href="${base}/board" class="btn btn-ghost btn-sm">전체</a>` : ""}
+    </form>
     <section class="panel"><h2 class="panel-title">새 글 쓰기</h2>
-      <form method="post" action="${base}/board" class="stack-form compact">
+      <form method="post" action="${base}/board" class="stack-form compact" enctype="multipart/form-data">
         <input type="text" name="title" placeholder="제목" required maxlength="200" />
         <textarea name="body" rows="4" placeholder="내용을 입력하세요." required></textarea>
+        <label class="file-inline">📷 사진 첨부 (선택)<input type="file" name="image" accept="image/*" /></label>
         <button class="btn btn-primary btn-sm">등록</button>
       </form>
     </section>
@@ -426,9 +436,11 @@ export function postDetail(req, res, { assoc, params, query }) {
     <div class="article-head">${p.pinned ? `<span class="notice-tag tag-important">고정</span>` : ""}
       <time>${esc(p.created_at.slice(0, 16).replace("T", " "))}</time></div>
     <h1 class="article-title">${esc(p.title)}</h1>
-    <p class="post-author">작성자: ${esc(p.author_name || "(탈퇴)")}</p>
+    <p class="post-author">작성자: ${esc(p.author_name || "(탈퇴)")}${p.updated_at ? ` · <span class="post-edited">수정됨 ${esc(p.updated_at.slice(0, 16).replace("T", " "))}</span>` : ""}</p>
+    ${p.image ? `<img class="article-image" src="${esc(storage.publicUrl(p.image))}" alt="${esc(p.title)}" loading="lazy" />` : ""}
     <div class="article-body">${esc(p.body).replace(/\n/g, "<br />")}</div>
     <div class="post-actions">
+      ${(mod || isAuthor) ? `<a href="${base}/board/${p.id}/edit" class="btn btn-ghost btn-xs">수정</a>` : ""}
       ${mod ? `<form method="post" action="${base}/board/${p.id}/pin"><button class="btn btn-ghost btn-xs">${p.pinned ? "고정 해제" : "상단 고정"}</button></form>` : ""}
       ${(mod || isAuthor) ? `<form method="post" action="${base}/board/${p.id}/delete" data-confirm="게시글을 삭제할까요?"><button class="btn btn-ghost btn-xs link-danger">삭제</button></form>` : ""}
     </div>
@@ -440,6 +452,34 @@ export function postDetail(req, res, { assoc, params, query }) {
     </form>
   </div></section>`;
   html(res, layout({ title: p.title, user: req.user, assoc, base, activeNav: base + "/board", body }));
+}
+
+// 게시글 수정 폼 (작성자 또는 관리자)
+export function editPost(req, res, { assoc, params, query }) {
+  const base = baseOf(assoc);
+  const p = M.getPost(Number(params.id));
+  if (!p || p.association_id !== assoc.id) return notFound(req, res, { assoc });
+  const isAuthor = req.user && p.author_id === req.user.id;
+  if (!(canModerate(req, assoc) || isAuthor))
+    return redirect(res, base + "/board/" + p.id + "?err=1&msg=" + encodeURIComponent("수정 권한이 없습니다."));
+
+  const body = `<section class="section page-top"><div class="container narrow">
+    <a href="${base}/board/${p.id}" class="back-link">← 게시글로</a>
+    <h1 class="article-title">글 수정</h1>
+    ${flash(query.get("err") ? decodeURIComponent(query.get("msg") || "입력을 확인하세요.") : "", "err")}
+    <form method="post" action="${base}/board/${p.id}/edit" class="stack-form" enctype="multipart/form-data">
+      <label>제목<input type="text" name="title" value="${esc(p.title)}" required maxlength="200" /></label>
+      <label>내용<textarea name="body" rows="8" required>${esc(p.body)}</textarea></label>
+      ${p.image ? `<div class="edit-image"><img src="${esc(storage.publicUrl(p.image))}" alt="현재 첨부 이미지" />
+        <label class="check"><input type="checkbox" name="remove_image" value="1" /> 현재 사진 삭제</label></div>` : ""}
+      <label class="file-inline">📷 ${p.image ? "사진 교체" : "사진 첨부"} (선택)<input type="file" name="image" accept="image/*" /></label>
+      <div class="post-actions">
+        <button type="submit" class="btn btn-primary">저장</button>
+        <a href="${base}/board/${p.id}" class="btn btn-ghost">취소</a>
+      </div>
+    </form>
+  </div></section>`;
+  html(res, layout({ title: "글 수정", user: req.user, assoc, base, activeNav: base + "/board", body }));
 }
 
 // ================= 인증 폼 =================
@@ -873,7 +913,7 @@ export function signList(req, res, { assoc, query }) {
 
   const todoRows = todo.length
     ? todo.map((d) => `<li><a href="${base}/sign/${d.id}"><span class="notice-tag tag-important">서명 필요</span>
-        <span class="notice-title">${esc(d.title)}</span><time>${esc(d.created_at.slice(0, 10).replace(/-/g, "."))}</time></a></li>`).join("")
+        <span class="notice-title">${esc(d.title)}${d.ordered ? ' <span class="badge badge-info">순차</span>' : ""}${d.due_date ? ` <span class="badge badge-wait">~${esc(d.due_date)}</span>` : ""}</span><time>${esc(d.created_at.slice(0, 10).replace(/-/g, "."))}</time></a></li>`).join("")
     : `<li class="empty">서명할 문서가 없습니다.</li>`;
   const doneRows = all.filter((d) => signedIds.has(d.id))
     .map((d) => `<li><span class="notice-tag badge-ok">서명 완료</span><span class="notice-title">${esc(d.title)}</span></li>`).join("") || `<li class="empty">서명 내역이 없습니다.</li>`;
@@ -898,10 +938,26 @@ export function signForm(req, res, { assoc, params, query }) {
   if (!d || d.association_id !== assoc.id) return notFound(req, res, { assoc });
   if (M.hasSigned(d.id, req.user.id)) return redirect(res, base + "/sign?msg=" + encodeURIComponent("이미 서명한 문서입니다."));
   if (d.closed) return redirect(res, base + "/sign?err=1&msg=" + encodeURIComponent("마감된 문서입니다."));
+  if (M.isPastDue(d)) return redirect(res, base + "/sign?err=1&msg=" + encodeURIComponent("서명 기한이 지난 문서입니다."));
+
+  const myTurn = M.canSignNow(d, req.user.id);
+  const metaBar = `${d.ordered ? '<span class="badge badge-info">순차 서명</span>' : ""}${d.due_date ? `<span class="badge badge-wait">서명 기한 ${esc(d.due_date)}</span>` : ""}`;
+  // 순차 서명에서 내 차례가 아니면 서명 폼 대신 안내
+  if (!myTurn) {
+    const wbody = `<section class="section page-top"><div class="container narrow">
+      <a href="${base}/sign" class="back-link">← 서명 목록</a>
+      <h1 class="article-title">${esc(d.title)}</h1>
+      <p>${metaBar}</p>
+      <div class="doc-body">${docBody(d.body)}</div>
+      <div class="flash flash-warn">이 문서는 <b>순차 서명</b> 방식입니다. 앞 순번의 서명이 완료되면 서명하실 수 있습니다. 차례가 되면 대시보드·서명 목록에 표시됩니다.</div>
+    </div></section>`;
+    return html(res, layout({ title: `서명: ${d.title}`, user: req.user, assoc, base, body: wbody }));
+  }
 
   const body = `<section class="section page-top"><div class="container narrow">
     <a href="${base}/sign" class="back-link">← 서명 목록</a>
     <h1 class="article-title">${esc(d.title)}</h1>
+    ${metaBar ? `<p>${metaBar}</p>` : ""}
     <div class="doc-body">${docBody(d.body)}</div>
     <p class="doc-hash">문서 해시(SHA-256): <code>${esc(d.content_hash)}</code></p>
     ${flash(query.get("err") ? decodeURIComponent(query.get("msg") || "입력을 확인하세요.") : "", "err")}
@@ -925,12 +981,15 @@ export function signForm(req, res, { assoc, params, query }) {
 // 관리자: 문서 목록 + 생성
 export function adminDocuments(req, res, { assoc, query }) {
   const base = baseOf(assoc);
+  const todayStr = new Date().toISOString().slice(0, 10);
   const docs = M.listDocuments(assoc.id);
   const rows = docs.length
     ? docs.map((d) => `<tr>
-        <td><a href="${base}/admin/documents/${d.id}">${esc(d.title)}</a><br /><small>${esc(d.created_at.slice(0, 16).replace("T", " "))}</small></td>
+        <td><a href="${base}/admin/documents/${d.id}">${esc(d.title)}</a>
+          ${d.ordered ? '<span class="badge badge-info">순차</span>' : ""}${d.due_date ? `<span class="badge ${d.due_date < todayStr ? "badge-no" : "badge-wait"}">기한 ${esc(d.due_date)}</span>` : ""}
+          <br /><small>${esc(d.created_at.slice(0, 16).replace("T", " "))}</small></td>
         <td>${d.sign_count}명</td>
-        <td>${d.closed ? '<span class="badge badge-no">마감</span>' : '<span class="badge badge-ok">진행중</span>'}</td>
+        <td>${d.closed ? '<span class="badge badge-no">마감</span>' : (d.due_date && d.due_date < todayStr ? '<span class="badge badge-no">기한종료</span>' : '<span class="badge badge-ok">진행중</span>')}</td>
         <td class="actions-cell">
           <a class="btn btn-xs btn-ghost" href="${base}/admin/documents/${d.id}">서명 보기</a>
           ${d.closed ? "" : `<form method="post" action="${base}/admin/documents/${d.id}/close" data-confirm="더 이상 서명을 받지 않도록 마감할까요?"><button class="btn btn-xs btn-ghost">마감</button></form>`}
@@ -952,10 +1011,15 @@ export function adminDocuments(req, res, { assoc, query }) {
       <form method="post" action="${base}/admin/documents" class="stack-form">
         <label>제목<input type="text" name="title" required placeholder="예: 2026년도 상인회 가입 동의서" /></label>
         <label>본문(약관·동의 내용)<textarea name="body" rows="10" required placeholder="동의 내용을 입력하세요."></textarea></label>
+        <div class="form-two">
+          <label>서명 기한 (선택)<input type="date" name="due_date" /></label>
+          <label class="check check-inline"><input type="checkbox" name="ordered" value="1" /> 순차 서명 (지정 순서대로만 서명 가능)</label>
+        </div>
         <div class="form-divider">서명 대상 (다자 서명)</div>
         <label class="check"><input type="radio" name="target" value="all" checked /> 전체 회원에게 요청</label>
         <label class="check"><input type="radio" name="target" value="select" /> 특정 회원 지정</label>
         <div class="member-picker">${memberChecks}</div>
+        <p class="panel-hint">순차 서명 시 위 목록에 나타난 순서(위 → 아래)대로 순번이 정해지며, 앞 순번이 서명해야 다음 순번이 서명할 수 있습니다.</p>
         <button class="btn btn-primary">문서 생성 및 서명 요청</button>
       </form>
     </section>
@@ -991,16 +1055,19 @@ export function adminDocumentDetail(req, res, { assoc, params, query }) {
   const rc = M.requestCounts(d.id);
   const reqStatus = M.listRequestStatus(d.id);
   const pct = rc.total ? Math.round((rc.signed / rc.total) * 100) : 0;
+  // 순차 서명: 다음 차례(가장 낮은 순번의 미서명자)
+  const nextTurn = d.ordered ? reqStatus.find((u) => !u.signed) : null;
   const reqPanel = rc.total
-    ? `<section class="panel"><h2 class="panel-title">서명 완료 현황 <span class="badge ${rc.signed === rc.total ? "badge-ok" : "badge-wait"}">${rc.signed}/${rc.total}명 (${pct}%)</span></h2>
+    ? `<section class="panel"><h2 class="panel-title">서명 완료 현황 <span class="badge ${rc.signed === rc.total ? "badge-ok" : "badge-wait"}">${rc.signed}/${rc.total}명 (${pct}%)</span>${d.ordered ? ' <span class="badge badge-info">순차 서명</span>' : ""}</h2>
         <div class="progress"><span style="width:${pct}%"></span></div>
-        <ul class="req-list">${reqStatus.map((u) => `<li><span class="req-name">${esc(u.name)}</span> <small>${esc(u.email)}</small> ${u.signed ? '<span class="badge badge-ok">서명 완료</span>' : '<span class="badge badge-wait">미서명</span>'}</li>`).join("")}</ul>
+        <ul class="req-list">${reqStatus.map((u) => `<li>${d.ordered ? `<span class="req-order">${u.sign_order}</span>` : ""}<span class="req-name">${esc(u.name)}</span> <small>${esc(u.email)}</small> ${u.signed ? '<span class="badge badge-ok">서명 완료</span>' : (d.ordered ? (nextTurn && nextTurn.id === u.id ? '<span class="badge badge-wait">서명 차례</span>' : '<span class="badge badge-muted">대기</span>') : '<span class="badge badge-wait">미서명</span>')}</li>`).join("")}</ul>
+        ${d.ordered && nextTurn ? `<p class="panel-hint">현재 <b>${esc(nextTurn.name)}</b>님의 서명 차례입니다.</p>` : ""}
       </section>`
     : `<section class="panel"><p class="panel-hint">이 문서는 특정 대상 지정 없이 전체 공개로 생성되었습니다(누구나 서명 가능).</p></section>`;
 
   const body = `<section class="dash"><div class="container">
     <div class="dash-head"><div><p class="section-eyebrow">E-SIGN</p>
-      <h1 class="dash-title">${esc(d.title)} ${d.closed ? '<span class="badge badge-no">마감</span>' : ""}</h1>
+      <h1 class="dash-title">${esc(d.title)} ${d.closed ? '<span class="badge badge-no">마감</span>' : ""}${d.ordered ? ' <span class="badge badge-info">순차</span>' : ""}${d.due_date ? `<span class="badge ${M.isPastDue(d) ? "badge-no" : "badge-wait"}">기한 ${esc(d.due_date)}</span>` : ""}</h1>
       <p class="dash-sub"><a href="${base}/admin/documents">← 문서 목록</a> · 서명 ${sigs.length}명</p></div></div>
     ${reqPanel}
     <section class="panel"><h2 class="panel-title">문서 본문</h2>

@@ -68,6 +68,7 @@ CREATE TABLE IF NOT EXISTS media (
   kind          TEXT NOT NULL,
   filename      TEXT NOT NULL,
   poster        TEXT NOT NULL DEFAULT '',              -- 영상 포스터(썸네일) 스토리지 키
+  thumb         TEXT NOT NULL DEFAULT '',              -- 이미지 축소 썸네일(목록·그리드용) 스토리지 키
   original_name TEXT NOT NULL DEFAULT '',
   caption       TEXT NOT NULL DEFAULT '',
   size          INTEGER NOT NULL DEFAULT 0,
@@ -112,7 +113,9 @@ CREATE TABLE IF NOT EXISTS posts (
   author_id      INTEGER REFERENCES users(id) ON DELETE SET NULL,
   title          TEXT NOT NULL,
   body           TEXT NOT NULL DEFAULT '',
+  image          TEXT NOT NULL DEFAULT '',              -- 첨부 이미지(스토리지 키)
   pinned         INTEGER NOT NULL DEFAULT 0,
+  updated_at     TEXT NOT NULL DEFAULT '',              -- 수정 시각(빈 값=미수정)
   created_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -136,6 +139,8 @@ CREATE TABLE IF NOT EXISTS documents (
   body           TEXT NOT NULL,                         -- 서명 대상 본문(약관/동의 내용). 생성 후 불변.
   content_hash   TEXT NOT NULL,                         -- sha256(body) — 서명 대상 고정 해시
   created_by     INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  ordered        INTEGER NOT NULL DEFAULT 0,            -- 1이면 순차(지정 순서대로) 서명
+  due_date       TEXT NOT NULL DEFAULT '',              -- 서명 기한(YYYY-MM-DD). 빈 값=무기한
   closed         INTEGER NOT NULL DEFAULT 0,
   created_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -161,6 +166,7 @@ CREATE TABLE IF NOT EXISTS signature_requests (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
   user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  sign_order  INTEGER NOT NULL DEFAULT 0,               -- 순차 서명 순번(1부터). 지정 순서.
   created_at  TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE (document_id, user_id)
 );
@@ -202,6 +208,12 @@ function columnExists(table, col) {
   if (!columnExists("associations", "map_lng")) db.exec("ALTER TABLE associations ADD COLUMN map_lng REAL NOT NULL DEFAULT 127.0324");
   if (!columnExists("associations", "map_zoom")) db.exec("ALTER TABLE associations ADD COLUMN map_zoom INTEGER NOT NULL DEFAULT 14");
   if (!columnExists("notices", "image")) db.exec("ALTER TABLE notices ADD COLUMN image TEXT NOT NULL DEFAULT ''");
+  if (!columnExists("media", "thumb")) db.exec("ALTER TABLE media ADD COLUMN thumb TEXT NOT NULL DEFAULT ''");
+  if (!columnExists("posts", "image")) db.exec("ALTER TABLE posts ADD COLUMN image TEXT NOT NULL DEFAULT ''");
+  if (!columnExists("posts", "updated_at")) db.exec("ALTER TABLE posts ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''");
+  if (!columnExists("documents", "ordered")) db.exec("ALTER TABLE documents ADD COLUMN ordered INTEGER NOT NULL DEFAULT 0");
+  if (!columnExists("documents", "due_date")) db.exec("ALTER TABLE documents ADD COLUMN due_date TEXT NOT NULL DEFAULT ''");
+  if (!columnExists("signature_requests", "sign_order")) db.exec("ALTER TABLE signature_requests ADD COLUMN sign_order INTEGER NOT NULL DEFAULT 0");
 })();
 
 (function migrate() {

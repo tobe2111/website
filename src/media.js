@@ -65,7 +65,38 @@ export async function processVideo(buffer, contentType) {
   return { buffer: outBuffer, contentType: outType, poster };
 }
 
+// 이미지 썸네일 생성 → { thumb: Buffer|null, thumbType }
+// ffmpeg 로 긴 변을 최대 600px 로 축소. 없으면 null(원본 사용). 애니메이션 GIF 는 원본 유지.
+export async function processImage(buffer, contentType) {
+  if (!hasFfmpeg || contentType === "image/gif") return { thumb: null, thumbType: "" };
+  const isPng = contentType === "image/png"; // 투명도 보존 위해 PNG 는 PNG 로 출력
+  const inPath = tmp(extForType(contentType) || ".img");
+  const outPath = tmp(isPng ? ".png" : ".jpg");
+  await fsp.writeFile(inPath, buffer);
+  let thumb = null, thumbType = "";
+  try {
+    const scale = "scale='min(600,iw)':-2";
+    const args = isPng
+      ? ["-i", inPath, "-vf", scale, "-y", outPath]
+      : ["-i", inPath, "-vf", scale, "-q:v", "4", "-y", outPath];
+    const code = await run("ffmpeg", args);
+    if (code === 0) {
+      try {
+        const out = await fsp.readFile(outPath);
+        // 축소본이 원본보다 실제로 작을 때만 채택(작은 이미지는 원본 사용)
+        if (out.length > 0 && out.length < buffer.length) {
+          thumb = out; thumbType = isPng ? "image/png" : "image/jpeg";
+        }
+      } catch {}
+    }
+  } finally {
+    await fsp.rm(inPath, { force: true }).catch(() => {});
+    await fsp.rm(outPath, { force: true }).catch(() => {});
+  }
+  return { thumb, thumbType };
+}
+
 export function info() {
-  if (!hasFfmpeg) return "ffmpeg 없음(원본 통과)";
-  return `ffmpeg 있음(transcode=${config.mediaTranscode}, poster=${config.mediaPoster})`;
+  if (!hasFfmpeg) return "ffmpeg 없음(원본 통과, 썸네일 미생성)";
+  return `ffmpeg 있음(transcode=${config.mediaTranscode}, poster=${config.mediaPoster}, 이미지 썸네일 자동)`;
 }

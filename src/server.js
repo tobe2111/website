@@ -62,6 +62,8 @@ const tenantRoutes = [
   mk("GET", "/board", pages.board, "MEMBER"),
   mk("POST", "/board", api.createPost, "MEMBER"),
   mk("GET", "/board/:id", pages.postDetail, "MEMBER"),
+  mk("GET", "/board/:id/edit", pages.editPost, "MEMBER"),
+  mk("POST", "/board/:id/edit", api.updatePost, "MEMBER"),
   mk("POST", "/board/:id/comment", api.createComment, "MEMBER"),
   mk("POST", "/board/:id/comment/:cid/delete", api.deleteComment, "MEMBER"),
   mk("POST", "/board/:id/delete", api.deletePost, "MEMBER"),
