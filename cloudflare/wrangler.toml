@@ -1,0 +1,33 @@
+# Cloudflare Workers 설정 — 서초구 상인회 플랫폼 (무료 티어로 배포 가능)
+# 배포 전:  wrangler d1 create seocho-db   /   wrangler r2 bucket create seocho-media
+# 그 뒤 아래 database_id 를 채우고:  wrangler deploy
+name = "seocho-website"
+main = "src/index.js"
+compatibility_date = "2024-11-01"
+compatibility_flags = ["nodejs_compat"]
+
+# 정적 자산(css/js) — Workers 에 함께 배포되어 자동 서빙
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+# D1 (SQLite) — 무료 티어: 5GB, 하루 5백만 읽기
+[[d1_databases]]
+binding = "DB"
+database_name = "seocho-db"
+database_id = "여기에-wrangler-d1-create-로-받은-id"
+
+# R2 (오브젝트 스토리지, 사진) — 무료 티어: 10GB 저장, 전송(egress) 무료
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "seocho-media"
+
+# 공개 시크릿은 `wrangler secret put` 으로 등록 (SESSION_SECRET 등).
+# 일반 설정값:
+[vars]
+PUBLIC_SCHEME = "https"
+# BASE_DOMAIN = "example.com"        # 서브도메인 방식 쓸 때
+# NAVER_MAP_CLIENT_ID = ""            # 지도 키(공개 도메인 화이트리스트로 보호)
+# NAVER_MAP_PARAM = "ncpClientId"
+# R2 퍼블릭 URL(사진 공개 접근). R2 버킷에 공개 도메인 연결 후 넣으세요.
+# MEDIA_PUBLIC_BASE = "https://media.example.com"
