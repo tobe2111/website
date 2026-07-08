@@ -10,6 +10,8 @@
       kind: t.getAttribute("data-kind"),
       poster: t.getAttribute("data-poster") || "",
       caption: t.getAttribute("data-caption") || "",
+      embedSrc: t.getAttribute("data-embed-src") || "",
+      vertical: t.getAttribute("data-vertical") === "1",
     };
   });
 
@@ -34,7 +36,7 @@
   function clearStage() {
     var v = stage.querySelector("video");
     if (v) { try { v.pause(); } catch (e) {} v.removeAttribute("src"); v.load && v.load(); }
-    stage.innerHTML = "";
+    stage.innerHTML = ""; // iframe 포함 모든 자식 제거 → 임베드 재생 중단
   }
 
   function render() {
@@ -42,6 +44,24 @@
     stage.classList.remove("portrait", "landscape");
     var it = items[idx];
     var el;
+    if (it.kind === "embed") {
+      // 외부 영상 임베드(유튜브/인스타/네이버TV) — 신뢰 도메인 iframe
+      el = document.createElement("iframe");
+      el.src = it.embedSrc;
+      el.setAttribute("allow", "autoplay; encrypted-media; picture-in-picture; fullscreen");
+      el.setAttribute("allowfullscreen", "");
+      el.setAttribute("title", it.caption || "영상");
+      el.className = "viewer-embed";
+      stage.classList.add(it.vertical ? "portrait" : "landscape");
+      stage.appendChild(el);
+      capEl.textContent = it.caption || "";
+      capEl.style.display = it.caption ? "" : "none";
+      countEl.textContent = (idx + 1) + " / " + items.length;
+      var m2 = items.length > 1;
+      overlay.querySelector(".viewer-prev").style.display = m2 ? "" : "none";
+      overlay.querySelector(".viewer-next").style.display = m2 ? "" : "none";
+      return;
+    }
     if (it.kind === "video") {
       el = document.createElement("video");
       el.src = it.src;

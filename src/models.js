@@ -129,13 +129,17 @@ export function listMedia(businessId) {
 export function getCoverImage(businessId) {
   return db.prepare("SELECT filename, thumb FROM media WHERE business_id = ? AND kind = 'image' ORDER BY created_at DESC LIMIT 1").get(businessId);
 }
-export function addMedia({ businessId, kind, filename, poster = "", thumb = "", originalName, size, caption = "" }) {
+export function addMedia({ businessId, kind, filename = "", poster = "", thumb = "", provider = "", embedId = "", originalName = "", size = 0, caption = "" }) {
   const info = db
     .prepare(
-      "INSERT INTO media (business_id, kind, filename, poster, thumb, original_name, size, caption) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO media (business_id, kind, filename, poster, thumb, provider, embed_id, original_name, size, caption) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
-    .run(businessId, kind, filename, poster, thumb, originalName, size, caption);
+    .run(businessId, kind, filename, poster, thumb, provider, embedId, originalName, size, caption);
   return db.prepare("SELECT * FROM media WHERE id = ?").get(info.lastInsertRowid);
+}
+// 업체당 임베드 영상 개수 (개수 제한용)
+export function countEmbeds(businessId) {
+  return db.prepare("SELECT COUNT(*) AS n FROM media WHERE business_id = ? AND kind = 'embed'").get(businessId).n;
 }
 export function getMedia(id) {
   return db.prepare("SELECT * FROM media WHERE id = ?").get(id);

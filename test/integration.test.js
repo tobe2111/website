@@ -173,6 +173,39 @@ test("회원 게시판: 비회원 차단, 회원 글·댓글 작성", async () =
   assert.match(withComment, /테스트 댓글입니다/);
 });
 
+test("영상 임베드: 유튜브 링크 추가 + 잘못된 링크 거부 + 상세 렌더", async () => {
+  const { jar } = await loginAs("jung@ex.kr", "merchant1234");
+  // 유튜브 링크 추가
+  let r = await fetch(`${BASE}/t/seocho/dashboard/media/embed`, {
+    method: "POST", redirect: "manual",
+    headers: { "content-type": "application/x-www-form-urlencoded", cookie: cookieHeader(jar) },
+    body: new URLSearchParams({ _csrf: jar.sc_csrf, url: "https://youtu.be/dQw4w9WgXcQ", caption: "소개영상" }),
+  });
+  assert.equal(r.status, 303);
+  assert.doesNotMatch(new URL(r.headers.get("location"), BASE).search, /err=1/);
+
+  // 지원하지 않는 링크 거부
+  r = await fetch(`${BASE}/t/seocho/dashboard/media/embed`, {
+    method: "POST", redirect: "manual",
+    headers: { "content-type": "application/x-www-form-urlencoded", cookie: cookieHeader(jar) },
+    body: new URLSearchParams({ _csrf: jar.sc_csrf, url: "https://vimeo.com/123" }),
+  });
+  assert.match(new URL(r.headers.get("location"), BASE).search, /err=1/);
+
+  // 업체 상세(소유자 조회)에서 임베드 iframe src 노출
+  const detail = await (await fetch(`${BASE}/t/seocho/business/${encodeURIComponent("서초정육점")}`, { headers: { cookie: cookieHeader(jar) } })).text();
+  assert.match(detail, /data-kind="embed"/);
+  assert.match(detail, /youtube-nocookie\.com\/embed\/dQw4w9WgXcQ/);
+});
+
+test("영상 임베드: CSP frame-src 로 유튜브·인스타·네이버TV 허용", async () => {
+  const r = await fetch(`${BASE}/t/seocho`);
+  const csp = r.headers.get("content-security-policy") || "";
+  assert.match(csp, /frame-src[^;]*youtube-nocookie\.com/);
+  assert.match(csp, /frame-src[^;]*instagram\.com/);
+  assert.match(csp, /frame-src[^;]*tv\.naver\.com/);
+});
+
 test("점포 지도: 페이지 렌더 + 좌표 저장 후 마커 데이터 노출", async () => {
   // 지도 페이지 접근
   let r = await fetch(`${BASE}/t/seocho/map`);

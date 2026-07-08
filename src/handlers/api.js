@@ -7,6 +7,7 @@ import * as csrf from "../csrf.js";
 import * as mailer from "../mailer.js";
 import { sniff } from "../filetype.js";
 import { contentHash, sealRecord, newVerifyCode } from "../esign.js";
+import { parseEmbed } from "../embed.js";
 import * as M from "../models.js";
 import * as A from "../associations.js";
 import * as storage from "../storage.js";
@@ -260,8 +261,8 @@ export async function uploadMedia(req, res, { assoc }) {
 
 async function doUpload(req, res, { assoc, base, b }) {
   let buf;
-  try { buf = await readBody(req, config.maxVideoBytes + 1024 * 1024); }
-  catch { return back(res, base + "/dashboard", "파일이 너무 큽니다. (영상 최대 120MB)", true); }
+  try { buf = await readBody(req, config.maxImageBytes * 12 + 512 * 1024); }
+  catch { return back(res, base + "/dashboard", "이미지가 너무 많거나 큽니다. (이미지 최대 8MB)", true); }
   let parsed;
   try { parsed = parseMultipart(buf, req.headers["content-type"] || ""); }
   catch { return back(res, base + "/dashboard", "업로드 형식이 올바르지 않습니다.", true); }
@@ -280,21 +281,14 @@ async function doUpload(req, res, { assoc, base, b }) {
     const real = sniff(file.data);
     const isImage = real && config.allowedImageTypes.includes(real);
     const isVideo = real && config.allowedVideoTypes.includes(real);
-    if (!isImage && !isVideo) { errs.push(`${file.filename}: 지원하지 않는 형식`); continue; }
-    if (file.data.length > (isVideo ? config.maxVideoBytes : config.maxImageBytes)) { errs.push(`${file.filename}: 용량 초과`); continue; }
-    if (isVideo) {
-      const processed = await media.processVideo(file.data, real);
-      const filename = await storage.save(processed.buffer, processed.contentType);
-      let posterKey = "";
-      if (processed.poster) posterKey = await storage.save(processed.poster, "image/jpeg");
-      M.addMedia({ businessId: b.id, kind: "video", filename, poster: posterKey, originalName: file.filename, size: processed.buffer.length, caption });
-    } else {
-      const filename = await storage.save(file.data, real);
-      let thumbKey = "";
-      const pr = await media.processImage(file.data, real);
-      if (pr.thumb) thumbKey = await storage.save(pr.thumb, pr.thumbType);
-      M.addMedia({ businessId: b.id, kind: "image", filename, thumb: thumbKey, originalName: file.filename, size: file.data.length, caption });
-    }
+    if (isVideo) { errs.push(`${file.filename}: 영상은 직접 업로드 대신 링크(유튜브·인스타·네이버TV)로 추가해 주세요`); continue; }
+    if (!isImage) { errs.push(`${file.filename}: 지원하지 않는 형식`); continue; }
+    if (file.data.length > config.maxImageBytes) { errs.push(`${file.filename}: 용량 초과(최대 8MB)`); continue; }
+    const filename = await storage.save(file.data, real);
+    let thumbKey = "";
+    const pr = await media.processImage(file.data, real);
+    if (pr.thumb) thumbKey = await storage.save(pr.thumb, pr.thumbType);
+    M.addMedia({ businessId: b.id, kind: "image", filename, thumb: thumbKey, originalName: file.filename, size: file.data.length, caption });
     ok++;
   }
   back(res, base + "/dashboard", `${ok}개 업로드 완료.` + (errs.length ? ` 실패: ${errs.join(", ")}` : ""), errs.length > 0 && ok === 0);
@@ -307,11 +301,31 @@ export async function deleteMedia(req, res, { assoc, params }) {
   const b = M.getBusinessByOwner(req.user.id);
   const m = M.getMedia(Number(params.id));
   if (!b || !m || m.business_id !== b.id) return back(res, base + "/dashboard", "삭제할 수 없습니다.", true);
+  // 임베드는 저장 파일이 없음(링크만) → storage.remove 는 빈 값에서 즉시 반환
   await storage.remove(m.filename);
   if (m.poster) await storage.remove(m.poster);
   if (m.thumb) await storage.remove(m.thumb);
   M.deleteMedia(m.id);
   back(res, base + "/dashboard", "삭제되었습니다.");
+}
+
+// ---------- 영상 링크(임베드) 추가 — 유튜브/인스타/네이버TV ----------
+export async function addVideoEmbed(req, res, { assoc }) {
+  const base = baseOf(assoc);
+  const b = M.getBusinessByOwner(req.user.id);
+  if (!b || b.association_id !== assoc.id) return back(res, base + "/dashboard", "업체를 찾을 수 없습니다.", true);
+  const f = await readForm(req, res, 8 * 1024);
+  if (!f) return;
+  if (M.countEmbeds(b.id) >= config.maxEmbedsPerBusiness)
+    return back(res, base + "/dashboard", `영상 링크는 업체당 최대 ${config.maxEmbedsPerBusiness}개까지 추가할 수 있습니다.`, true);
+  const parsed = parseEmbed(f.url || "");
+  if (!parsed)
+    return back(res, base + "/dashboard", "지원하는 영상 링크가 아닙니다. 유튜브·유튜브 쇼츠·인스타그램 릴스·네이버TV 주소를 붙여넣어 주세요.", true);
+  M.addMedia({
+    businessId: b.id, kind: "embed", provider: parsed.provider, embedId: parsed.id,
+    caption: cap((f.caption || "").trim(), 200),
+  });
+  back(res, base + "/dashboard", "영상 링크를 추가했습니다.");
 }
 
 // ---------- 관리자: 업체 상태 ----------

@@ -8,6 +8,7 @@ import * as storage from "../storage.js";
 import { parseLayout, defaultLayout, SECTION_CATALOG, renderHome } from "../homeLayout.js";
 import { config } from "../config.js";
 import { verifySignature, algorithm, publicKeyPem, canonicalFromSig } from "../esign.js";
+import { embedSrc, embedThumb, providerLabel, isVertical } from "../embed.js";
 
 // 테넌트의 절대/상대 베이스 URL (서브도메인 모드 지원). 호스트 간 이동(로그인 후 리다이렉트)에 사용.
 export function tenantBase(assoc, req) {
@@ -44,9 +45,20 @@ function mediaThumb(m) {
 
 // 뷰어(라이트박스)로 열리는 클릭 가능한 갤러리 타일. 세로/가로 자동 대응.
 function galleryItem(m, { showCaption = true } = {}) {
+  const cap = esc(m.caption || "");
+  // 외부 영상 임베드(유튜브/인스타/네이버TV) — 클릭 시 뷰어에서 iframe 재생
+  if (m.kind === "embed") {
+    const label = providerLabel(m.provider);
+    const thumb = embedThumb(m.provider, m.embed_id);
+    const src = embedSrc(m.provider, m.embed_id);
+    const face = thumb
+      ? `<img src="${esc(thumb)}" alt="${cap || esc(label) + " 영상"}" loading="lazy" />`
+      : `<span class="embed-face embed-${esc(m.provider)}">${esc(label)}</span>`;
+    return `<button type="button" class="gallery-item is-video is-embed" data-kind="embed" data-embed-src="${esc(src)}" data-provider="${esc(m.provider)}" data-vertical="${isVertical(m.provider) ? "1" : "0"}" data-caption="${cap}" aria-label="${cap || esc(label) + " 영상 보기"}">
+      ${face}<span class="play-badge" aria-hidden="true">▶</span><span class="embed-badge">${esc(label)}</span>${showCaption && cap ? `<figcaption>${cap}</figcaption>` : ""}</button>`;
+  }
   const url = storage.publicUrl(m.filename);
   const posterUrl = m.poster ? storage.publicUrl(m.poster) : "";
-  const cap = esc(m.caption || "");
   let inner;
   if (m.kind === "video") {
     const thumb = posterUrl
@@ -236,7 +248,7 @@ export function businessDetail(req, res, { assoc, params }) {
   if (!canSee) return notFound(req, res, { assoc });
   const media = M.listMedia(b.id);
   const images = media.filter((m) => m.kind === "image");
-  const videos = media.filter((m) => m.kind === "video");
+  const videos = media.filter((m) => m.kind === "video" || m.kind === "embed");
   const hue = hueFor(b.category + b.name);
   const gallery = (items) => items.length
     ? `<div class="gallery">${items.map(galleryItem).join("")}</div>` : "";
@@ -557,7 +569,7 @@ export function dashboard(req, res, { assoc, query }) {
   const opts = CATEGORIES.map((c) => `<option value="${esc(c)}"${c === b.category ? " selected" : ""}>${esc(c)}</option>`).join("");
   const mediaGrid = media.length
     ? media.map((m) => `<figure class="media-tile">${galleryItem(m, { showCaption: false })}<figcaption>
-        <span class="media-kind">${m.kind === "video" ? "🎬 영상" : "🖼 사진"}</span>
+        <span class="media-kind">${m.kind === "image" ? "🖼 사진" : (m.kind === "embed" ? "🎬 " + esc(providerLabel(m.provider)) : "🎬 영상")}</span>
         <form method="post" action="${base}/dashboard/media/${m.id}/delete" data-confirm="삭제하시겠습니까?"><button class="link-danger" type="submit">삭제</button></form>
       </figcaption></figure>`).join("")
     : `<p class="empty">아직 업로드한 사진·영상이 없습니다.</p>`;
@@ -592,15 +604,22 @@ export function dashboard(req, res, { assoc, query }) {
           </div>
           <button type="submit" class="btn btn-primary">정보 저장</button>
         </form></section>
-      <section class="panel"><h2 class="panel-title">사진·영상 업로드</h2>
+      <section class="panel"><h2 class="panel-title">사진 업로드</h2>
         <form method="post" action="${base}/dashboard/media" enctype="multipart/form-data" class="upload-form" id="uploadForm">
           <label class="file-drop" id="fileDrop">
-            <input type="file" name="files" id="fileInput" accept="image/*,video/*" multiple />
-            <span class="file-drop-text">📁 클릭하거나 파일을 끌어다 놓으세요<br /><small>이미지 최대 8MB · 영상 최대 120MB</small></span>
+            <input type="file" name="files" id="fileInput" accept="image/*" multiple />
+            <span class="file-drop-text">📁 클릭하거나 사진을 끌어다 놓으세요<br /><small>이미지(JPG·PNG·WebP·GIF) 최대 8MB</small></span>
           </label>
           <input type="text" name="caption" placeholder="설명 (선택)" class="caption-input" />
           <div id="fileList" class="file-list"></div>
           <button type="submit" class="btn btn-primary btn-block" id="uploadBtn">업로드</button>
+        </form>
+        <h3 class="panel-subtitle">🎬 영상 링크 추가</h3>
+        <p class="panel-hint">영상은 <b>유튜브·유튜브 쇼츠·인스타그램 릴스·네이버TV</b>에 올린 뒤 <b>주소만 붙여넣으세요.</b> (직접 업로드보다 빠르고 비용이 들지 않습니다) · 업체당 ${config.maxEmbedsPerBusiness}개까지</p>
+        <form method="post" action="${base}/dashboard/media/embed" class="stack-form compact">
+          <input type="url" name="url" placeholder="https://youtu.be/... 또는 인스타 릴스·네이버TV 주소" required />
+          <input type="text" name="caption" placeholder="설명 (선택)" maxlength="200" />
+          <button type="submit" class="btn btn-primary btn-sm">영상 링크 추가</button>
         </form>
         <h3 class="panel-subtitle">등록된 미디어 (${media.length})</h3>
         <div class="media-grid">${mediaGrid}</div></section>

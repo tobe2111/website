@@ -65,10 +65,12 @@ CREATE TABLE IF NOT EXISTS businesses (
 CREATE TABLE IF NOT EXISTS media (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   business_id   INTEGER NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
-  kind          TEXT NOT NULL,
-  filename      TEXT NOT NULL,
+  kind          TEXT NOT NULL,                         -- 'image' | 'video'(레거시) | 'embed'(외부 영상 링크)
+  filename      TEXT NOT NULL DEFAULT '',
   poster        TEXT NOT NULL DEFAULT '',              -- 영상 포스터(썸네일) 스토리지 키
   thumb         TEXT NOT NULL DEFAULT '',              -- 이미지 축소 썸네일(목록·그리드용) 스토리지 키
+  provider      TEXT NOT NULL DEFAULT '',              -- 임베드 제공자(youtube|instagram|navertv)
+  embed_id      TEXT NOT NULL DEFAULT '',              -- 임베드 영상 식별자(ID/shortcode)
   original_name TEXT NOT NULL DEFAULT '',
   caption       TEXT NOT NULL DEFAULT '',
   size          INTEGER NOT NULL DEFAULT 0,
@@ -209,6 +211,8 @@ function columnExists(table, col) {
   if (!columnExists("associations", "map_zoom")) db.exec("ALTER TABLE associations ADD COLUMN map_zoom INTEGER NOT NULL DEFAULT 14");
   if (!columnExists("notices", "image")) db.exec("ALTER TABLE notices ADD COLUMN image TEXT NOT NULL DEFAULT ''");
   if (!columnExists("media", "thumb")) db.exec("ALTER TABLE media ADD COLUMN thumb TEXT NOT NULL DEFAULT ''");
+  if (!columnExists("media", "provider")) db.exec("ALTER TABLE media ADD COLUMN provider TEXT NOT NULL DEFAULT ''");
+  if (!columnExists("media", "embed_id")) db.exec("ALTER TABLE media ADD COLUMN embed_id TEXT NOT NULL DEFAULT ''");
   if (!columnExists("posts", "image")) db.exec("ALTER TABLE posts ADD COLUMN image TEXT NOT NULL DEFAULT ''");
   if (!columnExists("posts", "updated_at")) db.exec("ALTER TABLE posts ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''");
   if (!columnExists("documents", "ordered")) db.exec("ALTER TABLE documents ADD COLUMN ordered INTEGER NOT NULL DEFAULT 0");

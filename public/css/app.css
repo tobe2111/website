@@ -167,6 +167,14 @@ img,video{max-width:100%;display:block}
 .gallery-item .play-badge{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:56px;height:56px;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;display:grid;place-items:center;font-size:1.3rem;padding-left:4px;pointer-events:none;transition:background .2s}
 .gallery-item.is-video:hover .play-badge{background:var(--green-600)}
 .gallery-item.is-video::before{content:"🎬 영상";position:absolute;top:8px;left:8px;z-index:1;font-size:.72rem;font-weight:700;color:#fff;background:rgba(0,0,0,.5);padding:3px 9px;border-radius:999px}
+/* 임베드 영상 타일 */
+.gallery-item.is-embed::before{display:none} /* 제공자 배지로 대체 */
+.embed-badge{position:absolute;top:8px;left:8px;z-index:1;font-size:.72rem;font-weight:700;color:#fff;background:rgba(0,0,0,.55);padding:3px 9px;border-radius:999px}
+.embed-face{display:flex;align-items:center;justify-content:center;width:100%;aspect-ratio:4/3;color:#fff;font-weight:800;font-size:1.05rem;letter-spacing:.02em;background:#333}
+.embed-face.embed-instagram{background:linear-gradient(45deg,#feda75,#d62976,#4f5bd5)}
+.embed-face.embed-navertv{background:linear-gradient(135deg,#03c75a,#029a46)}
+.embed-face.embed-youtube{background:linear-gradient(135deg,#ff4e45,#c4302b)}
+.media-tile .embed-face{aspect-ratio:1}
 
 /* ---------- Media viewer (lightbox / reels) ---------- */
 .viewer{position:fixed;inset:0;z-index:1000;display:none;align-items:center;justify-content:center;background:rgba(8,12,10,.94);backdrop-filter:blur(4px)}
@@ -174,6 +182,9 @@ img,video{max-width:100%;display:block}
 .viewer-stage{display:flex;align-items:center;justify-content:center;max-width:94vw;max-height:88vh}
 .viewer-stage img,.viewer-stage video{max-width:min(94vw,1100px);max-height:88vh;width:auto;height:auto;object-fit:contain;border-radius:10px;background:#000;box-shadow:0 20px 60px rgba(0,0,0,.5)}
 .viewer-stage.portrait video,.viewer-stage.portrait img{max-height:88vh;max-width:min(94vw,calc(88vh*9/16))}
+/* 임베드 iframe: 가로(16:9)·세로(9:16) */
+.viewer-embed{border:0;border-radius:10px;background:#000;box-shadow:0 20px 60px rgba(0,0,0,.5);width:min(94vw,900px);height:min(88vh,calc(min(94vw,900px)*9/16))}
+.viewer-stage.portrait .viewer-embed{height:88vh;width:min(94vw,calc(88vh*9/16))}
 .viewer-close{position:absolute;top:18px;right:20px;width:46px;height:46px;border-radius:50%;border:none;background:rgba(255,255,255,.12);color:#fff;font-size:1.3rem;cursor:pointer;z-index:2;transition:background .2s}
 .viewer-close:hover{background:rgba(255,255,255,.25)}
 .viewer-nav{position:absolute;top:50%;transform:translateY(-50%);width:52px;height:52px;border-radius:50%;border:none;background:rgba(255,255,255,.12);color:#fff;font-size:2rem;line-height:1;cursor:pointer;z-index:2;transition:background .2s}

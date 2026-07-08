@@ -71,6 +71,7 @@ const tenantRoutes = [
   mk("GET", "/dashboard", pages.dashboard, "MERCHANT"),
   mk("POST", "/dashboard/business", api.updateBusiness, "MERCHANT"),
   mk("POST", "/dashboard/media", api.uploadMedia, "MERCHANT"),
+  mk("POST", "/dashboard/media/embed", api.addVideoEmbed, "MERCHANT"),
   mk("POST", "/dashboard/media/:id/delete", api.deleteMedia, "MERCHANT"),
   mk("GET", "/sign", pages.signList, "MERCHANT"),
   mk("GET", "/sign/:id", pages.signForm, "MERCHANT"),
@@ -172,8 +173,10 @@ const CSP = [
   "form-action 'self'",
   `script-src 'self'${NAVER_SCRIPT}`,
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: https:", // https: 로 네이버 타일(pstatic.net) 포함
+  "img-src 'self' data: https:", // https: 로 네이버 타일(pstatic.net)·유튜브 썸네일(i.ytimg.com) 포함
   "media-src 'self' https:",
+  // 외부 영상 임베드(유튜브/인스타/네이버TV) — 해당 도메인 iframe 만 허용
+  "frame-src 'self' https://www.youtube-nocookie.com https://www.youtube.com https://www.instagram.com https://tv.naver.com",
   `connect-src 'self'${NAVER_CONNECT}`,
   "font-src 'self'",
 ].join("; ");

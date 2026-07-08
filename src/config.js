@@ -58,6 +58,7 @@ export const config = {
   maxVideoBytes: 120 * 1024 * 1024,
   maxLogoBytes: 2 * 1024 * 1024,
   maxConcurrentUploads: Number(process.env.MAX_CONCURRENT_UPLOADS) || 3, // 동시 업로드 수 제한(메모리 보호)
+  maxEmbedsPerBusiness: Number(process.env.MAX_EMBEDS_PER_BUSINESS) || 30, // 업체당 영상 링크(임베드) 최대 개수
   allowedImageTypes: ["image/jpeg", "image/png", "image/webp", "image/gif"],
   allowedVideoTypes: ["video/mp4", "video/webm", "video/quicktime"],
 
