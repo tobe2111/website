@@ -45,11 +45,21 @@ export function updateBusiness(id, fields) {
     phone: fields.phone ?? b.phone,
     address: fields.address ?? b.address,
     hours: fields.hours ?? b.hours,
+    lat: fields.lat !== undefined ? fields.lat : b.lat,
+    lng: fields.lng !== undefined ? fields.lng : b.lng,
   };
   db.prepare(
-    "UPDATE businesses SET name=?, category=?, description=?, phone=?, address=?, hours=? WHERE id=?"
-  ).run(n.name, n.category, n.description, n.phone, n.address, n.hours, id);
+    "UPDATE businesses SET name=?, category=?, description=?, phone=?, address=?, hours=?, lat=?, lng=? WHERE id=?"
+  ).run(n.name, n.category, n.description, n.phone, n.address, n.hours, n.lat, n.lng, id);
   return getBusinessById(id);
+}
+
+// 지도 마커 (좌표가 있는 승인 업체)
+export function listBusinessMarkers(associationId) {
+  return db
+    .prepare(`SELECT id, name, slug, category, lat, lng, address, phone FROM businesses
+              WHERE association_id = ? AND status = 'approved' AND lat IS NOT NULL AND lng IS NOT NULL`)
+    .all(associationId);
 }
 export function setBusinessStatus(id, status) {
   db.prepare("UPDATE businesses SET status = ? WHERE id = ?").run(status, id);

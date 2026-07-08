@@ -24,6 +24,9 @@ CREATE TABLE IF NOT EXISTS associations (
   address     TEXT NOT NULL DEFAULT '',
   email       TEXT NOT NULL DEFAULT '',
   logo        TEXT NOT NULL DEFAULT '',              -- 상인회 로고 (스토리지 키). 비어있으면 이니셜 표시
+  map_lat     REAL NOT NULL DEFAULT 37.4837,         -- 지도 기본 중심 (서초구청 부근)
+  map_lng     REAL NOT NULL DEFAULT 127.0324,
+  map_zoom    INTEGER NOT NULL DEFAULT 14,
   active      INTEGER NOT NULL DEFAULT 1,
   home_layout TEXT,                                  -- 홈페이지 구성(JSON). NULL 이면 기본 구성 사용
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
@@ -52,6 +55,8 @@ CREATE TABLE IF NOT EXISTS businesses (
   phone          TEXT NOT NULL DEFAULT '',
   address        TEXT NOT NULL DEFAULT '',
   hours          TEXT NOT NULL DEFAULT '',
+  lat            REAL,                                  -- 지도 좌표 (위도). NULL 이면 미표시
+  lng            REAL,                                  -- 지도 좌표 (경도)
   status         TEXT NOT NULL DEFAULT 'pending',
   created_at     TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE (association_id, slug)
@@ -156,6 +161,11 @@ function columnExists(table, col) {
   if (!columnExists("users", "session_version")) {
     db.exec("ALTER TABLE users ADD COLUMN session_version INTEGER NOT NULL DEFAULT 0");
   }
+  if (!columnExists("businesses", "lat")) db.exec("ALTER TABLE businesses ADD COLUMN lat REAL");
+  if (!columnExists("businesses", "lng")) db.exec("ALTER TABLE businesses ADD COLUMN lng REAL");
+  if (!columnExists("associations", "map_lat")) db.exec("ALTER TABLE associations ADD COLUMN map_lat REAL NOT NULL DEFAULT 37.4837");
+  if (!columnExists("associations", "map_lng")) db.exec("ALTER TABLE associations ADD COLUMN map_lng REAL NOT NULL DEFAULT 127.0324");
+  if (!columnExists("associations", "map_zoom")) db.exec("ALTER TABLE associations ADD COLUMN map_zoom INTEGER NOT NULL DEFAULT 14");
 })();
 
 (function migrate() {
