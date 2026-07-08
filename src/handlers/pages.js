@@ -917,7 +917,7 @@ export function signForm(req, res, { assoc, params, query }) {
       <label class="check"><input type="checkbox" name="consent" value="1" required /> 위 문서 내용을 확인했으며, 본인이 전자서명하는 데 동의합니다.</label>
       <button type="submit" class="btn btn-primary btn-block" id="signSubmit">전자서명 제출</button>
     </form>
-    <p class="auth-note">서명 시 서명자·시각·IP·기기 정보와 문서 해시가 기록되고, HMAC로 봉인되어 위변조를 방지합니다.</p>
+    <p class="auth-note">서명 시 서명자·시각·IP·기기 정보와 문서 해시가 기록되고, Ed25519 디지털 서명으로 봉인되어 위변조를 방지합니다.</p>
   </div></section>`;
   html(res, layout({ title: `서명: ${d.title}`, user: req.user, assoc, base, body, scripts: `<script src="/js/sign.js" defer></script>` }));
 }
@@ -937,16 +937,25 @@ export function adminDocuments(req, res, { assoc, query }) {
         </td></tr>`).join("")
     : `<tr><td colspan="4" class="empty">문서가 없습니다.</td></tr>`;
 
+  const members = M.listUsersByAssociation(assoc.id, "MERCHANT");
+  const memberChecks = members.length
+    ? members.map((m) => `<label class="check member-check"><input type="checkbox" name="members" value="${m.id}" /> ${esc(m.name)} <small>${esc(m.email)}</small></label>`).join("")
+    : `<p class="empty">회원이 없습니다.</p>`;
+
   const body = `<section class="dash"><div class="container">
     <div class="dash-head"><div><p class="section-eyebrow">E-SIGN · ${esc(assoc.name)}</p>
       <h1 class="dash-title">전자서명 문서</h1>
       <p class="dash-sub"><a href="${base}/admin">← 관리자 대시보드</a></p></div></div>
     ${flash(query.get("msg") ? decodeURIComponent(query.get("msg")) : "", query.get("err") ? "err" : "ok")}
     <section class="panel panel-accent"><h2 class="panel-title">➕ 서명 문서 만들기</h2>
-      <p class="panel-hint">생성 후 본문은 무결성을 위해 변경할 수 없습니다. 회원 대시보드에 서명 요청으로 표시됩니다.</p>
+      <p class="panel-hint">생성 후 본문은 무결성을 위해 변경할 수 없습니다. 지정한 회원의 대시보드에 서명 요청으로 표시됩니다.</p>
       <form method="post" action="${base}/admin/documents" class="stack-form">
         <label>제목<input type="text" name="title" required placeholder="예: 2026년도 상인회 가입 동의서" /></label>
         <label>본문(약관·동의 내용)<textarea name="body" rows="10" required placeholder="동의 내용을 입력하세요."></textarea></label>
+        <div class="form-divider">서명 대상 (다자 서명)</div>
+        <label class="check"><input type="radio" name="target" value="all" checked /> 전체 회원에게 요청</label>
+        <label class="check"><input type="radio" name="target" value="select" /> 특정 회원 지정</label>
+        <div class="member-picker">${memberChecks}</div>
         <button class="btn btn-primary">문서 생성 및 서명 요청</button>
       </form>
     </section>
@@ -978,10 +987,22 @@ export function adminDocumentDetail(req, res, { assoc, params, query }) {
       }).join("")
     : `<tr><td colspan="4" class="empty">아직 서명이 없습니다.</td></tr>`;
 
+  // 지정 대상 완료 추적
+  const rc = M.requestCounts(d.id);
+  const reqStatus = M.listRequestStatus(d.id);
+  const pct = rc.total ? Math.round((rc.signed / rc.total) * 100) : 0;
+  const reqPanel = rc.total
+    ? `<section class="panel"><h2 class="panel-title">서명 완료 현황 <span class="badge ${rc.signed === rc.total ? "badge-ok" : "badge-wait"}">${rc.signed}/${rc.total}명 (${pct}%)</span></h2>
+        <div class="progress"><span style="width:${pct}%"></span></div>
+        <ul class="req-list">${reqStatus.map((u) => `<li><span class="req-name">${esc(u.name)}</span> <small>${esc(u.email)}</small> ${u.signed ? '<span class="badge badge-ok">서명 완료</span>' : '<span class="badge badge-wait">미서명</span>'}</li>`).join("")}</ul>
+      </section>`
+    : `<section class="panel"><p class="panel-hint">이 문서는 특정 대상 지정 없이 전체 공개로 생성되었습니다(누구나 서명 가능).</p></section>`;
+
   const body = `<section class="dash"><div class="container">
     <div class="dash-head"><div><p class="section-eyebrow">E-SIGN</p>
       <h1 class="dash-title">${esc(d.title)} ${d.closed ? '<span class="badge badge-no">마감</span>' : ""}</h1>
       <p class="dash-sub"><a href="${base}/admin/documents">← 문서 목록</a> · 서명 ${sigs.length}명</p></div></div>
+    ${reqPanel}
     <section class="panel"><h2 class="panel-title">문서 본문</h2>
       <div class="doc-body">${docBody(d.body)}</div>
       <p class="doc-hash">문서 해시: <code>${esc(d.content_hash)}</code></p>

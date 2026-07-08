@@ -416,13 +416,28 @@ export async function deleteComment(req, res, { assoc, params }) {
 // ---------- 전자서명: 관리자 문서 생성 ----------
 export async function adminCreateDocument(req, res, { assoc }) {
   const base = baseOf(assoc);
-  const f = await readForm(req, res, 128 * 1024);
-  if (!f) return;
-  const title = cap((f.title || "").trim(), 200);
-  const bodyText = cap((f.body || "").trim(), 20000);
+  let buf;
+  try { buf = await readBody(req, 128 * 1024); } catch { return back(res, base + "/admin/documents", "요청이 큽니다.", true); }
+  const params = new URLSearchParams(buf.toString("utf8"));
+  if (!csrf.valid(req, params.get("_csrf"))) { res.writeHead(403, { "Content-Type": "text/html; charset=utf-8" }); return res.end("<h1>403 잘못된 요청(CSRF)</h1>"); }
+
+  const title = cap((params.get("title") || "").trim(), 200);
+  const bodyText = cap((params.get("body") || "").trim(), 20000);
   if (!title || !bodyText) return back(res, base + "/admin/documents", "제목과 본문을 입력하세요.", true);
-  M.createDocument({ associationId: assoc.id, title, body: bodyText, contentHash: contentHash(bodyText), createdBy: req.user.id });
-  back(res, base + "/admin/documents", "문서를 생성했습니다. 회원 대시보드에 서명 요청으로 표시됩니다.");
+
+  const doc = M.createDocument({ associationId: assoc.id, title, body: bodyText, contentHash: contentHash(bodyText), createdBy: req.user.id });
+
+  // 서명 대상 지정 (전체 회원 / 선택 회원 / 미지정=전체공개)
+  const target = params.get("target");
+  const members = M.listUsersByAssociation(assoc.id, "MERCHANT");
+  if (target === "all") {
+    M.createSignatureRequests(doc.id, members.map((m) => m.id));
+  } else if (target === "select") {
+    const validIds = new Set(members.map((m) => m.id));
+    const chosen = params.getAll("members").map(Number).filter((id) => validIds.has(id));
+    M.createSignatureRequests(doc.id, chosen);
+  }
+  back(res, base + "/admin/documents", "문서를 생성했습니다. 대상 회원 대시보드에 서명 요청으로 표시됩니다.");
 }
 export async function adminCloseDocument(req, res, { assoc, params }) {
   const base = baseOf(assoc);

@@ -290,18 +290,36 @@ export function listDocuments(associationId) {
               FROM documents d WHERE d.association_id = ? ORDER BY d.created_at DESC`)
     .all(associationId);
 }
+// 서명해야 할 문서: 미마감 + 미서명 + (나에게 요청됨 OR 지정 대상이 아예 없음=전체공개)
+const TO_SIGN_WHERE = `d.association_id = ? AND d.closed = 0
+  AND NOT EXISTS (SELECT 1 FROM signatures s WHERE s.document_id = d.id AND s.user_id = ?)
+  AND (EXISTS (SELECT 1 FROM signature_requests r WHERE r.document_id = d.id AND r.user_id = ?)
+       OR NOT EXISTS (SELECT 1 FROM signature_requests r2 WHERE r2.document_id = d.id))`;
 export function listDocumentsToSign(associationId, userId) {
-  return db
-    .prepare(`SELECT d.* FROM documents d
-              WHERE d.association_id = ? AND d.closed = 0
-                AND NOT EXISTS (SELECT 1 FROM signatures s WHERE s.document_id = d.id AND s.user_id = ?)
-              ORDER BY d.created_at DESC`)
-    .all(associationId, userId);
+  return db.prepare(`SELECT d.* FROM documents d WHERE ${TO_SIGN_WHERE} ORDER BY d.created_at DESC`)
+    .all(associationId, userId, userId);
 }
 export function countDocumentsToSign(associationId, userId) {
-  return db.prepare(`SELECT COUNT(*) AS n FROM documents d
-    WHERE d.association_id = ? AND d.closed = 0
-      AND NOT EXISTS (SELECT 1 FROM signatures s WHERE s.document_id = d.id AND s.user_id = ?)`).get(associationId, userId).n;
+  return db.prepare(`SELECT COUNT(*) AS n FROM documents d WHERE ${TO_SIGN_WHERE}`).get(associationId, userId, userId).n;
+}
+
+// ----- 전자서명: 서명 요청 대상 -----
+export function createSignatureRequests(documentId, userIds) {
+  const stmt = db.prepare("INSERT OR IGNORE INTO signature_requests (document_id, user_id) VALUES (?, ?)");
+  for (const uid of userIds) stmt.run(documentId, uid);
+}
+// 요청 대상 목록 + 서명 여부 (완료 추적)
+export function listRequestStatus(documentId) {
+  return db.prepare(`SELECT u.id, u.name, u.email,
+      EXISTS (SELECT 1 FROM signatures s WHERE s.document_id = r.document_id AND s.user_id = u.id) AS signed
+    FROM signature_requests r JOIN users u ON u.id = r.user_id
+    WHERE r.document_id = ? ORDER BY signed ASC, u.name`).all(documentId);
+}
+export function requestCounts(documentId) {
+  const total = db.prepare("SELECT COUNT(*) AS n FROM signature_requests WHERE document_id = ?").get(documentId).n;
+  const signed = db.prepare(`SELECT COUNT(*) AS n FROM signature_requests r
+    WHERE r.document_id = ? AND EXISTS (SELECT 1 FROM signatures s WHERE s.document_id = r.document_id AND s.user_id = r.user_id)`).get(documentId).n;
+  return { total, signed };
 }
 export function closeDocument(id) {
   db.prepare("UPDATE documents SET closed = 1 WHERE id = ?").run(id);

@@ -156,8 +156,19 @@ CREATE TABLE IF NOT EXISTS signatures (
   UNIQUE (document_id, user_id)
 );
 
+-- 전자서명: 서명 요청 대상 (지정·다자 서명)
+CREATE TABLE IF NOT EXISTS signature_requests (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (document_id, user_id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_doc_assoc ON documents(association_id);
 CREATE INDEX IF NOT EXISTS idx_sig_doc ON signatures(document_id);
+CREATE INDEX IF NOT EXISTS idx_sigreq_doc ON signature_requests(document_id);
+CREATE INDEX IF NOT EXISTS idx_sigreq_user ON signature_requests(user_id);
 CREATE INDEX IF NOT EXISTS idx_notif_assoc ON notifications(association_id, is_read);
 CREATE INDEX IF NOT EXISTS idx_media_business ON media(business_id);
 CREATE INDEX IF NOT EXISTS idx_business_assoc ON businesses(association_id, status);

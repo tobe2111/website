@@ -280,6 +280,31 @@ test("전자서명: 문서 생성 → 서명 → 검증(유효)", async () => {
   assert.equal(ok, true); // 서버 비밀 없이 공개키만으로 검증됨(Ed25519)
 });
 
+test("전자서명: 지정 서명 — 대상만 서명 요청, 완료 추적", async () => {
+  const { getUserByEmail } = await import("../src/auth.js");
+  const jung = getUserByEmail("jung@ex.kr");
+  const { jar: aj } = await loginAs("admin@seocho-merchants.kr", "admin1234");
+  // jung 만 지정
+  let r = await fetch(`${BASE}/t/seocho/admin/documents`, {
+    method: "POST", redirect: "manual",
+    headers: { "content-type": "application/x-www-form-urlencoded", cookie: cookieHeader(aj) },
+    body: new URLSearchParams([["_csrf", aj.sc_csrf], ["title", "지정 문서"], ["body", "본문"], ["target", "select"], ["members", String(jung.id)]]),
+  });
+  assert.equal(r.status, 303);
+  const { listDocuments, requestCounts } = await import("../src/models.js");
+  const { getAssociationBySlug } = await import("../src/associations.js");
+  const docId = listDocuments(getAssociationBySlug("seocho").id).find((d) => d.title === "지정 문서").id;
+
+  // jung 은 보임, cafe 는 안 보임
+  const { jar: jj } = await loginAs("jung@ex.kr", "merchant1234");
+  const { jar: cj } = await loginAs("cafe@ex.kr", "merchant1234");
+  const jungList = await (await fetch(`${BASE}/t/seocho/sign`, { headers: { cookie: cookieHeader(jj) } })).text();
+  const cafeList = await (await fetch(`${BASE}/t/seocho/sign`, { headers: { cookie: cookieHeader(cj) } })).text();
+  assert.match(jungList, /지정 문서/);
+  assert.doesNotMatch(cafeList, /지정 문서/);
+  assert.equal(requestCounts(docId).total, 1);
+});
+
 test("관리자: 회원 임시 비밀번호 발급 → 새 비밀번호로 로그인", async () => {
   const { jar } = await loginAs("admin@seocho-merchants.kr", "admin1234");
   // cafe 회원 id 조회 (models 직접)

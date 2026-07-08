@@ -343,6 +343,16 @@ img,video{max-width:100%;display:block}
 .verify-sig img{max-width:100%;height:auto;display:block}
 .sig-thumb{width:120px;height:40px;object-fit:contain;background:#fff;border:1px solid var(--line);border-radius:6px}
 .verify-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+.member-picker{display:grid;gap:6px;max-height:220px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:12px;background:var(--bg-alt)}
+.member-check{font-size:.92rem}
+.member-check small{color:var(--muted)}
+.progress{height:10px;border-radius:999px;background:var(--line);overflow:hidden;margin:6px 0 16px}
+.progress span{display:block;height:100%;background:var(--green-600);transition:width .3s}
+.req-list{display:grid;gap:6px}
+.req-list li{display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--bg-alt);border-radius:8px;flex-wrap:wrap}
+.req-name{font-weight:600}
+.req-list small{color:var(--muted)}
+.req-list .badge{margin-left:auto}
 /* 증명서 */
 .cert{background:#fff;border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:clamp(24px,4vw,40px)}
 .cert-head{text-align:center;border-bottom:2px solid var(--green-700);padding-bottom:18px;margin-bottom:22px}
