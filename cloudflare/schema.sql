@@ -16,10 +16,24 @@ CREATE TABLE IF NOT EXISTS associations (
   map_zoom    INTEGER NOT NULL DEFAULT 14,
   active      INTEGER NOT NULL DEFAULT 1,
   home_layout TEXT,
-  custom_domain TEXT NOT NULL DEFAULT '',   -- 상인회별 개별 도메인(예: seocho-market.kr)
+  custom_domain TEXT NOT NULL DEFAULT '',
+  plan        TEXT NOT NULL DEFAULT 'free',   -- 요금제(free|basic|pro)
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_assoc_domain ON associations(custom_domain) WHERE custom_domain != '';
+
+-- 셀프 입점 신청
+CREATE TABLE IF NOT EXISTS applications (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  assoc_name    TEXT NOT NULL,
+  contact_name  TEXT NOT NULL DEFAULT '',
+  contact_email TEXT NOT NULL,
+  contact_phone TEXT NOT NULL DEFAULT '',
+  message       TEXT NOT NULL DEFAULT '',
+  status        TEXT NOT NULL DEFAULT 'pending',  -- pending|approved|rejected
+  created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_app_status ON applications(status, created_at);
 
 CREATE TABLE IF NOT EXISTS users (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,

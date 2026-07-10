@@ -8,6 +8,7 @@ import { parseEmbed } from "./embed.js";
 import { cap, sniffImage, EMAIL_RE, MAX_IMAGE_BYTES, slugify } from "./util.js";
 import { contentHash, sealRecord, newVerifyCode } from "./esign.js";
 import { turnstileVerify } from "./turnstile.js";
+import { planOf } from "./plans.js";
 
 const BOARD_MAX_IMAGES = 6;
 const MAX_EMBEDS = 30;
@@ -90,6 +91,8 @@ export async function register(ctx) {
   if (!name || !EMAIL_RE.test(email) || password.length < 8 || password.length > 200 || !businessName)
     return back(base + "/register", "입력값을 확인해 주세요. (비밀번호 8~200자)", true);
   if (await D.getUserByEmail(db, email)) return back(base + "/register", "이미 가입된 이메일입니다.", true);
+  if ((await D.countMembers(db, assoc.id)) >= planOf(assoc).maxMembers)
+    return back(base + "/register", "회원 정원이 가득 찼습니다. 상인회 관리자에게 문의해 주세요.", true);
   const { hash, salt } = await hashPassword(password);
   const user = await D.createUser(db, { email, passwordHash: hash, salt, name, role: "MERCHANT", associationId: assoc.id });
   await D.createBusiness(db, { associationId: assoc.id, ownerId: user.id, name: businessName, category: cap(form.get("category"), 40) });
@@ -136,6 +139,9 @@ export async function uploadMedia(ctx) {
   const b = await D.getBusinessByOwner(db, user.id);
   if (!b || b.association_id !== assoc.id) return back(base + "/dashboard", "업체를 찾을 수 없습니다.", true);
   const caption = cap((form.get("caption") || "").trim(), 200);
+  const maxPhotos = planOf(assoc).maxPhotos;
+  if ((await D.countBusinessImages(db, b.id)) >= maxPhotos)
+    return back(base + "/dashboard", `사진은 최대 ${maxPhotos}장까지 올릴 수 있습니다.`, true);
   const up = await saveImages(env, form.getAll("files"), 12);
   if (up.error) return back(base + "/dashboard", up.error, true);
   if (!up.images.length) return back(base + "/dashboard", "선택된 사진이 없습니다.", true);
@@ -148,7 +154,8 @@ export async function addVideoEmbed(ctx) {
   const { db, form, user, base, assoc } = ctx;
   const b = await D.getBusinessByOwner(db, user.id);
   if (!b || b.association_id !== assoc.id) return back(base + "/dashboard", "업체를 찾을 수 없습니다.", true);
-  if ((await D.countEmbeds(db, b.id)) >= MAX_EMBEDS) return back(base + "/dashboard", `영상 링크는 최대 ${MAX_EMBEDS}개까지 가능합니다.`, true);
+  const maxEmbeds = planOf(assoc).maxEmbeds;
+  if ((await D.countEmbeds(db, b.id)) >= maxEmbeds) return back(base + "/dashboard", `영상 링크는 최대 ${maxEmbeds}개까지 가능합니다.`, true);
   const parsed = parseEmbed(form.get("url") || "");
   if (!parsed) return back(base + "/dashboard", "지원하는 영상 링크가 아닙니다. (유튜브·쇼츠·인스타 릴스·네이버TV)", true);
   await D.addMedia(db, { businessId: b.id, kind: "embed", provider: parsed.provider, embedId: parsed.id, caption: cap((form.get("caption") || "").trim(), 200) });
@@ -478,6 +485,7 @@ export async function superSetDomain(ctx) {
   const { db, form, params } = ctx;
   const a = await D.getAssociationById(db, Number(params.id));
   if (!a) return back("/super", "상인회를 찾을 수 없습니다.", true);
+  if (!planOf(a).customDomain) return back("/super", "이 상인회 플랜은 개별 도메인을 지원하지 않습니다.", true);
   // 입력 정리: 프로토콜·경로 제거, 소문자화
   let domain = (form.get("domain") || "").toLowerCase().trim()
     .replace(/^https?:\/\//, "").replace(/\/.*$/, "").replace(/\.$/, "");
@@ -492,4 +500,66 @@ export async function superSetDomain(ctx) {
   return back("/super", domain
     ? `'${a.name}' 에 ${domain} 을 연결했습니다. Cloudflare 워커의 Custom Domain 에도 같은 도메인을 추가하세요.`
     : `'${a.name}' 도메인 연결을 해제했습니다.`);
+}
+
+// ---------- 셀프 입점 신청 (공개) ----------
+export async function applySubmit(ctx) {
+  const { db, env, form, ip } = ctx;
+  if (!(await turnstileVerify(env, form.get("cf-turnstile-response"), ip)))
+    return back("/apply", "봇 방지 확인에 실패했습니다. 다시 시도해 주세요.", true);
+  const assocName = cap((form.get("assoc_name") || "").trim(), 100);
+  const contactEmail = cap((form.get("contact_email") || "").toLowerCase().trim(), 120);
+  if (!assocName || !EMAIL_RE.test(contactEmail))
+    return back("/apply", "상인회 이름과 올바른 이메일을 입력해 주세요.", true);
+  await D.createApplication(db, {
+    assocName, contactEmail,
+    contactName: cap(form.get("contact_name"), 60),
+    contactPhone: cap(form.get("contact_phone"), 40),
+    message: cap(form.get("message"), 2000),
+  });
+  await D.createNotification(db, { associationId: null, kind: "application", message: `새 입점 신청: ${assocName} (${contactEmail})`, link: "/super" });
+  return back("/apply", "신청이 접수되었습니다. 검토 후 이메일로 안내드리겠습니다.");
+}
+
+// ---------- 슈퍼: 입점 신청 승인/반려 ----------
+export async function approveApplication(ctx) {
+  const { db, params } = ctx;
+  const app = await D.getApplication(db, Number(params.id));
+  if (!app || app.status !== "pending") return back("/super", "처리할 신청을 찾을 수 없습니다.", true);
+  if (await D.getUserByEmail(db, app.contact_email)) return back("/super", "이미 사용 중인 이메일입니다. 신청자에게 다른 이메일을 요청하세요.", true);
+  // 상인회 + 관리자(임시 비밀번호) 자동 발급
+  let slug = slugify(app.assoc_name), n = 1;
+  while (await D.getAssociationBySlug(db, slug)) slug = slugify(app.assoc_name) + "-" + (++n);
+  const assoc = await D.createAssociation(db, { slug, name: app.assoc_name });
+  const temp = Math.random().toString(36).slice(2, 10);
+  const { hash, salt } = await hashPassword(temp);
+  await D.createUser(db, { email: app.contact_email, passwordHash: hash, salt, name: app.assoc_name + " 관리자", role: "ADMIN", associationId: assoc.id });
+  await D.setApplicationStatus(db, app.id, "approved");
+  await audit(ctx, "입점승인", `${app.assoc_name} (${app.contact_email})`, null);
+  return back("/super", `'${app.assoc_name}' 발급 완료 — 주소 /t/${assoc.slug}, 관리자 ${app.contact_email} / 임시비번 ${temp} (신청자에게 전달하세요)`);
+}
+export async function rejectApplication(ctx) {
+  const { db, params } = ctx;
+  const app = await D.getApplication(db, Number(params.id));
+  if (app && app.status === "pending") { await D.setApplicationStatus(db, app.id, "rejected"); await audit(ctx, "입점반려", app.assoc_name, null); }
+  return back("/super", "신청을 반려했습니다.");
+}
+
+// ---------- 슈퍼: 상인회 플랜 변경 ----------
+export async function superSetPlan(ctx) {
+  const { db, form, params } = ctx;
+  const { PLAN_KEYS } = await import("./plans.js");
+  const a = await D.getAssociationById(db, Number(params.id));
+  if (!a) return back("/super", "상인회를 찾을 수 없습니다.", true);
+  const plan = form.get("plan");
+  if (!PLAN_KEYS.includes(plan)) return back("/super", "잘못된 플랜입니다.", true);
+  await D.setAssociationPlan(db, a.id, plan);
+  await audit(ctx, "플랜변경", `${a.name} → ${plan}`, null);
+  return back("/super", `'${a.name}' 플랜을 ${plan} 으로 변경했습니다.`);
+}
+
+// ---------- 슈퍼: 플랫폼 랜딩 모드 토글 ----------
+export async function superSetPlatformMode(ctx) {
+  await D.setSetting(ctx.db, "platform_mode", ctx.form.get("on") === "1" ? "1" : "0");
+  return back("/super", "플랫폼 설정을 저장했습니다.");
 }

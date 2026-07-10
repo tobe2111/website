@@ -10,6 +10,7 @@ import { text } from "./http.js";
 import { parseLayout, renderHome, SECTION_CATALOG } from "./homeLayout.js";
 import { turnstileWidget, turnstileScript } from "./turnstile.js";
 import { otpauthUri } from "./totp.js";
+import { PLANS, PLAN_KEYS } from "./plans.js";
 
 const CATEGORIES = ["음식점", "카페·디저트", "생활·서비스", "패션·잡화", "농수축산", "교육·문화", "기타"];
 const NOTICE_CATEGORIES = ["안내", "공지", "소식", "행사", "혜택", "긴급"];
@@ -578,17 +579,35 @@ export async function superConsole(ctx) {
   const ps = await D.platformStats(db);
   const list = await D.listAllAssociations(db);
   const auditLog = await D.listAudit(db, null, 15);
+  const pendingApps = await D.listApplications(db, "pending");
+  const platformMode = (await D.getSetting(db, "platform_mode")) === "1";
+  const planOpts = (cur) => PLAN_KEYS.map((k) => `<option value="${k}"${k === cur ? " selected" : ""}>${esc(PLANS[k].label)}</option>`).join("");
+  const appsPanel = `<section class="panel panel-accent"><h2 class="panel-title">입점 신청 <span class="badge ${pendingApps.length ? "badge-wait" : "badge-muted"}">${pendingApps.length}건 대기</span></h2>
+    ${pendingApps.length ? `<div class="table-scroll"><table class="admin-table"><thead><tr><th>상인회</th><th>연락처</th><th>메모</th><th>처리</th></tr></thead><tbody>
+      ${pendingApps.map((a) => `<tr><td>${esc(a.assoc_name)}<br /><small>${esc(a.created_at.slice(0, 10))}</small></td>
+        <td>${esc(a.contact_name || "-")}<br /><small>${esc(a.contact_email)}${a.contact_phone ? " · " + esc(a.contact_phone) : ""}</small></td>
+        <td><small>${esc(clip(a.message, 80))}</small></td>
+        <td class="actions-cell"><form method="post" action="/super/application/${a.id}/approve" data-confirm="승인하고 상인회·관리자 계정을 발급할까요?"><button class="btn btn-xs btn-primary">승인·발급</button></form>
+          <form method="post" action="/super/application/${a.id}/reject" data-confirm="반려할까요?"><button class="btn btn-xs btn-ghost">반려</button></form></td></tr>`).join("")}
+      </tbody></table></div>` : `<p class="panel-hint">대기 중인 신청이 없습니다. 공개 신청 주소: <a href="/apply" target="_blank">/apply</a></p>`}</section>`;
   const rows = list.map((a) => `<tr><td><a href="/t/${esc(a.slug)}" target="_blank">${esc(a.name)}</a><br /><small>/t/${esc(a.slug)}</small></td>
     <td><form method="post" action="/super/association/${a.id}/domain" class="domain-form">
       <input type="text" name="domain" value="${esc(a.custom_domain || "")}" placeholder="예: seocho-market.kr" />
       <button class="btn btn-xs btn-ghost">저장</button></form>
       ${a.custom_domain ? `<small class="domain-hint">✅ <a href="https://${esc(a.custom_domain)}" target="_blank">${esc(a.custom_domain)}</a></small>` : ""}</td>
+    <td><form method="post" action="/super/association/${a.id}/plan" class="plan-form"><select name="plan">${planOpts(a.plan || "free")}</select><button class="btn btn-xs btn-ghost">변경</button></form></td>
     <td>${a.active ? '<span class="badge badge-ok">활성</span>' : '<span class="badge badge-no">비활성</span>'}</td>
     <td class="actions-cell"><a class="btn btn-xs btn-ghost" href="/t/${esc(a.slug)}/admin">관리</a>
-      <form method="post" action="/super/association/${a.id}/toggle"><button class="btn btn-xs btn-ghost">${a.active ? "비활성화" : "활성화"}</button></form></td></tr>`).join("") || `<tr><td colspan="4" class="empty">상인회가 없습니다.</td></tr>`;
+      <form method="post" action="/super/association/${a.id}/toggle"><button class="btn btn-xs btn-ghost">${a.active ? "비활성화" : "활성화"}</button></form></td></tr>`).join("") || `<tr><td colspan="5" class="empty">상인회가 없습니다.</td></tr>`;
   const body = `<section class="dash"><div class="container">
     <div class="dash-head"><div><p class="section-eyebrow">SUPER</p><h1 class="dash-title">플랫폼 관리</h1></div>
       <div class="dash-head-actions"><form method="post" action="/logout"><button class="btn btn-ghost btn-sm">로그아웃</button></form></div></div>${flashOf(query)}
+    ${appsPanel}
+    <section class="panel"><h2 class="panel-title">플랫폼 설정</h2>
+      <form method="post" action="/super/platform-mode" class="stack-form compact">
+        <label class="check"><input type="checkbox" name="on" value="1"${platformMode ? " checked" : ""} /> 루트(첫 화면)를 <b>플랫폼 소개 랜딩</b>으로 표시 (끄면 상인회가 1곳일 때 그 홈으로 바로 이동)</label>
+        <button class="btn btn-ghost btn-sm">저장</button></form>
+      <p class="panel-hint">공개 신청 페이지: <a href="/apply" target="_blank">/apply</a> · 랜딩 미리보기는 위 옵션 켠 뒤 루트 접속</p></section>
     <div class="stat-cards"><div class="stat-card"><span class="stat-num">${ps.associations}</span><span class="stat-label">상인회</span></div>
       <div class="stat-card"><span class="stat-num">${ps.businesses}</span><span class="stat-label">승인 업체</span></div>
       <div class="stat-card"><span class="stat-num">${ps.users}</span><span class="stat-label">사용자</span></div>
@@ -604,7 +623,7 @@ export async function superConsole(ctx) {
     <section class="panel"><h2 class="panel-title">상인회 목록</h2>
       <p class="panel-hint">개별 도메인: 도메인을 입력·저장한 뒤 <b>Cloudflare 대시보드 → 이 워커 → Settings → Domains &amp; Routes → Add → Custom Domain</b> 으로 같은 도메인을 추가해야 실제 접속됩니다(그 도메인이 이 Cloudflare 계정에 등록되어 있어야 함).</p>
       <div class="table-scroll"><table class="admin-table">
-      <thead><tr><th>상인회</th><th>개별 도메인</th><th>상태</th><th>관리</th></tr></thead><tbody>${rows}</tbody></table></div></section>
+      <thead><tr><th>상인회</th><th>개별 도메인</th><th>플랜</th><th>상태</th><th>관리</th></tr></thead><tbody>${rows}</tbody></table></div></section>
     <section class="panel"><h2 class="panel-title">감사 로그 (플랫폼)</h2>
       <ul class="audit-list">${auditLog.length ? auditLog.map((a) => `<li><span class="audit-action">${esc(a.action)}</span> <span class="audit-detail">${esc(a.detail)}</span><span class="audit-meta">${esc(a.actor_name)} · ${esc(a.created_at.slice(5, 16).replace("T", " "))}</span></li>`).join("") : `<li class="empty">기록이 없습니다.</li>`}</ul></section></div></section>`;
   return html(layout({ title: "슈퍼 관리자", user, body, csrf }));
@@ -680,6 +699,53 @@ export async function setupForm(ctx) {
       <button class="btn btn-primary btn-block">설정 완료하고 시작</button>
     </form><p class="auth-note">이 화면은 계정이 하나도 없을 때만 열립니다. 설정 후에는 자동으로 닫힙니다.</p></div></div></section>`;
   return html(layout({ title: "첫 설정", body, csrf }));
+}
+
+// ================= 플랫폼 랜딩 (루트) =================
+export async function platformLanding(ctx) {
+  const { db, csrf, query } = ctx;
+  const list = await D.listActiveAssociations(db);
+  const cards = list.map((a) => `<a class="landing-assoc" href="${a.custom_domain ? "https://" + esc(a.custom_domain) : "/t/" + esc(a.slug)}">
+    <span class="landing-assoc-logo" style="background:${esc(a.brand_color)}">${a.logo ? `<img src="${esc(mediaUrl(a.logo))}" alt="" />` : esc(a.name.slice(0, 1))}</span>
+    <span class="landing-assoc-name">${esc(a.name)}</span></a>`).join("") || `<p class="empty">첫 상인회를 기다리고 있어요.</p>`;
+  const body = `
+  <section class="landing-hero"><div class="container">
+    <p class="hero-eyebrow">상인회·번영회·소상공인 모임을 위한</p>
+    <h1 class="landing-title">우리 상권 홈페이지,<br /><span>5분 만에</span> 만드세요</h1>
+    <p class="landing-lead">가입 점포 안내·지도, 공지·소식, 회원 게시판, 전자 동의서까지 — 상인회에 꼭 필요한 기능만 담았습니다. 서버·개발 없이 바로 시작하세요.</p>
+    <div class="hero-actions"><a href="/apply" class="btn btn-primary btn-lg">무료로 신청하기</a>
+      <a href="#features" class="btn btn-ghost btn-lg">기능 둘러보기</a></div>
+  </div></section>
+  <section class="section" id="features"><div class="container">
+    <div class="section-head"><p class="section-eyebrow">FEATURES</p><h2 class="section-title">상인회에 필요한 모든 것</h2></div>
+    <div class="feature-grid">
+      ${[["🏪", "가입 점포 안내", "점포별 소개·사진·영상(유튜브·릴스 링크)"], ["🗺️", "점포 지도", "네이버 지도에 우리 상권 점포를 한눈에"], ["📢", "공지·소식", "카테고리·검색되는 공지 게시판"], ["💬", "회원 게시판", "회원 전용 소통·다중 사진"], ["✍️", "전자 동의서", "동의서·계약 전자서명(순차·검증)"], ["📱", "모바일 앱", "홈 화면 추가·설치형(PWA)"]].map(([i, t, d]) => `<div class="feature-card"><span class="feature-ico">${i}</span><h3>${t}</h3><p>${d}</p></div>`).join("")}
+    </div></div></section>
+  <section class="section section-alt"><div class="container">
+    <div class="section-head"><h2 class="section-title">함께하는 상인회</h2></div>
+    <div class="landing-assoc-grid">${cards}</div></div></section>
+  <section class="section section-dark"><div class="container cta-inner">
+    <h2 class="section-title">지금 우리 상권도 시작해보세요</h2>
+    <p class="section-lead">신청은 무료입니다. 검토 후 관리자 계정을 발급해 드립니다.</p>
+    <a href="/apply" class="btn btn-primary btn-lg">무료 신청하기</a></div></section>`;
+  return html(layout({ title: "상인회 홈페이지 플랫폼", body, csrf, description: "상인회·번영회를 위한 홈페이지를 서버·개발 없이 5분 만에. 점포 안내·지도·공지·게시판·전자서명." }));
+}
+
+// 셀프 입점 신청 폼 (공개)
+export function applyForm(ctx) {
+  const { env, query, csrf } = ctx;
+  const body = `<section class="section page-top"><div class="container auth-wrap"><div class="auth-card">
+    <h1 class="auth-title">홈페이지 신청</h1><p class="auth-sub">간단히 신청하면 검토 후 관리자 계정을 발급해 드립니다. (무료)</p>${flashOf(query)}
+    <form method="post" action="/apply" class="stack-form">
+      <label>상인회·모임 이름<input type="text" name="assoc_name" required maxlength="100" placeholder="예: 강남시장 상인회" /></label>
+      <label>담당자 성함<input type="text" name="contact_name" maxlength="60" /></label>
+      <label>연락받을 이메일<input type="email" name="contact_email" required /></label>
+      <label>연락처(선택)<input type="tel" name="contact_phone" maxlength="40" /></label>
+      <label>남기실 말(선택)<textarea name="message" rows="3" maxlength="2000" placeholder="점포 수, 원하는 기능 등 자유롭게"></textarea></label>
+      ${turnstileWidget(env)}
+      <button class="btn btn-primary btn-block">신청하기</button>
+    </form><p class="auth-note">이미 계정이 있으신가요? <a href="/login">로그인</a></p></div></div></section>`;
+  return html(layout({ title: "홈페이지 신청", body, csrf, scripts: turnstileScript(env) }));
 }
 
 // ================= SEO: sitemap · robots =================

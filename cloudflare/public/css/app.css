@@ -529,3 +529,25 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .domain-form input{width:180px;max-width:100%;padding:6px 10px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:.85rem}
 .domain-hint{display:block;margin-top:4px;color:var(--muted)}
 .domain-hint a{color:var(--green-700)}
+
+/* ---------- 플랫폼 랜딩 ---------- */
+.btn-lg{padding:14px 28px;font-size:1.05rem}
+.landing-hero{padding:clamp(48px,9vw,110px) 0;text-align:center;background:linear-gradient(160deg,var(--green-50,#eef7f1),#fff)}
+.landing-title{font-size:clamp(2rem,6vw,3.6rem);font-weight:900;line-height:1.15;margin:10px 0 16px}
+.landing-title span{color:var(--green-600)}
+.landing-lead{max-width:640px;margin:0 auto 26px;color:var(--ink-soft);font-size:clamp(1rem,2.5vw,1.2rem);line-height:1.7}
+.landing-hero .hero-actions{justify-content:center}
+.feature-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.feature-card{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:26px;box-shadow:var(--shadow)}
+.feature-ico{font-size:2rem;display:block;margin-bottom:10px}
+.feature-card h3{font-size:1.15rem;font-weight:800;margin-bottom:6px}
+.feature-card p{color:var(--muted);font-size:.94rem;line-height:1.6}
+.landing-assoc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:16px}
+.landing-assoc{display:flex;flex-direction:column;align-items:center;gap:10px;padding:22px;background:#fff;border:1px solid var(--line);border-radius:var(--radius);text-decoration:none;color:var(--ink);transition:transform .2s,box-shadow .2s}
+.landing-assoc:hover{transform:translateY(-4px);box-shadow:var(--shadow-lg)}
+.landing-assoc-logo{width:56px;height:56px;border-radius:16px;display:grid;place-items:center;color:#fff;font-weight:900;font-size:1.4rem;overflow:hidden}
+.landing-assoc-logo img{width:100%;height:100%;object-fit:cover}
+.landing-assoc-name{font-weight:700;font-size:.95rem;text-align:center}
+.plan-form,.domain-form{display:flex;gap:6px;align-items:center}
+.plan-form select{padding:5px 8px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:.85rem}
+@media (max-width:720px){.feature-grid{grid-template-columns:1fr}}

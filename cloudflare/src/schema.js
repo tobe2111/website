@@ -19,9 +19,23 @@ CREATE TABLE IF NOT EXISTS associations (
   active      INTEGER NOT NULL DEFAULT 1,
   home_layout TEXT,
   custom_domain TEXT NOT NULL DEFAULT '',
+  plan        TEXT NOT NULL DEFAULT 'free',   -- 요금제(free|basic|pro)
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_assoc_domain ON associations(custom_domain) WHERE custom_domain != '';
+
+-- 셀프 입점 신청
+CREATE TABLE IF NOT EXISTS applications (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  assoc_name    TEXT NOT NULL,
+  contact_name  TEXT NOT NULL DEFAULT '',
+  contact_email TEXT NOT NULL,
+  contact_phone TEXT NOT NULL DEFAULT '',
+  message       TEXT NOT NULL DEFAULT '',
+  status        TEXT NOT NULL DEFAULT 'pending',  -- pending|approved|rejected
+  created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_app_status ON applications(status, created_at);
 
 CREATE TABLE IF NOT EXISTS users (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -212,5 +226,14 @@ async function migrateColumns(db) {
   if (!cols.some((c) => c.name === "custom_domain")) {
     await db.prepare("ALTER TABLE associations ADD COLUMN custom_domain TEXT NOT NULL DEFAULT ''").run();
     await db.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_assoc_domain ON associations(custom_domain) WHERE custom_domain != ''").run();
+  }
+  if (!cols.some((c) => c.name === "plan")) {
+    await db.prepare("ALTER TABLE associations ADD COLUMN plan TEXT NOT NULL DEFAULT 'free'").run();
+  }
+  // applications 표가 없으면 생성 (기존 배포 업그레이드)
+  const appTbl = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='applications'").first();
+  if (!appTbl) {
+    await db.prepare("CREATE TABLE applications (id INTEGER PRIMARY KEY AUTOINCREMENT, assoc_name TEXT NOT NULL, contact_name TEXT NOT NULL DEFAULT '', contact_email TEXT NOT NULL, contact_phone TEXT NOT NULL DEFAULT '', message TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'pending', created_at TEXT NOT NULL DEFAULT (datetime('now')))").run();
+    await db.prepare("CREATE INDEX IF NOT EXISTS idx_app_status ON applications(status, created_at)").run();
   }
 }

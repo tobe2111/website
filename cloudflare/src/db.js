@@ -23,6 +23,22 @@ export function updateAssociation(db, id, f) {
 export const setAssociationActive = (db, id, a) => run(db, "UPDATE associations SET active=? WHERE id=?", a ? 1 : 0, id);
 export const getAssociationByDomain = (db, host) => first(db, "SELECT * FROM associations WHERE custom_domain = ? AND custom_domain != ''", String(host || "").toLowerCase());
 export const setAssociationDomain = (db, id, domain) => run(db, "UPDATE associations SET custom_domain=? WHERE id=?", domain || "", id);
+export const setAssociationPlan = (db, id, plan) => run(db, "UPDATE associations SET plan=? WHERE id=?", plan, id);
+export const countMembers = async (db, aid) => (await first(db, "SELECT COUNT(*) AS n FROM users WHERE association_id=? AND role='MERCHANT'", aid)).n;
+export const countBusinessImages = async (db, businessId) => (await first(db, "SELECT COUNT(*) AS n FROM media WHERE business_id=? AND kind='image'", businessId)).n;
+
+// ----- 셀프 입점 신청 -----
+export async function createApplication(db, { assocName, contactName, contactEmail, contactPhone, message }) {
+  await run(db, "INSERT INTO applications (assoc_name, contact_name, contact_email, contact_phone, message) VALUES (?,?,?,?,?)",
+    assocName, contactName || "", contactEmail, contactPhone || "", message || "");
+  return first(db, "SELECT * FROM applications WHERE id=?", await lastId(db));
+}
+export const getApplication = (db, id) => first(db, "SELECT * FROM applications WHERE id=?", id);
+export const listApplications = (db, status = null) => status
+  ? all(db, "SELECT * FROM applications WHERE status=? ORDER BY created_at DESC", status)
+  : all(db, "SELECT * FROM applications ORDER BY created_at DESC");
+export const countPendingApplications = async (db) => (await first(db, "SELECT COUNT(*) AS n FROM applications WHERE status='pending'")).n;
+export const setApplicationStatus = (db, id, status) => run(db, "UPDATE applications SET status=? WHERE id=?", status, id);
 export const saveHomeLayout = (db, id, json) => run(db, "UPDATE associations SET home_layout=? WHERE id=?", json, id);
 
 // ----- Settings (자동 생성 키·설정 저장) -----

@@ -26,6 +26,8 @@ const GLOBAL = [
   ["POST", "/account/2fa/disable", api.twofaDisable, "USER"],
   ["GET", "/setup", pages.setupForm],
   ["POST", "/setup", api.setupSubmit],
+  ["GET", "/apply", pages.applyForm],
+  ["POST", "/apply", api.applySubmit],
   ["GET", "/forgot", pages.forgotForm],
   ["POST", "/forgot", api.forgotPassword],
   ["GET", "/sitemap.xml", pages.sitemap],
@@ -36,6 +38,10 @@ const GLOBAL = [
   ["POST", "/super/association", api.superCreateAssociation, "SUPERADMIN"],
   ["POST", "/super/association/:id/toggle", api.superToggleAssociation, "SUPERADMIN"],
   ["POST", "/super/association/:id/domain", api.superSetDomain, "SUPERADMIN"],
+  ["POST", "/super/association/:id/plan", api.superSetPlan, "SUPERADMIN"],
+  ["POST", "/super/application/:id/approve", api.approveApplication, "SUPERADMIN"],
+  ["POST", "/super/application/:id/reject", api.rejectApplication, "SUPERADMIN"],
+  ["POST", "/super/platform-mode", api.superSetPlatformMode, "SUPERADMIN"],
 ];
 const TENANT = [
   ["GET", "/", pages.home],
@@ -233,20 +239,17 @@ async function handle(request, env) {
     return finalize(res, setCookies, env);
   }
 
-  // 루트: 상인회 목록 / 단일이면 리다이렉트
-  if (pathname === "/") return finalize(await platformIndex(baseCtx), setCookies, env);
+  // 루트: 플랫폼 모드면 랜딩 / 아니면 상인회 1곳이면 그 홈으로 바로 이동
+  if (pathname === "/") {
+    const platformMode = (await D.getSetting(db, "platform_mode")) === "1";
+    if (!platformMode) {
+      const list = await D.listActiveAssociations(db);
+      if (list.length === 1) return finalize(redirect(`/t/${list[0].slug}`), setCookies, env);
+    }
+    return finalize(await pages.platformLanding(baseCtx), setCookies, env);
+  }
 
   return finalize(notFoundResponse({}), setCookies, env);
-}
-
-async function platformIndex(ctx) {
-  const list = await D.listActiveAssociations(ctx.db);
-  if (list.length === 1) return redirect(`/t/${list[0].slug}`);
-  const cards = list.map((a) => `<li><a class="btn btn-ghost" href="/t/${esc(a.slug)}">${esc(a.name)}</a></li>`).join("") || "<li class='empty'>등록된 상인회가 없습니다.</li>";
-  const body = `<section class="section page-top"><div class="container">
-    <div class="section-head"><h1 class="section-title">참여 상인회</h1></div>
-    <ul class="assoc-list">${cards}</ul></div></section>`;
-  return html(layout({ title: "상인회 플랫폼", body, csrf: ctx.csrf }));
 }
 
 async function serveMedia(env, key) {
@@ -257,7 +260,9 @@ async function serveMedia(env, key) {
   if (!obj) return new Response("Not Found", { status: 404 });
   const headers = new Headers();
   if (obj.httpMetadata && obj.httpMetadata.contentType) headers.set("content-type", obj.httpMetadata.contentType);
-  headers.set("cache-control", "public, max-age=86400");
+  // 파일명이 콘텐츠 고유(랜덤) → 1년 불변 캐시. Cloudflare 엣지·브라우저가 캐시해 R2 읽기·워커 요청 절감.
+  headers.set("cache-control", "public, max-age=31536000, immutable");
+  if (obj.httpEtag) headers.set("etag", obj.httpEtag);
   return new Response(obj.body, { headers });
 }
 
