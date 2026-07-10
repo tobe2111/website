@@ -23,10 +23,18 @@ export function back(to, msg, err = false) {
   return redirect(to + q);
 }
 export function notFoundResponse(ctx) {
-  const body = `<section class="section page-top"><div class="container" style="text-align:center">
-    <h1 style="font-size:3rem">404</h1><p class="empty">요청하신 페이지를 찾을 수 없습니다.</p>
-    <p><a class="btn btn-ghost btn-sm" href="${ctx && ctx.base ? ctx.base : "/"}/">홈으로</a></p></div></section>`;
-  return html(layout({ title: "404", assoc: ctx && ctx.assoc, base: ctx && ctx.base || "", body }), 404);
+  const base = (ctx && ctx.base) || "";
+  const body = `<section class="nf-wrap">
+    <div class="nf-inner">
+      <p class="nf-num" aria-hidden="true">404</p>
+      <h1 class="nf-title">찾으시는 골목이 없어요</h1>
+      <p class="nf-desc">주소가 바뀌었거나 삭제된 페이지입니다.<br />홈에서 다시 찾아보세요.</p>
+      <div class="nf-actions">
+        <a class="btn btn-primary" href="${base}/">홈으로</a>
+        ${ctx && ctx.assoc ? `<a class="btn btn-ghost" href="${base}/businesses">업체 둘러보기</a>` : ""}
+      </div>
+    </div></section>`;
+  return html(layout({ title: "404", assoc: ctx && ctx.assoc, base, body }), 404);
 }
 export function forbidden(msg = "권한이 없습니다.") {
   return html(`<section class="section page-top"><div class="container"><h1>403</h1><p>${esc(msg)}</p></div></section>`, 403);

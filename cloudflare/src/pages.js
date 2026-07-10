@@ -881,7 +881,7 @@ export async function platformLanding(ctx) {
 export function applyForm(ctx) {
   const { env, query, csrf } = ctx;
   const body = `<section class="section page-top"><div class="container auth-wrap"><div class="auth-card">
-    <h1 class="auth-title">홈페이지 신청</h1><p class="auth-sub">간단히 신청하면 검토 후 관리자 계정을 발급해 드립니다. (무료)</p>${flashOf(query)}
+    ${authHead("홈페이지 신청", "간단히 신청하면 검토 후 관리자 계정을 발급해 드립니다. (무료)")}${flashOf(query)}
     <form method="post" action="/apply" class="stack-form">
       <label>상인회·모임 이름<input type="text" name="assoc_name" required maxlength="100" placeholder="예: 강남시장 상인회" /></label>
       <label>담당자 성함<input type="text" name="contact_name" maxlength="60" /></label>
