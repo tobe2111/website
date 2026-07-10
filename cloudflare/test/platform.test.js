@@ -24,7 +24,7 @@ async function seedSuper(env) {
 test("셀프 입점 신청 → 슈퍼 승인 → 상인회·관리자 자동 발급 → 로그인", async () => {
   const env = makeEnv();
   await seedSuper(env);
-  let r = await post(env, jar(), "/apply", { assoc_name: "강남시장 상인회", contact_email: "gn@ex.kr", contact_name: "김강남" }, "/apply");
+  let r = await post(env, jar(), "/apply", { assoc_name: "강남시장 상인회", contact_email: "gn@ex.kr", contact_name: "김강남", agree: "1" }, "/apply");
   assert.equal(r.status, 303);
   const apps = await D.listApplications(env.DB, "pending");
   assert.equal(apps.length, 1);
@@ -64,7 +64,7 @@ test("슈퍼 플랜 변경 + 가입 카운트", async () => {
   await seedSuper(env);
   const a = await D.createAssociation(env.DB, { slug: "s", name: "S" });
   const j = jar();
-  let r = await post(env, j, "/t/s/register", { name: "가", email: "m1@ex.kr", password: "merchant1234", business_name: "가게1", category: "기타" }, "/t/s/register");
+  let r = await post(env, j, "/t/s/register", { name: "가", email: "m1@ex.kr", password: "merchant1234", business_name: "가게1", category: "기타", agree: "1" }, "/t/s/register");
   assert.equal(r.status, 303);
   assert.equal(await D.countMembers(env.DB, a.id), 1);
   const js = jar(); await post(env, js, "/login", { email: "super@p.kr", password: "super1234" }, "/login");

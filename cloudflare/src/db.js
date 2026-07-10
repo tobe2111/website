@@ -292,5 +292,14 @@ export async function platformStats(db) {
     businesses: await one("SELECT COUNT(*) AS n FROM businesses WHERE status='approved'"),
     users: await one("SELECT COUNT(*) AS n FROM users"),
     media: await one("SELECT COUNT(*) AS n FROM media"),
+    storage: (await first(db, "SELECT COALESCE(SUM(size),0) AS n FROM media")).n,
   };
+}
+// 상인회별 사용량 (회원·미디어·저장용량)
+export function usageByAssociation(db) {
+  return all(db, `SELECT a.id, a.name, a.slug, a.plan,
+      (SELECT COUNT(*) FROM users u WHERE u.association_id=a.id AND u.role='MERCHANT') AS members,
+      (SELECT COUNT(*) FROM media m JOIN businesses b ON b.id=m.business_id WHERE b.association_id=a.id) AS media_count,
+      (SELECT COALESCE(SUM(m.size),0) FROM media m JOIN businesses b ON b.id=m.business_id WHERE b.association_id=a.id) AS storage
+    FROM associations a ORDER BY storage DESC, members DESC`);
 }

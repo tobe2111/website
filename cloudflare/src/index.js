@@ -28,6 +28,8 @@ const GLOBAL = [
   ["POST", "/setup", api.setupSubmit],
   ["GET", "/apply", pages.applyForm],
   ["POST", "/apply", api.applySubmit],
+  ["GET", "/terms", pages.terms],
+  ["GET", "/privacy", pages.privacy],
   ["GET", "/forgot", pages.forgotForm],
   ["POST", "/forgot", api.forgotPassword],
   ["GET", "/sitemap.xml", pages.sitemap],
@@ -42,6 +44,7 @@ const GLOBAL = [
   ["POST", "/super/application/:id/approve", api.approveApplication, "SUPERADMIN"],
   ["POST", "/super/application/:id/reject", api.rejectApplication, "SUPERADMIN"],
   ["POST", "/super/platform-mode", api.superSetPlatformMode, "SUPERADMIN"],
+  ["POST", "/super/platform-info", api.superSetPlatformInfo, "SUPERADMIN"],
 ];
 const TENANT = [
   ["GET", "/", pages.home],

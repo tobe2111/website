@@ -39,7 +39,7 @@ async function postM(j, p, fields, fileFields) {
 
 test("회원가입 → 대시보드 리다이렉트 + 세션", async () => {
   const j = jar();
-  const r = await postU(j, "/t/seocho/register", { name: "홍상인", email: "hong@ex.kr", password: "merchant1234", business_name: "홍가네분식", category: "음식점" });
+  const r = await postU(j, "/t/seocho/register", { name: "홍상인", email: "hong@ex.kr", password: "merchant1234", business_name: "홍가네분식", category: "음식점", agree: "1" });
   assert.equal(r.status, 303);
   assert.match(r.headers.get("location"), /\/dashboard/);
   assert.ok(j.c.sc_session, "세션 쿠키 발급");
@@ -50,7 +50,7 @@ test("회원가입 → 대시보드 리다이렉트 + 세션", async () => {
 
 test("업체 정보 수정 + 좌표", async () => {
   const j = jar();
-  await postU(j, "/t/seocho/register", { name: "김점포", email: "kim@ex.kr", password: "merchant1234", business_name: "김가게", category: "카페·디저트" });
+  await postU(j, "/t/seocho/register", { name: "김점포", email: "kim@ex.kr", password: "merchant1234", business_name: "김가게", category: "카페·디저트", agree: "1" });
   const r = await postU(j, "/t/seocho/dashboard/business", { name: "김가게", category: "카페·디저트", description: "맛있는 커피", phone: "02-1", address: "서초로 1", hours: "10-22", lat: "37.49", lng: "127.01" });
   assert.equal(r.status, 303);
   const b = await D.getBusinessByOwner(env.DB, (await D.getUserByEmail(env.DB, "kim@ex.kr")).id);
@@ -60,7 +60,7 @@ test("업체 정보 수정 + 좌표", async () => {
 
 test("사진 업로드(R2) + 임베드 추가 + 삭제", async () => {
   const j = jar();
-  await postU(j, "/t/seocho/register", { name: "이사진", email: "photo@ex.kr", password: "merchant1234", business_name: "사진관", category: "생활·서비스" });
+  await postU(j, "/t/seocho/register", { name: "이사진", email: "photo@ex.kr", password: "merchant1234", business_name: "사진관", category: "생활·서비스", agree: "1" });
   const biz = await D.getBusinessByOwner(env.DB, (await D.getUserByEmail(env.DB, "photo@ex.kr")).id);
   let r = await postM(j, "/t/seocho/dashboard/media", { caption: "우리가게" }, { files: [PNG, PNG] });
   assert.equal(r.status, 303);
@@ -80,7 +80,7 @@ test("사진 업로드(R2) + 임베드 추가 + 삭제", async () => {
 
 test("게시판: 사진 2장 글 작성 → 상세 갤러리 + 댓글", async () => {
   const j = jar();
-  await postU(j, "/t/seocho/register", { name: "박글", email: "post@ex.kr", password: "merchant1234", business_name: "박상점", category: "기타" });
+  await postU(j, "/t/seocho/register", { name: "박글", email: "post@ex.kr", password: "merchant1234", business_name: "박상점", category: "기타", agree: "1" });
   let r = await postM(j, "/t/seocho/board", { title: "우리 사진들", body: "여러장" }, { images: [PNG, PNG] });
   assert.equal(r.status, 303);
   const pid = r.headers.get("location").match(/\/board\/(\d+)/)[1];

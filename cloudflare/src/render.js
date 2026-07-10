@@ -30,6 +30,7 @@ export function layout({ title, assoc, base = "", user = null, body, activeNav =
 <footer class="site-footer"><div class="container">
   <p>© ${brand}</p>
   ${assoc && (assoc.phone || assoc.address) ? `<p class="foot-contact">${assoc.address ? esc(assoc.address) : ""}${assoc.phone ? " · " + esc(assoc.phone) : ""}</p>` : ""}
+  <p class="foot-links"><a href="/terms">이용약관</a> · <a href="/privacy">개인정보처리방침</a></p>
 </div></footer>
 <script src="/js/app.js" defer></script>${scripts}
 </body></html>`;

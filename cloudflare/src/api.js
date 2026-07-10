@@ -26,7 +26,7 @@ async function saveImages(env, files, max) {
     if (!real) return { error: "이미지 파일만 첨부할 수 있습니다." };
     if (buf.byteLength > MAX_IMAGE_BYTES) return { error: "이미지 용량이 큽니다. (최대 8MB)" };
     const key = await storage.save(env, buf, real);
-    out.push({ filename: key, thumb: "" });
+    out.push({ filename: key, thumb: "", size: buf.byteLength });
   }
   return { images: out };
 }
@@ -88,6 +88,7 @@ export async function register(ctx) {
   const email = cap((form.get("email") || "").toLowerCase().trim(), 120);
   const password = form.get("password") || "";
   const businessName = cap((form.get("business_name") || "").trim(), 100);
+  if (form.get("agree") !== "1") return back(base + "/register", "개인정보 수집·이용에 동의해 주세요.", true);
   if (!name || !EMAIL_RE.test(email) || password.length < 8 || password.length > 200 || !businessName)
     return back(base + "/register", "입력값을 확인해 주세요. (비밀번호 8~200자)", true);
   if (await D.getUserByEmail(db, email)) return back(base + "/register", "이미 가입된 이메일입니다.", true);
@@ -145,7 +146,7 @@ export async function uploadMedia(ctx) {
   const up = await saveImages(env, form.getAll("files"), 12);
   if (up.error) return back(base + "/dashboard", up.error, true);
   if (!up.images.length) return back(base + "/dashboard", "선택된 사진이 없습니다.", true);
-  for (const im of up.images) await D.addMedia(db, { businessId: b.id, kind: "image", filename: im.filename, caption });
+  for (const im of up.images) await D.addMedia(db, { businessId: b.id, kind: "image", filename: im.filename, size: im.size, caption });
   return back(base + "/dashboard", `${up.images.length}장 업로드 완료.`);
 }
 
@@ -507,6 +508,7 @@ export async function applySubmit(ctx) {
   const { db, env, form, ip } = ctx;
   if (!(await turnstileVerify(env, form.get("cf-turnstile-response"), ip)))
     return back("/apply", "봇 방지 확인에 실패했습니다. 다시 시도해 주세요.", true);
+  if (form.get("agree") !== "1") return back("/apply", "개인정보 수집·이용에 동의해 주세요.", true);
   const assocName = cap((form.get("assoc_name") || "").trim(), 100);
   const contactEmail = cap((form.get("contact_email") || "").toLowerCase().trim(), 120);
   if (!assocName || !EMAIL_RE.test(contactEmail))
@@ -562,4 +564,14 @@ export async function superSetPlan(ctx) {
 export async function superSetPlatformMode(ctx) {
   await D.setSetting(ctx.db, "platform_mode", ctx.form.get("on") === "1" ? "1" : "0");
   return back("/super", "플랫폼 설정을 저장했습니다.");
+}
+
+// ---------- 슈퍼: 플랫폼/운영자 정보 저장 ----------
+export async function superSetPlatformInfo(ctx) {
+  const { db, form } = ctx;
+  await D.setSetting(db, "site_name", cap((form.get("site_name") || "").trim(), 60));
+  await D.setSetting(db, "operator", cap((form.get("operator") || "").trim(), 80));
+  await D.setSetting(db, "contact_email", cap((form.get("contact_email") || "").trim(), 120));
+  await D.setSetting(db, "contact_phone", cap((form.get("contact_phone") || "").trim(), 40));
+  return back("/super", "플랫폼 정보를 저장했습니다.");
 }

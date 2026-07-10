@@ -1,6 +1,6 @@
 // 공개/인증 페이지 핸들러 (async). ctx = { env, db, assoc, base, user, url, query, csrf, params }
 import * as D from "./db.js";
-import { esc, clip, openBadge } from "./util.js";
+import { esc, clip, openBadge, fmtBytes } from "./util.js";
 import { layout, flash, statusBadge, pager, mediaUrl } from "./render.js";
 import { html, notFoundResponse, back } from "./http.js";
 import { galleryItem } from "./media-render.js";
@@ -310,6 +310,7 @@ export function registerForm(ctx) {
       <label>비밀번호 (8자 이상)<input type="password" name="password" required minlength="8" /></label>
       <label>점포명<input type="text" name="business_name" required maxlength="100" /></label>
       <label>업종<select name="category">${opts}</select></label>
+      <label class="check"><input type="checkbox" name="agree" value="1" required /> <a href="/privacy" target="_blank">개인정보 수집·이용</a>에 동의합니다.</label>
       ${turnstileWidget(env)}
       <button class="btn btn-primary btn-block">가입 신청</button>
     </form><p class="auth-note">가입 후 관리자 승인 시 일반에 공개됩니다.</p></div></div></section>`;
@@ -580,7 +581,17 @@ export async function superConsole(ctx) {
   const list = await D.listAllAssociations(db);
   const auditLog = await D.listAudit(db, null, 15);
   const pendingApps = await D.listApplications(db, "pending");
+  const usage = await D.usageByAssociation(db);
   const platformMode = (await D.getSetting(db, "platform_mode")) === "1";
+  const siteName = (await D.getSetting(db, "site_name")) || "상인회 플랫폼";
+  const operator = (await D.getSetting(db, "operator")) || "";
+  const contactEmail = (await D.getSetting(db, "contact_email")) || "";
+  const contactPhone = (await D.getSetting(db, "contact_phone")) || "";
+  const usagePanel = `<section class="panel"><h2 class="panel-title">상인회별 사용량 <span class="badge badge-muted">R2 총 ${fmtBytes(ps.storage)}</span></h2>
+    <div class="table-scroll"><table class="admin-table"><thead><tr><th>상인회</th><th>회원</th><th>미디어</th><th>저장용량</th><th>플랜</th></tr></thead><tbody>
+      ${usage.length ? usage.map((u) => `<tr><td>${esc(u.name)}</td><td>${u.members}명</td><td>${u.media_count}개</td><td>${fmtBytes(u.storage)}</td><td>${esc((PLANS[u.plan] || PLANS.free).label)}</td></tr>`).join("") : `<tr><td colspan="5" class="empty">데이터 없음</td></tr>`}
+    </tbody></table></div>
+    <p class="panel-hint">R2 무료 한도 10GB 기준 사용량입니다. 사진은 업로드 시 자동 축소(WebP)되어 저장됩니다.</p></section>`;
   const planOpts = (cur) => PLAN_KEYS.map((k) => `<option value="${k}"${k === cur ? " selected" : ""}>${esc(PLANS[k].label)}</option>`).join("");
   const appsPanel = `<section class="panel panel-accent"><h2 class="panel-title">입점 신청 <span class="badge ${pendingApps.length ? "badge-wait" : "badge-muted"}">${pendingApps.length}건 대기</span></h2>
     ${pendingApps.length ? `<div class="table-scroll"><table class="admin-table"><thead><tr><th>상인회</th><th>연락처</th><th>메모</th><th>처리</th></tr></thead><tbody>
@@ -607,7 +618,14 @@ export async function superConsole(ctx) {
       <form method="post" action="/super/platform-mode" class="stack-form compact">
         <label class="check"><input type="checkbox" name="on" value="1"${platformMode ? " checked" : ""} /> 루트(첫 화면)를 <b>플랫폼 소개 랜딩</b>으로 표시 (끄면 상인회가 1곳일 때 그 홈으로 바로 이동)</label>
         <button class="btn btn-ghost btn-sm">저장</button></form>
-      <p class="panel-hint">공개 신청 페이지: <a href="/apply" target="_blank">/apply</a> · 랜딩 미리보기는 위 옵션 켠 뒤 루트 접속</p></section>
+      <div class="form-divider">플랫폼/운영자 정보 (약관·개인정보처리방침·푸터에 표시)</div>
+      <form method="post" action="/super/platform-info" class="stack-form compact">
+        <div class="form-two"><label>플랫폼/서비스명<input type="text" name="site_name" value="${esc(siteName)}" maxlength="60" /></label>
+          <label>운영자(사업자)명<input type="text" name="operator" value="${esc(operator)}" maxlength="80" /></label></div>
+        <div class="form-two"><label>문의 이메일<input type="email" name="contact_email" value="${esc(contactEmail)}" /></label>
+          <label>문의 전화(선택)<input type="text" name="contact_phone" value="${esc(contactPhone)}" maxlength="40" /></label></div>
+        <button class="btn btn-ghost btn-sm">정보 저장</button></form>
+      <p class="panel-hint">공개 신청: <a href="/apply" target="_blank">/apply</a> · 약관: <a href="/terms" target="_blank">/terms</a> · 개인정보처리방침: <a href="/privacy" target="_blank">/privacy</a></p></section>
     <div class="stat-cards"><div class="stat-card"><span class="stat-num">${ps.associations}</span><span class="stat-label">상인회</span></div>
       <div class="stat-card"><span class="stat-num">${ps.businesses}</span><span class="stat-label">승인 업체</span></div>
       <div class="stat-card"><span class="stat-num">${ps.users}</span><span class="stat-label">사용자</span></div>
@@ -624,6 +642,7 @@ export async function superConsole(ctx) {
       <p class="panel-hint">개별 도메인: 도메인을 입력·저장한 뒤 <b>Cloudflare 대시보드 → 이 워커 → Settings → Domains &amp; Routes → Add → Custom Domain</b> 으로 같은 도메인을 추가해야 실제 접속됩니다(그 도메인이 이 Cloudflare 계정에 등록되어 있어야 함).</p>
       <div class="table-scroll"><table class="admin-table">
       <thead><tr><th>상인회</th><th>개별 도메인</th><th>플랜</th><th>상태</th><th>관리</th></tr></thead><tbody>${rows}</tbody></table></div></section>
+    ${usagePanel}
     <section class="panel"><h2 class="panel-title">감사 로그 (플랫폼)</h2>
       <ul class="audit-list">${auditLog.length ? auditLog.map((a) => `<li><span class="audit-action">${esc(a.action)}</span> <span class="audit-detail">${esc(a.detail)}</span><span class="audit-meta">${esc(a.actor_name)} · ${esc(a.created_at.slice(5, 16).replace("T", " "))}</span></li>`).join("") : `<li class="empty">기록이 없습니다.</li>`}</ul></section></div></section>`;
   return html(layout({ title: "슈퍼 관리자", user, body, csrf }));
@@ -742,10 +761,57 @@ export function applyForm(ctx) {
       <label>연락받을 이메일<input type="email" name="contact_email" required /></label>
       <label>연락처(선택)<input type="tel" name="contact_phone" maxlength="40" /></label>
       <label>남기실 말(선택)<textarea name="message" rows="3" maxlength="2000" placeholder="점포 수, 원하는 기능 등 자유롭게"></textarea></label>
+      <label class="check"><input type="checkbox" name="agree" value="1" required /> <a href="/privacy" target="_blank">개인정보 수집·이용</a>에 동의합니다.</label>
       ${turnstileWidget(env)}
       <button class="btn btn-primary btn-block">신청하기</button>
     </form><p class="auth-note">이미 계정이 있으신가요? <a href="/login">로그인</a></p></div></div></section>`;
   return html(layout({ title: "홈페이지 신청", body, csrf, scripts: turnstileScript(env) }));
+}
+
+// ================= 법적 페이지 (약관·개인정보) =================
+async function platformInfo(db) {
+  return {
+    siteName: (await D.getSetting(db, "site_name")) || "상인회 플랫폼",
+    operator: (await D.getSetting(db, "operator")) || "운영자",
+    email: (await D.getSetting(db, "contact_email")) || "",
+    phone: (await D.getSetting(db, "contact_phone")) || "",
+  };
+}
+function legalWrap(title, inner, info, csrf) {
+  const contact = [info.email && `이메일 ${esc(info.email)}`, info.phone && `전화 ${esc(info.phone)}`].filter(Boolean).join(" · ");
+  const body = `<section class="section page-top"><div class="container narrow legal">
+    <h1 class="article-title">${esc(title)}</h1>
+    <p class="legal-meta">${esc(info.siteName)}${contact ? " · " + contact : ""}</p>
+    ${inner}
+    <p class="legal-note">※ 본 문서는 표준 양식입니다. 실제 서비스 운영 전 사업 형태에 맞게 검토·보완하시길 권장합니다.</p>
+  </div></section>`;
+  return html(layout({ title, body, csrf }));
+}
+export async function terms(ctx) {
+  const info = await platformInfo(ctx.db);
+  const inner = `
+    <h2>제1조 (목적)</h2><p>본 약관은 <b>${esc(info.siteName)}</b>(이하 "서비스")가 제공하는 상인회·소상공인 홈페이지 및 관련 기능의 이용 조건과 절차, 이용자와 운영자의 권리·의무를 규정함을 목적으로 합니다.</p>
+    <h2>제2조 (정의)</h2><p>"이용자"란 서비스에 접속하여 이 약관에 따라 서비스를 이용하는 상인회·회원·방문자를 말합니다. "회원"이란 계정을 등록한 이용자를 말합니다.</p>
+    <h2>제3조 (서비스의 제공)</h2><p>서비스는 점포 안내·지도, 공지·소식, 회원 게시판, 전자 동의서(전자서명) 등을 제공합니다. 운영자는 서비스 내용을 변경하거나 중단할 수 있으며, 중대한 변경 시 사전에 공지합니다.</p>
+    <h2>제4조 (회원의 의무)</h2><p>회원은 타인의 권리를 침해하거나 법령·공서양속에 반하는 게시물을 등록해서는 안 되며, 계정 정보를 안전하게 관리할 책임이 있습니다.</p>
+    <h2>제5조 (게시물의 관리)</h2><p>운영자·상인회 관리자는 관련 법령을 위반하거나 부적절한 게시물을 사전 통지 없이 삭제·이동할 수 있습니다.</p>
+    <h2>제6조 (전자서명)</h2><p>서비스가 제공하는 전자서명은 서명자 확인(로그인)·서명 의사(동의)·위변조 방지(해시·디지털 서명)·감사추적(시각·IP·기기)을 갖춘 일반 전자서명입니다. 고강도 인증이 필요한 용도는 별도 검토가 필요합니다.</p>
+    <h2>제7조 (면책)</h2><p>운영자는 천재지변, 이용자의 귀책, 제3자 서비스(지도·영상 등)의 장애로 인한 손해에 대해 책임을 지지 않습니다.</p>
+    <h2>제8조 (문의)</h2><p>본 약관 관련 문의는 위 연락처로 접수합니다.</p>`;
+  return legalWrap("이용약관", inner, info, ctx.csrf);
+}
+export async function privacy(ctx) {
+  const info = await platformInfo(ctx.db);
+  const inner = `
+    <p><b>${esc(info.siteName)}</b>(이하 "서비스")는 이용자의 개인정보를 중요하게 생각하며, 「개인정보 보호법」 등 관련 법령을 준수합니다.</p>
+    <h2>1. 수집하는 개인정보 항목</h2><p>회원가입·입점신청 시 <b>이름, 이메일, 연락처, 점포 정보</b>를 수집합니다. 서비스 이용 과정에서 접속 IP·기기 정보·서비스 이용 기록이 자동 생성·수집될 수 있습니다. 전자서명 시 서명자·시각·IP·기기 정보가 기록됩니다.</p>
+    <h2>2. 수집·이용 목적</h2><p>회원 식별 및 관리, 서비스 제공(점포 안내·공지·게시판·전자서명), 문의 응대, 부정 이용 방지를 위해 이용합니다.</p>
+    <h2>3. 보유·이용 기간</h2><p>수집·이용 목적 달성 시 지체 없이 파기합니다. 다만 관련 법령에 따라 보존이 필요한 경우 해당 기간 동안 보관합니다. 회원 탈퇴 시 계정 정보는 삭제되며, 전자서명 기록은 법적 효력·분쟁 대비를 위해 별도 기간 보관될 수 있습니다.</p>
+    <h2>4. 제3자 제공·처리위탁</h2><p>서비스는 원칙적으로 개인정보를 외부에 제공하지 않습니다. 지도(네이버) 및 영상(유튜브·인스타그램·네이버TV)은 이용자가 직접 링크·연동하는 외부 서비스이며, 해당 서비스의 정책이 적용됩니다. 서비스 인프라는 Cloudflare를 통해 운영됩니다.</p>
+    <h2>5. 이용자의 권리</h2><p>이용자는 언제든지 본인의 개인정보 열람·정정·삭제·처리정지를 요청할 수 있으며, 계정 설정 또는 문의처를 통해 행사할 수 있습니다.</p>
+    <h2>6. 안전성 확보 조치</h2><p>비밀번호는 복호화 불가능한 방식(PBKDF2)으로 저장하고, 통신은 HTTPS로 암호화합니다. 2단계 인증(2FA)을 제공합니다.</p>
+    <h2>7. 개인정보 보호책임자·문의</h2><p>${esc(info.operator)}${info.email ? ` (이메일 ${esc(info.email)})` : ""}${info.phone ? ` (전화 ${esc(info.phone)})` : ""}</p>`;
+  return legalWrap("개인정보처리방침", inner, info, ctx.csrf);
 }
 
 // ================= SEO: sitemap · robots =================
