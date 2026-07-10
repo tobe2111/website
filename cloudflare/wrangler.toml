@@ -1,7 +1,7 @@
 # Cloudflare Workers 설정 — 서초구 상인회 플랫폼 (무료 티어로 배포 가능)
 # 배포 전:  wrangler d1 create seocho-db   /   wrangler r2 bucket create seocho-media
 # 그 뒤 아래 database_id 를 채우고:  wrangler deploy
-name = "seocho-website"
+name = "website"
 main = "src/index.js"
 compatibility_date = "2024-11-01"
 compatibility_flags = ["nodejs_compat"]
