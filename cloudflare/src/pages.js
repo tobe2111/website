@@ -17,8 +17,38 @@ const NOTICE_CATEGORIES = ["안내", "공지", "소식", "행사", "혜택", "�
 const qs = (o) => { const p = new URLSearchParams(); for (const [k, v] of Object.entries(o)) if (v != null && v !== "" && !(k === "page" && v === 1)) p.set(k, v); const s = p.toString(); return s ? "?" + s : ""; };
 const canModerate = (user, assoc) => user && (user.role === "SUPERADMIN" || (user.role === "ADMIN" && user.association_id === assoc.id));
 
+// 카테고리 SVG 라인 아이콘 (디자인 시스템: brand-700 stroke, 이모지 대체)
+const _ic = (inner) => `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${inner}</svg>`;
+const CAT_SVG = {
+  "음식점": _ic('<path d="M4 3v7a2 2 0 0 0 2 2h1V3M7 3v9M7 12v9M17 3c-2 1.5-3 3.8-3 6v3h3v9M17 12V3"/>'),
+  "카페·디저트": _ic('<path d="M4 9h12v6a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V9z"/><path d="M16 10h1.5a2.5 2.5 0 0 1 0 5H16M7 5.5c0-1 .8-1 .8-2M11 5.5c0-1 .8-1 .8-2"/>'),
+  "생활·서비스": _ic('<path d="M14.7 6.3a4.5 4.5 0 0 0-6 5.6L3 17.6V21h3.4l5.7-5.7a4.5 4.5 0 0 0 5.6-6L14.5 12l-2.5-2.5 2.7-3.2z"/>'),
+  "의류·잡화": _ic('<path d="M9 4 5 7l1.5 3L9 8.7V20h6V8.7l2.5 1.3L19 7l-4-3a3 3 0 0 1-6 0z"/>'),
+  "뷰티·건강": _ic('<circle cx="6.5" cy="7" r="2.5"/><circle cx="6.5" cy="17" r="2.5"/><path d="M8.7 8.5 20 20M8.7 15.5 20 4"/>'),
+  "학원·교육": _ic('<path d="M4 19V5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 19a2 2 0 0 0 2 2h13"/><path d="M9 7h6"/>'),
+  "의료": _ic('<path d="M12 4v16M4 12h16"/><rect x="3" y="3" width="18" height="18" rx="4"/>'),
+  "기타": _ic('<path d="M4 9l1.2-4.2A1 1 0 0 1 6.2 4h11.6a1 1 0 0 1 1 .8L20 9"/><path d="M4 9v10a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9"/><path d="M9 20v-5h6v5"/>'),
+  "전체": _ic('<circle cx="5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.4" fill="currentColor" stroke="none"/>'),
+};
+const catIcon = (cat) => CAT_SVG[cat] || CAT_SVG["기타"];
+// 관리자 사이드바 아이콘 (18px 라인)
+const _si = (inner) => `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${inner}</svg>`;
+const SIDE_SVG = {
+  stats: _si('<path d="M4 20V10M10 20V4M16 20v-7M21 20H3"/>'),
+  bell: _si('<path d="M18 8a6 6 0 0 0-12 0c0 7-3 8-3 8h18s-3-1-3-8"/><path d="M13.7 20a2 2 0 0 1-3.4 0"/>'),
+  users: _si('<circle cx="9" cy="8" r="3.5"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M21 20c0-2.6-1.6-4.8-4-5.7"/>'),
+  store: _si('<path d="M4 9l1.2-4.2A1 1 0 0 1 6.2 4h11.6a1 1 0 0 1 1 .8L20 9"/><path d="M4 9v10a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9"/><path d="M9 20v-5h6v5"/>'),
+  tag: _si('<path d="M20.6 13.4 12 22 2 12V2h10l8.6 8.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.4"/>'),
+  home: _si('<path d="M3 11l9-8 9 8"/><path d="M5 9.5V21h14V9.5"/><path d="M10 21v-6h4v6"/>'),
+  palette: _si('<path d="M12 21a9 9 0 1 1 9-9c0 2-1.5 3-3 3h-2a2 2 0 0 0-1.5 3.3c.6.7.2 2.7-2.5 2.7z"/><circle cx="7.5" cy="10.5" r="1"/><circle cx="12" cy="7.5" r="1"/><circle cx="16.5" cy="10.5" r="1"/>'),
+  mega: _si('<path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1z"/><path d="M14 8a4 4 0 0 1 0 8M17 5a8 8 0 0 1 0 14"/>'),
+  sign: _si('<path d="M4 20h4L19 9a2 2 0 0 0-3-3L5 17l-1 3z"/><path d="M14.5 6.5l3 3"/>'),
+  ext: _si('<path d="M14 4h6v6M20 4l-9 9"/><path d="M20 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h5"/>'),
+};
 const PIN_SVG = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="2.6"/></svg>';
 const PHONE_SVG = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2 4.2 2 2 0 0 1 4 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8.1 9.7a16 16 0 0 0 6 6l1.2-1.1a2 2 0 0 1 2.1-.5c.9.3 1.8.6 2.7.7A2 2 0 0 1 22 16.9z"/></svg>';
+const CLOCK_SVG = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
+const TAG_SVG = '<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 13.4 12 22 2 12V2h10l8.6 8.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.4"/></svg>';
 async function businessCard(db, base, b) {
   const cover = await D.getCoverImage(db, b.id);
   const thumb = cover
@@ -47,12 +77,11 @@ export async function home(ctx) {
   const events = await D.listEvents(db, assoc.id, true);
   const stats = await D.stats(db, assoc.id);
   const cats = await D.distinctCategories(db, assoc.id);
-  const CAT_ICON = { "음식점": "🍽️", "카페·디저트": "☕", "생활·서비스": "🧰", "의류·잡화": "👕", "뷰티·건강": "💇", "학원·교육": "📚", "의료": "🏥", "기타": "🏪" };
-  const catTiles = cats.length ? `<div class="cat-grid">${cats.map((c) => `<a class="cat-tile" href="${base}/businesses?category=${encodeURIComponent(c.category)}"><span class="cat-ico">${CAT_ICON[c.category] || "🏪"}</span><span class="cat-name">${esc(c.category)}</span><span class="cat-count">${c.n}</span></a>`).join("")}<a class="cat-tile cat-all" href="${base}/businesses"><span class="cat-ico">⋯</span><span class="cat-name">전체보기</span></a></div>` : "";
+  const catTiles = cats.length ? `<div class="cat-grid">${cats.map((c) => `<a class="cat-tile" href="${base}/businesses?category=${encodeURIComponent(c.category)}"><span class="cat-ico">${catIcon(c.category)}</span><span class="cat-name">${esc(c.category)}</span><span class="cat-count">${c.n}</span></a>`).join("")}<a class="cat-tile cat-all" href="${base}/businesses"><span class="cat-ico">${catIcon("전체")}</span><span class="cat-name">전체보기</span></a></div>` : "";
   const eventsHtml = events.length ? events.map((e) => {
     const d = e.event_date.slice(8, 10), mo = Number(e.event_date.slice(5, 7)) + "월";
     return `<article class="event-card"><div class="event-date"><span class="d">${d}</span><span class="m">${mo}</span></div>
-      <div class="event-info"><h3>${esc(e.title)}</h3><p>${esc(e.description)}</p><span class="event-place">📍 ${esc(e.place)}</span></div></article>`;
+      <div class="event-info"><h3>${esc(e.title)}</h3><p>${esc(e.description)}</p><span class="event-place">${PIN_SVG}${esc(e.place)}</span></div></article>`;
   }).join("") : `<p class="empty">예정된 행사가 없습니다.</p>`;
   const body = renderHome(lay, { assoc, base, stats, businessesHtml, catTiles, noticesHtml: noticeRows(base, notices), eventsHtml, loggedIn: !!user });
   return html(layout({ title: "", assoc, base, user, body, activeNav: `${base}/`, csrf, description: assoc.tagline }));
@@ -112,7 +141,7 @@ export async function businessDetail(ctx) {
   const prods = await D.listProducts(db, b.id); // 공개: 비숨김만
   const productGrid = prods.length ? `<h2 class="biz-section-title">제품·메뉴</h2>
     <div class="product-grid">${prods.map((p) => `<figure class="product-card${p.sold_out ? " is-sold" : ""}">
-      <div class="product-photo">${p.image ? `<img src="${esc(mediaUrl(p.image))}" alt="${esc(p.name)}" loading="lazy" />` : `<span class="product-noimg">🏷️</span>`}${p.sold_out ? `<span class="product-sold">품절</span>` : ""}</div>
+      <div class="product-photo">${p.image ? `<img src="${esc(mediaUrl(p.image))}" alt="${esc(p.name)}" loading="lazy" />` : `<span class="product-noimg">${TAG_SVG}</span>`}${p.sold_out ? `<span class="product-sold">품절</span>` : ""}</div>
       <figcaption><div class="product-caption-top"><strong class="product-name">${esc(p.name)}</strong>${p.price ? `<span class="product-price">${esc(p.price)}</span>` : ""}</div>${p.description ? `<p class="product-desc">${esc(p.description)}</p>` : ""}</figcaption>
     </figure>`).join("")}</div>` : "";
   const pending = b.status !== "approved" ? `<div class="flash flash-warn">이 페이지는 ${statusBadge(b.status)} 상태입니다.</div>` : "";
@@ -121,7 +150,7 @@ export async function businessDetail(ctx) {
     <span class="chip chip-light">${esc(b.category)}</span>${openBadge(b.hours)}<h1>${esc(b.name)}</h1>
     <p class="biz-desc">${esc(b.description || "소개가 곧 등록됩니다.")}</p>
     <ul class="biz-contact">
-      ${b.address ? `<li>📍 ${esc(b.address)}</li>` : ""}${b.phone ? `<li>☎️ <a href="tel:${esc(b.phone)}">${esc(b.phone)}</a></li>` : ""}${b.hours ? `<li>🕘 ${esc(b.hours)}</li>` : ""}
+      ${b.address ? `<li>${PIN_SVG} ${esc(b.address)}</li>` : ""}${b.phone ? `<li>${PHONE_SVG} <a href="tel:${esc(b.phone)}">${esc(b.phone)}</a></li>` : ""}${b.hours ? `<li>${CLOCK_SVG} ${esc(b.hours)}</li>` : ""}
     </ul></div></section>
   <section class="section"><div class="container">
     ${productGrid}
@@ -167,7 +196,7 @@ export async function mapPage(ctx) {
     cats.map((c) => `<a href="${base}/map?category=${encodeURIComponent(c.category)}" class="chip-filter${cat === c.category ? " active" : ""}">${esc(c.category)}</a>`).join("");
   const listRows = markers.length ? markers.map((m) => `<li class="map-store" data-lat="${m.lat}" data-lng="${m.lng}">
       <a href="${base}/business/${esc(m.slug)}" class="map-store-name">${esc(m.name)}</a><span class="chip">${esc(m.category)}</span>
-      ${m.address ? `<span class="map-store-addr">📍 ${esc(m.address)}</span>` : ""}
+      ${m.address ? `<span class="map-store-addr">${PIN_SVG} ${esc(m.address)}</span>` : ""}
       <a class="map-store-link" href="https://map.naver.com/p/search/${encodeURIComponent(m.address || m.name)}" target="_blank" rel="noopener">네이버 지도에서 열기 →</a></li>`).join("")
     : `<li class="empty">지도에 표시할 좌표가 등록된 점포가 없습니다.</li>`;
   const mapEl = naver
@@ -185,11 +214,16 @@ export async function mapPage(ctx) {
 }
 
 // ================= 공지 =================
+const CHEV_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>';
+const BELL_SVG = '<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 8-3 8h18s-3-1-3-8"/><path d="M13.7 20a2 2 0 0 1-3.4 0"/></svg>';
 function noticeRows(base, list) {
-  return list.length ? list.map((n) => `<li${n.image ? ' class="has-thumb"' : ""}><a href="${base}/notices/${n.id}">
-    ${n.image ? `<img class="notice-thumb" src="${esc(mediaUrl(n.image))}" alt="" loading="lazy" />` : ""}
-    <span class="notice-tag${n.pinned ? " tag-important" : ""}">${esc(n.tag)}</span>
-    <span class="notice-title">${esc(n.title)}</span><time>${esc(n.created_at.slice(0, 10).replace(/-/g, "."))}</time></a></li>`).join("")
+  return list.length ? list.map((n) => `<li><a href="${base}/notices/${n.id}">
+    ${n.image ? `<img class="notice-ico notice-thumb-img" src="${esc(mediaUrl(n.image))}" alt="" loading="lazy" />` : `<span class="notice-ico${n.pinned ? " is-pinned" : ""}">${BELL_SVG}</span>`}
+    <span class="notice-main">
+      <span class="notice-title">${n.pinned ? '<em class="pin-mini">고정</em>' : ""}${esc(n.title)}</span>
+      <span class="notice-meta">${esc(n.tag)} · ${esc(n.created_at.slice(0, 10).replace(/-/g, "."))}</span>
+    </span>
+    <span class="notice-chev">${CHEV_SVG}</span></a></li>`).join("")
     : `<li class="empty">등록된 공지가 없습니다.</li>`;
 }
 export async function notices(ctx) {
@@ -229,7 +263,7 @@ export async function events(ctx) {
   const cards = list.length ? list.map((e) => {
     const d = e.event_date.slice(8, 10), mo = Number(e.event_date.slice(5, 7)) + "월";
     return `<article class="event-card"><div class="event-date"><span class="d">${d}</span><span class="m">${mo}</span></div>
-      <div class="event-info"><h3>${esc(e.title)}</h3><p>${esc(e.description)}</p><span class="event-place">📍 ${esc(e.place)}</span></div></article>`;
+      <div class="event-info"><h3>${esc(e.title)}</h3><p>${esc(e.description)}</p><span class="event-place">${PIN_SVG}${esc(e.place)}</span></div></article>`;
   }).join("") : `<p class="empty">예정된 행사가 없습니다.</p>`;
   const body = `<section class="section page-top"><div class="container">
     <div class="section-head"><p class="section-eyebrow">EVENTS</p><h2 class="section-title">행사·소식</h2></div>
@@ -472,10 +506,10 @@ export async function admin(ctx) {
     ${flashOf(query)}
     <div class="console-grid">
     <aside class="console-side"><nav>
-      <a href="#p-stats">📊 현황</a><a href="#p-notif">🔔 알림함${unread ? ` <span class="side-badge">${unread}</span>` : ""}</a>
-      <a href="#p-members">👥 회원</a><a href="#p-biz">🏪 업체 승인${s.pending ? ` <span class="side-badge">${s.pending}</span>` : ""}</a>
-      <a href="#p-products">🛒 제품</a><a href="#p-home">🏠 홈 구성</a><a href="#p-brand">🎨 브랜딩</a><a href="#p-content">📢 공지·행사</a>
-      <a href="${base}/admin/documents" class="side-ext">✍ 전자서명 문서</a><a href="${base}" target="_blank" class="side-ext">↗ 사이트 보기</a>
+      <a href="#p-stats">${SIDE_SVG.stats} 현황</a><a href="#p-notif">${SIDE_SVG.bell} 알림함${unread ? ` <span class="side-badge">${unread}</span>` : ""}</a>
+      <a href="#p-members">${SIDE_SVG.users} 회원</a><a href="#p-biz">${SIDE_SVG.store} 업체 승인${s.pending ? ` <span class="side-badge">${s.pending}</span>` : ""}</a>
+      <a href="#p-products">${SIDE_SVG.tag} 제품</a><a href="#p-home">${SIDE_SVG.home} 홈 구성</a><a href="#p-brand">${SIDE_SVG.palette} 브랜딩</a><a href="#p-content">${SIDE_SVG.mega} 공지·행사</a>
+      <a href="${base}/admin/documents" class="side-ext">${SIDE_SVG.sign} 전자서명 문서</a><a href="${base}" target="_blank" class="side-ext">${SIDE_SVG.ext} 사이트 보기</a>
     </nav></aside>
     <div class="console-main">
     <div class="stat-cards" id="p-stats">
