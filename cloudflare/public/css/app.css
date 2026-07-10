@@ -3,19 +3,21 @@
    테넌트가 --brand HEX 하나만 지정하면 900~50 스케일이 자동 파생됩니다.
    ========================================================= */
 :root {
-  /* 브랜드 — 테넌트별 --brand 를 render.js 가 주입, 스케일은 자동 파생 */
+  /* 브랜드 — 테넌트별 --brand 를 render.js 가 주입, 스케일은 자동 파생.
+     각 토큰은 정적 폴백(기본 딥그린) → color-mix 순으로 선언:
+     color-mix 미지원 구형 브라우저는 폴백을 유지(사이트 정상), 지원 브라우저는 테넌트 색으로 파생. */
   --brand:#0b6e4f;
-  --brand-900:color-mix(in oklab, var(--brand), #04100a 50%);
-  --brand-800:color-mix(in oklab, var(--brand), #04100a 28%);
-  --brand-700:var(--brand);
-  --brand-600:color-mix(in oklab, var(--brand), white 12%);
-  --brand-500:color-mix(in oklab, var(--brand), white 28%);
-  --brand-300:color-mix(in oklab, var(--brand), white 55%);
-  --brand-100:color-mix(in oklab, var(--brand), white 82%);
-  --brand-50:color-mix(in oklab, var(--brand), white 91%);
+  --brand-900:#063320; --brand-900:color-mix(in oklab, var(--brand), #04100a 50%);
+  --brand-800:#083f2b; --brand-800:color-mix(in oklab, var(--brand), #04100a 28%);
+  --brand-700:#0b6e4f; --brand-700:var(--brand);
+  --brand-600:#1f7d61; --brand-600:color-mix(in oklab, var(--brand), white 12%);
+  --brand-500:#4a9a80; --brand-500:color-mix(in oklab, var(--brand), white 28%);
+  --brand-300:#87b8a7; --brand-300:color-mix(in oklab, var(--brand), white 55%);
+  --brand-100:#cee7de; --brand-100:color-mix(in oklab, var(--brand), white 82%);
+  --brand-50:#e6f3ee;  --brand-50:color-mix(in oklab, var(--brand), white 91%);
   --on-brand:#fff;
-  --brand-tint:var(--brand-50);
-  --brand-ring:color-mix(in oklab, var(--brand), transparent 58%);
+  --brand-tint:#e6f3ee; --brand-tint:var(--brand-50);
+  --brand-ring:rgba(11,110,79,.42); --brand-ring:color-mix(in oklab, var(--brand), transparent 58%);
   --accent:#f6a623;
   /* 잉크·라인·표면 */
   --ink:#1d1d1f; --ink-soft:#515154; --muted:#86868b;
@@ -83,7 +85,7 @@ img,video{max-width:100%;display:block}
 .link-danger:hover{text-decoration:underline}
 
 /* ---------- Header ---------- */
-.site-header{position:sticky;top:0;z-index:60;background:color-mix(in oklab,var(--bg),transparent 18%);backdrop-filter:saturate(180%) blur(20px);border-bottom:1px solid var(--line-soft);transition:box-shadow .25s}
+.site-header{position:sticky;top:0;z-index:60;background:rgba(255,255,255,.86);background:color-mix(in oklab,var(--bg),transparent 18%);-webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px);border-bottom:1px solid var(--line-soft);transition:box-shadow .25s}
 .site-header.scrolled{box-shadow:0 4px 20px rgba(0,0,0,.05)}
 .header-inner{display:flex;align-items:center;gap:16px;height:var(--header-h)}
 .brand{display:flex;align-items:center;gap:9px;margin-right:auto;min-width:0}
@@ -125,7 +127,7 @@ img,video{max-width:100%;display:block}
 .hero-actions{display:flex;flex-wrap:wrap;gap:14px;margin-top:30px}
 .hero-actions .btn-primary{background:#fff;color:var(--green-700)}
 .hero-actions .btn-primary:hover{background:var(--amber);color:var(--green-900)}
-.hero-actions .btn-ghost{color:#fff;border-color:rgba(255,255,255,.55)}
+.hero-actions .btn-ghost{background:transparent;color:#fff;border-color:rgba(255,255,255,.55)}
 .hero-actions .btn-ghost:hover{background:rgba(255,255,255,.12);border-color:#fff}
 .hero-stats{display:flex;flex-wrap:wrap;gap:clamp(24px,6vw,56px);margin-top:clamp(36px,6vw,56px);padding-top:28px;border-top:1px solid rgba(255,255,255,.18)}
 .hero-stats dt{font-size:.86rem;color:rgba(255,255,255,.78)}
@@ -230,7 +232,7 @@ img,video{max-width:100%;display:block}
 .media-tile .embed-face{aspect-ratio:1}
 
 /* ---------- Media viewer (lightbox / reels) ---------- */
-.viewer{position:fixed;inset:0;z-index:1000;display:none;align-items:center;justify-content:center;background:rgba(8,12,10,.94);backdrop-filter:blur(4px)}
+.viewer{position:fixed;inset:0;z-index:1000;display:none;align-items:center;justify-content:center;background:rgba(8,12,10,.94);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
 .viewer.open{display:flex}
 .viewer-stage{display:flex;align-items:center;justify-content:center;max-width:94vw;max-height:88vh}
 .viewer-stage img,.viewer-stage video{max-width:min(94vw,1100px);max-height:88vh;width:auto;height:auto;object-fit:contain;border-radius:10px;background:#000;box-shadow:0 20px 60px rgba(0,0,0,.5)}
@@ -636,7 +638,7 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 /* 카드 그리드 유틸 */
 .grid-auto{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px}
 /* 강조 그라디언트 패널(슈퍼 콘솔·지도 배너) */
-.promo{position:relative;overflow:hidden;border-radius:var(--r-xl);padding:clamp(24px,4vw,40px);color:#fff;box-shadow:var(--sh-2);background:linear-gradient(120deg,var(--brand-700),color-mix(in oklab,var(--brand),#2563eb 40%))}
+.promo{position:relative;overflow:hidden;border-radius:var(--r-xl);padding:clamp(24px,4vw,40px);color:#fff;box-shadow:var(--sh-2);background:var(--brand-700);background:linear-gradient(120deg,var(--brand-700),color-mix(in oklab,var(--brand),#2563eb 40%))}
 .promo::before{content:"";position:absolute;right:-40px;top:-60px;width:220px;height:220px;border-radius:999px;background:radial-gradient(circle,rgba(255,255,255,.22),transparent 70%);pointer-events:none}
 .promo-inner{position:relative;display:flex;flex-wrap:wrap;align-items:center;gap:18px}
 .promo h2{font-size:clamp(20px,3vw,26px);font-weight:800;margin:0}
@@ -667,7 +669,7 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .product-photo{position:relative;aspect-ratio:1/1;background:var(--surface-2);display:grid;place-items:center;overflow:hidden}
 .product-photo img{width:100%;height:100%;object-fit:cover}
 .product-noimg{font-size:2rem;opacity:.5}
-.product-sold{position:absolute;top:10px;left:10px;padding:4px 10px;border-radius:999px;background:color-mix(in oklab,#000,transparent 35%);color:#fff;font-size:.72rem;font-weight:700;backdrop-filter:blur(6px)}
+.product-sold{position:absolute;top:10px;left:10px;padding:4px 10px;border-radius:999px;background:rgba(0,0,0,.6);background:color-mix(in oklab,#000,transparent 35%);color:#fff;font-size:.72rem;font-weight:700;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
 .product-card figcaption{padding:12px 14px 14px}
 .product-caption-top{display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap}
 .product-name{font-size:1rem;font-weight:700;color:var(--ink)}
@@ -714,6 +716,23 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .auth-title{font-size:1.7rem;font-weight:800;letter-spacing:-.02em}
 .auth-sub{color:var(--muted);margin-top:6px}
 .auth-card{border-radius:var(--r-xl);box-shadow:var(--sh-2)}
+/* 관리자 콘솔 사이드바 크롬 */
+.console-grid{display:grid;grid-template-columns:220px minmax(0,1fr);gap:22px;align-items:start}
+.console-side{position:sticky;top:calc(var(--header-h) + 16px);align-self:start}
+.console-side nav{display:flex;flex-direction:column;gap:2px;background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--r-lg);padding:8px;box-shadow:var(--sh-1)}
+.console-side a{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:10px;font-size:14px;font-weight:600;color:var(--ink-soft);text-decoration:none;transition:background .15s,color .15s}
+.console-side a:hover{background:var(--bg-alt);color:var(--ink)}
+.console-side .side-ext{color:var(--brand-700);margin-top:2px}
+.console-side .side-ext:first-of-type{border-top:1px solid var(--line-soft);margin-top:6px;padding-top:12px}
+.side-badge{margin-left:auto;background:var(--wait-bg);color:var(--wait-fg);font-size:11px;font-weight:700;border-radius:999px;padding:1px 7px}
+.console-main{min-width:0}
+.console-main [id]{scroll-margin-top:calc(var(--header-h) + 12px)}
+@media (max-width:860px){
+  .console-grid{grid-template-columns:1fr}
+  .console-side{position:static;top:auto}
+  .console-side nav{flex-direction:row;flex-wrap:wrap;gap:6px}
+  .console-side a{padding:8px 12px;font-size:13px}
+}
 
 /* 법적 페이지 */
 .legal h2{font-size:1.1rem;font-weight:800;margin:22px 0 6px}

@@ -461,17 +461,25 @@ export async function admin(ctx) {
       <p class="dash-sub">홈페이지: <a href="${base}" target="_blank">${base}</a></p></div>
       <div class="dash-head-actions"><a href="${base}/admin/documents" class="btn btn-ghost btn-sm">전자서명 문서</a></div></div>
     ${flashOf(query)}
-    <div class="stat-cards">
+    <div class="console-grid">
+    <aside class="console-side"><nav>
+      <a href="#p-stats">📊 현황</a><a href="#p-notif">🔔 알림함${unread ? ` <span class="side-badge">${unread}</span>` : ""}</a>
+      <a href="#p-members">👥 회원</a><a href="#p-biz">🏪 업체 승인${s.pending ? ` <span class="side-badge">${s.pending}</span>` : ""}</a>
+      <a href="#p-products">🛒 제품</a><a href="#p-home">🏠 홈 구성</a><a href="#p-brand">🎨 브랜딩</a><a href="#p-content">📢 공지·행사</a>
+      <a href="${base}/admin/documents" class="side-ext">✍ 전자서명 문서</a><a href="${base}" target="_blank" class="side-ext">↗ 사이트 보기</a>
+    </nav></aside>
+    <div class="console-main">
+    <div class="stat-cards" id="p-stats">
       <div class="stat-card"><span class="stat-num">${s.businesses}</span><span class="stat-label">승인 업체</span></div>
       <div class="stat-card${s.pending ? " stat-alert" : ""}"><span class="stat-num">${s.pending}</span><span class="stat-label">승인 대기</span></div>
       <div class="stat-card"><span class="stat-num">${s.notices}</span><span class="stat-label">공지</span></div>
       <div class="stat-card"><span class="stat-num">${s.events}</span><span class="stat-label">행사</span></div>
       <div class="stat-card"><span class="stat-num">${s.mediaCount}</span><span class="stat-label">미디어</span></div></div>
-    <section class="panel"><div class="panel-head"><h2 class="panel-title">알림함${unread ? ` <span class="badge badge-wait">${unread}</span>` : ""}</h2>
+    <section class="panel" id="p-notif"><div class="panel-head"><h2 class="panel-title">알림함${unread ? ` <span class="badge badge-wait">${unread}</span>` : ""}</h2>
       ${unread ? `<form method="post" action="${base}/admin/notifications/read"><button class="btn btn-xs btn-ghost">모두 읽음</button></form>` : ""}</div>
       <ul class="notif-list">${notifRows}</ul></section>
     ${metricsPanel}
-    <section class="panel"><div class="panel-head"><h2 class="panel-title">회원 관리 <span class="badge badge-muted">${members.length}명</span></h2>
+    <section class="panel" id="p-members"><div class="panel-head"><h2 class="panel-title">회원 관리 <span class="badge badge-muted">${members.length}명</span></h2>
       ${members.length ? `<a class="btn btn-xs btn-ghost" href="${base}/admin/members.csv">⬇ 명단 CSV</a>` : ""}</div>
       <div class="table-scroll"><table class="admin-table"><thead><tr><th>회원</th><th>업체</th><th>비밀번호</th></tr></thead><tbody>${memberRows}</tbody></table></div>
       <details class="help-box" style="margin-top:14px"><summary>사장님 대신 등록하기 (대행)</summary>
@@ -481,10 +489,10 @@ export async function admin(ctx) {
           <div class="form-two"><label>업체명<input type="text" name="business_name" required /></label><label>업종<input type="text" name="category" placeholder="예: 음식점" /></label></div>
           <button class="btn btn-primary btn-sm">대행 등록 + 임시 비번 발급</button></form></div></details></section>
     ${auditPanel}
-    <section class="panel"><h2 class="panel-title">홈페이지 구성 편집</h2>
+    <section class="panel" id="p-home"><h2 class="panel-title">홈페이지 구성 편집</h2>
       <p class="panel-hint">섹션을 켜고 끄거나 순서(▲▼)를 바꾸고 문구를 직접 수정할 수 있습니다.</p>
       ${layoutEditor(base, lay)}</section>
-    <section class="panel"><h2 class="panel-title">상인회 정보 · 브랜딩</h2>
+    <section class="panel" id="p-brand"><h2 class="panel-title">상인회 정보 · 브랜딩</h2>
       <form method="post" action="${base}/admin/settings" enctype="multipart/form-data" class="stack-form">
         <div class="form-two"><label>상인회 이름<input type="text" name="name" value="${esc(assoc.name)}" required /></label><label>대표 색상<input type="color" name="brand_color" value="${esc(assoc.brand_color)}" /></label></div>
         <label>한 줄 소개<input type="text" name="tagline" value="${esc(assoc.tagline)}" /></label>
@@ -492,10 +500,10 @@ export async function admin(ctx) {
         <label>주소<input type="text" name="address" value="${esc(assoc.address)}" /></label>
         <label class="mini-label">로고 <small>(선택·이미지)</small><input type="file" name="logo" accept="image/*" /></label>
         <button class="btn btn-primary btn-sm">브랜딩 저장</button></form></section>
-    <section class="panel"><h2 class="panel-title">업체 관리</h2><div class="table-scroll"><table class="admin-table">
+    <section class="panel" id="p-biz"><h2 class="panel-title">업체 관리</h2><div class="table-scroll"><table class="admin-table">
       <thead><tr><th>업체</th><th>사장님</th><th>상태</th><th>처리</th></tr></thead><tbody>${bizRows}</tbody></table></div></section>
-    ${productModPanel}
-    <div class="dash-grid">
+    <div id="p-products">${productModPanel}</div>
+    <div class="dash-grid" id="p-content">
       <section class="panel"><h2 class="panel-title">공지·소식</h2>
         <form method="post" action="${base}/admin/notice" enctype="multipart/form-data" class="stack-form compact">
           <input type="text" name="title" placeholder="제목" required /><textarea name="body" rows="3" placeholder="내용"></textarea>
@@ -509,7 +517,8 @@ export async function admin(ctx) {
           <input type="text" name="place" placeholder="장소" /><textarea name="description" rows="2" placeholder="설명"></textarea>
           <button class="btn btn-primary btn-sm">등록</button></form>
         <ul class="admin-mini-list">${eventRows}</ul></section>
-    </div></div></section>`;
+    </div>
+    </div></div></div></section>`;
   return html(layout({ title: "관리자", assoc, base, user, body, activeNav: `${base}/admin`, csrf, scripts: `<script src="/js/layout-editor.js" defer></script><script src="/js/upload-resize.js" defer></script>` }));
 }
 
