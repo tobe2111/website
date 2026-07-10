@@ -15,7 +15,7 @@ binding = "ASSETS"
 [[d1_databases]]
 binding = "DB"
 database_name = "seocho-db"
-database_id = "여기에-wrangler-d1-create-로-받은-id"
+database_id = "49a1f920-9286-4ce3-aa5c-6cdb7cdbdd3e"
 
 # R2 (오브젝트 스토리지, 사진) — 무료 티어: 10GB 저장, 전송(egress) 무료
 [[r2_buckets]]
