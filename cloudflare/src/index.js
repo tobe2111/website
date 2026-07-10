@@ -129,10 +129,10 @@ function securityHeaders(env) {
   const cfaConn = env.CF_ANALYTICS_TOKEN ? " https://cloudflareinsights.com" : "";
   const csp = [
     "default-src 'self'", "base-uri 'self'", "object-src 'none'", "frame-ancestors 'self'", "form-action 'self'",
-    `script-src 'self'${naver}${ts}${cfa}`, "style-src 'self' 'unsafe-inline'",
+    `script-src 'self'${naver}${ts}${cfa}`, "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
     "img-src 'self' data: https:", "media-src 'self' https:",
     `frame-src 'self' https://www.youtube-nocookie.com https://www.youtube.com https://www.instagram.com https://tv.naver.com${ts}`,
-    `connect-src 'self'${naver}${naverImg}${ts}${cfaConn}`, "font-src 'self'",
+    `connect-src 'self'${naver}${naverImg}${ts}${cfaConn}`, "font-src 'self' https://cdn.jsdelivr.net",
   ].join("; ");
   return {
     "X-Content-Type-Options": "nosniff", "X-Frame-Options": "SAMEORIGIN",
