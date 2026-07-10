@@ -101,7 +101,7 @@ function renderSection(s, deps) {
         "",
         s.title,
         s.lead,
-        `<div class="market-grid">${deps.businessesHtml}</div>
+        `${deps.catTiles || ""}<div class="market-grid">${deps.businessesHtml}</div>
          <div class="section-more"><a href="${deps.base}/businesses" class="btn btn-ghost btn-sm">전체 업체 보기</a></div>`
       );
     case "notices":
@@ -150,6 +150,10 @@ function heroSection(s, deps) {
       <p class="hero-eyebrow">${esc(s.eyebrow || "")}</p>
       <h1 class="hero-title">${hl}</h1>
       <p class="hero-desc">${esc(s.subtitle || "")}</p>
+      <form class="hero-search" method="get" action="${base}/businesses" role="search">
+        <input type="search" name="q" placeholder="우리 동네 가게·업종 검색" aria-label="점포 검색" />
+        <button class="btn btn-primary" type="submit">검색</button>
+      </form>
       <div class="hero-actions">
         <a href="${base}/register" class="btn btn-primary">${esc(s.primaryLabel || "업체 등록하기")}</a>
         <a href="${base}/businesses" class="btn btn-ghost">업체 둘러보기</a>

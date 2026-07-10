@@ -37,12 +37,15 @@ export async function home(ctx) {
   const notices = await D.listNotices(db, assoc.id, 5);
   const events = await D.listEvents(db, assoc.id, true);
   const stats = await D.stats(db, assoc.id);
+  const cats = await D.distinctCategories(db, assoc.id);
+  const CAT_ICON = { "음식점": "🍽️", "카페·디저트": "☕", "생활·서비스": "🧰", "의류·잡화": "👕", "뷰티·건강": "💇", "학원·교육": "📚", "의료": "🏥", "기타": "🏪" };
+  const catTiles = cats.length ? `<div class="cat-grid">${cats.map((c) => `<a class="cat-tile" href="${base}/businesses?category=${encodeURIComponent(c.category)}"><span class="cat-ico">${CAT_ICON[c.category] || "🏪"}</span><span class="cat-name">${esc(c.category)}</span><span class="cat-count">${c.n}</span></a>`).join("")}<a class="cat-tile cat-all" href="${base}/businesses"><span class="cat-ico">⋯</span><span class="cat-name">전체보기</span></a></div>` : "";
   const eventsHtml = events.length ? events.map((e) => {
     const d = e.event_date.slice(8, 10), mo = Number(e.event_date.slice(5, 7)) + "월";
     return `<article class="event-card"><div class="event-date"><span class="d">${d}</span><span class="m">${mo}</span></div>
       <div class="event-info"><h3>${esc(e.title)}</h3><p>${esc(e.description)}</p><span class="event-place">📍 ${esc(e.place)}</span></div></article>`;
   }).join("") : `<p class="empty">예정된 행사가 없습니다.</p>`;
-  const body = renderHome(lay, { assoc, base, stats, businessesHtml, noticesHtml: noticeRows(base, notices), eventsHtml, loggedIn: !!user });
+  const body = renderHome(lay, { assoc, base, stats, businessesHtml, catTiles, noticesHtml: noticeRows(base, notices), eventsHtml, loggedIn: !!user });
   return html(layout({ title: "", assoc, base, user, body, activeNav: `${base}/`, csrf, description: assoc.tagline }));
 }
 
@@ -56,7 +59,7 @@ function layoutEditor(base, layoutArr) {
       return `<label class="mini-label">${esc(f.label)}<input type="text" name="${name}" value="${esc(val || "")}" /></label>`;
     }).join("");
     return `<div class="layout-row" data-index="${i}"><div class="layout-row-head">
-      <label class="check"><input type="checkbox" name="en_${i}" value="1"${sec.enabled ? " checked" : ""} /> <strong>${esc(cat.label)}</strong></label>
+      <div class="row-toggle"><label class="switch"><input type="checkbox" name="en_${i}" value="1"${sec.enabled ? " checked" : ""} /><span class="track"></span></label> <strong>${esc(cat.label)}</strong></div>
       <input type="hidden" name="ty_${i}" value="${esc(sec.type)}" />
       <span class="layout-move"><button type="button" class="move-btn" data-dir="up" aria-label="위로">▲</button><button type="button" class="move-btn" data-dir="down" aria-label="아래로">▼</button></span>
     </div><div class="layout-fields">${fields}</div></div>`;
@@ -679,10 +682,14 @@ export async function superConsole(ctx) {
   const body = `<section class="dash"><div class="container">
     <div class="dash-head"><div><p class="section-eyebrow">SUPER</p><h1 class="dash-title">플랫폼 관리</h1></div>
       <div class="dash-head-actions"><form method="post" action="/logout"><button class="btn btn-ghost btn-sm">로그아웃</button></form></div></div>${flashOf(query)}
+    <div class="promo"><div class="promo-inner"><span class="mark" style="width:56px;height:56px;font-size:1.7rem;background:rgba(255,255,255,.18)">＋</span>
+      <div><h2>새 상인회 사이트를 5분 만에</h2><p>클릭 한 번으로 상인회 홈·관리자 계정을 발급합니다. 운영 중 ${ps.associations}곳 · 가입 점포 ${ps.businesses}곳.</p></div>
+      <a href="#new-assoc" class="btn btn-lg">새 사이트 만들기</a></div></div>
     ${appsPanel}
     <section class="panel"><h2 class="panel-title">플랫폼 설정</h2>
       <form method="post" action="/super/platform-mode" class="stack-form compact">
-        <label class="check"><input type="checkbox" name="on" value="1"${platformMode ? " checked" : ""} /> 루트(첫 화면)를 <b>플랫폼 소개 랜딩</b>으로 표시 (끄면 상인회가 1곳일 때 그 홈으로 바로 이동)</label>
+        <div class="row-toggle"><label class="switch"><input type="checkbox" name="on" value="1"${platformMode ? " checked" : ""} /><span class="track"></span></label>
+          <span>루트(첫 화면)를 <b>플랫폼 소개 랜딩</b>으로 표시 <small style="color:var(--muted)">(끄면 상인회가 1곳일 때 그 홈으로 바로 이동)</small></span></div>
         <button class="btn btn-ghost btn-sm">저장</button></form>
       <div class="form-divider">플랫폼/운영자 정보 (약관·개인정보처리방침·푸터에 표시)</div>
       <form method="post" action="/super/platform-info" class="stack-form compact">
@@ -696,7 +703,7 @@ export async function superConsole(ctx) {
       <div class="stat-card"><span class="stat-num">${ps.businesses}</span><span class="stat-label">승인 업체</span></div>
       <div class="stat-card"><span class="stat-num">${ps.users}</span><span class="stat-label">사용자</span></div>
       <div class="stat-card"><span class="stat-num">${ps.media}</span><span class="stat-label">미디어</span></div></div>
-    <section class="panel panel-accent"><h2 class="panel-title">➕ 새 상인회 (사이트 복제)</h2>
+    <section class="panel panel-accent" id="new-assoc"><h2 class="panel-title">➕ 새 상인회 (사이트 복제)</h2>
       <form method="post" action="/super/association" class="stack-form">
         <div class="form-two"><label>상인회 이름<input type="text" name="name" required /></label><label>대표 색상<input type="color" name="brand_color" value="#0b6e4f" /></label></div>
         <label>한 줄 소개<input type="text" name="tagline" /></label>
