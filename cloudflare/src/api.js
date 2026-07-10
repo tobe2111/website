@@ -14,6 +14,9 @@ const MAX_EMBEDS = 30;
 
 // FormData 파일들을 R2 에 저장(썸네일은 Workers 에선 원본 사용) → { images } 또는 { error }
 async function saveImages(env, files, max) {
+  const hasFiles = files.some((f) => f && typeof f.arrayBuffer === "function" && f.size);
+  if (hasFiles && !storage.enabled(env))
+    return { error: "사진 저장소(R2)가 아직 연결되지 않아 사진을 올릴 수 없습니다. 영상 링크는 바로 사용할 수 있어요." };
   const out = [];
   for (const f of files.slice(0, max)) {
     if (!f || typeof f.arrayBuffer !== "function" || !f.size) continue;
@@ -282,7 +285,7 @@ export async function adminSettings(ctx) {
   const color = /^#[0-9a-fA-F]{6}$/.test(form.get("brand_color") || "") ? form.get("brand_color") : assoc.brand_color;
   let logo = assoc.logo;
   const up = await saveImages(env, form.getAll("logo"), 1);
-  if (up.error) return back(base + "/admin", "로고는 이미지만 가능합니다.", true);
+  if (up.error) return back(base + "/admin", up.error, true);
   if (up.images[0]) { if (assoc.logo) await storage.remove(env, assoc.logo); logo = up.images[0].filename; }
   await D.updateAssociation(db, assoc.id, { name: cap(form.get("name").trim(), 100), tagline: cap(form.get("tagline"), 200), brand_color: color, phone: cap(form.get("phone"), 40), email: cap(form.get("email"), 120), address: cap(form.get("address"), 200), logo });
   await audit(ctx, "브랜딩수정", "");
@@ -339,7 +342,7 @@ export async function memberSign(ctx) {
   if (!m) return back(base + "/sign/" + d.id, "서명을 입력해 주세요.", true);
   let bytes; try { bytes = Uint8Array.from(atob(m[1]), (c) => c.charCodeAt(0)); } catch { bytes = null; }
   if (!bytes || bytes.length < 64 || bytes.length > 500 * 1024 || sniffImage(bytes) !== "image/png") return back(base + "/sign/" + d.id, "서명 이미지가 올바르지 않습니다.", true);
-  const sigKey = await storage.save(env, bytes, "image/png");
+  const sigKey = storage.enabled(env) ? await storage.save(env, bytes, "image/png") : ""; // R2 미연결 시 이미지 생략(봉인은 유효)
   const signerName = cap((form.get("signer_name") || "").trim(), 60) || user.name;
   const signedAt = new Date().toISOString();
   const recordHash = await sealRecord(env, { documentId: d.id, userId: user.id, signerName, contentHash: d.content_hash, signedAt, ip });

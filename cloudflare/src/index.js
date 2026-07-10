@@ -236,6 +236,7 @@ async function platformIndex(ctx) {
 }
 
 async function serveMedia(env, key) {
+  if (!env.MEDIA) return new Response("Not Found", { status: 404 }); // R2 미연결 시
   key = key.replace(/[^A-Za-z0-9._-]/g, "");
   if (!key) return new Response("Not Found", { status: 404 });
   const obj = await env.MEDIA.get(key);

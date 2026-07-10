@@ -18,6 +18,9 @@ database_name = "seocho-db"
 database_id = "49a1f920-9286-4ce3-aa5c-6cdb7cdbdd3e"
 
 # R2 (오브젝트 스토리지, 사진) — 무료 티어: 10GB 저장, 전송(egress) 무료
+# ⚠️ 배포 전에 R2 에서 `seocho-media` 버킷을 먼저 만들어야 합니다.
+#    (R2 활성화에 카드 등록 필요 — 무료 한도 내 청구 0원)
+# 사진 업로드 없이 먼저 띄우려면 아래 3줄을 주석(#) 처리해도 사이트는 정상 동작합니다.
 [[r2_buckets]]
 binding = "MEDIA"
 bucket_name = "seocho-media"
