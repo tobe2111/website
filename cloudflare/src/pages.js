@@ -1,7 +1,7 @@
 // 공개/인증 페이지 핸들러 (async). ctx = { env, db, assoc, base, user, url, query, csrf, params }
 import * as D from "./db.js";
 import { esc, clip, openBadge, fmtBytes } from "./util.js";
-import { layout, flash, statusBadge, pager, mediaUrl } from "./render.js";
+import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG } from "./render.js";
 import { html, notFoundResponse, back } from "./http.js";
 import { galleryItem } from "./media-render.js";
 import { providerLabel } from "./embed.js";
@@ -129,7 +129,7 @@ export async function businessDetail(ctx) {
 export function loginForm(ctx) {
   const { env, query, csrf } = ctx;
   const body = `<section class="section page-top"><div class="container auth-wrap"><div class="auth-card">
-    <h1 class="auth-title">로그인</h1><p class="auth-sub">상인회 회원·관리자 로그인</p>
+    ${authHead("로그인", "상인회 회원·관리자 로그인")}
     ${flash(query.get("msg") ? decodeURIComponent(query.get("msg")) : "", query.get("err") ? "err" : "ok")}
     <form method="post" action="/login" class="stack-form">
       <label>이메일<input type="email" name="email" required /></label>
@@ -143,6 +143,8 @@ export function loginForm(ctx) {
 }
 
 const flashOf = (q) => flash(q.get("msg") ? decodeURIComponent(q.get("msg")) : "", q.get("err") ? "err" : "ok");
+// 디자인 v2: 인증 카드 브랜드 아이콘 헤더
+const authHead = (title, sub) => `<div class="auth-head"><span class="mark auth-mark">${STOREFRONT_SVG}</span><h1 class="auth-title">${esc(title)}</h1><p class="auth-sub">${esc(sub)}</p></div>`;
 
 // ================= 점포 지도 =================
 export async function mapPage(ctx) {
@@ -313,7 +315,7 @@ export function registerForm(ctx) {
   const { env, assoc, base, query, csrf } = ctx;
   const opts = CATEGORIES.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
   const body = `<section class="section page-top"><div class="container auth-wrap"><div class="auth-card">
-    <h1 class="auth-title">${esc(assoc.name)} 가입</h1><p class="auth-sub">점포 정보를 등록하고 사진·소식을 공유하세요.</p>${flashOf(query)}
+    ${authHead(assoc.name + " 가입", "점포 정보를 등록하고 사진·소식을 공유하세요.")}${flashOf(query)}
     <form method="post" action="${base}/register" class="stack-form">
       <label>대표자 성함<input type="text" name="name" required maxlength="60" /></label>
       <label>이메일<input type="email" name="email" required /></label>
@@ -764,7 +766,7 @@ export function account(ctx) {
 export function forgotForm(ctx) {
   const { query, csrf } = ctx;
   const body = `<section class="section page-top"><div class="container auth-wrap"><div class="auth-card">
-    <h1 class="auth-title">비밀번호 찾기</h1><p class="auth-sub">가입한 이메일을 입력하면 상인회 관리자에게 재설정 요청이 전달됩니다.</p>
+    ${authHead("비밀번호 찾기", "가입한 이메일을 입력하면 상인회 관리자에게 재설정 요청이 전달됩니다.")}
     ${flashOf(query)}
     <form method="post" action="/forgot" class="stack-form"><label>이메일<input type="email" name="email" required /></label>
       <button class="btn btn-primary btn-block">재설정 요청</button></form>
