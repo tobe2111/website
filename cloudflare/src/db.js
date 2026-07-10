@@ -141,7 +141,7 @@ export async function engagementMetrics(db, aid) {
       COUNT(*) AS total,
       SUM(CASE WHEN source='self' THEN 1 ELSE 0 END) AS self_cnt,
       SUM(CASE WHEN source='proxy' THEN 1 ELSE 0 END) AS proxy_cnt,
-      SUM(CASE WHEN (description<>'' OR EXISTS(SELECT 1 FROM media m WHERE m.business_id=businesses.id)) THEN 1 ELSE 0 END) AS filled_cnt,
+      SUM(CASE WHEN (description<>'' OR EXISTS(SELECT 1 FROM media m WHERE m.business_id=businesses.id) OR EXISTS(SELECT 1 FROM products p WHERE p.business_id=businesses.id AND p.hidden=0)) THEN 1 ELSE 0 END) AS filled_cnt,
       SUM(CASE WHEN updated_at IS NOT NULL AND updated_at >= datetime('now','-30 days') THEN 1 ELSE 0 END) AS refreshed_cnt
     FROM businesses WHERE association_id=?`, aid);
   const total = row.total || 0;
@@ -152,6 +152,44 @@ export async function engagementMetrics(db, aid) {
     total, selfCnt, proxyCnt, filledCnt, refreshedCnt,
     selfRate: pct(selfCnt), filledRate: pct(filledCnt), refreshRate: pct(refreshedCnt),
   };
+}
+
+// ----- 점포 제품 진열 (전시 전용) -----
+export const listProducts = (db, businessId, { includeHidden = false } = {}) =>
+  all(db, `SELECT * FROM products WHERE business_id=?${includeHidden ? "" : " AND hidden=0"} ORDER BY sort_order ASC, id ASC`, businessId);
+export const getProduct = (db, id) => first(db, "SELECT * FROM products WHERE id=?", id);
+// 상인회 관리자용: 자기 상인회 전 점포 제품 (숨김 포함)
+export const listAssocProducts = (db, aid) =>
+  all(db, `SELECT p.*, b.name AS biz_name, b.slug AS biz_slug FROM products p JOIN businesses b ON b.id=p.business_id
+           WHERE p.association_id=? ORDER BY b.name ASC, p.sort_order ASC`, aid);
+export const countProducts = async (db, businessId) => (await first(db, "SELECT COUNT(*) AS n FROM products WHERE business_id=?", businessId)).n;
+export const countProductImages = async (db, businessId) => (await first(db, "SELECT COUNT(*) AS n FROM products WHERE business_id=? AND image<>''", businessId)).n;
+// 저장 quota: 미디어 사진 + 제품 사진 합산 (플랜 maxPhotos 공유)
+export const countStoredImages = async (db, businessId) =>
+  (await countBusinessImages(db, businessId)) + (await countProductImages(db, businessId));
+// 목록 카드 대표 제품 1개 (노출·비품절 우선)
+export const topProduct = (db, businessId) =>
+  first(db, "SELECT * FROM products WHERE business_id=? AND hidden=0 AND image<>'' ORDER BY sold_out ASC, sort_order ASC, id ASC LIMIT 1", businessId);
+export async function createProduct(db, { businessId, associationId, name, price = "", description = "", image = "", externalLink = null, source = "self" }) {
+  const ord = (await first(db, "SELECT COALESCE(MAX(sort_order),0)+1 AS n FROM products WHERE business_id=?", businessId)).n;
+  await run(db, "INSERT INTO products (business_id, association_id, name, price, description, image, sort_order, external_link, source) VALUES (?,?,?,?,?,?,?,?,?)",
+    businessId, associationId, name.trim(), price, description, image, ord, externalLink, source === "proxy" ? "proxy" : "self");
+  return getProduct(db, await lastId(db));
+}
+export const updateProduct = (db, id, f) =>
+  run(db, "UPDATE products SET name=?, price=?, description=?, sold_out=? WHERE id=?", f.name, f.price, f.description, f.soldOut ? 1 : 0, id);
+export const setProductImage = (db, id, image) => run(db, "UPDATE products SET image=? WHERE id=?", image, id);
+export const setProductHidden = (db, id, hidden) => run(db, "UPDATE products SET hidden=? WHERE id=?", hidden ? 1 : 0, id);
+export const setProductSoldOut = (db, id, sold) => run(db, "UPDATE products SET sold_out=? WHERE id=?", sold ? 1 : 0, id);
+export const deleteProduct = (db, id) => run(db, "DELETE FROM products WHERE id=?", id);
+export async function moveProduct(db, id, dir) {
+  const p = await getProduct(db, id); if (!p) return;
+  const neighbor = await first(db,
+    `SELECT * FROM products WHERE business_id=? AND sort_order ${dir < 0 ? "<" : ">"} ? ORDER BY sort_order ${dir < 0 ? "DESC" : "ASC"} LIMIT 1`,
+    p.business_id, p.sort_order);
+  if (!neighbor) return;
+  await run(db, "UPDATE products SET sort_order=? WHERE id=?", neighbor.sort_order, p.id);
+  await run(db, "UPDATE products SET sort_order=? WHERE id=?", p.sort_order, neighbor.id);
 }
 
 // ----- Notices -----

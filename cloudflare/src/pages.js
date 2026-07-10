@@ -97,6 +97,12 @@ export async function businessDetail(ctx) {
   const images = media.filter((m) => m.kind === "image");
   const vids = media.filter((m) => m.kind === "video" || m.kind === "embed");
   const gallery = (arr) => arr.length ? `<div class="gallery">${arr.map((m) => galleryItem(m)).join("")}</div>` : "";
+  const prods = await D.listProducts(db, b.id); // 공개: 비숨김만
+  const productGrid = prods.length ? `<h2 class="biz-section-title">제품·메뉴</h2>
+    <div class="product-grid">${prods.map((p) => `<figure class="product-card${p.sold_out ? " is-sold" : ""}">
+      <div class="product-photo">${p.image ? `<img src="${esc(mediaUrl(p.image))}" alt="${esc(p.name)}" loading="lazy" />` : `<span class="product-noimg">🏷️</span>`}${p.sold_out ? `<span class="product-sold">품절</span>` : ""}</div>
+      <figcaption><div class="product-caption-top"><strong class="product-name">${esc(p.name)}</strong>${p.price ? `<span class="product-price">${esc(p.price)}</span>` : ""}</div>${p.description ? `<p class="product-desc">${esc(p.description)}</p>` : ""}</figcaption>
+    </figure>`).join("")}</div>` : "";
   const pending = b.status !== "approved" ? `<div class="flash flash-warn">이 페이지는 ${statusBadge(b.status)} 상태입니다.</div>` : "";
   const body = `
   <section class="biz-hero"><div class="container">${pending}
@@ -106,9 +112,10 @@ export async function businessDetail(ctx) {
       ${b.address ? `<li>📍 ${esc(b.address)}</li>` : ""}${b.phone ? `<li>☎️ <a href="tel:${esc(b.phone)}">${esc(b.phone)}</a></li>` : ""}${b.hours ? `<li>🕘 ${esc(b.hours)}</li>` : ""}
     </ul></div></section>
   <section class="section"><div class="container">
+    ${productGrid}
     ${images.length ? `<h2 class="biz-section-title">사진</h2>${gallery(images)}` : ""}
     ${vids.length ? `<h2 class="biz-section-title">영상</h2>${gallery(vids)}` : ""}
-    ${!media.length ? `<p class="empty">아직 등록된 사진·영상이 없습니다.</p>` : ""}
+    ${!media.length && !prods.length ? `<p class="empty">아직 등록된 제품·사진이 없습니다.</p>` : ""}
     <div class="section-more"><a href="${base}/businesses" class="btn btn-ghost btn-sm">← 다른 점포 보기</a></div>
   </div></section>`;
   return html(layout({ title: b.name, assoc, base, user, body, activeNav: `${base}/businesses`, csrf,
@@ -323,6 +330,35 @@ export async function dashboard(ctx) {
   const b = await D.getBusinessByOwner(db, user.id);
   if (!b || b.association_id !== assoc.id) return html(layout({ title: "대시보드", assoc, base, user, body: `<section class="section page-top"><div class="container"><p class="empty">연결된 업체가 없습니다.</p></div></section>`, csrf }));
   const media = await D.listMedia(db, b.id);
+  const products = await D.listProducts(db, b.id, { includeHidden: true });
+  const plan = PLANS[assoc.plan] || PLANS.free;
+  const prodMax = plan.maxProducts === Infinity ? "무제한" : plan.maxProducts;
+  const productRows = products.length ? products.map((p) => `<div class="prod-row${p.sold_out ? " sold" : ""}">
+      <div class="prod-thumb">${p.image ? `<img src="${esc(mediaUrl(p.image))}" alt="" loading="lazy" />` : `<span class="prod-noimg">사진 없음</span>`}</div>
+      <div class="prod-info"><div class="prod-line"><strong>${esc(p.name)}</strong>${p.price ? `<span class="prod-price">${esc(p.price)}</span>` : ""}${p.sold_out ? `<span class="badge badge-no">품절</span>` : `<span class="badge badge-ok">판매중</span>`}${p.hidden ? `<span class="badge badge-neutral">관리자 숨김</span>` : ""}</div>
+        ${p.description ? `<p class="prod-desc">${esc(p.description)}</p>` : ""}
+        <div class="prod-actions">
+          <form method="post" action="${base}/dashboard/products/${p.id}/move" class="inline-form"><input type="hidden" name="dir" value="up"><button class="move-btn" title="위로">▲</button></form>
+          <form method="post" action="${base}/dashboard/products/${p.id}/move" class="inline-form"><input type="hidden" name="dir" value="down"><button class="move-btn" title="아래로">▼</button></form>
+          <form method="post" action="${base}/dashboard/products/${p.id}/soldout" class="inline-form"><button class="btn btn-xs btn-ghost">${p.sold_out ? "판매중으로" : "품절로"}</button></form>
+          <details class="prod-edit"><summary class="btn btn-xs btn-ghost">수정</summary>
+            <form method="post" action="${base}/dashboard/products/${p.id}" class="stack-form compact">
+              <label>이름<input name="name" value="${esc(p.name)}" required></label>
+              <label>가격 <small>(선택)</small><input name="price" value="${esc(p.price)}" placeholder="예: 8,000원 · 시가 · 미표기"></label>
+              <label>한 줄 설명<textarea name="description" rows="2">${esc(p.description)}</textarea></label>
+              <label class="check"><input type="checkbox" name="sold_out" value="1"${p.sold_out ? " checked" : ""}> 품절</label>
+              <button class="btn btn-primary btn-sm">저장</button></form></details>
+          <form method="post" action="${base}/dashboard/products/${p.id}/delete" class="inline-form" data-confirm="이 제품을 삭제할까요?"><button class="link-danger">삭제</button></form>
+        </div></div></div>`).join("") : `<p class="empty">아직 등록한 제품이 없습니다. 아래에서 추가해 보세요.</p>`;
+  const productPanel = `<section class="panel"><div class="panel-head"><h2 class="panel-title">제품·메뉴 진열 <span class="badge badge-muted">${products.length}/${prodMax}</span></h2></div>
+    <p class="panel-hint">가게에서 파는 제품·메뉴를 사진과 함께 진열합니다. <strong>전시 전용</strong>이라 결제·주문 기능은 없습니다.</p>
+    <div class="prod-list">${productRows}</div>
+    <h3 class="panel-subtitle">제품 추가</h3>
+    <form method="post" action="${base}/dashboard/products" enctype="multipart/form-data" class="stack-form compact">
+      <label class="file-drop"><input type="file" name="image" accept="image/*" /><span class="file-drop-text">📷 제품 사진 (선택·최대 8MB)</span></label>
+      <div class="form-two"><label>제품 이름<input name="name" required /></label><label>가격 <small>(선택)</small><input name="price" placeholder="예: 8,000원 · 시가 · 미표기" /></label></div>
+      <label>한 줄 설명 <small>(선택)</small><input name="description" maxlength="300" /></label>
+      <button class="btn btn-primary btn-sm">제품 추가</button></form></section>`;
   const opts = CATEGORIES.map((c) => `<option value="${esc(c)}"${c === b.category ? " selected" : ""}>${esc(c)}</option>`).join("");
   const grid = media.length ? media.map((m) => `<figure class="media-tile">${galleryItem(m, { showCaption: false })}<figcaption>
       <span class="media-kind">${m.kind === "image" ? "🖼 사진" : (m.kind === "embed" ? "🎬 " + esc(providerLabel(m.provider)) : "🎬 영상")}</span>
@@ -356,7 +392,9 @@ export async function dashboard(ctx) {
           <input type="url" name="url" placeholder="영상 주소(링크)" required /><input type="text" name="caption" placeholder="설명 (선택)" maxlength="200" />
           <button class="btn btn-primary btn-sm">영상 링크 추가</button></form>
         <h3 class="panel-subtitle">등록된 미디어 (${media.length})</h3><div class="media-grid">${grid}</div></section>
-    </div></div></section>`;
+    </div>
+    ${productPanel}
+    </div></section>`;
   const picker = naver ? `<script src="https://oapi.map.naver.com/openapi/v3/maps.js?${esc(env.NAVER_MAP_PARAM || "ncpClientId")}=${esc(naver)}"></script><script src="/js/map.js" defer></script>` : "";
   return html(layout({ title: "내 업체 관리", assoc, base, user, body, csrf, scripts: `<script src="/js/viewer.js" defer></script><script src="/js/upload-resize.js" defer></script>${picker}` }));
 }
@@ -388,6 +426,15 @@ export async function admin(ctx) {
       <div class="stat-card left"><div class="stat-top"><span class="stat-label">정보 채움률</span></div><span class="stat-num">${met.filledRate}%</span><div class="stat-delta mut">소개·사진 있는 업체 ${met.filledCnt}곳</div></div>
       <div class="stat-card left"><div class="stat-top"><span class="stat-label">최근 30일 갱신률</span></div><span class="stat-num">${met.refreshRate}%</span><div class="stat-delta mut">갱신 ${met.refreshedCnt}곳</div></div></div>
     <p class="panel-hint" style="margin-top:14px">판정 기준: 셀프 등록률 <strong>30%↑</strong> 이면 "회원이 채우는 서비스" 성립 → 확장 단계. 못 넘으면 "관리자가 쉽게 채우는 도구"로 포지셔닝.</p></section>`;
+  const assocProducts = await D.listAssocProducts(db, assoc.id);
+  const productModPanel = assocProducts.length ? `<section class="panel"><h2 class="panel-title">제품 진열 관리 <span class="badge badge-muted">${assocProducts.length}</span></h2>
+    <p class="panel-hint">부적절한 제품은 숨길 수 있습니다. (사장님 화면에는 '관리자 숨김'으로 표시됩니다)</p>
+    <div class="table-scroll"><table class="admin-table"><thead><tr><th>제품</th><th>점포</th><th>상태</th><th>처리</th></tr></thead><tbody>
+    ${assocProducts.map((p) => `<tr><td>${esc(p.name)}${p.price ? `<br /><small>${esc(p.price)}</small>` : ""}</td>
+      <td><a href="${base}/business/${esc(p.biz_slug)}" target="_blank">${esc(p.biz_name)}</a></td>
+      <td>${p.hidden ? '<span class="badge badge-neutral">숨김</span>' : (p.sold_out ? '<span class="badge badge-no">품절</span>' : '<span class="badge badge-ok">노출</span>')}</td>
+      <td class="actions-cell"><form method="post" action="${base}/admin/product/${p.id}/hide"><button class="btn btn-xs btn-ghost">${p.hidden ? "다시 노출" : "숨기기"}</button></form></td></tr>`).join("")}
+    </tbody></table></div></section>` : "";
   const auditPanel = `<section class="panel"><h2 class="panel-title">감사 로그 <span class="badge badge-muted">최근 ${auditLog.length}</span></h2>
     <ul class="audit-list">${auditLog.length ? auditLog.map((a) => `<li><span class="audit-action">${esc(a.action)}</span> <span class="audit-detail">${esc(a.detail)}</span><span class="audit-meta">${esc(a.actor_name)} · ${esc(a.created_at.slice(5, 16).replace("T", " "))}</span></li>`).join("") : `<li class="empty">기록이 없습니다.</li>`}</ul></section>`;
 
@@ -442,6 +489,7 @@ export async function admin(ctx) {
         <button class="btn btn-primary btn-sm">브랜딩 저장</button></form></section>
     <section class="panel"><h2 class="panel-title">업체 관리</h2><div class="table-scroll"><table class="admin-table">
       <thead><tr><th>업체</th><th>사장님</th><th>상태</th><th>처리</th></tr></thead><tbody>${bizRows}</tbody></table></div></section>
+    ${productModPanel}
     <div class="dash-grid">
       <section class="panel"><h2 class="panel-title">공지·소식</h2>
         <form method="post" action="${base}/admin/notice" enctype="multipart/form-data" class="stack-form compact">

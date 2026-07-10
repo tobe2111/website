@@ -98,6 +98,24 @@ CREATE TABLE IF NOT EXISTS media (
   created_at    TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- 점포 제품/메뉴 진열 (전시 전용 — 결제·주문·장바구니 없음)
+CREATE TABLE IF NOT EXISTS products (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  business_id    INTEGER NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+  association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,  -- 테넌트 격리
+  name           TEXT NOT NULL,
+  price          TEXT NOT NULL DEFAULT '',    -- 선택 입력("시가"·미표기 허용) → 문자열
+  description    TEXT NOT NULL DEFAULT '',
+  image          TEXT NOT NULL DEFAULT '',    -- R2 key (기존 미디어 파이프라인·WebP 재사용)
+  sold_out       INTEGER NOT NULL DEFAULT 0,  -- 사장님 품절 토글
+  hidden         INTEGER NOT NULL DEFAULT 0,  -- 상인회 관리자 숨김/정리
+  sort_order     INTEGER NOT NULL DEFAULT 0,  -- 노출 순서
+  external_link  TEXT,                        -- nullable, 현재 미노출 · 향후 외부 판매 링크용
+  source         TEXT NOT NULL DEFAULT 'self',-- 등록 주체(self/proxy) — 계측 합산
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_products_biz ON products(business_id, hidden, sort_order);
+
 CREATE TABLE IF NOT EXISTS notices (
   id             INTEGER PRIMARY KEY AUTOINCREMENT,
   association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
@@ -242,6 +260,12 @@ async function migrateColumns(db) {
     if (!bcols.some((c) => c.name === "updated_at")) {
       await db.prepare("ALTER TABLE businesses ADD COLUMN updated_at TEXT").run();
     }
+  }
+  // products 표가 없으면 생성 (기존 배포 업그레이드): 점포 제품 진열
+  const prodTbl = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='products'").first();
+  if (!prodTbl) {
+    await db.prepare(`CREATE TABLE products (id INTEGER PRIMARY KEY AUTOINCREMENT, business_id INTEGER NOT NULL REFERENCES businesses(id) ON DELETE CASCADE, association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE, name TEXT NOT NULL, price TEXT NOT NULL DEFAULT '', description TEXT NOT NULL DEFAULT '', image TEXT NOT NULL DEFAULT '', sold_out INTEGER NOT NULL DEFAULT 0, hidden INTEGER NOT NULL DEFAULT 0, sort_order INTEGER NOT NULL DEFAULT 0, external_link TEXT, source TEXT NOT NULL DEFAULT 'self', created_at TEXT NOT NULL DEFAULT (datetime('now')))`).run();
+    await db.prepare("CREATE INDEX IF NOT EXISTS idx_products_biz ON products(business_id, hidden, sort_order)").run();
   }
   // applications 표가 없으면 생성 (기존 배포 업그레이드)
   const appTbl = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='applications'").first();

@@ -175,6 +175,89 @@ export async function deleteMedia(ctx) {
   return back(base + "/dashboard", "삭제되었습니다.");
 }
 
+// ---------- 점포 제품 진열 (전시 전용 · 결제/주문 없음) ----------
+async function ownBusiness(ctx) {
+  const { db, user, assoc } = ctx;
+  const b = await D.getBusinessByOwner(db, user.id);
+  return b && b.association_id === assoc.id ? b : null;
+}
+export async function productAdd(ctx) {
+  const { db, env, form, base, assoc } = ctx;
+  const b = await ownBusiness(ctx);
+  if (!b) return back(base + "/dashboard", "업체를 찾을 수 없습니다.", true);
+  const name = cap((form.get("name") || "").trim(), 100);
+  if (!name) return back(base + "/dashboard", "제품 이름을 입력해 주세요.", true);
+  const plan = planOf(assoc);
+  if ((await D.countProducts(db, b.id)) >= plan.maxProducts)
+    return back(base + "/dashboard", `제품은 최대 ${plan.maxProducts}개까지 올릴 수 있습니다. (플랜 업그레이드 시 확장)`, true);
+  let image = "";
+  const files = form.getAll("image").filter((f) => f && typeof f.arrayBuffer === "function" && f.size);
+  if (files.length) {
+    if ((await D.countStoredImages(db, b.id)) >= plan.maxPhotos)
+      return back(base + "/dashboard", `사진 저장 한도(${plan.maxPhotos}장)를 초과했습니다.`, true);
+    const up = await saveImages(env, files, 1);
+    if (up.error) return back(base + "/dashboard", up.error, true);
+    if (up.images.length) image = up.images[0].filename;
+  }
+  await D.createProduct(db, {
+    businessId: b.id, associationId: assoc.id, name,
+    price: cap((form.get("price") || "").trim(), 40),
+    description: cap((form.get("description") || "").trim(), 300),
+    image, source: "self",
+  });
+  await D.touchBusiness(db, b.id); // 콘텐츠 갱신 계측
+  return back(base + "/dashboard", "제품을 추가했습니다.");
+}
+export async function productUpdate(ctx) {
+  const { db, form, base, params } = ctx;
+  const b = await ownBusiness(ctx);
+  const p = await D.getProduct(db, Number(params.id));
+  if (!b || !p || p.business_id !== b.id) return back(base + "/dashboard", "수정할 수 없습니다.", true);
+  const name = cap((form.get("name") || "").trim(), 100);
+  if (!name) return back(base + "/dashboard", "제품 이름을 입력해 주세요.", true);
+  await D.updateProduct(db, p.id, {
+    name, price: cap((form.get("price") || "").trim(), 40),
+    description: cap((form.get("description") || "").trim(), 300),
+    soldOut: form.get("sold_out") === "1",
+  });
+  await D.touchBusiness(db, b.id);
+  return back(base + "/dashboard", "제품을 수정했습니다.");
+}
+export async function productToggleSoldOut(ctx) {
+  const { db, base, params } = ctx;
+  const b = await ownBusiness(ctx);
+  const p = await D.getProduct(db, Number(params.id));
+  if (!b || !p || p.business_id !== b.id) return back(base + "/dashboard", "처리할 수 없습니다.", true);
+  await D.setProductSoldOut(db, p.id, !p.sold_out);
+  return back(base + "/dashboard", p.sold_out ? "판매중으로 변경했습니다." : "품절로 표시했습니다.");
+}
+export async function productMove(ctx) {
+  const { db, base, params, form } = ctx;
+  const b = await ownBusiness(ctx);
+  const p = await D.getProduct(db, Number(params.id));
+  if (!b || !p || p.business_id !== b.id) return back(base + "/dashboard", "처리할 수 없습니다.", true);
+  await D.moveProduct(db, p.id, form.get("dir") === "up" ? -1 : 1);
+  return back(base + "/dashboard", "순서를 변경했습니다.");
+}
+export async function productDelete(ctx) {
+  const { db, env, base, params } = ctx;
+  const b = await ownBusiness(ctx);
+  const p = await D.getProduct(db, Number(params.id));
+  if (!b || !p || p.business_id !== b.id) return back(base + "/dashboard", "삭제할 수 없습니다.", true);
+  if (p.image) await storage.remove(env, p.image);
+  await D.deleteProduct(db, p.id);
+  return back(base + "/dashboard", "제품을 삭제했습니다.");
+}
+// 상인회 관리자: 자기 상인회 점포 제품 숨김/정리 (테넌트 격리)
+export async function adminProductHide(ctx) {
+  const { db, base, assoc, params } = ctx;
+  const p = await D.getProduct(db, Number(params.id));
+  if (!p || p.association_id !== assoc.id) return back(base + "/admin", "대상 제품을 찾을 수 없습니다.", true);
+  await D.setProductHidden(db, p.id, !p.hidden);
+  await audit(ctx, p.hidden ? "제품숨김해제" : "제품숨김", `#${p.id} ${p.name}`);
+  return back(base + "/admin", p.hidden ? "제품을 다시 노출했습니다." : "제품을 숨겼습니다.");
+}
+
 // ---------- 게시판 ----------
 export async function createPost(ctx) {
   const { db, env, form, user, base, assoc } = ctx;
