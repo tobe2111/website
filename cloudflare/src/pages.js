@@ -17,15 +17,24 @@ const NOTICE_CATEGORIES = ["안내", "공지", "소식", "행사", "혜택", "�
 const qs = (o) => { const p = new URLSearchParams(); for (const [k, v] of Object.entries(o)) if (v != null && v !== "" && !(k === "page" && v === 1)) p.set(k, v); const s = p.toString(); return s ? "?" + s : ""; };
 const canModerate = (user, assoc) => user && (user.role === "SUPERADMIN" || (user.role === "ADMIN" && user.association_id === assoc.id));
 
+const PIN_SVG = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="2.6"/></svg>';
+const PHONE_SVG = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2 4.2 2 2 0 0 1 4 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8.1 9.7a16 16 0 0 0 6 6l1.2-1.1a2 2 0 0 1 2.1-.5c.9.3 1.8.6 2.7.7A2 2 0 0 1 22 16.9z"/></svg>';
 async function businessCard(db, base, b) {
   const cover = await D.getCoverImage(db, b.id);
-  const thumb = cover ? `<img src="${esc(mediaUrl(cover.thumb || cover.filename))}" alt="${esc(b.name)}" loading="lazy" />` : `<span>${esc(b.name.slice(0, 2))}</span>`;
+  const thumb = cover
+    ? `<img src="${esc(mediaUrl(cover.thumb || cover.filename))}" alt="" loading="lazy" />`
+    : `<span class="thumb-mono" aria-hidden="true">${esc(b.name.slice(0, 1))}</span>`;
+  const open = openBadge(b.hours);
   return `<article class="market-card">
-    <a href="${base}/business/${esc(b.slug)}" class="market-thumb">${thumb}</a>
-    <div class="market-body"><span class="chip">${esc(b.category)}</span>${openBadge(b.hours)}
+    <a href="${base}/business/${esc(b.slug)}" class="market-thumb${cover ? " has-img" : ""}">
+      ${thumb}
+      <span class="market-cat">${esc(b.category)}</span>
+      ${open ? `<span class="market-open">${open}</span>` : ""}
+    </a>
+    <div class="market-body">
       <h3><a href="${base}/business/${esc(b.slug)}">${esc(b.name)}</a></h3>
       <p>${esc(b.description || "소개가 곧 등록됩니다.")}</p>
-      <ul class="market-meta">${b.address ? `<li>📍 ${esc(b.address)}</li>` : ""}${b.phone ? `<li>☎ ${esc(b.phone)}</li>` : ""}</ul>
+      ${b.address || b.phone ? `<ul class="market-meta">${b.address ? `<li>${PIN_SVG}${esc(b.address)}</li>` : ""}${b.phone ? `<li>${PHONE_SVG}${esc(b.phone)}</li>` : ""}</ul>` : ""}
     </div></article>`;
 }
 
