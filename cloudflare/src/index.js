@@ -84,6 +84,7 @@ const TENANT = [
   ["POST", "/admin/layout/reset", api.adminResetLayout, "ADMIN"],
   ["POST", "/admin/notifications/read", api.adminReadNotifications, "ADMIN"],
   ["POST", "/admin/user/:id/reset-password", api.adminResetUserPassword, "ADMIN"],
+  ["POST", "/admin/members/add", api.adminAddMember, "ADMIN"],
   ["GET", "/admin/members.csv", pages.adminExportMembers, "ADMIN"],
   ["GET", "/admin/documents", pages.adminDocuments, "ADMIN"],
   ["POST", "/admin/documents", api.adminCreateDocument, "ADMIN"],

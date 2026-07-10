@@ -75,7 +75,9 @@ CREATE TABLE IF NOT EXISTS businesses (
   lat            REAL,
   lng            REAL,
   status         TEXT NOT NULL DEFAULT 'pending',
+  source         TEXT NOT NULL DEFAULT 'self',   -- 'self'(사장님 직접) | 'proxy'(관리자 대행) — 핵심 가설 계측
   created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at     TEXT,                            -- 콘텐츠 갱신 시각(살아있는 홈 판정)
   UNIQUE (association_id, slug)
 );
 

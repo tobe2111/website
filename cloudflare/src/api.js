@@ -314,6 +314,25 @@ export async function adminResetUserPassword(ctx) {
   return back(base + "/admin", `${target.name}님 임시 비밀번호: ${temp} — 전달 후 변경 안내하세요.`);
 }
 
+// 관리자 대행 등록: 총무가 사장님 대신 회원+업체를 만들고 임시 비번을 전달.
+// source='proxy' 로 태깅 → '셀프 등록률' 계측의 분모/분자에 반영.
+export async function adminAddMember(ctx) {
+  const { db, form, base, assoc } = ctx;
+  const name = cap((form.get("name") || "").trim(), 60);
+  const email = cap((form.get("email") || "").toLowerCase().trim(), 120);
+  const businessName = cap((form.get("business_name") || "").trim(), 100);
+  if (!name || !EMAIL_RE.test(email) || !businessName) return back(base + "/admin", "이름·이메일·업체명을 확인해 주세요.", true);
+  if (await D.getUserByEmail(db, email)) return back(base + "/admin", "이미 가입된 이메일입니다.", true);
+  if ((await D.countMembers(db, assoc.id)) >= planOf(assoc).maxMembers)
+    return back(base + "/admin", "회원 정원이 가득 찼습니다.", true);
+  const temp = Math.random().toString(36).slice(2, 10);
+  const { hash, salt } = await hashPassword(temp);
+  const user = await D.createUser(db, { email, passwordHash: hash, salt, name, role: "MERCHANT", associationId: assoc.id });
+  await D.createBusiness(db, { associationId: assoc.id, ownerId: user.id, name: businessName, category: cap(form.get("category"), 40), source: "proxy" });
+  await audit(ctx, "회원대행등록", `${name} / ${businessName} (${email})`);
+  return back(base + "/admin", `대행 등록 완료 — ${name}님 로그인: ${email} / 임시비번 ${temp} (사장님께 전달하세요)`);
+}
+
 // ---------- 전자서명 ----------
 export async function adminCreateDocument(ctx) {
   const { db, form, base, assoc, user } = ctx;

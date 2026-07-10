@@ -83,16 +83,18 @@ export async function uniqueSlug(db, aid, name) {
   while (await first(db, "SELECT id FROM businesses WHERE association_id = ? AND slug = ?", aid, slug)) slug = `${base}-${++n}`;
   return slug;
 }
-export async function createBusiness(db, { associationId, ownerId, name, category }) {
+export async function createBusiness(db, { associationId, ownerId, name, category, source = "self" }) {
   const slug = await uniqueSlug(db, associationId, name);
-  await run(db, "INSERT INTO businesses (association_id, owner_id, name, slug, category) VALUES (?, ?, ?, ?, ?)",
-    associationId, ownerId, name.trim(), slug, category || "기타");
+  await run(db, "INSERT INTO businesses (association_id, owner_id, name, slug, category, source) VALUES (?, ?, ?, ?, ?, ?)",
+    associationId, ownerId, name.trim(), slug, category || "기타", source === "proxy" ? "proxy" : "self");
   return getBusinessById(db, await lastId(db));
 }
 export function updateBusiness(db, id, f) {
-  return run(db, "UPDATE businesses SET name=?, category=?, description=?, phone=?, address=?, hours=?, lat=?, lng=? WHERE id=?",
+  return run(db, "UPDATE businesses SET name=?, category=?, description=?, phone=?, address=?, hours=?, lat=?, lng=?, updated_at=datetime('now') WHERE id=?",
     f.name, f.category, f.description, f.phone, f.address, f.hours, f.lat ?? null, f.lng ?? null, id);
 }
+// 콘텐츠 활동(사진 추가 등) 발생 시 갱신 시각 터치 — '살아있는 홈' 계측용
+export const touchBusiness = (db, id) => run(db, "UPDATE businesses SET updated_at=datetime('now') WHERE id=?", id);
 export const setBusinessStatus = (db, id, status) => run(db, "UPDATE businesses SET status=? WHERE id=?", status, id);
 export const listBusinessMarkers = (db, aid) =>
   all(db, `SELECT id, name, slug, category, lat, lng, address, phone FROM businesses
@@ -128,7 +130,28 @@ export const countEmbeds = async (db, businessId) => (await first(db, "SELECT CO
 export async function addMedia(db, { businessId, kind, filename = "", poster = "", thumb = "", provider = "", embedId = "", originalName = "", size = 0, caption = "" }) {
   await run(db, "INSERT INTO media (business_id, kind, filename, poster, thumb, provider, embed_id, original_name, size, caption) VALUES (?,?,?,?,?,?,?,?,?,?)",
     businessId, kind, filename, poster, thumb, provider, embedId, originalName, size, caption);
+  await run(db, "UPDATE businesses SET updated_at=datetime('now') WHERE id=?", businessId); // 콘텐츠 갱신 계측
   return getMedia(db, await lastId(db));
+}
+
+// ----- 핵심 가설 계측: 셀프 등록률·관리자 개입·콘텐츠 갱신률 -----
+// "회원이 스스로 채운다"가 성립하는지 재는 세 숫자. 30% 셀프 등록률을 2단계 트리거 기준으로.
+export async function engagementMetrics(db, aid) {
+  const row = await first(db, `SELECT
+      COUNT(*) AS total,
+      SUM(CASE WHEN source='self' THEN 1 ELSE 0 END) AS self_cnt,
+      SUM(CASE WHEN source='proxy' THEN 1 ELSE 0 END) AS proxy_cnt,
+      SUM(CASE WHEN (description<>'' OR EXISTS(SELECT 1 FROM media m WHERE m.business_id=businesses.id)) THEN 1 ELSE 0 END) AS filled_cnt,
+      SUM(CASE WHEN updated_at IS NOT NULL AND updated_at >= datetime('now','-30 days') THEN 1 ELSE 0 END) AS refreshed_cnt
+    FROM businesses WHERE association_id=?`, aid);
+  const total = row.total || 0;
+  const selfCnt = row.self_cnt || 0, proxyCnt = row.proxy_cnt || 0;
+  const filledCnt = row.filled_cnt || 0, refreshedCnt = row.refreshed_cnt || 0;
+  const pct = (n) => (total ? Math.round((n / total) * 100) : 0);
+  return {
+    total, selfCnt, proxyCnt, filledCnt, refreshedCnt,
+    selfRate: pct(selfCnt), filledRate: pct(filledCnt), refreshRate: pct(refreshedCnt),
+  };
 }
 
 // ----- Notices -----

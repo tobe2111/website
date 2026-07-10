@@ -377,6 +377,17 @@ export async function admin(ctx) {
   const today = new Date().toISOString().slice(0, 10);
   const lay = parseLayout(assoc.home_layout, assoc.name);
   const auditLog = await D.listAudit(db, assoc.id, 12);
+  const met = await D.engagementMetrics(db, assoc.id);
+  // 핵심 가설 계측: "회원이 스스로 채운다"가 성립하는가. 셀프 등록률 30% 이상이면 성립 신호.
+  const selfOk = met.total >= 5 && met.selfRate >= 30;
+  const metricsPanel = `<section class="panel panel-accent"><div class="panel-head"><h2 class="panel-title">참여 계측 <span class="badge badge-brand">핵심 지표</span></h2>
+      <span class="badge ${met.total < 5 ? "badge-neutral" : selfOk ? "badge-ok" : "badge-wait"}">${met.total < 5 ? "표본 부족" : selfOk ? "가설 성립 신호" : "관찰 중"}</span></div>
+    <p class="panel-hint">사장님이 직접 채우는 살아있는 홈인지 재는 세 숫자입니다. 표본 ${met.total}곳 기준.</p>
+    <div class="stat-cards">
+      <div class="stat-card left"><div class="stat-top"><span class="stat-label">셀프 등록률</span></div><span class="stat-num">${met.selfRate}%</span><div class="stat-delta ${met.selfRate >= 30 ? "up" : "mut"}">직접 ${met.selfCnt} · 대행 ${met.proxyCnt}</div></div>
+      <div class="stat-card left"><div class="stat-top"><span class="stat-label">정보 채움률</span></div><span class="stat-num">${met.filledRate}%</span><div class="stat-delta mut">소개·사진 있는 업체 ${met.filledCnt}곳</div></div>
+      <div class="stat-card left"><div class="stat-top"><span class="stat-label">최근 30일 갱신률</span></div><span class="stat-num">${met.refreshRate}%</span><div class="stat-delta mut">갱신 ${met.refreshedCnt}곳</div></div></div>
+    <p class="panel-hint" style="margin-top:14px">판정 기준: 셀프 등록률 <strong>30%↑</strong> 이면 "회원이 채우는 서비스" 성립 → 확장 단계. 못 넘으면 "관리자가 쉽게 채우는 도구"로 포지셔닝.</p></section>`;
   const auditPanel = `<section class="panel"><h2 class="panel-title">감사 로그 <span class="badge badge-muted">최근 ${auditLog.length}</span></h2>
     <ul class="audit-list">${auditLog.length ? auditLog.map((a) => `<li><span class="audit-action">${esc(a.action)}</span> <span class="audit-detail">${esc(a.detail)}</span><span class="audit-meta">${esc(a.actor_name)} · ${esc(a.created_at.slice(5, 16).replace("T", " "))}</span></li>`).join("") : `<li class="empty">기록이 없습니다.</li>`}</ul></section>`;
 
@@ -407,9 +418,16 @@ export async function admin(ctx) {
     <section class="panel"><div class="panel-head"><h2 class="panel-title">알림함${unread ? ` <span class="badge badge-wait">${unread}</span>` : ""}</h2>
       ${unread ? `<form method="post" action="${base}/admin/notifications/read"><button class="btn btn-xs btn-ghost">모두 읽음</button></form>` : ""}</div>
       <ul class="notif-list">${notifRows}</ul></section>
+    ${metricsPanel}
     <section class="panel"><div class="panel-head"><h2 class="panel-title">회원 관리 <span class="badge badge-muted">${members.length}명</span></h2>
       ${members.length ? `<a class="btn btn-xs btn-ghost" href="${base}/admin/members.csv">⬇ 명단 CSV</a>` : ""}</div>
-      <div class="table-scroll"><table class="admin-table"><thead><tr><th>회원</th><th>업체</th><th>비밀번호</th></tr></thead><tbody>${memberRows}</tbody></table></div></section>
+      <div class="table-scroll"><table class="admin-table"><thead><tr><th>회원</th><th>업체</th><th>비밀번호</th></tr></thead><tbody>${memberRows}</tbody></table></div>
+      <details class="help-box" style="margin-top:14px"><summary>사장님 대신 등록하기 (대행)</summary>
+        <div class="help-body"><p class="help-lead">사장님이 직접 못 하실 때 총무가 대신 계정을 만들어 드립니다. 임시 비밀번호를 전달하세요. (대행 등록은 참여 계측에 '대행'으로 집계됩니다.)</p>
+        <form method="post" action="${base}/admin/members/add" class="stack-form compact">
+          <div class="form-two"><label>사장님 성함<input type="text" name="name" required /></label><label>이메일<input type="email" name="email" required /></label></div>
+          <div class="form-two"><label>업체명<input type="text" name="business_name" required /></label><label>업종<input type="text" name="category" placeholder="예: 음식점" /></label></div>
+          <button class="btn btn-primary btn-sm">대행 등록 + 임시 비번 발급</button></form></div></details></section>
     ${auditPanel}
     <section class="panel"><h2 class="panel-title">홈페이지 구성 편집</h2>
       <p class="panel-hint">섹션을 켜고 끄거나 순서(▲▼)를 바꾸고 문구를 직접 수정할 수 있습니다.</p>

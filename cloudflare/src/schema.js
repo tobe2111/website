@@ -77,7 +77,9 @@ CREATE TABLE IF NOT EXISTS businesses (
   lat            REAL,
   lng            REAL,
   status         TEXT NOT NULL DEFAULT 'pending',
+  source         TEXT NOT NULL DEFAULT 'self',   -- 'self'(사장님 직접) | 'proxy'(관리자 대행) — 핵심 가설 계측
   created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at     TEXT,                            -- 콘텐츠 갱신 시각(살아있는 홈 판정)
   UNIQUE (association_id, slug)
 );
 
@@ -229,6 +231,17 @@ async function migrateColumns(db) {
   }
   if (!cols.some((c) => c.name === "plan")) {
     await db.prepare("ALTER TABLE associations ADD COLUMN plan TEXT NOT NULL DEFAULT 'free'").run();
+  }
+  // businesses 계측 컬럼 (기존 배포 업그레이드): 등록 경로·갱신 시각
+  const bizTbl = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='businesses'").first();
+  if (bizTbl) {
+    const bcols = (await db.prepare("PRAGMA table_info(businesses)").all()).results || [];
+    if (!bcols.some((c) => c.name === "source")) {
+      await db.prepare("ALTER TABLE businesses ADD COLUMN source TEXT NOT NULL DEFAULT 'self'").run();
+    }
+    if (!bcols.some((c) => c.name === "updated_at")) {
+      await db.prepare("ALTER TABLE businesses ADD COLUMN updated_at TEXT").run();
+    }
   }
   // applications 표가 없으면 생성 (기존 배포 업그레이드)
   const appTbl = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='applications'").first();
