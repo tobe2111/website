@@ -221,6 +221,7 @@ CREATE INDEX IF NOT EXISTS idx_sigreq_doc ON signature_requests(document_id);
 CREATE INDEX IF NOT EXISTS idx_notif_assoc ON notifications(association_id, is_read);
 CREATE INDEX IF NOT EXISTS idx_media_business ON media(business_id);
 CREATE INDEX IF NOT EXISTS idx_business_assoc ON businesses(association_id, status);
+CREATE INDEX IF NOT EXISTS idx_business_owner ON businesses(owner_id);
 CREATE INDEX IF NOT EXISTS idx_notices_assoc ON notices(association_id);
 CREATE INDEX IF NOT EXISTS idx_events_assoc ON events(association_id);
 CREATE INDEX IF NOT EXISTS idx_users_assoc ON users(association_id);
@@ -267,6 +268,8 @@ async function migrateColumns(db) {
     await db.prepare(`CREATE TABLE products (id INTEGER PRIMARY KEY AUTOINCREMENT, business_id INTEGER NOT NULL REFERENCES businesses(id) ON DELETE CASCADE, association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE, name TEXT NOT NULL, price TEXT NOT NULL DEFAULT '', description TEXT NOT NULL DEFAULT '', image TEXT NOT NULL DEFAULT '', sold_out INTEGER NOT NULL DEFAULT 0, hidden INTEGER NOT NULL DEFAULT 0, sort_order INTEGER NOT NULL DEFAULT 0, external_link TEXT, source TEXT NOT NULL DEFAULT 'self', created_at TEXT NOT NULL DEFAULT (datetime('now')))`).run();
     await db.prepare("CREATE INDEX IF NOT EXISTS idx_products_biz ON products(business_id, hidden, sort_order)").run();
   }
+  // 조회 빈도 높은 owner_id 인덱스 (기존 배포 업그레이드 · businesses 존재 시)
+  if (bizTbl) await db.prepare("CREATE INDEX IF NOT EXISTS idx_business_owner ON businesses(owner_id)").run();
   // applications 표가 없으면 생성 (기존 배포 업그레이드)
   const appTbl = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='applications'").first();
   if (!appTbl) {

@@ -50,8 +50,7 @@ const PIN_SVG = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" str
 const PHONE_SVG = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2 4.2 2 2 0 0 1 4 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8.1 9.7a16 16 0 0 0 6 6l1.2-1.1a2 2 0 0 1 2.1-.5c.9.3 1.8.6 2.7.7A2 2 0 0 1 22 16.9z"/></svg>';
 const CLOCK_SVG = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
 const TAG_SVG = '<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 13.4 12 22 2 12V2h10l8.6 8.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.4"/></svg>';
-async function businessCard(db, base, b) {
-  const cover = await D.getCoverImage(db, b.id);
+function businessCard(base, b, cover) {
   const thumb = cover
     ? `<img src="${esc(mediaUrl(cover.thumb || cover.filename))}" alt="" loading="lazy" />`
     : `<span class="thumb-mono" aria-hidden="true">${esc(b.name.slice(0, 1))}</span>`;
@@ -73,7 +72,8 @@ export async function home(ctx) {
   const { db, assoc, base, user, csrf } = ctx;
   const lay = parseLayout(assoc.home_layout, assoc.name);
   const { items } = await D.listBusinessesPaged(db, assoc.id, { perPage: 6 });
-  const businessesHtml = (await Promise.all(items.map((b) => businessCard(db, base, b)))).join("") || `<p class="empty">등록된 점포가 곧 표시됩니다.</p>`;
+  const covers = await D.coverImagesFor(db, items.map((b) => b.id));
+  const businessesHtml = items.map((b) => businessCard(base, b, covers.get(b.id))).join("") || `<p class="empty">등록된 점포가 곧 표시됩니다.</p>`;
   const notices = await D.listNotices(db, assoc.id, 5);
   const events = await D.listEvents(db, assoc.id, true);
   const stats = await D.stats(db, assoc.id);
@@ -119,7 +119,8 @@ export async function businesses(ctx) {
   const qs = (o) => { const p = new URLSearchParams(); for (const [k, v] of Object.entries(o)) if (v) p.set(k, v); const s = p.toString(); return s ? "?" + s : ""; };
   const chips = `<a href="${base}/businesses${qs({ q })}" class="chip-filter${!cat ? " active" : ""}">전체</a>` +
     cats.map((c) => `<a href="${base}/businesses${qs({ category: c.category, q })}" class="chip-filter${cat === c.category ? " active" : ""}">${esc(c.category)} <em>${c.n}</em></a>`).join("");
-  const cards = (await Promise.all(items.map((b) => businessCard(db, base, b)))).join("") || `<p class="empty">${q ? "검색 결과가 없습니다." : "등록된 점포가 없습니다."}</p>`;
+  const covers = await D.coverImagesFor(db, items.map((b) => b.id));
+  const cards = items.map((b) => businessCard(base, b, covers.get(b.id))).join("") || `<p class="empty">${q ? "검색 결과가 없습니다." : "등록된 점포가 없습니다."}</p>`;
   const body = `<section class="section page-top"><div class="container">
     <div class="section-head"><p class="section-eyebrow">MEMBERS</p><h2 class="section-title">가입 점포 안내</h2><p class="section-lead">총 ${total}곳</p></div>
     <form method="get" action="${base}/businesses" class="board-search"><input type="search" name="q" value="${esc(q)}" placeholder="점포·업종 검색" /><button class="btn btn-ghost btn-sm">검색</button></form>
@@ -451,7 +452,12 @@ export async function dashboard(ctx) {
 }
 
 const docBody = (b) => esc(b).replace(/\n/g, "<br />");
-const csvCell = (v) => { const s = String(v == null ? "" : v); return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+// CSV 셀: 따옴표 이스케이프 + 수식 인젝션 방지(= + - @ 로 시작하면 \' 접두)
+const csvCell = (v) => {
+  let s = String(v == null ? "" : v);
+  if (/^[=+\-@]/.test(s)) s = "'" + s;
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
 
 // ================= 관리자 =================
 export async function admin(ctx) {

@@ -6,7 +6,6 @@ import * as pages from "./pages.js";
 import * as api from "./api.js";
 import { setMediaBase, setOrigin, layout } from "./render.js";
 import { html, text, redirect, notFoundResponse, forbidden } from "./http.js";
-import { esc } from "./util.js";
 import { ensureSchema } from "./schema.js";
 import { resolveSessionSecret } from "./secrets.js";
 
@@ -168,7 +167,11 @@ export default {
     try {
       return await handle(request, env);
     } catch (e) {
-      return html(`<h1>500</h1><pre>${esc(String(e && e.stack || e))}</pre>`, 500);
+      console.error(e && e.stack || e); // 상세는 로그로만 (wrangler tail / 대시보드)
+      return html(`<section style="text-align:center;padding:80px 20px;font-family:system-ui">
+        <h1 style="font-size:2rem">일시적인 오류가 발생했습니다</h1>
+        <p style="color:#666">잠시 후 다시 시도해 주세요.</p>
+        <p><a href="/" style="color:#0b6e4f;font-weight:700">홈으로</a></p></section>`, 500);
     }
   },
 };

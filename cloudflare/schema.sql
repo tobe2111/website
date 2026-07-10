@@ -219,6 +219,7 @@ CREATE INDEX IF NOT EXISTS idx_sigreq_doc ON signature_requests(document_id);
 CREATE INDEX IF NOT EXISTS idx_notif_assoc ON notifications(association_id, is_read);
 CREATE INDEX IF NOT EXISTS idx_media_business ON media(business_id);
 CREATE INDEX IF NOT EXISTS idx_business_assoc ON businesses(association_id, status);
+CREATE INDEX IF NOT EXISTS idx_business_owner ON businesses(owner_id);
 CREATE INDEX IF NOT EXISTS idx_notices_assoc ON notices(association_id);
 CREATE INDEX IF NOT EXISTS idx_events_assoc ON events(association_id);
 CREATE INDEX IF NOT EXISTS idx_users_assoc ON users(association_id);

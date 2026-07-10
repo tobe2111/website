@@ -124,6 +124,19 @@ export async function listBusinessesPaged(db, aid, { status = "approved", catego
 export const listMedia = (db, businessId) => all(db, "SELECT * FROM media WHERE business_id = ? ORDER BY created_at DESC", businessId);
 export const getCoverImage = (db, businessId) =>
   first(db, "SELECT filename, thumb FROM media WHERE business_id=? AND kind='image' ORDER BY created_at DESC LIMIT 1", businessId);
+// 여러 업체의 대표 사진을 한 번에 (목록 N+1 방지) → Map(business_id → {filename,thumb})
+export async function coverImagesFor(db, businessIds) {
+  if (!businessIds.length) return new Map();
+  const ph = businessIds.map(() => "?").join(",");
+  const rows = await all(db,
+    `SELECT m.business_id, m.filename, m.thumb FROM media m
+     JOIN (SELECT business_id, MAX(created_at) AS mc FROM media WHERE kind='image' AND business_id IN (${ph}) GROUP BY business_id) t
+       ON t.business_id=m.business_id AND t.mc=m.created_at
+     WHERE m.kind='image'`, ...businessIds);
+  const map = new Map();
+  for (const r of rows) if (!map.has(r.business_id)) map.set(r.business_id, r);
+  return map;
+}
 export const getMedia = (db, id) => first(db, "SELECT * FROM media WHERE id = ?", id);
 export const deleteMedia = (db, id) => run(db, "DELETE FROM media WHERE id = ?", id);
 export const countEmbeds = async (db, businessId) => (await first(db, "SELECT COUNT(*) AS n FROM media WHERE business_id=? AND kind='embed'", businessId)).n;
