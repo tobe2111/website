@@ -4,7 +4,7 @@ import { SESSION_COOKIE, CSRF_COOKIE, ensureCsrfSeed, csrfToken, csrfValid, user
 import * as D from "./db.js";
 import * as pages from "./pages.js";
 import * as api from "./api.js";
-import { setMediaBase, layout } from "./render.js";
+import { setMediaBase, setOrigin, layout } from "./render.js";
 import { html, text, redirect, notFoundResponse, forbidden } from "./http.js";
 import { esc } from "./util.js";
 import { ensureSchema } from "./schema.js";
@@ -32,6 +32,8 @@ const GLOBAL = [
   ["GET", "/privacy", pages.privacy],
   ["GET", "/forgot", pages.forgotForm],
   ["POST", "/forgot", api.forgotPassword],
+  ["GET", "/reset", pages.resetForm],
+  ["POST", "/reset", api.resetPassword],
   ["GET", "/sitemap.xml", pages.sitemap],
   ["GET", "/robots.txt", pages.robots],
   ["GET", "/verify", pages.verifyPage],
@@ -92,6 +94,7 @@ const TENANT = [
   ["POST", "/admin/members/add", api.adminAddMember, "ADMIN"],
   ["POST", "/admin/product/:id/hide", api.adminProductHide, "ADMIN"],
   ["GET", "/admin/members.csv", pages.adminExportMembers, "ADMIN"],
+  ["GET", "/admin/export.json", pages.adminExportAll, "ADMIN"],
   ["GET", "/admin/documents", pages.adminDocuments, "ADMIN"],
   ["POST", "/admin/documents", api.adminCreateDocument, "ADMIN"],
   ["GET", "/admin/documents/:id", pages.adminDocumentDetail, "ADMIN"],
@@ -176,6 +179,7 @@ async function handle(request, env) {
   const db = env.DB;
   const isProd = (env.PUBLIC_SCHEME || "https") === "https";
   setMediaBase(env.MEDIA_PUBLIC_BASE || "");
+  setOrigin(url.origin); // og:image 등 절대 URL 조립용
 
   // 정적 자산 (css/js/img/아이콘/PWA)
   if (/^\/(css|js|img|favicon)/.test(pathname) || pathname === "/manifest.webmanifest" || pathname === "/sw.js") {

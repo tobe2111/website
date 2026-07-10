@@ -11,6 +11,7 @@ import { parseLayout, renderHome, SECTION_CATALOG } from "./homeLayout.js";
 import { turnstileWidget, turnstileScript } from "./turnstile.js";
 import { otpauthUri } from "./totp.js";
 import { PLANS, PLAN_KEYS } from "./plans.js";
+import { emailEnabled as emailOn } from "./email.js";
 
 const CATEGORIES = ["음식점", "카페·디저트", "생활·서비스", "패션·잡화", "농수축산", "교육·문화", "기타"];
 const NOTICE_CATEGORIES = ["안내", "공지", "소식", "행사", "혜택", "긴급"];
@@ -159,8 +160,10 @@ export async function businessDetail(ctx) {
     ${!media.length && !prods.length ? `<p class="empty">아직 등록된 제품·사진이 없습니다.</p>` : ""}
     <div class="section-more"><a href="${base}/businesses" class="btn btn-ghost btn-sm">← 다른 점포 보기</a></div>
   </div></section>`;
+  const cover = images[0] || null; // 카톡 공유 미리보기용 대표 사진
   return html(layout({ title: b.name, assoc, base, user, body, activeNav: `${base}/businesses`, csrf,
     description: clip(b.description) || `${assoc.name} · ${b.category} · ${b.name}`,
+    ogImage: cover ? (cover.thumb || cover.filename) : "",
     scripts: media.length ? `<script src="/js/viewer.js" defer></script>` : "" }));
 }
 
@@ -512,6 +515,7 @@ export async function admin(ctx) {
       <a href="${base}/admin/documents" class="side-ext">${SIDE_SVG.sign} 전자서명 문서</a><a href="${base}" target="_blank" class="side-ext">${SIDE_SVG.ext} 사이트 보기</a>
     </nav></aside>
     <div class="console-main">
+    ${onboardPanel(base, assoc, s, members.length, notices.length)}
     <div class="stat-cards" id="p-stats">
       <div class="stat-card"><span class="stat-num">${s.businesses}</span><span class="stat-label">승인 업체</span></div>
       <div class="stat-card${s.pending ? " stat-alert" : ""}"><span class="stat-num">${s.pending}</span><span class="stat-label">승인 대기</span></div>
@@ -523,7 +527,7 @@ export async function admin(ctx) {
       <ul class="notif-list">${notifRows}</ul></section>
     ${metricsPanel}
     <section class="panel" id="p-members"><div class="panel-head"><h2 class="panel-title">회원 관리 <span class="badge badge-muted">${members.length}명</span></h2>
-      ${members.length ? `<a class="btn btn-xs btn-ghost" href="${base}/admin/members.csv">⬇ 명단 CSV</a>` : ""}</div>
+      <span class="pill-row">${members.length ? `<a class="btn btn-xs btn-ghost" href="${base}/admin/members.csv">명단 CSV</a>` : ""}<a class="btn btn-xs btn-ghost" href="${base}/admin/export.json">전체 백업(JSON)</a></span></div>
       <div class="table-scroll"><table class="admin-table"><thead><tr><th>회원</th><th>업체</th><th>비밀번호</th></tr></thead><tbody>${memberRows}</tbody></table></div>
       <details class="help-box" style="margin-top:14px"><summary>사장님 대신 등록하기 (대행)</summary>
         <div class="help-body"><p class="help-lead">사장님이 직접 못 하실 때 총무가 대신 계정을 만들어 드립니다. 임시 비밀번호를 전달하세요. (대행 등록은 참여 계측에 '대행'으로 집계됩니다.)</p>
@@ -563,6 +567,45 @@ export async function admin(ctx) {
     </div>
     </div></div></div></section>`;
   return html(layout({ title: "관리자", assoc, base, user, body, activeNav: `${base}/admin`, csrf, scripts: `<script src="/js/layout-editor.js" defer></script><script src="/js/upload-resize.js" defer></script>` }));
+}
+
+// 관리자 온보딩 체크리스트 (모두 완료되면 자동으로 사라짐)
+function onboardPanel(base, assoc, stats, memberCount, noticeCount) {
+  const steps = [
+    { done: !!(assoc.tagline && assoc.tagline.trim()), label: "상인회 한 줄 소개 쓰기", href: "#p-brand" },
+    { done: assoc.brand_color && assoc.brand_color !== "#0b6e4f" || !!assoc.logo, label: "대표 색·로고 정하기", href: "#p-brand" },
+    { done: noticeCount > 0, label: "첫 공지 올리기", href: "#p-content" },
+    { done: memberCount > 0, label: "회원(사장님) 모집 — 가입 링크 공유", href: base + "/register" },
+    { done: stats.pending === 0, label: "가입 승인 대기 처리", href: "#p-biz" },
+  ];
+  const remain = steps.filter((x) => !x.done).length;
+  if (!remain) return "";
+  return `<section class="panel onboard"><div class="panel-head"><h2 class="panel-title">시작 체크리스트 <span class="badge badge-wait">${steps.length - remain}/${steps.length}</span></h2></div>
+    <ul class="onboard-list">${steps.map((x) => `<li class="${x.done ? "done" : ""}">
+      <span class="ob-check">${x.done ? "✓" : ""}</span><a href="${x.href}">${x.label}</a></li>`).join("")}</ul></section>`;
+}
+
+// 상인회 전체 데이터 내보내기 (백업·이전용 JSON)
+export async function adminExportAll(ctx) {
+  const { db, assoc } = ctx;
+  const [members, businesses, notices, events] = await Promise.all([
+    D.listUsersByAssociation(db, assoc.id, "MERCHANT"),
+    D.listBusinessesPaged(db, assoc.id, { perPage: 100000 }).then((r) => r.items),
+    D.listNotices(db, assoc.id, 100000),
+    D.listEvents(db, assoc.id, false),
+  ]);
+  const products = await D.listAssocProducts(db, assoc.id);
+  const dump = {
+    exported_at: new Date().toISOString(),
+    association: { name: assoc.name, slug: assoc.slug, tagline: assoc.tagline, phone: assoc.phone, email: assoc.email, address: assoc.address },
+    counts: { members: members.length, businesses: businesses.length, products: products.length, notices: notices.length, events: events.length },
+    members: members.map((m) => ({ name: m.name, email: m.email, business: m.business_name || "" })),
+    businesses: businesses.map((b) => ({ name: b.name, category: b.category, description: b.description, phone: b.phone, address: b.address, hours: b.hours, status: b.status })),
+    products: products.map((p) => ({ business: p.biz_name, name: p.name, price: p.price, description: p.description, sold_out: !!p.sold_out, hidden: !!p.hidden })),
+    notices: notices.map((n) => ({ title: n.title, tag: n.tag, body: n.body, pinned: !!n.pinned, created_at: n.created_at })),
+    events: events.map((e) => ({ title: e.title, date: e.event_date, place: e.place, description: e.description })),
+  };
+  return text(JSON.stringify(dump, null, 2), 200, { "content-type": "application/json; charset=utf-8", "content-disposition": `attachment; filename="backup_${assoc.slug}.json"`, "cache-control": "no-store" });
 }
 
 export async function adminExportMembers(ctx) {
@@ -816,14 +859,29 @@ export function account(ctx) {
 
 // ================= 비밀번호 찾기 (내부 처리) =================
 export function forgotForm(ctx) {
-  const { query, csrf } = ctx;
+  const { env, query, csrf } = ctx;
+  const auto = emailOn(env);
   const body = `<section class="section page-top"><div class="container auth-wrap"><div class="auth-card">
-    ${authHead("비밀번호 찾기", "가입한 이메일을 입력하면 상인회 관리자에게 재설정 요청이 전달됩니다.")}
+    ${authHead("비밀번호 찾기", auto ? "가입한 이메일로 재설정 링크를 보내드립니다." : "가입한 이메일을 입력하면 상인회 관리자에게 재설정 요청이 전달됩니다.")}
     ${flashOf(query)}
     <form method="post" action="/forgot" class="stack-form"><label>이메일<input type="email" name="email" required /></label>
-      <button class="btn btn-primary btn-block">재설정 요청</button></form>
-    <p class="auth-note">보안을 위해 이메일 존재 여부와 관계없이 동일하게 안내됩니다. 관리자가 확인 후 임시 비밀번호를 발급합니다.</p></div></div></section>`;
+      <button class="btn btn-primary btn-block">${auto ? "재설정 링크 받기" : "재설정 요청"}</button></form>
+    <p class="auth-note">보안을 위해 이메일 존재 여부와 관계없이 동일하게 안내됩니다.${auto ? "" : " 관리자가 확인 후 임시 비밀번호를 발급합니다."}</p></div></div></section>`;
   return html(layout({ title: "비밀번호 찾기", assoc: ctx.assoc, base: ctx.base, body, csrf }));
+}
+
+// 이메일 재설정 링크로 진입하는 새 비밀번호 설정 폼
+export function resetForm(ctx) {
+  const { query, csrf } = ctx;
+  const token = query.get("token") || "";
+  const body = `<section class="section page-top"><div class="container auth-wrap"><div class="auth-card">
+    ${authHead("새 비밀번호 설정", "8자 이상으로 입력해 주세요.")}
+    ${flashOf(query)}
+    <form method="post" action="/reset" class="stack-form">
+      <input type="hidden" name="token" value="${esc(token)}" />
+      <label>새 비밀번호<input type="password" name="password" minlength="8" required autocomplete="new-password" /></label>
+      <button class="btn btn-primary btn-block">비밀번호 변경</button></form></div></div></section>`;
+  return html(layout({ title: "새 비밀번호 설정", body, csrf }));
 }
 
 // ================= 설치 마법사 (최초 1회) =================

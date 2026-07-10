@@ -727,6 +727,15 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .nf-title{font-size:clamp(1.4rem,4vw,1.9rem);font-weight:800;letter-spacing:-.02em;margin-bottom:10px}
 .nf-desc{color:var(--muted);line-height:1.65;margin-bottom:24px}
 .nf-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+/* 온보딩 체크리스트 */
+.onboard{border:1px solid color-mix(in oklab,var(--brand),transparent 65%);background:linear-gradient(180deg,var(--brand-50),var(--surface))}
+.onboard-list{display:grid;gap:4px;list-style:none;margin:0;padding:0}
+.onboard-list li{display:flex;align-items:center;gap:11px;padding:9px 4px}
+.onboard-list a{font-size:.95rem;font-weight:600;color:var(--ink)}
+.onboard-list a:hover{color:var(--brand-700)}
+.onboard-list li.done a{color:var(--muted);text-decoration:line-through;font-weight:500}
+.ob-check{flex:none;display:grid;place-items:center;width:24px;height:24px;border-radius:999px;border:1.5px solid var(--line);background:var(--surface);color:#fff;font-size:.8rem;font-weight:800}
+.onboard-list li.done .ob-check{background:var(--ok);border-color:var(--ok)}
 /* 인증 카드 브랜드 아이콘 헤더 */
 .auth-head{text-align:center;margin-bottom:22px}
 .auth-mark{width:52px;height:52px;border-radius:15px;margin:0 auto 14px}

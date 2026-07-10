@@ -1,6 +1,7 @@
 // 폼 처리 핸들러 (POST). ctx.form 은 파싱된 FormData.
 import * as D from "./db.js";
-import { verifyPassword, hashPassword } from "./crypto.js";
+import { verifyPassword, hashPassword, hmacSign, hmacVerify, b64uFromBytes, bytesFromB64u } from "./crypto.js";
+import { sendEmail, emailEnabled, mailShell, mailButton } from "./email.js";
 import { sessionTokenForUser, sessionCookie, clearSessionCookie } from "./auth.js";
 import { back, redirect } from "./http.js";
 import * as storage from "./storage.js";
@@ -490,15 +491,61 @@ export async function superToggleAssociation(ctx) {
 }
 
 // ---------- 비밀번호 찾기 (내부 알림, 이메일 없이) ----------
+// ----- 비밀번호 재설정 (이메일 링크 · HMAC 토큰 60분) -----
+const RESET_TTL_MS = 60 * 60 * 1000;
+export async function makeResetToken(secret, email) {
+  const exp = Date.now() + RESET_TTL_MS;
+  const payload = `reset|${email}|${exp}`;
+  const sig = await hmacSign(secret, payload);
+  return `${b64uFromBytes(new TextEncoder().encode(email))}.${exp}.${sig}`;
+}
+export async function verifyResetToken(secret, token) {
+  const parts = String(token || "").split(".");
+  if (parts.length !== 3) return null;
+  let email;
+  try { email = new TextDecoder().decode(bytesFromB64u(parts[0])); } catch { return null; }
+  const exp = Number(parts[1]);
+  if (!exp || Date.now() > exp) return null;
+  if (!(await hmacVerify(secret, `reset|${email}|${exp}`, parts[2]))) return null;
+  return email;
+}
+
 export async function forgotPassword(ctx) {
-  const { db, form } = ctx;
+  const { db, env, form, request } = ctx;
   const email = (form.get("email") || "").toLowerCase().trim();
   const user = email ? await D.getUserByEmail(db, email) : null;
+  // 이메일 설정 시: 재설정 링크 자동 발송 (존재 여부 무관 동일 안내 = 계정 열거 방지)
+  if (emailEnabled(env)) {
+    if (user) {
+      const token = await makeResetToken(env.SESSION_SECRET, email);
+      const origin = new URL(request.url).origin;
+      const link = `${origin}/reset?token=${encodeURIComponent(token)}`;
+      await sendEmail(env, {
+        to: email, subject: "비밀번호 재설정 안내",
+        html: mailShell("비밀번호 재설정", `<p>아래 버튼을 눌러 새 비밀번호를 설정하세요. 링크는 <b>1시간</b> 동안만 유효합니다.</p>${mailButton(link, "새 비밀번호 설정")}`),
+      });
+    }
+    return back("/forgot", "가입된 이메일이라면 재설정 링크를 보냈습니다. 메일함을 확인해 주세요.");
+  }
+  // 이메일 미설정 폴백: 관리자에게 알림
   if (user && user.association_id) {
     const a = await D.getAssociationById(db, user.association_id);
     await D.createNotification(db, { associationId: user.association_id, kind: "password_reset", message: `비밀번호 재설정 요청: ${user.name} (${user.email})`, link: a ? `/t/${a.slug}/admin` : "" });
   }
   return back("/forgot", "요청이 접수되었습니다. 관리자가 확인 후 임시 비밀번호를 안내해 드립니다.");
+}
+
+export async function resetPassword(ctx) {
+  const { db, env, form } = ctx;
+  const email = await verifyResetToken(env.SESSION_SECRET, form.get("token"));
+  if (!email) return back("/forgot", "링크가 만료되었거나 올바르지 않습니다. 다시 요청해 주세요.", true);
+  const pw = String(form.get("password") || "");
+  if (pw.length < 8) return back("/reset?token=" + encodeURIComponent(form.get("token") || ""), "비밀번호는 8자 이상이어야 합니다.", true);
+  const user = await D.getUserByEmail(db, email);
+  if (!user) return back("/forgot", "계정을 찾을 수 없습니다.", true);
+  const h = await hashPassword(pw);
+  await D.updateUserPassword(db, user.id, h.hash, h.salt);
+  return redirect("/login?msg=" + encodeURIComponent("비밀번호가 변경되었습니다. 새 비밀번호로 로그인하세요."));
 }
 
 // ---------- 전 기기 로그아웃 ----------
@@ -640,6 +687,18 @@ export async function approveApplication(ctx) {
   await D.createUser(db, { email: app.contact_email, passwordHash: hash, salt, name: app.assoc_name + " 관리자", role: "ADMIN", associationId: assoc.id });
   await D.setApplicationStatus(db, app.id, "approved");
   await audit(ctx, "입점승인", `${app.assoc_name} (${app.contact_email})`, null);
+  // 이메일 설정 시: 신청자에게 접속 안내 자동 발송
+  if (emailEnabled(ctx.env)) {
+    const origin = new URL(ctx.request.url).origin;
+    const r = await sendEmail(ctx.env, {
+      to: app.contact_email, subject: `'${app.assoc_name}' 홈페이지가 개설되었습니다`,
+      html: mailShell("홈페이지 개설 완료", `<p><b>${app.assoc_name}</b> 홈페이지가 준비되었습니다.</p>
+        <p>관리자 계정: <b>${app.contact_email}</b><br>임시 비밀번호: <b style="font-family:monospace">${temp}</b></p>
+        <p>로그인 후 반드시 비밀번호를 변경해 주세요.</p>${mailButton(origin + "/login", "로그인하기")}
+        <p>홈 주소: ${origin}/t/${assoc.slug}</p>`),
+    });
+    if (r.sent) return back("/super", `'${app.assoc_name}' 발급 완료 — 주소 /t/${assoc.slug}. 접속 안내 메일을 ${app.contact_email} 로 보냈습니다.`);
+  }
   return back("/super", `'${app.assoc_name}' 발급 완료 — 주소 /t/${assoc.slug}, 관리자 ${app.contact_email} / 임시비번 ${temp} (신청자에게 전달하세요)`);
 }
 export async function rejectApplication(ctx) {

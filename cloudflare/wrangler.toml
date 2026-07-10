@@ -36,6 +36,9 @@ NAVER_MAP_CLIENT_ID = "8nkkau8yrp"
 # 지도가 안 뜨면 ncpClientId <-> ncpKeyId 로 바꿔보세요(콘솔 버전 차이).
 NAVER_MAP_PARAM = "ncpClientId"
 # Turnstile(무료 봇 차단) — 대시보드에서 발급한 사이트키를 넣으면 자동 활성화.
+# 이메일 자동 발송 (비번 재설정 링크·입점 승인 안내) — Resend(https://resend.com) 무료 플랜 가능.
+# 설정법: 대시보드 → Settings → Variables 에 RESEND_API_KEY(Secret), MAIL_FROM 등록. 없으면 수동 안내 폴백.
+# MAIL_FROM = "상인회 플랫폼 <no-reply@내도메인.kr>"   # Resend 에 도메인 인증 필요
 # 시크릿은 `wrangler secret put TURNSTILE_SECRET` 로 등록. 둘 다 없으면 캡차 비활성.
 # TURNSTILE_SITE_KEY = "0x4AAAAAAA..."
 # Cloudflare Web Analytics(무료 방문 통계) — 대시보드에서 발급한 토큰. 넣으면 자동 삽입.
