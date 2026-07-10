@@ -579,9 +579,13 @@ export async function superConsole(ctx) {
   const list = await D.listAllAssociations(db);
   const auditLog = await D.listAudit(db, null, 15);
   const rows = list.map((a) => `<tr><td><a href="/t/${esc(a.slug)}" target="_blank">${esc(a.name)}</a><br /><small>/t/${esc(a.slug)}</small></td>
+    <td><form method="post" action="/super/association/${a.id}/domain" class="domain-form">
+      <input type="text" name="domain" value="${esc(a.custom_domain || "")}" placeholder="예: seocho-market.kr" />
+      <button class="btn btn-xs btn-ghost">저장</button></form>
+      ${a.custom_domain ? `<small class="domain-hint">✅ <a href="https://${esc(a.custom_domain)}" target="_blank">${esc(a.custom_domain)}</a></small>` : ""}</td>
     <td>${a.active ? '<span class="badge badge-ok">활성</span>' : '<span class="badge badge-no">비활성</span>'}</td>
     <td class="actions-cell"><a class="btn btn-xs btn-ghost" href="/t/${esc(a.slug)}/admin">관리</a>
-      <form method="post" action="/super/association/${a.id}/toggle"><button class="btn btn-xs btn-ghost">${a.active ? "비활성화" : "활성화"}</button></form></td></tr>`).join("") || `<tr><td colspan="3" class="empty">상인회가 없습니다.</td></tr>`;
+      <form method="post" action="/super/association/${a.id}/toggle"><button class="btn btn-xs btn-ghost">${a.active ? "비활성화" : "활성화"}</button></form></td></tr>`).join("") || `<tr><td colspan="4" class="empty">상인회가 없습니다.</td></tr>`;
   const body = `<section class="dash"><div class="container">
     <div class="dash-head"><div><p class="section-eyebrow">SUPER</p><h1 class="dash-title">플랫폼 관리</h1></div>
       <div class="dash-head-actions"><form method="post" action="/logout"><button class="btn btn-ghost btn-sm">로그아웃</button></form></div></div>${flashOf(query)}
@@ -597,8 +601,10 @@ export async function superConsole(ctx) {
         <div class="form-two"><label>관리자 이름<input type="text" name="admin_name" /></label><label>관리자 이메일<input type="email" name="admin_email" required /></label></div>
         <label>관리자 비밀번호 (8자 이상)<input type="password" name="admin_password" required minlength="8" /></label>
         <button class="btn btn-primary">상인회 생성</button></form></section>
-    <section class="panel"><h2 class="panel-title">상인회 목록</h2><div class="table-scroll"><table class="admin-table">
-      <thead><tr><th>상인회</th><th>상태</th><th>관리</th></tr></thead><tbody>${rows}</tbody></table></div></section>
+    <section class="panel"><h2 class="panel-title">상인회 목록</h2>
+      <p class="panel-hint">개별 도메인: 도메인을 입력·저장한 뒤 <b>Cloudflare 대시보드 → 이 워커 → Settings → Domains &amp; Routes → Add → Custom Domain</b> 으로 같은 도메인을 추가해야 실제 접속됩니다(그 도메인이 이 Cloudflare 계정에 등록되어 있어야 함).</p>
+      <div class="table-scroll"><table class="admin-table">
+      <thead><tr><th>상인회</th><th>개별 도메인</th><th>상태</th><th>관리</th></tr></thead><tbody>${rows}</tbody></table></div></section>
     <section class="panel"><h2 class="panel-title">감사 로그 (플랫폼)</h2>
       <ul class="audit-list">${auditLog.length ? auditLog.map((a) => `<li><span class="audit-action">${esc(a.action)}</span> <span class="audit-detail">${esc(a.detail)}</span><span class="audit-meta">${esc(a.actor_name)} · ${esc(a.created_at.slice(5, 16).replace("T", " "))}</span></li>`).join("") : `<li class="empty">기록이 없습니다.</li>`}</ul></section></div></section>`;
   return html(layout({ title: "슈퍼 관리자", user, body, csrf }));

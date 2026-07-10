@@ -35,6 +35,7 @@ const GLOBAL = [
   ["GET", "/super", pages.superConsole, "SUPERADMIN"],
   ["POST", "/super/association", api.superCreateAssociation, "SUPERADMIN"],
   ["POST", "/super/association/:id/toggle", api.superToggleAssociation, "SUPERADMIN"],
+  ["POST", "/super/association/:id/domain", api.superSetDomain, "SUPERADMIN"],
 ];
 const TENANT = [
   ["GET", "/", pages.home],
@@ -195,10 +196,15 @@ async function handle(request, env) {
 
   const baseCtx = { env, db, url, query: url.searchParams, user, csrf, form, addCookie, isProd, ip, request };
 
-  // 테넌트 라우트
-  const t = resolveTenant(env, url.hostname, pathname);
+  // 테넌트 라우트 — ① BASE_DOMAIN 서브도메인/경로(/t/:slug) ② 상인회별 개별 도메인(custom_domain)
+  let t = resolveTenant(env, url.hostname, pathname);
+  let assocPre = null;
+  if (!t) {
+    assocPre = await D.getAssociationByDomain(db, url.hostname);
+    if (assocPre) t = { slug: assocPre.slug, subpath: pathname || "/", base: "" };
+  }
   if (t) {
-    const assoc = await D.getAssociationBySlug(db, t.slug);
+    const assoc = assocPre || (await D.getAssociationBySlug(db, t.slug));
     if (!assoc || (!assoc.active && !(user && user.role === ROLES.SUPERADMIN)))
       return finalize(notFoundResponse({ base: t.base }), setCookies, env);
     assoc._base = t.base;
@@ -207,6 +213,14 @@ async function handle(request, env) {
       const ok = authorize(user, route.auth, assoc);
       if (ok !== true) return finalize(typeof ok === "string" ? redirect(ok) : forbidden(), setCookies, env);
       const res = await route.handler({ ...baseCtx, assoc, base: t.base, params: route.params });
+      return finalize(res, setCookies, env);
+    }
+    // 테넌트 경로에 없으면 전역 라우트 폴백 (개별 도메인·서브도메인에서 /login, /verify, /sitemap.xml 등)
+    const gt = matchRoute(GLOBAL, request.method, t.subpath);
+    if (gt) {
+      const ok = authorize(user, gt.auth, assoc);
+      if (ok !== true) return finalize(typeof ok === "string" ? redirect(ok) : forbidden(), setCookies, env);
+      const res = await gt.handler({ ...baseCtx, assoc, base: t.base, params: gt.params });
       return finalize(res, setCookies, env);
     }
     return finalize(notFoundResponse({ assoc, base: t.base }), setCookies, env);

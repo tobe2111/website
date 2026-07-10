@@ -16,8 +16,10 @@ CREATE TABLE IF NOT EXISTS associations (
   map_zoom    INTEGER NOT NULL DEFAULT 14,
   active      INTEGER NOT NULL DEFAULT 1,
   home_layout TEXT,
+  custom_domain TEXT NOT NULL DEFAULT '',   -- 상인회별 개별 도메인(예: seocho-market.kr)
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_assoc_domain ON associations(custom_domain) WHERE custom_domain != '';
 
 CREATE TABLE IF NOT EXISTS users (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,

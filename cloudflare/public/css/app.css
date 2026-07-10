@@ -523,3 +523,9 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .totp-uri{display:block;word-break:break-all;font-size:.78rem;color:var(--muted);margin-top:6px}
 .totp-setup{margin:10px 0;padding:12px;border:1px dashed var(--line);border-radius:10px}
 .totp-login small{color:var(--muted)}
+
+/* 슈퍼 콘솔: 개별 도메인 폼 */
+.domain-form{display:flex;gap:6px;align-items:center}
+.domain-form input{width:180px;max-width:100%;padding:6px 10px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:.85rem}
+.domain-hint{display:block;margin-top:4px;color:var(--muted)}
+.domain-hint a{color:var(--green-700)}

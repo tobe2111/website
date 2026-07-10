@@ -472,3 +472,24 @@ export async function setupSubmit(ctx) {
   await D.createUser(db, { email: adminEmail, passwordHash: ad.hash, salt: ad.salt, name: assocName + " 관리자", role: "ADMIN", associationId: assoc.id });
   return redirect("/login?msg=" + encodeURIComponent("설정이 완료되었습니다! 관리자 계정으로 로그인하세요."));
 }
+
+// ---------- 슈퍼: 상인회별 개별 도메인 연결 ----------
+export async function superSetDomain(ctx) {
+  const { db, form, params } = ctx;
+  const a = await D.getAssociationById(db, Number(params.id));
+  if (!a) return back("/super", "상인회를 찾을 수 없습니다.", true);
+  // 입력 정리: 프로토콜·경로 제거, 소문자화
+  let domain = (form.get("domain") || "").toLowerCase().trim()
+    .replace(/^https?:\/\//, "").replace(/\/.*$/, "").replace(/\.$/, "");
+  if (domain && !/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(domain))
+    return back("/super", "도메인 형식을 확인해 주세요. (예: seocho-market.kr)", true);
+  if (domain) {
+    const dup = await D.getAssociationByDomain(db, domain);
+    if (dup && dup.id !== a.id) return back("/super", "이미 다른 상인회에 연결된 도메인입니다.", true);
+  }
+  await D.setAssociationDomain(db, a.id, domain);
+  await audit(ctx, "도메인연결", `${a.name} → ${domain || "(해제)"}`, null);
+  return back("/super", domain
+    ? `'${a.name}' 에 ${domain} 을 연결했습니다. Cloudflare 워커의 Custom Domain 에도 같은 도메인을 추가하세요.`
+    : `'${a.name}' 도메인 연결을 해제했습니다.`);
+}

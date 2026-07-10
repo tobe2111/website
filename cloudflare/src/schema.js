@@ -18,8 +18,10 @@ CREATE TABLE IF NOT EXISTS associations (
   map_zoom    INTEGER NOT NULL DEFAULT 14,
   active      INTEGER NOT NULL DEFAULT 1,
   home_layout TEXT,
+  custom_domain TEXT NOT NULL DEFAULT '',
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_assoc_domain ON associations(custom_domain) WHERE custom_domain != '';
 
 CREATE TABLE IF NOT EXISTS users (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -195,11 +197,20 @@ CREATE TABLE IF NOT EXISTS settings (
 );
 `;
 
-// 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 건너뜀.
+// 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
 export async function ensureSchema(db) {
   const has = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='associations'").first();
-  if (has) return false;
+  if (has) { await migrateColumns(db); return false; }
   const clean = SCHEMA_SQL.replace(/--[^\n]*\n/g, "\n");
   for (const st of clean.split(";").map((s) => s.trim()).filter(Boolean)) await db.prepare(st).run();
   return true;
+}
+
+// 기존 배포 DB 업그레이드: 이후 버전에서 추가된 컬럼을 자동 반영 (무손실)
+async function migrateColumns(db) {
+  const cols = (await db.prepare("PRAGMA table_info(associations)").all()).results || [];
+  if (!cols.some((c) => c.name === "custom_domain")) {
+    await db.prepare("ALTER TABLE associations ADD COLUMN custom_domain TEXT NOT NULL DEFAULT ''").run();
+    await db.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_assoc_domain ON associations(custom_domain) WHERE custom_domain != ''").run();
+  }
 }

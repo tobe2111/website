@@ -21,6 +21,8 @@ export function updateAssociation(db, id, f) {
     f.name, f.tagline, f.brand_color, f.phone, f.email, f.address, f.logo, id);
 }
 export const setAssociationActive = (db, id, a) => run(db, "UPDATE associations SET active=? WHERE id=?", a ? 1 : 0, id);
+export const getAssociationByDomain = (db, host) => first(db, "SELECT * FROM associations WHERE custom_domain = ? AND custom_domain != ''", String(host || "").toLowerCase());
+export const setAssociationDomain = (db, id, domain) => run(db, "UPDATE associations SET custom_domain=? WHERE id=?", domain || "", id);
 export const saveHomeLayout = (db, id, json) => run(db, "UPDATE associations SET home_layout=? WHERE id=?", json, id);
 
 // ----- Settings (자동 생성 키·설정 저장) -----

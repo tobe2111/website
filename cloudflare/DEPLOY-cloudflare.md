@@ -135,6 +135,24 @@ Cloudflare 대시보드 → **Turnstile** 에서 위젯을 만들어 **사이트
 
 ---
 
+## 상인회별 도메인 연결 (3가지 방식)
+
+| 방식 | 예 | 필요한 것 |
+| --- | --- | --- |
+| 경로(기본) | `…workers.dev/t/seocho` | 없음 — 바로 동작 |
+| 서브도메인 | `seocho.sangin.kr` | 도메인 1개 + `BASE_DOMAIN` 변수 + 와일드카드 라우트 |
+| **개별 도메인** | 서초=`seocho-market.kr`, 강남=`gangnam.com` | 상인회마다 도메인 |
+
+### 개별 도메인 연결 순서 (상인회 1곳당)
+1. 그 도메인을 **이 Cloudflare 계정에 추가** (대시보드 → Domains → Add a domain, 무료 플랜 → 안내대로 네임서버 변경)
+2. **워커에 도메인 연결**: Workers & Pages → 이 워커 → **Settings → Domains & Routes → Add → Custom Domain** → 도메인 입력 (HTTPS 인증서 자동)
+3. **슈퍼 콘솔(`/super`)** → 상인회 목록의 **개별 도메인** 칸에 같은 도메인 입력 → 저장
+→ 이제 그 도메인으로 접속하면 해당 상인회 홈페이지가 뜹니다. (www 도 쓰려면 2·3단계에 `www.도메인` 추가)
+
+### 서브도메인 방식(도메인 1개로 여러 상인회)
+1. 도메인을 계정에 추가 후, 워커 **Routes** 에 `*.sangin.kr/*` 와일드카드 라우트 + DNS `*` 레코드 추가
+2. 워커 **Variables** 에 `BASE_DOMAIN = sangin.kr` 추가 → `slug.sangin.kr` 이 각 상인회로 연결
+
 ## 기능 스위치 (모두 선택 · 무료)
 
 `wrangler.toml [vars]` 또는 `wrangler secret put` 으로 켜면 자동 활성화됩니다.
