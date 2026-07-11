@@ -652,6 +652,18 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .onboard-list li.done a{color:var(--muted);text-decoration:line-through;font-weight:500}
 .ob-check{flex:none;display:grid;place-items:center;width:24px;height:24px;border-radius:999px;border:1.5px solid var(--line);background:var(--surface);color:#fff;font-size:.8rem;font-weight:800}
 .onboard-list li.done .ob-check{background:var(--ok);border-color:var(--ok)}
+/* 공유 버튼 + 토스트 (디자인: 다크 pill 토스트) */
+.biz-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}
+.btn-share{background:rgba(255,255,255,.16);color:#fff;border:1px solid rgba(255,255,255,.45)}
+.btn-share:hover{background:rgba(255,255,255,.26);border-color:#fff}
+.share-toast{position:fixed;left:50%;bottom:32px;transform:translate(-50%,16px);z-index:1100;display:inline-flex;align-items:center;gap:9px;padding:13px 20px;border-radius:999px;background:var(--ink);color:var(--bg);font-weight:600;font-size:15px;box-shadow:var(--sh-2);opacity:0;transition:.25s ease;pointer-events:none}
+.share-toast.on{opacity:1;transform:translate(-50%,0)}
+/* 가게 QR 위젯 */
+.qr-widget{display:flex;gap:22px;align-items:center;flex-wrap:wrap}
+.qr-img{flex:none;width:180px;height:180px;border-radius:var(--r-md);border:1px solid var(--line-soft);background:#fff;padding:6px;box-shadow:var(--sh-1)}
+.qr-img svg{width:100%;height:100%;display:block}
+.qr-actions{display:flex;flex-direction:column;gap:8px}
+@media (max-width:600px){.qr-widget{justify-content:center;text-align:center}.qr-actions{flex-direction:row}}
 /* 인증 카드 브랜드 아이콘 헤더 */
 .auth-head{text-align:center;margin-bottom:22px}
 .auth-mark{width:52px;height:52px;border-radius:15px;margin:0 auto 14px}

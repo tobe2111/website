@@ -153,7 +153,10 @@ export async function businessDetail(ctx) {
     <p class="biz-desc">${esc(b.description || "소개가 곧 등록됩니다.")}</p>
     <ul class="biz-contact">
       ${b.address ? `<li>${PIN_SVG} ${esc(b.address)}</li>` : ""}${b.phone ? `<li>${PHONE_SVG} <a href="tel:${esc(b.phone)}">${esc(b.phone)}</a></li>` : ""}${b.hours ? `<li>${CLOCK_SVG} ${esc(b.hours)}</li>` : ""}
-    </ul></div></section>
+    </ul>
+    <div class="biz-actions">
+      <button type="button" class="btn btn-share" data-share data-share-title="${esc(b.name)} — ${esc(assoc.name)}">${SHARE_SVG} 가게 공유하기</button>
+    </div></div></section>
   <section class="section"><div class="container">
     ${productGrid}
     ${images.length ? `<h2 class="biz-section-title">사진</h2>${gallery(images)}` : ""}
@@ -165,7 +168,7 @@ export async function businessDetail(ctx) {
   return html(layout({ title: b.name, assoc, base, user, body, activeNav: `${base}/businesses`, csrf,
     description: clip(b.description) || `${assoc.name} · ${b.category} · ${b.name}`,
     ogImage: cover ? (cover.thumb || cover.filename) : "",
-    scripts: media.length ? `<script src="/js/viewer.js" defer></script>` : "" }));
+    scripts: `${media.length ? `<script src="/js/viewer.js" defer></script>` : ""}<script src="/js/share.js" defer></script>` }));
 }
 
 export function loginForm(ctx) {
@@ -218,6 +221,7 @@ export async function mapPage(ctx) {
 }
 
 // ================= 공지 =================
+const SHARE_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="12" r="2.6"/><circle cx="17.5" cy="5.5" r="2.6"/><circle cx="17.5" cy="18.5" r="2.6"/><path d="M8.4 10.8l6.8-4M8.4 13.2l6.8 4"/></svg>';
 const CHEV_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>';
 const BELL_SVG = '<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 8-3 8h18s-3-1-3-8"/><path d="M13.7 20a2 2 0 0 1-3.4 0"/></svg>';
 function noticeRows(base, list) {
@@ -257,7 +261,7 @@ export async function noticeDetail(ctx) {
     <h1 class="article-title">${esc(n.title)}</h1>
     ${n.image ? `<img class="article-image" src="${esc(mediaUrl(n.image))}" alt="${esc(n.title)}" />` : ""}
     <div class="article-body">${esc(n.body).replace(/\n/g, "<br />")}</div></div></section>`;
-  return html(layout({ title: n.title, assoc, base, user, body, activeNav: `${base}/notices`, csrf, description: clip(n.body) || n.title }));
+  return html(layout({ title: n.title, assoc, base, user, body, activeNav: `${base}/notices`, csrf, description: clip(n.body) || n.title, ogImage: n.image || "" }));
 }
 
 // ================= 행사 =================
@@ -410,7 +414,16 @@ export async function dashboard(ctx) {
       <label class="file-drop"><input type="file" name="image" accept="image/*" /><span class="file-drop-text">📷 제품 사진 (선택·최대 8MB)</span></label>
       <div class="form-two"><label>제품 이름<input name="name" required /></label><label>가격 <small>(선택)</small><input name="price" placeholder="예: 8,000원 · 시가 · 미표기" /></label></div>
       <label>한 줄 설명 <small>(선택)</small><input name="description" maxlength="300" /></label>
-      <button class="btn btn-primary btn-sm">제품 추가</button></form></section>`;
+      <button class="btn btn-primary btn-sm">제품 추가</button></form></section>
+    <section class="panel"><h2 class="panel-title">가게 QR 코드</h2>
+      <p class="panel-hint">인쇄해서 계산대·출입문에 붙여보세요. 손님이 스캔하면 우리 가게 페이지가 열립니다.</p>
+      <div id="qrWidget" class="qr-widget" data-url="${base}/business/${esc(b.slug)}" data-name="${esc(b.name)}">
+        <div class="qr-img" aria-label="가게 QR 코드"></div>
+        <div class="qr-actions">
+          <button type="button" class="btn btn-primary btn-sm" data-qr-png>PNG 저장 (인쇄용)</button>
+          <button type="button" class="btn btn-ghost btn-sm" data-qr-copy>링크 복사</button>
+        </div>
+      </div></section>`;
   const opts = CATEGORIES.map((c) => `<option value="${esc(c)}"${c === b.category ? " selected" : ""}>${esc(c)}</option>`).join("");
   const grid = media.length ? media.map((m) => `<figure class="media-tile">${galleryItem(m, { showCaption: false })}<figcaption>
       <span class="media-kind">${m.kind === "image" ? "🖼 사진" : (m.kind === "embed" ? "🎬 " + esc(providerLabel(m.provider)) : "🎬 영상")}</span>
@@ -448,7 +461,7 @@ export async function dashboard(ctx) {
     ${productPanel}
     </div></section>`;
   const picker = naver ? `<script src="https://oapi.map.naver.com/openapi/v3/maps.js?${esc(env.NAVER_MAP_PARAM || "ncpClientId")}=${esc(naver)}"></script><script src="/js/map.js" defer></script>` : "";
-  return html(layout({ title: "내 업체 관리", assoc, base, user, body, csrf, scripts: `<script src="/js/viewer.js" defer></script><script src="/js/upload-resize.js" defer></script>${picker}` }));
+  return html(layout({ title: "내 업체 관리", assoc, base, user, body, csrf, scripts: `<script src="/js/viewer.js" defer></script><script src="/js/upload-resize.js" defer></script><script src="/js/qr.js" defer></script><script src="/js/qr-widget.js" defer></script>${picker}` }));
 }
 
 const docBody = (b) => esc(b).replace(/\n/g, "<br />");
