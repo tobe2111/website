@@ -110,9 +110,20 @@ Cloudflare 대시보드 → Workers & Pages → 해당 워커 → **Settings →
 ## 5. 사진 공개 URL + 비용 최적화 (권장)
 
 R2 파일은 기본적으로 워커를 거쳐 `/media/...` 로 제공됩니다(동작함).
-비용·성능을 더 아끼려면 **R2 버킷에 공개 도메인을 연결**하고 `wrangler.toml [vars]` 에
-`MEDIA_PUBLIC_BASE = "https://media.내도메인"` 을 설정하세요.
-→ 사진이 워커를 안 거치고 R2/CDN 에서 바로 서빙 → **워커 요청 수(무료 10만/일) 절약**.
+비용·성능을 더 아끼려면 **R2 버킷에 공개 도메인을 연결**하면 사진이 워커를 안 거치고
+R2/CDN 에서 바로 서빙됩니다 → **워커 요청 수(무료 10만/일) 절약**.
+
+**가장 쉬운 방법 (r2.dev · 2분):**
+1. Cloudflare 대시보드 → **R2** → `seocho-media` 버킷 → **Settings** 탭
+2. **Public access** → *r2.dev subdomain* → **Allow Access** 클릭
+3. 표시되는 주소(`https://pub-xxxxxxxx.r2.dev`)를 복사
+4. Workers & Pages → `website` 워커 → **Settings → Variables** 에
+   `MEDIA_PUBLIC_BASE` = 복사한 주소 추가 → 재배포(자동)
+5. 확인: 업체 사진 우클릭 → "이미지 주소 복사" 가 `pub-….r2.dev` 로 시작하면 성공
+
+> 커스텀 도메인(`media.내도메인`)을 연결하면 캐시 규칙까지 제어할 수 있어 더 좋지만,
+> r2.dev 로도 충분합니다. 보안 참고: 파일 키가 128비트 랜덤이라 주소를 아는 사람만
+> 접근 가능 — 지금 워커 경유 방식과 동일한 수준입니다.
 
 ### R2 를 최대한 덜 쓰게 만든 장치들 (이미 적용됨)
 - **업로드 전 브라우저 리사이즈**: 긴 변 1280px + WebP → 휴대폰 원본(수 MB)을 보통 100~300KB 로.
