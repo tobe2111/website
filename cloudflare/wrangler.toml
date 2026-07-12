@@ -36,12 +36,11 @@ PUBLIC_SCHEME = "https"
 # BASE_DOMAIN = "example.com"        # 서브도메인 방식 쓸 때
 # 네이버 지도 Client ID (도메인 화이트리스트로 보호되는 공개 값 — 콘솔에 배포 도메인 등록 필요).
 # ⚠️ Client Secret 은 지도에 불필요하며 여기에 절대 넣지 마세요.
-NAVER_MAP_CLIENT_ID = "8nkkau8yrp"
+NAVER_MAP_CLIENT_ID = "5mvveclqay"   # Maps 콘솔의 "urdeal-sanginhoe" 앱 (Dynamic Map)
 # 지도가 안 뜨면 ncpClientId <-> ncpKeyId 로 바꿔보세요(콘솔 버전 차이).
-# 이 앱은 구형(AI·NAVER API, 키 라벨이 X-NCP-APIGW-*) → ncpClientId 가 맞음.
-# 신규 Maps 콘솔(2023.11+)에서 새로 만든 앱이면 ncpKeyId 로 변경.
+# Maps 콘솔(신규) 앱은 ncpKeyId 사용. (구 AI·NAVER API 앱만 ncpClientId)
 # 주의: 이 파일 값이 대시보드 변수보다 우선 적용됨(배포 시 덮어씀) — 변경은 여기서!
-NAVER_MAP_PARAM = "ncpClientId"
+NAVER_MAP_PARAM = "ncpKeyId"
 # Turnstile(무료 봇 차단) — 대시보드에서 발급한 사이트키를 넣으면 자동 활성화.
 # 사진 서빙 워커 우회 (선택 · 서버리스 순도↑): R2 버킷에 공개 도메인을 켜고 그 주소를 넣으면
 # 사진이 워커를 거치지 않고 R2→CDN 직행 (워커 요청 한도 절약). 설정법: DEPLOY-cloudflare.md 참고.
