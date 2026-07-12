@@ -7,6 +7,7 @@ import * as api from "./api.js";
 import { setMediaBase, setOrigin, setAssetVer, layout } from "./render.js";
 import { html, text, redirect, notFoundResponse, forbidden } from "./http.js";
 import { ensureSchema } from "./schema.js";
+import { runWeekly } from "./scheduled.js";
 import { resolveSessionSecret } from "./secrets.js";
 
 const _schemaReady = new WeakSet(); // DB 별 스키마 준비 캐시
@@ -57,6 +58,7 @@ const TENANT = [
   ["GET", "/feed.xml", pages.noticesFeed],
   ["GET", "/notices/:id", pages.noticeDetail],
   ["GET", "/events", pages.events],
+  ["GET", "/events/:id/calendar.ics", pages.eventIcs],
   ["GET", "/register", pages.registerForm],
   ["POST", "/register", api.register],
   ["GET", "/invite", pages.invitePage],
@@ -100,6 +102,7 @@ const TENANT = [
   ["POST", "/admin/user/:id/reset-password", api.adminResetUserPassword, "ADMIN"],
   ["POST", "/admin/members/add", api.adminAddMember, "ADMIN"],
   ["POST", "/admin/invite", api.adminCreateInvite, "ADMIN"],
+  ["POST", "/admin/admins/add", api.adminAddAdmin, "ADMIN"],
   ["POST", "/admin/product/:id/hide", api.adminProductHide, "ADMIN"],
   ["GET", "/admin/members.csv", pages.adminExportMembers, "ADMIN"],
   ["GET", "/admin/export.json", pages.adminExportAll, "ADMIN"],
@@ -186,6 +189,12 @@ export default {
         <p style="color:#666">잠시 후 다시 시도해 주세요.</p>
         <p><a href="/" style="color:#0b6e4f;font-weight:700">홈으로</a></p></section>`, 500);
     }
+  },
+  // 주간 정기 작업 (wrangler.toml [triggers].crons) — 암호화 백업 + 운영 리포트 메일
+  async scheduled(event, env, ctx) {
+    await ensureSchema(env.DB);
+    const full = { ...env, SESSION_SECRET: await resolveSessionSecret(env) };
+    ctx.waitUntil(runWeekly(full));
   },
 };
 

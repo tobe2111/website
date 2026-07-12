@@ -15,6 +15,12 @@ binding = "CF_VERSION_METADATA"
 directory = "./public"
 binding = "ASSETS"
 
+# 주간 정기 작업 — 매주 일요일 18:00 UTC(월요일 새벽 3시 KST):
+# ① 전체 데이터 암호화 백업 → R2 backups/ (8주 보존, 복호화: scripts/decrypt-backup.mjs)
+# ② 상인회별 주간 운영 리포트 메일 (RESEND_API_KEY 설정 시)
+[triggers]
+crons = ["0 18 * * 0"]
+
 # D1 (SQLite) — 무료 티어: 5GB, 하루 5백만 읽기
 [[d1_databases]]
 binding = "DB"

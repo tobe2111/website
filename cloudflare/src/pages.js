@@ -84,15 +84,37 @@ function businessCard(base, b, cover) {
 }
 
 // 행사 카드 (시안: 이미지 16:10 + 오버레이 + 날짜 칩 / 이미지 없으면 날짜 사각형형)
-function eventCard(e) {
+function eventCard(base, e) {
   const d = e.event_date.slice(8, 10), mo = Number(e.event_date.slice(5, 7)) + "월";
+  const calLink = `<a class="event-cal" href="${base}/events/${e.id}/calendar.ics" title="아이폰·구글 캘린더에 추가">${CAL_SVG} 캘린더에 추가</a>`;
   if (e.image) return `<article class="event-photo-card">
     <img src="${esc(mediaUrl(e.image))}" alt="" loading="lazy" />
     <span class="epc-overlay" aria-hidden="true"></span>
-    <span class="epc-body"><span class="epc-date">${Number(e.event_date.slice(5, 7))}.${Number(d)}</span><strong>${esc(e.title)}</strong>${e.place ? `<span class="epc-place">${PIN_SVG}${esc(e.place)}</span>` : ""}</span>
+    <span class="epc-body"><span class="epc-date">${Number(e.event_date.slice(5, 7))}.${Number(d)}</span><strong>${esc(e.title)}</strong>${e.place ? `<span class="epc-place">${PIN_SVG}${esc(e.place)}</span>` : ""}${calLink}</span>
   </article>`;
   return `<article class="event-card"><div class="event-date"><span class="d">${d}</span><span class="m">${mo}</span></div>
-      <div class="event-info"><h3>${esc(e.title)}</h3><p>${esc(e.description)}</p>${e.place ? `<span class="event-place">${PIN_SVG}${esc(e.place)}</span>` : ""}</div></article>`;
+      <div class="event-info"><h3>${esc(e.title)}</h3><p>${esc(e.description)}</p>${e.place ? `<span class="event-place">${PIN_SVG}${esc(e.place)}</span>` : ""}${calLink}</div></article>`;
+}
+const CAL_SVG = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 9h18M12 13v5M9.5 15.5h5"/></svg>';
+
+// 행사 → iCalendar 파일 (아이폰·구글·네이버 캘린더 공통 규격)
+export async function eventIcs(ctx) {
+  const { db, assoc, params } = ctx;
+  const e = await D.getEvent(db, Number(params.id));
+  if (!e || e.association_id !== assoc.id || !/^\d{4}-\d{2}-\d{2}/.test(e.event_date || "")) return notFoundResponse(ctx);
+  const day = e.event_date.slice(0, 10);
+  const next = new Date(day + "T00:00:00Z"); next.setUTCDate(next.getUTCDate() + 1);
+  const icsEsc = (s) => String(s || "").replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
+  const ics = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//sanginhoe-platform//ko", "CALSCALE:GREGORIAN", "BEGIN:VEVENT",
+    `UID:event-${e.id}@${assoc.slug}`,
+    `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, "").slice(0, 15)}Z`,
+    `DTSTART;VALUE=DATE:${day.replace(/-/g, "")}`,
+    `DTEND;VALUE=DATE:${next.toISOString().slice(0, 10).replace(/-/g, "")}`,
+    `SUMMARY:${icsEsc(e.title)} — ${icsEsc(assoc.name)}`,
+    e.place ? `LOCATION:${icsEsc(e.place)}` : "",
+    e.description ? `DESCRIPTION:${icsEsc(e.description)}` : "",
+    "END:VEVENT", "END:VCALENDAR"].filter(Boolean).join("\r\n");
+  return new Response(ics, { headers: { "content-type": "text/calendar; charset=utf-8", "content-disposition": `attachment; filename="event-${e.id}.ics"`, "cache-control": "public, max-age=600" } });
 }
 
 export async function home(ctx) {
@@ -110,7 +132,7 @@ export async function home(ctx) {
   const covers = await D.coverImagesFor(db, items.map((b) => b.id));
   const businessesHtml = items.map((b) => businessCard(base, b, covers.get(b.id))).join("");
   const catTiles = cats.length ? `<div class="cat-grid">${cats.map((c) => `<a class="cat-tile" href="${base}/businesses?category=${encodeURIComponent(c.category)}"><span class="cat-ico">${catIcon(c.category)}</span><span class="cat-name">${esc(c.category)}</span></a>`).join("")}<a class="cat-tile cat-all" href="${base}/businesses"><span class="cat-ico">${catIcon("전체")}</span><span class="cat-name">전체보기</span></a></div>` : "";
-  const eventsHtml = events.map(eventCard).join("");
+  const eventsHtml = events.map((e) => eventCard(base, e)).join("");
   const body = renderHome(lay, {
     assoc, base, stats, businessesHtml, catTiles, eventsHtml, loggedIn: !!user,
     noticesHtml: notices.length ? noticeRows(base, notices) : "",
@@ -126,7 +148,8 @@ export async function home(ctx) {
     ...(assoc.phone ? { telephone: assoc.phone } : {}),
     ...(assoc.address ? { address: { "@type": "PostalAddress", streetAddress: assoc.address, addressCountry: "KR" } } : {}),
   };
-  return html(layout({ title: "", assoc, base, user, body, activeNav: `${base}/`, csrf, description: assoc.tagline, jsonLd: orgLd }));
+  return html(layout({ title: "", assoc, base, user, body, activeNav: `${base}/`, csrf, description: assoc.tagline, jsonLd: orgLd,
+    scripts: names.length ? `<script src="/js/suggest.js" defer></script>` : "" }));
 }
 
 function layoutEditor(base, layoutArr) {
@@ -368,7 +391,7 @@ export async function noticeDetail(ctx) {
 export async function events(ctx) {
   const { db, assoc, base, user, csrf } = ctx;
   const list = await D.listEvents(db, assoc.id);
-  const cards = list.length ? list.map(eventCard).join("") : `<p class="empty">예정된 행사가 없습니다.</p>`;
+  const cards = list.length ? list.map((e) => eventCard(base, e)).join("") : `<p class="empty">예정된 행사가 없습니다.</p>`;
   const body = `<section class="section page-top"><div class="container">
     <div class="section-head"><p class="section-eyebrow">EVENTS</p><h2 class="section-title">행사·소식</h2></div>
     <div class="event-grid">${cards}</div></div></section>`;
@@ -662,6 +685,7 @@ export async function admin(ctx) {
   const notices = await D.listNotices(db, assoc.id);
   const events = await D.listEvents(db, assoc.id);
   const members = await D.listUsersByAssociation(db, assoc.id, "MERCHANT");
+  const admins = await D.listUsersByAssociation(db, assoc.id, "ADMIN");
   const notifs = await D.listNotifications(db, assoc.id, 15);
   const unread = await D.unreadCount(db, assoc.id);
   const today = new Date().toISOString().slice(0, 10);
@@ -740,6 +764,12 @@ export async function admin(ctx) {
         <form method="post" action="${base}/admin/invite" class="stack-form compact">
           <div class="form-two"><label>가게 이름<input type="text" name="biz_name" required maxlength="100" /></label><label>업종<select name="category">${CATEGORIES.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("")}</select></label></div>
           <button class="btn btn-primary btn-sm">초대 링크 만들기</button></form></div></details>
+      <details class="help-box" style="margin-top:14px"><summary>👥 부관리자 추가 (회장·총무 공동 운영)</summary>
+        <div class="help-body"><p class="help-lead">관리자 권한 계정을 하나 더 발급합니다. 승인·공지·브랜딩 등 이 콘솔의 모든 기능을 함께 쓸 수 있으니 믿을 수 있는 분에게만 발급하세요.</p>
+        ${admins.length > 1 ? `<p class="panel-hint">현재 관리자: ${admins.map((u) => esc(u.name || u.email)).join(", ")}</p>` : ""}
+        <form method="post" action="${base}/admin/admins/add" class="stack-form compact">
+          <div class="form-two"><label>성함<input type="text" name="name" required /></label><label>이메일<input type="email" name="email" required /></label></div>
+          <button class="btn btn-primary btn-sm">부관리자 발급 + 임시 비번</button></form></div></details>
       <details class="help-box" style="margin-top:14px"><summary>사장님 대신 등록하기 (대행)</summary>
         <div class="help-body"><p class="help-lead">사장님이 직접 못 하실 때 총무가 대신 계정을 만들어 드립니다. 임시 비밀번호를 전달하세요. (대행 등록은 참여 계측에 '대행'으로 집계됩니다.)</p>
         <form method="post" action="${base}/admin/members/add" class="stack-form compact">

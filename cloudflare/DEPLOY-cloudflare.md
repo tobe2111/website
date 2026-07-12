@@ -232,3 +232,13 @@ node --experimental-sqlite --test cloudflare/test/*.test.js   # 22건
 | 사진 썸네일 | ffmpeg 자동 | 원본 사용(ffmpeg 없음) |
 | 영상 | 링크 임베드 | 링크 임베드(동일) |
 | 배포 | 서버/도커 | Workers(무료 티어) |
+
+## 검증·백업 도구
+
+- **단위 테스트**: `node --experimental-sqlite --test cloudflare/test/*.test.js`
+- **E2E 스모크**(실브라우저 — 다크 토글·모바일 메뉴·초성 검색·QR·중복 제출 가드):
+  `node --experimental-sqlite cloudflare/test-e2e/smoke.mjs` (전역 playwright + Chromium 필요)
+- **자동 백업**: 매주 일요일 18:00 UTC 에 전체 데이터가 암호화되어 R2 `backups/` 에 저장됩니다(8주 보존).
+  복원: R2 에서 `.enc` 파일 다운로드 후
+  `node cloudflare/scripts/decrypt-backup.mjs backup-YYYY-MM-DD.json.enc "<SESSION_SECRET>" > 복원본.json`
+  (SESSION_SECRET 은 wrangler secret 또는 settings 표의 자동 생성값)

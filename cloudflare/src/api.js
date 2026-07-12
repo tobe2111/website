@@ -466,6 +466,21 @@ export async function adminAddMember(ctx) {
   return back(base + "/admin", `대행 등록 완료 — ${name}님 로그인: ${email} / 임시비번 ${temp} (사장님께 전달하세요)`);
 }
 
+// ---------- 부관리자 (회장·총무 등 공동 운영) ----------
+export async function adminAddAdmin(ctx) {
+  const { db, base, assoc, user } = ctx;
+  const form = ctx.form;
+  const name = cap((form.get("name") || "").trim(), 60);
+  const email = cap((form.get("email") || "").toLowerCase().trim(), 120);
+  if (!name || !EMAIL_RE.test(email)) return back(base + "/admin", "이름·이메일을 확인해 주세요.", true);
+  if (await D.getUserByEmail(db, email)) return back(base + "/admin", "이미 가입된 이메일입니다.", true);
+  const temp = Math.random().toString(36).slice(2, 10);
+  const { hash, salt } = await hashPassword(temp);
+  await D.createUser(db, { email, passwordHash: hash, salt, name, role: "ADMIN", associationId: assoc.id });
+  await audit(ctx, "부관리자추가", `${name} (${email}) by ${user.email}`);
+  return back(base + "/admin", `부관리자 발급 완료 — ${name}님 로그인: ${email} / 임시비번 ${temp} (전달 후 비밀번호 변경을 안내하세요)`);
+}
+
 // ---------- 전자서명 ----------
 export async function adminCreateDocument(ctx) {
   const { db, form, base, assoc, user } = ctx;
@@ -478,8 +493,18 @@ export async function adminCreateDocument(ctx) {
   const doc = await D.createDocument(db, { associationId: assoc.id, title, body, contentHash: await contentHash(body), createdBy: user.id, ordered, dueDate });
   const target = form.get("target");
   const members = await D.listUsersByAssociation(db, assoc.id, "MERCHANT");
-  if (target === "all") await D.createSignatureRequests(db, doc.id, members.map((m) => m.id));
-  else if (target === "select") { const valid = new Set(members.map((m) => m.id)); const chosen = form.getAll("members").map(Number).filter((id) => valid.has(id)); await D.createSignatureRequests(db, doc.id, chosen); }
+  let recipients = [];
+  if (target === "all") { recipients = members; await D.createSignatureRequests(db, doc.id, members.map((m) => m.id)); }
+  else if (target === "select") { const valid = new Map(members.map((m) => [m.id, m])); const chosen = form.getAll("members").map(Number).filter((id) => valid.has(id)); recipients = chosen.map((id) => valid.get(id)); await D.createSignatureRequests(db, doc.id, chosen); }
+  // 서명 요청 이메일 (RESEND 설정 시) — 실패해도 문서 생성은 유효
+  if (emailEnabled(ctx.env) && recipients.length) {
+    const origin = new URL(ctx.request.url).origin;
+    await Promise.all(recipients.filter((m) => m.email).map((m) => sendEmail(ctx.env, {
+      to: m.email,
+      subject: `[${assoc.name}] 전자서명 요청 — ${title}`,
+      html: mailShell(`${assoc.name} 전자서명`, `<p>${m.name || "회원"}님, 서명이 필요한 문서가 도착했습니다.</p><p><b>${title}</b>${dueDate ? ` (기한: ${dueDate})` : ""}${ordered ? " · 순차 서명 문서입니다" : ""}</p>${mailButton("서명하러 가기", `${origin}${base}/sign`)}`),
+    }).catch(() => {})));
+  }
   await audit(ctx, "서명문서생성", title);
   return back(base + "/admin/documents", ordered ? "순차 서명 문서를 생성했습니다." : "문서를 생성했습니다.");
 }
