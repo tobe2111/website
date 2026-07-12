@@ -97,6 +97,15 @@ function renderSection(s, deps) {
     case "hero":
       return heroSection(s, deps);
     case "businesses":
+      // 빈 상태: 회색 빈말 대신 "첫 상점" 초대 카드 (개점 준비 분위기)
+      if (!deps.counts || deps.counts.businesses === 0)
+        return sectionWrap("", s.title, s.lead,
+          `<div class="first-invite">
+            <span class="first-invite-badge">OPEN 준비 중</span>
+            <h3>이 상권의 첫 번째 상점이 되어주세요</h3>
+            <p>지금 등록하면 홈 첫 화면에 우리 가게가 가장 먼저 소개됩니다.<br />사진·메뉴·위치까지 5분이면 등록 완료.</p>
+            <a href="${deps.base}/register" class="btn btn-primary btn-lg">무료로 우리 가게 올리기</a>
+          </div>`);
       return sectionWrap(
         "",
         s.title,
@@ -105,6 +114,7 @@ function renderSection(s, deps) {
          <div class="section-more"><a href="${deps.base}/businesses" class="btn btn-ghost btn-sm">전체 업체 보기</a></div>`
       );
     case "notices":
+      if (!deps.noticesHtml) return ""; // 공지 없으면 공개 홈에서 섹션 자체 숨김
       return sectionWrap(
         "section-alt",
         s.title,
@@ -113,6 +123,7 @@ function renderSection(s, deps) {
          <div class="section-more"><a href="${deps.base}/notices" class="btn btn-ghost btn-sm">공지사항 전체보기</a></div>`
       );
     case "events":
+      if (!deps.eventsHtml) return ""; // 행사 없으면 섹션 숨김
       return sectionWrap("", s.title, "", `<div class="event-grid">${deps.eventsHtml}</div>`);
     case "text":
       return sectionWrap(
@@ -138,7 +149,7 @@ function heroSection(s, deps) {
   const hl = s.highlight && title.includes(s.highlight)
     ? title.replace(esc(s.highlight), `<span>${esc(s.highlight)}</span>`)
     : title;
-  const statsHtml = s.showStats
+  const statsHtml = s.showStats && stats.businesses > 0
     ? `<dl class="hero-stats">
         <div><dt>등록 업체</dt><dd>${stats.businesses}<span>곳</span></dd></div>
         <div><dt>진행 행사</dt><dd>${stats.events}<span>건</span></dd></div>

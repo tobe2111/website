@@ -73,7 +73,7 @@ export async function home(ctx) {
   const lay = parseLayout(assoc.home_layout, assoc.name);
   const { items } = await D.listBusinessesPaged(db, assoc.id, { perPage: 6 });
   const covers = await D.coverImagesFor(db, items.map((b) => b.id));
-  const businessesHtml = items.map((b) => businessCard(base, b, covers.get(b.id))).join("") || `<p class="empty">등록된 점포가 곧 표시됩니다.</p>`;
+  const businessesHtml = items.map((b) => businessCard(base, b, covers.get(b.id))).join("");
   const notices = await D.listNotices(db, assoc.id, 5);
   const events = await D.listEvents(db, assoc.id, true);
   const stats = await D.stats(db, assoc.id);
@@ -83,8 +83,12 @@ export async function home(ctx) {
     const d = e.event_date.slice(8, 10), mo = Number(e.event_date.slice(5, 7)) + "월";
     return `<article class="event-card"><div class="event-date"><span class="d">${d}</span><span class="m">${mo}</span></div>
       <div class="event-info"><h3>${esc(e.title)}</h3><p>${esc(e.description)}</p><span class="event-place">${PIN_SVG}${esc(e.place)}</span></div></article>`;
-  }).join("") : `<p class="empty">예정된 행사가 없습니다.</p>`;
-  const body = renderHome(lay, { assoc, base, stats, businessesHtml, catTiles, noticesHtml: noticeRows(base, notices), eventsHtml, loggedIn: !!user });
+  }).join("") : "";
+  const body = renderHome(lay, {
+    assoc, base, stats, businessesHtml, catTiles, eventsHtml, loggedIn: !!user,
+    noticesHtml: notices.length ? noticeRows(base, notices) : "",
+    counts: { businesses: items.length, notices: notices.length, events: events.length },
+  });
   return html(layout({ title: "", assoc, base, user, body, activeNav: `${base}/`, csrf, description: assoc.tagline }));
 }
 

@@ -674,6 +674,11 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .ops-body p{font-size:.92rem;color:var(--ink-soft)}
 .ops-body code{font-family:var(--mono);font-size:.85em;background:var(--bg-alt);padding:2px 6px;border-radius:5px}
 .ops-body a{color:var(--brand-700);font-weight:600;text-decoration:underline}
+/* 빈 상권 첫 상점 초대 카드 */
+.first-invite{position:relative;overflow:hidden;text-align:center;padding:clamp(40px,7vw,72px) 24px;border-radius:var(--r-xl);border:1px solid var(--line-soft);background:radial-gradient(80% 90% at 50% -10%, var(--brand-50), var(--surface) 70%);box-shadow:var(--sh-1)}
+.first-invite-badge{display:inline-block;font-size:.78rem;font-weight:800;letter-spacing:.08em;color:var(--brand-700);background:var(--surface);border:1px solid var(--line-soft);border-radius:999px;padding:7px 16px;box-shadow:var(--sh-1);margin-bottom:18px}
+.first-invite h3{font-size:clamp(1.3rem,3.4vw,1.8rem);font-weight:800;letter-spacing:-.02em;margin-bottom:12px}
+.first-invite p{color:var(--ink-soft);line-height:1.7;margin-bottom:24px}
 /* 인증 카드 브랜드 아이콘 헤더 */
 .auth-head{text-align:center;margin-bottom:22px}
 .auth-mark{width:52px;height:52px;border-radius:15px;margin:0 auto 14px}
