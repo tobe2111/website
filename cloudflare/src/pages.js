@@ -410,7 +410,7 @@ export async function dashboard(ctx) {
               <button class="btn btn-primary btn-sm">저장</button></form></details>
           <form method="post" action="${base}/dashboard/products/${p.id}/delete" class="inline-form" data-confirm="이 제품을 삭제할까요?"><button class="link-danger">삭제</button></form>
         </div></div></div>`).join("") : `<p class="empty">아직 등록한 제품이 없습니다. 아래에서 추가해 보세요.</p>`;
-  const productPanel = `<section class="panel"><div class="panel-head"><h2 class="panel-title">제품·메뉴 진열 <span class="badge badge-muted">${products.length}/${prodMax}</span></h2></div>
+  const productPanel = `<section class="panel" id="d-products"><div class="panel-head"><h2 class="panel-title">제품·메뉴 진열 <span class="badge badge-muted">${products.length}/${prodMax}</span></h2></div>
     <p class="panel-hint">가게에서 파는 제품·메뉴를 사진과 함께 진열합니다. <strong>전시 전용</strong>이라 결제·주문 기능은 없습니다.</p>
     <div class="prod-list">${productRows}</div>
     <h3 class="panel-subtitle">제품 추가</h3>
@@ -428,6 +428,23 @@ export async function dashboard(ctx) {
           <button type="button" class="btn btn-ghost btn-sm" data-qr-copy>링크 복사</button>
         </div>
       </div></section>`;
+  // 사장님 온보딩 체크리스트 (콘텐츠 채움 유도 — 셀프 등록률 핵심 장치)
+  const imgCount = media.filter((m) => m.kind === "image").length;
+  const mSteps = [
+    { done: !!(b.description || "").trim(), label: "가게 소개 쓰기", href: "#d-info" },
+    { done: imgCount >= 3, label: `가게 사진 3장 올리기 (${Math.min(imgCount, 3)}/3)`, href: "#d-media" },
+    { done: products.length >= 1, label: "제품·메뉴 1개 올리기", href: "#d-products" },
+    { done: b.lat != null && b.lng != null, label: "지도에 위치 찍기", href: "#d-info" },
+  ];
+  const mRemain = mSteps.filter((x) => !x.done).length;
+  const merchantOnboard = mRemain ? `<section class="panel onboard"><div class="panel-head"><h2 class="panel-title">우리 가게 채우기 <span class="badge badge-wait">${mSteps.length - mRemain}/${mSteps.length}</span></h2></div>
+    <p class="panel-hint">4가지만 채우면 손님이 보는 가게 페이지가 완성됩니다.</p>
+    <ul class="onboard-list">${mSteps.map((x) => `<li class="${x.done ? "done" : ""}"><span class="ob-check">${x.done ? "✓" : ""}</span><a href="${x.href}">${x.label}</a></li>`).join("")}</ul></section>` : "";
+  const approveBanner = b.status === "approved" ? `<div class="approve-banner" data-dismiss-key="approved-${b.id}" hidden>
+    <span class="ab-emoji" aria-hidden="true">🎉</span>
+    <div class="ab-text"><strong>가게가 공개되었습니다!</strong><p>아래 QR을 인쇄해 계산대에 붙이고, 가게 페이지의 공유 버튼으로 카톡방에 알려보세요.</p></div>
+    <span class="ab-actions"><a class="btn btn-sm btn-primary" href="${base}/business/${esc(b.slug)}" target="_blank">내 가게 보기</a><button type="button" class="btn btn-sm btn-ghost" data-dismiss>닫기</button></span>
+  </div>` : "";
   const opts = CATEGORIES.map((c) => `<option value="${esc(c)}"${c === b.category ? " selected" : ""}>${esc(c)}</option>`).join("");
   const grid = media.length ? media.map((m) => `<figure class="media-tile">${galleryItem(m, { showCaption: false })}<figcaption>
       <span class="media-kind">${m.kind === "image" ? "🖼 사진" : (m.kind === "embed" ? "🎬 " + esc(providerLabel(m.provider)) : "🎬 영상")}</span>
@@ -438,8 +455,10 @@ export async function dashboard(ctx) {
       <p class="dash-sub">공개 주소: <a href="${base}/business/${esc(b.slug)}" target="_blank">${base}/business/${esc(b.slug)}</a></p></div>
       <div class="dash-head-actions"><a href="${base}/sign" class="btn btn-ghost btn-sm">전자서명</a></div></div>
     ${flashOf(query)}
+    ${approveBanner}
+    ${merchantOnboard}
     <div class="dash-grid">
-      <section class="panel"><h2 class="panel-title">업체 정보</h2>
+      <section class="panel" id="d-info"><h2 class="panel-title">업체 정보</h2>
         <form method="post" action="${base}/dashboard/business" class="stack-form">
           <label>업체명<input type="text" name="name" value="${esc(b.name)}" required /></label>
           <label>업종<select name="category">${opts}</select></label>
@@ -450,7 +469,7 @@ export async function dashboard(ctx) {
           ${naver ? `<div id="pickMap" class="pick-map" data-center-lat="${b.lat ?? assoc.map_lat}" data-center-lng="${b.lng ?? assoc.map_lng}" data-zoom="16"></div><p class="panel-hint">지도를 클릭하면 좌표가 입력됩니다.</p>` : `<p class="panel-hint">위도·경도를 입력하면 지도에 표시됩니다.</p>`}
           <div class="form-two"><label>위도<input type="text" inputmode="decimal" name="lat" id="latInput" value="${b.lat != null ? esc(String(b.lat)) : ""}" /></label><label>경도<input type="text" inputmode="decimal" name="lng" id="lngInput" value="${b.lng != null ? esc(String(b.lng)) : ""}" /></label></div>
           <button class="btn btn-primary">정보 저장</button></form></section>
-      <section class="panel"><h2 class="panel-title">사진 업로드</h2>
+      <section class="panel" id="d-media"><h2 class="panel-title">사진 업로드</h2>
         <form method="post" action="${base}/dashboard/media" enctype="multipart/form-data" class="upload-form">
           <label class="file-drop"><input type="file" name="files" accept="image/*" multiple /><span class="file-drop-text">📁 사진 선택 (최대 8MB)</span></label>
           <input type="text" name="caption" placeholder="설명 (선택)" class="caption-input" />

@@ -111,3 +111,34 @@ test("자산 캐시버스터: CSS/JS 주소에 배포 버전 부착 + 캐시 헤
   const nv = await worker.fetch(new Request(B + "/css/app.css"), env);
   assert.equal(nv.headers.get("cache-control"), "no-cache");
 });
+
+test("플로우: 승인 순간 → 사장님 메일 + 대시보드 축하 배너 + 채우기 체크리스트", async () => {
+  const env = makeEnv({ RESEND_API_KEY: "re_test", MAIL_FROM: "테스트 <no-reply@t.kr>" });
+  const a = await D.createAssociation(env.DB, { slug: "s2", name: "S2상인회" });
+  const ad = await hashPassword("admin1234");
+  await D.createUser(env.DB, { email: "adm2@s.kr", passwordHash: ad.hash, salt: ad.salt, name: "총무", role: "ADMIN", associationId: a.id });
+  // 사장님 셀프 가입 (승인 대기)
+  const jm = jar();
+  await post(env, jm, "/t/s2/register", { name: "김사장", email: "kim2@s.kr", password: "merchant1234", business_name: "김분식", category: "음식점", agree: "1" }, "/t/s2/register");
+  const biz = await D.getBusinessByOwner(env.DB, (await D.getUserByEmail(env.DB, "kim2@s.kr")).id);
+  // 대시보드: 채우기 체크리스트 노출 (0/4)
+  let dash = await (await get(env, jm, "/t/s2/dashboard")).text();
+  assert.match(dash, /우리 가게 채우기/);
+  assert.ok(!dash.includes("approve-banner"), "승인 전엔 배너 없음");
+  // 관리자 승인 → 메일 발송
+  outbox.length = 0;
+  const ja = jar();
+  await post(env, ja, "/login", { email: "adm2@s.kr", password: "admin1234" }, "/login");
+  const r = await post(env, ja, `/t/s2/admin/business/${biz.id}/status`, { status: "approved" }, "/t/s2/admin");
+  assert.equal(r.status, 303);
+  assert.equal(outbox.length, 1, "승인 메일 1통");
+  assert.match(outbox[0].subject, /공개되었습니다/);
+  assert.equal(outbox[0].to[0], "kim2@s.kr");
+  // 대시보드에 축하 배너
+  dash = await (await get(env, jm, "/t/s2/dashboard")).text();
+  assert.match(dash, /가게가 공개되었습니다/);
+  // 재승인(동일 상태 변경) 시 메일 중복 발송 없음
+  outbox.length = 0;
+  await post(env, ja, `/t/s2/admin/business/${biz.id}/status`, { status: "approved" }, "/t/s2/admin");
+  assert.equal(outbox.length, 0, "중복 메일 없음");
+});

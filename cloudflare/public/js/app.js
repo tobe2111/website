@@ -65,3 +65,19 @@
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", function () { navigator.serviceWorker.register("/sw.js").catch(function () {}); });
 }
+
+// 닫으면 다시 안 뜨는 배너 (localStorage 기억)
+(function () {
+  "use strict";
+  var els = document.querySelectorAll("[data-dismiss-key]");
+  Array.prototype.forEach.call(els, function (el) {
+    var key = "dis-" + el.getAttribute("data-dismiss-key");
+    try { if (localStorage.getItem(key)) return; } catch (e) {}
+    el.hidden = false;
+    var btn = el.querySelector("[data-dismiss]");
+    if (btn) btn.addEventListener("click", function () {
+      try { localStorage.setItem(key, "1"); } catch (e) {}
+      el.hidden = true;
+    });
+  });
+})();

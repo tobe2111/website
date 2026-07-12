@@ -711,3 +711,12 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .legal-note{margin-top:26px;padding:12px;background:var(--bg-alt);border-radius:8px;font-size:.85rem;color:var(--muted)}
 .foot-links{margin-top:6px;font-size:.85rem}
 .foot-links a{color:inherit;opacity:.85}
+
+/* 승인 축하 배너 */
+.approve-banner{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:18px 20px;border-radius:var(--r-lg);border:1px solid color-mix(in oklab,var(--ok),transparent 62%);background:linear-gradient(120deg,var(--ok-bg),var(--surface) 75%);box-shadow:var(--sh-1);margin-bottom:22px}
+.approve-banner[hidden]{display:none}
+.ab-emoji{font-size:1.9rem;flex:none}
+.ab-text{flex:1;min-width:200px}
+.ab-text strong{font-size:1.05rem;color:var(--ok-fg)}
+.ab-text p{margin-top:3px;font-size:.9rem;color:var(--ink-soft)}
+.ab-actions{display:flex;gap:8px;flex-wrap:wrap}

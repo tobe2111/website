@@ -339,8 +339,23 @@ export async function adminBusinessStatus(ctx) {
   if (!["approved", "rejected", "pending"].includes(form.get("status"))) return back(base + "/admin", "잘못된 상태값", true);
   const b = await D.getBusinessById(db, Number(params.id));
   if (!b || b.association_id !== assoc.id) return back(base + "/admin", "업체를 찾을 수 없습니다.", true);
+  const wasApproved = b.status === "approved";
   await D.setBusinessStatus(db, b.id, form.get("status"));
   await audit(ctx, "업체상태", `${b.name} → ${form.get("status")}`);
+  // 승인 순간: 사장님에게 "가게 공개" 안내 메일 (이메일 설정 시)
+  if (form.get("status") === "approved" && !wasApproved && emailEnabled(ctx.env)) {
+    const owner = await D.getUserById(db, b.owner_id);
+    if (owner) {
+      const origin = new URL(ctx.request.url).origin;
+      const link = `${origin}${base}/business/${encodeURIComponent(b.slug)}`;
+      await sendEmail(ctx.env, {
+        to: owner.email, subject: `🎉 '${b.name}' 가게가 공개되었습니다`,
+        html: mailShell("가게가 공개되었습니다!", `<p><b>${b.name}</b> 페이지가 ${assoc.name} 홈에 공개되었습니다.</p>
+          ${mailButton(link, "내 가게 페이지 보기")}
+          <p>대시보드에서 <b>가게 QR 코드</b>를 인쇄해 계산대에 붙이고, <b>공유하기</b>로 카톡방에 알려보세요.</p>`),
+      });
+    }
+  }
   return back(base + "/admin", `'${b.name}' 상태를 변경했습니다.`);
 }
 export async function adminCreateNotice(ctx) {
