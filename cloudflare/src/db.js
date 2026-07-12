@@ -350,14 +350,14 @@ export const getSignatureByCode = (db, code) => first(db, "SELECT * FROM signatu
 
 // ----- Stats -----
 export async function stats(db, aid) {
-  const q = async (sql) => (await first(db, sql, aid)).n;
-  return {
-    businesses: await q("SELECT COUNT(*) AS n FROM businesses WHERE association_id=? AND status='approved'"),
-    pending: await q("SELECT COUNT(*) AS n FROM businesses WHERE association_id=? AND status='pending'"),
-    events: await q("SELECT COUNT(*) AS n FROM events WHERE association_id=?"),
-    notices: await q("SELECT COUNT(*) AS n FROM notices WHERE association_id=?"),
-    mediaCount: (await first(db, "SELECT COUNT(*) AS n FROM media m JOIN businesses b ON b.id=m.business_id WHERE b.association_id=?", aid)).n,
-  };
+  // 단일 왕복 (D1 은 쿼리마다 네트워크 왕복 → 직렬 5회는 TTFB 를 직접 늘림)
+  const r = await first(db, `SELECT
+    (SELECT COUNT(*) FROM businesses WHERE association_id=?1 AND status='approved') AS businesses,
+    (SELECT COUNT(*) FROM businesses WHERE association_id=?1 AND status='pending')  AS pending,
+    (SELECT COUNT(*) FROM events   WHERE association_id=?1) AS events,
+    (SELECT COUNT(*) FROM notices  WHERE association_id=?1) AS notices,
+    (SELECT COUNT(*) FROM media m JOIN businesses b ON b.id=m.business_id WHERE b.association_id=?1) AS mediaCount`, aid);
+  return r;
 }
 export async function platformStats(db) {
   const one = async (sql) => (await first(db, sql)).n;

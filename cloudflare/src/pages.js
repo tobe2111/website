@@ -97,13 +97,16 @@ function eventCard(e) {
 export async function home(ctx) {
   const { db, assoc, base, user, csrf } = ctx;
   const lay = parseLayout(assoc.home_layout, assoc.name);
-  const { items } = await D.listBusinessesPaged(db, assoc.id, { perPage: 6 });
+  // 독립 쿼리는 병렬로 — D1 은 쿼리마다 네트워크 왕복이라 직렬 대기가 TTFB 로 직결됨
+  const [{ items }, notices, events, stats, cats] = await Promise.all([
+    D.listBusinessesPaged(db, assoc.id, { perPage: 6 }),
+    D.listNotices(db, assoc.id, 5),
+    D.listEvents(db, assoc.id, true),
+    D.stats(db, assoc.id),
+    D.distinctCategories(db, assoc.id),
+  ]);
   const covers = await D.coverImagesFor(db, items.map((b) => b.id));
   const businessesHtml = items.map((b) => businessCard(base, b, covers.get(b.id))).join("");
-  const notices = await D.listNotices(db, assoc.id, 5);
-  const events = await D.listEvents(db, assoc.id, true);
-  const stats = await D.stats(db, assoc.id);
-  const cats = await D.distinctCategories(db, assoc.id);
   const catTiles = cats.length ? `<div class="cat-grid">${cats.map((c) => `<a class="cat-tile" href="${base}/businesses?category=${encodeURIComponent(c.category)}"><span class="cat-ico">${catIcon(c.category)}</span><span class="cat-name">${esc(c.category)}</span></a>`).join("")}<a class="cat-tile cat-all" href="${base}/businesses"><span class="cat-ico">${catIcon("전체")}</span><span class="cat-name">전체보기</span></a></div>` : "";
   const eventsHtml = events.map(eventCard).join("");
   const body = renderHome(lay, {
@@ -162,11 +165,10 @@ export async function businessDetail(ctx) {
   const b = await D.getBusinessBySlug(db, assoc.id, params.slug);
   const canSee = b && (b.status === "approved" || (user && (user.id === b.owner_id || user.role === "SUPERADMIN" || (user.role === "ADMIN" && user.association_id === assoc.id))));
   if (!canSee) return notFoundResponse(ctx);
-  const media = await D.listMedia(db, b.id);
+  const [media, prods] = await Promise.all([D.listMedia(db, b.id), D.listProducts(db, b.id)]);
   const images = media.filter((m) => m.kind === "image");
   const vids = media.filter((m) => m.kind === "video" || m.kind === "embed");
   const gallery = (arr) => arr.length ? `<div class="gallery">${arr.map((m) => galleryItem(m)).join("")}</div>` : "";
-  const prods = await D.listProducts(db, b.id); // 공개: 비숨김만
   const productGrid = prods.length ? `<h2 class="biz-section-title">제품·메뉴</h2>
     <div class="product-grid">${prods.map((p) => `<figure class="product-card${p.sold_out ? " is-sold" : ""}">
       <div class="product-photo">${p.image ? `<img src="${esc(mediaUrl(p.image))}" alt="${esc(p.name)}" loading="lazy" />` : `<span class="product-noimg">${TAG_SVG}</span>`}${p.sold_out ? `<span class="product-sold">품절</span>` : ""}</div>

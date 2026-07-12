@@ -81,3 +81,12 @@ if ("serviceWorker" in navigator) {
     });
   });
 })();
+
+// 폰트 CSS 비차단 활성화 (media=print 로 내려받은 뒤 전체 적용 — CDN 지연이 첫 화면을 막지 않음)
+(function () {
+  var f = document.getElementById("fontCss");
+  if (!f) return;
+  function apply() { f.media = "all"; }
+  if (f.sheet) apply(); else f.addEventListener("load", apply);
+  setTimeout(apply, 3000); // 로드 이벤트 유실 대비
+})();

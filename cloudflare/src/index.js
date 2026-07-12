@@ -180,7 +180,10 @@ export default {
 async function handle(request, env) {
   const url = new URL(request.url);
   const { pathname } = url;
-  const db = env.DB;
+  const timing = { t0: Date.now(), db: { n: 0, ms: 0 } };
+  const rawDb = env.DB;
+  const db = instrumentDb(rawDb, timing.db);
+  env = { ...env, DB: db }; // 핸들러 내부 D1 사용도 계측에 포함
   const isProd = (env.PUBLIC_SCHEME || "https") === "https";
   setMediaBase(env.MEDIA_PUBLIC_BASE || "");
   setOrigin(url.origin); // og:image 등 절대 URL 조립용
@@ -201,13 +204,13 @@ async function handle(request, env) {
   if (pathname.startsWith("/media/")) return serveMedia(env, pathname.slice("/media/".length));
 
   // 최초 실행: 표 자동 생성 + 세션 시크릿 자동 확보 (시크릿·스키마 명령 불필요)
-  if (!_schemaReady.has(db)) { await ensureSchema(db); _schemaReady.add(db); }
+  if (!_schemaReady.has(rawDb)) { await ensureSchema(db); _schemaReady.add(rawDb); }
   env = { ...env, SESSION_SECRET: await resolveSessionSecret(env) };
 
   // 설치 마법사 게이트: 계정이 하나도 없으면 /setup 으로 유도
-  if (!_usersConfirmed.has(db)) {
-    if ((await D.countUsers(db)) > 0) _usersConfirmed.add(db);
-    else if (pathname !== "/setup") return finalize(redirect("/setup"), [], env);
+  if (!_usersConfirmed.has(rawDb)) {
+    if ((await D.countUsers(db)) > 0) _usersConfirmed.add(rawDb);
+    else if (pathname !== "/setup") return finalize(redirect("/setup"), [], env, timing);
   }
 
   const cookies = parseCookies(request.headers.get("cookie") || "");
@@ -223,7 +226,7 @@ async function handle(request, env) {
   if (request.method === "POST") {
     try { form = await request.formData(); } catch { form = new FormData(); }
     if (!(await csrfValid(seed, form.get("_csrf"), env.SESSION_SECRET)))
-      return finalize(html("<h1>403 잘못된 요청(CSRF)</h1>", 403), setCookies, env);
+      return finalize(html("<h1>403 잘못된 요청(CSRF)</h1>", 403), setCookies, env, timing);
   }
 
   const baseCtx = { env, db, url, query: url.searchParams, user, csrf, form, addCookie, isProd, ip, request };
@@ -238,31 +241,31 @@ async function handle(request, env) {
   if (t) {
     const assoc = assocPre || (await D.getAssociationBySlug(db, t.slug));
     if (!assoc || (!assoc.active && !(user && user.role === ROLES.SUPERADMIN)))
-      return finalize(notFoundResponse({ base: t.base }), setCookies, env);
+      return finalize(notFoundResponse({ base: t.base }), setCookies, env, timing);
     assoc._base = t.base;
     const route = matchRoute(TENANT, request.method, t.subpath);
     if (route) {
       const ok = authorize(user, route.auth, assoc);
-      if (ok !== true) return finalize(typeof ok === "string" ? redirect(ok) : forbidden(), setCookies, env);
+      if (ok !== true) return finalize(typeof ok === "string" ? redirect(ok) : forbidden(), setCookies, env, timing);
       const res = await route.handler({ ...baseCtx, assoc, base: t.base, params: route.params });
-      return finalize(res, setCookies, env);
+      return finalize(res, setCookies, env, timing);
     }
     // 테넌트 경로에 없으면 전역 라우트 폴백 (개별 도메인·서브도메인에서 /login, /verify, /sitemap.xml 등)
     const gt = matchRoute(GLOBAL, request.method, t.subpath);
     if (gt) {
       const ok = authorize(user, gt.auth, assoc);
-      if (ok !== true) return finalize(typeof ok === "string" ? redirect(ok) : forbidden(), setCookies, env);
+      if (ok !== true) return finalize(typeof ok === "string" ? redirect(ok) : forbidden(), setCookies, env, timing);
       const res = await gt.handler({ ...baseCtx, assoc, base: t.base, params: gt.params });
-      return finalize(res, setCookies, env);
+      return finalize(res, setCookies, env, timing);
     }
-    return finalize(notFoundResponse({ assoc, base: t.base }), setCookies, env);
+    return finalize(notFoundResponse({ assoc, base: t.base }), setCookies, env, timing);
   }
 
   // 전역 라우트
   const g = matchRoute(GLOBAL, request.method, pathname);
   if (g) {
     const res = await g.handler({ ...baseCtx, params: g.params });
-    return finalize(res, setCookies, env);
+    return finalize(res, setCookies, env, timing);
   }
 
   // 루트: 플랫폼 모드면 랜딩 / 아니면 상인회 1곳이면 그 홈으로 바로 이동
@@ -270,12 +273,12 @@ async function handle(request, env) {
     const platformMode = (await D.getSetting(db, "platform_mode")) === "1";
     if (!platformMode) {
       const list = await D.listActiveAssociations(db);
-      if (list.length === 1) return finalize(redirect(`/t/${list[0].slug}`), setCookies, env);
+      if (list.length === 1) return finalize(redirect(`/t/${list[0].slug}`), setCookies, env, timing);
     }
-    return finalize(await pages.platformLanding(baseCtx), setCookies, env);
+    return finalize(await pages.platformLanding(baseCtx), setCookies, env, timing);
   }
 
-  return finalize(notFoundResponse({}), setCookies, env);
+  return finalize(notFoundResponse({}), setCookies, env, timing);
 }
 
 async function serveMedia(env, key) {
@@ -293,10 +296,23 @@ async function serveMedia(env, key) {
 }
 
 // 보안 헤더 + 쿠키 부착 (+ 선택: Cloudflare Web Analytics 주입)
-async function finalize(res, setCookies, env) {
+// D1 계측: 요청당 쿼리 수·소요 시간 집계 (Server-Timing 으로 노출 → 개발자도구에서 병목 확인)
+function instrumentDb(db, acc) {
+  const wrapStmt = (stmt) => ({
+    bind: (...a) => wrapStmt(stmt.bind(...a)),
+    first: async (...a) => { const t0 = Date.now(); try { return await stmt.first(...a); } finally { acc.n++; acc.ms += Date.now() - t0; } },
+    all: async (...a) => { const t0 = Date.now(); try { return await stmt.all(...a); } finally { acc.n++; acc.ms += Date.now() - t0; } },
+    run: async (...a) => { const t0 = Date.now(); try { return await stmt.run(...a); } finally { acc.n++; acc.ms += Date.now() - t0; } },
+  });
+  return { prepare: (sql) => wrapStmt(db.prepare(sql)) };
+}
+
+async function finalize(res, setCookies, env, timing) {
   const headers = new Headers(res.headers);
   const sec = securityHeaders(env);
   for (const [k, v] of Object.entries(sec)) headers.set(k, v);
+  if (timing) headers.set("Server-Timing",
+    `db;dur=${timing.db.ms};desc="D1 ${timing.db.n} queries", app;dur=${Date.now() - timing.t0};desc="worker total"`);
   for (const c of setCookies) headers.append("set-cookie", c);
   let body = res.body;
   if (env.CF_ANALYTICS_TOKEN && (headers.get("content-type") || "").includes("text/html")) {

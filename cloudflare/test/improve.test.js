@@ -142,3 +142,14 @@ test("플로우: 승인 순간 → 사장님 메일 + 대시보드 축하 배너
   await post(env, ja, `/t/s2/admin/business/${biz.id}/status`, { status: "approved" }, "/t/s2/admin");
   assert.equal(outbox.length, 0, "중복 메일 없음");
 });
+
+test("성능 계측: Server-Timing 헤더 (D1 쿼리 수·시간)", async () => {
+  const env = makeEnv();
+  await seed(env);
+  const r = await get(env, jar(), "/t/seocho");
+  const st = r.headers.get("server-timing") || "";
+  assert.match(st, /db;dur=\d+;desc="D1 \d+ queries"/);
+  assert.match(st, /app;dur=\d+/);
+  const n = Number(/D1 (\d+) queries/.exec(st)[1]);
+  assert.ok(n > 0 && n < 40, `홈 쿼리 수 상한 확인 — 콜드스타트 DDL 포함 (${n})`);
+});

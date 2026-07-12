@@ -238,11 +238,26 @@ CREATE TABLE IF NOT EXISTS settings (
 `;
 
 // 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
+// 마이그레이션 세대 — migrateColumns 에 단계를 추가할 때마다 +1
+const SCHEMA_VERSION = "7";
+
 export async function ensureSchema(db) {
   const has = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='associations'").first();
-  if (has) { await migrateColumns(db); return false; }
+  if (has) {
+    // 패스트패스: 버전이 이미 최신이면 마이그레이션 검사(~15회 왕복) 생략 → 콜드스타트 단축
+    try {
+      const v = await db.prepare("SELECT value FROM settings WHERE key='schema_version'").first();
+      if (v && v.value === SCHEMA_VERSION) return false;
+    } catch {}
+    await migrateColumns(db);
+    // 초구버전 DB 엔 settings 자체가 없을 수 있음 (버전 기록 전 보장)
+    await db.prepare("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL DEFAULT '')").run();
+    await db.prepare("INSERT INTO settings (key, value) VALUES ('schema_version', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(SCHEMA_VERSION).run();
+    return false;
+  }
   const clean = SCHEMA_SQL.replace(/--[^\n]*\n/g, "\n");
   for (const st of clean.split(";").map((s) => s.trim()).filter(Boolean)) await db.prepare(st).run();
+  await db.prepare("INSERT INTO settings (key, value) VALUES ('schema_version', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(SCHEMA_VERSION).run();
   return true;
 }
 
