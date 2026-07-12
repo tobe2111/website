@@ -1,6 +1,6 @@
 // 공개/인증 페이지 핸들러 (async). ctx = { env, db, assoc, base, user, url, query, csrf, params }
 import * as D from "./db.js";
-import { esc, clip, openBadge, fmtBytes } from "./util.js";
+import { esc, clip, openBadge, openNow, fmtBytes } from "./util.js";
 import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG, ORIGIN } from "./render.js";
 import { verifyInviteToken } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
 import { html, notFoundResponse, back } from "./http.js";
@@ -64,14 +64,20 @@ function snsButtons(b) {
   return btns ? `<span class="sns-row">${btns}</span>` : "";
 }
 
+// 영업 상태 배지: 오늘 임시휴무 > 영업시간 계산
+function bizStatusBadge(b) {
+  if (D.isDayOff(b)) return '<span class="badge badge-dayoff">오늘 휴무</span>';
+  return openBadge(b.hours);
+}
 // 업체 카드 (시안: 영업중 dot pill 좌상단 · 본문 = 카테고리 라벨/이름/한 줄 메타)
 function businessCard(base, b, cover) {
   const thumb = cover
     ? `<img src="${esc(mediaUrl(cover.thumb || cover.filename))}" alt="" loading="lazy" />`
     : `<span class="thumb-mono" aria-hidden="true">${esc(b.name.slice(0, 1))}</span>`;
-  const open = openBadge(b.hours);
+  const open = bizStatusBadge(b);
   const meta = [b.address, b.hours].filter(Boolean).join(" · ");
-  return `<article class="market-card">
+  return `<article class="market-card" data-slug="${esc(b.slug)}">
+    <button type="button" class="fav-btn" data-fav="${esc(b.slug)}" aria-label="찜하기" hidden>♥</button>
     <a href="${base}/business/${esc(b.slug)}" class="market-thumb${cover ? " has-img" : ""}">
       ${thumb}
       ${open ? `<span class="market-open">${open}</span>` : ""}
@@ -121,13 +127,14 @@ export async function home(ctx) {
   const { db, assoc, base, user, csrf } = ctx;
   const lay = parseLayout(assoc.home_layout, assoc.name);
   // 독립 쿼리는 병렬로 — D1 은 쿼리마다 네트워크 왕복이라 직렬 대기가 TTFB 로 직결됨
-  const [{ items }, notices, events, stats, cats, names] = await Promise.all([
+  const [{ items }, notices, events, stats, cats, names, recentUpdates] = await Promise.all([
     D.listBusinessesPaged(db, assoc.id, { perPage: 6 }),
     D.listNotices(db, assoc.id, 5),
     D.listEvents(db, assoc.id, true),
     D.stats(db, assoc.id),
     D.distinctCategories(db, assoc.id),
     D.listBusinessNames(db, assoc.id),
+    D.listAssocUpdates(db, assoc.id, 6),
   ]);
   const covers = await D.coverImagesFor(db, items.map((b) => b.id));
   const businessesHtml = items.map((b) => businessCard(base, b, covers.get(b.id))).join("");
@@ -138,6 +145,9 @@ export async function home(ctx) {
     noticesHtml: notices.length ? noticeRows(base, notices) : "",
     counts: { businesses: items.length, notices: notices.length, events: events.length },
     suggestNames: names.map((r) => r.name),
+    updatesHtml: recentUpdates.map((u) => `<a class="update-card" href="${base}/business/${esc(u.biz_slug)}">
+      ${u.image ? `<span class="uc-img"><img src="${esc(mediaUrl(u.image))}" alt="" loading="lazy" /></span>` : ""}
+      <span class="uc-body"><strong>${esc(u.biz_name)}</strong><p>${esc(u.body)}</p><time>${esc(u.created_at.slice(5, 10).replace("-", "."))}</time></span></a>`).join(""),
   });
   // 검색엔진 구조화 데이터: 상인회 = 조직
   const orgLd = {
@@ -177,22 +187,27 @@ function layoutEditor(base, layoutArr) {
 export async function businesses(ctx) {
   const { db, assoc, base, user, query, csrf } = ctx;
   const cat = query.get("category"), q = (query.get("q") || "").trim().slice(0, 60);
+  const openOnly = query.get("open") === "1";
   const page = parseInt(query.get("page") || "1", 10) || 1;
-  const { items, total, page: cur, pages } = await D.listBusinessesPaged(db, assoc.id, { category: cat, q, page });
+  // "지금 영업중" 필터: 영업시간 문자열 기반이라 서버에서 계산 — 페이지네이션 대신 넉넉히 가져와 거른다
+  let { items, total, page: cur, pages } = await D.listBusinessesPaged(db, assoc.id, { category: cat, q, page: openOnly ? 1 : page, perPage: openOnly ? 200 : 12 });
+  if (openOnly) { items = items.filter((b) => openNow(b.hours) === true && !D.isDayOff(b)); total = items.length; cur = 1; pages = 1; }
   const cats = await D.distinctCategories(db, assoc.id);
   const qs = (o) => { const p = new URLSearchParams(); for (const [k, v] of Object.entries(o)) if (v) p.set(k, v); const s = p.toString(); return s ? "?" + s : ""; };
-  const chips = `<a href="${base}/businesses${qs({ q })}" class="chip-filter${!cat ? " active" : ""}">전체</a>` +
+  const chips = `<a href="${base}/businesses${qs({ q })}" class="chip-filter${!cat && !openOnly ? " active" : ""}">전체</a>` +
+    `<a href="${base}/businesses${qs({ q, open: "1" })}" class="chip-filter chip-open${openOnly ? " active" : ""}">● 지금 영업중</a>` +
+    `<button type="button" class="chip-filter chip-fav" id="favFilter" hidden>❤ 찜한 가게</button>` +
     cats.map((c) => `<a href="${base}/businesses${qs({ category: c.category, q })}" class="chip-filter${cat === c.category ? " active" : ""}">${esc(c.category)} <em>${c.n}</em></a>`).join("");
   const covers = await D.coverImagesFor(db, items.map((b) => b.id));
-  const cards = items.map((b) => businessCard(base, b, covers.get(b.id))).join("") || `<p class="empty">${q ? "검색 결과가 없습니다." : "등록된 점포가 없습니다."}</p>`;
+  const cards = items.map((b) => businessCard(base, b, covers.get(b.id))).join("") || `<p class="empty">${openOnly ? "지금 영업 중인 가게가 없습니다." : q ? "검색 결과가 없습니다." : "등록된 점포가 없습니다."}</p>`;
   const body = `<section class="section page-top"><div class="container">
     <div class="section-head"><p class="section-eyebrow">MEMBERS</p><h2 class="section-title">가입 점포 안내</h2><p class="section-lead">총 ${total}곳</p></div>
     <form method="get" action="${base}/businesses" class="board-search"><input type="search" name="q" value="${esc(q)}" placeholder="점포·업종 검색" /><button class="btn btn-ghost btn-sm">검색</button></form>
     <div class="chip-filters">${chips}</div>
-    <div class="market-grid">${cards}</div>
-    ${pager((i) => `${base}/businesses${qs({ category: cat, q, page: i })}`, cur, pages)}
+    <div class="market-grid" id="bizGrid">${cards}</div>
+    ${openOnly ? "" : pager((i) => `${base}/businesses${qs({ category: cat, q, page: i })}`, cur, pages)}
   </div></section>`;
-  return html(layout({ title: "가입 점포", assoc, base, user, body, activeNav: `${base}/businesses`, csrf }));
+  return html(layout({ title: "가입 점포", assoc, base, user, body, activeNav: `${base}/businesses`, csrf, scripts: `<script src="/js/fav.js" defer></script>` }));
 }
 
 export async function businessDetail(ctx) {
@@ -200,7 +215,11 @@ export async function businessDetail(ctx) {
   const b = await D.getBusinessBySlug(db, assoc.id, params.slug);
   const canSee = b && (b.status === "approved" || (user && (user.id === b.owner_id || user.role === "SUPERADMIN" || (user.role === "ADMIN" && user.association_id === assoc.id))));
   if (!canSee) return notFoundResponse(ctx);
-  const [media, prods, coupons] = await Promise.all([D.listMedia(db, b.id), D.listProducts(db, b.id), D.listActiveCoupons(db, b.id)]);
+  const [media, prods, coupons, updates] = await Promise.all([D.listMedia(db, b.id), D.listProducts(db, b.id), D.listActiveCoupons(db, b.id), D.listUpdates(db, b.id, 5)]);
+  // 같은 업종 다른 가게 추천 (상권 내 순환)
+  const { items: sameCat } = await D.listBusinessesPaged(db, assoc.id, { category: b.category, perPage: 8 });
+  const others = sameCat.filter((x) => x.id !== b.id).slice(0, 3);
+  const otherCovers = others.length ? await D.coverImagesFor(db, others.map((x) => x.id)) : new Map();
   const images = media.filter((m) => m.kind === "image");
   const vids = media.filter((m) => m.kind === "video" || m.kind === "embed");
   const gallery = (arr) => arr.length ? `<div class="gallery">${arr.map((m) => galleryItem(m)).join("")}</div>` : "";
@@ -210,6 +229,14 @@ export async function businessDetail(ctx) {
       <figcaption><div class="product-caption-top"><strong class="product-name">${esc(p.name)}</strong>${p.price ? `<span class="product-price">${esc(p.price)}</span>` : ""}</div>${p.description ? `<p class="product-desc">${esc(p.description)}</p>` : ""}</figcaption>
     </figure>`).join("")}</div>` : "";
   const pending = b.status !== "approved" ? `<div class="flash flash-warn">이 페이지는 ${statusBadge(b.status)} 상태입니다.</div>` : "";
+  // 가게 소식 (한 줄 피드)
+  const updateFeed = updates.length ? `<h2 class="biz-section-title">가게 소식</h2>
+    <ul class="update-feed">${updates.map((u) => `<li class="update-item">
+      ${u.image ? `<img class="update-img" src="${esc(mediaUrl(u.image))}" alt="" loading="lazy" />` : ""}
+      <div class="update-body"><p>${esc(u.body)}</p><time>${esc(u.created_at.slice(0, 10).replace(/-/g, "."))}</time></div></li>`).join("")}</ul>` : "";
+  // 이런 가게는 어때요 (같은 업종)
+  const recommend = others.length ? `<h2 class="biz-section-title">이런 가게는 어때요</h2>
+    <div class="market-grid recommend-grid">${others.map((x) => businessCard(base, x, otherCovers.get(x.id))).join("")}</div>` : "";
   // 쿠폰: 매장에서 화면 제시 방식 (결제·발급 없음)
   const couponSection = coupons.length ? `<h2 class="biz-section-title">쿠폰·혜택</h2>
     <div class="coupon-grid">${coupons.map((c) => `<div class="coupon-card">
@@ -226,7 +253,7 @@ export async function businessDetail(ctx) {
     <p class="biz-way">${b.address ? `${PIN_SVG} ${esc(b.address)} · ` : ""}<a href="https://map.naver.com/p/search/${encodeURIComponent(b.address || b.name)}" target="_blank" rel="noopener">네이버 지도에서 길찾기 →</a></p>` : "";
   const body = `
   <section class="biz-hero"><div class="container">${pending}
-    <span class="chip chip-light">${esc(b.category)}</span>${openBadge(b.hours)}<h1>${esc(b.name)}</h1>
+    <span class="chip chip-light">${esc(b.category)}</span>${bizStatusBadge(b)}<h1>${esc(b.name)}</h1>
     <p class="biz-desc">${esc(b.description || "소개가 곧 등록됩니다.")}</p>
     <ul class="biz-contact">
       ${b.address ? `<li>${PIN_SVG} ${esc(b.address)}</li>` : ""}${b.phone ? `<li>${PHONE_SVG} <a href="tel:${esc(b.phone)}">${esc(b.phone)}</a></li>` : ""}${b.hours ? `<li>${CLOCK_SVG} ${esc(b.hours)}</li>` : ""}
@@ -236,12 +263,14 @@ export async function businessDetail(ctx) {
       ${snsButtons(b)}
     </div></div></section>
   <section class="section"><div class="container">
+    ${updateFeed}
     ${couponSection}
     ${productGrid}
     ${images.length ? `<h2 class="biz-section-title">사진</h2>${gallery(images)}` : ""}
     ${vids.length ? `<h2 class="biz-section-title">영상</h2>${gallery(vids)}` : ""}
     ${!media.length && !prods.length ? `<p class="empty">아직 등록된 제품·사진이 없습니다.</p>` : ""}
     ${wayToCome}
+    ${recommend}
     <div class="section-more"><a href="${base}/businesses" class="btn btn-ghost btn-sm">← 다른 점포 보기</a></div>
   </div></section>`;
   const cover = images[0] || null; // 카톡 공유 미리보기용 대표 사진
@@ -389,13 +418,70 @@ export async function noticeDetail(ctx) {
 
 // ================= 행사 =================
 export async function events(ctx) {
-  const { db, assoc, base, user, csrf } = ctx;
+  const { db, assoc, base, user, query, csrf } = ctx;
   const list = await D.listEvents(db, assoc.id);
-  const cards = list.length ? list.map((e) => eventCard(base, e)).join("") : `<p class="empty">예정된 행사가 없습니다.</p>`;
+  const isMember = !!user && (user.association_id === assoc.id || user.role === "SUPERADMIN");
+  const cards = [];
+  for (const e of list) {
+    const count = await D.rsvpCount(db, e.id);
+    const mine = isMember ? await D.userRsvped(db, e.id, user.id) : false;
+    const rsvp = `<div class="event-rsvp">
+      ${count ? `<span class="rsvp-count">참가 신청 ${count}곳</span>` : ""}
+      ${isMember ? (mine
+        ? `<form method="post" action="${base}/events/${e.id}/rsvp/cancel" class="inline-form"><button class="btn btn-xs btn-ghost">✓ 신청됨 (취소)</button></form>`
+        : `<form method="post" action="${base}/events/${e.id}/rsvp" class="inline-form"><button class="btn btn-xs btn-primary">참가 신청</button></form>`) : ""}
+    </div>`;
+    cards.push(eventCard(base, e).replace("</article>", rsvp + "</article>"));
+  }
   const body = `<section class="section page-top"><div class="container">
-    <div class="section-head"><p class="section-eyebrow">EVENTS</p><h2 class="section-title">행사·소식</h2></div>
-    <div class="event-grid">${cards}</div></div></section>`;
+    <div class="section-head"><p class="section-eyebrow">EVENTS</p><h2 class="section-title">행사·소식</h2>
+      ${isMember ? `<p class="section-lead">회원은 행사별로 참가 신청을 할 수 있습니다. 명단은 관리자에게 전달됩니다.</p>` : ""}</div>
+    ${flashOf(query)}
+    <div class="event-grid">${cards.join("") || `<p class="empty">예정된 행사가 없습니다.</p>`}</div></div></section>`;
   return html(layout({ title: "행사", assoc, base, user, body, activeNav: `${base}/notices`, csrf }));
+}
+
+// ================= 총회 안건 투표 =================
+export async function polls(ctx) {
+  const { db, assoc, base, user, query, csrf } = ctx;
+  const list = await D.listPolls(db, assoc.id);
+  const isAdmin = user.role === "ADMIN" || user.role === "SUPERADMIN";
+  const cards = [];
+  for (const p of list) {
+    const open = D.isPollOpen(p);
+    const r = await D.pollResults(db, p.id);
+    const mine = await D.userVote(db, p.id, user.id);
+    const pct = (n) => (r.total ? Math.round((n / r.total) * 100) : 0);
+    const bar = (label, key, cls) => `<div class="poll-bar"><span class="pb-label">${label} <b>${r[key]}표</b></span>
+      <span class="pb-track"><span class="pb-fill ${cls}" style="width:${pct(r[key])}%"></span></span><span class="pb-pct">${pct(r[key])}%</span></div>`;
+    const voteBtns = open ? `<form method="post" action="${base}/polls/${p.id}/vote" class="poll-actions">
+        ${[["yes", "찬성"], ["no", "반대"], ["abstain", "기권"]].map(([v, l]) =>
+          `<button name="choice" value="${v}" class="btn btn-sm ${mine === v ? "btn-primary" : "btn-ghost"}">${l}${mine === v ? " ✓" : ""}</button>`).join("")}
+      </form>${mine ? `<p class="panel-hint">내 투표: <b>${{ yes: "찬성", no: "반대", abstain: "기권" }[mine]}</b> — 마감 전까지 변경할 수 있습니다.</p>` : ""}` : "";
+    cards.push(`<section class="panel poll-card${open ? "" : " is-closed"}">
+      <div class="panel-head"><h2 class="panel-title">${esc(p.title)}</h2>
+        <span class="badge ${open ? "badge-open" : "badge-muted"}">${open ? (p.closes_at ? `~${esc(p.closes_at)}` : "진행 중") : "마감"}</span></div>
+      ${p.body ? `<p class="poll-body">${esc(p.body).replace(/\n/g, "<br />")}</p>` : ""}
+      ${voteBtns}
+      <div class="poll-results">${bar("찬성", "yes", "is-yes")}${bar("반대", "no", "is-no")}${bar("기권", "abstain", "is-abs")}
+        <p class="panel-hint">총 ${r.total}명 참여</p></div>
+      ${isAdmin && open ? `<form method="post" action="${base}/admin/polls/${p.id}/close" data-confirm="이 투표를 마감할까요? 마감 후에는 변경할 수 없습니다."><button class="btn btn-xs btn-ghost">투표 마감</button></form>` : ""}
+    </section>`);
+  }
+  const createForm = isAdmin ? `<section class="panel panel-accent"><h2 class="panel-title">새 안건 올리기</h2>
+    <form method="post" action="${base}/admin/polls" class="stack-form compact">
+      <label>안건 제목<input name="title" required maxlength="200" placeholder="예: 가을 골목축제 공동 부스 운영 여부" /></label>
+      <label>설명 (선택)<textarea name="body" rows="3" maxlength="2000"></textarea></label>
+      <label>마감일 (선택·비우면 수동 마감)<input type="date" name="closes_at" /></label>
+      <button class="btn btn-primary btn-sm">투표 시작</button></form></section>` : "";
+  const body = `<section class="section page-top"><div class="container narrow">
+    <div class="section-head"><p class="section-eyebrow">VOTE</p><h2 class="section-title">안건 투표</h2>
+      <p class="section-lead">총회에 못 오셔도 폰에서 의견을 남길 수 있습니다. 1인 1표, 마감 전 변경 가능.</p></div>
+    ${flashOf(query)}
+    ${createForm}
+    ${cards.join("") || `<p class="empty">진행 중인 안건이 없습니다.</p>`}
+  </div></section>`;
+  return html(layout({ title: "안건 투표", assoc, base, user, body, activeNav: `${base}/board`, csrf }));
 }
 
 // ================= 회원 게시판 =================
@@ -548,6 +634,8 @@ export async function dashboard(ctx) {
   const media = await D.listMedia(db, b.id);
   const products = await D.listProducts(db, b.id, { includeHidden: true });
   const coupons = await D.listCoupons(db, b.id);
+  const updates = await D.listUpdates(db, b.id, 10);
+  const dayOff = D.isDayOff(b);
   const plan = PLANS[assoc.plan] || PLANS.free;
   const prodMax = plan.maxProducts === Infinity ? "무제한" : plan.maxProducts;
   const productRows = products.length ? products.map((p) => `<div class="prod-row${p.sold_out ? " sold" : ""}">
@@ -576,6 +664,16 @@ export async function dashboard(ctx) {
       <div class="form-two"><label>제품 이름<input name="name" required /></label><label>가격 <small>(선택)</small><input name="price" placeholder="예: 8,000원 · 시가 · 미표기" /></label></div>
       <label>한 줄 설명 <small>(선택)</small><input name="description" maxlength="300" /></label>
       <button class="btn btn-primary btn-sm">제품 추가</button></form></section>
+    <section class="panel" id="d-updates"><h2 class="panel-title">가게 소식 <span class="badge badge-muted">${updates.length}</span></h2>
+      <p class="panel-hint">"오늘 딸기 들어왔어요" 같은 한 줄 소식을 올리면 <strong>가게 페이지와 상인회 홈 첫 화면</strong>에 바로 노출됩니다. 자주 올릴수록 손님이 자주 봅니다.</p>
+      <form method="post" action="${base}/dashboard/updates" enctype="multipart/form-data" class="stack-form compact">
+        <label>오늘의 소식<input name="body" required maxlength="300" placeholder="예: 오늘 생딸기 크레페 한정 20개!" /></label>
+        <label class="file-inline">📷 사진 1장 (선택)<input type="file" name="image" accept="image/*" /></label>
+        <button class="btn btn-primary btn-sm">소식 올리기</button></form>
+      ${updates.length ? `<ul class="update-feed compact">${updates.map((u) => `<li class="update-item">
+        ${u.image ? `<img class="update-img" src="${esc(mediaUrl(u.image))}" alt="" loading="lazy" />` : ""}
+        <div class="update-body"><p>${esc(u.body)}</p><time>${esc(u.created_at.slice(0, 10).replace(/-/g, "."))}</time></div>
+        <form method="post" action="${base}/dashboard/updates/${u.id}/delete" data-confirm="이 소식을 삭제할까요?"><button class="link-danger">삭제</button></form></li>`).join("")}</ul>` : ""}</section>
     <section class="panel" id="d-coupons"><h2 class="panel-title">쿠폰·혜택 <span class="badge badge-muted">${coupons.length}/5</span></h2>
       <p class="panel-hint">손님이 매장에서 <strong>이 화면을 보여주면</strong> 제공하는 혜택입니다. 결제·발급 기능이 없어 부담 없이 운영할 수 있어요. 기한이 지나면 자동으로 내려갑니다.</p>
       ${coupons.length ? `<ul class="coupon-admin-list">${coupons.map((c) => {
@@ -628,7 +726,10 @@ export async function dashboard(ctx) {
   const body = `<section class="dash"><div class="container">
     <div class="dash-head"><div><p class="section-eyebrow">MY BUSINESS</p><h1 class="dash-title">${esc(b.name)} ${statusBadge(b.status)}</h1>
       <p class="dash-sub">공개 주소: <a href="${base}/business/${esc(b.slug)}" target="_blank">${base}/business/${esc(b.slug)}</a></p></div>
-      <div class="dash-head-actions"><a href="${base}/sign" class="btn btn-ghost btn-sm">전자서명</a></div></div>
+      <div class="dash-head-actions">
+        <form method="post" action="${base}/dashboard/dayoff" class="inline-form">
+          <button class="btn btn-sm ${dayOff ? "btn-primary" : "btn-ghost"}" title="가게 카드에 '오늘 휴무'로 표시됩니다. 내일 자동 해제.">${dayOff ? "🚫 오늘 휴무 중 (해제)" : "오늘 임시휴무"}</button></form>
+        <a href="${base}/sign" class="btn btn-ghost btn-sm">전자서명</a></div></div>
     ${flashOf(query)}
     ${approveBanner}
     ${merchantOnboard}
@@ -722,8 +823,27 @@ export async function admin(ctx) {
     <td class="actions-cell"><form method="post" action="${base}/admin/user/${m.id}/reset-password" data-confirm="임시 비밀번호를 발급할까요?"><button class="btn btn-xs btn-ghost">임시 비밀번호</button></form></td></tr>`).join("") : `<tr><td colspan="3" class="empty">회원이 없습니다.</td></tr>`;
   const noticeRows2 = notices.map((n) => `<li><span class="notice-tag${n.pinned ? " tag-important" : ""}">${esc(n.tag)}</span><span class="notice-title">${esc(n.title)}</span>
     <form method="post" action="${base}/admin/notice/${n.id}/delete" data-confirm="삭제?"><button class="link-danger">삭제</button></form></li>`).join("") || `<li class="empty">공지가 없습니다.</li>`;
-  const eventRows = events.map((e) => `<li><span class="event-mini-date">${esc(e.event_date)}</span><span class="notice-title">${esc(e.title)}</span>
-    <form method="post" action="${base}/admin/event/${e.id}/delete" data-confirm="삭제?"><button class="link-danger">삭제</button></form></li>`).join("") || `<li class="empty">행사가 없습니다.</li>`;
+  let eventRows = "";
+  for (const e of events) {
+    const rsvps = await D.listRsvps(db, e.id);
+    eventRows += `<li><span class="event-mini-date">${esc(e.event_date)}</span><span class="notice-title">${esc(e.title)}</span>
+      ${rsvps.length ? `<details class="rsvp-names"><summary>참가 ${rsvps.length}곳</summary><p>${rsvps.map((r) => esc(r.biz_name || r.user_name)).join(", ")}</p></details>` : ""}
+      <form method="post" action="${base}/admin/event/${e.id}/delete" data-confirm="삭제?"><button class="link-danger">삭제</button></form></li>`;
+  }
+  eventRows = eventRows || `<li class="empty">행사가 없습니다.</li>`;
+  // 회비 장부: ?due_period=YYYY-MM (기본 이번 달)
+  const duePeriod = /^\d{4}-\d{2}$/.test(query.get("due_period") || "") ? query.get("due_period") : D.kstToday().slice(0, 7);
+  const paidSet = new Set((await D.listDuesForPeriod(db, assoc.id, duePeriod)).map((r) => r.user_id));
+  const dueRows = members.map((m) => `<tr><td>${esc(m.name)}<br /><small>${esc(m.business_name || "")}</small></td>
+    <td>${paidSet.has(m.id) ? '<span class="badge badge-ok">납부</span>' : '<span class="badge badge-wait">미납</span>'}</td>
+    <td class="actions-cell"><form method="post" action="${base}/admin/dues" class="inline-form">
+      <input type="hidden" name="period" value="${esc(duePeriod)}" /><input type="hidden" name="user_id" value="${m.id}" /><input type="hidden" name="on" value="${paidSet.has(m.id) ? "0" : "1"}" />
+      <button class="btn btn-xs ${paidSet.has(m.id) ? "btn-ghost" : "btn-primary"}">${paidSet.has(m.id) ? "납부 취소" : "납부 체크"}</button></form></td></tr>`).join("")
+    || `<tr><td colspan="3" class="empty">회원이 없습니다.</td></tr>`;
+  const duesPanel = `<section class="panel" id="p-dues"><div class="panel-head"><h2 class="panel-title">회비 장부 <span class="badge badge-muted">${paidSet.size}/${members.length} 납부</span></h2>
+      <form method="get" action="${base}/admin" class="inline-form"><input type="month" name="due_period" value="${esc(duePeriod)}" onchange="this.form.submit()" /><noscript><button class="btn btn-xs btn-ghost">이동</button></noscript></form></div>
+    <p class="panel-hint">납부 <b>기록</b>만 남기는 장부입니다(결제 아님). 월을 바꿔 지난 달 현황도 볼 수 있습니다.</p>
+    <div class="table-scroll"><table class="admin-table"><thead><tr><th>회원</th><th>${esc(duePeriod)}</th><th>처리</th></tr></thead><tbody>${dueRows}</tbody></table></div></section>`;
   const notifRows = notifs.length ? notifs.map((n) => `<li class="${n.is_read ? "" : "unread"}"><span class="notif-dot"></span><a href="${esc(n.link || base + "/admin")}" class="notif-msg">${esc(n.message)}</a><time>${esc(n.created_at.slice(5, 16).replace("T", " "))}</time></li>`).join("") : `<li class="empty">알림이 없습니다.</li>`;
   const noticeCats = NOTICE_CATEGORIES.map((c) => `<option value="${esc(c)}"${c === "안내" ? " selected" : ""}>${esc(c)}</option>`).join("");
 
@@ -736,8 +856,8 @@ export async function admin(ctx) {
     <aside class="console-side"><nav>
       <a href="#p-stats">${SIDE_SVG.stats} 현황</a><a href="#p-notif">${SIDE_SVG.bell} 알림함${unread ? ` <span class="side-badge">${unread}</span>` : ""}</a>
       <a href="#p-members">${SIDE_SVG.users} 회원</a><a href="#p-biz">${SIDE_SVG.store} 업체 승인${s.pending ? ` <span class="side-badge">${s.pending}</span>` : ""}</a>
-      <a href="#p-products">${SIDE_SVG.tag} 제품</a><a href="#p-home">${SIDE_SVG.home} 홈 구성</a><a href="#p-brand">${SIDE_SVG.palette} 브랜딩</a><a href="#p-content">${SIDE_SVG.mega} 공지·행사</a>
-      <a href="${base}/admin/documents" class="side-ext">${SIDE_SVG.sign} 전자서명 문서</a><a href="${base}" target="_blank" class="side-ext">${SIDE_SVG.ext} 사이트 보기</a>
+      <a href="#p-products">${SIDE_SVG.tag} 제품</a><a href="#p-dues">${SIDE_SVG.stats} 회비 장부</a><a href="#p-home">${SIDE_SVG.home} 홈 구성</a><a href="#p-brand">${SIDE_SVG.palette} 브랜딩</a><a href="#p-content">${SIDE_SVG.mega} 공지·행사</a>
+      <a href="${base}/polls" class="side-ext">${SIDE_SVG.bell} 안건 투표</a><a href="${base}/admin/documents" class="side-ext">${SIDE_SVG.sign} 전자서명 문서</a><a href="${base}" target="_blank" class="side-ext">${SIDE_SVG.ext} 사이트 보기</a>
     </nav></aside>
     <div class="console-main">
     ${onboardPanel(base, assoc, s, members.length, notices.length)}
@@ -776,6 +896,7 @@ export async function admin(ctx) {
           <div class="form-two"><label>사장님 성함<input type="text" name="name" required /></label><label>이메일<input type="email" name="email" required /></label></div>
           <div class="form-two"><label>업체명<input type="text" name="business_name" required /></label><label>업종<input type="text" name="category" placeholder="예: 음식점" /></label></div>
           <button class="btn btn-primary btn-sm">대행 등록 + 임시 비번 발급</button></form></div></details></section>
+    ${duesPanel}
     ${auditPanel}
     <section class="panel" id="p-home"><h2 class="panel-title">홈페이지 구성 편집</h2>
       <p class="panel-hint">섹션을 켜고 끄거나 순서(▲▼)를 바꾸고 문구를 직접 수정할 수 있습니다.</p>

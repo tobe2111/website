@@ -44,6 +44,10 @@ export const SECTION_CATALOG = {
       { key: "subtitle", label: "설명", type: "text" },
     ],
   },
+  updates: {
+    label: "동네 새소식 (가게 소식 피드)",
+    fields: [{ key: "title", label: "제목", type: "text" }],
+  },
   cta: {
     label: "가입 유도 배너",
     fields: [
@@ -68,6 +72,7 @@ export function defaultLayout(assocName = "우리 상인회") {
       showStats: false,
     },
     { type: "businesses", enabled: true, title: "지금 문 연 가게", lead: "" },
+    { type: "updates", enabled: true, title: "동네 새소식" },
     { type: "mapbanner", enabled: true, title: "우리 동네 점포 지도", subtitle: "" },
     { type: "notices", enabled: true, title: "동네 소식" },
     { type: "events", enabled: true, title: "다가오는 행사" },
@@ -86,6 +91,11 @@ export function parseLayout(json, assocName) {
     if (!out.some((s) => s.type === "mapbanner")) {
       const i = out.findIndex((s) => s.type === "businesses");
       out.splice(i >= 0 ? i + 1 : out.length, 0, { type: "mapbanner", enabled: true, title: "우리 동네 점포 지도", subtitle: "" });
+    }
+    // 구버전 업그레이드: 동네 새소식 섹션이 없으면 업체 섹션 뒤에 추가
+    if (!out.some((s) => s.type === "updates")) {
+      const i = out.findIndex((s) => s.type === "businesses");
+      out.splice(i >= 0 ? i + 1 : out.length, 0, { type: "updates", enabled: true, title: "동네 새소식" });
     }
     return out;
   } catch {
@@ -146,6 +156,9 @@ function renderSection(s, deps) {
         "",
         `<div class="free-text container narrow">${esc(s.body || "").replace(/\n/g, "<br />")}</div>`
       );
+    case "updates":
+      if (!deps.updatesHtml) return ""; // 소식 없으면 섹션 숨김
+      return sectionWrap("", s.title || "동네 새소식", "", `<div class="update-grid">${deps.updatesHtml}</div>`);
     case "mapbanner": {
       const n = deps.counts ? deps.counts.businesses : 0;
       const sub = s.subtitle || (n > 0 ? `${n}곳이 지도 위에. 가까운 가게를 한눈에 찾아요.` : "가까운 가게를 지도에서 한눈에 찾아요.");

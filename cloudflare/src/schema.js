@@ -77,6 +77,7 @@ CREATE TABLE IF NOT EXISTS businesses (
   phone          TEXT NOT NULL DEFAULT '',
   address        TEXT NOT NULL DEFAULT '',
   hours          TEXT NOT NULL DEFAULT '',
+  day_off_date   TEXT NOT NULL DEFAULT '',    -- 오늘 임시휴무 (KST 날짜 저장 — 지나면 자동 무효)
   lat            REAL,
   lng            REAL,
   status         TEXT NOT NULL DEFAULT 'pending',
@@ -133,6 +134,55 @@ CREATE TABLE IF NOT EXISTS coupons (
   created_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_coupons_biz ON coupons(business_id);
+
+CREATE TABLE IF NOT EXISTS updates (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  business_id    INTEGER NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+  association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
+  body           TEXT NOT NULL,               -- 한 줄 소식 ("오늘 딸기 들어왔어요")
+  image          TEXT NOT NULL DEFAULT '',    -- R2 key (선택)
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_updates_biz ON updates(business_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_updates_assoc ON updates(association_id, created_at);
+
+CREATE TABLE IF NOT EXISTS polls (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
+  title          TEXT NOT NULL,
+  body           TEXT NOT NULL DEFAULT '',
+  closes_at      TEXT NOT NULL DEFAULT '',    -- YYYY-MM-DD, 비우면 수동 마감만
+  closed         INTEGER NOT NULL DEFAULT 0,
+  created_by     INTEGER,
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS poll_votes (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  poll_id    INTEGER NOT NULL REFERENCES polls(id) ON DELETE CASCADE,
+  user_id    INTEGER NOT NULL,
+  choice     TEXT NOT NULL,                   -- yes | no | abstain
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(poll_id, user_id)                    -- 1인 1표 (재투표 시 변경)
+);
+
+CREATE TABLE IF NOT EXISTS event_rsvps (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_id       INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  association_id INTEGER NOT NULL,
+  user_id        INTEGER NOT NULL,
+  created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(event_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS dues (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
+  user_id        INTEGER NOT NULL,
+  period         TEXT NOT NULL,               -- YYYY-MM (월별 회비)
+  memo           TEXT NOT NULL DEFAULT '',
+  created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(association_id, user_id, period)
+);
 
 CREATE TABLE IF NOT EXISTS notices (
   id             INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -253,7 +303,7 @@ CREATE TABLE IF NOT EXISTS settings (
 
 // 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
 // 마이그레이션 세대 — migrateColumns 에 단계를 추가할 때마다 +1
-const SCHEMA_VERSION = "10";
+const SCHEMA_VERSION = "11";
 
 export async function ensureSchema(db) {
   const has = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='associations'").first();
@@ -302,7 +352,7 @@ async function migrateColumns(db) {
     if (!bcols.some((c) => c.name === "updated_at")) {
       await db.prepare("ALTER TABLE businesses ADD COLUMN updated_at TEXT").run();
     }
-    for (const col of ["sns_instagram", "sns_youtube", "sns_blog", "sns_kakao"]) {
+    for (const col of ["sns_instagram", "sns_youtube", "sns_blog", "sns_kakao", "day_off_date"]) {
       if (!bcols.some((c) => c.name === col)) {
         await db.prepare(`ALTER TABLE businesses ADD COLUMN ${col} TEXT NOT NULL DEFAULT ''`).run();
       }
@@ -319,6 +369,19 @@ async function migrateColumns(db) {
   if (!cpTbl) {
     await db.prepare(`CREATE TABLE coupons (id INTEGER PRIMARY KEY AUTOINCREMENT, business_id INTEGER NOT NULL REFERENCES businesses(id) ON DELETE CASCADE, association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE, title TEXT NOT NULL, terms TEXT NOT NULL DEFAULT '', valid_until TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT (datetime('now')))`).run();
     await db.prepare("CREATE INDEX IF NOT EXISTS idx_coupons_biz ON coupons(business_id)").run();
+  }
+  // v11 신규 표 (기존 배포 업그레이드): 소식·투표·행사 신청·회비
+  const v11 = [
+    ["updates", `CREATE TABLE updates (id INTEGER PRIMARY KEY AUTOINCREMENT, business_id INTEGER NOT NULL REFERENCES businesses(id) ON DELETE CASCADE, association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE, body TEXT NOT NULL, image TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+      ["CREATE INDEX IF NOT EXISTS idx_updates_biz ON updates(business_id, created_at)", "CREATE INDEX IF NOT EXISTS idx_updates_assoc ON updates(association_id, created_at)"]],
+    ["polls", `CREATE TABLE polls (id INTEGER PRIMARY KEY AUTOINCREMENT, association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE, title TEXT NOT NULL, body TEXT NOT NULL DEFAULT '', closes_at TEXT NOT NULL DEFAULT '', closed INTEGER NOT NULL DEFAULT 0, created_by INTEGER, created_at TEXT NOT NULL DEFAULT (datetime('now')))`, []],
+    ["poll_votes", `CREATE TABLE poll_votes (id INTEGER PRIMARY KEY AUTOINCREMENT, poll_id INTEGER NOT NULL REFERENCES polls(id) ON DELETE CASCADE, user_id INTEGER NOT NULL, choice TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(poll_id, user_id))`, []],
+    ["event_rsvps", `CREATE TABLE event_rsvps (id INTEGER PRIMARY KEY AUTOINCREMENT, event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE, association_id INTEGER NOT NULL, user_id INTEGER NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(event_id, user_id))`, []],
+    ["dues", `CREATE TABLE dues (id INTEGER PRIMARY KEY AUTOINCREMENT, association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE, user_id INTEGER NOT NULL, period TEXT NOT NULL, memo TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(association_id, user_id, period))`, []],
+  ];
+  for (const [name, ddl, idx] of v11) {
+    const tbl = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").bind(name).first();
+    if (!tbl) { await db.prepare(ddl).run(); for (const i of idx) await db.prepare(i).run(); }
   }
   // events 대표 이미지 컬럼 (기존 배포 업그레이드)
   const evTbl = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='events'").first();

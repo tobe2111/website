@@ -212,6 +212,60 @@ export const createCoupon = (db, { businessId, associationId, title, terms = "",
   run(db, "INSERT INTO coupons (business_id, association_id, title, terms, valid_until) VALUES (?,?,?,?,?)", businessId, associationId, title, terms, validUntil);
 export const getCoupon = (db, id) => first(db, "SELECT * FROM coupons WHERE id=?", id);
 export const deleteCoupon = (db, id) => run(db, "DELETE FROM coupons WHERE id=?", id);
+
+// ----- 가게 소식 (한 줄 피드) -----
+export const listUpdates = (db, businessId, limit = 20) =>
+  all(db, "SELECT * FROM updates WHERE business_id=? ORDER BY created_at DESC, id DESC LIMIT ?", businessId, limit);
+export const listAssocUpdates = (db, aid, limit = 6) =>
+  all(db, `SELECT u.*, b.name AS biz_name, b.slug AS biz_slug FROM updates u
+           JOIN businesses b ON b.id = u.business_id AND b.status = 'approved'
+           WHERE u.association_id=? ORDER BY u.created_at DESC, u.id DESC LIMIT ?`, aid, limit);
+export const countUpdates = async (db, businessId) => (await first(db, "SELECT COUNT(*) AS n FROM updates WHERE business_id=?", businessId)).n;
+export const createUpdate = (db, { businessId, associationId, body, image = "" }) =>
+  run(db, "INSERT INTO updates (business_id, association_id, body, image) VALUES (?,?,?,?)", businessId, associationId, body, image);
+export const getUpdate = (db, id) => first(db, "SELECT * FROM updates WHERE id=?", id);
+export const deleteUpdate = (db, id) => run(db, "DELETE FROM updates WHERE id=?", id);
+
+// ----- 오늘 임시휴무 (KST 날짜 저장 — 날짜가 지나면 자동 무효) -----
+export const kstToday = () => new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+export const setDayOff = (db, businessId, date) => run(db, "UPDATE businesses SET day_off_date=? WHERE id=?", date || "", businessId);
+export const isDayOff = (b) => !!b && b.day_off_date === kstToday();
+
+// ----- 총회 안건 투표 -----
+export const createPoll = (db, { associationId, title, body = "", closesAt = "", createdBy = null }) =>
+  run(db, "INSERT INTO polls (association_id, title, body, closes_at, created_by) VALUES (?,?,?,?,?)", associationId, title, body, closesAt, createdBy).then((r) => first(db, "SELECT * FROM polls WHERE id=?", r.meta.last_row_id));
+export const listPolls = (db, aid) => all(db, "SELECT * FROM polls WHERE association_id=? ORDER BY closed, created_at DESC", aid);
+export const getPoll = (db, id) => first(db, "SELECT * FROM polls WHERE id=?", id);
+export const closePoll = (db, id) => run(db, "UPDATE polls SET closed=1 WHERE id=?", id);
+export const isPollOpen = (p) => p && !p.closed && (!p.closes_at || p.closes_at >= kstToday());
+export const votePoll = (db, pollId, userId, choice) =>
+  run(db, "INSERT INTO poll_votes (poll_id, user_id, choice) VALUES (?,?,?) ON CONFLICT(poll_id, user_id) DO UPDATE SET choice=excluded.choice, created_at=datetime('now')", pollId, userId, choice);
+export const pollResults = async (db, pollId) => {
+  const rows = await all(db, "SELECT choice, COUNT(*) AS n FROM poll_votes WHERE poll_id=? GROUP BY choice", pollId);
+  const r = { yes: 0, no: 0, abstain: 0, total: 0 };
+  for (const row of rows) { if (row.choice in r) r[row.choice] = row.n; r.total += row.n; }
+  return r;
+};
+export const userVote = async (db, pollId, userId) => (await first(db, "SELECT choice FROM poll_votes WHERE poll_id=? AND user_id=?", pollId, userId))?.choice || null;
+
+// ----- 행사 참가 신청 -----
+export const rsvpEvent = (db, eventId, aid, userId) =>
+  run(db, "INSERT OR IGNORE INTO event_rsvps (event_id, association_id, user_id) VALUES (?,?,?)", eventId, aid, userId);
+export const cancelRsvp = (db, eventId, userId) => run(db, "DELETE FROM event_rsvps WHERE event_id=? AND user_id=?", eventId, userId);
+export const rsvpCount = async (db, eventId) => (await first(db, "SELECT COUNT(*) AS n FROM event_rsvps WHERE event_id=?", eventId)).n;
+export const listRsvps = (db, eventId) =>
+  all(db, `SELECT r.*, u.name AS user_name, b.name AS biz_name FROM event_rsvps r
+           JOIN users u ON u.id = r.user_id LEFT JOIN businesses b ON b.owner_id = u.id
+           WHERE r.event_id=? ORDER BY r.created_at`, eventId);
+export const userRsvped = async (db, eventId, userId) => !!(await first(db, "SELECT 1 AS x FROM event_rsvps WHERE event_id=? AND user_id=?", eventId, userId));
+
+// ----- 회비 장부 (납부 기록만 — 결제 아님) -----
+export const setDuePaid = (db, aid, userId, period) =>
+  run(db, "INSERT OR IGNORE INTO dues (association_id, user_id, period) VALUES (?,?,?)", aid, userId, period);
+export const setDueUnpaid = (db, aid, userId, period) =>
+  run(db, "DELETE FROM dues WHERE association_id=? AND user_id=? AND period=?", aid, userId, period);
+export const listDuesForPeriod = (db, aid, period) =>
+  all(db, "SELECT user_id FROM dues WHERE association_id=? AND period=?", aid, period);
 export async function moveProduct(db, id, dir) {
   const p = await getProduct(db, id); if (!p) return;
   const neighbor = await first(db,

@@ -87,6 +87,7 @@ function navHtml(base, user, active) {
   ];
   if (user) {
     items.push(link(`${base}/board`, "회원 게시판"));
+    items.push(link(`${base}/polls`, "투표"));
     if (user.role === "MERCHANT") items.push(link(`${base}/dashboard`, "내 업체"));
     if (user.role === "ADMIN" || user.role === "SUPERADMIN") items.push(link(`${base}/admin`, "관리자"));
     if (user.role === "SUPERADMIN") items.push(link(`/super`, "슈퍼"));

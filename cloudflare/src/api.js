@@ -466,6 +466,106 @@ export async function adminAddMember(ctx) {
   return back(base + "/admin", `대행 등록 완료 — ${name}님 로그인: ${email} / 임시비번 ${temp} (사장님께 전달하세요)`);
 }
 
+// ---------- 가게 소식 (한 줄 피드) ----------
+export async function updateAdd(ctx) {
+  const { db, env, form, base, assoc } = ctx;
+  const b = await ownBusiness(ctx);
+  if (!b) return back(base + "/dashboard", "업체를 찾을 수 없습니다.", true);
+  const body = cap((form.get("body") || "").trim(), 300);
+  if (!body) return back(base + "/dashboard", "소식 내용을 입력해 주세요.", true);
+  if ((await D.countUpdates(db, b.id)) >= 100) return back(base + "/dashboard", "소식은 100개까지 보관됩니다. 오래된 소식을 지워주세요.", true);
+  let image = "";
+  const files = form.getAll("image").filter((f) => f && typeof f.arrayBuffer === "function" && f.size);
+  if (files.length) {
+    const up = await saveImages(env, files, 1);
+    if (up.error) return back(base + "/dashboard", up.error, true);
+    if (up.images.length) image = up.images[0].filename;
+  }
+  await D.createUpdate(db, { businessId: b.id, associationId: assoc.id, body, image });
+  await D.touchBusiness(db, b.id);
+  return back(base + "/dashboard", "소식을 올렸습니다. 가게 페이지와 홈에 바로 노출됩니다.");
+}
+export async function updateDelete(ctx) {
+  const { db, env, base, params } = ctx;
+  const b = await ownBusiness(ctx);
+  const u = await D.getUpdate(db, Number(params.id));
+  if (!b || !u || u.business_id !== b.id) return back(base + "/dashboard", "삭제할 수 없습니다.", true);
+  if (u.image) await storage.remove(env, u.image);
+  await D.deleteUpdate(db, u.id);
+  return back(base + "/dashboard", "소식을 삭제했습니다.");
+}
+
+// ---------- 오늘 임시휴무 토글 ----------
+export async function dayOffToggle(ctx) {
+  const { db, base } = ctx;
+  const b = await ownBusiness(ctx);
+  if (!b) return back(base + "/dashboard", "업체를 찾을 수 없습니다.", true);
+  const today = D.kstToday();
+  const off = b.day_off_date === today;
+  await D.setDayOff(db, b.id, off ? "" : today);
+  return back(base + "/dashboard", off ? "휴무를 해제했습니다. 영업 상태로 표시됩니다." : "오늘 하루 휴무로 표시했습니다. 내일 자동으로 풀립니다.");
+}
+
+// ---------- 총회 안건 투표 ----------
+export async function adminCreatePoll(ctx) {
+  const { db, form, base, assoc, user } = ctx;
+  const title = cap((form.get("title") || "").trim(), 200);
+  if (!title) return back(base + "/admin", "안건 제목을 입력해 주세요.", true);
+  const rawClose = (form.get("closes_at") || "").trim();
+  const closesAt = /^\d{4}-\d{2}-\d{2}$/.test(rawClose) ? rawClose : "";
+  await D.createPoll(db, { associationId: assoc.id, title, body: cap((form.get("body") || "").trim(), 2000), closesAt, createdBy: user.id });
+  await D.createNotification(db, { associationId: assoc.id, kind: "poll", message: `새 투표: ${title}`, link: base + "/polls" });
+  await audit(ctx, "투표생성", title);
+  return back(base + "/polls", "투표를 시작했습니다. 회원들이 투표할 수 있습니다.");
+}
+export async function adminClosePoll(ctx) {
+  const { db, base, assoc, params } = ctx;
+  const p = await D.getPoll(db, Number(params.id));
+  if (!p || p.association_id !== assoc.id) return back(base + "/polls", "투표를 찾을 수 없습니다.", true);
+  await D.closePoll(db, p.id);
+  await audit(ctx, "투표마감", p.title);
+  return back(base + "/polls", "투표를 마감했습니다.");
+}
+export async function pollVote(ctx) {
+  const { db, form, base, assoc, user, params } = ctx;
+  const p = await D.getPoll(db, Number(params.id));
+  if (!p || p.association_id !== assoc.id) return back(base + "/polls", "투표를 찾을 수 없습니다.", true);
+  if (!D.isPollOpen(p)) return back(base + "/polls", "마감된 투표입니다.", true);
+  const choice = form.get("choice");
+  if (!["yes", "no", "abstain"].includes(choice)) return back(base + "/polls", "선택을 확인해 주세요.", true);
+  await D.votePoll(db, p.id, user.id, choice);
+  return back(base + "/polls", "투표했습니다. 마감 전까지 다시 눌러 변경할 수 있습니다.");
+}
+
+// ---------- 행사 참가 신청 ----------
+export async function eventRsvp(ctx) {
+  const { db, base, assoc, user, params } = ctx;
+  const e = await D.getEvent(db, Number(params.id));
+  if (!e || e.association_id !== assoc.id) return back(base + "/events", "행사를 찾을 수 없습니다.", true);
+  await D.rsvpEvent(db, e.id, assoc.id, user.id);
+  return back(base + "/events", `'${e.title}' 참가 신청 완료! 관리자가 명단을 확인합니다.`);
+}
+export async function eventRsvpCancel(ctx) {
+  const { db, base, assoc, user, params } = ctx;
+  const e = await D.getEvent(db, Number(params.id));
+  if (!e || e.association_id !== assoc.id) return back(base + "/events", "행사를 찾을 수 없습니다.", true);
+  await D.cancelRsvp(db, e.id, user.id);
+  return back(base + "/events", "참가 신청을 취소했습니다.");
+}
+
+// ---------- 회비 장부 (기록만) ----------
+export async function adminDueToggle(ctx) {
+  const { db, form, base, assoc } = ctx;
+  const period = (form.get("period") || "").trim();
+  const userId = Number(form.get("user_id"));
+  if (!/^\d{4}-\d{2}$/.test(period) || !userId) return back(base + "/admin", "입력값을 확인해 주세요.", true);
+  const member = await D.getUserById(db, userId);
+  if (!member || member.association_id !== assoc.id) return back(base + "/admin", "회원을 찾을 수 없습니다.", true);
+  if (form.get("on") === "1") await D.setDuePaid(db, assoc.id, userId, period);
+  else await D.setDueUnpaid(db, assoc.id, userId, period);
+  return redirect(`${base}/admin?due_period=${encodeURIComponent(period)}#p-dues`);
+}
+
 // ---------- 부관리자 (회장·총무 등 공동 운영) ----------
 export async function adminAddAdmin(ctx) {
   const { db, base, assoc, user } = ctx;

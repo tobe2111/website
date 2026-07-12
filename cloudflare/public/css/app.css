@@ -564,6 +564,57 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .invite-box{margin-top:14px;padding:16px;border:1.5px solid var(--brand);border-radius:12px;background:var(--brand-tint);display:grid;gap:10px}
 .invite-box-title{font-weight:800}
 .invite-url{width:100%;font-size:.85rem;padding:9px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink)}
+/* 가게 소식 피드 */
+.update-feed{display:grid;gap:12px;list-style:none;margin:0 0 34px;padding:0}
+.update-item{display:flex;gap:14px;align-items:flex-start;background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--radius-sm);padding:14px 16px;box-shadow:var(--sh-1)}
+.update-img{width:72px;height:72px;object-fit:cover;border-radius:10px;flex:none}
+.update-body{flex:1;min-width:0}
+.update-body p{margin:0 0 4px;font-size:.98rem}
+.update-body time{font-size:.78rem;color:var(--muted)}
+.update-feed.compact{margin-top:14px;margin-bottom:0}
+/* 홈: 동네 새소식 카드 */
+.update-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
+.update-card{display:flex;gap:12px;align-items:center;background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--radius-sm);padding:14px 16px;box-shadow:var(--sh-1);transition:transform .2s,box-shadow .2s}
+.update-card:hover{transform:translateY(-2px);box-shadow:var(--sh-2)}
+.uc-img{flex:none;width:56px;height:56px;border-radius:10px;overflow:hidden}
+.uc-img img{width:100%;height:100%;object-fit:cover}
+.uc-body{min-width:0}
+.uc-body strong{display:block;font-size:.82rem;color:var(--brand-700)}
+.uc-body p{margin:2px 0;font-size:.94rem;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.uc-body time{font-size:.75rem;color:var(--muted)}
+/* 오늘 휴무 배지 */
+.badge-dayoff{background:#fdecec;color:#b3261e}
+:root[data-theme="dark"] .badge-dayoff{background:#3a1d1b;color:#f2b8b5}
+/* 지금 영업중 필터 칩 */
+.chip-open{color:var(--green-700)}
+/* 찜 하트 */
+.market-card{position:relative}
+.fav-btn{position:absolute;top:10px;left:10px;z-index:5;width:34px;height:34px;border-radius:50%;border:0;background:rgba(255,255,255,.88);color:#c6cfc9;font-size:1.05rem;cursor:pointer;box-shadow:var(--sh-1);transition:transform .15s,color .15s}
+.fav-btn:hover{transform:scale(1.1)}
+.fav-btn.is-on{color:#e0245e}
+.market-open{left:auto} /* 영업중 배지는 우상단 유지, 하트는 좌상단 */
+.chip-fav.active{background:#e0245e;border-color:#e0245e;color:#fff}
+/* 투표 */
+.poll-card{margin-bottom:16px}
+.poll-card.is-closed{opacity:.85}
+.poll-body{color:var(--ink-soft);margin-bottom:12px}
+.poll-actions{display:flex;gap:8px;margin-bottom:14px}
+.poll-results{display:grid;gap:8px}
+.poll-bar{display:grid;grid-template-columns:110px 1fr 44px;align-items:center;gap:10px}
+.pb-label{font-size:.88rem}
+.pb-track{height:10px;border-radius:99px;background:var(--bg-alt);overflow:hidden}
+.pb-fill{display:block;height:100%;border-radius:99px;transition:width .4s ease}
+.pb-fill.is-yes{background:var(--brand)}
+.pb-fill.is-no{background:#d65745}
+.pb-fill.is-abs{background:#b9c2bc}
+.pb-pct{font-size:.82rem;color:var(--muted);text-align:right}
+/* 행사 참가 신청 */
+.event-rsvp{display:flex;align-items:center;gap:10px;padding:10px 16px;border-top:1px dashed var(--line-soft)}
+.event-photo-card .event-rsvp{background:var(--surface)}
+.rsvp-count{font-size:.82rem;font-weight:700;color:var(--brand-700)}
+.rsvp-names{font-size:.82rem}
+.rsvp-names summary{cursor:pointer;color:var(--brand-700);font-weight:600}
+.rsvp-names p{margin:4px 0 0;color:var(--ink-soft)}
 /* 페이지 전환 애니메이션 — 지원 브라우저(크롬·사파리 최신)에서 페이드 전환, 미지원은 무시 */
 @view-transition{navigation:auto}
 @media (prefers-reduced-motion:reduce){@view-transition{navigation:none}}

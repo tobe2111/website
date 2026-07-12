@@ -11,6 +11,7 @@ const KEEP = 8; // 주 1회 × 8주 보존
 // 복원 가치가 있는 원본 테이블 전체 (스키마 변화에 안전하도록 SELECT * 덤프)
 const TABLES = [
   "associations", "users", "businesses", "media", "products", "coupons",
+  "updates", "polls", "poll_votes", "event_rsvps", "dues",
   "notices", "events", "posts", "comments", "post_images",
   "documents", "signatures", "signature_requests",
   "notifications", "applications", "audit_log", "settings",
