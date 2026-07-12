@@ -62,7 +62,7 @@ ${assoc ? `<link rel="alternate" type="application/rss+xml" title="${brand} 공�
 <main>${injected}</main>
 <footer class="site-footer"><div class="container">
   <div class="foot-top">
-    <nav class="foot-policy"><a href="/privacy" class="strong">개인정보처리방침</a><span class="sep"></span><a href="/terms">이용약관</a></nav>
+    <nav class="foot-policy"><a href="/privacy" class="strong">개인정보처리방침</a><span class="sep"></span><a href="/terms">이용약관</a>${assoc ? `<span class="sep"></span><a href="${base}/contact">문의하기</a>` : ""}</nav>
   </div>
   <div class="foot-bottom">
     <span class="foot-mark" aria-hidden="true">${STOREFRONT_SVG}</span>

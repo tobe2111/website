@@ -523,6 +523,38 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .geo-search{display:flex;gap:8px;margin-bottom:8px}
 .geo-search input{flex:1;min-width:0}
 .geo-search .btn{flex:none;white-space:nowrap}
+/* 쿠폰 — 매장 제시형 (점선 테두리 + 펀치홀 티켓 모양) */
+.coupon-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px;margin-bottom:34px}
+.coupon-card{position:relative;display:grid;gap:5px;padding:18px 20px 16px 26px;background:var(--surface);border:2px dashed var(--brand);border-radius:14px;overflow:hidden}
+.coupon-punch{position:absolute;left:-9px;top:50%;transform:translateY(-50%);width:18px;height:18px;border-radius:50%;background:var(--bg);border:2px dashed var(--brand)}
+.coupon-title{font-size:1.08rem;font-weight:800;color:var(--brand-700)}
+.coupon-terms{font-size:.9rem;color:var(--ink-soft)}
+.coupon-meta{font-size:.78rem;color:var(--muted)}
+/* 대시보드 쿠폰 목록 */
+.coupon-admin-list{display:grid;gap:8px;margin-bottom:6px}
+.coupon-admin{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;background:var(--bg-alt);border-radius:10px}
+.coupon-admin .ca-text{display:grid;gap:2px}
+.coupon-admin .ca-text small{color:var(--muted)}
+.coupon-admin.is-expired{opacity:.55}
+/* 유어딜 연계 */
+.urdeal-promo{border:1px solid var(--line);position:relative}
+.up-badge{position:absolute;top:14px;right:16px;font-size:.68rem;font-weight:800;letter-spacing:.08em;color:var(--muted);border:1px solid var(--line);border-radius:99px;padding:3px 10px}
+.family-banner{display:flex;align-items:center;gap:18px;padding:22px 26px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface);box-shadow:var(--shadow);transition:transform .2s,box-shadow .2s}
+.family-banner:hover{transform:translateY(-2px);box-shadow:var(--sh-2)}
+.fb-badge{flex:none;font-size:.68rem;font-weight:800;letter-spacing:.08em;color:var(--brand-700);border:1px solid var(--brand);border-radius:99px;padding:4px 11px}
+.fb-text{display:grid;gap:2px}
+.fb-text strong{font-size:1.05rem}
+.fb-text em{font-style:normal;font-size:.9rem;color:var(--muted)}
+.fb-chev{margin-left:auto;font-weight:800;color:var(--brand-700)}
+/* 가게 상세: 오시는 길 미니 지도 */
+.biz-map{width:100%;height:clamp(220px,36vh,320px);border-radius:var(--radius);border:1px solid var(--line);overflow:hidden;background:var(--bg-alt);margin-bottom:12px}
+.biz-way{display:flex;align-items:center;gap:6px;flex-wrap:wrap;color:var(--ink-soft);margin-bottom:34px}
+.biz-way a{font-weight:700;color:var(--brand-700)}
+/* 초대 링크 */
+.invite-summary{display:flex;align-items:center;gap:8px;justify-content:center;margin:-4px 0 16px;font-size:1.05rem}
+.invite-box{margin-top:14px;padding:16px;border:1.5px solid var(--brand);border-radius:12px;background:var(--brand-tint);display:grid;gap:10px}
+.invite-box-title{font-weight:800}
+.invite-url{width:100%;font-size:.85rem;padding:9px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink)}
 /* 페이지 전환 애니메이션 — 지원 브라우저(크롬·사파리 최신)에서 페이드 전환, 미지원은 무시 */
 @view-transition{navigation:auto}
 @media (prefers-reduced-motion:reduce){@view-transition{navigation:none}}

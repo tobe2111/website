@@ -200,6 +200,18 @@ export const setProductImage = (db, id, image) => run(db, "UPDATE products SET i
 export const setProductHidden = (db, id, hidden) => run(db, "UPDATE products SET hidden=? WHERE id=?", hidden ? 1 : 0, id);
 export const setProductSoldOut = (db, id, sold) => run(db, "UPDATE products SET sold_out=? WHERE id=?", sold ? 1 : 0, id);
 export const deleteProduct = (db, id) => run(db, "DELETE FROM products WHERE id=?", id);
+
+// ----- 쿠폰 (보여주기 혜택 — 결제 없음) -----
+export const listCoupons = (db, businessId) =>
+  all(db, "SELECT * FROM coupons WHERE business_id=? ORDER BY created_at DESC", businessId);
+// 공개 노출: 기한 지난 쿠폰 자동 제외 (SQLite date('now') = UTC — KST 자정보다 최대 9시간 늦게 사라지는 정도라 허용)
+export const listActiveCoupons = (db, businessId) =>
+  all(db, "SELECT * FROM coupons WHERE business_id=? AND (valid_until='' OR valid_until >= date('now')) ORDER BY created_at DESC", businessId);
+export const countCoupons = async (db, businessId) => (await first(db, "SELECT COUNT(*) AS n FROM coupons WHERE business_id=?", businessId)).n;
+export const createCoupon = (db, { businessId, associationId, title, terms = "", validUntil = "" }) =>
+  run(db, "INSERT INTO coupons (business_id, association_id, title, terms, valid_until) VALUES (?,?,?,?,?)", businessId, associationId, title, terms, validUntil);
+export const getCoupon = (db, id) => first(db, "SELECT * FROM coupons WHERE id=?", id);
+export const deleteCoupon = (db, id) => run(db, "DELETE FROM coupons WHERE id=?", id);
 export async function moveProduct(db, id, dir) {
   const p = await getProduct(db, id); if (!p) return;
   const neighbor = await first(db,

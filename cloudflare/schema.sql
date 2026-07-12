@@ -121,6 +121,17 @@ CREATE TABLE IF NOT EXISTS products (
 );
 CREATE INDEX IF NOT EXISTS idx_products_biz ON products(business_id, hidden, sort_order);
 
+CREATE TABLE IF NOT EXISTS coupons (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  business_id    INTEGER NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+  association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,  -- 테넌트 격리
+  title          TEXT NOT NULL,               -- 예: "어묵 1개 서비스"
+  terms          TEXT NOT NULL DEFAULT '',    -- 조건 (예: "2만원 이상 주문 시")
+  valid_until    TEXT NOT NULL DEFAULT '',    -- YYYY-MM-DD, 비우면 무기한 — 지나면 자동 숨김
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_coupons_biz ON coupons(business_id);
+
 CREATE TABLE IF NOT EXISTS notices (
   id             INTEGER PRIMARY KEY AUTOINCREMENT,
   association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,

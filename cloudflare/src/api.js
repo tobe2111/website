@@ -252,6 +252,31 @@ export async function productDelete(ctx) {
   await D.deleteProduct(db, p.id);
   return back(base + "/dashboard", "제품을 삭제했습니다.");
 }
+
+// ---------- 쿠폰 (보여주기 혜택 — 결제·발급 없음, 매장에서 화면 제시) ----------
+const MAX_COUPONS = 5;
+export async function couponAdd(ctx) {
+  const { db, form, base, assoc } = ctx;
+  const b = await ownBusiness(ctx);
+  if (!b) return back(base + "/dashboard", "업체를 찾을 수 없습니다.", true);
+  const title = cap((form.get("title") || "").trim(), 80);
+  if (!title) return back(base + "/dashboard", "혜택 내용을 입력해 주세요.", true);
+  if ((await D.countCoupons(db, b.id)) >= MAX_COUPONS)
+    return back(base + "/dashboard", `쿠폰은 최대 ${MAX_COUPONS}개까지 등록할 수 있습니다. 지난 쿠폰을 삭제해 주세요.`, true);
+  const rawDate = (form.get("valid_until") || "").trim();
+  const validUntil = /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : "";
+  await D.createCoupon(db, { businessId: b.id, associationId: assoc.id, title, terms: cap((form.get("terms") || "").trim(), 120), validUntil });
+  await D.touchBusiness(db, b.id);
+  return back(base + "/dashboard", "쿠폰을 등록했습니다. 가게 페이지에 바로 노출됩니다.");
+}
+export async function couponDelete(ctx) {
+  const { db, base, params } = ctx;
+  const b = await ownBusiness(ctx);
+  const c = await D.getCoupon(db, Number(params.id));
+  if (!b || !c || c.business_id !== b.id) return back(base + "/dashboard", "삭제할 수 없습니다.", true);
+  await D.deleteCoupon(db, c.id);
+  return back(base + "/dashboard", "쿠폰을 삭제했습니다.");
+}
 // 상인회 관리자: 자기 상인회 점포 제품 숨김/정리 (테넌트 격리)
 export async function adminProductHide(ctx) {
   const { db, base, assoc, params } = ctx;
@@ -532,6 +557,77 @@ export async function verifyResetToken(secret, token) {
   if (!exp || Date.now() > exp) return null;
   if (!(await hmacVerify(secret, `reset|${email}|${exp}`, parts[2]))) return null;
   return email;
+}
+
+// ---------- 방문자 문의 (관리자 알림함 + 이메일 수신) ----------
+export async function contactSubmit(ctx) {
+  const { db, env, form, base, assoc, ip } = ctx;
+  if (!(await turnstileVerify(env, form.get("cf-turnstile-response"), ip))) return back(base + "/contact", "봇 방지 확인에 실패했습니다. 다시 시도해 주세요.", true);
+  if (form.get("website")) return back(base + "/contact", "문의가 접수되었습니다. 확인 후 연락드리겠습니다."); // 허니팟 — 봇에겐 성공처럼
+  const name = cap((form.get("name") || "").trim(), 60);
+  const contact = cap((form.get("contact") || "").trim(), 120);
+  const message = cap((form.get("message") || "").trim(), 2000);
+  if (form.get("agree") !== "1") return back(base + "/contact", "개인정보 수집·이용에 동의해 주세요.", true);
+  if (!name || !contact || !message) return back(base + "/contact", "성함·연락처·문의 내용을 모두 입력해 주세요.", true);
+  await D.createNotification(db, { associationId: assoc.id, kind: "contact", message: `[문의] ${name} (${contact}): ${cap(message, 200)}`, link: base + "/admin" });
+  if (emailEnabled(env) && assoc.email) {
+    await sendEmail(env, {
+      to: assoc.email,
+      subject: `[${assoc.name}] 새 문의 — ${name}`,
+      html: mailShell(`${assoc.name} 문의`, `<p><b>보낸 분</b>: ${name}<br /><b>연락처</b>: ${contact}</p><p style="white-space:pre-wrap">${message.replace(/</g, "&lt;")}</p>`),
+    }).catch(() => {}); // 메일 실패해도 알림함에는 남음
+  }
+  return back(base + "/contact", "문의가 접수되었습니다. 확인 후 연락드리겠습니다.");
+}
+
+// ----- 사장님 초대 링크 (HMAC 토큰 7일 · 테이블 없음) -----
+// 관리자가 가게 이름·업종을 미리 채워 링크를 만들고, 사장님은 이메일·비밀번호만 입력하면
+// 승인 상태로 즉시 개설 (관리자가 초대 = 승인 심사 불필요).
+const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+export async function makeInviteToken(secret, assocId, bizName, category) {
+  const json = JSON.stringify({ a: assocId, b: bizName, c: category, x: Date.now() + INVITE_TTL_MS });
+  const sig = await hmacSign(secret, "invite|" + json);
+  return `${b64uFromBytes(new TextEncoder().encode(json))}.${sig}`;
+}
+export async function verifyInviteToken(secret, token, assocId) {
+  const parts = String(token || "").split(".");
+  if (parts.length !== 2) return null;
+  let raw;
+  try { raw = new TextDecoder().decode(bytesFromB64u(parts[0])); } catch { return null; }
+  if (!(await hmacVerify(secret, "invite|" + raw, parts[1]))) return null;
+  let data;
+  try { data = JSON.parse(raw); } catch { return null; }
+  if (!data || data.a !== assocId || !data.x || Date.now() > data.x) return null;
+  return data;
+}
+export async function adminCreateInvite(ctx) {
+  const { env, form, base, assoc } = ctx;
+  const bizName = cap((form.get("biz_name") || "").trim(), 100);
+  if (!bizName) return back(base + "/admin", "가게 이름을 입력해 주세요.", true);
+  const token = await makeInviteToken(env.SESSION_SECRET, assoc.id, bizName, cap(form.get("category"), 40));
+  await audit(ctx, "초대링크생성", bizName);
+  return redirect(`${base}/admin?invite=${encodeURIComponent(token)}#p-members`);
+}
+export async function acceptInvite(ctx) {
+  const { db, env, form, addCookie, isProd, base, assoc } = ctx;
+  const inv = await verifyInviteToken(env.SESSION_SECRET, form.get("token"), assoc.id);
+  if (!inv) return back(base + "/invite", "초대 링크가 만료되었거나 올바르지 않습니다. 관리자에게 새 링크를 요청해 주세요.", true);
+  const name = cap((form.get("name") || "").trim(), 60);
+  const email = cap((form.get("email") || "").toLowerCase().trim(), 120);
+  const password = form.get("password") || "";
+  if (form.get("agree") !== "1") return back(`${base}/invite?t=${encodeURIComponent(form.get("token"))}`, "개인정보 수집·이용에 동의해 주세요.", true);
+  if (!name || !EMAIL_RE.test(email) || password.length < 8 || password.length > 200)
+    return back(`${base}/invite?t=${encodeURIComponent(form.get("token"))}`, "입력값을 확인해 주세요. (비밀번호 8자 이상)", true);
+  if (await D.getUserByEmail(db, email)) return back("/login", "이미 가입된 이메일입니다. 로그인해 주세요.", true);
+  if ((await D.countMembers(db, assoc.id)) >= planOf(assoc).maxMembers)
+    return back(base + "/invite", "회원 정원이 가득 찼습니다. 상인회 관리자에게 문의해 주세요.", true);
+  const { hash, salt } = await hashPassword(password);
+  const user = await D.createUser(db, { email, passwordHash: hash, salt, name, role: "MERCHANT", associationId: assoc.id });
+  const biz = await D.createBusiness(db, { associationId: assoc.id, ownerId: user.id, name: inv.b, category: inv.c || "기타" });
+  await D.setBusinessStatus(db, biz.id, "approved"); // 관리자가 초대했으므로 즉시 공개
+  await D.createNotification(db, { associationId: assoc.id, kind: "new_business", message: `초대 링크로 ${name}님이 '${inv.b}' 개설을 마쳤습니다.`, link: base + "/admin" });
+  addCookie(sessionCookie(await sessionTokenForUser(user, env.SESSION_SECRET), isProd));
+  return back(base + "/dashboard", "환영합니다! 가게가 바로 공개되었습니다. 사진과 제품·메뉴를 채워보세요.");
 }
 
 export async function forgotPassword(ctx) {

@@ -101,6 +101,17 @@
     });
   }
 
+  // ----- 가게 상세: 오시는 길 미니 지도 -----
+  var bizEl = document.getElementById("bizMap");
+  if (bizEl) {
+    var blat = parseFloat(bizEl.getAttribute("data-lat")), blng = parseFloat(bizEl.getAttribute("data-lng"));
+    if (!isNaN(blat) && !isNaN(blng)) {
+      var bpos = new naver.maps.LatLng(blat, blng);
+      var bmap = new naver.maps.Map(bizEl, { center: bpos, zoom: 16, scrollWheel: false }); // 스크롤 하이재킹 방지
+      new naver.maps.Marker({ position: bpos, map: bmap, title: bizEl.getAttribute("data-name") || "", icon: pinIcon(false) });
+    }
+  }
+
   // ----- 좌표 피커 (대시보드) -----
   var pickEl = document.getElementById("pickMap");
   var latInput = document.getElementById("latInput");

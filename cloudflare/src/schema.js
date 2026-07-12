@@ -123,6 +123,17 @@ CREATE TABLE IF NOT EXISTS products (
 );
 CREATE INDEX IF NOT EXISTS idx_products_biz ON products(business_id, hidden, sort_order);
 
+CREATE TABLE IF NOT EXISTS coupons (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  business_id    INTEGER NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+  association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,  -- 테넌트 격리
+  title          TEXT NOT NULL,               -- 예: "어묵 1개 서비스"
+  terms          TEXT NOT NULL DEFAULT '',    -- 조건 (예: "2만원 이상 주문 시")
+  valid_until    TEXT NOT NULL DEFAULT '',    -- YYYY-MM-DD, 비우면 무기한 — 지나면 자동 숨김
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_coupons_biz ON coupons(business_id);
+
 CREATE TABLE IF NOT EXISTS notices (
   id             INTEGER PRIMARY KEY AUTOINCREMENT,
   association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
@@ -242,7 +253,7 @@ CREATE TABLE IF NOT EXISTS settings (
 
 // 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
 // 마이그레이션 세대 — migrateColumns 에 단계를 추가할 때마다 +1
-const SCHEMA_VERSION = "9";
+const SCHEMA_VERSION = "10";
 
 export async function ensureSchema(db) {
   const has = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='associations'").first();
@@ -302,6 +313,12 @@ async function migrateColumns(db) {
   if (!prodTbl) {
     await db.prepare(`CREATE TABLE products (id INTEGER PRIMARY KEY AUTOINCREMENT, business_id INTEGER NOT NULL REFERENCES businesses(id) ON DELETE CASCADE, association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE, name TEXT NOT NULL, price TEXT NOT NULL DEFAULT '', description TEXT NOT NULL DEFAULT '', image TEXT NOT NULL DEFAULT '', sold_out INTEGER NOT NULL DEFAULT 0, hidden INTEGER NOT NULL DEFAULT 0, sort_order INTEGER NOT NULL DEFAULT 0, external_link TEXT, source TEXT NOT NULL DEFAULT 'self', created_at TEXT NOT NULL DEFAULT (datetime('now')))`).run();
     await db.prepare("CREATE INDEX IF NOT EXISTS idx_products_biz ON products(business_id, hidden, sort_order)").run();
+  }
+  // coupons 표가 없으면 생성 (기존 배포 업그레이드): 보여주기 쿠폰
+  const cpTbl = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='coupons'").first();
+  if (!cpTbl) {
+    await db.prepare(`CREATE TABLE coupons (id INTEGER PRIMARY KEY AUTOINCREMENT, business_id INTEGER NOT NULL REFERENCES businesses(id) ON DELETE CASCADE, association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE, title TEXT NOT NULL, terms TEXT NOT NULL DEFAULT '', valid_until TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT (datetime('now')))`).run();
+    await db.prepare("CREATE INDEX IF NOT EXISTS idx_coupons_biz ON coupons(business_id)").run();
   }
   // events 대표 이미지 컬럼 (기존 배포 업그레이드)
   const evTbl = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='events'").first();

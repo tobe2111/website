@@ -2,6 +2,7 @@
 import * as D from "./db.js";
 import { esc, clip, openBadge, fmtBytes } from "./util.js";
 import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG, ORIGIN } from "./render.js";
+import { verifyInviteToken } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
 import { html, notFoundResponse, back } from "./http.js";
 import { galleryItem } from "./media-render.js";
 import { providerLabel } from "./embed.js";
@@ -172,11 +173,11 @@ export async function businesses(ctx) {
 }
 
 export async function businessDetail(ctx) {
-  const { db, assoc, base, user, params, csrf } = ctx;
+  const { db, env, assoc, base, user, params, csrf } = ctx;
   const b = await D.getBusinessBySlug(db, assoc.id, params.slug);
   const canSee = b && (b.status === "approved" || (user && (user.id === b.owner_id || user.role === "SUPERADMIN" || (user.role === "ADMIN" && user.association_id === assoc.id))));
   if (!canSee) return notFoundResponse(ctx);
-  const [media, prods] = await Promise.all([D.listMedia(db, b.id), D.listProducts(db, b.id)]);
+  const [media, prods, coupons] = await Promise.all([D.listMedia(db, b.id), D.listProducts(db, b.id), D.listActiveCoupons(db, b.id)]);
   const images = media.filter((m) => m.kind === "image");
   const vids = media.filter((m) => m.kind === "video" || m.kind === "embed");
   const gallery = (arr) => arr.length ? `<div class="gallery">${arr.map((m) => galleryItem(m)).join("")}</div>` : "";
@@ -186,6 +187,20 @@ export async function businessDetail(ctx) {
       <figcaption><div class="product-caption-top"><strong class="product-name">${esc(p.name)}</strong>${p.price ? `<span class="product-price">${esc(p.price)}</span>` : ""}</div>${p.description ? `<p class="product-desc">${esc(p.description)}</p>` : ""}</figcaption>
     </figure>`).join("")}</div>` : "";
   const pending = b.status !== "approved" ? `<div class="flash flash-warn">이 페이지는 ${statusBadge(b.status)} 상태입니다.</div>` : "";
+  // 쿠폰: 매장에서 화면 제시 방식 (결제·발급 없음)
+  const couponSection = coupons.length ? `<h2 class="biz-section-title">쿠폰·혜택</h2>
+    <div class="coupon-grid">${coupons.map((c) => `<div class="coupon-card">
+      <span class="coupon-punch" aria-hidden="true"></span>
+      <strong class="coupon-title">${esc(c.title)}</strong>
+      ${c.terms ? `<span class="coupon-terms">${esc(c.terms)}</span>` : ""}
+      <span class="coupon-meta">${c.valid_until ? `${esc(c.valid_until.replace(/-/g, "."))}까지` : "기한 없음"} · 매장에서 이 화면을 보여주세요</span>
+    </div>`).join("")}</div>` : "";
+  // 오시는 길: 좌표가 있으면 미니 지도 (브랜드 핀 재사용)
+  const naverKey = assoc.map_client_id || env.NAVER_MAP_CLIENT_ID;
+  const hasGeo = b.lat != null && b.lng != null && naverKey;
+  const wayToCome = b.lat != null && b.lng != null ? `<h2 class="biz-section-title">오시는 길</h2>
+    ${hasGeo ? `<div id="bizMap" class="biz-map" data-lat="${b.lat}" data-lng="${b.lng}" data-name="${esc(b.name)}"></div>` : ""}
+    <p class="biz-way">${b.address ? `${PIN_SVG} ${esc(b.address)} · ` : ""}<a href="https://map.naver.com/p/search/${encodeURIComponent(b.address || b.name)}" target="_blank" rel="noopener">네이버 지도에서 길찾기 →</a></p>` : "";
   const body = `
   <section class="biz-hero"><div class="container">${pending}
     <span class="chip chip-light">${esc(b.category)}</span>${openBadge(b.hours)}<h1>${esc(b.name)}</h1>
@@ -198,10 +213,12 @@ export async function businessDetail(ctx) {
       ${snsButtons(b)}
     </div></div></section>
   <section class="section"><div class="container">
+    ${couponSection}
     ${productGrid}
     ${images.length ? `<h2 class="biz-section-title">사진</h2>${gallery(images)}` : ""}
     ${vids.length ? `<h2 class="biz-section-title">영상</h2>${gallery(vids)}` : ""}
     ${!media.length && !prods.length ? `<p class="empty">아직 등록된 제품·사진이 없습니다.</p>` : ""}
+    ${wayToCome}
     <div class="section-more"><a href="${base}/businesses" class="btn btn-ghost btn-sm">← 다른 점포 보기</a></div>
   </div></section>`;
   const cover = images[0] || null; // 카톡 공유 미리보기용 대표 사진
@@ -230,7 +247,7 @@ export async function businessDetail(ctx) {
     description: clip(b.description) || `${assoc.name} · ${b.category} · ${b.name}`,
     ogImage: cover ? (cover.thumb || cover.filename) : "",
     jsonLd: ld,
-    scripts: `${media.length ? `<script src="/js/viewer.js" defer></script>` : ""}<script src="/js/share.js" defer></script>` }));
+    scripts: `${media.length ? `<script src="/js/viewer.js" defer></script>` : ""}<script src="/js/share.js" defer></script>${hasGeo ? `<script src="https://oapi.map.naver.com/openapi/v3/maps.js?${esc(env.NAVER_MAP_PARAM || "ncpClientId")}=${esc(naverKey)}"></script><script src="/js/map.js" defer></script>` : ""}` }));
 }
 
 export function loginForm(ctx) {
@@ -459,6 +476,47 @@ export function registerForm(ctx) {
   return html(layout({ title: "가입", assoc, base, body, csrf, scripts: turnstileScript(env) }));
 }
 
+// ================= 초대 링크 가입 (관리자가 가게 정보를 미리 채움) =================
+export async function invitePage(ctx) {
+  const { env, assoc, base, query, csrf } = ctx;
+  const inv = await verifyInviteToken(env.SESSION_SECRET, query.get("t"), assoc.id);
+  if (!inv) {
+    const body = `<section class="section page-top"><div class="container auth-wrap"><div class="auth-card">
+      ${authHead("초대 링크 만료", "링크가 만료되었거나 올바르지 않습니다.")}
+      <p class="auth-note">상인회 관리자에게 새 초대 링크를 요청해 주세요. 직접 가입하려면 <a href="${base}/register">가입 신청</a>을 이용할 수 있습니다.</p></div></div></section>`;
+    return html(layout({ title: "초대", assoc, base, body, csrf }));
+  }
+  const body = `<section class="section page-top"><div class="container auth-wrap"><div class="auth-card">
+    ${authHead(`${inv.b} 사장님, 환영합니다!`, `${assoc.name}에서 초대했습니다. 아래만 입력하면 가게 페이지가 바로 열립니다.`)}${flashOf(query)}
+    <div class="invite-summary"><span class="chip">${esc(inv.c || "기타")}</span> <strong>${esc(inv.b)}</strong></div>
+    <form method="post" action="${base}/invite" class="stack-form">
+      <input type="hidden" name="token" value="${esc(query.get("t") || "")}" />
+      <label>사장님 성함<input type="text" name="name" required maxlength="60" autocomplete="name" /></label>
+      <label>이메일<input type="email" name="email" required autocomplete="email" /></label>
+      <label>비밀번호 (8자 이상)<input type="password" name="password" required minlength="8" autocomplete="new-password" /></label>
+      <label class="check"><input type="checkbox" name="agree" value="1" required /> <a href="/privacy" target="_blank">개인정보 수집·이용</a>에 동의합니다.</label>
+      <button class="btn btn-primary btn-block">가게 열기</button>
+    </form><p class="auth-note">관리자 초대라 승인 절차 없이 바로 공개됩니다.</p></div></div></section>`;
+  return html(layout({ title: "초대 가입", assoc, base, body, csrf }));
+}
+
+// ================= 방문자 문의 =================
+export function contactForm(ctx) {
+  const { env, assoc, base, query, csrf, user } = ctx;
+  const body = `<section class="section page-top"><div class="container auth-wrap"><div class="auth-card">
+    ${authHead(`${assoc.name}에 문의`, "가입·행사·제휴 등 무엇이든 남겨주세요. 확인 후 연락드립니다.")}${flashOf(query)}
+    <form method="post" action="${base}/contact" class="stack-form">
+      <input type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px" />
+      <div class="form-two"><label>성함<input type="text" name="name" required maxlength="60" autocomplete="name" /></label>
+        <label>연락처 (전화 또는 이메일)<input type="text" name="contact" required maxlength="120" /></label></div>
+      <label>문의 내용<textarea name="message" rows="6" required maxlength="2000"></textarea></label>
+      <label class="check"><input type="checkbox" name="agree" value="1" required /> 회신 목적의 <a href="/privacy" target="_blank">개인정보 수집·이용</a>에 동의합니다.</label>
+      ${turnstileWidget(env)}
+      <button class="btn btn-primary btn-block">문의 보내기</button>
+    </form>${assoc.phone ? `<p class="auth-note">급하신 경우 전화 ${esc(assoc.phone)}</p>` : ""}</div></div></section>`;
+  return html(layout({ title: "문의", assoc, base, user, body, csrf, scripts: turnstileScript(env) }));
+}
+
 // ================= 대시보드 (내 업체) =================
 export async function dashboard(ctx) {
   const { db, env, assoc, base, user, query, csrf } = ctx;
@@ -466,6 +524,7 @@ export async function dashboard(ctx) {
   if (!b || b.association_id !== assoc.id) return html(layout({ title: "대시보드", assoc, base, user, body: `<section class="section page-top"><div class="container"><p class="empty">연결된 업체가 없습니다.</p></div></section>`, csrf }));
   const media = await D.listMedia(db, b.id);
   const products = await D.listProducts(db, b.id, { includeHidden: true });
+  const coupons = await D.listCoupons(db, b.id);
   const plan = PLANS[assoc.plan] || PLANS.free;
   const prodMax = plan.maxProducts === Infinity ? "무제한" : plan.maxProducts;
   const productRows = products.length ? products.map((p) => `<div class="prod-row${p.sold_out ? " sold" : ""}">
@@ -494,6 +553,24 @@ export async function dashboard(ctx) {
       <div class="form-two"><label>제품 이름<input name="name" required /></label><label>가격 <small>(선택)</small><input name="price" placeholder="예: 8,000원 · 시가 · 미표기" /></label></div>
       <label>한 줄 설명 <small>(선택)</small><input name="description" maxlength="300" /></label>
       <button class="btn btn-primary btn-sm">제품 추가</button></form></section>
+    <section class="panel" id="d-coupons"><h2 class="panel-title">쿠폰·혜택 <span class="badge badge-muted">${coupons.length}/5</span></h2>
+      <p class="panel-hint">손님이 매장에서 <strong>이 화면을 보여주면</strong> 제공하는 혜택입니다. 결제·발급 기능이 없어 부담 없이 운영할 수 있어요. 기한이 지나면 자동으로 내려갑니다.</p>
+      ${coupons.length ? `<ul class="coupon-admin-list">${coupons.map((c) => {
+        const expired = c.valid_until && c.valid_until < new Date().toISOString().slice(0, 10);
+        return `<li class="coupon-admin${expired ? " is-expired" : ""}"><div class="ca-text"><strong>${esc(c.title)}</strong>${c.terms ? `<small>${esc(c.terms)}</small>` : ""}<small>${c.valid_until ? `~${esc(c.valid_until)}` : "무기한"}${expired ? " · 기간 종료(비노출)" : ""}</small></div>
+          <form method="post" action="${base}/dashboard/coupons/${c.id}/delete" data-confirm="이 쿠폰을 삭제할까요?"><button class="link-danger">삭제</button></form></li>`;
+      }).join("")}</ul>` : `<p class="empty">등록한 쿠폰이 없습니다. 첫 쿠폰으로 손님을 맞아보세요.</p>`}
+      <h3 class="panel-subtitle">쿠폰 추가</h3>
+      <form method="post" action="${base}/dashboard/coupons" class="stack-form compact">
+        <label>혜택 내용<input name="title" required maxlength="80" placeholder="예: 어묵 1개 서비스" /></label>
+        <div class="form-two"><label>조건 <small>(선택)</small><input name="terms" maxlength="120" placeholder="예: 2만원 이상 주문 시" /></label>
+          <label>유효기한 <small>(선택·비우면 무기한)</small><input type="date" name="valid_until" /></label></div>
+        <button class="btn btn-primary btn-sm">쿠폰 등록</button></form></section>
+    <section class="panel urdeal-promo">
+      <span class="up-badge">운영사 서비스</span>
+      <h2 class="panel-title">이용권·동네딜을 온라인으로 팔고 싶다면</h2>
+      <p class="panel-hint">이곳의 쿠폰은 보여주기 혜택(결제 없음)입니다. 할인 이용권·기프티콘 교환권을 <strong>실제로 판매</strong>하려면 운영사의 커머스 <strong>유어딜</strong>과 함께하세요.</p>
+      <a class="btn btn-ghost btn-sm" href="https://live.ur-team.com/" target="_blank" rel="noopener">유어딜 알아보기 →</a></section>
     <section class="panel"><h2 class="panel-title">가게 QR 코드</h2>
       <p class="panel-hint">인쇄해서 계산대·출입문에 붙여보세요. 손님이 스캔하면 우리 가게 페이지가 열립니다.</p>
       <div id="qrWidget" class="qr-widget" data-url="${base}/business/${esc(b.slug)}" data-name="${esc(b.name)}">
@@ -653,6 +730,16 @@ export async function admin(ctx) {
     <section class="panel" id="p-members"><div class="panel-head"><h2 class="panel-title">회원 관리 <span class="badge badge-muted">${members.length}명</span></h2>
       <span class="pill-row">${members.length ? `<a class="btn btn-xs btn-ghost" href="${base}/admin/members.csv">명단 CSV</a>` : ""}<a class="btn btn-xs btn-ghost" href="${base}/admin/export.json">전체 백업(JSON)</a></span></div>
       <div class="table-scroll"><table class="admin-table"><thead><tr><th>회원</th><th>업체</th><th>비밀번호</th></tr></thead><tbody>${memberRows}</tbody></table></div>
+      ${query.get("invite") ? `<div class="invite-box">
+        <p class="invite-box-title">✅ 초대 링크가 만들어졌습니다 <small>(7일 유효)</small></p>
+        <input type="text" class="invite-url" value="${esc(`${ORIGIN}${base}/invite?t=${encodeURIComponent(query.get("invite"))}`)}" readonly onclick="this.select()" />
+        <span class="pill-row"><button type="button" class="btn btn-sm btn-primary" data-share data-share-url="${esc(`${ORIGIN}${base}/invite?t=${encodeURIComponent(query.get("invite"))}`)}" data-share-title="${esc(assoc.name)} 입점 초대">카톡으로 보내기 / 복사</button></span>
+        <p class="panel-hint">사장님이 링크를 열어 이메일·비밀번호만 정하면 가게가 <b>승인 절차 없이 바로 공개</b>됩니다.</p></div>` : ""}
+      <details class="help-box" style="margin-top:14px" ${query.get("invite") ? "" : "open"}><summary>📨 사장님 초대 링크 만들기 (가장 쉬운 온보딩)</summary>
+        <div class="help-body"><p class="help-lead">가게 이름만 입력해 링크를 만들고 카톡으로 보내세요. 사장님은 이메일·비밀번호만 정하면 끝 — 가게가 바로 공개됩니다.</p>
+        <form method="post" action="${base}/admin/invite" class="stack-form compact">
+          <div class="form-two"><label>가게 이름<input type="text" name="biz_name" required maxlength="100" /></label><label>업종<select name="category">${CATEGORIES.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("")}</select></label></div>
+          <button class="btn btn-primary btn-sm">초대 링크 만들기</button></form></div></details>
       <details class="help-box" style="margin-top:14px"><summary>사장님 대신 등록하기 (대행)</summary>
         <div class="help-body"><p class="help-lead">사장님이 직접 못 하실 때 총무가 대신 계정을 만들어 드립니다. 임시 비밀번호를 전달하세요. (대행 등록은 참여 계측에 '대행'으로 집계됩니다.)</p>
         <form method="post" action="${base}/admin/members/add" class="stack-form compact">
@@ -695,7 +782,7 @@ export async function admin(ctx) {
         <ul class="admin-mini-list">${eventRows}</ul></section>
     </div>
     </div></div></div></section>`;
-  return html(layout({ title: "관리자", assoc, base, user, body, activeNav: `${base}/admin`, csrf, scripts: `<script src="/js/layout-editor.js" defer></script><script src="/js/upload-resize.js" defer></script>` }));
+  return html(layout({ title: "관리자", assoc, base, user, body, activeNav: `${base}/admin`, csrf, scripts: `<script src="/js/layout-editor.js" defer></script><script src="/js/upload-resize.js" defer></script><script src="/js/share.js" defer></script>` }));
 }
 
 // 관리자 온보딩 체크리스트 (모두 완료되면 자동으로 사라짐)
@@ -1091,6 +1178,11 @@ export async function platformLanding(ctx) {
   <section class="section section-alt"><div class="container">
     <div class="section-head"><h2 class="section-title">함께하는 상인회</h2></div>
     <div class="landing-assoc-grid">${cards}</div></div></section>
+  <section class="section"><div class="container">
+    <a class="family-banner" href="https://live.ur-team.com/" target="_blank" rel="noopener">
+      <span class="fb-badge">FAMILY SERVICE</span>
+      <span class="fb-text"><strong>유어딜 — 돈버는 쇼핑</strong><em>할인 이용권·기프티콘 교환권·동네딜. 우리 상권 가게의 매출 채널이 되어드립니다.</em></span>
+      <span class="fb-chev" aria-hidden="true">→</span></a></div></section>
   <section class="section section-dark"><div class="container cta-inner">
     <h2 class="section-title">지금 우리 상권도 시작해보세요</h2>
     <p class="section-lead">신청은 무료입니다. 검토 후 관리자 계정을 발급해 드립니다.</p>
