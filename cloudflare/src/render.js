@@ -52,9 +52,17 @@ ${ogImgAbs ? `<meta property="og:image" content="${esc(ogImgAbs)}" />` : ""}
 </header>
 <main>${injected}</main>
 <footer class="site-footer"><div class="container">
-  <p>© ${brand}</p>
-  ${assoc && (assoc.phone || assoc.address) ? `<p class="foot-contact">${assoc.address ? esc(assoc.address) : ""}${assoc.phone ? " · " + esc(assoc.phone) : ""}</p>` : ""}
-  <p class="foot-links"><a href="/terms">이용약관</a> · <a href="/privacy">개인정보처리방침</a></p>
+  <div class="foot-top">
+    <nav class="foot-policy"><a href="/privacy" class="strong">개인정보처리방침</a><span class="sep"></span><a href="/terms">이용약관</a></nav>
+  </div>
+  <div class="foot-bottom">
+    <span class="foot-mark" aria-hidden="true">${STOREFRONT_SVG}</span>
+    <div class="foot-info">
+      <strong>${brand}</strong>
+      ${assoc && (assoc.phone || assoc.address) ? `<p>${assoc.address ? esc(assoc.address) : ""}${assoc.phone ? `${assoc.address ? " · " : ""}문의 ${esc(assoc.phone)}` : ""}</p>` : ""}
+      <p class="foot-copy">COPYRIGHT © ${new Date().getFullYear()} ${brand}. ALL RIGHTS RESERVED.</p>
+    </div>
+  </div>
 </div></footer>
 <script src="${assetUrl("/js/app.js")}" defer></script>${scripts}
 </body></html>`;

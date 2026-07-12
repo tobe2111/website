@@ -90,8 +90,9 @@ export async function createBusiness(db, { associationId, ownerId, name, categor
   return getBusinessById(db, await lastId(db));
 }
 export function updateBusiness(db, id, f) {
-  return run(db, "UPDATE businesses SET name=?, category=?, description=?, phone=?, address=?, hours=?, lat=?, lng=?, updated_at=datetime('now') WHERE id=?",
-    f.name, f.category, f.description, f.phone, f.address, f.hours, f.lat ?? null, f.lng ?? null, id);
+  return run(db, "UPDATE businesses SET name=?, category=?, description=?, phone=?, address=?, hours=?, lat=?, lng=?, sns_instagram=?, sns_youtube=?, sns_blog=?, sns_kakao=?, updated_at=datetime('now') WHERE id=?",
+    f.name, f.category, f.description, f.phone, f.address, f.hours, f.lat ?? null, f.lng ?? null,
+    f.snsInstagram || "", f.snsYoutube || "", f.snsBlog || "", f.snsKakao || "", id);
 }
 // 콘텐츠 활동(사진 추가 등) 발생 시 갱신 시각 터치 — '살아있는 홈' 계측용
 export const touchBusiness = (db, id) => run(db, "UPDATE businesses SET updated_at=datetime('now') WHERE id=?", id);

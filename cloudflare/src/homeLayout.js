@@ -60,17 +60,17 @@ export function defaultLayout(assocName = "우리 상인회") {
     {
       type: "hero",
       enabled: true,
-      eyebrow: "지역 상권 공식 커뮤니티",
-      title: "함께 성장하는 상권을 만듭니다",
-      highlight: "함께",
-      subtitle: "업체 소개, 사진·영상 홍보, 공동 마케팅으로 활기찬 상권을 함께 만들어갑니다.",
-      primaryLabel: "우리 업체 등록하기",
-      showStats: true,
+      eyebrow: "",
+      title: "이웃님, 안녕하세요 👋\n가까운 가게를 찾아보세요.",
+      highlight: "",
+      subtitle: "",
+      primaryLabel: "",
+      showStats: false,
     },
-    { type: "businesses", enabled: true, title: "우리 동네 업체", lead: "상인회에 소속된 업체들을 만나보세요. 사진과 영상도 확인할 수 있습니다." },
-    { type: "mapbanner", enabled: true, title: "지도에서 한눈에 보기", subtitle: "우리 동네 가게들을 지도에서 찾아보세요" },
-    { type: "notices", enabled: true, title: "공지사항" },
-    { type: "events", enabled: true, title: "다가오는 행사·이벤트" },
+    { type: "businesses", enabled: true, title: "지금 문 연 가게", lead: "" },
+    { type: "mapbanner", enabled: true, title: "우리 동네 점포 지도", subtitle: "" },
+    { type: "notices", enabled: true, title: "동네 소식" },
+    { type: "events", enabled: true, title: "다가오는 행사" },
     { type: "cta", enabled: true, title: "아직 회원이 아니신가요?", body: "지금 업체를 등록하면 나만의 업체 페이지에 사진·영상을 올리고 상권 홍보에 함께할 수 있습니다.", buttonLabel: "무료로 업체 등록하기" },
   ];
 }
@@ -85,7 +85,7 @@ export function parseLayout(json, assocName) {
     // 구버전 저장 레이아웃 업그레이드: 지도 배너가 없으면 업체 섹션 뒤에 추가
     if (!out.some((s) => s.type === "mapbanner")) {
       const i = out.findIndex((s) => s.type === "businesses");
-      out.splice(i >= 0 ? i + 1 : out.length, 0, { type: "mapbanner", enabled: true, title: "지도에서 한눈에 보기", subtitle: "우리 동네 가게들을 지도에서 찾아보세요" });
+      out.splice(i >= 0 ? i + 1 : out.length, 0, { type: "mapbanner", enabled: true, title: "우리 동네 점포 지도", subtitle: "" });
     }
     return out;
   } catch {
@@ -146,14 +146,17 @@ function renderSection(s, deps) {
         "",
         `<div class="free-text container narrow">${esc(s.body || "").replace(/\n/g, "<br />")}</div>`
       );
-    case "mapbanner":
+    case "mapbanner": {
+      const n = deps.counts ? deps.counts.businesses : 0;
+      const sub = s.subtitle || (n > 0 ? `${n}곳이 지도 위에. 가까운 가게를 한눈에 찾아요.` : "가까운 가게를 지도에서 한눈에 찾아요.");
       return `<section class="section" style="padding-top:0"><div class="container">
         <a href="${deps.base}/map" class="map-banner">
           <span class="mb-glow" aria-hidden="true"></span>
-          <span class="mb-ico" aria-hidden="true"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="2.6"/></svg></span>
-          <span class="mb-text"><strong>${esc(s.title || "지도에서 한눈에 보기")}</strong><em>${esc(s.subtitle || "")}</em></span>
+          <span class="mb-text"><strong>${esc(s.title || "우리 동네 점포 지도")}</strong><em>${esc(sub)}</em></span>
+          <span class="mb-map" aria-hidden="true"><svg viewBox="0 0 24 24" width="86" height="86" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg></span>
           <span class="mb-chev" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></span>
         </a></div></section>`;
+    }
     case "cta":
       return `<section class="section"><div class="container">
         <div class="join-cta">
@@ -170,8 +173,9 @@ function renderSection(s, deps) {
 
 function heroSection(s, deps) {
   const { stats, base } = deps;
-  const title = esc(s.title || "");
-  const hl = s.highlight && title.includes(s.highlight)
+  // 제목: \n 줄바꿈 지원 + 강조 단어 색상 (시안: 인사말 2줄)
+  const title = esc(s.title || "").replace(/\n/g, "<br />");
+  const hl = s.highlight && title.includes(esc(s.highlight))
     ? title.replace(esc(s.highlight), `<span>${esc(s.highlight)}</span>`)
     : title;
   const statsHtml = s.showStats && stats.businesses > 0
@@ -183,17 +187,17 @@ function heroSection(s, deps) {
     : "";
   return `<section class="hero"><div class="hero-bg" aria-hidden="true"></div>
     <div class="container hero-inner">
-      <p class="hero-eyebrow">${esc(s.eyebrow || "")}</p>
+      ${s.eyebrow ? `<p class="hero-eyebrow">${esc(s.eyebrow)}</p>` : ""}
       <h1 class="hero-title">${hl}</h1>
-      <p class="hero-desc">${esc(s.subtitle || "")}</p>
+      ${s.subtitle ? `<p class="hero-desc">${esc(s.subtitle)}</p>` : ""}
       <form class="hero-search" method="get" action="${base}/businesses" role="search">
-        <input type="search" name="q" placeholder="우리 동네 가게·업종 검색" aria-label="점포 검색" />
+        <input type="search" name="q" placeholder="가게 이름, 업종을 검색해 보세요" aria-label="점포 검색" />
         <button class="btn btn-primary" type="submit">검색</button>
       </form>
-      <div class="hero-actions">
-        <a href="${base}/register" class="btn btn-primary">${esc(s.primaryLabel || "업체 등록하기")}</a>
+      ${s.primaryLabel ? `<div class="hero-actions">
+        <a href="${base}/register" class="btn btn-primary">${esc(s.primaryLabel)}</a>
         <a href="${base}/businesses" class="btn btn-ghost">업체 둘러보기</a>
-      </div>
+      </div>` : ""}
       ${statsHtml}
     </div></section>`;
 }

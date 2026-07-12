@@ -127,10 +127,13 @@ export async function updateBusiness(ctx) {
   const coord = (v, mn, mx) => { const s = (v ?? "").trim(); if (s === "") return null; const n = Number(s); return Number.isFinite(n) && n >= mn && n <= mx ? n : undefined; };
   const lat = coord(form.get("lat"), -90, 90), lng = coord(form.get("lng"), -180, 180);
   if (lat === undefined || lng === undefined) return back(base + "/dashboard", "좌표 형식을 확인해 주세요.", true);
+  const snsUrl = (v) => { const t = cap((v || "").trim(), 200); if (!t) return ""; return /^https?:\/\//.test(t) ? t : "https://" + t; };
   await D.updateBusiness(db, b.id, {
     name: cap(form.get("name").trim(), 100), category: cap(form.get("category"), 40),
     description: cap(form.get("description"), 2000), phone: cap(form.get("phone"), 40),
     address: cap(form.get("address"), 200), hours: cap(form.get("hours"), 100), lat, lng,
+    snsInstagram: snsUrl(form.get("sns_instagram")), snsYoutube: snsUrl(form.get("sns_youtube")),
+    snsBlog: snsUrl(form.get("sns_blog")), snsKakao: snsUrl(form.get("sns_kakao")),
   });
   return back(base + "/dashboard", "업체 정보가 저장되었습니다.");
 }

@@ -731,7 +731,7 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .map-banner{position:relative;overflow:hidden;display:flex;align-items:center;gap:16px;padding:clamp(20px,3vw,28px);border-radius:var(--r-xl);color:#fff;background:var(--brand-700);background:linear-gradient(120deg,var(--brand-700),color-mix(in oklab,var(--brand),#12b981 45%));box-shadow:var(--sh-2);transition:transform .2s var(--ease),box-shadow .25s}
 .map-banner:hover{transform:translateY(-2px);box-shadow:var(--sh-3)}
 .mb-glow{position:absolute;right:-30px;top:-55px;width:160px;height:160px;border-radius:999px;background:radial-gradient(circle,rgba(255,255,255,.28),transparent 70%);pointer-events:none}
-.mb-ico{flex:none;display:grid;place-items:center;width:52px;height:52px;border-radius:16px;background:rgba(255,255,255,.18)}
+.mb-map{flex:none;color:rgba(255,255,255,.35);margin:-18px 0 -26px}
 .mb-text{flex:1;min-width:0;display:grid;gap:3px}
 .mb-text strong{font-size:clamp(1.05rem,2.4vw,1.3rem);font-weight:800;letter-spacing:-.02em}
 .mb-text em{font-style:normal;font-size:.9rem;opacity:.88}
@@ -749,9 +749,7 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .event-photo-card:hover{transform:translateY(-3px);box-shadow:var(--sh-2)}
 .event-photo-card img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 .epc-overlay{position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.72),transparent 58%)}
-.epc-date{position:absolute;top:12px;left:12px;display:grid;place-items:center;padding:7px 11px 8px;border-radius:13px;background:var(--surface);box-shadow:var(--sh-2);line-height:1;text-align:center}
-.epc-date em{font-style:normal;font-size:.66rem;font-weight:700;color:var(--brand-700);letter-spacing:.04em}
-.epc-date strong{font-size:1.25rem;font-weight:800;color:var(--ink)}
+.epc-date{align-self:flex-start;padding:5px 11px;border-radius:8px;background:rgba(0,0,0,.55);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);font-size:.8rem;font-weight:700;letter-spacing:.02em}
 .epc-body{position:absolute;left:16px;right:16px;bottom:14px;color:#fff;display:grid;gap:5px}
 .epc-body>strong{font-size:1.15rem;font-weight:800;letter-spacing:-.01em;text-shadow:0 1px 8px rgba(0,0,0,.35)}
 .epc-place{display:inline-flex;align-items:center;gap:5px;font-size:.82rem;opacity:.92}
@@ -770,3 +768,31 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .tc-body em{font-style:normal;font-size:.85rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tc-meta{display:inline-flex;align-items:center;gap:6px;margin-top:6px;font-size:.82rem;font-weight:600;color:var(--ink-soft)}
 .tc-meta svg{width:14px;height:14px;color:var(--brand-700)}
+
+/* 시안 세부 반영: 업체 카드 본문 / 소식 아이콘 / 푸터 / SNS 버튼 */
+.mc-cat{display:block;font-size:.76rem;font-weight:600;color:var(--brand-700);margin-bottom:3px}
+.mc-meta{display:flex;align-items:center;gap:6px;margin-top:7px;font-size:.82rem;color:var(--muted);overflow:hidden}
+.mc-meta svg{flex:none;color:var(--brand-600)}
+.mc-meta span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.market-open{position:absolute;top:10px;left:10px;right:auto}
+.market-open .badge::before{content:"";width:7px;height:7px;border-radius:999px;background:var(--ok);display:inline-block}
+.notice-ico.is-recruit{background:#fdf0e3;color:#c2680f}
+:root[data-theme="dark"] .notice-ico.is-recruit{background:#33230f;color:#eda85c}
+/* 멀티행 푸터 (시안) */
+.site-footer{padding:0}
+.foot-top{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:18px 0;border-bottom:1px solid rgba(255,255,255,.14)}
+.foot-policy{display:flex;align-items:center;gap:14px;font-size:.88rem}
+.foot-policy a{color:rgba(255,255,255,.8)}
+.foot-policy a.strong{color:#fff;font-weight:700}
+.foot-policy .sep{width:1px;height:12px;background:rgba(255,255,255,.25)}
+.foot-bottom{display:flex;gap:14px;align-items:flex-start;padding:24px 0 30px}
+.foot-mark{flex:none;display:grid;place-items:center;width:34px;height:34px;border-radius:9px;background:rgba(255,255,255,.14);color:#fff}
+.foot-mark svg{width:18px;height:18px}
+.foot-info{display:grid;gap:4px}
+.foot-info strong{color:#fff;font-size:.98rem}
+.foot-info p{font-size:.85rem;line-height:1.7}
+.foot-copy{font-size:.76rem;opacity:.75;letter-spacing:.02em;margin-top:4px}
+/* 업체 히어로 SNS 원형 버튼 (시안) */
+.sns-row{display:inline-flex;gap:9px;margin-left:6px}
+.sns-btn{display:grid;place-items:center;width:46px;height:46px;border-radius:999px;background:rgba(255,255,255,.16);color:#fff;transition:background .2s}
+.sns-btn:hover{background:rgba(255,255,255,.3)}

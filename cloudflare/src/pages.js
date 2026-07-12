@@ -50,21 +50,35 @@ const PIN_SVG = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" str
 const PHONE_SVG = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2 4.2 2 2 0 0 1 4 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8.1 9.7a16 16 0 0 0 6 6l1.2-1.1a2 2 0 0 1 2.1-.5c.9.3 1.8.6 2.7.7A2 2 0 0 1 22 16.9z"/></svg>';
 const CLOCK_SVG = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
 const TAG_SVG = '<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 13.4 12 22 2 12V2h10l8.6 8.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.4"/></svg>';
+// 업체 SNS 원형 버튼 (시안: 히어로의 반투명 원형 아이콘 버튼)
+const SNS_DEFS = [
+  ["sns_instagram", "인스타그램", '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1.2" fill="currentColor" stroke="none"/></svg>'],
+  ["sns_youtube", "유튜브", '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M23 12s0-3.8-.5-5.6a2.9 2.9 0 0 0-2-2C18.7 4 12 4 12 4s-6.7 0-8.5.4a2.9 2.9 0 0 0-2 2C1 8.2 1 12 1 12s0 3.8.5 5.6a2.9 2.9 0 0 0 2 2C5.3 20 12 20 12 20s6.7 0 8.5-.4a2.9 2.9 0 0 0 2-2C23 15.8 23 12 23 12z" opacity=".9"/><path d="M10 15.5l6-3.5-6-3.5z" fill="var(--brand-800,#083f2b)"/></svg>'],
+  ["sns_blog", "네이버 블로그", '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><text x="12" y="17" text-anchor="middle" font-size="15" font-weight="800" font-family="sans-serif">b</text></svg>'],
+  ["sns_kakao", "카카오톡 채널", '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 3C6.5 3 2 6.6 2 11c0 2.8 1.8 5.2 4.6 6.6L5.5 21l4-2.3c.8.2 1.6.3 2.5.3 5.5 0 10-3.6 10-8S17.5 3 12 3z"/></svg>'],
+];
+function snsButtons(b) {
+  const btns = SNS_DEFS.filter(([k]) => b[k]).map(([k, label, ico]) =>
+    `<a class="sns-btn" href="${esc(b[k])}" target="_blank" rel="noopener" aria-label="${label}" title="${label}">${ico}</a>`).join("");
+  return btns ? `<span class="sns-row">${btns}</span>` : "";
+}
+
+// 업체 카드 (시안: 영업중 dot pill 좌상단 · 본문 = 카테고리 라벨/이름/한 줄 메타)
 function businessCard(base, b, cover) {
   const thumb = cover
     ? `<img src="${esc(mediaUrl(cover.thumb || cover.filename))}" alt="" loading="lazy" />`
     : `<span class="thumb-mono" aria-hidden="true">${esc(b.name.slice(0, 1))}</span>`;
   const open = openBadge(b.hours);
+  const meta = [b.address, b.hours].filter(Boolean).join(" · ");
   return `<article class="market-card">
     <a href="${base}/business/${esc(b.slug)}" class="market-thumb${cover ? " has-img" : ""}">
       ${thumb}
-      <span class="market-cat">${esc(b.category)}</span>
       ${open ? `<span class="market-open">${open}</span>` : ""}
     </a>
     <div class="market-body">
+      <span class="mc-cat">${esc(b.category)}</span>
       <h3><a href="${base}/business/${esc(b.slug)}">${esc(b.name)}</a></h3>
-      <p>${esc(b.description || "소개가 곧 등록됩니다.")}</p>
-      ${b.address || b.phone ? `<ul class="market-meta">${b.address ? `<li>${PIN_SVG}${esc(b.address)}</li>` : ""}${b.phone ? `<li>${PHONE_SVG}${esc(b.phone)}</li>` : ""}</ul>` : ""}
+      ${meta ? `<p class="mc-meta">${PIN_SVG}<span>${esc(meta)}</span></p>` : ""}
     </div></article>`;
 }
 
@@ -74,8 +88,7 @@ function eventCard(e) {
   if (e.image) return `<article class="event-photo-card">
     <img src="${esc(mediaUrl(e.image))}" alt="" loading="lazy" />
     <span class="epc-overlay" aria-hidden="true"></span>
-    <span class="epc-date"><em>${esc(mo)}</em><strong>${esc(d)}</strong></span>
-    <span class="epc-body"><strong>${esc(e.title)}</strong>${e.place ? `<span class="epc-place">${PIN_SVG}${esc(e.place)}</span>` : ""}</span>
+    <span class="epc-body"><span class="epc-date">${Number(e.event_date.slice(5, 7))}.${Number(d)}</span><strong>${esc(e.title)}</strong>${e.place ? `<span class="epc-place">${PIN_SVG}${esc(e.place)}</span>` : ""}</span>
   </article>`;
   return `<article class="event-card"><div class="event-date"><span class="d">${d}</span><span class="m">${mo}</span></div>
       <div class="event-info"><h3>${esc(e.title)}</h3><p>${esc(e.description)}</p>${e.place ? `<span class="event-place">${PIN_SVG}${esc(e.place)}</span>` : ""}</div></article>`;
@@ -91,7 +104,7 @@ export async function home(ctx) {
   const events = await D.listEvents(db, assoc.id, true);
   const stats = await D.stats(db, assoc.id);
   const cats = await D.distinctCategories(db, assoc.id);
-  const catTiles = cats.length ? `<div class="cat-grid">${cats.map((c) => `<a class="cat-tile" href="${base}/businesses?category=${encodeURIComponent(c.category)}"><span class="cat-ico">${catIcon(c.category)}</span><span class="cat-name">${esc(c.category)}</span><span class="cat-count">${c.n}</span></a>`).join("")}<a class="cat-tile cat-all" href="${base}/businesses"><span class="cat-ico">${catIcon("전체")}</span><span class="cat-name">전체보기</span></a></div>` : "";
+  const catTiles = cats.length ? `<div class="cat-grid">${cats.map((c) => `<a class="cat-tile" href="${base}/businesses?category=${encodeURIComponent(c.category)}"><span class="cat-ico">${catIcon(c.category)}</span><span class="cat-name">${esc(c.category)}</span></a>`).join("")}<a class="cat-tile cat-all" href="${base}/businesses"><span class="cat-ico">${catIcon("전체")}</span><span class="cat-name">전체보기</span></a></div>` : "";
   const eventsHtml = events.map(eventCard).join("");
   const body = renderHome(lay, {
     assoc, base, stats, businessesHtml, catTiles, eventsHtml, loggedIn: !!user,
@@ -169,6 +182,7 @@ export async function businessDetail(ctx) {
     </ul>
     <div class="biz-actions">
       <button type="button" class="btn btn-share" data-share data-share-title="${esc(b.name)} — ${esc(assoc.name)}">${SHARE_SVG} 가게 공유하기</button>
+      ${snsButtons(b)}
     </div></div></section>
   <section class="section"><div class="container">
     ${productGrid}
@@ -237,9 +251,12 @@ export async function mapPage(ctx) {
 const SHARE_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="12" r="2.6"/><circle cx="17.5" cy="5.5" r="2.6"/><circle cx="17.5" cy="18.5" r="2.6"/><path d="M8.4 10.8l6.8-4M8.4 13.2l6.8 4"/></svg>';
 const CHEV_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>';
 const BELL_SVG = '<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 8-3 8h18s-3-1-3-8"/><path d="M13.7 20a2 2 0 0 1-3.4 0"/></svg>';
+const SEND_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>';
+const DOC_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h6"/></svg>';
+const noticeIco = (n) => n.pinned ? BELL_SVG : (/모집|참여|이벤트/.test(n.tag) ? SEND_SVG : DOC_SVG);
 function noticeRows(base, list) {
   return list.length ? list.map((n) => `<li><a href="${base}/notices/${n.id}">
-    ${n.image ? `<img class="notice-ico notice-thumb-img" src="${esc(mediaUrl(n.image))}" alt="" loading="lazy" />` : `<span class="notice-ico${n.pinned ? " is-pinned" : ""}">${BELL_SVG}</span>`}
+    ${n.image ? `<img class="notice-ico notice-thumb-img" src="${esc(mediaUrl(n.image))}" alt="" loading="lazy" />` : `<span class="notice-ico${n.pinned ? " is-pinned" : ""}${/모집|참여|이벤트/.test(n.tag) ? " is-recruit" : ""}">${noticeIco(n)}</span>`}
     <span class="notice-main">
       <span class="notice-title">${n.pinned ? '<em class="pin-mini">고정</em>' : ""}${esc(n.title)}</span>
       <span class="notice-meta">${esc(n.tag)} · ${esc(n.created_at.slice(0, 10).replace(/-/g, "."))}</span>
@@ -470,6 +487,11 @@ export async function dashboard(ctx) {
           <label>소개<textarea name="description" rows="4">${esc(b.description)}</textarea></label>
           <div class="form-two"><label>전화<input type="tel" name="phone" value="${esc(b.phone)}" /></label><label>영업시간<input type="text" name="hours" value="${esc(b.hours)}" /></label></div>
           <label>주소<input type="text" name="address" value="${esc(b.address)}" /></label>
+          <div class="form-divider">SNS 링크 <small style="font-weight:400;color:var(--muted)">(선택 · 가게 페이지에 버튼으로 표시)</small></div>
+          <div class="form-two"><label>인스타그램<input type="url" name="sns_instagram" value="${esc(b.sns_instagram || "")}" placeholder="instagram.com/가게계정" /></label>
+            <label>유튜브<input type="url" name="sns_youtube" value="${esc(b.sns_youtube || "")}" placeholder="youtube.com/@채널" /></label></div>
+          <div class="form-two"><label>네이버 블로그<input type="url" name="sns_blog" value="${esc(b.sns_blog || "")}" placeholder="blog.naver.com/아이디" /></label>
+            <label>카카오톡 채널<input type="url" name="sns_kakao" value="${esc(b.sns_kakao || "")}" placeholder="pf.kakao.com/_채널" /></label></div>
           <div class="form-divider">지도 위치</div>
           ${naver ? `<div id="pickMap" class="pick-map" data-center-lat="${b.lat ?? assoc.map_lat}" data-center-lng="${b.lng ?? assoc.map_lng}" data-zoom="16"></div><p class="panel-hint">지도를 클릭하면 좌표가 입력됩니다.</p>` : `<p class="panel-hint">위도·경도를 입력하면 지도에 표시됩니다.</p>`}
           <div class="form-two"><label>위도<input type="text" inputmode="decimal" name="lat" id="latInput" value="${b.lat != null ? esc(String(b.lat)) : ""}" /></label><label>경도<input type="text" inputmode="decimal" name="lng" id="lngInput" value="${b.lng != null ? esc(String(b.lng)) : ""}" /></label></div>

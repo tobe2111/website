@@ -77,6 +77,10 @@ CREATE TABLE IF NOT EXISTS businesses (
   lat            REAL,
   lng            REAL,
   status         TEXT NOT NULL DEFAULT 'pending',
+  sns_instagram  TEXT NOT NULL DEFAULT '',
+  sns_youtube    TEXT NOT NULL DEFAULT '',
+  sns_blog       TEXT NOT NULL DEFAULT '',
+  sns_kakao      TEXT NOT NULL DEFAULT '',
   source         TEXT NOT NULL DEFAULT 'self',   -- 'self'(사장님 직접) | 'proxy'(관리자 대행) — 핵심 가설 계측
   created_at     TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at     TEXT,                            -- 콘텐츠 갱신 시각(살아있는 홈 판정)
@@ -261,6 +265,11 @@ async function migrateColumns(db) {
     }
     if (!bcols.some((c) => c.name === "updated_at")) {
       await db.prepare("ALTER TABLE businesses ADD COLUMN updated_at TEXT").run();
+    }
+    for (const col of ["sns_instagram", "sns_youtube", "sns_blog", "sns_kakao"]) {
+      if (!bcols.some((c) => c.name === col)) {
+        await db.prepare(`ALTER TABLE businesses ADD COLUMN ${col} TEXT NOT NULL DEFAULT ''`).run();
+      }
     }
   }
   // products 표가 없으면 생성 (기존 배포 업그레이드): 점포 제품 진열
