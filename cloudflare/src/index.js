@@ -4,7 +4,7 @@ import { SESSION_COOKIE, CSRF_COOKIE, ensureCsrfSeed, csrfToken, csrfValid, user
 import * as D from "./db.js";
 import * as pages from "./pages.js";
 import * as api from "./api.js";
-import { setMediaBase, setOrigin, layout } from "./render.js";
+import { setMediaBase, setOrigin, setAssetVer, layout } from "./render.js";
 import { html, text, redirect, notFoundResponse, forbidden } from "./http.js";
 import { ensureSchema } from "./schema.js";
 import { resolveSessionSecret } from "./secrets.js";
@@ -183,10 +183,18 @@ async function handle(request, env) {
   const isProd = (env.PUBLIC_SCHEME || "https") === "https";
   setMediaBase(env.MEDIA_PUBLIC_BASE || "");
   setOrigin(url.origin); // og:image 등 절대 URL 조립용
+  // 배포 버전을 CSS/JS 주소에 붙여 옛 캐시 자동 무력화 (배포마다 새 주소)
+  setAssetVer(env.CF_VERSION_METADATA && env.CF_VERSION_METADATA.id);
 
   // 정적 자산 (css/js/img/아이콘/PWA)
   if (/^\/(css|js|img|favicon)/.test(pathname) || pathname === "/manifest.webmanifest" || pathname === "/sw.js") {
-    if (env.ASSETS) return env.ASSETS.fetch(request);
+    if (env.ASSETS) {
+      const res = await env.ASSETS.fetch(request);
+      // ?v= 버전 주소 = 배포마다 바뀜 → 1년 불변 캐시. 무버전 주소 = 매번 재검증(옛 캐시 자가치유).
+      const h = new Headers(res.headers);
+      h.set("Cache-Control", url.searchParams.has("v") ? "public, max-age=31536000, immutable" : "no-cache");
+      return new Response(res.body, { status: res.status, headers: h });
+    }
   }
   // R2 미디어 서빙 (퍼블릭 base 미설정 시 워커 경유)
   if (pathname.startsWith("/media/")) return serveMedia(env, pathname.slice("/media/".length));

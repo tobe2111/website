@@ -33,7 +33,7 @@ ${ogImgAbs ? `<meta property="og:image" content="${esc(ogImgAbs)}" />` : ""}
 <title>${esc(title ? title + " · " : "")}${brand}</title>${meta}${og}
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css" />
-<link rel="stylesheet" href="/css/app.css" />
+<link rel="stylesheet" href="${assetUrl("/css/app.css")}" />
 <style>:root{--brand:${brandColor}}</style>
 <link rel="manifest" href="/manifest.webmanifest" />
 <meta name="theme-color" content="${brandColor}" />
@@ -55,7 +55,7 @@ ${ogImgAbs ? `<meta property="og:image" content="${esc(ogImgAbs)}" />` : ""}
   ${assoc && (assoc.phone || assoc.address) ? `<p class="foot-contact">${assoc.address ? esc(assoc.address) : ""}${assoc.phone ? " · " + esc(assoc.phone) : ""}</p>` : ""}
   <p class="foot-links"><a href="/terms">이용약관</a> · <a href="/privacy">개인정보처리방침</a></p>
 </div></footer>
-<script src="/js/app.js" defer></script>${scripts}
+<script src="${assetUrl("/js/app.js")}" defer></script>${scripts}
 </body></html>`;
 }
 
@@ -103,6 +103,10 @@ export function setMediaBase(b) { MEDIA_BASE = b || ""; }
 // 요청 오리진 (og:image 등 절대 URL 조립용 — index 에서 요청마다 주입)
 export let ORIGIN = "";
 export function setOrigin(o) { ORIGIN = o || ""; }
+// 정적 자산 버전 (배포마다 자동 변경 → 브라우저·CDN 의 옛 CSS/JS 캐시 무력화)
+export let ASSET_VER = "dev";
+export function setAssetVer(v) { if (v) ASSET_VER = String(v).slice(0, 12); }
+export const assetUrl = (path) => `${path}?v=${ASSET_VER}`;
 export function mediaUrl(key) {
   if (!key) return "";
   if (/^https?:\/\//.test(key)) return key;

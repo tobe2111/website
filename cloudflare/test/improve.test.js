@@ -98,3 +98,16 @@ test("전체 백업 JSON + 온보딩 체크리스트", async () => {
   assert.equal(dump.counts.businesses, 1);
   assert.equal(dump.members[0].email, "hong@s.kr");
 });
+
+test("자산 캐시버스터: CSS/JS 주소에 배포 버전 부착 + 캐시 헤더", async () => {
+  const env = makeEnv({ CF_VERSION_METADATA: { id: "deploy1234abcd" } });
+  await seed(env);
+  const h = await (await get(env, jar(), "/t/seocho")).text();
+  assert.match(h, /\/css\/app\.css\?v=deploy123/);
+  assert.match(h, /\/js\/app\.js\?v=deploy123/);
+  // 버전 주소 = 불변 캐시, 무버전 = 재검증
+  const va = await worker.fetch(new Request(B + "/css/app.css?v=deploy1234"), env);
+  assert.match(va.headers.get("cache-control") || "", /immutable/);
+  const nv = await worker.fetch(new Request(B + "/css/app.css"), env);
+  assert.equal(nv.headers.get("cache-control"), "no-cache");
+});
