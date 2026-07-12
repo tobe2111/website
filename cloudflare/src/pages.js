@@ -1,7 +1,7 @@
 // 공개/인증 페이지 핸들러 (async). ctx = { env, db, assoc, base, user, url, query, csrf, params }
 import * as D from "./db.js";
 import { esc, clip, openBadge, fmtBytes } from "./util.js";
-import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG } from "./render.js";
+import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG, ORIGIN } from "./render.js";
 import { html, notFoundResponse, back } from "./http.js";
 import { galleryItem } from "./media-render.js";
 import { providerLabel } from "./embed.js";
@@ -98,12 +98,13 @@ export async function home(ctx) {
   const { db, assoc, base, user, csrf } = ctx;
   const lay = parseLayout(assoc.home_layout, assoc.name);
   // 독립 쿼리는 병렬로 — D1 은 쿼리마다 네트워크 왕복이라 직렬 대기가 TTFB 로 직결됨
-  const [{ items }, notices, events, stats, cats] = await Promise.all([
+  const [{ items }, notices, events, stats, cats, names] = await Promise.all([
     D.listBusinessesPaged(db, assoc.id, { perPage: 6 }),
     D.listNotices(db, assoc.id, 5),
     D.listEvents(db, assoc.id, true),
     D.stats(db, assoc.id),
     D.distinctCategories(db, assoc.id),
+    D.listBusinessNames(db, assoc.id),
   ]);
   const covers = await D.coverImagesFor(db, items.map((b) => b.id));
   const businessesHtml = items.map((b) => businessCard(base, b, covers.get(b.id))).join("");
@@ -113,8 +114,18 @@ export async function home(ctx) {
     assoc, base, stats, businessesHtml, catTiles, eventsHtml, loggedIn: !!user,
     noticesHtml: notices.length ? noticeRows(base, notices) : "",
     counts: { businesses: items.length, notices: notices.length, events: events.length },
+    suggestNames: names.map((r) => r.name),
   });
-  return html(layout({ title: "", assoc, base, user, body, activeNav: `${base}/`, csrf, description: assoc.tagline }));
+  // 검색엔진 구조화 데이터: 상인회 = 조직
+  const orgLd = {
+    "@context": "https://schema.org", "@type": "Organization",
+    name: assoc.name, url: `${ORIGIN}${base}/`,
+    ...(assoc.tagline ? { description: assoc.tagline } : {}),
+    ...(assoc.logo ? { logo: /^https?:\/\//.test(mediaUrl(assoc.logo)) ? mediaUrl(assoc.logo) : ORIGIN + mediaUrl(assoc.logo) } : {}),
+    ...(assoc.phone ? { telephone: assoc.phone } : {}),
+    ...(assoc.address ? { address: { "@type": "PostalAddress", streetAddress: assoc.address, addressCountry: "KR" } } : {}),
+  };
+  return html(layout({ title: "", assoc, base, user, body, activeNav: `${base}/`, csrf, description: assoc.tagline, jsonLd: orgLd }));
 }
 
 function layoutEditor(base, layoutArr) {
@@ -194,9 +205,31 @@ export async function businessDetail(ctx) {
     <div class="section-more"><a href="${base}/businesses" class="btn btn-ghost btn-sm">← 다른 점포 보기</a></div>
   </div></section>`;
   const cover = images[0] || null; // 카톡 공유 미리보기용 대표 사진
+  // 검색엔진 구조화 데이터: 네이버·구글이 가게 정보(주소·전화·좌표)를 리치 결과로 노출
+  const pageUrl = `${ORIGIN}${base}/business/${encodeURIComponent(b.slug)}`;
+  const coverUrl = cover ? mediaUrl(cover.thumb || cover.filename) : "";
+  const ld = [{
+    "@context": "https://schema.org", "@type": "LocalBusiness",
+    name: b.name, url: pageUrl,
+    ...(b.description ? { description: b.description } : {}),
+    ...(b.phone ? { telephone: b.phone } : {}),
+    ...(b.address ? { address: { "@type": "PostalAddress", streetAddress: b.address, addressCountry: "KR" } } : {}),
+    ...(b.lat != null && b.lng != null ? { geo: { "@type": "GeoCoordinates", latitude: b.lat, longitude: b.lng } } : {}),
+    ...(b.hours ? { openingHours: b.hours } : {}),
+    ...(coverUrl ? { image: /^https?:\/\//.test(coverUrl) ? coverUrl : ORIGIN + coverUrl } : {}),
+    parentOrganization: { "@type": "Organization", name: assoc.name, url: `${ORIGIN}${base}/` },
+  }, {
+    "@context": "https://schema.org", "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: assoc.name, item: `${ORIGIN}${base}/` },
+      { "@type": "ListItem", position: 2, name: "가입 점포", item: `${ORIGIN}${base}/businesses` },
+      { "@type": "ListItem", position: 3, name: b.name, item: pageUrl },
+    ],
+  }];
   return html(layout({ title: b.name, assoc, base, user, body, activeNav: `${base}/businesses`, csrf,
     description: clip(b.description) || `${assoc.name} · ${b.category} · ${b.name}`,
     ogImage: cover ? (cover.thumb || cover.filename) : "",
+    jsonLd: ld,
     scripts: `${media.length ? `<script src="/js/viewer.js" defer></script>` : ""}<script src="/js/share.js" defer></script>` }));
 }
 
@@ -292,8 +325,9 @@ export async function noticeDetail(ctx) {
     <div class="article-head"><span class="notice-tag${n.pinned ? " tag-important" : ""}">${esc(n.tag)}</span><time>${esc(n.created_at.slice(0, 10).replace(/-/g, "."))}</time></div>
     <h1 class="article-title">${esc(n.title)}</h1>
     ${n.image ? `<img class="article-image" src="${esc(mediaUrl(n.image))}" alt="${esc(n.title)}" />` : ""}
-    <div class="article-body">${esc(n.body).replace(/\n/g, "<br />")}</div></div></section>`;
-  return html(layout({ title: n.title, assoc, base, user, body, activeNav: `${base}/notices`, csrf, description: clip(n.body) || n.title, ogImage: n.image || "" }));
+    <div class="article-body">${esc(n.body).replace(/\n/g, "<br />")}</div>
+    <div class="article-actions"><button type="button" class="btn btn-share" data-share data-share-title="${esc(n.title)} — ${esc(assoc.name)}">${SHARE_SVG} 공지 공유하기</button></div></div></section>`;
+  return html(layout({ title: n.title, assoc, base, user, body, activeNav: `${base}/notices`, csrf, description: clip(n.body) || n.title, ogImage: n.image || "", scripts: `<script src="/js/share.js" defer></script>` }));
 }
 
 // ================= 행사 =================
@@ -495,7 +529,9 @@ export async function dashboard(ctx) {
           <div class="form-two"><label>네이버 블로그<input type="url" name="sns_blog" value="${esc(b.sns_blog || "")}" placeholder="blog.naver.com/아이디" /></label>
             <label>카카오톡 채널<input type="url" name="sns_kakao" value="${esc(b.sns_kakao || "")}" placeholder="pf.kakao.com/_채널" /></label></div>
           <div class="form-divider">지도 위치</div>
-          ${naver ? `<div id="pickMap" class="pick-map" data-center-lat="${b.lat ?? assoc.map_lat}" data-center-lng="${b.lng ?? assoc.map_lng}" data-zoom="16"></div><p class="panel-hint">지도를 클릭하면 좌표가 입력됩니다.</p>` : `<p class="panel-hint">위도·경도를 입력하면 지도에 표시됩니다.</p>`}
+          ${naver ? `<div class="geo-search"><input type="text" id="geoQuery" value="${esc(b.address)}" placeholder="도로명 주소 (예: 서초대로 123)" aria-label="주소로 좌표 찾기" /><button type="button" class="btn btn-ghost btn-sm" id="geoBtn">주소로 찾기</button></div>
+          <p class="geo-msg panel-hint" id="geoMsg" hidden></p>
+          <div id="pickMap" class="pick-map" data-center-lat="${b.lat ?? assoc.map_lat}" data-center-lng="${b.lng ?? assoc.map_lng}" data-zoom="16"></div><p class="panel-hint">주소로 찾거나, 지도를 직접 클릭하면 좌표가 입력됩니다.</p>` : `<p class="panel-hint">위도·경도를 입력하면 지도에 표시됩니다.</p>`}
           <div class="form-two"><label>위도<input type="text" inputmode="decimal" name="lat" id="latInput" value="${b.lat != null ? esc(String(b.lat)) : ""}" /></label><label>경도<input type="text" inputmode="decimal" name="lng" id="lngInput" value="${b.lng != null ? esc(String(b.lng)) : ""}" /></label></div>
           <button class="btn btn-primary">정보 저장</button></form></section>
       <section class="panel" id="d-media"><h2 class="panel-title">사진 업로드</h2>
@@ -512,7 +548,7 @@ export async function dashboard(ctx) {
     </div>
     ${productPanel}
     </div></section>`;
-  const picker = naver ? `<script src="https://oapi.map.naver.com/openapi/v3/maps.js?${esc(env.NAVER_MAP_PARAM || "ncpClientId")}=${esc(naver)}"></script><script src="/js/map.js" defer></script>` : "";
+  const picker = naver ? `<script src="https://oapi.map.naver.com/openapi/v3/maps.js?${esc(env.NAVER_MAP_PARAM || "ncpClientId")}=${esc(naver)}&submodules=geocoder"></script><script src="/js/map.js" defer></script>` : "";
   return html(layout({ title: "내 업체 관리", assoc, base, user, body, csrf, scripts: `<script src="/js/viewer.js" defer></script><script src="/js/upload-resize.js" defer></script><script src="/js/qr.js" defer></script><script src="/js/qr-widget.js" defer></script>${picker}` }));
 }
 
@@ -891,6 +927,7 @@ export async function superConsole(ctx) {
         <li><b>Web 서비스 URL</b> 에 지도가 표시될 도메인을 <b>추가</b> (예: <code>https://website.tobe211167.workers.dev</code>, 개별 도메인 연결 시 그 도메인도)</li>
         <li>기존 주소는 지우지 말 것 — 미등록 도메인에선 지도가 "인증 실패" 회색 화면이 됩니다</li>
         <li>URL 은 앱당 <b>최대 10개</b> — 초과 시 Maps 앱을 하나 더 만들고, 아래 상인회 목록의 <b>지도 키</b> 칸에 새 앱의 Client ID 를 넣으면 그 상인회만 새 앱을 사용합니다</li>
+        <li>사장님 대시보드의 <b>"주소로 찾기"</b>(주소→좌표 자동 변환)를 쓰려면 같은 Maps 앱에서 <b>Geocoding</b> 서비스도 체크해 주세요 — 미활성이어도 지도 클릭 방식은 그대로 동작합니다</li>
       </ol>
       <h3>개별 도메인 연결 (상인회 1곳당)</h3>
       <ol>

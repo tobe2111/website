@@ -6,7 +6,7 @@ export const STOREFRONT_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="curr
 export const THEME_SUN_SVG = '<svg class="ico-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4 12H2M22 12h-2M5 5l1.4 1.4M17.6 17.6L19 19M19 5l-1.4 1.4M6.4 17.6L5 19"/></svg>';
 export const THEME_MOON_SVG = '<svg class="ico-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.3 6.3 0 0 0 10.5 10.5z"/></svg>';
 
-export function layout({ title, assoc, base = "", user = null, body, activeNav = "", description = "", scripts = "", csrf = "", ogImage = "" }) {
+export function layout({ title, assoc, base = "", user = null, body, activeNav = "", description = "", scripts = "", csrf = "", ogImage = "", jsonLd = null }) {
   const nav = assoc ? navHtml(base, user, activeNav) : "";
   const brand = assoc ? esc(assoc.name) : "상인회 플랫폼";
   const meta = description ? `<meta name="description" content="${esc(description)}" />` : "";
@@ -22,6 +22,9 @@ export function layout({ title, assoc, base = "", user = null, body, activeNav =
 ${description ? `<meta property="og:description" content="${esc(description)}" />` : ""}
 ${ogImgAbs ? `<meta property="og:image" content="${esc(ogImgAbs)}" />` : ""}
 <meta name="twitter:card" content="${ogImgAbs ? "summary_large_image" : "summary"}" />`;
+  // 검색엔진 구조화 데이터 (네이버·구글 리치 결과). ld+json 은 실행되지 않는 데이터 스크립트라 CSP 영향 없음.
+  // JSON 안의 "<" 를 이스케이프해 </script> 조기 종료(HTML 인젝션)를 차단.
+  const ldScript = jsonLd ? `<script type="application/ld+json">${JSON.stringify(jsonLd).replace(/</g, "\\u003c")}</script>` : "";
   // 테넌트 대표색 하나로 사이트 전체 테마 전환 (900~50 스케일 자동 파생). CSS 주입 방지를 위해 HEX 만 허용.
   const brandColor = /^#[0-9a-fA-F]{3,8}$/.test((assoc && assoc.brand_color) || "") ? assoc.brand_color : "#0b6e4f";
   // 모든 POST 폼에 CSRF 히든 필드 주입
@@ -30,7 +33,7 @@ ${ogImgAbs ? `<meta property="og:image" content="${esc(ogImgAbs)}" />` : ""}
     : body;
   return `<!doctype html><html lang="ko"><head>
 <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>${esc(title ? title + " · " : "")}${brand}</title>${meta}${og}
+<title>${esc(title ? title + " · " : "")}${brand}</title>${meta}${og}${ldScript}
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
 <link rel="stylesheet" id="fontCss" media="print" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css" />
 <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css" /></noscript>
@@ -71,7 +74,7 @@ ${ogImgAbs ? `<meta property="og:image" content="${esc(ogImgAbs)}" />` : ""}
 }
 
 function navHtml(base, user, active) {
-  const link = (href, label) => `<a href="${href}"${active === href ? ' class="active"' : ""}>${label}</a>`;
+  const link = (href, label) => `<a href="${href}"${active === href ? ' class="active" aria-current="page"' : ""}>${label}</a>`;
   let items = [
     link(`${base}/`, "소개"),
     link(`${base}/businesses`, "가입 점포"),

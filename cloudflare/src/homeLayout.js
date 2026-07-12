@@ -191,8 +191,9 @@ function heroSection(s, deps) {
       <h1 class="hero-title">${hl}</h1>
       ${s.subtitle ? `<p class="hero-desc">${esc(s.subtitle)}</p>` : ""}
       <form class="hero-search" method="get" action="${base}/businesses" role="search">
-        <input type="search" name="q" placeholder="가게 이름, 업종을 검색해 보세요" aria-label="점포 검색" />
+        <input type="search" name="q" placeholder="가게 이름, 업종을 검색해 보세요" aria-label="점포 검색"${deps.suggestNames && deps.suggestNames.length ? ' list="storeSuggest"' : ""} />
         <button class="btn btn-primary" type="submit">검색</button>
+        ${deps.suggestNames && deps.suggestNames.length ? `<datalist id="storeSuggest">${deps.suggestNames.map((n) => `<option value="${esc(n)}"></option>`).join("")}</datalist>` : ""}
       </form>
       ${s.primaryLabel ? `<div class="hero-actions">
         <a href="${base}/register" class="btn btn-primary">${esc(s.primaryLabel)}</a>

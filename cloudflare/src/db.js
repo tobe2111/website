@@ -103,6 +103,9 @@ export const listBusinessMarkers = (db, aid) =>
            WHERE association_id = ? AND status='approved' AND lat IS NOT NULL AND lng IS NOT NULL`, aid);
 export const distinctCategories = (db, aid) =>
   all(db, "SELECT category, COUNT(*) AS n FROM businesses WHERE association_id=? AND status='approved' GROUP BY category ORDER BY n DESC", aid);
+// 홈 검색 자동완성(datalist)용 — 이름만 가볍게
+export const listBusinessNames = (db, aid, limit = 300) =>
+  all(db, "SELECT name FROM businesses WHERE association_id=? AND status='approved' ORDER BY name LIMIT ?", aid, limit);
 export const listAllBusinesses = (db, aid) =>
   all(db, `SELECT b.*, u.email AS owner_email, u.name AS owner_name FROM businesses b JOIN users u ON u.id=b.owner_id
            WHERE b.association_id=? ORDER BY CASE b.status WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END, b.created_at DESC`, aid);

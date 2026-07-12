@@ -132,9 +132,10 @@ function resolveTenant(env, hostname, pathname) {
 }
 
 function securityHeaders(env) {
-  // 네이버 지도 SDK 는 oapi 로더 외에 *.pstatic.net 에서 스타일 스크립트(JSONP)도 로드함
-  const naver = env.NAVER_MAP_CLIENT_ID ? " https://oapi.map.naver.com https://*.pstatic.net" : "";
-  const naverImg = env.NAVER_MAP_CLIENT_ID ? " https://*.pstatic.net https://*.map.naver.com" : "";
+  // 네이버 지도 SDK 는 oapi 로더 외에 *.pstatic.net 에서 스타일 스크립트(JSONP)도 로드함.
+  // 상인회별 지도 키(map_client_id)만 있고 공용 키가 비어 있어도 동작해야 하므로 항상 허용.
+  const naver = " https://oapi.map.naver.com https://*.pstatic.net";
+  const naverImg = " https://*.pstatic.net https://*.map.naver.com";
   const ts = env.TURNSTILE_SITE_KEY ? " https://challenges.cloudflare.com" : "";
   const cfa = env.CF_ANALYTICS_TOKEN ? " https://static.cloudflareinsights.com" : "";
   const cfaConn = env.CF_ANALYTICS_TOKEN ? " https://cloudflareinsights.com" : "";
@@ -149,6 +150,8 @@ function securityHeaders(env) {
     "X-Content-Type-Options": "nosniff", "X-Frame-Options": "SAMEORIGIN",
     "Referrer-Policy": "strict-origin-when-cross-origin",
     "Permissions-Policy": "geolocation=(), microphone=(), camera=()",
+    // HTTPS 강제 1년 (workers.dev·커스텀 도메인 모두 HTTPS 전용 운영)
+    "Strict-Transport-Security": "max-age=31536000",
     "Content-Security-Policy": csp,
   };
 }
@@ -203,6 +206,14 @@ async function handle(request, env) {
   }
   // R2 미디어 서빙 (퍼블릭 base 미설정 시 워커 경유)
   if (pathname.startsWith("/media/")) return serveMedia(env, pathname.slice("/media/".length));
+
+  // Speculation Rules — 지원 브라우저(크롬 계열)가 링크에 마우스를 올리면 다음 페이지를 미리 받아
+  // 클릭 시 즉시 표시. 전용 MIME 이 필수라 정적 자산이 아닌 여기서 직접 서빙.
+  if (pathname === "/speculationrules.json") {
+    return new Response(JSON.stringify({
+      prefetch: [{ where: { and: [{ href_matches: "/*" }, { not: { href_matches: "/logout" } }] }, eagerness: "moderate" }],
+    }), { headers: { "content-type": "application/speculationrules+json", "cache-control": "public, max-age=86400" } });
+  }
 
   // 최초 실행: 표 자동 생성 + 세션 시크릿 자동 확보 (시크릿·스키마 명령 불필요)
   if (!_schemaReady.has(rawDb)) { await ensureSchema(db); _schemaReady.add(rawDb); }
@@ -312,6 +323,8 @@ async function finalize(res, setCookies, env, timing) {
   const headers = new Headers(res.headers);
   const sec = securityHeaders(env);
   for (const [k, v] of Object.entries(sec)) headers.set(k, v);
+  // 호버 시 다음 페이지 선(先)로딩 — 지원 브라우저만 반응, 나머지는 무시
+  if ((headers.get("content-type") || "").includes("text/html")) headers.set("Speculation-Rules", '"/speculationrules.json"');
   if (timing) headers.set("Server-Timing",
     `db;dur=${timing.db.ms};desc="D1 ${timing.db.n} queries", app;dur=${Date.now() - timing.t0};desc="worker total"`);
   for (const c of setCookies) headers.append("set-cookie", c);

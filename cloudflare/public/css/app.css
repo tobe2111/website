@@ -519,6 +519,13 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 @media (prefers-reduced-motion:reduce){.map-pin{animation:none}}
 .map-store[data-lat]{cursor:pointer;transition:border-color .15s ease,box-shadow .15s ease}
 .map-store[data-lat]:hover{border-color:var(--brand);box-shadow:0 2px 10px rgba(0,0,0,.08)}
+/* 대시보드: 주소 → 좌표 검색 */
+.geo-search{display:flex;gap:8px;margin-bottom:8px}
+.geo-search input{flex:1;min-width:0}
+.geo-search .btn{flex:none;white-space:nowrap}
+/* 페이지 전환 애니메이션 — 지원 브라우저(크롬·사파리 최신)에서 페이드 전환, 미지원은 무시 */
+@view-transition{navigation:auto}
+@media (prefers-reduced-motion:reduce){@view-transition{navigation:none}}
 /* 핀 클릭 팝업 — 지도 타일은 항상 밝으므로 다크 모드에서도 밝은 배경 유지 */
 .map-iw{padding:12px 14px;min-width:180px;max-width:240px;background:#fff;border-radius:12px;font-family:inherit}
 .map-iw-name{font-weight:700;font-size:15px;color:#1c2320;margin-bottom:4px}
@@ -673,8 +680,12 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .onboard-list li.done .ob-check{background:var(--ok);border-color:var(--ok)}
 /* 공유 버튼 + 토스트 (디자인: 다크 pill 토스트) */
 .biz-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}
-.btn-share{background:rgba(255,255,255,.16);color:#fff;border:1px solid rgba(255,255,255,.45)}
-.btn-share:hover{background:rgba(255,255,255,.26);border-color:#fff}
+/* 공유 버튼: 기본은 밝은 배경용, 어두운 히어로 안에서는 흰 반투명 */
+.btn-share{background:var(--surface);color:var(--ink);border:1px solid var(--line)}
+.btn-share:hover{border-color:var(--brand);color:var(--brand-700)}
+.biz-hero .btn-share{background:rgba(255,255,255,.16);color:#fff;border:1px solid rgba(255,255,255,.45)}
+.biz-hero .btn-share:hover{background:rgba(255,255,255,.26);border-color:#fff;color:#fff}
+.article-actions{margin-top:26px;padding-top:18px;border-top:1px solid var(--line-soft)}
 .share-toast{position:fixed;left:50%;bottom:32px;transform:translate(-50%,16px);z-index:1100;display:inline-flex;align-items:center;gap:9px;padding:13px 20px;border-radius:999px;background:var(--ink);color:var(--bg);font-weight:600;font-size:15px;box-shadow:var(--sh-2);opacity:0;transition:.25s ease;pointer-events:none}
 .share-toast.on{opacity:1;transform:translate(-50%,0)}
 /* 가게 QR 위젯 */

@@ -120,6 +120,38 @@
       latInput.value = e.coord.lat().toFixed(6);
       lngInput.value = e.coord.lng().toFixed(6);
     });
+
+    // 주소 → 좌표 (geocoder 서브모듈 — 콘솔에서 Geocoding 서비스 활성화 필요)
+    var geoBtn = document.getElementById("geoBtn"), geoQ = document.getElementById("geoQuery"), geoMsg = document.getElementById("geoMsg");
+    function geoSay(m) { if (geoMsg) { geoMsg.textContent = m; geoMsg.hidden = !m; } }
+    function setPicked(lat, lng) {
+      var pos = new naver.maps.LatLng(lat, lng);
+      pmap.morph(pos, Math.max(pmap.getZoom() || 16, 16));
+      pmarker.setPosition(pos);
+      pmarker.setVisible(true);
+      latInput.value = lat.toFixed(6);
+      lngInput.value = lng.toFixed(6);
+    }
+    function geocode() {
+      var q = (geoQ.value || "").trim();
+      if (!q) { geoSay("주소를 입력해 주세요."); geoQ.focus(); return; }
+      if (!(naver.maps.Service && naver.maps.Service.geocode)) {
+        geoSay("주소 검색을 켜려면 네이버 클라우드 콘솔의 Maps 앱에서 Geocoding 을 활성화해 주세요. 지금은 지도를 직접 클릭해 위치를 지정할 수 있습니다.");
+        return;
+      }
+      geoSay("주소를 찾는 중…");
+      naver.maps.Service.geocode({ query: q }, function (status, res) {
+        var item = status === naver.maps.Service.Status.OK && res && res.v2 && res.v2.addresses && res.v2.addresses[0];
+        if (!item) { geoSay("주소를 찾지 못했어요. 도로명 주소로 다시 입력하거나 지도를 직접 클릭해 주세요."); return; }
+        setPicked(parseFloat(item.y), parseFloat(item.x));
+        geoSay("");
+      });
+    }
+    if (geoBtn && geoQ) {
+      geoBtn.addEventListener("click", geocode);
+      // Enter 로 검색해도 업체 정보 폼이 통째로 제출되지 않게
+      geoQ.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); geocode(); } });
+    }
   }
 
   function esc(s) {
