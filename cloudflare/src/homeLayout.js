@@ -37,6 +37,13 @@ export const SECTION_CATALOG = {
       { key: "body", label: "본문", type: "textarea" },
     ],
   },
+  mapbanner: {
+    label: "지도 배너 (점포 지도 바로가기)",
+    fields: [
+      { key: "title", label: "제목", type: "text" },
+      { key: "subtitle", label: "설명", type: "text" },
+    ],
+  },
   cta: {
     label: "가입 유도 배너",
     fields: [
@@ -61,6 +68,7 @@ export function defaultLayout(assocName = "우리 상인회") {
       showStats: true,
     },
     { type: "businesses", enabled: true, title: "우리 동네 업체", lead: "상인회에 소속된 업체들을 만나보세요. 사진과 영상도 확인할 수 있습니다." },
+    { type: "mapbanner", enabled: true, title: "지도에서 한눈에 보기", subtitle: "우리 동네 가게들을 지도에서 찾아보세요" },
     { type: "notices", enabled: true, title: "공지사항" },
     { type: "events", enabled: true, title: "다가오는 행사·이벤트" },
     { type: "cta", enabled: true, title: "아직 회원이 아니신가요?", body: "지금 업체를 등록하면 나만의 업체 페이지에 사진·영상을 올리고 상권 홍보에 함께할 수 있습니다.", buttonLabel: "무료로 업체 등록하기" },
@@ -73,7 +81,13 @@ export function parseLayout(json, assocName) {
   try {
     const arr = JSON.parse(json);
     if (!Array.isArray(arr) || arr.length === 0) return defaultLayout(assocName);
-    return arr.filter((s) => s && SECTION_CATALOG[s.type]);
+    const out = arr.filter((s) => s && SECTION_CATALOG[s.type]);
+    // 구버전 저장 레이아웃 업그레이드: 지도 배너가 없으면 업체 섹션 뒤에 추가
+    if (!out.some((s) => s.type === "mapbanner")) {
+      const i = out.findIndex((s) => s.type === "businesses");
+      out.splice(i >= 0 ? i + 1 : out.length, 0, { type: "mapbanner", enabled: true, title: "지도에서 한눈에 보기", subtitle: "우리 동네 가게들을 지도에서 찾아보세요" });
+    }
+    return out;
   } catch {
     return defaultLayout(assocName);
   }
@@ -110,8 +124,8 @@ function renderSection(s, deps) {
         "",
         s.title,
         s.lead,
-        `${deps.catTiles || ""}<div class="market-grid">${deps.businessesHtml}</div>
-         <div class="section-more"><a href="${deps.base}/businesses" class="btn btn-ghost btn-sm">전체 업체 보기</a></div>`
+        `${deps.catTiles || ""}<div class="market-grid">${deps.businessesHtml}</div>`,
+        { href: `${deps.base}/businesses`, label: "더보기" }
       );
     case "notices":
       if (!deps.noticesHtml) return ""; // 공지 없으면 공개 홈에서 섹션 자체 숨김
@@ -119,12 +133,12 @@ function renderSection(s, deps) {
         "section-alt",
         s.title,
         "",
-        `<ul class="notice-list">${deps.noticesHtml}</ul>
-         <div class="section-more"><a href="${deps.base}/notices" class="btn btn-ghost btn-sm">공지사항 전체보기</a></div>`
+        `<ul class="notice-list">${deps.noticesHtml}</ul>`,
+        { href: `${deps.base}/notices`, label: "전체보기" }
       );
     case "events":
       if (!deps.eventsHtml) return ""; // 행사 없으면 섹션 숨김
-      return sectionWrap("", s.title, "", `<div class="event-grid">${deps.eventsHtml}</div>`);
+      return sectionWrap("", s.title, "", `<div class="event-grid">${deps.eventsHtml}</div>`, { href: `${deps.base}/events`, label: "전체보기" });
     case "text":
       return sectionWrap(
         "section-alt",
@@ -132,12 +146,23 @@ function renderSection(s, deps) {
         "",
         `<div class="free-text container narrow">${esc(s.body || "").replace(/\n/g, "<br />")}</div>`
       );
+    case "mapbanner":
+      return `<section class="section" style="padding-top:0"><div class="container">
+        <a href="${deps.base}/map" class="map-banner">
+          <span class="mb-glow" aria-hidden="true"></span>
+          <span class="mb-ico" aria-hidden="true"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="2.6"/></svg></span>
+          <span class="mb-text"><strong>${esc(s.title || "지도에서 한눈에 보기")}</strong><em>${esc(s.subtitle || "")}</em></span>
+          <span class="mb-chev" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></span>
+        </a></div></section>`;
     case "cta":
-      return `<section class="section section-dark"><div class="container cta-inner">
-        <h2 class="section-title">${esc(s.title || "")}</h2>
-        <p class="section-lead">${esc(s.body || "")}</p>
-        <a href="${deps.base}/register" class="btn btn-primary">${esc(s.buttonLabel || "업체 등록하기")}</a>
-      </div></section>`;
+      return `<section class="section"><div class="container">
+        <div class="join-cta">
+          <span class="jc-glow" aria-hidden="true"></span>
+          <span class="mark jc-mark" aria-hidden="true"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9l1.2-4.2A1 1 0 0 1 6.2 4h11.6a1 1 0 0 1 1 .8L20 9"/><path d="M4 9v10a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9"/><path d="M9 20v-5h6v5"/></svg></span>
+          <h2>${esc(s.title || "")}</h2>
+          <p>${esc(s.body || "")}</p>
+          <a href="${deps.base}/register" class="btn btn-primary btn-lg">${esc(s.buttonLabel || "업체 등록하기")}</a>
+        </div></div></section>`;
     default:
       return "";
   }
@@ -173,9 +198,12 @@ function heroSection(s, deps) {
     </div></section>`;
 }
 
-function sectionWrap(extraClass, title, lead, inner) {
+function sectionWrap(extraClass, title, lead, inner, more) {
   return `<section class="section ${extraClass}"><div class="container">
-    <div class="section-head"><h2 class="section-title">${esc(title || "")}</h2>
-    ${lead ? `<p class="section-lead">${esc(lead)}</p>` : ""}</div>
+    <div class="section-head head-row">
+      <div><h2 class="section-title">${esc(title || "")}</h2>
+      ${lead ? `<p class="section-lead">${esc(lead)}</p>` : ""}</div>
+      ${more ? `<a class="section-more-link" href="${more.href}">${esc(more.label)} <span aria-hidden="true">›</span></a>` : ""}
+    </div>
     ${inner}</div></section>`;
 }

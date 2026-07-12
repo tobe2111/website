@@ -134,6 +134,7 @@ CREATE TABLE IF NOT EXISTS events (
   event_date     TEXT NOT NULL,
   place          TEXT NOT NULL DEFAULT '',
   description    TEXT NOT NULL DEFAULT '',
+  image          TEXT NOT NULL DEFAULT '',
   created_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -267,6 +268,14 @@ async function migrateColumns(db) {
   if (!prodTbl) {
     await db.prepare(`CREATE TABLE products (id INTEGER PRIMARY KEY AUTOINCREMENT, business_id INTEGER NOT NULL REFERENCES businesses(id) ON DELETE CASCADE, association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE, name TEXT NOT NULL, price TEXT NOT NULL DEFAULT '', description TEXT NOT NULL DEFAULT '', image TEXT NOT NULL DEFAULT '', sold_out INTEGER NOT NULL DEFAULT 0, hidden INTEGER NOT NULL DEFAULT 0, sort_order INTEGER NOT NULL DEFAULT 0, external_link TEXT, source TEXT NOT NULL DEFAULT 'self', created_at TEXT NOT NULL DEFAULT (datetime('now')))`).run();
     await db.prepare("CREATE INDEX IF NOT EXISTS idx_products_biz ON products(business_id, hidden, sort_order)").run();
+  }
+  // events 대표 이미지 컬럼 (기존 배포 업그레이드)
+  const evTbl = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='events'").first();
+  if (evTbl) {
+    const ecols = (await db.prepare("PRAGMA table_info(events)").all()).results || [];
+    if (!ecols.some((c) => c.name === "image")) {
+      await db.prepare("ALTER TABLE events ADD COLUMN image TEXT NOT NULL DEFAULT ''").run();
+    }
   }
   // 조회 빈도 높은 owner_id 인덱스 (기존 배포 업그레이드 · businesses 존재 시)
   if (bizTbl) await db.prepare("CREATE INDEX IF NOT EXISTS idx_business_owner ON businesses(owner_id)").run();

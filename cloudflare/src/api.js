@@ -381,9 +381,12 @@ export async function adminCreateEvent(ctx) {
   return back(base + "/admin", "행사를 등록했습니다.");
 }
 export async function adminDeleteEvent(ctx) {
-  const { db, base, assoc, params } = ctx;
+  const { db, env, base, assoc, params } = ctx;
   const e = await D.getEvent(db, Number(params.id));
-  if (e && e.association_id === assoc.id) await D.deleteEvent(db, e.id);
+  if (e && e.association_id === assoc.id) {
+    if (e.image) await storage.remove(env, e.image);
+    await D.deleteEvent(db, e.id);
+  }
   return back(base + "/admin", "행사를 삭제했습니다.");
 }
 export async function adminSettings(ctx) {

@@ -132,6 +132,7 @@ CREATE TABLE IF NOT EXISTS events (
   event_date     TEXT NOT NULL,
   place          TEXT NOT NULL DEFAULT '',
   description    TEXT NOT NULL DEFAULT '',
+  image          TEXT NOT NULL DEFAULT '',
   created_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

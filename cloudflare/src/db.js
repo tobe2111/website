@@ -233,9 +233,9 @@ export const listEvents = (db, aid, upcomingOnly = false) => upcomingOnly
   ? all(db, "SELECT * FROM events WHERE association_id=? AND event_date >= date('now') ORDER BY event_date ASC", aid)
   : all(db, "SELECT * FROM events WHERE association_id=? ORDER BY event_date DESC", aid);
 export const getEvent = (db, id) => first(db, "SELECT * FROM events WHERE id=?", id);
-export async function createEvent(db, { associationId, title, event_date, place, description }) {
-  await run(db, "INSERT INTO events (association_id, title, event_date, place, description) VALUES (?,?,?,?,?)",
-    associationId, title, event_date, place || "", description || "");
+export async function createEvent(db, { associationId, title, event_date, place, description, image }) {
+  await run(db, "INSERT INTO events (association_id, title, event_date, place, description, image) VALUES (?,?,?,?,?,?)",
+    associationId, title, event_date, place || "", description || "", image || "");
   return getEvent(db, await lastId(db));
 }
 export const deleteEvent = (db, id) => run(db, "DELETE FROM events WHERE id=?", id);

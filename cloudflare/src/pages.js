@@ -68,6 +68,19 @@ function businessCard(base, b, cover) {
     </div></article>`;
 }
 
+// 행사 카드 (시안: 이미지 16:10 + 오버레이 + 날짜 칩 / 이미지 없으면 날짜 사각형형)
+function eventCard(e) {
+  const d = e.event_date.slice(8, 10), mo = Number(e.event_date.slice(5, 7)) + "월";
+  if (e.image) return `<article class="event-photo-card">
+    <img src="${esc(mediaUrl(e.image))}" alt="" loading="lazy" />
+    <span class="epc-overlay" aria-hidden="true"></span>
+    <span class="epc-date"><em>${esc(mo)}</em><strong>${esc(d)}</strong></span>
+    <span class="epc-body"><strong>${esc(e.title)}</strong>${e.place ? `<span class="epc-place">${PIN_SVG}${esc(e.place)}</span>` : ""}</span>
+  </article>`;
+  return `<article class="event-card"><div class="event-date"><span class="d">${d}</span><span class="m">${mo}</span></div>
+      <div class="event-info"><h3>${esc(e.title)}</h3><p>${esc(e.description)}</p>${e.place ? `<span class="event-place">${PIN_SVG}${esc(e.place)}</span>` : ""}</div></article>`;
+}
+
 export async function home(ctx) {
   const { db, assoc, base, user, csrf } = ctx;
   const lay = parseLayout(assoc.home_layout, assoc.name);
@@ -79,11 +92,7 @@ export async function home(ctx) {
   const stats = await D.stats(db, assoc.id);
   const cats = await D.distinctCategories(db, assoc.id);
   const catTiles = cats.length ? `<div class="cat-grid">${cats.map((c) => `<a class="cat-tile" href="${base}/businesses?category=${encodeURIComponent(c.category)}"><span class="cat-ico">${catIcon(c.category)}</span><span class="cat-name">${esc(c.category)}</span><span class="cat-count">${c.n}</span></a>`).join("")}<a class="cat-tile cat-all" href="${base}/businesses"><span class="cat-ico">${catIcon("전체")}</span><span class="cat-name">전체보기</span></a></div>` : "";
-  const eventsHtml = events.length ? events.map((e) => {
-    const d = e.event_date.slice(8, 10), mo = Number(e.event_date.slice(5, 7)) + "월";
-    return `<article class="event-card"><div class="event-date"><span class="d">${d}</span><span class="m">${mo}</span></div>
-      <div class="event-info"><h3>${esc(e.title)}</h3><p>${esc(e.description)}</p><span class="event-place">${PIN_SVG}${esc(e.place)}</span></div></article>`;
-  }).join("") : "";
+  const eventsHtml = events.map(eventCard).join("");
   const body = renderHome(lay, {
     assoc, base, stats, businessesHtml, catTiles, eventsHtml, loggedIn: !!user,
     noticesHtml: notices.length ? noticeRows(base, notices) : "",
@@ -272,14 +281,10 @@ export async function noticeDetail(ctx) {
 export async function events(ctx) {
   const { db, assoc, base, user, csrf } = ctx;
   const list = await D.listEvents(db, assoc.id);
-  const cards = list.length ? list.map((e) => {
-    const d = e.event_date.slice(8, 10), mo = Number(e.event_date.slice(5, 7)) + "월";
-    return `<article class="event-card"><div class="event-date"><span class="d">${d}</span><span class="m">${mo}</span></div>
-      <div class="event-info"><h3>${esc(e.title)}</h3><p>${esc(e.description)}</p><span class="event-place">${PIN_SVG}${esc(e.place)}</span></div></article>`;
-  }).join("") : `<p class="empty">예정된 행사가 없습니다.</p>`;
+  const cards = list.length ? list.map(eventCard).join("") : `<p class="empty">예정된 행사가 없습니다.</p>`;
   const body = `<section class="section page-top"><div class="container">
     <div class="section-head"><p class="section-eyebrow">EVENTS</p><h2 class="section-title">행사·소식</h2></div>
-    <div class="event-list">${cards}</div></div></section>`;
+    <div class="event-grid">${cards}</div></div></section>`;
   return html(layout({ title: "행사", assoc, base, user, body, activeNav: `${base}/notices`, csrf }));
 }
 
@@ -601,9 +606,10 @@ export async function admin(ctx) {
           <button class="btn btn-primary btn-sm">등록</button></form>
         <ul class="admin-mini-list">${noticeRows2}</ul></section>
       <section class="panel"><h2 class="panel-title">행사</h2>
-        <form method="post" action="${base}/admin/event" class="stack-form compact">
+        <form method="post" action="${base}/admin/event" enctype="multipart/form-data" class="stack-form compact">
           <input type="text" name="title" placeholder="행사명" required /><input type="date" name="event_date" required />
           <input type="text" name="place" placeholder="장소" /><textarea name="description" rows="2" placeholder="설명"></textarea>
+          <label class="mini-label">대표 이미지 <small>(선택 · 홈에 포스터형 카드로 표시)</small><input type="file" name="image" accept="image/*" /></label>
           <button class="btn btn-primary btn-sm">등록</button></form>
         <ul class="admin-mini-list">${eventRows}</ul></section>
     </div>
@@ -975,9 +981,14 @@ export async function setupForm(ctx) {
 export async function platformLanding(ctx) {
   const { db, csrf, query } = ctx;
   const list = await D.listActiveAssociations(db);
-  const cards = list.map((a) => `<a class="landing-assoc" href="${a.custom_domain ? "https://" + esc(a.custom_domain) : "/t/" + esc(a.slug)}">
-    <span class="landing-assoc-logo" style="background:${esc(a.brand_color)}">${a.logo ? `<img src="${esc(mediaUrl(a.logo))}" alt="" />` : esc(a.name.slice(0, 1))}</span>
-    <span class="landing-assoc-name">${esc(a.name)}</span></a>`).join("") || `<p class="empty">첫 상인회를 기다리고 있어요.</p>`;
+  const bizCounts = new Map((await Promise.all(list.map(async (a) => [a.id, (await D.stats(db, a.id)).businesses]))));
+  const safeColor = (c) => /^#[0-9a-fA-F]{3,8}$/.test(c || "") ? c : "#0b6e4f";
+  const cards = list.map((a) => `<a class="tenant-card" href="${a.custom_domain ? "https://" + esc(a.custom_domain) : "/t/" + esc(a.slug)}">
+    <span class="tc-band" style="background:linear-gradient(135deg,${safeColor(a.brand_color)},${safeColor(a.brand_color)}cc)"><span class="tc-glow" aria-hidden="true"></span></span>
+    <span class="tc-avatar">${a.logo ? `<img src="${esc(mediaUrl(a.logo))}" alt="" />` : `<b>${esc(a.name.slice(0, 1))}</b>`}</span>
+    <span class="tc-body"><strong>${esc(a.name)}</strong><em>${esc(a.tagline || "")}</em>
+      <span class="tc-meta">${STOREFRONT_SVG} 가입 점포 ${bizCounts.get(a.id) || 0}곳</span></span>
+  </a>`).join("") || `<p class="empty">첫 상인회를 기다리고 있어요.</p>`;
   const body = `
   <section class="landing-hero"><div class="container">
     <p class="hero-eyebrow">상인회·번영회·소상공인 모임을 위한</p>
