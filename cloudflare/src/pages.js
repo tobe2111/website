@@ -1172,12 +1172,22 @@ export async function sitemap(ctx) {
   const o = originOf(ctx);
   const urls = [];
   const add = (loc) => urls.push(`<url><loc>${esc(loc)}</loc></url>`);
-  add(o + "/");
-  for (const a of await D.listActiveAssociations(db)) {
-    const base = `${o}/t/${encodeURIComponent(a.slug)}`;
-    ["", "/businesses", "/map", "/notices", "/events"].forEach((p) => add(base + p));
-    for (const b of await D.listBusinessesPaged(db, a.id, { perPage: 200 }).then((r) => r.items)) add(`${base}/business/${encodeURIComponent(b.slug)}`);
-    for (const n of await D.listNotices(db, a.id, 200)) add(`${base}/notices/${n.id}`);
+  const emitAssoc = async (a, prefix) => {
+    add(prefix || o + "/");
+    for (const p of ["/businesses", "/map", "/notices", "/events"]) add((prefix || o) + p);
+    for (const b of (await D.listBusinessesPaged(db, a.id, { perPage: 200 })).items) add(`${prefix || o}/business/${encodeURIComponent(b.slug)}`);
+    for (const n of await D.listNotices(db, a.id, 200)) add(`${(prefix || o)}/notices/${n.id}`);
+  };
+  // 개별 도메인으로 접속: 그 상인회의 URL 만, 루트 경로 기준으로 (검색엔진은 같은 호스트 URL 만 수집)
+  const own = await D.getAssociationByDomain(db, ctx.url.hostname);
+  if (own) {
+    await emitAssoc(own, "");
+  } else {
+    add(o + "/");
+    for (const a of await D.listActiveAssociations(db)) {
+      if (a.custom_domain) continue; // 개별 도메인 사이트는 그 도메인의 /sitemap.xml 에서 수집 (중복 노출 방지)
+      await emitAssoc(a, `${o}/t/${encodeURIComponent(a.slug)}`);
+    }
   }
   const xml = `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls.join("")}</urlset>`;
   return new Response(xml, { headers: { "content-type": "application/xml; charset=utf-8", "cache-control": "public, max-age=3600" } });

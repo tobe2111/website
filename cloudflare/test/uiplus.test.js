@@ -111,3 +111,19 @@ test("검색엔진 소유 확인 메타: 관리자 저장 → 모든 테넌트 �
   assert.match(h, /<meta name="naver-site-verification" content="abc123script" \/>/); // 위험 문자 제거 확인
   assert.match(h, /<meta name="google-site-verification" content="gvcode99" \/>/);
 });
+
+test("sitemap: 개별 도메인에선 그 상인회만 루트 경로로, 공용 도메인에선 개별 도메인 상인회 제외", async () => {
+  const env = makeEnv();
+  const { a } = await seed(env); // seocho (공용)
+  const b = await D.createAssociation(env.DB, { slug: "gangnam", name: "강남 상인회" });
+  await D.setAssociationDomain(env.DB, b.id, "gangnam-market.kr");
+  // 공용 도메인: seocho 는 /t/ 경로로 포함, gangnam 은 제외(자기 도메인에서 수집)
+  let xml = await (await worker.fetch(new Request(B + "/sitemap.xml"), env)).text();
+  assert.match(xml, /\/t\/seocho/);
+  assert.doesNotMatch(xml, /gangnam/);
+  // 개별 도메인: gangnam 만 루트 경로로, 다른 상인회 URL 없음
+  xml = await (await worker.fetch(new Request("http://gangnam-market.kr/sitemap.xml"), env)).text();
+  assert.match(xml, /<loc>https:\/\/gangnam-market\.kr\/<\/loc>/); // 스킴은 PUBLIC_SCHEME 기본값 https
+  assert.match(xml, /gangnam-market\.kr\/businesses/);
+  assert.doesNotMatch(xml, /\/t\/seocho/);
+});
