@@ -827,6 +827,30 @@ export async function superConsole(ctx) {
         <div class="form-two"><label>관리자 이름<input type="text" name="admin_name" /></label><label>관리자 이메일<input type="email" name="admin_email" required /></label></div>
         <label>관리자 비밀번호 (8자 이상)<input type="password" name="admin_password" required minlength="8" /></label>
         <button class="btn btn-primary">상인회 생성</button></form></section>
+    <details class="panel ops-guide"><summary class="panel-title">🧭 운영 가이드 — 도메인·지도·이메일 설정 위치</summary>
+      <div class="ops-body">
+      <h3>네이버 지도 (도메인 바뀔 때마다!)</h3>
+      <ol>
+        <li><a href="https://console.ncloud.com" target="_blank" rel="noopener">네이버 클라우드 콘솔</a> → Maps → Application 목록 → 해당 앱 <b>[변경]</b></li>
+        <li><b>Web 서비스 URL</b> 에 지도가 표시될 도메인을 <b>추가</b> (예: <code>https://website.tobe211167.workers.dev</code>, 개별 도메인 연결 시 그 도메인도)</li>
+        <li>기존 주소는 지우지 말 것 — 미등록 도메인에선 지도가 "인증 실패" 회색 화면이 됩니다</li>
+      </ol>
+      <h3>개별 도메인 연결 (상인회 1곳당)</h3>
+      <ol>
+        <li>도메인을 이 Cloudflare 계정에 추가 (Domains → Add)</li>
+        <li>Workers &amp; Pages → 이 워커 → Settings → <b>Domains &amp; Routes → Add → Custom Domain</b></li>
+        <li>아래 상인회 목록의 <b>개별 도메인</b> 칸에 같은 도메인 입력·저장</li>
+        <li>네이버 지도 사용 시 → 위의 Web 서비스 URL 에도 추가</li>
+      </ol>
+      <h3>이메일 자동 발송 (비번 재설정·입점 승인 메일)</h3>
+      <ol>
+        <li><a href="https://resend.com" target="_blank" rel="noopener">Resend</a> 가입 → API 키 발급 (무료 월 3,000통)</li>
+        <li>Workers &amp; Pages → 이 워커 → Settings → Variables 에 <code>RESEND_API_KEY</code>(Secret), <code>MAIL_FROM</code> 등록</li>
+        <li>미설정 시에도 사이트는 정상 — 수동 안내 방식으로 동작합니다</li>
+      </ol>
+      <h3>사진 직접 서빙 (설정 완료 ✓)</h3>
+      <p>R2 버킷 공개 도메인(r2.dev) → 워커 변수 <code>MEDIA_PUBLIC_BASE</code>. 트래픽 커지면 커스텀 도메인으로 값만 교체.</p>
+      </div></details>
     <section class="panel"><h2 class="panel-title">상인회 목록</h2>
       <p class="panel-hint">개별 도메인: 도메인을 입력·저장한 뒤 <b>Cloudflare 대시보드 → 이 워커 → Settings → Domains &amp; Routes → Add → Custom Domain</b> 으로 같은 도메인을 추가해야 실제 접속됩니다(그 도메인이 이 Cloudflare 계정에 등록되어 있어야 함).</p>
       <div class="table-scroll"><table class="admin-table">
