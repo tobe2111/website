@@ -299,6 +299,23 @@ function noticeRows(base, list) {
     <span class="notice-chev">${CHEV_SVG}</span></a></li>`).join("")
     : `<li class="empty">등록된 공지가 없습니다.</li>`;
 }
+// 공지 RSS 피드 — 구독기·네이버 수집용 (layout 의 rel=alternate 로 자동 발견)
+export async function noticesFeed(ctx) {
+  const { db, assoc, base } = ctx;
+  const items = await D.listNotices(db, assoc.id, 20);
+  const x = (s) => String(s == null ? "" : s).replace(/[<>&'"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" }[c]));
+  const link = ORIGIN + base;
+  const rfc822 = (t) => new Date(String(t).replace(" ", "T") + "Z").toUTCString();
+  const rss = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+<title>${x(assoc.name)} 공지·소식</title>
+<link>${x(link + "/notices")}</link>
+<description>${x(assoc.tagline || assoc.name + " 공지사항")}</description>
+<language>ko</language>
+${items.map((n) => `<item><title>${x(n.title)}</title><link>${x(`${link}/notices/${n.id}`)}</link><guid isPermaLink="true">${x(`${link}/notices/${n.id}`)}</guid><pubDate>${rfc822(n.created_at)}</pubDate><category>${x(n.tag)}</category><description>${x(clip(n.body, 300))}</description></item>`).join("\n")}
+</channel></rss>`;
+  return new Response(rss, { headers: { "content-type": "application/rss+xml; charset=utf-8", "cache-control": "public, max-age=600" } });
+}
 export async function notices(ctx) {
   const { db, assoc, base, user, query, csrf } = ctx;
   const page = parseInt(query.get("page") || "1", 10) || 1;
@@ -653,6 +670,10 @@ export async function admin(ctx) {
         <div class="form-two"><label>대표 전화<input type="text" name="phone" value="${esc(assoc.phone)}" /></label><label>이메일<input type="email" name="email" value="${esc(assoc.email)}" /></label></div>
         <label>주소<input type="text" name="address" value="${esc(assoc.address)}" /></label>
         <label class="mini-label">로고 <small>(선택·이미지)</small><input type="file" name="logo" accept="image/*" /></label>
+        <div class="form-divider">검색 노출 (선택) — 네이버·구글에 사이트를 등록할 때 발급받는 소유 확인 코드</div>
+        <div class="form-two"><label>네이버 서치어드바이저 코드<input type="text" name="naver_verification" value="${esc(assoc.naver_verification || "")}" placeholder="content=&quot;…&quot; 안의 값만" /></label>
+          <label>구글 서치콘솔 코드<input type="text" name="google_verification" value="${esc(assoc.google_verification || "")}" placeholder="content=&quot;…&quot; 안의 값만" /></label></div>
+        <p class="panel-hint">입력하면 모든 페이지에 확인 메타 태그가 자동 삽입됩니다. 등록 후 사이트맵 <code>/sitemap.xml</code> 과 RSS <code>${esc(base)}/feed.xml</code> 을 제출하세요.</p>
         <button class="btn btn-primary btn-sm">브랜딩 저장</button></form></section>
     <section class="panel" id="p-biz"><h2 class="panel-title">업체 관리</h2><div class="table-scroll"><table class="admin-table">
       <thead><tr><th>업체</th><th>사장님</th><th>상태</th><th>처리</th></tr></thead><tbody>${bizRows}</tbody></table></div></section>

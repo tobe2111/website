@@ -20,6 +20,8 @@ CREATE TABLE IF NOT EXISTS associations (
   home_layout TEXT,
   custom_domain TEXT NOT NULL DEFAULT '',
   map_client_id TEXT NOT NULL DEFAULT '',     -- 상인회별 네이버 지도 키 (비우면 플랫폼 공용 키)
+  naver_verification TEXT NOT NULL DEFAULT '',  -- 네이버 서치어드바이저 소유 확인 코드
+  google_verification TEXT NOT NULL DEFAULT '', -- 구글 서치콘솔 소유 확인 코드
   plan        TEXT NOT NULL DEFAULT 'free',   -- 요금제(free|basic|pro)
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -240,7 +242,7 @@ CREATE TABLE IF NOT EXISTS settings (
 
 // 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
 // 마이그레이션 세대 — migrateColumns 에 단계를 추가할 때마다 +1
-const SCHEMA_VERSION = "8";
+const SCHEMA_VERSION = "9";
 
 export async function ensureSchema(db) {
   const has = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='associations'").first();
@@ -274,6 +276,10 @@ async function migrateColumns(db) {
   }
   if (!cols.some((c) => c.name === "map_client_id")) {
     await db.prepare("ALTER TABLE associations ADD COLUMN map_client_id TEXT NOT NULL DEFAULT ''").run();
+  }
+  if (!cols.some((c) => c.name === "naver_verification")) {
+    await db.prepare("ALTER TABLE associations ADD COLUMN naver_verification TEXT NOT NULL DEFAULT ''").run();
+    await db.prepare("ALTER TABLE associations ADD COLUMN google_verification TEXT NOT NULL DEFAULT ''").run();
   }
   // businesses 계측 컬럼 (기존 배포 업그레이드): 등록 경로·갱신 시각
   const bizTbl = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='businesses'").first();

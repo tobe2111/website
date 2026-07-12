@@ -40,6 +40,10 @@ ${ogImgAbs ? `<meta property="og:image" content="${esc(ogImgAbs)}" />` : ""}
 <link rel="stylesheet" href="${assetUrl("/css/app.css")}" />
 <style>:root{--brand:${brandColor}}</style>
 <script src="${assetUrl("/js/theme.js")}"></script>
+${assoc && assoc.naver_verification ? `<meta name="naver-site-verification" content="${esc(assoc.naver_verification)}" />` : ""}
+${assoc && assoc.google_verification ? `<meta name="google-site-verification" content="${esc(assoc.google_verification)}" />` : ""}
+${assoc ? `<link rel="alternate" type="application/rss+xml" title="${brand} 공지·소식" href="${base}/feed.xml" />` : ""}
+<meta property="og:locale" content="ko_KR" />
 <link rel="manifest" href="/manifest.webmanifest" />
 <meta name="theme-color" content="${brandColor}" />
 <link rel="icon" href="/img/icon.svg" />

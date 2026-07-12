@@ -76,3 +76,38 @@ test("대시보드: 주소로 찾기(geocoder) UI + 서브모듈 로드", async 
   assert.match(h, /id="geoBtn"/);
   assert.match(h, /submodules=geocoder/);
 });
+
+test("공지 RSS 피드: rel=alternate 발견 + 유효 XML + 항목 포함", async () => {
+  const env = makeEnv();
+  const { n } = await seed(env);
+  const home = await (await worker.fetch(new Request(B + "/t/seocho"), env)).text();
+  assert.match(home, /rel="alternate" type="application\/rss\+xml"[^>]*href="\/t\/seocho\/feed\.xml"/);
+  const r = await worker.fetch(new Request(B + "/t/seocho/feed.xml"), env);
+  assert.equal(r.headers.get("content-type"), "application/rss+xml; charset=utf-8");
+  const xml = await r.text();
+  assert.match(xml, /<rss version="2.0">/);
+  assert.match(xml, /<title>총회 안내<\/title>/);
+  assert.match(xml, new RegExp(`/t/seocho/notices/${n.id}</link>`));
+});
+
+test("검색엔진 소유 확인 메타: 관리자 저장 → 모든 테넌트 페이지에 출력", async () => {
+  const env = makeEnv();
+  const { a } = await seed(env);
+  const ad = await hashPassword("admin1234");
+  await D.createUser(env.DB, { email: "a@s.kr", passwordHash: ad.hash, salt: ad.salt, name: "관리자", role: "ADMIN", associationId: a.id });
+  const jar = {};
+  const ch = () => Object.entries(jar).map(([k, v]) => `${k}=${v}`).join("; ");
+  const absorb = (r) => { for (const s of r.headers.getSetCookie?.() || []) { const kv = s.split(";")[0]; const i = kv.indexOf("="); jar[kv.slice(0, i)] = kv.slice(i + 1); } };
+  let r = await worker.fetch(new Request(B + "/login"), env); absorb(r);
+  let t = (/name="_csrf" value="([^"]+)"/.exec(await r.text()) || [])[1];
+  r = await worker.fetch(new Request(B + "/login", { method: "POST", headers: { cookie: ch(), "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ _csrf: t, email: "a@s.kr", password: "admin1234" }).toString() }), env);
+  absorb(r);
+  r = await worker.fetch(new Request(B + "/t/seocho/admin", { headers: { cookie: ch() } }), env);
+  t = (/name="_csrf" value="([^"]+)"/.exec(await r.text()) || [])[1];
+  // multipart 폼이지만 urlencoded 도 파싱됨 (로고 없이)
+  r = await worker.fetch(new Request(B + "/t/seocho/admin/settings", { method: "POST", headers: { cookie: ch(), "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ _csrf: t, name: "서초구 상인회", tagline: "", brand_color: "#0b6e4f", phone: "", email: "", address: "", naver_verification: "abc123<script>", google_verification: "gvcode99" }).toString() }), env);
+  assert.equal(r.status, 303);
+  const h = await (await worker.fetch(new Request(B + "/t/seocho"), env)).text();
+  assert.match(h, /<meta name="naver-site-verification" content="abc123script" \/>/); // 위험 문자 제거 확인
+  assert.match(h, /<meta name="google-site-verification" content="gvcode99" \/>/);
+});

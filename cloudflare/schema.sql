@@ -18,6 +18,8 @@ CREATE TABLE IF NOT EXISTS associations (
   home_layout TEXT,
   custom_domain TEXT NOT NULL DEFAULT '',
   map_client_id TEXT NOT NULL DEFAULT '',     -- 상인회별 네이버 지도 키 (비우면 플랫폼 공용 키)
+  naver_verification TEXT NOT NULL DEFAULT '',  -- 네이버 서치어드바이저 소유 확인 코드
+  google_verification TEXT NOT NULL DEFAULT '', -- 구글 서치콘솔 소유 확인 코드
   plan        TEXT NOT NULL DEFAULT 'free',   -- 요금제(free|basic|pro)
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );

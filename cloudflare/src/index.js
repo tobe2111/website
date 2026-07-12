@@ -54,6 +54,7 @@ const TENANT = [
   ["GET", "/business/:slug", pages.businessDetail],
   ["GET", "/map", pages.mapPage],
   ["GET", "/notices", pages.notices],
+  ["GET", "/feed.xml", pages.noticesFeed],
   ["GET", "/notices/:id", pages.noticeDetail],
   ["GET", "/events", pages.events],
   ["GET", "/register", pages.registerForm],
