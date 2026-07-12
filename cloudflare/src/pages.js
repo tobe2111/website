@@ -206,8 +206,8 @@ export function loginForm(ctx) {
     ${authHead("로그인", "상인회 회원·관리자 로그인")}
     ${flash(query.get("msg") ? decodeURIComponent(query.get("msg")) : "", query.get("err") ? "err" : "ok")}
     <form method="post" action="/login" class="stack-form">
-      <label>이메일<input type="email" name="email" required /></label>
-      <label>비밀번호<input type="password" name="password" required /></label>
+      <label>이메일<input type="email" name="email" required autocomplete="email" /></label>
+      <label>비밀번호<input type="password" name="password" required autocomplete="current-password" /></label>
       <label class="totp-login">2단계 인증 코드 <small>(설정한 경우만)</small><input type="text" name="totp" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" placeholder="000000" /></label>
       ${turnstileWidget(env)}
       <button class="btn btn-primary btn-block">로그인</button>
@@ -397,8 +397,8 @@ export function registerForm(ctx) {
     ${authHead(assoc.name + " 가입", "점포 정보를 등록하고 사진·소식을 공유하세요.")}${flashOf(query)}
     <form method="post" action="${base}/register" class="stack-form">
       <label>대표자 성함<input type="text" name="name" required maxlength="60" /></label>
-      <label>이메일<input type="email" name="email" required /></label>
-      <label>비밀번호 (8자 이상)<input type="password" name="password" required minlength="8" /></label>
+      <label>이메일<input type="email" name="email" required autocomplete="email" /></label>
+      <label>비밀번호 (8자 이상)<input type="password" name="password" required minlength="8" autocomplete="new-password" /></label>
       <label>점포명<input type="text" name="business_name" required maxlength="100" /></label>
       <label>업종<select name="category">${opts}</select></label>
       <label class="check"><input type="checkbox" name="agree" value="1" required /> <a href="/privacy" target="_blank">개인정보 수집·이용</a>에 동의합니다.</label>
@@ -945,9 +945,9 @@ export function account(ctx) {
     <h1 class="article-title">계정 설정</h1>${flashOf(query)}
     <section class="panel"><h2 class="panel-title">비밀번호 변경</h2>
       <form method="post" action="/account/password" class="stack-form">
-        <label>현재 비밀번호<input type="password" name="current" required /></label>
-        <label>새 비밀번호 (8자 이상)<input type="password" name="new" required minlength="8" /></label>
-        <label>새 비밀번호 확인<input type="password" name="confirm" required /></label>
+        <label>현재 비밀번호<input type="password" name="current" required autocomplete="current-password" /></label>
+        <label>새 비밀번호 (8자 이상)<input type="password" name="new" required minlength="8" autocomplete="new-password" /></label>
+        <label>새 비밀번호 확인<input type="password" name="confirm" required autocomplete="new-password" /></label>
         <button class="btn btn-primary btn-sm">변경</button></form></section>
     <section class="panel"><h2 class="panel-title">2단계 인증 (2FA)</h2>${twofa}</section>
     <section class="panel"><h2 class="panel-title">보안</h2>
@@ -964,7 +964,7 @@ export function forgotForm(ctx) {
   const body = `<section class="section page-top"><div class="container auth-wrap"><div class="auth-card">
     ${authHead("비밀번호 찾기", auto ? "가입한 이메일로 재설정 링크를 보내드립니다." : "가입한 이메일을 입력하면 상인회 관리자에게 재설정 요청이 전달됩니다.")}
     ${flashOf(query)}
-    <form method="post" action="/forgot" class="stack-form"><label>이메일<input type="email" name="email" required /></label>
+    <form method="post" action="/forgot" class="stack-form"><label>이메일<input type="email" name="email" required autocomplete="email" /></label>
       <button class="btn btn-primary btn-block">${auto ? "재설정 링크 받기" : "재설정 요청"}</button></form>
     <p class="auth-note">보안을 위해 이메일 존재 여부와 관계없이 동일하게 안내됩니다.${auto ? "" : " 관리자가 확인 후 임시 비밀번호를 발급합니다."}</p></div></div></section>`;
   return html(layout({ title: "비밀번호 찾기", assoc: ctx.assoc, base: ctx.base, body, csrf }));

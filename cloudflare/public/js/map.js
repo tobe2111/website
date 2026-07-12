@@ -8,9 +8,9 @@
   var PIN_SVG = '<svg viewBox="0 0 36 46" width="34" height="43" aria-hidden="true">' +
     '<path d="M18 1.5C9.4 1.5 2.5 8.4 2.5 17c0 10.6 12.2 23.1 14.4 25.3a1.55 1.55 0 0 0 2.2 0C21.3 40.1 33.5 27.6 33.5 17 33.5 8.4 26.6 1.5 18 1.5z" fill="var(--brand,#0b6e4f)" stroke="#fff" stroke-width="2"/><circle cx="18" cy="16.5" r="10" fill="#fff"/>' +
     '<svg x="11" y="9.5" width="14" height="14" viewBox="0 0 24 24"><g fill="var(--brand,#0b6e4f)"><path d="M2.5 9.5 5.2 3h13.6l2.7 6.5z"/><path d="M4.5 11.5h15V20h-15z"/></g><path d="M10.3 14.5h3.4V20h-3.4z" fill="#fff"/></svg></svg>';
-  function pinIcon() {
+  function pinIcon(active) {
     // anchor: 핀 꼬리 끝(가로 중앙·세로 맨 아래)이 좌표에 정확히 닿도록
-    return { content: '<div class="map-pin">' + PIN_SVG + "</div>", anchor: new naver.maps.Point(17, 43) };
+    return { content: '<div class="map-pin' + (active ? " is-active" : "") + '">' + PIN_SVG + "</div>", anchor: new naver.maps.Point(17, 43) };
   }
 
   // ----- 점포 지도 (마커 전체 표시) -----
@@ -28,20 +28,34 @@
     try { data = JSON.parse(document.getElementById("mapData").textContent); } catch (e) {}
     var pts = data.filter(function (s) { return typeof s.lat === "number" && typeof s.lng === "number"; });
 
-    var info = new naver.maps.InfoWindow({ anchorSkew: true, borderWidth: 0 });
+    // 팝업: 배경을 투명하게 두고 .map-iw 가 둥근 흰 카드를 그린다 (모서리 각짐 방지)
+    var info = new naver.maps.InfoWindow({ anchorSkew: true, borderWidth: 0, backgroundColor: "transparent", disableAnchor: false, pixelOffset: new naver.maps.Point(0, -4) });
+    var activeMarker = null;
+    function deactivate() {
+      if (activeMarker) { try { activeMarker.setIcon(pinIcon(false)); } catch (e) {} activeMarker = null; }
+      info.close();
+    }
     function makeMarker(s) {
-      var marker = new naver.maps.Marker({ position: new naver.maps.LatLng(s.lat, s.lng), map: map, title: s.name, icon: pinIcon() });
+      var marker = new naver.maps.Marker({ position: new naver.maps.LatLng(s.lat, s.lng), map: map, title: s.name, icon: pinIcon(false) });
       naver.maps.Event.addListener(marker, "click", function () {
+        if (activeMarker === marker) { deactivate(); return; } // 같은 핀 다시 누르면 닫기
+        deactivate();
+        marker.setIcon(pinIcon(true));
+        marker.setZIndex(1000); // 선택 핀을 항상 맨 위로
+        activeMarker = marker;
         info.setContent(
           '<div class="map-iw">' +
           '<div class="map-iw-name">' + esc(s.name) + "</div>" +
           '<div class="map-iw-cat">' + esc(s.category) + "</div>" +
           (s.address ? '<div class="map-iw-addr">' + esc(s.address) + "</div>" : "") +
+          (s.phone ? '<a class="map-iw-tel" href="tel:' + esc(s.phone) + '">📞 ' + esc(s.phone) + "</a>" : "") +
           '<a class="map-iw-link" href="' + base + "/business/" + encodeURIComponent(s.slug) + '">상세 보기 →</a></div>');
         info.open(map, marker);
       });
       return marker;
     }
+    // 빈 지도 클릭 → 팝업 닫기 + 선택 해제
+    naver.maps.Event.addListener(map, "click", deactivate);
     // 전체가 보이도록 맞춤
     if (pts.length > 1) {
       var b = new naver.maps.LatLngBounds(new naver.maps.LatLng(pts[0].lat, pts[0].lng), new naver.maps.LatLng(pts[0].lat, pts[0].lng));
@@ -51,7 +65,7 @@
 
     // 점포가 많으면(>12) 그리드 클러스터링, 아니면 개별 마커. 오류 시 개별 마커로 폴백.
     var CLUSTER = pts.length > 12, cur = [];
-    function clearAll() { cur.forEach(function (m) { m.setMap(null); }); cur = []; }
+    function clearAll() { deactivate(); cur.forEach(function (m) { m.setMap(null); }); cur = []; }
     function plain() { clearAll(); pts.forEach(function (s) { cur.push(makeMarker(s)); }); }
     function clustered() {
       clearAll();
@@ -74,6 +88,17 @@
     function render() { try { if (CLUSTER) clustered(); else plain(); } catch (e) { try { plain(); } catch (_) {} } }
     render();
     if (CLUSTER) naver.maps.Event.addListener(map, "idle", render);
+
+    // 아래 점포 목록 클릭 → 해당 핀으로 부드럽게 이동
+    document.querySelectorAll(".map-store[data-lat]").forEach(function (li) {
+      li.addEventListener("click", function (ev) {
+        if (ev.target.closest("a")) return; // 링크는 원래 동작 유지
+        var lat = parseFloat(li.getAttribute("data-lat")), lng = parseFloat(li.getAttribute("data-lng"));
+        if (isNaN(lat) || isNaN(lng)) return;
+        map.morph(new naver.maps.LatLng(lat, lng), Math.max(map.getZoom() || 14, 16));
+        mapEl.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+    });
   }
 
   // ----- 좌표 피커 (대시보드) -----

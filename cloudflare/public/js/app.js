@@ -25,11 +25,7 @@
     });
   }
 
-  // 다크 모드 토글 (localStorage 유지, data-theme 로 전환)
-  try {
-    var saved = localStorage.getItem("theme");
-    if (saved === "dark" || saved === "light") document.documentElement.setAttribute("data-theme", saved);
-  } catch (e) {}
+  // 다크 모드 토글 (초기 적용은 head 의 theme.js 가 담당 — 저장값 > OS 설정 > 라이트)
   var themeBtn = document.getElementById("themeToggle");
   if (themeBtn) {
     themeBtn.addEventListener("click", function () {
@@ -58,6 +54,28 @@
     if (btn && !window.confirm(btn.getAttribute("data-confirm"))) { e.preventDefault(); e.stopPropagation(); }
     var pr = e.target.closest && e.target.closest("[data-print]");
     if (pr) { e.preventDefault(); window.print(); }
+  });
+
+  // 중복 제출 방지 — 제출된 폼의 버튼을 잠가 느린 네트워크에서 두 번 눌리는 것을 막는다
+  // (data-confirm 리스너보다 나중에 등록 → 취소된 제출(e.defaultPrevented)은 건너뜀)
+  function unlockForm(f) {
+    delete f.dataset.busy;
+    f.querySelectorAll(".is-busy").forEach(function (b) { b.disabled = false; b.classList.remove("is-busy"); });
+  }
+  document.addEventListener("submit", function (e) {
+    var f = e.target;
+    if (!f || e.defaultPrevented) return;
+    if (f.dataset.busy) { e.preventDefault(); return; }
+    f.dataset.busy = "1";
+    // 버튼 값 직렬화가 끝난 뒤 잠그도록 다음 틱에 disabled 처리
+    setTimeout(function () {
+      f.querySelectorAll('button[type="submit"],button:not([type]),input[type="submit"]').forEach(function (b) { b.disabled = true; b.classList.add("is-busy"); });
+    }, 0);
+    setTimeout(function () { unlockForm(f); }, 10000); // 응답이 오래 없으면 잠금 해제(안전망)
+  });
+  // 뒤로가기(bfcache)로 돌아왔을 때 잠금 해제
+  window.addEventListener("pageshow", function (e) {
+    if (e.persisted) document.querySelectorAll("form[data-busy]").forEach(unlockForm);
   });
 })();
 

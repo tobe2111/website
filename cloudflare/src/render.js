@@ -36,10 +36,11 @@ ${ogImgAbs ? `<meta property="og:image" content="${esc(ogImgAbs)}" />` : ""}
 <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css" /></noscript>
 <link rel="stylesheet" href="${assetUrl("/css/app.css")}" />
 <style>:root{--brand:${brandColor}}</style>
+<script src="${assetUrl("/js/theme.js")}"></script>
 <link rel="manifest" href="/manifest.webmanifest" />
 <meta name="theme-color" content="${brandColor}" />
 <link rel="icon" href="/img/icon.svg" />
-<link rel="apple-touch-icon" href="/img/icon.svg" />
+<link rel="apple-touch-icon" href="/img/icon-180.png" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" /></head>
 <body>
