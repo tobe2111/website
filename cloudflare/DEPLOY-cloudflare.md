@@ -174,6 +174,9 @@ Cloudflare 대시보드 → **Turnstile** 에서 위젯을 만들어 **사이트
 1. 그 도메인을 **이 Cloudflare 계정에 추가** (대시보드 → Domains → Add a domain, 무료 플랜 → 안내대로 네임서버 변경)
 2. **워커에 도메인 연결**: Workers & Pages → 이 워커 → **Settings → Domains & Routes → Add → Custom Domain** → 도메인 입력 (HTTPS 인증서 자동)
 3. **슈퍼 콘솔(`/super`)** → 상인회 목록의 **개별 도메인** 칸에 같은 도메인 입력 → 저장
+4. **네이버 지도를 쓰는 경우**: 네이버 클라우드 콘솔 → Maps Application → **Web 서비스 URL** 에
+   새 도메인(`https://새도메인`)을 **추가** 등록 (기존 workers.dev 주소는 지우지 말 것 —
+   미등록 도메인에선 지도가 "인증 실패" 회색 화면으로 나옵니다)
 → 이제 그 도메인으로 접속하면 해당 상인회 홈페이지가 뜹니다. (www 도 쓰려면 2·3단계에 `www.도메인` 추가)
 
 ### 서브도메인 방식(도메인 1개로 여러 상인회)
