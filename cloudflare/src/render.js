@@ -39,6 +39,7 @@ ${ogImgAbs ? `<meta property="og:image" content="${esc(ogImgAbs)}" />` : ""}
 <meta name="theme-color" content="${brandColor}" />
 <link rel="icon" href="/img/icon.svg" />
 <link rel="apple-touch-icon" href="/img/icon.svg" />
+<meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" /></head>
 <body>
 <header class="site-header" id="siteHeader">

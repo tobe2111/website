@@ -131,7 +131,8 @@ function resolveTenant(env, hostname, pathname) {
 }
 
 function securityHeaders(env) {
-  const naver = env.NAVER_MAP_CLIENT_ID ? " https://oapi.map.naver.com" : "";
+  // 네이버 지도 SDK 는 oapi 로더 외에 *.pstatic.net 에서 스타일 스크립트(JSONP)도 로드함
+  const naver = env.NAVER_MAP_CLIENT_ID ? " https://oapi.map.naver.com https://*.pstatic.net" : "";
   const naverImg = env.NAVER_MAP_CLIENT_ID ? " https://*.pstatic.net https://*.map.naver.com" : "";
   const ts = env.TURNSTILE_SITE_KEY ? " https://challenges.cloudflare.com" : "";
   const cfa = env.CF_ANALYTICS_TOKEN ? " https://static.cloudflareinsights.com" : "";
