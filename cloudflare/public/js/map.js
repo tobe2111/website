@@ -4,6 +4,15 @@
   "use strict";
   if (!window.naver || !naver.maps) return;
 
+  // 브랜드색 핀 (스토어프론트 글리프) — var(--brand) 로 테넌트 대표색 자동 적용
+  var PIN_SVG = '<svg viewBox="0 0 36 46" width="34" height="43" aria-hidden="true">' +
+    '<path d="M18 1.5C9.4 1.5 2.5 8.4 2.5 17c0 10.6 12.2 23.1 14.4 25.3a1.55 1.55 0 0 0 2.2 0C21.3 40.1 33.5 27.6 33.5 17 33.5 8.4 26.6 1.5 18 1.5z" fill="var(--brand,#0b6e4f)" stroke="#fff" stroke-width="2"/><circle cx="18" cy="16.5" r="10" fill="#fff"/>' +
+    '<svg x="11" y="9.5" width="14" height="14" viewBox="0 0 24 24"><g fill="var(--brand,#0b6e4f)"><path d="M2.5 9.5 5.2 3h13.6l2.7 6.5z"/><path d="M4.5 11.5h15V20h-15z"/></g><path d="M10.3 14.5h3.4V20h-3.4z" fill="#fff"/></svg></svg>';
+  function pinIcon() {
+    // anchor: 핀 꼬리 끝(가로 중앙·세로 맨 아래)이 좌표에 정확히 닿도록
+    return { content: '<div class="map-pin">' + PIN_SVG + "</div>", anchor: new naver.maps.Point(17, 43) };
+  }
+
   // ----- 점포 지도 (마커 전체 표시) -----
   var mapEl = document.getElementById("storeMap");
   if (mapEl) {
@@ -21,15 +30,14 @@
 
     var info = new naver.maps.InfoWindow({ anchorSkew: true, borderWidth: 0 });
     function makeMarker(s) {
-      var marker = new naver.maps.Marker({ position: new naver.maps.LatLng(s.lat, s.lng), map: map, title: s.name });
+      var marker = new naver.maps.Marker({ position: new naver.maps.LatLng(s.lat, s.lng), map: map, title: s.name, icon: pinIcon() });
       naver.maps.Event.addListener(marker, "click", function () {
         info.setContent(
-          '<div style="padding:12px 14px;min-width:180px;max-width:240px;font-family:inherit">' +
-          '<div style="font-weight:700;font-size:15px;margin-bottom:4px">' + esc(s.name) + "</div>" +
-          '<div style="font-size:12px;color:#0b6e4f;margin-bottom:6px">' + esc(s.category) + "</div>" +
-          (s.address ? '<div style="font-size:12px;color:#555;margin-bottom:8px">📍 ' + esc(s.address) + "</div>" : "") +
-          '<a href="' + base + "/business/" + encodeURIComponent(s.slug) +
-          '" style="font-size:13px;font-weight:700;color:#0b6e4f;text-decoration:none">상세 보기 →</a></div>');
+          '<div class="map-iw">' +
+          '<div class="map-iw-name">' + esc(s.name) + "</div>" +
+          '<div class="map-iw-cat">' + esc(s.category) + "</div>" +
+          (s.address ? '<div class="map-iw-addr">' + esc(s.address) + "</div>" : "") +
+          '<a class="map-iw-link" href="' + base + "/business/" + encodeURIComponent(s.slug) + '">상세 보기 →</a></div>');
         info.open(map, marker);
       });
       return marker;
@@ -79,7 +87,7 @@
     );
     var pmap = new naver.maps.Map(pickEl, { center: pc, zoom: parseInt(pickEl.getAttribute("data-zoom"), 10) || 16 });
     var hasInitial = latInput.value && lngInput.value;
-    var pmarker = new naver.maps.Marker({ position: pc, map: pmap });
+    var pmarker = new naver.maps.Marker({ position: pc, map: pmap, icon: pinIcon() });
     if (!hasInitial) pmarker.setVisible(false);
     naver.maps.Event.addListener(pmap, "click", function (e) {
       pmarker.setPosition(e.coord);

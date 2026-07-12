@@ -507,6 +507,15 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .audit-detail{color:var(--ink-soft)}
 .audit-meta{margin-left:auto;color:var(--muted);font-size:.82rem}
 .map-cluster{display:flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:50%;background:var(--green-700);color:#fff;font-weight:800;border:3px solid rgba(255,255,255,.85);box-shadow:0 2px 8px rgba(0,0,0,.3);font-size:.9rem}
+/* 지도 핀 — 브랜드색 스토어프론트 (디자인 시스템 v2) */
+.map-pin{width:34px;height:43px;filter:drop-shadow(0 3px 5px rgba(0,0,0,.35));transition:transform .15s ease;transform-origin:50% 100%;cursor:pointer}
+.map-pin:hover{transform:scale(1.12)}
+/* 핀 클릭 팝업 — 지도 타일은 항상 밝으므로 다크 모드에서도 밝은 배경 유지 */
+.map-iw{padding:12px 14px;min-width:180px;max-width:240px;background:#fff;border-radius:12px;font-family:inherit}
+.map-iw-name{font-weight:700;font-size:15px;color:#1c2320;margin-bottom:4px}
+.map-iw-cat{display:inline-block;font-size:12px;font-weight:700;color:var(--brand,#0b6e4f);margin-bottom:6px}
+.map-iw-addr{font-size:12px;color:#5c6660;margin-bottom:8px}
+.map-iw-link{font-size:13px;font-weight:700;color:var(--brand,#0b6e4f);text-decoration:none}
 .totp-key{font-size:1.05rem;letter-spacing:.05em;background:var(--bg-alt);padding:4px 10px;border-radius:6px;user-select:all}
 .totp-uri{display:block;word-break:break-all;font-size:.78rem;color:var(--muted);margin-top:6px}
 .totp-setup{margin:10px 0;padding:12px;border:1px dashed var(--line);border-radius:10px}
