@@ -730,6 +730,18 @@ export async function rejectApplication(ctx) {
 }
 
 // ---------- 슈퍼: 상인회 플랜 변경 ----------
+// 상인회별 네이버 지도 키 (비우면 플랫폼 공용) — 도메인 10개 초과 확장용
+export async function superSetMapKey(ctx) {
+  const { db, form, params } = ctx;
+  const a = await D.getAssociationById(db, Number(params.id));
+  if (!a) return back("/super", "상인회를 찾을 수 없습니다.", true);
+  const key = (form.get("map_client_id") || "").trim();
+  if (key && !/^[a-z0-9]{4,24}$/i.test(key)) return back("/super", "지도 키 형식이 올바르지 않습니다. (영문·숫자)", true);
+  await D.setAssociationMapKey(db, a.id, key);
+  await audit(ctx, "지도키", `${a.name} → ${key || "(공용)"}`, null);
+  return back("/super", key ? `'${a.name}' 전용 지도 키를 설정했습니다.` : `'${a.name}' 지도 키를 공용으로 되돌렸습니다.`);
+}
+
 export async function superSetPlan(ctx) {
   const { db, form, params } = ctx;
   const { PLAN_KEYS } = await import("./plans.js");

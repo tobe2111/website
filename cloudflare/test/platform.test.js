@@ -78,3 +78,28 @@ test("공개 신청 폼 렌더", async () => {
   await seedSuper(env);
   assert.match(await (await get(env, jar(), "/apply")).text(), /홈페이지 신청/);
 });
+
+test("상인회별 지도 키 오버라이드: 슈퍼 저장 → 지도 페이지가 전용 키 사용", async () => {
+  const env = makeEnv({ NAVER_MAP_CLIENT_ID: "commonkey", NAVER_MAP_PARAM: "ncpKeyId" });
+  await seedSuper(env);
+  const a = await D.createAssociation(env.DB, { slug: "s", name: "S" });
+  // 기본: 공용 키 사용
+  let html = await (await get(env, jar(), "/t/s/map")).text();
+  assert.match(html, /maps\.js\?ncpKeyId=commonkey/);
+  // 슈퍼가 전용 키 저장
+  const j = jar(); await post(env, j, "/login", { email: "super@p.kr", password: "super1234" }, "/login");
+  let r = await post(env, j, `/super/association/${a.id}/mapkey`, { map_client_id: "tenantkey99" }, "/super");
+  assert.equal(r.status, 303);
+  assert.equal((await D.getAssociationById(env.DB, a.id)).map_client_id, "tenantkey99");
+  html = await (await get(env, jar(), "/t/s/map")).text();
+  assert.match(html, /maps\.js\?ncpKeyId=tenantkey99/);
+  // 슈퍼 콘솔에 입력칸 노출
+  assert.match(await (await get(env, j, "/super")).text(), /name="map_client_id" value="tenantkey99"/);
+  // 잘못된 형식은 거부
+  r = await post(env, j, `/super/association/${a.id}/mapkey`, { map_client_id: "bad key!" }, "/super");
+  assert.equal((await D.getAssociationById(env.DB, a.id)).map_client_id, "tenantkey99");
+  // 비우면 공용 키로 복귀
+  await post(env, j, `/super/association/${a.id}/mapkey`, { map_client_id: "" }, "/super");
+  html = await (await get(env, jar(), "/t/s/map")).text();
+  assert.match(html, /maps\.js\?ncpKeyId=commonkey/);
+});

@@ -42,6 +42,7 @@ const GLOBAL = [
   ["POST", "/super/association/:id/toggle", api.superToggleAssociation, "SUPERADMIN"],
   ["POST", "/super/association/:id/domain", api.superSetDomain, "SUPERADMIN"],
   ["POST", "/super/association/:id/plan", api.superSetPlan, "SUPERADMIN"],
+  ["POST", "/super/association/:id/mapkey", api.superSetMapKey, "SUPERADMIN"],
   ["POST", "/super/application/:id/approve", api.approveApplication, "SUPERADMIN"],
   ["POST", "/super/application/:id/reject", api.rejectApplication, "SUPERADMIN"],
   ["POST", "/super/platform-mode", api.superSetPlatformMode, "SUPERADMIN"],
