@@ -239,7 +239,8 @@ async function handle(request, env) {
   // 클릭 시 즉시 표시. 전용 MIME 이 필수라 정적 자산이 아닌 여기서 직접 서빙.
   if (pathname === "/speculationrules.json") {
     return new Response(JSON.stringify({
-      prefetch: [{ where: { and: [{ href_matches: "/*" }, { not: { href_matches: "/logout" } }] }, eagerness: "moderate" }],
+      // 인증·개인·대용량 경로는 선로딩 제외 — 호버마다 D1 무거운 렌더가 낭비되고 개인 페이지 프리페치는 부적절
+      prefetch: [{ where: { and: [{ href_matches: "/*" }, { not: { href_matches: ["/logout", "/*/admin*", "/*/dashboard*", "/*/polls*", "/*/board*", "/*/sign*", "/*/invite*", "/admin*", "/dashboard*", "/super*", "/account*", "/*.csv", "/*.json", "/*.ics", "/*.xml"] } }] }, eagerness: "moderate" }],
     }), { headers: { "content-type": "application/speculationrules+json", "cache-control": "public, max-age=86400" } });
   }
 

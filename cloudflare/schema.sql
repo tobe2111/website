@@ -172,6 +172,7 @@ CREATE TABLE IF NOT EXISTS event_rsvps (
   created_at     TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE(event_id, user_id)
 );
+CREATE INDEX IF NOT EXISTS idx_rsvp_assoc ON event_rsvps(association_id);
 
 CREATE TABLE IF NOT EXISTS dues (
   id             INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -182,6 +183,7 @@ CREATE TABLE IF NOT EXISTS dues (
   created_at     TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE(association_id, user_id, period)
 );
+CREATE INDEX IF NOT EXISTS idx_dues_period ON dues(association_id, period);
 
 CREATE TABLE IF NOT EXISTS notices (
   id             INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -103,6 +103,9 @@ export const listBusinessMarkers = (db, aid) =>
            WHERE association_id = ? AND status='approved' AND lat IS NOT NULL AND lng IS NOT NULL`, aid);
 export const distinctCategories = (db, aid) =>
   all(db, "SELECT category, COUNT(*) AS n FROM businesses WHERE association_id=? AND status='approved' GROUP BY category ORDER BY n DESC", aid);
+// 가게 상세 '이런 가게는 어때요' — COUNT 없는 직접 조회 1쿼리
+export const listSameCategory = (db, aid, category, exceptId, limit = 3) =>
+  all(db, "SELECT * FROM businesses WHERE association_id=? AND status='approved' AND category=? AND id<>? ORDER BY created_at DESC LIMIT ?", aid, category, exceptId, limit);
 // 홈 검색 자동완성(datalist)용 — 이름만 가볍게
 export const listBusinessNames = (db, aid, limit = 300) =>
   all(db, "SELECT name FROM businesses WHERE association_id=? AND status='approved' ORDER BY name LIMIT ?", aid, limit);
@@ -247,6 +250,24 @@ export const pollResults = async (db, pollId) => {
   return r;
 };
 export const userVote = async (db, pollId, userId) => (await first(db, "SELECT choice FROM poll_votes WHERE poll_id=? AND user_id=?", pollId, userId))?.choice || null;
+// 투표 페이지용 일괄 조회 — 안건 수와 무관하게 2쿼리 (N+1 제거)
+export async function pollResultsBulk(db, pollIds) {
+  const out = new Map(pollIds.map((id) => [id, { yes: 0, no: 0, abstain: 0, total: 0 }]));
+  if (!pollIds.length) return out;
+  const ph = pollIds.map(() => "?").join(",");
+  for (const row of await all(db, `SELECT poll_id, choice, COUNT(*) AS n FROM poll_votes WHERE poll_id IN (${ph}) GROUP BY poll_id, choice`, ...pollIds)) {
+    const r = out.get(row.poll_id);
+    if (r && row.choice in r) { r[row.choice] = row.n; r.total += row.n; }
+  }
+  return out;
+}
+export async function userVotesBulk(db, pollIds, userId) {
+  const out = new Map();
+  if (!pollIds.length) return out;
+  const ph = pollIds.map(() => "?").join(",");
+  for (const row of await all(db, `SELECT poll_id, choice FROM poll_votes WHERE user_id=? AND poll_id IN (${ph})`, userId, ...pollIds)) out.set(row.poll_id, row.choice);
+  return out;
+}
 
 // ----- 행사 참가 신청 -----
 export const rsvpEvent = (db, eventId, aid, userId) =>
@@ -258,6 +279,14 @@ export const listRsvps = (db, eventId) =>
            JOIN users u ON u.id = r.user_id LEFT JOIN businesses b ON b.owner_id = u.id
            WHERE r.event_id=? ORDER BY r.created_at`, eventId);
 export const userRsvped = async (db, eventId, userId) => !!(await first(db, "SELECT 1 AS x FROM event_rsvps WHERE event_id=? AND user_id=?", eventId, userId));
+// 행사 페이지용 일괄 요약 — 행사 수와 무관하게 1쿼리 (비회원은 uid 0)
+export const eventRsvpSummary = (db, aid, uid = 0) =>
+  all(db, "SELECT event_id, COUNT(*) AS n, MAX(user_id = ?2) AS mine FROM event_rsvps WHERE association_id = ?1 GROUP BY event_id", aid, uid);
+// 관리자 행사 목록용 — 상인회 전체 참가 명단을 1쿼리로
+export const listRsvpsByAssoc = (db, aid) =>
+  all(db, `SELECT r.event_id, u.name AS user_name, b.name AS biz_name FROM event_rsvps r
+           JOIN users u ON u.id = r.user_id LEFT JOIN businesses b ON b.owner_id = u.id
+           WHERE r.association_id=? ORDER BY r.created_at`, aid);
 
 // ----- 회비 장부 (납부 기록만 — 결제 아님) -----
 export const setDuePaid = (db, aid, userId, period) =>
@@ -301,7 +330,7 @@ export async function listNoticesPaged(db, aid, { page = 1, perPage = 20, q = nu
 
 // ----- Events -----
 export const listEvents = (db, aid, upcomingOnly = false) => upcomingOnly
-  ? all(db, "SELECT * FROM events WHERE association_id=? AND event_date >= date('now') ORDER BY event_date ASC", aid)
+  ? all(db, "SELECT * FROM events WHERE association_id=? AND event_date >= ? ORDER BY event_date ASC", aid, kstToday()) // date('now')=UTC — 새벽 0~9시에 어제 행사가 남던 버그
   : all(db, "SELECT * FROM events WHERE association_id=? ORDER BY event_date DESC", aid);
 export const getEvent = (db, id) => first(db, "SELECT * FROM events WHERE id=?", id);
 export async function createEvent(db, { associationId, title, event_date, place, description, image }) {
@@ -383,6 +412,12 @@ const TO_SIGN = `d.association_id=? AND d.closed=0 AND (d.due_date='' OR d.due_d
   AND ${TURN_OK}`;
 export const listDocumentsToSign = (db, aid, uid) => all(db, `SELECT d.* FROM documents d WHERE ${TO_SIGN} ORDER BY d.created_at DESC`, aid, uid, uid, uid);
 export const countDocumentsToSign = async (db, aid, uid) => (await first(db, `SELECT COUNT(*) AS n FROM documents d WHERE ${TO_SIGN}`, aid, uid, uid, uid)).n;
+// 대상이 지정된 문서(요청 행이 존재)는 대상자만 서명 가능 — 목록(TO_SIGN)과 동일한 규칙을 액션에도 강제
+export async function canReceiveSign(db, docId, uid) {
+  const any = await first(db, "SELECT 1 AS x FROM signature_requests WHERE document_id=? LIMIT 1", docId);
+  if (!any) return true; // 대상 미지정 문서 = 회원 전체 대상
+  return !!(await first(db, "SELECT 1 AS x FROM signature_requests WHERE document_id=? AND user_id=?", docId, uid));
+}
 export async function canSignNow(db, doc, uid) {
   if (!doc.ordered) return true;
   const mine = await first(db, "SELECT sign_order FROM signature_requests WHERE document_id=? AND user_id=?", doc.id, uid);

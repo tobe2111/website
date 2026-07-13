@@ -174,6 +174,7 @@ CREATE TABLE IF NOT EXISTS event_rsvps (
   created_at     TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE(event_id, user_id)
 );
+CREATE INDEX IF NOT EXISTS idx_rsvp_assoc ON event_rsvps(association_id);
 
 CREATE TABLE IF NOT EXISTS dues (
   id             INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -184,6 +185,7 @@ CREATE TABLE IF NOT EXISTS dues (
   created_at     TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE(association_id, user_id, period)
 );
+CREATE INDEX IF NOT EXISTS idx_dues_period ON dues(association_id, period);
 
 CREATE TABLE IF NOT EXISTS notices (
   id             INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -304,7 +306,7 @@ CREATE TABLE IF NOT EXISTS settings (
 
 // 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
 // 마이그레이션 세대 — migrateColumns 에 단계를 추가할 때마다 +1
-const SCHEMA_VERSION = "12";
+const SCHEMA_VERSION = "13";
 
 export async function ensureSchema(db) {
   const has = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='associations'").first();
@@ -384,6 +386,9 @@ async function migrateColumns(db) {
     const tbl = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").bind(name).first();
     if (!tbl) { await db.prepare(ddl).run(); for (const i of idx) await db.prepare(i).run(); }
   }
+  // v13 인덱스 (기존 배포 업그레이드): 행사 신청 상인회 집계·회비 월 조회
+  await db.prepare("CREATE INDEX IF NOT EXISTS idx_rsvp_assoc ON event_rsvps(association_id)").run();
+  await db.prepare("CREATE INDEX IF NOT EXISTS idx_dues_period ON dues(association_id, period)").run();
   // events 대표 이미지 컬럼 (기존 배포 업그레이드)
   const evTbl = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='events'").first();
   if (evTbl) {

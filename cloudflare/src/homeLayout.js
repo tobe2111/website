@@ -160,7 +160,7 @@ function renderSection(s, deps) {
       if (!deps.updatesHtml) return ""; // 소식 없으면 섹션 숨김
       return sectionWrap("", s.title || "동네 새소식", "", `<div class="update-grid">${deps.updatesHtml}</div>`);
     case "mapbanner": {
-      const n = deps.counts ? deps.counts.businesses : 0;
+      const n = deps.stats ? deps.stats.businesses : 0; // counts.businesses 는 페이지당 카드 수(최대 6) — 전체 수는 stats
       const sub = s.subtitle || (n > 0 ? `${n}곳이 지도 위에. 가까운 가게를 한눈에 찾아요.` : "가까운 가게를 지도에서 한눈에 찾아요.");
       return `<section class="section" style="padding-top:0"><div class="container">
         <a href="${deps.base}/map" class="map-banner">

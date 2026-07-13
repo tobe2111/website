@@ -17,9 +17,9 @@ export function redirect(location, status = 303, headers = {}) {
   const loc = /[^\x00-\x7F]/.test(location) ? encodeURI(location) : location;
   return new Response("", { status, headers: { Location: loc, ...headers } });
 }
-// msg 알림과 함께 뒤로 (PRG 패턴)
+// msg 알림과 함께 뒤로 (PRG 패턴) — 대상에 이미 쿼리가 있으면 & 로 잇는다 (?t=토큰?msg=… 오염 방지)
 export function back(to, msg, err = false) {
-  const q = msg ? `?${err ? "err=1&" : ""}msg=${encodeURIComponent(msg)}` : "";
+  const q = msg ? `${to.includes("?") ? "&" : "?"}${err ? "err=1&" : ""}msg=${encodeURIComponent(msg)}` : "";
   return redirect(to + q);
 }
 export function notFoundResponse(ctx) {

@@ -1,7 +1,7 @@
 // 공개/인증 페이지 핸들러 (async). ctx = { env, db, assoc, base, user, url, query, csrf, params }
 import * as D from "./db.js";
 import { esc, clip, openBadge, openNow, fmtBytes } from "./util.js";
-import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG, ORIGIN } from "./render.js";
+import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG, ORIGIN, assetUrl } from "./render.js";
 import { verifyInviteToken } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
 import { html, notFoundResponse, back } from "./http.js";
 import { galleryItem } from "./media-render.js";
@@ -160,7 +160,7 @@ export async function home(ctx) {
     ...(assoc.address ? { address: { "@type": "PostalAddress", streetAddress: assoc.address, addressCountry: "KR" } } : {}),
   };
   return html(layout({ title: "", assoc, base, user, body, activeNav: `${base}/`, csrf, description: assoc.tagline, jsonLd: orgLd,
-    scripts: names.length ? `<script src="/js/suggest.js" defer></script>` : "" }));
+    scripts: names.length ? `<script src="${assetUrl("/js/suggest.js")}" defer></script>` : "" }));
 }
 
 function layoutEditor(base, layoutArr) {
@@ -191,10 +191,9 @@ export async function businesses(ctx) {
   const openOnly = query.get("open") === "1";
   const page = parseInt(query.get("page") || "1", 10) || 1;
   // "지금 영업중" 필터: 영업시간 문자열 기반이라 서버에서 계산 — 페이지네이션 대신 넉넉히 가져와 거른다
-  let { items, total, page: cur, pages } = await D.listBusinessesPaged(db, assoc.id, { category: cat, q, page: openOnly ? 1 : page, perPage: openOnly ? 200 : 12 });
+  let { items, total, page: cur, pages } = await D.listBusinessesPaged(db, assoc.id, { category: cat, q, page: openOnly ? 1 : page, perPage: openOnly ? 1000 : 12 }); // open 필터는 서버 계산이라 넉넉히 (1000곳 초과 상권은 현실적으로 없음)
   if (openOnly) { items = items.filter((b) => openNow(b.hours) === true && !D.isDayOff(b)); total = items.length; cur = 1; pages = 1; }
   const cats = await D.distinctCategories(db, assoc.id);
-  const qs = (o) => { const p = new URLSearchParams(); for (const [k, v] of Object.entries(o)) if (v) p.set(k, v); const s = p.toString(); return s ? "?" + s : ""; };
   const chips = `<a href="${base}/businesses${qs({ q })}" class="chip-filter${!cat && !openOnly ? " active" : ""}">전체</a>` +
     `<a href="${base}/businesses${qs({ q, open: "1" })}" class="chip-filter chip-open${openOnly ? " active" : ""}">● 지금 영업중</a>` +
     `<button type="button" class="chip-filter chip-fav" id="favFilter" hidden>❤ 찜한 가게</button>` +
@@ -208,7 +207,7 @@ export async function businesses(ctx) {
     <div class="market-grid" id="bizGrid">${cards}</div>
     ${openOnly ? "" : pager((i) => `${base}/businesses${qs({ category: cat, q, page: i })}`, cur, pages)}
   </div></section>`;
-  return html(layout({ title: "가입 점포", assoc, base, user, body, activeNav: `${base}/businesses`, csrf, scripts: `<script src="/js/fav.js" defer></script>` }));
+  return html(layout({ title: "가입 점포", assoc, base, user, body, activeNav: `${base}/businesses`, csrf, scripts: `<script src="${assetUrl("/js/fav.js")}" defer></script>` }));
 }
 
 export async function businessDetail(ctx) {
@@ -216,10 +215,10 @@ export async function businessDetail(ctx) {
   const b = await D.getBusinessBySlug(db, assoc.id, params.slug);
   const canSee = b && (b.status === "approved" || (user && (user.id === b.owner_id || user.role === "SUPERADMIN" || (user.role === "ADMIN" && user.association_id === assoc.id))));
   if (!canSee) return notFoundResponse(ctx);
-  const [media, prods, coupons, updates] = await Promise.all([D.listMedia(db, b.id), D.listProducts(db, b.id), D.listActiveCoupons(db, b.id), D.listUpdates(db, b.id, 5)]);
-  // 같은 업종 다른 가게 추천 (상권 내 순환)
-  const { items: sameCat } = await D.listBusinessesPaged(db, assoc.id, { category: b.category, perPage: 8 });
-  const others = sameCat.filter((x) => x.id !== b.id).slice(0, 3);
+  const [media, prods, coupons, updates, others] = await Promise.all([
+    D.listMedia(db, b.id), D.listProducts(db, b.id), D.listActiveCoupons(db, b.id), D.listUpdates(db, b.id, 5),
+    D.listSameCategory(db, assoc.id, b.category, b.id, 3), // 같은 업종 추천 (상권 내 순환)
+  ]);
   const otherCovers = others.length ? await D.coverImagesFor(db, others.map((x) => x.id)) : new Map();
   const images = media.filter((m) => m.kind === "image");
   const vids = media.filter((m) => m.kind === "video" || m.kind === "embed");
@@ -304,14 +303,14 @@ export async function businessDetail(ctx) {
     description: clip(b.description) || `${assoc.name} · ${b.category} · ${b.name}`,
     ogImage: cover ? (cover.thumb || cover.filename) : "",
     jsonLd: ld,
-    scripts: `${media.length ? `<script src="/js/viewer.js" defer></script>` : ""}<script src="/js/share.js" defer></script>${hasGeo ? `<script src="https://oapi.map.naver.com/openapi/v3/maps.js?${esc(env.NAVER_MAP_PARAM || "ncpClientId")}=${esc(naverKey)}"></script><script src="/js/map.js" defer></script>` : ""}` }));
+    scripts: `${media.length ? `<script src="${assetUrl("/js/viewer.js")}" defer></script>` : ""}<script src="${assetUrl("/js/share.js")}" defer></script>${hasGeo ? `<script src="https://oapi.map.naver.com/openapi/v3/maps.js?${esc(env.NAVER_MAP_PARAM || "ncpClientId")}=${esc(naverKey)}"></script><script src="${assetUrl("/js/map.js")}" defer></script>` : ""}` }));
 }
 
 export function loginForm(ctx) {
   const { env, query, csrf } = ctx;
   const body = `<section class="section page-top"><div class="container auth-wrap"><div class="auth-card">
     ${authHead("로그인", "상인회 회원·관리자 로그인")}
-    ${flash(query.get("msg") ? decodeURIComponent(query.get("msg")) : "", query.get("err") ? "err" : "ok")}
+    ${flash(query.get("msg") || "", query.get("err") ? "err" : "ok")}
     <form method="post" action="/login" class="stack-form">
       <label>이메일<input type="email" name="email" required autocomplete="email" /></label>
       <label>비밀번호<input type="password" name="password" required autocomplete="current-password" /></label>
@@ -323,7 +322,7 @@ export function loginForm(ctx) {
   return html(layout({ title: "로그인", assoc: ctx.assoc, base: ctx.base, body, csrf, scripts: turnstileScript(env) }));
 }
 
-const flashOf = (q) => flash(q.get("msg") ? decodeURIComponent(q.get("msg")) : "", q.get("err") ? "err" : "ok");
+const flashOf = (q) => flash(q.get("msg") || "", q.get("err") ? "err" : "ok"); // get() 이 이미 디코드 — 이중 디코드는 %25 등에서 URIError
 // 디자인 v2: 인증 카드 브랜드 아이콘 헤더
 const authHead = (title, sub) => `<div class="auth-head"><span class="mark auth-mark">${STOREFRONT_SVG}</span><h1 class="auth-title">${esc(title)}</h1><p class="auth-sub">${esc(sub)}</p></div>`;
 
@@ -345,7 +344,7 @@ export async function mapPage(ctx) {
   const mapEl = naver
     ? `<div id="storeMap" class="store-map" data-center-lat="${assoc.map_lat}" data-center-lng="${assoc.map_lng}" data-zoom="${assoc.map_zoom}" data-base="${esc(base)}"></div>`
     : `<div class="map-fallback"><p>🗺️ 인터랙티브 지도는 관리자가 네이버 지도 키를 설정하면 표시됩니다. 아래 목록에서 각 점포의 네이버 지도를 열 수 있습니다.</p></div>`;
-  const loader = naver ? `<script src="https://oapi.map.naver.com/openapi/v3/maps.js?${esc(env.NAVER_MAP_PARAM || "ncpClientId")}=${esc(naver)}"></script><script src="/js/map.js" defer></script>` : "";
+  const loader = naver ? `<script src="https://oapi.map.naver.com/openapi/v3/maps.js?${esc(env.NAVER_MAP_PARAM || "ncpClientId")}=${esc(naver)}"></script><script src="${assetUrl("/js/map.js")}" defer></script>` : "";
   const markerData = markers.map((m) => ({ name: m.name, slug: m.slug, category: m.category, lat: m.lat, lng: m.lng, address: m.address || "", phone: m.phone || "" }));
   const body = `<section class="section page-top"><div class="container">
     <div class="section-head"><p class="section-eyebrow">MAP</p><h2 class="section-title">가입 점포 지도</h2><p class="section-lead">${esc(assoc.name)} 가입 점포 ${markers.length}곳</p></div>
@@ -418,7 +417,7 @@ export async function noticeDetail(ctx) {
     ${n.image ? `<img class="article-image" src="${esc(mediaUrl(n.image))}" alt="${esc(n.title)}" />` : ""}
     <div class="article-body">${esc(n.body).replace(/\n/g, "<br />")}</div>
     <div class="article-actions"><button type="button" class="btn btn-share" data-share data-share-title="${esc(n.title)} — ${esc(assoc.name)}">${SHARE_SVG} 공지 공유하기</button></div></div></section>`;
-  return html(layout({ title: n.title, assoc, base, user, body, activeNav: `${base}/notices`, csrf, description: clip(n.body) || n.title, ogImage: n.image || "", scripts: `<script src="/js/share.js" defer></script>` }));
+  return html(layout({ title: n.title, assoc, base, user, body, activeNav: `${base}/notices`, csrf, description: clip(n.body) || n.title, ogImage: n.image || "", scripts: `<script src="${assetUrl("/js/share.js")}" defer></script>` }));
 }
 
 // ================= 행사 =================
@@ -426,10 +425,12 @@ export async function events(ctx) {
   const { db, assoc, base, user, query, csrf } = ctx;
   const list = await D.listEvents(db, assoc.id);
   const isMember = !!user && (user.association_id === assoc.id || user.role === "SUPERADMIN");
+  // 행사 수와 무관하게 1쿼리 (건별 카운트·내 신청 조회의 N+1 제거)
+  const rsvpMap = new Map((await D.eventRsvpSummary(db, assoc.id, isMember ? user.id : 0)).map((r) => [r.event_id, r]));
   const cards = [];
   for (const e of list) {
-    const count = await D.rsvpCount(db, e.id);
-    const mine = isMember ? await D.userRsvped(db, e.id, user.id) : false;
+    const count = rsvpMap.get(e.id)?.n || 0;
+    const mine = isMember ? !!rsvpMap.get(e.id)?.mine : false;
     const rsvp = `<div class="event-rsvp">
       ${count ? `<span class="rsvp-count">참가 신청 ${count}곳</span>` : ""}
       ${isMember ? (mine
@@ -451,11 +452,14 @@ export async function polls(ctx) {
   const { db, assoc, base, user, query, csrf } = ctx;
   const list = await D.listPolls(db, assoc.id);
   const isAdmin = user.role === "ADMIN" || user.role === "SUPERADMIN";
+  // 안건 수와 무관하게 2쿼리 (건별 결과·내 표 조회의 N+1 제거)
+  const ids = list.map((p) => p.id);
+  const [resultsMap, votesMap] = await Promise.all([D.pollResultsBulk(db, ids), D.userVotesBulk(db, ids, user.id)]);
   const cards = [];
   for (const p of list) {
     const open = D.isPollOpen(p);
-    const r = await D.pollResults(db, p.id);
-    const mine = await D.userVote(db, p.id, user.id);
+    const r = resultsMap.get(p.id);
+    const mine = votesMap.get(p.id) || null;
     const pct = (n) => (r.total ? Math.round((n / r.total) * 100) : 0);
     const bar = (label, key, cls) => `<div class="poll-bar"><span class="pb-label">${label} <b>${r[key]}표</b></span>
       <span class="pb-track"><span class="pb-fill ${cls}" style="width:${pct(r[key])}%"></span></span><span class="pb-pct">${pct(r[key])}%</span></div>`;
@@ -486,7 +490,7 @@ export async function polls(ctx) {
     ${createForm}
     ${cards.join("") || `<p class="empty">진행 중인 안건이 없습니다.</p>`}
   </div></section>`;
-  return html(layout({ title: "안건 투표", assoc, base, user, body, activeNav: `${base}/board`, csrf }));
+  return html(layout({ title: "안건 투표", assoc, base, user, body, activeNav: `${base}/polls`, csrf }));
 }
 
 // ================= 회원 게시판 =================
@@ -515,7 +519,7 @@ export async function board(ctx) {
         <button class="btn btn-primary btn-sm">등록</button></form></section>
     <ul class="board-list">${rows}</ul>
     ${pager((i) => `${base}/board${qs({ q, page: i })}`, cur, pages)}</div></section>`;
-  return html(layout({ title: "회원 게시판", assoc, base, user, body, activeNav: `${base}/board`, csrf, scripts: `<script src="/js/upload-resize.js" defer></script>` }));
+  return html(layout({ title: "회원 게시판", assoc, base, user, body, activeNav: `${base}/board`, csrf, scripts: `<script src="${assetUrl("/js/upload-resize.js")}" defer></script>` }));
 }
 export async function postDetail(ctx) {
   const { db, assoc, base, user, params, query, csrf } = ctx;
@@ -547,7 +551,7 @@ export async function postDetail(ctx) {
     <ul class="comment-list">${cRows}</ul>
     <form method="post" action="${base}/board/${p.id}/comment" class="stack-form compact comment-form"><textarea name="body" rows="3" placeholder="댓글" required maxlength="3000"></textarea><button class="btn btn-primary btn-sm">댓글 등록</button></form>
   </div></section>`;
-  return html(layout({ title: p.title, assoc, base, user, body, activeNav: `${base}/board`, csrf, scripts: tiles ? `<script src="/js/viewer.js" defer></script>` : "" }));
+  return html(layout({ title: p.title, assoc, base, user, body, activeNav: `${base}/board`, csrf, scripts: tiles ? `<script src="${assetUrl("/js/viewer.js")}" defer></script>` : "" }));
 }
 export async function editPost(ctx) {
   const { db, assoc, base, user, params, query, csrf } = ctx;
@@ -568,7 +572,7 @@ export async function editPost(ctx) {
       <label class="file-inline">📷 사진 추가 (총 6장까지)<input type="file" name="images" accept="image/*" multiple /></label>
       <div class="post-actions"><button class="btn btn-primary">저장</button><a href="${base}/board/${p.id}" class="btn btn-ghost">취소</a></div>
     </form></div></section>`;
-  return html(layout({ title: "글 수정", assoc, base, user, body, activeNav: `${base}/board`, csrf, scripts: `<script src="/js/upload-resize.js" defer></script>` }));
+  return html(layout({ title: "글 수정", assoc, base, user, body, activeNav: `${base}/board`, csrf, scripts: `<script src="${assetUrl("/js/upload-resize.js")}" defer></script>` }));
 }
 
 // ================= 회원가입 =================
@@ -800,8 +804,8 @@ export async function dashboard(ctx) {
     </div>
     ${productPanel}
     </div></section>`;
-  const picker = naver ? `<script src="https://oapi.map.naver.com/openapi/v3/maps.js?${esc(env.NAVER_MAP_PARAM || "ncpClientId")}=${esc(naver)}&submodules=geocoder"></script><script src="/js/map.js" defer></script>` : "";
-  return html(layout({ title: "내 업체 관리", assoc, base, user, body, csrf, scripts: `<script src="/js/viewer.js" defer></script><script src="/js/upload-resize.js" defer></script><script src="/js/qr.js" defer></script><script src="/js/qr-widget.js" defer></script>${picker}` }));
+  const picker = naver ? `<script src="https://oapi.map.naver.com/openapi/v3/maps.js?${esc(env.NAVER_MAP_PARAM || "ncpClientId")}=${esc(naver)}&submodules=geocoder"></script><script src="${assetUrl("/js/map.js")}" defer></script>` : "";
+  return html(layout({ title: "내 업체 관리", assoc, base, user, body, csrf, scripts: `<script src="${assetUrl("/js/viewer.js")}" defer></script><script src="${assetUrl("/js/upload-resize.js")}" defer></script><script src="${assetUrl("/js/qr.js")}" defer></script><script src="${assetUrl("/js/qr-widget.js")}" defer></script>${picker}` }));
 }
 
 const docBody = (b) => esc(b).replace(/\n/g, "<br />");
@@ -815,18 +819,25 @@ const csvCell = (v) => {
 // ================= 관리자 =================
 export async function admin(ctx) {
   const { db, assoc, base, user, query, csrf } = ctx;
-  const s = await D.stats(db, assoc.id);
-  const all = await D.listAllBusinesses(db, assoc.id);
-  const notices = await D.listNotices(db, assoc.id);
-  const events = await D.listEvents(db, assoc.id);
-  const members = await D.listUsersByAssociation(db, assoc.id, "MERCHANT");
-  const admins = await D.listUsersByAssociation(db, assoc.id, "ADMIN");
-  const notifs = await D.listNotifications(db, assoc.id, 15);
-  const unread = await D.unreadCount(db, assoc.id);
+  // 독립 쿼리 병렬화 — D1 은 쿼리마다 왕복이라 직렬 대기가 관리자 TTFB 의 주범이었음
+  const duePeriod0 = /^\d{4}-\d{2}$/.test(query.get("due_period") || "") ? query.get("due_period") : D.kstToday().slice(0, 7);
+  const [s, all, notices, events, members, admins, notifs, unread, auditLog, met, assocProducts, allRsvps, dueRowsRaw] = await Promise.all([
+    D.stats(db, assoc.id),
+    D.listAllBusinesses(db, assoc.id),
+    D.listNotices(db, assoc.id),
+    D.listEvents(db, assoc.id),
+    D.listUsersByAssociation(db, assoc.id, "MERCHANT"),
+    D.listUsersByAssociation(db, assoc.id, "ADMIN"),
+    D.listNotifications(db, assoc.id, 15),
+    D.unreadCount(db, assoc.id),
+    D.listAudit(db, assoc.id, 12),
+    D.engagementMetrics(db, assoc.id),
+    D.listAssocProducts(db, assoc.id),
+    D.listRsvpsByAssoc(db, assoc.id),
+    D.listDuesForPeriod(db, assoc.id, duePeriod0),
+  ]);
   const today = new Date().toISOString().slice(0, 10);
   const lay = parseLayout(assoc.home_layout, assoc.name);
-  const auditLog = await D.listAudit(db, assoc.id, 12);
-  const met = await D.engagementMetrics(db, assoc.id);
   // 핵심 가설 계측: "회원이 스스로 채운다"가 성립하는가. 셀프 등록률 30% 이상이면 성립 신호.
   const selfOk = met.total >= 5 && met.selfRate >= 30;
   const metricsPanel = `<section class="panel panel-accent"><div class="panel-head"><h2 class="panel-title">참여 계측 <span class="badge badge-brand">핵심 지표</span></h2>
@@ -837,7 +848,6 @@ export async function admin(ctx) {
       <div class="stat-card left"><div class="stat-top"><span class="stat-label">정보 채움률</span></div><span class="stat-num">${met.filledRate}%</span><div class="stat-delta mut">소개·사진 있는 업체 ${met.filledCnt}곳</div></div>
       <div class="stat-card left"><div class="stat-top"><span class="stat-label">최근 30일 갱신률</span></div><span class="stat-num">${met.refreshRate}%</span><div class="stat-delta mut">갱신 ${met.refreshedCnt}곳</div></div></div>
     <p class="panel-hint" style="margin-top:14px">판정 기준: 셀프 등록률 <strong>30%↑</strong> 이면 "회원이 채우는 서비스" 성립 → 확장 단계. 못 넘으면 "관리자가 쉽게 채우는 도구"로 포지셔닝.</p></section>`;
-  const assocProducts = await D.listAssocProducts(db, assoc.id);
   const productModPanel = assocProducts.length ? `<section class="panel"><h2 class="panel-title">제품 진열 관리 <span class="badge badge-muted">${assocProducts.length}</span></h2>
     <p class="panel-hint">부적절한 제품은 숨길 수 있습니다. (사장님 화면에는 '관리자 숨김'으로 표시됩니다)</p>
     <div class="table-scroll"><table class="admin-table"><thead><tr><th>제품</th><th>점포</th><th>상태</th><th>처리</th></tr></thead><tbody>
@@ -857,17 +867,19 @@ export async function admin(ctx) {
     <td class="actions-cell"><form method="post" action="${base}/admin/user/${m.id}/reset-password" data-confirm="임시 비밀번호를 발급할까요?"><button class="btn btn-xs btn-ghost">임시 비밀번호</button></form></td></tr>`).join("") : `<tr><td colspan="3" class="empty">회원이 없습니다.</td></tr>`;
   const noticeRows2 = notices.map((n) => `<li><span class="notice-tag${n.pinned ? " tag-important" : ""}">${esc(n.tag)}</span><span class="notice-title">${esc(n.title)}</span>
     <form method="post" action="${base}/admin/notice/${n.id}/delete" data-confirm="삭제?"><button class="link-danger">삭제</button></form></li>`).join("") || `<li class="empty">공지가 없습니다.</li>`;
+  const rsvpsByEvent = new Map();
+  for (const r of allRsvps) { if (!rsvpsByEvent.has(r.event_id)) rsvpsByEvent.set(r.event_id, []); rsvpsByEvent.get(r.event_id).push(r); }
   let eventRows = "";
   for (const e of events) {
-    const rsvps = await D.listRsvps(db, e.id);
+    const rsvps = rsvpsByEvent.get(e.id) || [];
     eventRows += `<li><span class="event-mini-date">${esc(e.event_date)}</span><span class="notice-title">${esc(e.title)}</span>
       ${rsvps.length ? `<details class="rsvp-names"><summary>참가 ${rsvps.length}곳</summary><p>${rsvps.map((r) => esc(r.biz_name || r.user_name)).join(", ")}</p></details>` : ""}
       <form method="post" action="${base}/admin/event/${e.id}/delete" data-confirm="삭제?"><button class="link-danger">삭제</button></form></li>`;
   }
   eventRows = eventRows || `<li class="empty">행사가 없습니다.</li>`;
   // 회비 장부: ?due_period=YYYY-MM (기본 이번 달)
-  const duePeriod = /^\d{4}-\d{2}$/.test(query.get("due_period") || "") ? query.get("due_period") : D.kstToday().slice(0, 7);
-  const paidSet = new Set((await D.listDuesForPeriod(db, assoc.id, duePeriod)).map((r) => r.user_id));
+  const duePeriod = duePeriod0;
+  const paidSet = new Set(dueRowsRaw.map((r) => r.user_id));
   const dueRows = members.map((m) => `<tr><td>${esc(m.name)}<br /><small>${esc(m.business_name || "")}</small></td>
     <td>${paidSet.has(m.id) ? '<span class="badge badge-ok">납부</span>' : '<span class="badge badge-wait">미납</span>'}</td>
     <td class="actions-cell"><form method="post" action="${base}/admin/dues" class="inline-form">
@@ -875,7 +887,7 @@ export async function admin(ctx) {
       <button class="btn btn-xs ${paidSet.has(m.id) ? "btn-ghost" : "btn-primary"}">${paidSet.has(m.id) ? "납부 취소" : "납부 체크"}</button></form></td></tr>`).join("")
     || `<tr><td colspan="3" class="empty">회원이 없습니다.</td></tr>`;
   const duesPanel = `<section class="panel" id="p-dues"><div class="panel-head"><h2 class="panel-title">회비 장부 <span class="badge badge-muted">${paidSet.size}/${members.length} 납부</span></h2>
-      <form method="get" action="${base}/admin" class="inline-form"><input type="month" name="due_period" value="${esc(duePeriod)}" onchange="this.form.submit()" /><noscript><button class="btn btn-xs btn-ghost">이동</button></noscript></form></div>
+      <form method="get" action="${base}/admin" class="inline-form"><input type="month" name="due_period" value="${esc(duePeriod)}" data-autosubmit /><button class="btn btn-xs btn-ghost">이동</button></form></div>
     <p class="panel-hint">납부 <b>기록</b>만 남기는 장부입니다(결제 아님). 월을 바꿔 지난 달 현황도 볼 수 있습니다.</p>
     <div class="table-scroll"><table class="admin-table"><thead><tr><th>회원</th><th>${esc(duePeriod)}</th><th>처리</th></tr></thead><tbody>${dueRows}</tbody></table></div></section>`;
   const notifRows = notifs.length ? notifs.map((n) => `<li class="${n.is_read ? "" : "unread"}"><span class="notif-dot"></span><a href="${esc(n.link || base + "/admin")}" class="notif-msg">${esc(n.message)}</a><time>${esc(n.created_at.slice(5, 16).replace("T", " "))}</time></li>`).join("") : `<li class="empty">알림이 없습니다.</li>`;
@@ -910,7 +922,7 @@ export async function admin(ctx) {
       <div class="table-scroll"><table class="admin-table"><thead><tr><th>회원</th><th>업체</th><th>비밀번호</th></tr></thead><tbody>${memberRows}</tbody></table></div>
       ${query.get("invite") ? `<div class="invite-box">
         <p class="invite-box-title">✅ 초대 링크가 만들어졌습니다 <small>(7일 유효)</small></p>
-        <input type="text" class="invite-url" value="${esc(`${ORIGIN}${base}/invite?t=${encodeURIComponent(query.get("invite"))}`)}" readonly onclick="this.select()" />
+        <input type="text" class="invite-url" value="${esc(`${ORIGIN}${base}/invite?t=${encodeURIComponent(query.get("invite"))}`)}" readonly data-select-all />
         <span class="pill-row"><button type="button" class="btn btn-sm btn-primary" data-share data-share-url="${esc(`${ORIGIN}${base}/invite?t=${encodeURIComponent(query.get("invite"))}`)}" data-share-title="${esc(assoc.name)} 입점 초대">카톡으로 보내기 / 복사</button></span>
         <p class="panel-hint">사장님이 링크를 열어 이메일·비밀번호만 정하면 가게가 <b>승인 절차 없이 바로 공개</b>됩니다.</p></div>` : ""}
       <details class="help-box" style="margin-top:14px" ${query.get("invite") ? "" : "open"}><summary>📨 사장님 초대 링크 만들기 (가장 쉬운 온보딩)</summary>
@@ -967,7 +979,7 @@ export async function admin(ctx) {
         <ul class="admin-mini-list">${eventRows}</ul></section>
     </div>
     </div></div></div></section>`;
-  return html(layout({ title: "관리자", assoc, base, user, body, activeNav: `${base}/admin`, csrf, scripts: `<script src="/js/layout-editor.js" defer></script><script src="/js/upload-resize.js" defer></script><script src="/js/share.js" defer></script>` }));
+  return html(layout({ title: "관리자", assoc, base, user, body, activeNav: `${base}/admin`, csrf, scripts: `<script src="${assetUrl("/js/layout-editor.js")}" defer></script><script src="${assetUrl("/js/upload-resize.js")}" defer></script><script src="${assetUrl("/js/share.js")}" defer></script>` }));
 }
 
 // 관리자 온보딩 체크리스트 (모두 완료되면 자동으로 사라짐)
@@ -1040,6 +1052,7 @@ export async function signForm(ctx) {
   if (await D.hasSigned(db, d.id, user.id)) return back(base + "/sign", "이미 서명한 문서입니다.");
   if (d.closed) return back(base + "/sign", "마감된 문서입니다.", true);
   if (D.isPastDue(d)) return back(base + "/sign", "서명 기한이 지난 문서입니다.", true);
+  if (!(await D.canReceiveSign(db, d.id, user.id))) return back(base + "/sign", "이 문서의 서명 대상이 아닙니다.", true);
   const meta = `${d.ordered ? '<span class="badge badge-info">순차 서명</span>' : ""}${d.due_date ? `<span class="badge badge-wait">기한 ${esc(d.due_date)}</span>` : ""}`;
   if (!(await D.canSignNow(db, d, user.id))) {
     const wb = `<section class="section page-top"><div class="container narrow"><a href="${base}/sign" class="back-link">← 서명 목록</a>
@@ -1057,7 +1070,7 @@ export async function signForm(ctx) {
       <label class="check"><input type="checkbox" name="consent" value="1" required /> 위 내용을 확인했으며 본인이 전자서명하는 데 동의합니다.</label>
       <button class="btn btn-primary btn-block" id="signSubmit">전자서명 제출</button></form>
     <p class="auth-note">서명 시 서명자·시각·IP·기기·문서해시가 기록되고 Ed25519 디지털 서명으로 봉인됩니다.</p></div></section>`;
-  return html(layout({ title: `서명: ${d.title}`, assoc, base, user, body, csrf, scripts: `<script src="/js/sign.js" defer></script>` }));
+  return html(layout({ title: `서명: ${d.title}`, assoc, base, user, body, csrf, scripts: `<script src="${assetUrl("/js/sign.js")}" defer></script>` }));
 }
 
 export async function adminDocuments(ctx) {

@@ -605,10 +605,9 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .chip-open{color:var(--green-700)}
 /* 찜 하트 */
 .market-card{position:relative}
-.fav-btn{position:absolute;top:10px;left:10px;z-index:5;width:34px;height:34px;border-radius:50%;border:0;background:rgba(255,255,255,.88);color:#c6cfc9;font-size:1.05rem;cursor:pointer;box-shadow:var(--sh-1);transition:transform .15s,color .15s}
+.fav-btn{position:absolute;top:10px;right:10px;z-index:5;width:34px;height:34px;border-radius:50%;border:0;background:rgba(255,255,255,.88);color:#c6cfc9;font-size:1.05rem;cursor:pointer;box-shadow:var(--sh-1);transition:transform .15s,color .15s}
 .fav-btn:hover{transform:scale(1.1)}
 .fav-btn.is-on{color:#e0245e}
-.market-open{left:auto} /* 영업중 배지는 우상단 유지, 하트는 좌상단 */
 .chip-fav.active{background:#e0245e;border-color:#e0245e;color:#fff}
 /* 투표 */
 .poll-card{margin-bottom:16px}

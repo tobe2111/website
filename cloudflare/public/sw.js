@@ -24,7 +24,7 @@ self.addEventListener("fetch", (e) => {
   if (req.method !== "GET") return;
   const url = new URL(req.url);
   if (url.origin !== location.origin) return;
-  if (url.pathname.startsWith("/media/") || url.pathname.startsWith("/admin") || url.pathname.startsWith("/super") || url.pathname.startsWith("/dashboard")) return;
+  if (url.pathname.startsWith("/media/") || /^(\/t\/[^/]+)?\/(dashboard|admin|super|sign|account|polls|board|invite)(\/|$)/.test(url.pathname)) return; // 인증·개인 페이지는 캐시 금지 (테넌트 경로 포함)
   // 정적 자산: 캐시 응답 + 백그라운드 재검증
   if (/\.(css|js|svg|png|jpe?g|webp|ico|woff2?)$/.test(url.pathname) || url.pathname === "/manifest.webmanifest") {
     e.respondWith(caches.open(CACHE).then(async (c) => {
@@ -35,6 +35,6 @@ self.addEventListener("fetch", (e) => {
     return;
   }
   // 페이지: 네트워크 우선 → 실패 시 캐시 → 오프라인 안내
-  e.respondWith(fetch(req).then((res) => { const cp = res.clone(); caches.open(CACHE).then((c) => c.put(req, cp)); return res; })
+  e.respondWith(fetch(req).then((res) => { if (res.ok) { const cp = res.clone(); caches.open(CACHE).then((c) => c.put(req, cp)); } return res; }) // 500/404 를 오프라인 사본으로 남기지 않기
     .catch(() => caches.match(req).then((r) => r || new Response("<!doctype html><meta charset=utf-8><title>오프라인</title><body style='font-family:sans-serif;text-align:center;padding:80px'><h1>오프라인</h1><p>인터넷 연결을 확인해 주세요.</p>", { headers: { "content-type": "text/html; charset=utf-8" } }))));
 });

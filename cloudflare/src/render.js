@@ -51,6 +51,7 @@ ${assoc ? `<link rel="alternate" type="application/rss+xml" title="${brand} 공�
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" /></head>
 <body>
+<a class="skip-link" href="#main">본문 바로가기</a>
 <header class="site-header" id="siteHeader">
   <div class="container header-inner">
     <a class="brand" href="${base || "/"}">${assoc && assoc.logo ? `<img class="brand-logo" src="${esc(mediaUrl(assoc.logo))}" alt="" />` : `<span class="brand-mark">${STOREFRONT_SVG}</span>`}<span>${brand}</span></a>
@@ -59,7 +60,7 @@ ${assoc ? `<link rel="alternate" type="application/rss+xml" title="${brand} 공�
     <nav class="main-nav" id="mainNav">${nav}</nav>
   </div>
 </header>
-<main>${injected}</main>
+<main id="main">${injected}</main>
 <footer class="site-footer"><div class="container">
   <div class="foot-top">
     <nav class="foot-policy"><a href="/privacy" class="strong">개인정보처리방침</a><span class="sep"></span><a href="/terms">이용약관</a>${assoc ? `<span class="sep"></span><a href="${base}/contact">문의하기</a>` : ""}</nav>

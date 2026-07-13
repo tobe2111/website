@@ -54,6 +54,13 @@
     if (btn && !window.confirm(btn.getAttribute("data-confirm"))) { e.preventDefault(); e.stopPropagation(); }
     var pr = e.target.closest && e.target.closest("[data-print]");
     if (pr) { e.preventDefault(); window.print(); }
+    var sel = e.target.closest && e.target.closest("[data-select-all]");
+    if (sel && sel.select) sel.select();
+  });
+  // CSP 가 인라인 onchange 를 막으므로 위임으로 처리 (회비 장부 월 선택 등)
+  document.addEventListener("change", function (e) {
+    var el = e.target.closest && e.target.closest("[data-autosubmit]");
+    if (el && el.form) { if (el.form.requestSubmit) el.form.requestSubmit(); else el.form.submit(); }
   });
 
   // 중복 제출 방지 — 제출된 폼의 버튼을 잠가 느린 네트워크에서 두 번 눌리는 것을 막는다

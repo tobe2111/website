@@ -6,7 +6,7 @@ import { sessionTokenForUser, sessionCookie, clearSessionCookie } from "./auth.j
 import { back, redirect } from "./http.js";
 import * as storage from "./storage.js";
 import { parseEmbed } from "./embed.js";
-import { cap, sniffImage, EMAIL_RE, MAX_IMAGE_BYTES, slugify } from "./util.js";
+import { cap, sniffImage, EMAIL_RE, MAX_IMAGE_BYTES, slugify, esc } from "./util.js";
 import { contentHash, sealRecord, newVerifyCode } from "./esign.js";
 import { turnstileVerify } from "./turnstile.js";
 import { planOf } from "./plans.js";
@@ -357,7 +357,7 @@ export async function deleteComment(ctx) {
 }
 
 // ---------- 관리자 ----------
-const isAdmin = (user, assoc) => user && (user.role === "SUPERADMIN" || (user.role === "ADMIN" && user.association_id === assoc.id));
+const isAdmin = canModerateBoard; // 동일 판정 — 중복 정의 통합
 // 감사 로그 기록 (assoc=null 이면 플랫폼/슈퍼)
 const audit = (ctx, action, detail = "", assocId) =>
   D.logAudit(ctx.db, { associationId: assocId !== undefined ? assocId : (ctx.assoc ? ctx.assoc.id : null), userId: ctx.user.id, actorName: ctx.user.name, action, detail });
@@ -378,7 +378,7 @@ export async function adminBusinessStatus(ctx) {
       const link = `${origin}${base}/business/${encodeURIComponent(b.slug)}`;
       await sendEmail(ctx.env, {
         to: owner.email, subject: `🎉 '${b.name}' 가게가 공개되었습니다`,
-        html: mailShell("가게가 공개되었습니다!", `<p><b>${b.name}</b> 페이지가 ${assoc.name} 홈에 공개되었습니다.</p>
+        html: mailShell("가게가 공개되었습니다!", `<p><b>${esc(b.name)}</b> 페이지가 ${esc(assoc.name)} 홈에 공개되었습니다.</p>
           ${mailButton(link, "내 가게 페이지 보기")}
           <p>대시보드에서 <b>가게 QR 코드</b>를 인쇄해 계산대에 붙이고, <b>공유하기</b>로 카톡방에 알려보세요.</p>`),
       });
@@ -403,9 +403,11 @@ export async function adminDeleteNotice(ctx) {
   return back(base + "/admin", "공지를 삭제했습니다.");
 }
 export async function adminCreateEvent(ctx) {
-  const { db, form, base, assoc } = ctx;
+  const { db, env, form, base, assoc } = ctx;
   if (!(form.get("title") || "").trim() || !(form.get("event_date") || "").trim()) return back(base + "/admin", "행사명과 날짜를 입력하세요.", true);
-  await D.createEvent(db, { associationId: assoc.id, title: cap(form.get("title").trim(), 200), event_date: cap(form.get("event_date"), 10), place: cap(form.get("place"), 120), description: cap(form.get("description"), 2000) });
+  const up = await saveImages(env, form.getAll("image"), 1); // 폼의 대표 이미지 — 누락돼 조용히 버려지던 버그 수정
+  if (up.error) return back(base + "/admin", up.error, true);
+  await D.createEvent(db, { associationId: assoc.id, title: cap(form.get("title").trim(), 200), event_date: cap(form.get("event_date"), 10), place: cap(form.get("place"), 120), description: cap(form.get("description"), 2000), image: up.images[0]?.filename || "" });
   return back(base + "/admin", "행사를 등록했습니다.");
 }
 export async function adminDeleteEvent(ctx) {
@@ -602,7 +604,7 @@ export async function adminCreateDocument(ctx) {
     await Promise.all(recipients.filter((m) => m.email).map((m) => sendEmail(ctx.env, {
       to: m.email,
       subject: `[${assoc.name}] 전자서명 요청 — ${title}`,
-      html: mailShell(`${assoc.name} 전자서명`, `<p>${m.name || "회원"}님, 서명이 필요한 문서가 도착했습니다.</p><p><b>${title}</b>${dueDate ? ` (기한: ${dueDate})` : ""}${ordered ? " · 순차 서명 문서입니다" : ""}</p>${mailButton("서명하러 가기", `${origin}${base}/sign`)}`),
+      html: mailShell(`${esc(assoc.name)} 전자서명`, `<p>${esc(m.name || "회원")}님, 서명이 필요한 문서가 도착했습니다.</p><p><b>${esc(title)}</b>${dueDate ? ` (기한: ${dueDate})` : ""}${ordered ? " · 순차 서명 문서입니다" : ""}</p>${mailButton(`${origin}${base}/sign`, "서명하러 가기")}`),
     }).catch(() => {})));
   }
   await audit(ctx, "서명문서생성", title);
@@ -621,6 +623,8 @@ export async function memberSign(ctx) {
   if (d.closed) return back(base + "/sign", "마감된 문서입니다.", true);
   if (D.isPastDue(d)) return back(base + "/sign", "서명 기한이 지난 문서입니다.", true);
   if (await D.hasSigned(db, d.id, user.id)) return back(base + "/sign", "이미 서명한 문서입니다.", true);
+  // 대상 지정 문서는 지정된 회원만 서명 가능 (비대상자의 서명 봉인 위조 차단)
+  if (!(await D.canReceiveSign(db, d.id, user.id))) return back(base + "/sign", "이 문서의 서명 대상이 아닙니다.", true);
   if (!(await D.canSignNow(db, d, user.id))) return back(base + "/sign", "앞 순번의 서명이 완료된 후 서명할 수 있습니다.", true);
   if (form.get("consent") !== "1") return back(base + "/sign/" + d.id, "동의 확인란에 체크해 주세요.", true);
   const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(form.get("signature") || "");
@@ -699,7 +703,7 @@ export async function contactSubmit(ctx) {
     await sendEmail(env, {
       to: assoc.email,
       subject: `[${assoc.name}] 새 문의 — ${name}`,
-      html: mailShell(`${assoc.name} 문의`, `<p><b>보낸 분</b>: ${name}<br /><b>연락처</b>: ${contact}</p><p style="white-space:pre-wrap">${message.replace(/</g, "&lt;")}</p>`),
+      html: mailShell(`${esc(assoc.name)} 문의`, `<p><b>보낸 분</b>: ${esc(name)}<br /><b>연락처</b>: ${esc(contact)}</p><p style="white-space:pre-wrap">${esc(message)}</p>`),
     }).catch(() => {}); // 메일 실패해도 알림함에는 남음
   }
   return back(base + "/contact", "문의가 접수되었습니다. 확인 후 연락드리겠습니다.");
@@ -734,7 +738,8 @@ export async function adminCreateInvite(ctx) {
   return redirect(`${base}/admin?invite=${encodeURIComponent(token)}#p-members`);
 }
 export async function acceptInvite(ctx) {
-  const { db, env, form, addCookie, isProd, base, assoc } = ctx;
+  const { db, env, form, addCookie, isProd, base, assoc, ip } = ctx;
+  if (rateLimited(ip)) return back(base + "/invite", "시도가 너무 많습니다. 잠시 후 다시 시도해 주세요.", true);
   const inv = await verifyInviteToken(env.SESSION_SECRET, form.get("token"), assoc.id);
   if (!inv) return back(base + "/invite", "초대 링크가 만료되었거나 올바르지 않습니다. 관리자에게 새 링크를 요청해 주세요.", true);
   const name = cap((form.get("name") || "").trim(), 60);
@@ -937,7 +942,7 @@ export async function approveApplication(ctx) {
     const origin = new URL(ctx.request.url).origin;
     const r = await sendEmail(ctx.env, {
       to: app.contact_email, subject: `'${app.assoc_name}' 홈페이지가 개설되었습니다`,
-      html: mailShell("홈페이지 개설 완료", `<p><b>${app.assoc_name}</b> 홈페이지가 준비되었습니다.</p>
+      html: mailShell("홈페이지 개설 완료", `<p><b>${esc(app.assoc_name)}</b> 홈페이지가 준비되었습니다.</p>
         <p>관리자 계정: <b>${app.contact_email}</b><br>임시 비밀번호: <b style="font-family:monospace">${temp}</b></p>
         <p>로그인 후 반드시 비밀번호를 변경해 주세요.</p>${mailButton(origin + "/login", "로그인하기")}
         <p>홈 주소: ${origin}/t/${assoc.slug}</p>`),

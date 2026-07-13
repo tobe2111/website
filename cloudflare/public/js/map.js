@@ -87,7 +87,12 @@
     }
     function render() { try { if (CLUSTER) clustered(); else plain(); } catch (e) { try { plain(); } catch (_) {} } }
     render();
-    if (CLUSTER) naver.maps.Event.addListener(map, "idle", render);
+    // 클러스터 격자는 줌에만 의존(월드 픽셀 기준) — 팬·팝업 자동이동으로 재생성되면 열린 팝업이 즉시 닫히므로 줌 변경시에만 재계산
+    var lastZoom = map.getZoom();
+    if (CLUSTER) naver.maps.Event.addListener(map, "idle", function () {
+      var z = map.getZoom();
+      if (z !== lastZoom) { lastZoom = z; render(); }
+    });
 
     // 아래 점포 목록 클릭 → 해당 핀으로 부드럽게 이동
     document.querySelectorAll(".map-store[data-lat]").forEach(function (li) {

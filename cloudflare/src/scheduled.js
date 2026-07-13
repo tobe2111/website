@@ -39,7 +39,21 @@ async function dumpAll(db) {
   const dump = { backed_up_at: new Date().toISOString(), tables: {} };
   for (const t of TABLES) {
     try {
-      dump.tables[t] = (await db.prepare(`SELECT * FROM ${t}`).all()).results || [];
+      if (t === "settings") { // rowid 없는 소형 표
+        dump.tables[t] = (await db.prepare("SELECT * FROM settings").all()).results || [];
+        continue;
+      }
+      // 키셋 청크 — 한 번에 다 읽으면 D1 결과셋 한도·워커 메모리를 칠 수 있음 (특히 media·audit_log)
+      const rows = [];
+      let last = 0;
+      for (;;) {
+        const chunk = (await db.prepare(`SELECT rowid AS __rid, * FROM ${t} WHERE rowid > ? ORDER BY rowid LIMIT 2000`).bind(last).all()).results || [];
+        if (!chunk.length) break;
+        last = chunk[chunk.length - 1].__rid;
+        for (const r of chunk) { delete r.__rid; rows.push(r); }
+        if (chunk.length < 2000) break;
+      }
+      dump.tables[t] = rows;
     } catch { dump.tables[t] = null; } // 미생성 표(아주 옛 DB)는 건너뜀
   }
   return dump;
@@ -47,7 +61,9 @@ async function dumpAll(db) {
 
 export async function runBackup(env) {
   if (!env.MEDIA) return { skipped: "R2 미연결" };
-  const json = JSON.stringify(await dumpAll(env.DB));
+  let dump = await dumpAll(env.DB);
+  const json = JSON.stringify(dump);
+  dump = null; // 객체 그래프를 먼저 놓아 암호화 시 메모리 이중 보유를 줄임
   const enc = await encryptBackup(env.SESSION_SECRET, json);
   const key = `${BACKUP_PREFIX}backup-${new Date().toISOString().slice(0, 10)}.json.enc`;
   await env.MEDIA.put(key, enc, { httpMetadata: { contentType: "application/octet-stream" } });
