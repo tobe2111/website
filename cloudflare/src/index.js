@@ -68,6 +68,7 @@ const TENANT = [
   ["GET", "/invite", pages.invitePage],
   ["POST", "/invite", api.acceptInvite],
   ["GET", "/contact", pages.contactForm],
+  ["GET", "/urdeal", pages.urdealPage],
   ["POST", "/contact", api.contactSubmit],
   ["GET", "/board", pages.board, "MEMBER"],
   ["POST", "/board", api.createPost, "MEMBER"],

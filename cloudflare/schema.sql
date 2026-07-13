@@ -79,6 +79,7 @@ CREATE TABLE IF NOT EXISTS businesses (
   lat            REAL,
   lng            REAL,
   status         TEXT NOT NULL DEFAULT 'pending',
+  sns_naver      TEXT NOT NULL DEFAULT '',    -- 네이버 플레이스(스마트플레이스) URL
   sns_instagram  TEXT NOT NULL DEFAULT '',
   sns_youtube    TEXT NOT NULL DEFAULT '',
   sns_blog       TEXT NOT NULL DEFAULT '',

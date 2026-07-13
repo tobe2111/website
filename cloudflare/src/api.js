@@ -133,7 +133,7 @@ export async function updateBusiness(ctx) {
     description: cap(form.get("description"), 2000), phone: cap(form.get("phone"), 40),
     address: cap(form.get("address"), 200), hours: cap(form.get("hours"), 100), lat, lng,
     snsInstagram: snsUrl(form.get("sns_instagram")), snsYoutube: snsUrl(form.get("sns_youtube")),
-    snsBlog: snsUrl(form.get("sns_blog")), snsKakao: snsUrl(form.get("sns_kakao")),
+    snsBlog: snsUrl(form.get("sns_blog")), snsKakao: snsUrl(form.get("sns_kakao")), snsNaver: snsUrl(form.get("sns_naver")),
   });
   return back(base + "/dashboard", "업체 정보가 저장되었습니다.");
 }

@@ -53,6 +53,7 @@ const CLOCK_SVG = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" s
 const TAG_SVG = '<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 13.4 12 22 2 12V2h10l8.6 8.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.4"/></svg>';
 // 업체 SNS 원형 버튼 (시안: 히어로의 반투명 원형 아이콘 버튼)
 const SNS_DEFS = [
+  ["sns_naver", "네이버 플레이스", '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><text x="12" y="17" text-anchor="middle" font-size="15" font-weight="800" font-family="sans-serif">N</text></svg>'],
   ["sns_instagram", "인스타그램", '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1.2" fill="currentColor" stroke="none"/></svg>'],
   ["sns_youtube", "유튜브", '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M23 12s0-3.8-.5-5.6a2.9 2.9 0 0 0-2-2C18.7 4 12 4 12 4s-6.7 0-8.5.4a2.9 2.9 0 0 0-2 2C1 8.2 1 12 1 12s0 3.8.5 5.6a2.9 2.9 0 0 0 2 2C5.3 20 12 20 12 20s6.7 0 8.5-.4a2.9 2.9 0 0 0 2-2C23 15.8 23 12 23 12z" opacity=".9"/><path d="M10 15.5l6-3.5-6-3.5z" fill="var(--brand-800,#083f2b)"/></svg>'],
   ["sns_blog", "네이버 블로그", '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><text x="12" y="17" text-anchor="middle" font-size="15" font-weight="800" font-family="sans-serif">b</text></svg>'],
@@ -248,9 +249,11 @@ export async function businessDetail(ctx) {
   // 오시는 길: 좌표가 있으면 미니 지도 (브랜드 핀 재사용)
   const naverKey = assoc.map_client_id || env.NAVER_MAP_CLIENT_ID;
   const hasGeo = b.lat != null && b.lng != null && naverKey;
+  // 네이버 플레이스 링크가 있으면 검색 대신 그 가게 페이지로 직행 (리뷰·길찾기 정확)
+  const naverLink = b.sns_naver || `https://map.naver.com/p/search/${encodeURIComponent(b.address || b.name)}`;
   const wayToCome = b.lat != null && b.lng != null ? `<h2 class="biz-section-title">오시는 길</h2>
     ${hasGeo ? `<div id="bizMap" class="biz-map" data-lat="${b.lat}" data-lng="${b.lng}" data-name="${esc(b.name)}"></div>` : ""}
-    <p class="biz-way">${b.address ? `${PIN_SVG} ${esc(b.address)} · ` : ""}<a href="https://map.naver.com/p/search/${encodeURIComponent(b.address || b.name)}" target="_blank" rel="noopener">네이버 지도에서 길찾기 →</a></p>` : "";
+    <p class="biz-way">${b.address ? `${PIN_SVG} ${esc(b.address)} · ` : ""}<a href="${esc(naverLink)}" target="_blank" rel="noopener">네이버 지도에서 길찾기 →</a></p>` : "";
   const body = `
   <section class="biz-hero"><div class="container">${pending}
     <span class="chip chip-light">${esc(b.category)}</span>${bizStatusBadge(b)}<h1>${esc(b.name)}</h1>
@@ -286,6 +289,8 @@ export async function businessDetail(ctx) {
     ...(b.lat != null && b.lng != null ? { geo: { "@type": "GeoCoordinates", latitude: b.lat, longitude: b.lng } } : {}),
     ...(b.hours ? { openingHours: b.hours } : {}),
     ...(coverUrl ? { image: /^https?:\/\//.test(coverUrl) ? coverUrl : ORIGIN + coverUrl } : {}),
+    // sameAs: 네이버 플레이스·SNS — 검색엔진이 동일 가게임을 인식 (지역 검색 신뢰도)
+    ...((() => { const s = [b.sns_naver, b.sns_instagram, b.sns_youtube, b.sns_blog, b.sns_kakao].filter(Boolean); return s.length ? { sameAs: s } : {}; })()),
     parentOrganization: { "@type": "Organization", name: assoc.name, url: `${ORIGIN}${base}/` },
   }, {
     "@context": "https://schema.org", "@type": "BreadcrumbList",
@@ -335,7 +340,7 @@ export async function mapPage(ctx) {
   const listRows = markers.length ? markers.map((m) => `<li class="map-store" data-lat="${m.lat}" data-lng="${m.lng}">
       <a href="${base}/business/${esc(m.slug)}" class="map-store-name">${esc(m.name)}</a><span class="chip">${esc(m.category)}</span>
       ${m.address ? `<span class="map-store-addr">${PIN_SVG} ${esc(m.address)}</span>` : ""}
-      <a class="map-store-link" href="https://map.naver.com/p/search/${encodeURIComponent(m.address || m.name)}" target="_blank" rel="noopener">네이버 지도에서 열기 →</a></li>`).join("")
+      <a class="map-store-link" href="${esc(m.sns_naver || `https://map.naver.com/p/search/${encodeURIComponent(m.address || m.name)}`)}" target="_blank" rel="noopener">네이버 지도에서 열기 →</a></li>`).join("")
     : `<li class="empty">지도에 표시할 좌표가 등록된 점포가 없습니다.</li>`;
   const mapEl = naver
     ? `<div id="storeMap" class="store-map" data-center-lat="${assoc.map_lat}" data-center-lng="${assoc.map_lng}" data-zoom="${assoc.map_zoom}" data-base="${esc(base)}"></div>`
@@ -609,6 +614,33 @@ export async function invitePage(ctx) {
   return html(layout({ title: "초대 가입", assoc, base, body, csrf }));
 }
 
+// ================= 유어딜 연동 안내 =================
+export function urdealPage(ctx) {
+  const { assoc, base, user, csrf } = ctx;
+  const steps = [
+    ["1", "유어딜에 가게 등록", "운영사(리스터코퍼레이션)가 등록을 도와드립니다. 아래 문의로 연락주세요."],
+    ["2", "이용권·동네딜 만들기", "예: '2만원 식사권을 1만 8천원에' — 손님은 할인가로 사고, 가게는 선결제 매출이 생깁니다."],
+    ["3", "손님이 매장에서 사용", "손님이 폰으로 이용권을 보여주면 확인 후 사용 처리 — 끝."],
+  ];
+  const body = `<section class="section page-top"><div class="container narrow">
+    <div class="section-head"><p class="section-eyebrow">PARTNER</p><h2 class="section-title">유어딜로 매출 만들기</h2>
+      <p class="section-lead">이 홈페이지는 우리 가게를 <b>알리는 곳</b>, 유어딜은 <b>파는 곳</b>입니다. 운영사의 커머스 서비스라 상인회 회원은 등록을 도와드립니다.</p></div>
+    <div class="urdeal-hero">
+      <span class="fb-badge">FAMILY SERVICE</span>
+      <h3>유어딜 — 돈버는 쇼핑</h3>
+      <p>할인가로 사서 매장에서 바로 쓰는 <b>이용권</b>, 기프티콘 <b>교환권</b>, 내 주변 <b>동네딜</b>. 결제·정산은 유어딜이 처리하니 가게는 쿠폰 확인만 하면 됩니다.</p>
+      <a class="btn btn-primary" href="https://live.ur-team.com/" target="_blank" rel="noopener">유어딜 구경하기 →</a>
+    </div>
+    <div class="urdeal-steps">${steps.map(([n, t, d]) => `<div class="us-step"><span class="us-num">${n}</span><div><strong>${t}</strong><p>${d}</p></div></div>`).join("")}</div>
+    <div class="urdeal-vs">
+      <div class="uv-col"><h4>이 홈페이지 (무료)</h4><ul><li>가게 소개·사진·소식</li><li>보여주기 쿠폰 (결제 없음)</li><li>지도·검색 노출</li></ul></div>
+      <div class="uv-col is-urdeal"><h4>유어딜 (판매 채널)</h4><ul><li>이용권·교환권 실제 판매</li><li>동네딜로 신규 손님 유입</li><li>결제·정산 대행</li></ul></div>
+    </div>
+    <p class="panel-hint" style="text-align:center">등록 문의: <a href="${base}/contact">상인회 문의하기</a> 또는 유어딜에서 직접 신청</p>
+  </div></section>`;
+  return html(layout({ title: "유어딜 연동", assoc, base, user, body, csrf, description: "이용권·교환권·동네딜 — 유어딜로 우리 가게 매출 만들기" }));
+}
+
 // ================= 방문자 문의 =================
 export function contactForm(ctx) {
   const { env, assoc, base, query, csrf, user } = ctx;
@@ -691,7 +723,8 @@ export async function dashboard(ctx) {
       <span class="up-badge">운영사 서비스</span>
       <h2 class="panel-title">이용권·동네딜을 온라인으로 팔고 싶다면</h2>
       <p class="panel-hint">이곳의 쿠폰은 보여주기 혜택(결제 없음)입니다. 할인 이용권·기프티콘 교환권을 <strong>실제로 판매</strong>하려면 운영사의 커머스 <strong>유어딜</strong>과 함께하세요.</p>
-      <a class="btn btn-ghost btn-sm" href="https://live.ur-team.com/" target="_blank" rel="noopener">유어딜 알아보기 →</a></section>
+      <span class="pill-row"><a class="btn btn-primary btn-sm" href="${base}/urdeal">연동 방법 보기</a>
+      <a class="btn btn-ghost btn-sm" href="https://live.ur-team.com/" target="_blank" rel="noopener">유어딜 바로가기 →</a></span></section>
     <section class="panel"><h2 class="panel-title">가게 QR 코드</h2>
       <p class="panel-hint">인쇄해서 계산대·출입문에 붙여보세요. 손님이 스캔하면 우리 가게 페이지가 열립니다.</p>
       <div id="qrWidget" class="qr-widget" data-url="${base}/business/${esc(b.slug)}" data-name="${esc(b.name)}">
@@ -746,6 +779,7 @@ export async function dashboard(ctx) {
             <label>유튜브<input type="url" name="sns_youtube" value="${esc(b.sns_youtube || "")}" placeholder="youtube.com/@채널" /></label></div>
           <div class="form-two"><label>네이버 블로그<input type="url" name="sns_blog" value="${esc(b.sns_blog || "")}" placeholder="blog.naver.com/아이디" /></label>
             <label>카카오톡 채널<input type="url" name="sns_kakao" value="${esc(b.sns_kakao || "")}" placeholder="pf.kakao.com/_채널" /></label></div>
+          <label>네이버 플레이스 <small>(내 가게 네이버 지도 페이지 — 리뷰·길찾기 연결)</small><input type="url" name="sns_naver" value="${esc(b.sns_naver || "")}" placeholder="naver.me/… 또는 map.naver.com/p/entry/place/…" /></label>
           <div class="form-divider">지도 위치</div>
           ${naver ? `<div class="geo-search"><input type="text" id="geoQuery" value="${esc(b.address)}" placeholder="도로명 주소 (예: 서초대로 123)" aria-label="주소로 좌표 찾기" /><button type="button" class="btn btn-ghost btn-sm" id="geoBtn">주소로 찾기</button></div>
           <p class="geo-msg panel-hint" id="geoMsg" hidden></p>

@@ -81,6 +81,7 @@ CREATE TABLE IF NOT EXISTS businesses (
   lat            REAL,
   lng            REAL,
   status         TEXT NOT NULL DEFAULT 'pending',
+  sns_naver      TEXT NOT NULL DEFAULT '',    -- 네이버 플레이스(스마트플레이스) URL
   sns_instagram  TEXT NOT NULL DEFAULT '',
   sns_youtube    TEXT NOT NULL DEFAULT '',
   sns_blog       TEXT NOT NULL DEFAULT '',
@@ -303,7 +304,7 @@ CREATE TABLE IF NOT EXISTS settings (
 
 // 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
 // 마이그레이션 세대 — migrateColumns 에 단계를 추가할 때마다 +1
-const SCHEMA_VERSION = "11";
+const SCHEMA_VERSION = "12";
 
 export async function ensureSchema(db) {
   const has = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='associations'").first();
@@ -352,7 +353,7 @@ async function migrateColumns(db) {
     if (!bcols.some((c) => c.name === "updated_at")) {
       await db.prepare("ALTER TABLE businesses ADD COLUMN updated_at TEXT").run();
     }
-    for (const col of ["sns_instagram", "sns_youtube", "sns_blog", "sns_kakao", "day_off_date"]) {
+    for (const col of ["sns_instagram", "sns_youtube", "sns_blog", "sns_kakao", "sns_naver", "day_off_date"]) {
       if (!bcols.some((c) => c.name === col)) {
         await db.prepare(`ALTER TABLE businesses ADD COLUMN ${col} TEXT NOT NULL DEFAULT ''`).run();
       }

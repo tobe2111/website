@@ -122,3 +122,33 @@ test("가게 추천: 같은 업종 다른 가게가 상세 하단에", async () 
   assert.match(list, /data-fav=/);
   assert.match(list, /js\/fav\.js/);
 });
+
+test("네이버 플레이스 링크: 저장 → 플레이스 버튼·길찾기·지도 목록·JSON-LD sameAs 에 반영", async () => {
+  const env = makeEnv();
+  const { b } = await seed(env);
+  const j = jar(); await post(env, j, "/login", { email: "m@x.kr", password: "merchant1234" });
+  const r = await post(env, j, "/t/seocho/dashboard/business", {
+    name: "홍가네분식", category: "음식점", description: "떡볶이", phone: "", hours: "매일 10:00-21:00", address: "서초대로 123",
+    lat: "37.49", lng: "127.01", sns_naver: "https://naver.me/xyzabc12",
+  }, "/t/seocho/dashboard");
+  assert.equal(r.status, 303);
+  const h = await (await get(env, jar(), `/t/seocho/business/${encodeURIComponent(b.slug)}`)).text();
+  assert.match(h, /aria-label="네이버 플레이스"/); // SNS 버튼
+  assert.match(h, /href="https:\/\/naver\.me\/xyzabc12" target="_blank" rel="noopener">네이버 지도에서 길찾기/); // 검색 대신 직행
+  const ld = JSON.parse(/<script type="application\/ld\+json">(.+?)<\/script>/s.exec(h)[1]);
+  assert.ok(ld[0].sameAs.includes("https://naver.me/xyzabc12"));
+  const map = await (await get(env, jar(), "/t/seocho/map")).text();
+  assert.match(map, /https:\/\/naver\.me\/xyzabc12/); // 지도 목록도 플레이스 직행
+});
+
+test("유어딜 연동 페이지: /urdeal 렌더 + 대시보드에서 연결", async () => {
+  const env = makeEnv();
+  await seed(env);
+  const r = await worker.fetch(new Request(B + "/t/seocho/urdeal"), env);
+  assert.equal(r.status, 200);
+  const h = await r.text();
+  assert.match(h, /유어딜로 매출 만들기/);
+  assert.match(h, /live\.ur-team\.com/);
+  const j = jar(); await post(env, j, "/login", { email: "m@x.kr", password: "merchant1234" });
+  assert.match(await (await get(env, j, "/t/seocho/dashboard")).text(), /\/urdeal">연동 방법 보기/);
+});

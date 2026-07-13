@@ -91,15 +91,15 @@ export async function createBusiness(db, { associationId, ownerId, name, categor
   return getBusinessById(db, await lastId(db));
 }
 export function updateBusiness(db, id, f) {
-  return run(db, "UPDATE businesses SET name=?, category=?, description=?, phone=?, address=?, hours=?, lat=?, lng=?, sns_instagram=?, sns_youtube=?, sns_blog=?, sns_kakao=?, updated_at=datetime('now') WHERE id=?",
+  return run(db, "UPDATE businesses SET name=?, category=?, description=?, phone=?, address=?, hours=?, lat=?, lng=?, sns_instagram=?, sns_youtube=?, sns_blog=?, sns_kakao=?, sns_naver=?, updated_at=datetime('now') WHERE id=?",
     f.name, f.category, f.description, f.phone, f.address, f.hours, f.lat ?? null, f.lng ?? null,
-    f.snsInstagram || "", f.snsYoutube || "", f.snsBlog || "", f.snsKakao || "", id);
+    f.snsInstagram || "", f.snsYoutube || "", f.snsBlog || "", f.snsKakao || "", f.snsNaver || "", id);
 }
 // 콘텐츠 활동(사진 추가 등) 발생 시 갱신 시각 터치 — '살아있는 홈' 계측용
 export const touchBusiness = (db, id) => run(db, "UPDATE businesses SET updated_at=datetime('now') WHERE id=?", id);
 export const setBusinessStatus = (db, id, status) => run(db, "UPDATE businesses SET status=? WHERE id=?", status, id);
 export const listBusinessMarkers = (db, aid) =>
-  all(db, `SELECT id, name, slug, category, lat, lng, address, phone FROM businesses
+  all(db, `SELECT id, name, slug, category, lat, lng, address, phone, sns_naver FROM businesses
            WHERE association_id = ? AND status='approved' AND lat IS NOT NULL AND lng IS NOT NULL`, aid);
 export const distinctCategories = (db, aid) =>
   all(db, "SELECT category, COUNT(*) AS n FROM businesses WHERE association_id=? AND status='approved' GROUP BY category ORDER BY n DESC", aid);

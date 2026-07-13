@@ -564,6 +564,22 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .invite-box{margin-top:14px;padding:16px;border:1.5px solid var(--brand);border-radius:12px;background:var(--brand-tint);display:grid;gap:10px}
 .invite-box-title{font-weight:800}
 .invite-url{width:100%;font-size:.85rem;padding:9px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink)}
+/* 유어딜 연동 페이지 */
+.urdeal-hero{position:relative;text-align:center;padding:34px 28px;border:1.5px solid var(--brand);border-radius:var(--radius);background:var(--brand-tint);margin-bottom:26px}
+.urdeal-hero .fb-badge{position:static;display:inline-block;margin-bottom:12px;background:var(--surface)}
+.urdeal-hero h3{font-size:1.4rem;margin-bottom:8px}
+.urdeal-hero p{color:var(--ink-soft);max-width:520px;margin:0 auto 16px}
+.urdeal-steps{display:grid;gap:12px;margin-bottom:26px}
+.us-step{display:flex;gap:14px;align-items:flex-start;background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--radius-sm);padding:16px 18px}
+.us-num{flex:none;width:30px;height:30px;border-radius:50%;background:var(--brand);color:#fff;font-weight:800;display:flex;align-items:center;justify-content:center}
+.us-step p{color:var(--muted);font-size:.92rem;margin-top:2px}
+.urdeal-vs{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px}
+.uv-col{border:1px solid var(--line);border-radius:var(--radius-sm);padding:18px}
+.uv-col h4{margin-bottom:10px}
+.uv-col ul{list-style:none;display:grid;gap:6px;color:var(--ink-soft);font-size:.92rem}
+.uv-col li::before{content:"✓ ";color:var(--brand-700);font-weight:700}
+.uv-col.is-urdeal{border-color:var(--brand);background:var(--brand-tint)}
+@media (max-width:640px){.urdeal-vs{grid-template-columns:1fr}}
 /* 가게 소식 피드 */
 .update-feed{display:grid;gap:12px;list-style:none;margin:0 0 34px;padding:0}
 .update-item{display:flex;gap:14px;align-items:flex-start;background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--radius-sm);padding:14px 16px;box-shadow:var(--sh-1)}
