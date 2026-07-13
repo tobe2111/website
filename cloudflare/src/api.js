@@ -632,7 +632,8 @@ export async function memberSign(ctx) {
   let bytes; try { bytes = Uint8Array.from(atob(m[1]), (c) => c.charCodeAt(0)); } catch { bytes = null; }
   if (!bytes || bytes.length < 64 || bytes.length > 500 * 1024 || sniffImage(bytes) !== "image/png") return back(base + "/sign/" + d.id, "서명 이미지가 올바르지 않습니다.", true);
   const sigKey = storage.enabled(env) ? await storage.save(env, bytes, "image/png") : ""; // R2 미연결 시 이미지 생략(봉인은 유효)
-  const signerName = cap((form.get("signer_name") || "").trim(), 60) || user.name;
+  // 제어문자(개행 등) 제거 — 봉인 문자열이 \n 구분이라 이름에 섞이면 인코딩이 모호해짐
+  const signerName = cap((form.get("signer_name") || "").replace(/[\x00-\x1f\x7f]/g, " ").trim(), 60) || user.name;
   const signedAt = new Date().toISOString();
   const recordHash = await sealRecord(env, { documentId: d.id, userId: user.id, signerName, contentHash: d.content_hash, signedAt, ip });
   const verifyCode = newVerifyCode();
@@ -741,7 +742,7 @@ export async function acceptInvite(ctx) {
   const { db, env, form, addCookie, isProd, base, assoc, ip } = ctx;
   if (rateLimited(ip)) return back(base + "/invite", "시도가 너무 많습니다. 잠시 후 다시 시도해 주세요.", true);
   const inv = await verifyInviteToken(env.SESSION_SECRET, form.get("token"), assoc.id);
-  if (!inv) return back(base + "/invite", "초대 링크가 만료되었거나 올바르지 않습니다. 관리자에게 새 링크를 요청해 주세요.", true);
+  if (!inv) { recordFail(ip); return back(base + "/invite", "초대 링크가 만료되었거나 올바르지 않습니다. 관리자에게 새 링크를 요청해 주세요.", true); }
   const name = cap((form.get("name") || "").trim(), 60);
   const email = cap((form.get("email") || "").toLowerCase().trim(), 120);
   const password = form.get("password") || "";

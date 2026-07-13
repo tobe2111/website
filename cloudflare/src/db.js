@@ -251,21 +251,21 @@ export const pollResults = async (db, pollId) => {
 };
 export const userVote = async (db, pollId, userId) => (await first(db, "SELECT choice FROM poll_votes WHERE poll_id=? AND user_id=?", pollId, userId))?.choice || null;
 // 투표 페이지용 일괄 조회 — 안건 수와 무관하게 2쿼리 (N+1 제거)
-export async function pollResultsBulk(db, pollIds) {
-  const out = new Map(pollIds.map((id) => [id, { yes: 0, no: 0, abstain: 0, total: 0 }]));
-  if (!pollIds.length) return out;
-  const ph = pollIds.map(() => "?").join(",");
-  for (const row of await all(db, `SELECT poll_id, choice, COUNT(*) AS n FROM poll_votes WHERE poll_id IN (${ph}) GROUP BY poll_id, choice`, ...pollIds)) {
+// IN(?,?,...) 나열 대신 서브쿼리: D1 은 쿼리당 바인드 파라미터 100개 한도라 안건 100개부터 터진다
+export async function pollResultsBulk(db, aid) {
+  const out = new Map();
+  for (const row of await all(db, `SELECT poll_id, choice, COUNT(*) AS n FROM poll_votes
+      WHERE poll_id IN (SELECT id FROM polls WHERE association_id=?) GROUP BY poll_id, choice`, aid)) {
+    if (!out.has(row.poll_id)) out.set(row.poll_id, { yes: 0, no: 0, abstain: 0, total: 0 });
     const r = out.get(row.poll_id);
-    if (r && row.choice in r) { r[row.choice] = row.n; r.total += row.n; }
+    if (row.choice in r) { r[row.choice] = row.n; r.total += row.n; }
   }
   return out;
 }
-export async function userVotesBulk(db, pollIds, userId) {
+export async function userVotesBulk(db, aid, userId) {
   const out = new Map();
-  if (!pollIds.length) return out;
-  const ph = pollIds.map(() => "?").join(",");
-  for (const row of await all(db, `SELECT poll_id, choice FROM poll_votes WHERE user_id=? AND poll_id IN (${ph})`, userId, ...pollIds)) out.set(row.poll_id, row.choice);
+  for (const row of await all(db, `SELECT poll_id, choice FROM poll_votes
+      WHERE user_id=? AND poll_id IN (SELECT id FROM polls WHERE association_id=?)`, userId, aid)) out.set(row.poll_id, row.choice);
   return out;
 }
 

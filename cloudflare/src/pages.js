@@ -453,12 +453,11 @@ export async function polls(ctx) {
   const list = await D.listPolls(db, assoc.id);
   const isAdmin = user.role === "ADMIN" || user.role === "SUPERADMIN";
   // 안건 수와 무관하게 2쿼리 (건별 결과·내 표 조회의 N+1 제거)
-  const ids = list.map((p) => p.id);
-  const [resultsMap, votesMap] = await Promise.all([D.pollResultsBulk(db, ids), D.userVotesBulk(db, ids, user.id)]);
+  const [resultsMap, votesMap] = await Promise.all([D.pollResultsBulk(db, assoc.id), D.userVotesBulk(db, assoc.id, user.id)]);
   const cards = [];
   for (const p of list) {
     const open = D.isPollOpen(p);
-    const r = resultsMap.get(p.id);
+    const r = resultsMap.get(p.id) || { yes: 0, no: 0, abstain: 0, total: 0 };
     const mine = votesMap.get(p.id) || null;
     const pct = (n) => (r.total ? Math.round((n / r.total) * 100) : 0);
     const bar = (label, key, cls) => `<div class="poll-bar"><span class="pb-label">${label} <b>${r[key]}표</b></span>
