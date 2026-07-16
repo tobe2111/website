@@ -93,17 +93,28 @@ function businessCard(base, b, cover) {
     </div></article>`;
 }
 
+// D-day 계산 (KST 기준): 오늘=D-DAY, 미래=D-n, 과거=null(공개 홈은 예정 행사만 노출)
+function dDayLabel(dateStr) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr || "")) return "";
+  const day = 86400000;
+  const diff = Math.round((Date.parse(dateStr + "T00:00:00Z") - Date.parse(D.kstToday() + "T00:00:00Z")) / day);
+  if (isNaN(diff) || diff < 0) return "";
+  return diff === 0 ? "D-DAY" : "D-" + diff;
+}
 // 행사 카드 (시안: 이미지 16:10 + 오버레이 + 날짜 칩 / 이미지 없으면 날짜 사각형형)
 function eventCard(base, e) {
   const d = e.event_date.slice(8, 10), mo = Number(e.event_date.slice(5, 7)) + "월";
+  const dd = dDayLabel(e.event_date);
+  const ddBadge = dd ? `<span class="dday${dd === "D-DAY" ? " is-today" : ""}">${dd}</span>` : "";
   const calLink = `<a class="event-cal" href="${base}/events/${e.id}/calendar.ics" title="아이폰·구글 캘린더에 추가">${CAL_SVG} 캘린더에 추가</a>`;
   if (e.image) return `<article class="event-photo-card">
     <img src="${esc(mediaUrl(e.image))}" alt="" loading="lazy" />
     <span class="epc-overlay" aria-hidden="true"></span>
+    ${ddBadge ? `<span class="dday dday-corner${dd === "D-DAY" ? " is-today" : ""}">${dd}</span>` : ""}
     <span class="epc-body"><span class="epc-date">${Number(e.event_date.slice(5, 7))}.${Number(d)}</span><strong>${esc(e.title)}</strong>${e.place ? `<span class="epc-place">${PIN_SVG}${esc(e.place)}</span>` : ""}${calLink}</span>
   </article>`;
   return `<article class="event-card"><div class="event-date"><span class="d">${d}</span><span class="m">${mo}</span></div>
-      <div class="event-info"><h3>${esc(e.title)}</h3><p>${esc(e.description)}</p>${e.place ? `<span class="event-place">${PIN_SVG}${esc(e.place)}</span>` : ""}${calLink}</div></article>`;
+      <div class="event-info">${ddBadge ? `<div class="ev-head"><h3>${esc(e.title)}</h3>${ddBadge}</div>` : `<h3>${esc(e.title)}</h3>`}<p>${esc(e.description)}</p>${e.place ? `<span class="event-place">${PIN_SVG}${esc(e.place)}</span>` : ""}${calLink}</div></article>`;
 }
 const CAL_SVG = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 9h18M12 13v5M9.5 15.5h5"/></svg>';
 

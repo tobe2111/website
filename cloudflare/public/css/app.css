@@ -129,7 +129,7 @@ img,video{max-width:100%;display:block}
 .hero-stats dd span{color:var(--brand-700);font-size:.6em;margin-left:2px}
 
 /* ---------- Sections ---------- */
-.section{padding:clamp(56px,9vw,96px) 0}
+.section{padding:clamp(48px,7vw,80px) 0}
 .section.page-top{padding-top:clamp(40px,6vw,64px)}
 .section-alt{background:var(--bg-alt)}
 .section-dark{background:linear-gradient(160deg,var(--green-900),var(--green-700));color:#fff}
@@ -201,7 +201,7 @@ img,video{max-width:100%;display:block}
 .tag-important{background:var(--no-bg);color:var(--no-fg)}
 
 /* ---------- Event grid ---------- */
-.event-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
+.event-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),460px));gap:22px;justify-content:center}
 .event-card{display:flex;gap:18px;align-items:flex-start;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:22px;box-shadow:var(--shadow);transition:transform .2s var(--ease),box-shadow .25s}
 .event-card:hover{transform:translateY(-5px);box-shadow:var(--shadow-lg)}
 .event-date{flex:none;width:64px;height:64px;border-radius:14px;background:linear-gradient(140deg,var(--green-600),var(--green-500));color:#fff;display:grid;place-items:center;align-content:center;line-height:1}
@@ -489,10 +489,8 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
   .main-nav a+a{border-top:1px solid var(--line-soft)}
   .main-nav .btn{margin-top:10px;justify-content:center}
   .nav-logout{margin-left:0}
-  .event-grid{grid-template-columns:repeat(2,1fr)}
 }
 @media (max-width:600px){
-  .event-grid{grid-template-columns:1fr}
   .stat-cards{grid-template-columns:repeat(2,1fr)}
   .form-two,.layout-fields{grid-template-columns:1fr}
   .hero-actions{flex-direction:column}
@@ -593,7 +591,7 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .update-body time{font-size:.78rem;color:var(--muted)}
 .update-feed.compact{margin-top:14px;margin-bottom:0}
 /* 홈: 동네 새소식 카드 */
-.update-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
+.update-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,340px));gap:14px;justify-content:center}
 .update-card{display:flex;gap:12px;align-items:center;background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--radius-sm);padding:14px 16px;box-shadow:var(--sh-1);transition:transform .2s,box-shadow .2s}
 .update-card:hover{transform:translateY(-2px);box-shadow:var(--sh-2)}
 .uc-img{flex:none;width:56px;height:56px;border-radius:10px;overflow:hidden}
@@ -1041,3 +1039,21 @@ html.reveal-on .reveal.in{opacity:1;transform:none}
 @keyframes hiSun{0%,100%{opacity:.5}50%{opacity:.66}}
 @keyframes hiSway{0%,100%{transform:rotate(-1.1deg)}50%{transform:rotate(1.1deg)}}
 @keyframes hiGlow{0%,100%{opacity:1}50%{opacity:.72}}
+/* ── UI 폴리시: D-day 뱃지 · 카드 포커스 링 · 사진 호버 줌 ── */
+.dday{display:inline-block;padding:2px 9px;border-radius:999px;background:var(--brand-50);color:var(--brand-700);font-size:.72rem;font-weight:800;letter-spacing:.02em;line-height:1.7;white-space:nowrap}
+.dday.is-today{background:var(--brand);color:#fff}
+.ev-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+.ev-head h3{margin-bottom:0}
+.dday-corner{position:absolute;top:12px;right:12px;background:rgba(255,255,255,.92);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);box-shadow:var(--sh-1);z-index:1}
+.dday-corner.is-today{background:var(--brand);color:#fff}
+/* 카드 키보드 포커스 — overflow:hidden 로 잘리는 아웃라인 대신 카드 전체에 브랜드 링 */
+.market-card:focus-within,.update-card:focus-within,.event-card:focus-within,.event-photo-card:focus-within{box-shadow:0 0 0 3px var(--brand-ring),var(--sh-2);border-color:transparent}
+.market-card a:focus-visible,.update-card a:focus-visible,.event-photo-card a:focus-visible{outline:none}
+/* 사진 있는 카드: 호버 시 미세 확대 (그림 없는 카드엔 영향 없음) */
+.market-thumb.has-img img{transition:transform .45s var(--ease)}
+.market-card:hover .market-thumb.has-img img{transform:scale(1.05)}
+.event-photo-card img{transition:transform .5s var(--ease)}
+.event-photo-card:hover img{transform:scale(1.05)}
+@media (prefers-reduced-motion:reduce){
+  .market-card:hover .market-thumb.has-img img,.event-photo-card:hover img{transform:none}
+}
