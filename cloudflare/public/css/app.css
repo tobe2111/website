@@ -1118,3 +1118,13 @@ html.reveal-on .reveal.in{opacity:1;transform:none}
 .hp-photo-veil{position:absolute;inset:0;z-index:1;background:linear-gradient(180deg,rgba(6,26,17,.5) 0%,rgba(5,20,13,.6) 55%,rgba(4,16,10,.78) 100%)}
 /* 관리자: 현재 히어로 배경 미리보기 */
 .hero-img-cur img{width:100%;max-width:360px;aspect-ratio:16 / 6;object-fit:cover;border-radius:var(--r-md);border:1px solid var(--line-soft);display:block;margin:2px 0 8px}
+/* ===================== 관리자 프리미엄 정돈 (v6) ===================== */
+.dash-title{letter-spacing:-.03em;font-weight:800}
+/* 패널 제목 왼쪽 브랜드 킥 바 */
+.panel-title{position:relative;padding-left:14px;letter-spacing:-.02em}
+.panel-title::before{content:"";position:absolute;left:0;top:.14em;bottom:.14em;width:4px;border-radius:3px;background:linear-gradient(var(--brand-500),var(--brand-700))}
+/* 통계 카드: 프리미엄 대시보드 톤 */
+.stat-card{transition:transform .2s var(--ease),box-shadow .25s,border-color .2s}
+.stat-card:hover{transform:translateY(-3px);box-shadow:var(--sh-2)}
+.stat-num{color:var(--brand-800);letter-spacing:-.03em}
+.stat-card.stat-alert .stat-num{color:var(--wait-fg)}
