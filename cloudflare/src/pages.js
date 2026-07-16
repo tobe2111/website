@@ -170,6 +170,10 @@ function layoutEditor(base, layoutArr) {
       const val = sec[f.key], name = `f_${i}_${f.key}`;
       if (f.type === "bool") return `<label class="check"><input type="checkbox" name="${name}" value="1"${val ? " checked" : ""} /> ${esc(f.label)}</label>`;
       if (f.type === "textarea") return `<label class="mini-label">${esc(f.label)}<textarea name="${name}" rows="2">${esc(val || "")}</textarea></label>`;
+      if (f.type === "select") {
+        const cur = val || (f.options[0] && f.options[0][0]);
+        return `<label class="mini-label">${esc(f.label)}<select name="${name}">${f.options.map(([ov, ol]) => `<option value="${esc(ov)}"${cur === ov ? " selected" : ""}>${esc(ol)}</option>`).join("")}</select></label>`;
+      }
       return `<label class="mini-label">${esc(f.label)}<input type="text" name="${name}" value="${esc(val || "")}" /></label>`;
     }).join("");
     return `<div class="layout-row" data-index="${i}"><div class="layout-row-head">

@@ -138,6 +138,90 @@ const HERO_ILLUS = `<svg class="hi-svg" viewBox="0 0 1200 470" preserveAspectRat
  <g><circle cx="1060" cy="374" r="9" fill="#f0c9a0"/><rect x="1052" y="384" width="16" height="26" rx="7" fill="var(--brand)"/></g>
 </g>
 </svg>`;
+
+// 서초 랜드마크 히어로 — 예술의전당(갓지붕)·우면산·한강·반포대교 달빛무지개분수·세빛섬·반포한강공원.
+// 구조 요소는 --brand 를 따라 서초 녹색으로 자동 도색, 물/유리는 고정 중립톤. (테넌트가 홈 편집기에서 선택)
+const SEOCHO_ILLUS = `<svg class="hi-svg" viewBox="0 0 1200 470" preserveAspectRatio="xMidYMax slice" role="img" aria-label="서초 랜드마크 일러스트 — 예술의전당·한강·세빛섬">
+<defs>
+ <linearGradient id="sky2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--brand-300)"/><stop offset="0.6" stop-color="var(--brand-100)"/><stop offset="1" stop-color="#f4fcfa"/></linearGradient>
+ <linearGradient id="river" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d3e4e2"/><stop offset="1" stop-color="#b7d2d2"/></linearGradient>
+</defs>
+<rect width="1200" height="470" fill="url(#sky2)"/>
+<!-- clouds + sun -->
+<g class="hi-cloud hi-cloud-a" fill="#ffffff" opacity="0.9"><ellipse cx="230" cy="60" rx="52" ry="18"/><ellipse cx="284" cy="68" rx="36" ry="14"/><ellipse cx="182" cy="70" rx="30" ry="12"/></g>
+<g class="hi-cloud hi-cloud-b" fill="#ffffff" opacity="0.85"><ellipse cx="980" cy="52" rx="58" ry="20"/><ellipse cx="1038" cy="62" rx="40" ry="15"/></g>
+<circle class="hi-sun" cx="1092" cy="90" r="32" fill="#ffffff" opacity="0.55"/>
+<!-- 우면산 (두 겹 능선) -->
+<path d="M0 250 Q 200 196 420 232 T 820 220 Q 1000 210 1200 236 L1200 306 L0 306 Z" fill="var(--brand-300)" opacity="0.6"/>
+<path d="M0 276 Q 260 224 520 256 Q 760 286 1000 250 Q 1110 236 1200 258 L1200 306 L0 306 Z" fill="var(--brand-500)" opacity="0.8"/>
+<!-- 예술의전당 (갓지붕 오페라하우스) -->
+<g>
+ <rect x="176" y="240" width="118" height="66" fill="#f0e9db"/>
+ <g fill="var(--brand-100)"><rect x="192" y="258" width="18" height="40" rx="2"/><rect x="220" y="258" width="18" height="40" rx="2"/><rect x="248" y="258" width="18" height="40" rx="2"/></g>
+ <rect x="226" y="284" width="20" height="22" fill="var(--brand-500)"/>
+ <ellipse cx="235" cy="240" rx="92" ry="13" fill="var(--brand-700)"/>
+ <path d="M235 164 L300 240 L170 240 Z" fill="var(--brand-700)"/>
+ <path d="M235 176 L274 238 L235 238 Z" fill="var(--brand-500)" opacity="0.35"/>
+ <circle cx="235" cy="162" r="4" fill="var(--brand-700)"/>
+</g>
+<!-- 오피스 스카이라인 (서초 도심) -->
+<g>
+ <rect x="322" y="214" width="66" height="92" fill="#ece5d6"/>
+ <g fill="var(--brand-100)"><rect x="332" y="226" width="14" height="14"/><rect x="352" y="226" width="14" height="14"/><rect x="372" y="226" width="8" height="14"/><rect x="332" y="248" width="14" height="14"/><rect x="352" y="248" width="14" height="14"/><rect x="372" y="248" width="8" height="14"/><rect x="332" y="270" width="14" height="14"/><rect x="352" y="270" width="14" height="14"/><rect x="372" y="270" width="8" height="14"/></g>
+ <rect x="398" y="186" width="58" height="120" fill="#efe6d5"/>
+ <rect x="398" y="186" width="58" height="10" fill="var(--brand)"/>
+ <g fill="#d5dfe2"><rect x="408" y="204" width="14" height="16"/><rect x="430" y="204" width="14" height="16"/><rect x="408" y="228" width="14" height="16"/><rect x="430" y="228" width="14" height="16"/><rect x="408" y="252" width="14" height="16"/><rect x="430" y="252" width="14" height="16"/><rect x="408" y="276" width="14" height="16"/><rect x="430" y="276" width="14" height="16"/></g>
+ <rect x="466" y="238" width="50" height="68" fill="#e7dfd1"/>
+ <g fill="var(--brand-100)"><rect x="476" y="250" width="30" height="12"/><rect x="476" y="268" width="30" height="12"/><rect x="476" y="286" width="30" height="12"/></g>
+</g>
+<!-- 한강 -->
+<rect y="306" width="1200" height="52" fill="url(#river)"/>
+<g stroke="#ffffff" stroke-width="2" opacity="0.5"><line x1="60" y1="320" x2="150" y2="320"/><line x1="300" y1="330" x2="380" y2="330"/><line x1="640" y1="326" x2="720" y2="326"/><line x1="1020" y1="332" x2="1110" y2="332"/></g>
+<!-- 반포대교 + 달빛무지개분수 -->
+<g>
+ <rect x="70" y="316" width="470" height="7" fill="#d6d0c4"/>
+ <g stroke="#c7c0b2" stroke-width="5"><line x1="150" y1="322" x2="150" y2="352"/><line x1="270" y1="322" x2="270" y2="352"/><line x1="390" y1="322" x2="390" y2="352"/><line x1="500" y1="322" x2="500" y2="352"/></g>
+ <g class="hi-fountain" stroke="var(--brand-500)" stroke-width="1.6" fill="none" opacity="0.6">
+  <path d="M300 322 Q 250 330 214 352"/><path d="M320 322 Q 276 332 244 352"/><path d="M340 322 Q 306 334 282 352"/><path d="M360 322 Q 360 338 360 354"/><path d="M380 322 Q 414 334 438 352"/><path d="M400 322 Q 444 332 476 352"/><path d="M420 322 Q 470 330 506 352"/>
+ </g>
+</g>
+<!-- 세빛섬 (가빛·채빛·솔빛) -->
+<g>
+ <line x1="820" y1="344" x2="1120" y2="344" stroke="#e2dccf" stroke-width="4"/>
+ <g><path d="M866 346 q0 -32 33 -32 q33 0 33 32 z" fill="#edf7f4"/><path d="M899 316 v30 M879 328 h40" stroke="var(--brand-100)" stroke-width="2"/><rect x="866" y="342" width="66" height="5" fill="var(--brand-500)"/></g>
+ <g><path d="M940 346 q0 -40 38 -40 q38 0 38 40 z" fill="#f1f9f6"/><path d="M978 306 v40 M956 322 h44" stroke="var(--brand-100)" stroke-width="2"/><rect x="940" y="342" width="76" height="5" fill="var(--brand)"/></g>
+ <g><path d="M1024 346 q0 -30 30 -30 q30 0 30 30 z" fill="#edf7f4"/><path d="M1054 316 v30 M1036 328 h36" stroke="var(--brand-100)" stroke-width="2"/><rect x="1024" y="342" width="60" height="5" fill="var(--brand-500)"/></g>
+ <g stroke="#ffffff" stroke-width="1.4" opacity="0.4"><line x1="880" y1="352" x2="918" y2="352"/><line x1="958" y1="353" x2="998" y2="353"/><line x1="1036" y1="352" x2="1072" y2="352"/></g>
+</g>
+<!-- 근경: 반포한강공원 -->
+<rect y="358" width="1200" height="112" fill="#e6e3d7"/>
+<rect y="358" width="1200" height="10" fill="#c9d6bd"/>
+<rect y="416" width="1200" height="26" fill="#eceadf"/>
+<line x1="0" y1="429" x2="1200" y2="429" stroke="#d9d5c6" stroke-width="3" stroke-dasharray="22 20"/>
+<!-- 한강 돗자리 피크닉 -->
+<g>
+ <ellipse cx="250" cy="392" rx="46" ry="14" fill="#dfe6cf"/>
+ <circle cx="234" cy="384" r="7" fill="#f0c9a0"/><rect x="227" y="390" width="14" height="10" rx="5" fill="var(--brand)"/>
+ <circle cx="266" cy="386" r="7" fill="#e8b48c"/><rect x="259" y="392" width="14" height="9" rx="5" fill="#cf9b7d"/>
+</g>
+<!-- 가로수 -->
+<g class="hi-tree hi-tree-1"><rect x="120" y="380" width="7" height="30" fill="#9c7a58"/><circle cx="123" cy="372" r="19" fill="#a6c49c"/><circle cx="111" cy="380" r="13" fill="#b6cfab"/><circle cx="135" cy="380" r="13" fill="#b6cfab"/></g>
+<g class="hi-tree hi-tree-2"><rect x="560" y="382" width="7" height="30" fill="#9c7a58"/><circle cx="563" cy="374" r="19" fill="#a6c49c"/><circle cx="551" cy="382" r="13" fill="#b6cfab"/><circle cx="575" cy="382" r="13" fill="#b6cfab"/></g>
+<g class="hi-tree hi-tree-3"><rect x="1080" y="380" width="7" height="30" fill="#9c7a58"/><circle cx="1083" cy="372" r="19" fill="#a6c49c"/><circle cx="1071" cy="380" r="13" fill="#b6cfab"/><circle cx="1095" cy="380" r="13" fill="#b6cfab"/></g>
+<!-- 자전거 라이더 (반포 자전거길) -->
+<g>
+ <circle cx="690" cy="432" r="12" fill="none" stroke="#5c5c56" stroke-width="3"/><circle cx="740" cy="432" r="12" fill="none" stroke="#5c5c56" stroke-width="3"/>
+ <path d="M690 432 L714 432 L726 410 M714 432 L726 410 L740 432" fill="none" stroke="var(--brand-700)" stroke-width="3"/>
+ <line x1="700" y1="412" x2="722" y2="412" stroke="#5c5c56" stroke-width="2"/>
+ <circle cx="726" cy="398" r="7" fill="#f0c9a0"/><path d="M720 408 L726 400 L732 408 Z" fill="var(--brand)"/>
+</g>
+<!-- 사람들 -->
+<g>
+ <g><circle cx="430" cy="398" r="8" fill="#f0c9a0"/><rect x="423" y="406" width="15" height="24" rx="7" fill="var(--brand-500)"/></g>
+ <g><circle cx="880" cy="398" r="8" fill="#e8b48c"/><rect x="873" y="406" width="15" height="24" rx="7" fill="#b2a488"/><circle cx="900" cy="400" r="8" fill="#f0c9a0"/><rect x="893" y="408" width="15" height="22" rx="7" fill="#e2c07d"/></g>
+ <g><circle cx="1010" cy="400" r="8" fill="#f0c9a0"/><rect x="1003" y="408" width="15" height="24" rx="7" fill="var(--brand)"/><ellipse cx="1036" cy="428" rx="11" ry="6" fill="#c98a5a"/><circle cx="1046" cy="424" r="4.5" fill="#c98a5a"/><line x1="1015" y1="416" x2="1036" y2="424" stroke="#9a958a" stroke-width="2"/></g>
+</g>
+</svg>`;
 const FC_ICONS = {
   store: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9l1.2-4.2A1 1 0 0 1 6.2 4h11.6a1 1 0 0 1 1 .8L20 9"/><path d="M4 9v10a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9"/><path d="M9 20v-5h6v5"/></svg>',
   map: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg>',
@@ -156,6 +240,7 @@ export const SECTION_CATALOG = {
       { key: "highlight", label: "강조 단어 (제목 중 색상 강조)", type: "text" },
       { key: "subtitle", label: "설명", type: "textarea" },
       { key: "primaryLabel", label: "주요 버튼 문구", type: "text" },
+      { key: "illus", label: "일러스트", type: "select", options: [["town", "동네 골목형 (기본)"], ["seocho", "서초 랜드마크형 (예술의전당·세빛섬·한강)"]] },
       { key: "showStats", label: "통계 표시", type: "bool" },
     ],
   },
@@ -363,8 +448,12 @@ function heroSection(s, deps) {
   const eyebrow = esc(s.eyebrow || "함께 만드는 우리 동네");
   const name = (deps.assoc && deps.assoc.name) || "우리 상인회";
   const title = esc(s.title || name).replace(/\n/g, "<br />");
+  // 일러스트 변형: 편집기에서 고른 값 우선, 미설정(첫 배포)이면 서초 테넌트는 랜드마크형 자동 적용.
+  const slug = deps.assoc && deps.assoc.slug;
+  const variant = s.illus || (slug === "seocho" ? "seocho" : "town");
+  const illus = variant === "seocho" ? SEOCHO_ILLUS : HERO_ILLUS;
   return `<section class="hero-illus">
-    <div class="hi-scene" aria-hidden="true">${HERO_ILLUS}</div>
+    <div class="hi-scene" aria-hidden="true">${illus}</div>
     <div class="container hi-head">
       <p class="hi-eyebrow">${eyebrow}</p>
       <h1 class="hi-title">${title}</h1>

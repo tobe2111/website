@@ -1029,7 +1029,9 @@ html.reveal-on .reveal.in{opacity:1;transform:none}
   .hi-tree-2{animation:hiSway 7.4s ease-in-out -1.2s infinite}
   .hi-tree-3{animation:hiSway 8s ease-in-out -2.6s infinite}
   .hi-lamp{animation:hiGlow 5s ease-in-out infinite}
+  .hi-fountain{animation:hiFountain 4.5s ease-in-out infinite}
 }
+@keyframes hiFountain{0%,100%{opacity:.42}50%{opacity:.78}}
 @keyframes hiDriftA{0%,100%{transform:translateX(0)}50%{transform:translateX(22px)}}
 @keyframes hiDriftB{0%,100%{transform:translateX(0)}50%{transform:translateX(-18px)}}
 @keyframes hiSun{0%,100%{opacity:.5}50%{opacity:.66}}
