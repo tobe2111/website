@@ -468,7 +468,7 @@ function featureCardsSection(s, deps) {
   const cards = [
     ["mint", "가입 점포 찾기", "Find member stores", `${base}/businesses`, FC_ICONS.store],
     ["beige", "점포 지도", "Store map", `${base}/map`, FC_ICONS.map],
-    ["purple", "공지·소식", "News & notices", `${base}/notices`, FC_ICONS.news],
+    ["forest", "공지·소식", "News & notices", `${base}/notices`, FC_ICONS.news],
   ];
   const cardHtml = cards.map(([tone, ko, en, href, ico]) => `<a class="feat-card feat-${tone}" href="${href}">
       <span class="fc-ico" aria-hidden="true">${ico}</span>

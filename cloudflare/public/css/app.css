@@ -959,18 +959,23 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .feat-search .btn{border-radius:var(--r-pill);padding-inline:16px;display:inline-flex;align-items:center}
 .feat-more{border-radius:var(--r-pill)}
 .feat-cards{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-.feat-card{position:relative;display:flex;flex-direction:column;justify-content:space-between;gap:16px;min-height:132px;padding:22px 24px;border-radius:var(--r-xl);box-shadow:var(--sh-2);transition:transform .2s var(--ease),box-shadow .25s}
-.feat-card:hover{transform:translateY(-4px);box-shadow:var(--sh-3)}
-.feat-card .fc-ico svg{width:40px;height:40px}
-.feat-card .fc-txt{display:flex;flex-direction:column;gap:2px}
-.feat-card .fc-txt strong{font-size:1.14rem;font-weight:800;letter-spacing:-.01em}
-.feat-card .fc-txt em{font-style:normal;font-size:.78rem;opacity:.72;letter-spacing:.01em}
-.feat-mint{grid-row:span 2;background:var(--brand);color:#fff}
-.feat-mint .fc-txt em{opacity:.85}
-.feat-beige{background:#e7dcc4;color:#5c4a2c}
-.feat-purple{background:#9a92bb;color:#fff}
-:root[data-theme="dark"] .feat-beige{background:#3a3427;color:#e8dcc2}
-:root[data-theme="dark"] .feat-purple{background:#4a4470}
+.feat-card{position:relative;overflow:hidden;display:flex;flex-direction:column;justify-content:space-between;gap:18px;min-height:140px;padding:24px 26px;border-radius:var(--r-xl);box-shadow:var(--sh-2);transition:transform .28s var(--ease),box-shadow .3s}
+.feat-card:hover{transform:translateY(-5px);box-shadow:var(--sh-3)}
+/* 아이콘을 칩 안에 넣어 정돈된 프리미엄 느낌 */
+.feat-card .fc-ico{display:inline-flex;align-items:center;justify-content:center;width:52px;height:52px;border-radius:15px;background:rgba(255,255,255,.16)}
+.feat-card .fc-ico svg{width:26px;height:26px}
+.feat-card .fc-txt{display:flex;flex-direction:column;gap:3px}
+.feat-card .fc-txt strong{font-size:1.18rem;font-weight:800;letter-spacing:-.015em}
+.feat-card .fc-txt em{font-style:normal;font-size:.76rem;opacity:.7;letter-spacing:.04em;text-transform:uppercase}
+/* 상단 은은한 광택 (딥/브랜드 카드 프리미엄 질감) */
+.feat-mint::before,.feat-forest::before{content:"";position:absolute;inset:0;background:linear-gradient(160deg,rgba(255,255,255,.14),transparent 42%);pointer-events:none}
+.feat-mint{grid-row:span 2;background:linear-gradient(158deg,var(--brand-500),var(--brand-800));color:#fff}
+.feat-mint .fc-txt em{opacity:.82}
+.feat-mint .fc-ico svg{width:30px;height:30px}
+.feat-beige{background:linear-gradient(158deg,#f4efe3,#e9e1d0);color:#5b4d34;border:1px solid rgba(120,100,60,.14)}
+.feat-beige .fc-ico{background:rgba(120,100,60,.12)}
+.feat-beige .fc-ico,.feat-beige .fc-txt strong{color:#6b5836}
+.feat-forest{background:linear-gradient(158deg,var(--brand-900),#0a1512);color:#fff}
 :root[data-theme="dark"] .hero-illus{background:linear-gradient(#0f2a27,#0b1f1d)}
 @media (max-width:880px){
   .hero-illus{aspect-ratio:4/3}
@@ -1059,3 +1064,19 @@ html.reveal-on .reveal.in{opacity:1;transform:none}
 @media (prefers-reduced-motion:reduce){
   .market-card:hover .market-thumb.has-img img,.event-photo-card:hover img{transform:none}
 }
+/* ===================== 프리미엄 폴리시 (v4) — 고퀄리티 디테일 ===================== */
+/* 섹션 헤더: 브랜드 킥 라인 + 조밀한 디스플레이 타이포 */
+.head-row{align-items:flex-end}
+.head-row .section-title{position:relative;padding-top:17px;font-size:clamp(1.35rem,2.3vw,1.85rem);letter-spacing:-.03em;font-weight:800}
+.head-row .section-title::before{content:"";position:absolute;top:0;left:2px;width:26px;height:3px;border-radius:3px;background:linear-gradient(90deg,var(--brand),var(--brand-500))}
+.head-row .section-lead{color:var(--muted);font-size:.92rem;margin-top:5px}
+.section-more-link{color:var(--brand-700);font-weight:700;font-size:.9rem;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;transition:color .2s}
+.section-more-link:hover{color:var(--brand)}
+.section-more-link span{transition:transform .2s var(--ease)}
+.section-more-link:hover span{transform:translateX(3px)}
+/* 사진 없는 점포 카드: 아이콘을 소프트 배지 안에 → 정돈된 디자인 상태 */
+.thumb-ico::before{content:"";position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:84px;height:84px;border-radius:50%;background:rgba(255,255,255,.55);box-shadow:0 8px 22px rgba(20,60,40,.06)}
+.thumb-ico svg{position:relative;width:30%;height:30%;max-width:52px;max-height:52px}
+:root[data-theme="dark"] .thumb-ico::before{background:rgba(255,255,255,.06)}
+/* 영업중 배지 정돈 */
+.market-open .badge{font-weight:700;letter-spacing:-.01em}
