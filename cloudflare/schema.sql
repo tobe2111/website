@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS associations (
   address     TEXT NOT NULL DEFAULT '',
   email       TEXT NOT NULL DEFAULT '',
   logo        TEXT NOT NULL DEFAULT '',
+  hero_image  TEXT NOT NULL DEFAULT '',    -- 홈 히어로 배경 사진(R2 키). 비우면 프리미엄 그라데이션 히어로
   map_lat     REAL NOT NULL DEFAULT 37.4837,
   map_lng     REAL NOT NULL DEFAULT 127.0324,
   map_zoom    INTEGER NOT NULL DEFAULT 14,

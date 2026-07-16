@@ -1112,3 +1112,9 @@ html.reveal-on .reveal.in{opacity:1;transform:none}
 .showcase::after{content:"";position:absolute;left:50%;top:-180px;transform:translateX(-50%);width:560px;height:560px;border-radius:50%;background:radial-gradient(circle,var(--brand-500),transparent 68%);opacity:.28;filter:blur(80px);z-index:0;pointer-events:none;animation:hpFloat2 34s ease-in-out infinite}
 .showcase .sc-inner{position:relative;z-index:2}
 .sc-sub{max-width:42ch;margin-inline:auto}
+/* 히어로 배경 사진 모드 — 사진 위 어두운 베일로 흰 타이포 가독성 확보 */
+.hero-pro.has-photo{background:var(--brand-900)}
+.hp-photo{position:absolute;inset:0;background-size:cover;background-position:center;z-index:0}
+.hp-photo-veil{position:absolute;inset:0;z-index:1;background:linear-gradient(180deg,rgba(6,26,17,.5) 0%,rgba(5,20,13,.6) 55%,rgba(4,16,10,.78) 100%)}
+/* 관리자: 현재 히어로 배경 미리보기 */
+.hero-img-cur img{width:100%;max-width:360px;aspect-ratio:16 / 6;object-fit:cover;border-radius:var(--r-md);border:1px solid var(--line-soft);display:block;margin:2px 0 8px}

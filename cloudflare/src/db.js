@@ -17,8 +17,8 @@ export async function createAssociation(db, { slug, name, brandColor = "#0b8a46"
   return getAssociationById(db, await lastId(db));
 }
 export function updateAssociation(db, id, f) {
-  return run(db, `UPDATE associations SET name=?, tagline=?, brand_color=?, phone=?, email=?, address=?, logo=?, naver_verification=?, google_verification=? WHERE id=?`,
-    f.name, f.tagline, f.brand_color, f.phone, f.email, f.address, f.logo, f.naver_verification || "", f.google_verification || "", id);
+  return run(db, `UPDATE associations SET name=?, tagline=?, brand_color=?, phone=?, email=?, address=?, logo=?, hero_image=?, naver_verification=?, google_verification=? WHERE id=?`,
+    f.name, f.tagline, f.brand_color, f.phone, f.email, f.address, f.logo, f.hero_image || "", f.naver_verification || "", f.google_verification || "", id);
 }
 export const setAssociationActive = (db, id, a) => run(db, "UPDATE associations SET active=? WHERE id=?", a ? 1 : 0, id);
 export const getAssociationByDomain = (db, host) => first(db, "SELECT * FROM associations WHERE custom_domain = ? AND custom_domain != ''", String(host || "").toLowerCase());

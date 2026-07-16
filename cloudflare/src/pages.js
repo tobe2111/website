@@ -157,6 +157,7 @@ export async function home(ctx) {
   const eventsHtml = events.map((e) => eventCard(base, e)).join("");
   const body = renderHome(lay, {
     assoc, base, stats, businessesHtml, catTiles, eventsHtml, loggedIn: !!user,
+    heroImage: assoc.hero_image ? mediaUrl(assoc.hero_image) : "",
     noticesHtml: notices.length ? noticeRows(base, notices) : "",
     counts: { businesses: items.length, notices: notices.length, events: events.length },
     suggestNames: names.map((r) => r.name),
@@ -1019,6 +1020,8 @@ export async function admin(ctx) {
         <div class="form-two"><label>대표 전화<input type="text" name="phone" value="${esc(assoc.phone)}" /></label><label>이메일<input type="email" name="email" value="${esc(assoc.email)}" /></label></div>
         <label>주소<input type="text" name="address" value="${esc(assoc.address)}" /></label>
         <label class="mini-label">로고 <small>(선택·이미지)</small><input type="file" name="logo" accept="image/*" /></label>
+        <label class="mini-label">홈 히어로 배경 사진 <small>(선택·가로 이미지 권장·비우면 프리미엄 그라데이션 유지)</small><input type="file" name="hero_image" accept="image/*" /></label>
+        ${assoc.hero_image ? `<div class="hero-img-cur"><img src="${esc(mediaUrl(assoc.hero_image))}" alt="현재 히어로 배경" loading="lazy" /><label class="check"><input type="checkbox" name="hero_image_clear" value="1" /> 현재 사진 제거하고 그라데이션으로</label></div>` : ""}
         <div class="form-divider">검색 노출 (선택) — 네이버·구글에 사이트를 등록할 때 발급받는 소유 확인 코드</div>
         <div class="form-two"><label>네이버 서치어드바이저 코드<input type="text" name="naver_verification" value="${esc(assoc.naver_verification || "")}" placeholder="content=&quot;…&quot; 안의 값만" /></label>
           <label>구글 서치콘솔 코드<input type="text" name="google_verification" value="${esc(assoc.google_verification || "")}" placeholder="content=&quot;…&quot; 안의 값만" /></label></div>

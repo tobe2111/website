@@ -252,8 +252,13 @@ function heroSection(s, deps) {
   const title = esc(s.title || name).replace(/\n/g, "<br />");
   const sub = esc(s.subtitle || (deps.assoc && deps.assoc.tagline) || "우리 동네 상권을 한곳에서 만나보세요.");
   const sug = deps.suggestNames && deps.suggestNames.length;
-  return `<section class="hero-pro">
-    <div class="hero-pro-bg" aria-hidden="true"><span class="hp-glow hp-glow-1"></span><span class="hp-glow hp-glow-2"></span><div class="hp-skyline">${HERO_SKYLINE}</div></div>
+  // 배경 사진이 있으면 사진 + 어두운 베일(가독성), 없으면 그라데이션 + 광원 + 랜드마크 실루엣.
+  const photo = deps.heroImage;
+  const bg = photo
+    ? `<div class="hp-photo" style="background-image:url('${String(photo).replace(/['"\\]/g, "")}')"></div><div class="hp-photo-veil"></div>`
+    : `<span class="hp-glow hp-glow-1"></span><span class="hp-glow hp-glow-2"></span><div class="hp-skyline">${HERO_SKYLINE}</div>`;
+  return `<section class="hero-pro${photo ? " has-photo" : ""}">
+    <div class="hero-pro-bg" aria-hidden="true">${bg}</div>
     <div class="container hp-inner">
       <p class="hp-eyebrow">${eyebrow}</p>
       <h1 class="hp-title">${title}</h1>

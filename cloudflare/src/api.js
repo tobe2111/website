@@ -427,9 +427,15 @@ export async function adminSettings(ctx) {
   const up = await saveImages(env, form.getAll("logo"), 1);
   if (up.error) return back(base + "/admin", up.error, true);
   if (up.images[0]) { if (assoc.logo) await storage.remove(env, assoc.logo); logo = up.images[0].filename; }
+  // 히어로 배경 사진 (선택) — 있으면 홈 히어로가 사진 배경, 없으면 그라데이션 유지. 삭제 체크박스 지원.
+  let heroImage = assoc.hero_image;
+  const hup = await saveImages(env, form.getAll("hero_image"), 1);
+  if (hup.error) return back(base + "/admin", hup.error, true);
+  if (hup.images[0]) { if (assoc.hero_image) await storage.remove(env, assoc.hero_image); heroImage = hup.images[0].filename; }
+  else if (form.get("hero_image_clear") === "1") { if (assoc.hero_image) await storage.remove(env, assoc.hero_image); heroImage = ""; }
   // 검색엔진 소유 확인 코드: 메타 태그 content 로 그대로 나가므로 안전한 문자만 허용
   const verCode = (v) => (cap(v, 100) || "").replace(/[^-\w.]/g, "");
-  await D.updateAssociation(db, assoc.id, { name: cap(form.get("name").trim(), 100), tagline: cap(form.get("tagline"), 200), brand_color: color, phone: cap(form.get("phone"), 40), email: cap(form.get("email"), 120), address: cap(form.get("address"), 200), logo,
+  await D.updateAssociation(db, assoc.id, { name: cap(form.get("name").trim(), 100), tagline: cap(form.get("tagline"), 200), brand_color: color, phone: cap(form.get("phone"), 40), email: cap(form.get("email"), 120), address: cap(form.get("address"), 200), logo, hero_image: heroImage,
     naver_verification: verCode(form.get("naver_verification")), google_verification: verCode(form.get("google_verification")) });
   await audit(ctx, "브랜딩수정", "");
   return back(base + "/admin", "상인회 정보가 저장되었습니다.");

@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS associations (
   address     TEXT NOT NULL DEFAULT '',
   email       TEXT NOT NULL DEFAULT '',
   logo        TEXT NOT NULL DEFAULT '',
+  hero_image  TEXT NOT NULL DEFAULT '',    -- 홈 히어로 배경 사진(R2 키). 비우면 프리미엄 그라데이션 히어로
   map_lat     REAL NOT NULL DEFAULT 37.4837,
   map_lng     REAL NOT NULL DEFAULT 127.0324,
   map_zoom    INTEGER NOT NULL DEFAULT 14,
@@ -306,7 +307,7 @@ CREATE TABLE IF NOT EXISTS settings (
 
 // 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
 // 마이그레이션 세대 — migrateColumns 에 단계를 추가할 때마다 +1
-const SCHEMA_VERSION = "14";
+const SCHEMA_VERSION = "15";
 
 export async function ensureSchema(db) {
   const has = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='associations'").first();
@@ -393,6 +394,10 @@ async function migrateColumns(db) {
   //      옛 임시 기본값을 그대로 둔 테넌트만 갱신 — 직접 색을 고른 테넌트는 건드리지 않음.
   if (cols.some((c) => c.name === "brand_color")) {
     await db.prepare("UPDATE associations SET brand_color='#0b8a46' WHERE brand_color='#2bb3a3'").run();
+  }
+  // v15: 홈 히어로 배경 사진 컬럼
+  if (!cols.some((c) => c.name === "hero_image")) {
+    await db.prepare("ALTER TABLE associations ADD COLUMN hero_image TEXT NOT NULL DEFAULT ''").run();
   }
   // events 대표 이미지 컬럼 (기존 배포 업그레이드)
   const evTbl = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='events'").first();
