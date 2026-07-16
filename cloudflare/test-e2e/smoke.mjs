@@ -101,7 +101,7 @@ const ok = (cond, name) => { if (cond) { pass++; console.log("  ✓", name); } e
   await p.goto(`http://localhost:${PORT}/home.html`);
   const chosungOk = await p.evaluate(() => window.__storeSuggest && window.__storeSuggest.matches("홍가네분식", "ㅎㄱㄴ"));
   ok(chosungOk, "초성 매칭 함수 (ㅎㄱㄴ → 홍가네분식)");
-  const input = p.locator('.hero-search input[type="search"]');
+  const input = p.locator('.feat-search input[type="search"]');
   await input.fill("ㅎㄱ");
   await p.waitForTimeout(120);
   ok(await p.locator(".suggest-list li", { hasText: "홍가네분식" }).count() > 0, "초성 입력 → 드롭다운 제안");

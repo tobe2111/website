@@ -41,8 +41,8 @@ test("테넌트 홈 200 + 히어로", async () => {
   const r = await req("GET", "/t/seocho");
   assert.equal(r.status, 200);
   const h = await r.text();
-  assert.match(h, /hero-title/);
-  assert.match(h, /함께 성장하는 서초 상권/);
+  assert.match(h, /hi-title/); // 일러스트 히어로 타이틀
+  assert.match(h, /hero-illus/);
 });
 
 test("보안 헤더(CSP·nosniff) + 임베드 frame-src", async () => {

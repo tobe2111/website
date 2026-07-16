@@ -2,6 +2,146 @@
 // 각 상인회는 섹션의 표시 여부·순서·문구를 독립적으로 바꿀 수 있습니다.
 import { esc } from "./util.js";
 
+// 플랫 일러스트 히어로 (오리지널 · 브랜드색 따라감). 상점가·역·사람들 — 참고 상인회 사이트 톤.
+const HERO_ILLUS = `<svg class="hi-svg" viewBox="0 0 1200 470" preserveAspectRatio="xMidYMax slice" role="img" aria-label="상점가 일러스트">
+<defs>
+ <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+   <stop offset="0" stop-color="var(--brand-300)"/>
+   <stop offset="0.62" stop-color="var(--brand-100)"/>
+   <stop offset="1" stop-color="#f4fcfa"/>
+ </linearGradient>
+</defs>
+<rect width="1200" height="470" fill="url(#sky)"/>
+<!-- clouds -->
+<g fill="#ffffff" opacity="0.9">
+ <ellipse cx="200" cy="66" rx="54" ry="19"/><ellipse cx="250" cy="74" rx="38" ry="15"/><ellipse cx="150" cy="76" rx="34" ry="13"/>
+ <ellipse cx="960" cy="56" rx="60" ry="21"/><ellipse cx="1020" cy="66" rx="42" ry="16"/>
+</g>
+<!-- sun -->
+<circle cx="1090" cy="86" r="34" fill="#ffffff" opacity="0.55"/>
+<!-- ground -->
+<rect y="322" width="1200" height="148" fill="#c3e8b4"/>
+<rect y="322" width="1200" height="12" fill="#b0de9d"/>
+<!-- road -->
+<rect y="412" width="1200" height="58" fill="#d7dee0"/>
+<line x1="0" y1="441" x2="1200" y2="441" stroke="#ffffff" stroke-width="4" stroke-dasharray="26 22" opacity="0.85"/>
+<g fill="#ffffff" opacity="0.92"><rect x="548" y="414" width="13" height="56"/><rect x="573" y="414" width="13" height="56"/><rect x="598" y="414" width="13" height="56"/><rect x="623" y="414" width="13" height="56"/></g>
+
+<!-- Building: 꽃집 -->
+<g>
+ <rect x="70" y="198" width="118" height="124" rx="4" fill="#fdf7ec"/>
+ <path d="M62 200 L129 150 L196 200 Z" fill="var(--brand-500)"/>
+ <rect x="86" y="226" width="86" height="16" fill="var(--brand)"/>
+ <rect x="92" y="258" width="30" height="64" fill="#cfeae4"/><circle cx="116" cy="292" r="2.4" fill="var(--brand)"/>
+ <rect x="132" y="256" width="38" height="34" rx="3" fill="#bfe2f2"/><path d="M132 273 h38 M151 256 v34" stroke="#fff" stroke-width="2"/>
+ <g><circle cx="80" cy="314" r="6" fill="#ef8fae"/><circle cx="93" cy="314" r="6" fill="#f6c453"/><circle cx="106" cy="314" r="6" fill="#e0779b"/></g>
+</g>
+<!-- Building: 카페 -->
+<g>
+ <rect x="196" y="216" width="100" height="106" rx="4" fill="#f3ede1"/>
+ <rect x="196" y="216" width="100" height="20" fill="#d9a066"/>
+ <rect x="212" y="252" width="68" height="40" rx="3" fill="#bfe2f2"/><path d="M246 252 v40 M212 272 h68" stroke="#fff" stroke-width="2"/>
+ <rect x="228" y="298" width="36" height="24" fill="#8a6a4a"/>
+ <circle cx="246" cy="204" r="6" fill="#fff"/><path d="M240 200 q6 -10 12 0" fill="none" stroke="#fff" stroke-width="2"/>
+</g>
+<!-- MARKET -->
+<g>
+ <rect x="304" y="182" width="196" height="140" rx="4" fill="#ffffff"/>
+ <rect x="304" y="182" width="196" height="26" fill="var(--brand)"/>
+ <text x="402" y="201" text-anchor="middle" font-family="Pretendard,sans-serif" font-size="16" font-weight="800" fill="#fff">MARKET</text>
+ <!-- striped awning -->
+ <g>
+  <rect x="300" y="214" width="204" height="26" fill="#e8734f"/>
+  <g fill="#fff">
+   <path d="M300 214 h26 v26 h-26 z" opacity="0"/>
+   <rect x="326" y="214" width="26" height="26"/><rect x="378" y="214" width="26" height="26"/><rect x="430" y="214" width="26" height="26"/><rect x="482" y="214" width="22" height="26"/>
+  </g>
+  <path d="M300 240 l13 12 l13 -12 l13 12 l13 -12 l13 12 l13 -12 l13 12 l13 -12 l13 12 l13 -12 l13 12 l13 -12 l13 12 l13 -12 l13 12 l0 0" fill="#e8734f"/>
+ </g>
+ <rect x="322" y="258" width="70" height="64" rx="3" fill="#cfeae4"/><path d="M357 258 v64 M322 290 h70" stroke="#fff" stroke-width="2"/>
+ <rect x="410" y="262" width="72" height="60" fill="#f3f3f3"/>
+ <rect x="418" y="270" width="56" height="10" rx="3" fill="#e8734f"/><rect x="418" y="286" width="56" height="10" rx="3" fill="#f6c453"/><rect x="418" y="302" width="56" height="10" rx="3" fill="#7bc47f"/>
+</g>
+<!-- 베이커리 -->
+<g>
+ <rect x="516" y="222" width="96" height="100" rx="4" fill="#fae9d7"/>
+ <path d="M508 224 L564 186 L620 224 Z" fill="#d98b5e"/>
+ <rect x="530" y="252" width="68" height="38" rx="3" fill="#bfe2f2"/><path d="M564 252 v38 M530 271 h68" stroke="#fff" stroke-width="2"/>
+ <rect x="546" y="296" width="36" height="26" fill="#a06a44"/>
+</g>
+<!-- 서점(보라) -->
+<g>
+ <rect x="632" y="206" width="104" height="116" rx="4" fill="#ece7f3"/>
+ <rect x="632" y="206" width="104" height="20" fill="#9a92bb"/>
+ <rect x="650" y="244" width="70" height="42" rx="3" fill="#d8d0ea"/>
+ <g fill="#9a92bb"><rect x="658" y="252" width="8" height="26"/><rect x="670" y="250" width="8" height="28"/><rect x="682" y="254" width="8" height="24"/><rect x="694" y="250" width="8" height="28"/><rect x="706" y="252" width="8" height="26"/></g>
+ <rect x="666" y="296" width="36" height="26" fill="#6f668f"/>
+</g>
+<!-- 타워 오피스 -->
+<g>
+ <rect x="756" y="150" width="96" height="172" rx="4" fill="#e7eef2"/>
+ <rect x="756" y="150" width="96" height="12" fill="var(--brand)"/>
+ <g fill="#bcd6e6">
+  <rect x="770" y="176" width="20" height="18"/><rect x="800" y="176" width="20" height="18"/><rect x="830" y="176" width="12" height="18"/>
+  <rect x="770" y="206" width="20" height="18"/><rect x="800" y="206" width="20" height="18"/><rect x="830" y="206" width="12" height="18"/>
+  <rect x="770" y="236" width="20" height="18"/><rect x="800" y="236" width="20" height="18"/><rect x="830" y="236" width="12" height="18"/>
+  <rect x="770" y="266" width="20" height="18"/><rect x="800" y="266" width="20" height="18"/><rect x="830" y="266" width="12" height="18"/>
+ </g>
+</g>
+<!-- 역 -->
+<g>
+ <rect x="880" y="176" width="250" height="146" rx="6" fill="#eaf1f4"/>
+ <rect x="880" y="176" width="250" height="34" rx="6" fill="var(--brand)"/>
+ <text x="1005" y="199" text-anchor="middle" font-family="Pretendard,sans-serif" font-size="16" font-weight="800" fill="#fff">우리역</text>
+ <g fill="#bcd6e6">
+  <rect x="900" y="228" width="40" height="60" rx="3"/><rect x="956" y="228" width="40" height="60" rx="3"/><rect x="1012" y="228" width="40" height="60" rx="3"/><rect x="1068" y="228" width="44" height="60" rx="3"/>
+ </g>
+ <rect x="960" y="296" width="90" height="26" rx="3" fill="#cfe0e8"/>
+ <circle cx="1122" cy="160" r="10" fill="#fff"/><path d="M1122 160 v-6 M1122 160 h5" stroke="var(--brand)" stroke-width="2"/>
+</g>
+
+<!-- 가로수 -->
+<g>
+ <g><rect x="250" y="300" width="7" height="30" fill="#8a5a3c"/><circle cx="253" cy="292" r="20" fill="#7ec77f"/><circle cx="240" cy="300" r="14" fill="#8fd08f"/><circle cx="266" cy="300" r="14" fill="#8fd08f"/></g>
+ <g><rect x="610" y="298" width="7" height="32" fill="#8a5a3c"/><circle cx="613" cy="290" r="20" fill="#7ec77f"/><circle cx="600" cy="298" r="14" fill="#8fd08f"/><circle cx="626" cy="298" r="14" fill="#8fd08f"/></g>
+ <g><rect x="862" y="298" width="7" height="32" fill="#8a5a3c"/><circle cx="865" cy="290" r="19" fill="#7ec77f"/><circle cx="853" cy="298" r="13" fill="#8fd08f"/><circle cx="877" cy="298" r="13" fill="#8fd08f"/></g>
+</g>
+<!-- 가로등 -->
+<g stroke="#7c8a90" stroke-width="4" fill="none"><line x1="470" y1="330" x2="470" y2="270"/><line x1="740" y1="330" x2="740" y2="270"/></g>
+<g fill="#f6d97a"><circle cx="470" cy="266" r="7"/><circle cx="740" cy="266" r="7"/></g>
+
+<!-- 푸드카트 -->
+<g>
+ <rect x="150" y="360" width="70" height="40" rx="4" fill="#ef8f6b"/>
+ <rect x="150" y="354" width="70" height="10" fill="#fff"/>
+ <path d="M140 344 q45 -26 90 0 z" fill="#e8734f"/><path d="M140 344 q45 -26 90 0" fill="none" stroke="#fff" stroke-width="0"/>
+ <g fill="#fff"><path d="M162 344 q23 -14 0 0" opacity="0"/></g>
+ <line x1="185" y1="344" x2="185" y2="356" stroke="#c95c3e" stroke-width="3"/>
+ <circle cx="165" cy="404" r="8" fill="#5a5a5a"/><circle cx="205" cy="404" r="8" fill="#5a5a5a"/>
+</g>
+
+<!-- 사람들 -->
+<g>
+ <!-- person walking dog -->
+ <g><circle cx="330" cy="372" r="9" fill="#f0c9a0"/><rect x="322" y="382" width="16" height="26" rx="7" fill="var(--brand)"/><ellipse cx="360" cy="404" rx="12" ry="7" fill="#c98a5a"/><circle cx="372" cy="400" r="5" fill="#c98a5a"/><line x1="336" y1="392" x2="360" y2="400" stroke="#7c8a90" stroke-width="2"/></g>
+ <!-- person 2 -->
+ <g><circle cx="470" cy="374" r="9" fill="#e8b48c"/><rect x="462" y="384" width="16" height="26" rx="7" fill="#e8734f"/></g>
+ <!-- couple -->
+ <g><circle cx="700" cy="372" r="9" fill="#f0c9a0"/><rect x="692" y="382" width="16" height="28" rx="7" fill="#9a92bb"/><circle cx="722" cy="374" r="9" fill="#e8b48c"/><rect x="714" y="384" width="16" height="26" rx="7" fill="#f6c453"/></g>
+ <!-- person on bench -->
+ <g><rect x="560" y="392" width="46" height="8" rx="2" fill="#a87b52"/><rect x="564" y="378" width="6" height="16" fill="#a87b52"/><rect x="596" y="378" width="6" height="16" fill="#a87b52"/><circle cx="583" cy="378" r="8" fill="#e8b48c"/><rect x="576" y="386" width="14" height="12" rx="5" fill="var(--brand-500)"/></g>
+ <!-- delivery scooter -->
+ <g><circle cx="915" cy="404" r="10" fill="#4a4a4a"/><circle cx="955" cy="404" r="10" fill="#4a4a4a"/><path d="M915 404 L940 380 L958 380 L960 404" fill="none" stroke="#e8734f" stroke-width="5"/><rect x="936" y="366" width="18" height="16" rx="3" fill="#e8734f"/><circle cx="935" cy="360" r="8" fill="#f0c9a0"/></g>
+ <!-- person right -->
+ <g><circle cx="1060" cy="374" r="9" fill="#f0c9a0"/><rect x="1052" y="384" width="16" height="26" rx="7" fill="var(--brand)"/></g>
+</g>
+</svg>`;
+const FC_ICONS = {
+  store: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9l1.2-4.2A1 1 0 0 1 6.2 4h11.6a1 1 0 0 1 1 .8L20 9"/><path d="M4 9v10a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9"/><path d="M9 20v-5h6v5"/></svg>',
+  map: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg>',
+  news: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l14-6v14L3 13z"/><path d="M17 8a3 3 0 0 1 0 8"/><path d="M6 13v4a2 2 0 0 0 2 2h1"/></svg>',
+};
+
 // 섹션 카탈로그: 편집 가능한 필드 정의 (관리자 UI 자동 생성용)
 export const SECTION_CATALOG = {
   hero: {
@@ -44,6 +184,13 @@ export const SECTION_CATALOG = {
       { key: "subtitle", label: "설명", type: "text" },
     ],
   },
+  featurecards: {
+    label: "바로가기 카드 (소개 + 3색 카드)",
+    fields: [
+      { key: "title", label: "소개 제목", type: "text" },
+      { key: "lead", label: "소개 문구", type: "textarea" },
+    ],
+  },
   updates: {
     label: "동네 새소식 (가게 소식 피드)",
     fields: [{ key: "title", label: "제목", type: "text" }],
@@ -61,16 +208,8 @@ export const SECTION_CATALOG = {
 // 기본 홈 구성
 export function defaultLayout(assocName = "우리 상인회") {
   return [
-    {
-      type: "hero",
-      enabled: true,
-      eyebrow: "",
-      title: "이웃님, 안녕하세요 👋\n가까운 가게를 찾아보세요.",
-      highlight: "",
-      subtitle: "",
-      primaryLabel: "",
-      showStats: false,
-    },
+    { type: "hero", enabled: true, eyebrow: "함께 만드는 우리 동네", title: "", highlight: "", subtitle: "", primaryLabel: "", showStats: false },
+    { type: "featurecards", enabled: true, title: "", lead: "" },
     { type: "businesses", enabled: true, title: "지금 문 연 가게", lead: "" },
     { type: "updates", enabled: true, title: "동네 새소식" },
     { type: "mapbanner", enabled: true, title: "우리 동네 점포 지도", subtitle: "" },
@@ -91,6 +230,11 @@ export function parseLayout(json, assocName) {
     if (!out.some((s) => s.type === "mapbanner")) {
       const i = out.findIndex((s) => s.type === "businesses");
       out.splice(i >= 0 ? i + 1 : out.length, 0, { type: "mapbanner", enabled: true, title: "우리 동네 점포 지도", subtitle: "" });
+    }
+    // 개편 업그레이드: 바로가기 카드가 없으면 히어로 뒤에 주입
+    if (!out.some((s) => s.type === "featurecards")) {
+      const h = out.findIndex((s) => s.type === "hero");
+      out.splice(h >= 0 ? h + 1 : 0, 0, { type: "featurecards", enabled: true, title: "", lead: "" });
     }
     // 구버전 업그레이드: 동네 새소식 섹션이 없으면 업체 섹션 뒤에 추가
     if (!out.some((s) => s.type === "updates")) {
@@ -156,6 +300,8 @@ function renderSection(s, deps) {
         "",
         `<div class="free-text container narrow">${esc(s.body || "").replace(/\n/g, "<br />")}</div>`
       );
+    case "featurecards":
+      return featureCardsSection(s, deps);
     case "updates":
       if (!deps.updatesHtml) return ""; // 소식 없으면 섹션 숨김
       return sectionWrap("", s.title || "동네 새소식", "", `<div class="update-grid">${deps.updatesHtml}</div>`);
@@ -185,35 +331,47 @@ function renderSection(s, deps) {
 }
 
 function heroSection(s, deps) {
-  const { stats, base } = deps;
-  // 제목: \n 줄바꿈 지원 + 강조 단어 색상 (시안: 인사말 2줄)
-  const title = esc(s.title || "").replace(/\n/g, "<br />");
-  const hl = s.highlight && title.includes(esc(s.highlight))
-    ? title.replace(esc(s.highlight), `<span>${esc(s.highlight)}</span>`)
-    : title;
-  const statsHtml = s.showStats && stats.businesses > 0
-    ? `<dl class="hero-stats">
-        <div><dt>등록 업체</dt><dd>${stats.businesses}<span>곳</span></dd></div>
-        <div><dt>진행 행사</dt><dd>${stats.events}<span>건</span></dd></div>
-        <div><dt>홍보 미디어</dt><dd>${stats.mediaCount}<span>개</span></dd></div>
-      </dl>`
-    : "";
-  return `<section class="hero"><div class="hero-bg" aria-hidden="true"></div>
-    <div class="container hero-inner">
-      ${s.eyebrow ? `<p class="hero-eyebrow">${esc(s.eyebrow)}</p>` : ""}
-      <h1 class="hero-title">${hl}</h1>
-      ${s.subtitle ? `<p class="hero-desc">${esc(s.subtitle)}</p>` : ""}
-      <form class="hero-search" method="get" action="${base}/businesses" role="search">
-        <input type="search" name="q" placeholder="가게 이름, 업종을 검색해 보세요" aria-label="점포 검색"${deps.suggestNames && deps.suggestNames.length ? ' list="storeSuggest"' : ""} />
-        <button class="btn btn-primary" type="submit">검색</button>
-        ${deps.suggestNames && deps.suggestNames.length ? `<datalist id="storeSuggest">${deps.suggestNames.map((n) => `<option value="${esc(n)}"></option>`).join("")}</datalist>` : ""}
+  // 플랫 일러스트 배너 + 상단 중앙 타이틀 (참고: 상점가 일러스트 히어로)
+  const eyebrow = esc(s.eyebrow || "함께 만드는 우리 동네");
+  const name = (deps.assoc && deps.assoc.name) || "우리 상인회";
+  const title = esc(s.title || name).replace(/\n/g, "<br />");
+  return `<section class="hero-illus">
+    <div class="hi-scene" aria-hidden="true">${HERO_ILLUS}</div>
+    <div class="container hi-head">
+      <p class="hi-eyebrow">${eyebrow}</p>
+      <h1 class="hi-title">${title}</h1>
+    </div>
+  </section>`;
+}
+
+// 바로가기 카드 밴드 — 왼쪽 소개(제목·문구·검색·버튼) + 오른쪽 3색 파스텔 카드가 히어로에 겹침
+function featureCardsSection(s, deps) {
+  const base = deps.base;
+  const name = (deps.assoc && deps.assoc.name) || "우리 상인회";
+  const lead = s.lead || (deps.assoc && deps.assoc.tagline) || "우리 동네 상권을 한곳에서 만나보세요.";
+  const cards = [
+    ["mint", "가입 점포 찾기", "Find member stores", `${base}/businesses`, FC_ICONS.store],
+    ["beige", "점포 지도", "Store map", `${base}/map`, FC_ICONS.map],
+    ["purple", "공지·소식", "News & notices", `${base}/notices`, FC_ICONS.news],
+  ];
+  const cardHtml = cards.map(([tone, ko, en, href, ico]) => `<a class="feat-card feat-${tone}" href="${href}">
+      <span class="fc-ico" aria-hidden="true">${ico}</span>
+      <span class="fc-txt"><strong>${ko}</strong><em>${en}</em></span>
+    </a>`).join("");
+  const sug = deps.suggestNames && deps.suggestNames.length;
+  return `<section class="feat-band"><div class="container feat-inner">
+    <div class="feat-intro">
+      <h2>${esc(s.title || "우리 동네 상권, 한자리에")}</h2>
+      <p><strong>${esc(name)}</strong> — ${esc(lead)}</p>
+      <form class="feat-search" method="get" action="${base}/businesses" role="search">
+        <input type="search" name="q" placeholder="가게 이름·업종 검색" aria-label="점포 검색"${sug ? ' list="storeSuggest"' : ""} />
+        <button class="btn btn-primary" type="submit" aria-label="검색">${FC_ICONS.store ? '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>' : "검색"}</button>
+        ${sug ? `<datalist id="storeSuggest">${deps.suggestNames.map((n) => `<option value="${esc(n)}"></option>`).join("")}</datalist>` : ""}
       </form>
-      ${s.primaryLabel ? `<div class="hero-actions">
-        <a href="${base}/register" class="btn btn-primary">${esc(s.primaryLabel)}</a>
-        <a href="${base}/businesses" class="btn btn-ghost">업체 둘러보기</a>
-      </div>` : ""}
-      ${statsHtml}
-    </div></section>`;
+      <a class="btn btn-ghost feat-more" href="${base}/businesses">자세히 보기 →</a>
+    </div>
+    <div class="feat-cards">${cardHtml}</div>
+  </div></section>`;
 }
 
 function sectionWrap(extraClass, title, lead, inner, more) {

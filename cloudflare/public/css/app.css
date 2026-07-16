@@ -6,7 +6,7 @@
   /* 브랜드 — 테넌트별 --brand 를 render.js 가 주입, 스케일은 자동 파생.
      각 토큰은 정적 폴백(기본 딥그린) → color-mix 순으로 선언:
      color-mix 미지원 구형 브라우저는 폴백을 유지(사이트 정상), 지원 브라우저는 테넌트 색으로 파생. */
-  --brand:#0b6e4f;
+  --brand:#2bb3a3;
   --brand-900:#063320; --brand-900:color-mix(in oklab, var(--brand), #04100a 50%);
   --brand-800:#083f2b; --brand-800:color-mix(in oklab, var(--brand), #04100a 28%);
   --brand-700:#0b6e4f; --brand-700:var(--brand);
@@ -555,7 +555,7 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .epc-body .event-cal{color:rgba(255,255,255,.92)}
 .event-cal:hover{text-decoration:underline}
 /* 검색 자동완성 드롭다운 (초성 검색) */
-.hero-search{position:relative}
+.hero-search,.feat-search{position:relative}
 .suggest-list{position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:60;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--sh-2);overflow:hidden;list-style:none;margin:0;padding:6px}
 .suggest-list li{padding:10px 14px;border-radius:8px;cursor:pointer;font-size:.95rem}
 .suggest-list li:hover,.suggest-list li.is-active{background:var(--brand-tint);color:var(--brand-700);font-weight:600}
@@ -933,3 +933,46 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .sns-row{display:inline-flex;gap:9px;margin-left:6px}
 .sns-btn{display:grid;place-items:center;width:46px;height:46px;border-radius:999px;background:rgba(255,255,255,.16);color:#fff;transition:background .2s}
 .sns-btn:hover{background:rgba(255,255,255,.3)}
+
+
+/* ===================== 파스텔·일러스트 개편 (v3) ===================== */
+.hero-illus{position:relative;overflow:hidden;background:linear-gradient(var(--brand-100),#f4fcfa);aspect-ratio:1200/470}
+.hi-scene{position:absolute;inset:0;line-height:0}
+.hi-svg{width:100%;height:100%;display:block}
+.hi-head{position:absolute;top:0;left:50%;transform:translateX(-50%);width:100%;text-align:center;padding-top:clamp(18px,3.6vw,42px);pointer-events:none}
+.hi-eyebrow{font-weight:700;font-size:clamp(12px,1.4vw,15px);letter-spacing:.06em;color:var(--brand-900)}
+.hi-title{font-weight:800;font-size:clamp(20px,4.2vw,42px);color:var(--brand-900);letter-spacing:-.02em;margin-top:6px;text-shadow:0 2px 12px rgba(255,255,255,.5)}
+/* 겹치는 카드 밴드 */
+.feat-band{position:relative;z-index:3;margin-top:clamp(-96px,-7vw,-56px);margin-bottom:8px}
+.feat-inner{display:grid;grid-template-columns:1fr 1.12fr;gap:30px;align-items:end}
+.feat-intro{padding-bottom:6px}
+.feat-intro h2{font-size:clamp(1.4rem,2.6vw,2rem);font-weight:800;letter-spacing:-.02em;margin-bottom:10px;color:var(--ink)}
+.feat-intro p{color:var(--ink-soft);margin-bottom:16px;max-width:42ch}
+.feat-search{display:flex;gap:8px;max-width:420px;margin-bottom:14px}
+.feat-search input{flex:1;min-width:0;padding:12px 18px;border:1px solid var(--line);border-radius:var(--r-pill);background:var(--surface);font-size:.95rem}
+.feat-search input:focus{outline:none;border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-ring)}
+.feat-search .btn{border-radius:var(--r-pill);padding-inline:16px;display:inline-flex;align-items:center}
+.feat-more{border-radius:var(--r-pill)}
+.feat-cards{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.feat-card{position:relative;display:flex;flex-direction:column;justify-content:space-between;gap:16px;min-height:132px;padding:22px 24px;border-radius:var(--r-xl);box-shadow:var(--sh-2);transition:transform .2s var(--ease),box-shadow .25s}
+.feat-card:hover{transform:translateY(-4px);box-shadow:var(--sh-3)}
+.feat-card .fc-ico svg{width:40px;height:40px}
+.feat-card .fc-txt{display:flex;flex-direction:column;gap:2px}
+.feat-card .fc-txt strong{font-size:1.14rem;font-weight:800;letter-spacing:-.01em}
+.feat-card .fc-txt em{font-style:normal;font-size:.78rem;opacity:.72;letter-spacing:.01em}
+.feat-mint{grid-row:span 2;background:var(--brand);color:#fff}
+.feat-mint .fc-txt em{opacity:.85}
+.feat-beige{background:#e7dcc4;color:#5c4a2c}
+.feat-purple{background:#9a92bb;color:#fff}
+:root[data-theme="dark"] .feat-beige{background:#3a3427;color:#e8dcc2}
+:root[data-theme="dark"] .feat-purple{background:#4a4470}
+:root[data-theme="dark"] .hero-illus{background:linear-gradient(#0f2a27,#0b1f1d)}
+@media (max-width:880px){
+  .hero-illus{aspect-ratio:4/3}
+  .feat-band{margin-top:-28px}
+  .feat-inner{grid-template-columns:1fr;gap:22px;align-items:stretch}
+  .feat-mint{grid-row:auto;min-height:120px}
+  .hi-title{text-shadow:0 2px 14px rgba(255,255,255,.8),0 1px 3px rgba(255,255,255,.9)}
+}
+@media (max-width:560px){.hero-illus{aspect-ratio:1/1}}
+@media (max-width:520px){.feat-cards{grid-template-columns:1fr}}

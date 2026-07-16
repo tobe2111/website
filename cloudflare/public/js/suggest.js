@@ -21,7 +21,7 @@
   // 테스트/디버깅용 노출
   window.__storeSuggest = { chosung: chosung, matches: matches };
 
-  var input = document.querySelector('.hero-search input[type="search"]');
+  var input = document.querySelector('.feat-search input[type="search"], .hero-search input[type="search"]');
   var dl = document.getElementById("storeSuggest");
   if (!input || !dl) return;
   var names = Array.prototype.map.call(dl.querySelectorAll("option"), function (o) { return o.value; });
