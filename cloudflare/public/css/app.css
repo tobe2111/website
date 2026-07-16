@@ -1022,26 +1022,25 @@ html.reveal-on .reveal.in{opacity:1;transform:none}
 .market-card{transition:transform .25s var(--ease),box-shadow .3s}
 .market-card:hover{transform:translateY(-4px)}
 @media (prefers-reduced-motion:reduce){.market-card:hover{transform:none}}
-/* 히어로 일러스트 앰비언트 미세 모션 — 잔잔한 생동감 (transform/opacity만, GPU 친화).
-   prefers-reduced-motion: no-preference 안에서만 정의 → 모션 최소화 설정이면 완전 정지. */
-@media (prefers-reduced-motion: no-preference){
-  .hi-cloud{will-change:transform}
-  .hi-cloud-a{animation:hiDriftA 26s ease-in-out infinite}
-  .hi-cloud-b{animation:hiDriftB 32s ease-in-out infinite}
-  .hi-sun{animation:hiSun 9s ease-in-out infinite}
-  .hi-tree{transform-box:fill-box;transform-origin:50% 100%;will-change:transform}
-  .hi-tree-1{animation:hiSway 6.5s ease-in-out infinite}
-  .hi-tree-2{animation:hiSway 7.4s ease-in-out -1.2s infinite}
-  .hi-tree-3{animation:hiSway 8s ease-in-out -2.6s infinite}
-  .hi-lamp{animation:hiGlow 5s ease-in-out infinite}
-  .hi-fountain{animation:hiFountain 4.5s ease-in-out infinite}
-}
-@keyframes hiFountain{0%,100%{opacity:.42}50%{opacity:.78}}
-@keyframes hiDriftA{0%,100%{transform:translateX(0)}50%{transform:translateX(22px)}}
-@keyframes hiDriftB{0%,100%{transform:translateX(0)}50%{transform:translateX(-18px)}}
-@keyframes hiSun{0%,100%{opacity:.5}50%{opacity:.66}}
-@keyframes hiSway{0%,100%{transform:rotate(-1.1deg)}50%{transform:rotate(1.1deg)}}
-@keyframes hiGlow{0%,100%{opacity:1}50%{opacity:.72}}
+/* 히어로 일러스트 앰비언트 모션 — 잔잔하지만 분명히 움직이는 생동감 (transform/opacity만, GPU 친화).
+   장식용 무한 루프라 모션 최소화 설정과 무관하게 항상 재생(운영자 요청).
+   ※ 스크롤 리빌·카드 호버 확대 등 '큰' 모션은 여전히 prefers-reduced-motion 을 존중. */
+.hi-cloud{will-change:transform}
+.hi-cloud-a{animation:hiDriftA 19s ease-in-out infinite}
+.hi-cloud-b{animation:hiDriftB 24s ease-in-out infinite}
+.hi-sun{animation:hiSun 8s ease-in-out infinite}
+.hi-tree{transform-box:fill-box;transform-origin:50% 100%;will-change:transform}
+.hi-tree-1{animation:hiSway 5s ease-in-out infinite}
+.hi-tree-2{animation:hiSway 5.8s ease-in-out -1.2s infinite}
+.hi-tree-3{animation:hiSway 6.4s ease-in-out -2.6s infinite}
+.hi-lamp{animation:hiGlow 4.5s ease-in-out infinite}
+.hi-fountain{animation:hiFountain 4s ease-in-out infinite}
+@keyframes hiFountain{0%,100%{opacity:.4}50%{opacity:.8}}
+@keyframes hiDriftA{0%,100%{transform:translateX(0)}50%{transform:translateX(48px)}}
+@keyframes hiDriftB{0%,100%{transform:translateX(0)}50%{transform:translateX(-40px)}}
+@keyframes hiSun{0%,100%{opacity:.48}50%{opacity:.7}}
+@keyframes hiSway{0%,100%{transform:rotate(-2deg)}50%{transform:rotate(2deg)}}
+@keyframes hiGlow{0%,100%{opacity:1}50%{opacity:.66}}
 /* ── UI 폴리시: D-day 뱃지 · 카드 포커스 링 · 사진 호버 줌 ── */
 .dday{display:inline-block;padding:2px 9px;border-radius:999px;background:var(--brand-50);color:var(--brand-700);font-size:.72rem;font-weight:800;letter-spacing:.02em;line-height:1.7;white-space:nowrap}
 .dday.is-today{background:var(--brand);color:#fff}

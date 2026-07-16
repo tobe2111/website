@@ -1,7 +1,7 @@
 // 서비스 워커 — v2: 캐시명 교체(구버전 CSS 박제 퍼지) + 재검증 전략
 // CSS/JS 는 배포마다 주소가 바뀌므로(?v=배포ID) 캐시 우선이 안전하고,
 // 응답 후 백그라운드 재검증(stale-while-revalidate)로 이중 안전망.
-const CACHE = "scm-v2";
+const CACHE = "scm-v3";
 const CORE = ["/img/icon.svg", "/manifest.webmanifest"];
 
 self.addEventListener("install", (e) => {

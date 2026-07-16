@@ -70,21 +70,26 @@ const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromi
 let pass = 0, fail = 0;
 const ok = (cond, name) => { if (cond) { pass++; console.log("  ✓", name); } else { fail++; console.error("  ✗", name); } };
 
-// 1) 다크 모드 토글
-{
-  const p = await browser.newPage();
-  await p.goto(`http://localhost:${PORT}/home.html`);
-  await p.click("#themeToggle");
-  ok(await p.evaluate(() => document.documentElement.getAttribute("data-theme")) === "dark", "다크 토글 → data-theme=dark");
-  await p.click("#themeToggle");
-  ok(await p.evaluate(() => document.documentElement.getAttribute("data-theme")) === "light", "재클릭 → light");
-  await p.close();
-}
-// 2) OS 다크 설정 자동 반영 (theme.js)
+// 1) 화이트 테마 고정 — 토글 제거, OS 다크여도 라이트 유지
 {
   const p = await browser.newPage({ colorScheme: "dark" });
   await p.goto(`http://localhost:${PORT}/home.html`);
-  ok(await p.evaluate(() => document.documentElement.getAttribute("data-theme")) === "dark", "OS 다크 → 자동 다크");
+  ok(await p.evaluate(() => document.documentElement.getAttribute("data-theme")) === "light", "OS 다크여도 data-theme=light 고정");
+  ok(await p.evaluate(() => !document.getElementById("themeToggle")), "다크 토글 버튼 제거됨");
+  await p.close();
+}
+// 2) 히어로 앰비언트 모션 — 모션 최소화 설정과 무관하게 구름이 실제로 이동
+{
+  const p = await browser.newPage({ reducedMotion: "reduce" });
+  await p.goto(`http://localhost:${PORT}/home.html`);
+  await p.waitForTimeout(2500);
+  const moved = await p.evaluate(() => {
+    const el = document.querySelector(".hi-cloud-a");
+    if (!el) return false;
+    const m = new DOMMatrixReadOnly(getComputedStyle(el).transform);
+    return Math.abs(m.m41) > 1; // translateX 가 0 이 아니면 애니메이션 재생 중
+  });
+  ok(moved, "reduce 설정에서도 구름 앰비언트 모션 재생");
   await p.close();
 }
 // 3) 모바일 메뉴

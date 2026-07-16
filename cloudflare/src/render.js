@@ -31,7 +31,7 @@ ${ogImgAbs ? `<meta property="og:image" content="${esc(ogImgAbs)}" />` : ""}
   const injected = csrf
     ? String(body).replace(/(<form\b[^>]*\bmethod\s*=\s*["']post["'][^>]*>)/gi, `$1<input type="hidden" name="_csrf" value="${csrf}">`)
     : body;
-  return `<!doctype html><html lang="ko"><head>
+  return `<!doctype html><html lang="ko" data-theme="light"><head>
 <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>${esc(title ? title + " · " : "")}${brand}</title>${meta}${og}${ldScript}
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
@@ -39,7 +39,6 @@ ${ogImgAbs ? `<meta property="og:image" content="${esc(ogImgAbs)}" />` : ""}
 <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css" /></noscript>
 <link rel="stylesheet" href="${assetUrl("/css/app.css")}" />
 <style>:root{--brand:${brandColor}}</style>
-<script src="${assetUrl("/js/theme.js")}"></script>
 ${assoc && assoc.naver_verification ? `<meta name="naver-site-verification" content="${esc(assoc.naver_verification)}" />` : ""}
 ${assoc && assoc.google_verification ? `<meta name="google-site-verification" content="${esc(assoc.google_verification)}" />` : ""}
 ${assoc ? `<link rel="alternate" type="application/rss+xml" title="${brand} 공지·소식" href="${base}/feed.xml" />` : ""}
@@ -55,7 +54,6 @@ ${assoc ? `<link rel="alternate" type="application/rss+xml" title="${brand} 공�
 <header class="site-header" id="siteHeader">
   <div class="container header-inner">
     <a class="brand" href="${base || "/"}">${assoc && assoc.logo ? `<img class="brand-logo" src="${esc(mediaUrl(assoc.logo))}" alt="" />` : `<span class="brand-mark">${STOREFRONT_SVG}</span>`}<span>${brand}</span></a>
-    <button class="theme-toggle" id="themeToggle" type="button" aria-label="다크 모드 전환">${THEME_SUN_SVG}${THEME_MOON_SVG}</button>
     <button class="nav-toggle" id="navToggle" aria-label="메뉴 열기" aria-expanded="false"><span></span><span></span><span></span></button>
     <nav class="main-nav" id="mainNav">${nav}</nav>
   </div>
