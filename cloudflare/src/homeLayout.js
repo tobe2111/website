@@ -240,7 +240,7 @@ export const SECTION_CATALOG = {
       { key: "highlight", label: "강조 단어 (제목 중 색상 강조)", type: "text" },
       { key: "subtitle", label: "설명", type: "textarea" },
       { key: "primaryLabel", label: "주요 버튼 문구", type: "text" },
-      { key: "illus", label: "일러스트", type: "select", options: [["town", "동네 골목형 (기본)"], ["seocho", "서초 랜드마크형 (예술의전당·세빛섬·한강)"]] },
+      { key: "illus", label: "일러스트", type: "select", options: [["seocho", "서초 랜드마크형 (예술의전당·세빛섬·한강) — 기본"], ["town", "동네 골목형"]] },
       { key: "showStats", label: "통계 표시", type: "bool" },
     ],
   },
@@ -448,9 +448,8 @@ function heroSection(s, deps) {
   const eyebrow = esc(s.eyebrow || "함께 만드는 우리 동네");
   const name = (deps.assoc && deps.assoc.name) || "우리 상인회";
   const title = esc(s.title || name).replace(/\n/g, "<br />");
-  // 일러스트 변형: 편집기에서 고른 값 우선, 미설정(첫 배포)이면 서초 테넌트는 랜드마크형 자동 적용.
-  const slug = deps.assoc && deps.assoc.slug;
-  const variant = s.illus || (slug === "seocho" ? "seocho" : "town");
+  // 일러스트 변형: 편집기에서 고른 값 우선, 미설정이면 서초 랜드마크형이 기본.
+  const variant = s.illus || "seocho";
   const illus = variant === "seocho" ? SEOCHO_ILLUS : HERO_ILLUS;
   return `<section class="hero-illus">
     <div class="hi-scene" aria-hidden="true">${illus}</div>
