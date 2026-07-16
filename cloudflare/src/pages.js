@@ -164,16 +164,27 @@ export async function home(ctx) {
       ${u.image ? `<span class="uc-img"><img src="${esc(mediaUrl(u.image))}" alt="" loading="lazy" /></span>` : ""}
       <span class="uc-body"><strong>${esc(u.biz_name)}</strong><p>${esc(u.body)}</p><time>${esc(u.created_at.slice(5, 10).replace("-", "."))}</time></span></a>`).join(""),
   });
-  // 검색엔진 구조화 데이터: 상인회 = 조직
+  // 검색엔진 구조화 데이터: 상인회 = 조직 + 사이트 검색액션(사이트링크 검색창)
+  const homeUrl = `${ORIGIN}${base}/`;
   const orgLd = {
     "@context": "https://schema.org", "@type": "Organization",
-    name: assoc.name, url: `${ORIGIN}${base}/`,
+    name: assoc.name, url: homeUrl,
     ...(assoc.tagline ? { description: assoc.tagline } : {}),
     ...(assoc.logo ? { logo: /^https?:\/\//.test(mediaUrl(assoc.logo)) ? mediaUrl(assoc.logo) : ORIGIN + mediaUrl(assoc.logo) } : {}),
     ...(assoc.phone ? { telephone: assoc.phone } : {}),
     ...(assoc.address ? { address: { "@type": "PostalAddress", streetAddress: assoc.address, addressCountry: "KR" } } : {}),
   };
-  return html(layout({ title: "", assoc, base, user, body, activeNav: `${base}/`, csrf, description: assoc.tagline, jsonLd: orgLd,
+  const siteLd = {
+    "@context": "https://schema.org", "@type": "WebSite",
+    name: assoc.name, url: homeUrl,
+    // 구글 사이트링크 검색창: 브랜드 검색 시 결과에 점포 검색 입력창 노출
+    potentialAction: {
+      "@type": "SearchAction",
+      target: { "@type": "EntryPoint", urlTemplate: `${ORIGIN}${base}/businesses?q={search_term_string}` },
+      "query-input": "required name=search_term_string",
+    },
+  };
+  return html(layout({ title: "", assoc, base, user, body, activeNav: `${base}/`, csrf, description: assoc.tagline, jsonLd: [orgLd, siteLd],
     scripts: names.length ? `<script src="${assetUrl("/js/suggest.js")}" defer></script>` : "" }));
 }
 
@@ -225,7 +236,21 @@ export async function businesses(ctx) {
     <div class="market-grid" id="bizGrid">${cards}</div>
     ${openOnly ? "" : pager((i) => `${base}/businesses${qs({ category: cat, q, page: i })}`, cur, pages)}
   </div></section>`;
-  return html(layout({ title: "가입 점포", assoc, base, user, body, activeNav: `${base}/businesses`, csrf, scripts: `<script src="${assetUrl("/js/fav.js")}" defer></script>` }));
+  // 구조화 데이터: 점포 목록(ItemList) + 빵부스러기 → 검색엔진이 디렉터리 구조·구성원 인식
+  const startPos = openOnly ? 0 : (cur - 1) * 12;
+  const listLd = {
+    "@context": "https://schema.org", "@type": "ItemList",
+    itemListElement: items.map((b, i) => ({ "@type": "ListItem", position: startPos + i + 1, url: `${ORIGIN}${base}/business/${encodeURIComponent(b.slug)}`, name: b.name })),
+  };
+  const crumbLd = {
+    "@context": "https://schema.org", "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: assoc.name, item: `${ORIGIN}${base}/` },
+      { "@type": "ListItem", position: 2, name: "가입 점포", item: `${ORIGIN}${base}/businesses` },
+    ],
+  };
+  const desc = `${assoc.name} 가입 점포 ${total}곳${cat ? ` · ${cat}` : ""} — 우리 동네 상권을 업종별로 한눈에.`;
+  return html(layout({ title: cat ? `가입 점포 · ${cat}` : "가입 점포", assoc, base, user, body, activeNav: `${base}/businesses`, csrf, description: desc, jsonLd: [listLd, crumbLd], scripts: `<script src="${assetUrl("/js/fav.js")}" defer></script>` }));
 }
 
 export async function businessDetail(ctx) {
@@ -422,7 +447,8 @@ export async function notices(ctx) {
     <ul class="notice-list">${items.length ? noticeRows(base, items) : `<li class="empty">${q || tag ? "조건에 맞는 공지가 없습니다." : "등록된 공지가 없습니다."}</li>`}</ul>
     ${pager((i) => `${base}/notices${qs({ q, tag, page: i })}`, cur, pages)}
   </div></section>`;
-  return html(layout({ title: "공지사항", assoc, base, user, body, activeNav: `${base}/notices`, csrf }));
+  return html(layout({ title: "공지사항", assoc, base, user, body, activeNav: `${base}/notices`, csrf,
+    description: `${assoc.name} 공지사항 — 안내·행사·혜택 등 우리 동네 상권 소식 ${total}건.` }));
 }
 export async function noticeDetail(ctx) {
   const { db, assoc, base, user, params, csrf } = ctx;
@@ -435,7 +461,16 @@ export async function noticeDetail(ctx) {
     ${n.image ? `<img class="article-image" src="${esc(mediaUrl(n.image))}" alt="${esc(n.title)}" />` : ""}
     <div class="article-body">${esc(n.body).replace(/\n/g, "<br />")}</div>
     <div class="article-actions"><button type="button" class="btn btn-share" data-share data-share-title="${esc(n.title)} — ${esc(assoc.name)}">${SHARE_SVG} 공지 공유하기</button></div></div></section>`;
-  return html(layout({ title: n.title, assoc, base, user, body, activeNav: `${base}/notices`, csrf, description: clip(n.body) || n.title, ogImage: n.image || "", scripts: `<script src="${assetUrl("/js/share.js")}" defer></script>` }));
+  // 구조화 데이터: Article — 공지/소식 리치 결과(제목·발행일·발행처)
+  const artLd = {
+    "@context": "https://schema.org", "@type": "Article",
+    headline: clip(n.title, 110) || n.title, datePublished: n.created_at.slice(0, 10),
+    ...(n.image ? { image: /^https?:\/\//.test(mediaUrl(n.image)) ? mediaUrl(n.image) : ORIGIN + mediaUrl(n.image) } : {}),
+    author: { "@type": "Organization", name: assoc.name },
+    publisher: { "@type": "Organization", name: assoc.name, ...(assoc.logo ? { logo: { "@type": "ImageObject", url: /^https?:\/\//.test(mediaUrl(assoc.logo)) ? mediaUrl(assoc.logo) : ORIGIN + mediaUrl(assoc.logo) } } : {}) },
+    mainEntityOfPage: `${ORIGIN}${base}/notices/${n.id}`,
+  };
+  return html(layout({ title: n.title, assoc, base, user, body, activeNav: `${base}/notices`, csrf, description: clip(n.body) || n.title, ogImage: n.image || "", jsonLd: artLd, scripts: `<script src="${assetUrl("/js/share.js")}" defer></script>` }));
 }
 
 // ================= 행사 =================
@@ -462,7 +497,20 @@ export async function events(ctx) {
       ${isMember ? `<p class="section-lead">회원은 행사별로 참가 신청을 할 수 있습니다. 명단은 관리자에게 전달됩니다.</p>` : ""}</div>
     ${flashOf(query)}
     <div class="event-grid">${cards.join("") || `<p class="empty">예정된 행사가 없습니다.</p>`}</div></div></section>`;
-  return html(layout({ title: "행사", assoc, base, user, body, activeNav: `${base}/notices`, csrf }));
+  // 구조화 데이터: Event — 구글/네이버 행사 리치 결과(날짜·장소·주최)
+  const eventLd = list.map((e) => ({
+    "@context": "https://schema.org", "@type": "Event",
+    name: e.title, startDate: e.event_date,
+    eventStatus: "https://schema.org/EventScheduled",
+    eventAttendanceMode: "https://schema.org/OfflineEventAttendanceMode",
+    ...(e.place ? { location: { "@type": "Place", name: e.place, address: { "@type": "PostalAddress", streetAddress: e.place, addressCountry: "KR" } } } : {}),
+    ...(e.description ? { description: e.description } : {}),
+    ...(e.image ? { image: /^https?:\/\//.test(mediaUrl(e.image)) ? mediaUrl(e.image) : ORIGIN + mediaUrl(e.image) } : {}),
+    organizer: { "@type": "Organization", name: assoc.name, url: `${ORIGIN}${base}/` },
+  }));
+  return html(layout({ title: "행사", assoc, base, user, body, activeNav: `${base}/notices`, csrf,
+    description: `${assoc.name} 행사·이벤트 안내 — 골목축제·정기총회 등 우리 동네 소식.`,
+    jsonLd: eventLd.length ? eventLd : null }));
 }
 
 // ================= 총회 안건 투표 =================
@@ -1478,12 +1526,12 @@ export async function sitemap(ctx) {
   const { db } = ctx;
   const o = originOf(ctx);
   const urls = [];
-  const add = (loc) => urls.push(`<url><loc>${esc(loc)}</loc></url>`);
+  const add = (loc, lastmod) => urls.push(`<url><loc>${esc(loc)}</loc>${lastmod ? `<lastmod>${esc(String(lastmod).slice(0, 10))}</lastmod>` : ""}</url>`);
   const emitAssoc = async (a, prefix) => {
     add(prefix || o + "/");
     for (const p of ["/businesses", "/map", "/notices", "/events"]) add((prefix || o) + p);
-    for (const b of (await D.listBusinessesPaged(db, a.id, { perPage: 200 })).items) add(`${prefix || o}/business/${encodeURIComponent(b.slug)}`);
-    for (const n of await D.listNotices(db, a.id, 200)) add(`${(prefix || o)}/notices/${n.id}`);
+    for (const b of (await D.listBusinessesPaged(db, a.id, { perPage: 200 })).items) add(`${prefix || o}/business/${encodeURIComponent(b.slug)}`, b.updated_at || b.created_at);
+    for (const n of await D.listNotices(db, a.id, 200)) add(`${(prefix || o)}/notices/${n.id}`, n.created_at);
   };
   // 개별 도메인으로 접속: 그 상인회의 URL 만, 루트 경로 기준으로 (검색엔진은 같은 호스트 URL 만 수집)
   const own = await D.getAssociationByDomain(db, ctx.url.hostname);
@@ -1501,5 +1549,11 @@ export async function sitemap(ctx) {
 }
 export function robots(ctx) {
   const o = originOf(ctx);
-  return text(`User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /super\nDisallow: /dashboard\nSitemap: ${o}/sitemap.xml\n`);
+  // 공개 페이지는 모두 크롤 허용, 관리/개인/생성 경로만 차단 (테넌트 경로 포함). 사이트맵 명시.
+  const disallow = [
+    "/admin", "/super", "/dashboard", "/account", "/setup",
+    "/*/admin", "/*/dashboard", "/*/board", "/*/polls", "/*/account", "/*/sign", "/*/invite",
+    "/*.csv$", "/*.ics$",
+  ].map((p) => `Disallow: ${p}`).join("\n");
+  return text(`User-agent: *\nAllow: /\n${disallow}\nSitemap: ${o}/sitemap.xml\n`);
 }

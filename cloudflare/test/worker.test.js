@@ -52,6 +52,21 @@ test("표준 URL(canonical) — 쿼리 제외하고 경로만", async () => {
   assert.doesNotMatch(h, /rel="canonical"[^>]*err=1/);
 });
 
+test("구조화 데이터(JSON-LD) — 홈 WebSite/SearchAction · 목록 ItemList", async () => {
+  const home = await (await req("GET", "/t/seocho")).text();
+  assert.match(home, /"@type":"WebSite"/);
+  assert.match(home, /SearchAction/);
+  const list = await (await req("GET", "/t/seocho/businesses")).text();
+  assert.match(list, /"@type":"ItemList"/);
+  assert.match(list, /"@type":"BreadcrumbList"/);
+});
+
+test("robots.txt — 사이트맵 + 테넌트 관리경로 차단", async () => {
+  const t = await (await req("GET", "/robots.txt")).text();
+  assert.match(t, /Sitemap: /);
+  assert.match(t, /Disallow: \/\*\/admin/);
+});
+
 test("보안 헤더(CSP·nosniff) + 임베드 frame-src", async () => {
   const r = await req("GET", "/t/seocho");
   assert.equal(r.headers.get("x-content-type-options"), "nosniff");
