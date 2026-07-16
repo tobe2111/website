@@ -240,7 +240,6 @@ export const SECTION_CATALOG = {
       { key: "highlight", label: "강조 단어 (제목 중 색상 강조)", type: "text" },
       { key: "subtitle", label: "설명", type: "textarea" },
       { key: "primaryLabel", label: "주요 버튼 문구", type: "text" },
-      { key: "illus", label: "일러스트", type: "select", options: [["seocho", "서초 랜드마크형 (예술의전당·세빛섬·한강) — 기본"], ["town", "동네 골목형"]] },
       { key: "showStats", label: "통계 표시", type: "bool" },
     ],
   },
@@ -443,19 +442,47 @@ function renderSection(s, deps) {
   }
 }
 
+// 프리미엄 에디토리얼 히어로용 랜드마크 실루엣 — 반투명 그라데이션으로 녹색 배경 위에 원근 레이어.
+// 예술의전당 갓지붕 · 우면산 능선 · 오피스 스카이라인 · 세빛섬 · 반포대교.
+const HERO_SKYLINE = `<svg class="hp-sky-svg" viewBox="0 0 1200 340" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
+<defs>
+ <linearGradient id="hpFar" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff" stop-opacity=".13"/><stop offset="1" stop-color="#ffffff" stop-opacity=".04"/></linearGradient>
+ <linearGradient id="hpMid" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#03130d" stop-opacity=".16"/><stop offset="1" stop-color="#03130d" stop-opacity=".32"/></linearGradient>
+ <linearGradient id="hpNear" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#010c07" stop-opacity=".32"/><stop offset="1" stop-color="#010c07" stop-opacity=".52"/></linearGradient>
+</defs>
+<path d="M0 158 Q 240 96 480 138 Q 720 178 960 126 Q 1092 100 1200 138 L1200 340 L0 340 Z" fill="url(#hpFar)"/>
+<g fill="url(#hpMid)">
+ <rect x="150" y="182" width="64" height="158" rx="3"/><rect x="228" y="150" width="50" height="190" rx="3"/><rect x="292" y="206" width="58" height="134" rx="3"/>
+ <path d="M472 200 L520 132 L568 200 Z"/><ellipse cx="520" cy="200" rx="64" ry="9"/><rect x="484" y="200" width="72" height="140"/>
+ <rect x="602" y="172" width="56" height="168" rx="3"/><rect x="676" y="150" width="70" height="190" rx="3"/><rect x="764" y="196" width="52" height="144" rx="3"/>
+ <rect x="900" y="178" width="60" height="162" rx="3"/><rect x="978" y="158" width="46" height="182" rx="3"/><rect x="1040" y="200" width="60" height="140" rx="3"/>
+</g>
+<g fill="url(#hpNear)">
+ <rect x="0" y="300" width="1200" height="40"/>
+ <path d="M470 300 q0 -30 30 -30 q30 0 30 30 z"/><path d="M544 300 q0 -40 38 -40 q38 0 38 40 z"/><path d="M628 300 q0 -28 30 -28 q30 0 30 28 z"/>
+ <rect x="150" y="292" width="360" height="7"/><rect x="196" y="299" width="5" height="16"/><rect x="300" y="299" width="5" height="16"/><rect x="404" y="299" width="5" height="16"/>
+</g>
+</svg>`;
+
 function heroSection(s, deps) {
-  // 플랫 일러스트 배너 + 상단 중앙 타이틀 (참고: 상점가 일러스트 히어로)
+  // 프리미엄 에디토리얼 히어로: 딥 그린 그라데이션 + 부드럽게 흐르는 광원 + 랜드마크 실루엣 + 중앙 검색.
+  const base = deps.base;
   const eyebrow = esc(s.eyebrow || "함께 만드는 우리 동네");
   const name = (deps.assoc && deps.assoc.name) || "우리 상인회";
   const title = esc(s.title || name).replace(/\n/g, "<br />");
-  // 일러스트 변형: 편집기에서 고른 값 우선, 미설정이면 서초 랜드마크형이 기본.
-  const variant = s.illus || "seocho";
-  const illus = variant === "seocho" ? SEOCHO_ILLUS : HERO_ILLUS;
-  return `<section class="hero-illus">
-    <div class="hi-scene" aria-hidden="true">${illus}</div>
-    <div class="container hi-head">
-      <p class="hi-eyebrow">${eyebrow}</p>
-      <h1 class="hi-title">${title}</h1>
+  const sub = esc(s.subtitle || (deps.assoc && deps.assoc.tagline) || "우리 동네 상권을 한곳에서 만나보세요.");
+  const sug = deps.suggestNames && deps.suggestNames.length;
+  return `<section class="hero-pro">
+    <div class="hero-pro-bg" aria-hidden="true"><span class="hp-glow hp-glow-1"></span><span class="hp-glow hp-glow-2"></span><div class="hp-skyline">${HERO_SKYLINE}</div></div>
+    <div class="container hp-inner">
+      <p class="hp-eyebrow">${eyebrow}</p>
+      <h1 class="hp-title">${title}</h1>
+      <p class="hp-sub">${sub}</p>
+      <form class="feat-search hp-search" method="get" action="${base}/businesses" role="search">
+        <input type="search" name="q" placeholder="가게 이름·업종 검색" aria-label="점포 검색"${sug ? ' list="storeSuggest"' : ""} />
+        <button class="btn btn-primary" type="submit" aria-label="검색"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg></button>
+        ${sug ? `<datalist id="storeSuggest">${deps.suggestNames.map((n) => `<option value="${esc(n)}"></option>`).join("")}</datalist>` : ""}
+      </form>
     </div>
   </section>`;
 }
@@ -463,8 +490,6 @@ function heroSection(s, deps) {
 // 바로가기 카드 밴드 — 왼쪽 소개(제목·문구·검색·버튼) + 오른쪽 3색 파스텔 카드가 히어로에 겹침
 function featureCardsSection(s, deps) {
   const base = deps.base;
-  const name = (deps.assoc && deps.assoc.name) || "우리 상인회";
-  const lead = s.lead || (deps.assoc && deps.assoc.tagline) || "우리 동네 상권을 한곳에서 만나보세요.";
   const cards = [
     ["mint", "가입 점포 찾기", "Find member stores", `${base}/businesses`, FC_ICONS.store],
     ["beige", "점포 지도", "Store map", `${base}/map`, FC_ICONS.map],
@@ -474,19 +499,8 @@ function featureCardsSection(s, deps) {
       <span class="fc-ico" aria-hidden="true">${ico}</span>
       <span class="fc-txt"><strong>${ko}</strong><em>${en}</em></span>
     </a>`).join("");
-  const sug = deps.suggestNames && deps.suggestNames.length;
-  return `<section class="feat-band"><div class="container feat-inner">
-    <div class="feat-intro">
-      <h2>${esc(s.title || "우리 동네 상권, 한자리에")}</h2>
-      <p><strong>${esc(name)}</strong> — ${esc(lead)}</p>
-      <form class="feat-search" method="get" action="${base}/businesses" role="search">
-        <input type="search" name="q" placeholder="가게 이름·업종 검색" aria-label="점포 검색"${sug ? ' list="storeSuggest"' : ""} />
-        <button class="btn btn-primary" type="submit" aria-label="검색">${FC_ICONS.store ? '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>' : "검색"}</button>
-        ${sug ? `<datalist id="storeSuggest">${deps.suggestNames.map((n) => `<option value="${esc(n)}"></option>`).join("")}</datalist>` : ""}
-      </form>
-      <a class="btn btn-ghost feat-more" href="${base}/businesses">자세히 보기 →</a>
-    </div>
-    <div class="feat-cards">${cardHtml}</div>
+  return `<section class="feat-band"><div class="container">
+    <div class="feat-cards feat-cards-row">${cardHtml}</div>
   </div></section>`;
 }
 

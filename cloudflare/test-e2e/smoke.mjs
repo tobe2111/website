@@ -78,18 +78,18 @@ const ok = (cond, name) => { if (cond) { pass++; console.log("  ✓", name); } e
   ok(await p.evaluate(() => !document.getElementById("themeToggle")), "다크 토글 버튼 제거됨");
   await p.close();
 }
-// 2) 히어로 앰비언트 모션 — 모션 최소화 설정과 무관하게 구름이 실제로 이동
+// 2) 히어로 앰비언트 모션 — 부드러운 광원이 실제로 이동(모션 최소화 설정과 무관)
 {
   const p = await browser.newPage({ reducedMotion: "reduce" });
   await p.goto(`http://localhost:${PORT}/home.html`);
   await p.waitForTimeout(2500);
   const moved = await p.evaluate(() => {
-    const el = document.querySelector(".hi-cloud-a");
+    const el = document.querySelector(".hp-glow-1");
     if (!el) return false;
     const m = new DOMMatrixReadOnly(getComputedStyle(el).transform);
-    return Math.abs(m.m41) > 1; // translateX 가 0 이 아니면 애니메이션 재생 중
+    return Math.abs(m.m41) > 1 || Math.abs(m.m42) > 1; // 광원이 이동 중이면 재생 확인
   });
-  ok(moved, "reduce 설정에서도 구름 앰비언트 모션 재생");
+  ok(moved, "reduce 설정에서도 히어로 광원 모션 재생");
   await p.close();
 }
 // 3) 모바일 메뉴

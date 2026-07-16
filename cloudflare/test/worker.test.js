@@ -41,8 +41,8 @@ test("테넌트 홈 200 + 히어로", async () => {
   const r = await req("GET", "/t/seocho");
   assert.equal(r.status, 200);
   const h = await r.text();
-  assert.match(h, /hi-title/); // 일러스트 히어로 타이틀
-  assert.match(h, /hero-illus/);
+  assert.match(h, /hp-title/); // 에디토리얼 히어로 타이틀
+  assert.match(h, /hero-pro/);
 });
 
 test("표준 URL(canonical) — 쿼리 제외하고 경로만", async () => {
