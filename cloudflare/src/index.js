@@ -212,6 +212,7 @@ export default {
 async function handle(request, env) {
   const url = new URL(request.url);
   const { pathname } = url;
+  const canon = url.origin + url.pathname; // 표준 URL(쿼리 제외) — finalize 에서 <link rel=canonical> 주입
   const timing = { t0: Date.now(), db: { n: 0, ms: 0 } };
   const rawDb = env.DB;
   const db = instrumentDb(rawDb, timing.db);
@@ -284,12 +285,16 @@ async function handle(request, env) {
     if (!assoc || (!assoc.active && !(user && user.role === ROLES.SUPERADMIN)))
       return finalize(notFoundResponse({ base: t.base }), setCookies, env, timing);
     assoc._base = t.base;
+    // 개별 도메인이 있으면 표준 URL 을 그 도메인으로 고정 → workers.dev/t/:slug 사본이 개별 도메인으로 정규화(교차 호스트 중복 제거)
+    const tCanon = assoc.custom_domain && url.hostname !== assoc.custom_domain
+      ? `https://${assoc.custom_domain}${t.subpath}`
+      : canon;
     const route = matchRoute(TENANT, request.method, t.subpath);
     if (route) {
       const ok = authorize(user, route.auth, assoc);
       if (ok !== true) return finalize(typeof ok === "string" ? redirect(ok) : forbidden(), setCookies, env, timing);
       const res = await route.handler({ ...baseCtx, assoc, base: t.base, params: route.params });
-      return finalize(res, setCookies, env, timing);
+      return finalize(res, setCookies, env, timing, tCanon);
     }
     // 테넌트 경로에 없으면 전역 라우트 폴백 (개별 도메인·서브도메인에서 /login, /verify, /sitemap.xml 등)
     const gt = matchRoute(GLOBAL, request.method, t.subpath);
@@ -297,7 +302,7 @@ async function handle(request, env) {
       const ok = authorize(user, gt.auth, assoc);
       if (ok !== true) return finalize(typeof ok === "string" ? redirect(ok) : forbidden(), setCookies, env, timing);
       const res = await gt.handler({ ...baseCtx, assoc, base: t.base, params: gt.params });
-      return finalize(res, setCookies, env, timing);
+      return finalize(res, setCookies, env, timing, tCanon);
     }
     return finalize(notFoundResponse({ assoc, base: t.base }), setCookies, env, timing);
   }
@@ -306,7 +311,7 @@ async function handle(request, env) {
   const g = matchRoute(GLOBAL, request.method, pathname);
   if (g) {
     const res = await g.handler({ ...baseCtx, params: g.params });
-    return finalize(res, setCookies, env, timing);
+    return finalize(res, setCookies, env, timing, canon);
   }
 
   // 루트: 플랫폼 모드면 랜딩 / 아니면 상인회 1곳이면 그 홈으로 바로 이동
@@ -316,7 +321,7 @@ async function handle(request, env) {
       const list = await D.listActiveAssociations(db);
       if (list.length === 1) return finalize(redirect(`/t/${list[0].slug}`), setCookies, env, timing);
     }
-    return finalize(await pages.platformLanding(baseCtx), setCookies, env, timing);
+    return finalize(await pages.platformLanding(baseCtx), setCookies, env, timing, canon);
   }
 
   return finalize(notFoundResponse({}), setCookies, env, timing);
@@ -348,20 +353,32 @@ function instrumentDb(db, acc) {
   return { prepare: (sql) => wrapStmt(db.prepare(sql)) };
 }
 
-async function finalize(res, setCookies, env, timing) {
+async function finalize(res, setCookies, env, timing, canonical = "") {
   const headers = new Headers(res.headers);
   const sec = securityHeaders(env);
   for (const [k, v] of Object.entries(sec)) headers.set(k, v);
+  const isHtml = (headers.get("content-type") || "").includes("text/html");
   // 호버 시 다음 페이지 선(先)로딩 — 지원 브라우저만 반응, 나머지는 무시
-  if ((headers.get("content-type") || "").includes("text/html")) headers.set("Speculation-Rules", '"/speculationrules.json"');
+  if (isHtml) headers.set("Speculation-Rules", '"/speculationrules.json"');
   if (timing) headers.set("Server-Timing",
     `db;dur=${timing.db.ms};desc="D1 ${timing.db.n} queries", app;dur=${Date.now() - timing.t0};desc="worker total"`);
   for (const c of setCookies) headers.append("set-cookie", c);
   let body = res.body;
-  if (env.CF_ANALYTICS_TOKEN && (headers.get("content-type") || "").includes("text/html")) {
-    const beacon = `<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token":"${env.CF_ANALYTICS_TOKEN}"}'></script>`;
-    const t = await res.text();
-    body = t.includes("</body>") ? t.replace("</body>", beacon + "</body>") : t + beacon;
+  // 표준 URL(canonical) + 웹분석 비콘을 최종 HTML 에 주입 (둘 중 하나라도 필요할 때만 버퍼링).
+  // canonical = 오리진+경로(쿼리 제외) → ?err=·?page=·?category= 같은 중복 URL 을 하나로 정규화.
+  const needCanon = canonical && isHtml;
+  const needBeacon = env.CF_ANALYTICS_TOKEN && isHtml;
+  if (needCanon || needBeacon) {
+    let t = await res.text();
+    if (needCanon && !/rel=["']canonical["']/.test(t)) {
+      const tag = `<link rel="canonical" href="${canonical.replace(/"/g, "%22")}" />`;
+      if (t.includes("</head>")) t = t.replace("</head>", tag + "</head>");
+    }
+    if (needBeacon) {
+      const beacon = `<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token":"${env.CF_ANALYTICS_TOKEN}"}'></script>`;
+      t = t.includes("</body>") ? t.replace("</body>", beacon + "</body>") : t + beacon;
+    }
+    body = t;
     headers.delete("content-length");
   }
   return new Response(body, { status: res.status, headers });

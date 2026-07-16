@@ -45,6 +45,13 @@ test("테넌트 홈 200 + 히어로", async () => {
   assert.match(h, /hero-illus/);
 });
 
+test("표준 URL(canonical) — 쿼리 제외하고 경로만", async () => {
+  const r = await req("GET", "/t/seocho?err=1&page=2");
+  const h = await r.text();
+  assert.match(h, /<link rel="canonical" href="http:\/\/localhost\/t\/seocho"/);
+  assert.doesNotMatch(h, /rel="canonical"[^>]*err=1/);
+});
+
 test("보안 헤더(CSP·nosniff) + 임베드 frame-src", async () => {
   const r = await req("GET", "/t/seocho");
   assert.equal(r.headers.get("x-content-type-options"), "nosniff");
