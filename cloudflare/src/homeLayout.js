@@ -185,13 +185,13 @@ const SEOCHO_ILLUS = `<svg class="hi-svg" viewBox="0 0 1200 470" preserveAspectR
   <path d="M300 322 Q 250 330 214 352"/><path d="M320 322 Q 276 332 244 352"/><path d="M340 322 Q 306 334 282 352"/><path d="M360 322 Q 360 338 360 354"/><path d="M380 322 Q 414 334 438 352"/><path d="M400 322 Q 444 332 476 352"/><path d="M420 322 Q 470 330 506 352"/>
  </g>
 </g>
-<!-- 세빛섬 (가빛·채빛·솔빛) -->
+<!-- 세빛섬 (가빛·채빛·솔빛) — 강 중앙에 배치해 겹치는 카드에 가리지 않게 -->
 <g>
- <line x1="820" y1="344" x2="1120" y2="344" stroke="#e2dccf" stroke-width="4"/>
- <g><path d="M866 346 q0 -32 33 -32 q33 0 33 32 z" fill="#edf7f4"/><path d="M899 316 v30 M879 328 h40" stroke="var(--brand-100)" stroke-width="2"/><rect x="866" y="342" width="66" height="5" fill="var(--brand-500)"/></g>
- <g><path d="M940 346 q0 -40 38 -40 q38 0 38 40 z" fill="#f1f9f6"/><path d="M978 306 v40 M956 322 h44" stroke="var(--brand-100)" stroke-width="2"/><rect x="940" y="342" width="76" height="5" fill="var(--brand)"/></g>
- <g><path d="M1024 346 q0 -30 30 -30 q30 0 30 30 z" fill="#edf7f4"/><path d="M1054 316 v30 M1036 328 h36" stroke="var(--brand-100)" stroke-width="2"/><rect x="1024" y="342" width="60" height="5" fill="var(--brand-500)"/></g>
- <g stroke="#ffffff" stroke-width="1.4" opacity="0.4"><line x1="880" y1="352" x2="918" y2="352"/><line x1="958" y1="353" x2="998" y2="353"/><line x1="1036" y1="352" x2="1072" y2="352"/></g>
+ <line x1="520" y1="344" x2="820" y2="344" stroke="#e2dccf" stroke-width="4"/>
+ <g><path d="M566 346 q0 -32 33 -32 q33 0 33 32 z" fill="#edf7f4"/><path d="M599 316 v30 M579 328 h40" stroke="var(--brand-100)" stroke-width="2"/><rect x="566" y="342" width="66" height="5" fill="var(--brand-500)"/></g>
+ <g><path d="M640 346 q0 -40 38 -40 q38 0 38 40 z" fill="#f1f9f6"/><path d="M678 306 v40 M656 322 h44" stroke="var(--brand-100)" stroke-width="2"/><rect x="640" y="342" width="76" height="5" fill="var(--brand)"/></g>
+ <g><path d="M724 346 q0 -30 30 -30 q30 0 30 30 z" fill="#edf7f4"/><path d="M754 316 v30 M736 328 h36" stroke="var(--brand-100)" stroke-width="2"/><rect x="724" y="342" width="60" height="5" fill="var(--brand-500)"/></g>
+ <g stroke="#ffffff" stroke-width="1.4" opacity="0.4"><line x1="580" y1="352" x2="618" y2="352"/><line x1="658" y1="353" x2="698" y2="353"/><line x1="736" y1="352" x2="772" y2="352"/></g>
 </g>
 <!-- 근경: 반포한강공원 -->
 <rect y="358" width="1200" height="112" fill="#e6e3d7"/>

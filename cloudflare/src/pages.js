@@ -26,8 +26,11 @@ const CAT_SVG = {
   "카페·디저트": _ic('<path d="M4 9h12v6a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V9z"/><path d="M16 10h1.5a2.5 2.5 0 0 1 0 5H16M7 5.5c0-1 .8-1 .8-2M11 5.5c0-1 .8-1 .8-2"/>'),
   "생활·서비스": _ic('<path d="M14.7 6.3a4.5 4.5 0 0 0-6 5.6L3 17.6V21h3.4l5.7-5.7a4.5 4.5 0 0 0 5.6-6L14.5 12l-2.5-2.5 2.7-3.2z"/>'),
   "의류·잡화": _ic('<path d="M9 4 5 7l1.5 3L9 8.7V20h6V8.7l2.5 1.3L19 7l-4-3a3 3 0 0 1-6 0z"/>'),
+  "패션·잡화": _ic('<path d="M9 4 5 7l1.5 3L9 8.7V20h6V8.7l2.5 1.3L19 7l-4-3a3 3 0 0 1-6 0z"/>'),
   "뷰티·건강": _ic('<circle cx="6.5" cy="7" r="2.5"/><circle cx="6.5" cy="17" r="2.5"/><path d="M8.7 8.5 20 20M8.7 15.5 20 4"/>'),
+  "농수축산": _ic('<path d="M7 21h10M12 21c0-6 0-8 0-10M12 11C12 7 9 5 4 5c0 5 3 7 8 7M12 13c0-3 2-5 6-5 0 4-2 6-6 6"/>'),
   "학원·교육": _ic('<path d="M4 19V5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 19a2 2 0 0 0 2 2h13"/><path d="M9 7h6"/>'),
+  "교육·문화": _ic('<path d="M4 19V5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 19a2 2 0 0 0 2 2h13"/><path d="M9 7h6"/>'),
   "의료": _ic('<path d="M12 4v16M4 12h16"/><rect x="3" y="3" width="18" height="18" rx="4"/>'),
   "기타": _ic('<path d="M4 9l1.2-4.2A1 1 0 0 1 6.2 4h11.6a1 1 0 0 1 1 .8L20 9"/><path d="M4 9v10a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9"/><path d="M9 20v-5h6v5"/>'),
   "전체": _ic('<circle cx="5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.4" fill="currentColor" stroke="none"/>'),
@@ -74,7 +77,7 @@ function bizStatusBadge(b) {
 function businessCard(base, b, cover) {
   const thumb = cover
     ? `<img src="${esc(mediaUrl(cover.thumb || cover.filename))}" alt="" loading="lazy" />`
-    : `<span class="thumb-mono" aria-hidden="true">${esc(b.name.slice(0, 1))}</span>`;
+    : `<span class="thumb-ico" aria-hidden="true">${catIcon(b.category)}</span>`;
   const open = bizStatusBadge(b);
   const meta = [b.address, b.hours].filter(Boolean).join(" · ");
   return `<article class="market-card" data-slug="${esc(b.slug)}">

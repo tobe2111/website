@@ -165,9 +165,13 @@ img,video{max-width:100%;display:block}
 .market-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(248px,1fr));gap:16px}
 .market-card{background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--sh-1);transition:transform .22s var(--ease),box-shadow .25s}
 .market-card:hover{transform:translateY(-3px);box-shadow:var(--sh-2)}
-.market-thumb{position:relative;display:block;aspect-ratio:4/3;overflow:hidden;background:linear-gradient(150deg,var(--brand-50),var(--surface-2))}
+.market-thumb{position:relative;display:block;aspect-ratio:4/3;overflow:hidden;background:radial-gradient(115% 90% at 50% 15%,var(--brand-50),var(--surface-2))}
 .market-thumb img{width:100%;height:100%;object-fit:cover;position:absolute;inset:0}
 .thumb-mono{position:absolute;inset:0;display:grid;place-items:center;font-size:3.2rem;font-weight:800;color:var(--brand-300);opacity:.9}
+/* 사진 없는 점포: 업종 아이콘으로 빈 상태를 설계된 상태로 */
+.thumb-ico{position:absolute;inset:0;display:grid;place-items:center;color:var(--brand-300)}
+.thumb-ico svg{width:34%;height:34%;max-width:64px;max-height:64px}
+.market-card:hover .thumb-ico{color:var(--brand-500)}
 .market-cat{position:absolute;top:10px;left:10px;font-size:.72rem;font-weight:700;color:var(--brand-700);background:color-mix(in oklab,var(--surface),transparent 8%);background:rgba(255,255,255,.9);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);padding:4px 10px;border-radius:999px;box-shadow:var(--sh-1)}
 .market-open{position:absolute;top:10px;right:10px}
 .market-open .badge{background:rgba(255,255,255,.9);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);box-shadow:var(--sh-1)}
