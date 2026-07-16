@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS associations (
   slug        TEXT NOT NULL UNIQUE,
   name        TEXT NOT NULL,
   tagline     TEXT NOT NULL DEFAULT '함께 성장하는 우리 동네 상권',
-  brand_color TEXT NOT NULL DEFAULT '#2bb3a3',
+  brand_color TEXT NOT NULL DEFAULT '#0b8a46',
   phone       TEXT NOT NULL DEFAULT '',
   address     TEXT NOT NULL DEFAULT '',
   email       TEXT NOT NULL DEFAULT '',

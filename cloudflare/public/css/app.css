@@ -6,7 +6,7 @@
   /* 브랜드 — 테넌트별 --brand 를 render.js 가 주입, 스케일은 자동 파생.
      각 토큰은 정적 폴백(기본 딥그린) → color-mix 순으로 선언:
      color-mix 미지원 구형 브라우저는 폴백을 유지(사이트 정상), 지원 브라우저는 테넌트 색으로 파생. */
-  --brand:#2bb3a3;
+  --brand:#0b8a46;
   --brand-900:#063320; --brand-900:color-mix(in oklab, var(--brand), #04100a 50%);
   --brand-800:#083f2b; --brand-800:color-mix(in oklab, var(--brand), #04100a 28%);
   --brand-700:#0b6e4f; --brand-700:var(--brand);

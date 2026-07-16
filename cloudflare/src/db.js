@@ -12,7 +12,7 @@ export const getAssociationBySlug = (db, slug) => first(db, "SELECT * FROM assoc
 export const getAssociationById = (db, id) => first(db, "SELECT * FROM associations WHERE id = ?", id);
 export const listActiveAssociations = (db) => all(db, "SELECT * FROM associations WHERE active = 1 ORDER BY name");
 export const listAllAssociations = (db) => all(db, "SELECT * FROM associations ORDER BY created_at DESC");
-export async function createAssociation(db, { slug, name, brandColor = "#2bb3a3", tagline = "함께 성장하는 우리 동네 상권" }) {
+export async function createAssociation(db, { slug, name, brandColor = "#0b8a46", tagline = "함께 성장하는 우리 동네 상권" }) {
   await run(db, "INSERT INTO associations (slug, name, brand_color, tagline) VALUES (?, ?, ?, ?)", slug, name, brandColor, tagline);
   return getAssociationById(db, await lastId(db));
 }

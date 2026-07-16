@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS associations (
   slug        TEXT NOT NULL UNIQUE,
   name        TEXT NOT NULL,
   tagline     TEXT NOT NULL DEFAULT '함께 성장하는 우리 동네 상권',
-  brand_color TEXT NOT NULL DEFAULT '#2bb3a3',
+  brand_color TEXT NOT NULL DEFAULT '#0b8a46',
   phone       TEXT NOT NULL DEFAULT '',
   address     TEXT NOT NULL DEFAULT '',
   email       TEXT NOT NULL DEFAULT '',
@@ -306,7 +306,7 @@ CREATE TABLE IF NOT EXISTS settings (
 
 // 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
 // 마이그레이션 세대 — migrateColumns 에 단계를 추가할 때마다 +1
-const SCHEMA_VERSION = "13";
+const SCHEMA_VERSION = "14";
 
 export async function ensureSchema(db) {
   const has = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='associations'").first();
@@ -389,6 +389,11 @@ async function migrateColumns(db) {
   // v13 인덱스 (기존 배포 업그레이드): 행사 신청 상인회 집계·회비 월 조회
   await db.prepare("CREATE INDEX IF NOT EXISTS idx_rsvp_assoc ON event_rsvps(association_id)").run();
   await db.prepare("CREATE INDEX IF NOT EXISTS idx_dues_period ON dues(association_id, period)").run();
+  // v14: 브랜드색 기본값을 임시 민트(#2bb3a3)에서 서초구 정체성 녹색(#0b8a46)으로 교체.
+  //      옛 임시 기본값을 그대로 둔 테넌트만 갱신 — 직접 색을 고른 테넌트는 건드리지 않음.
+  if (cols.some((c) => c.name === "brand_color")) {
+    await db.prepare("UPDATE associations SET brand_color='#0b8a46' WHERE brand_color='#2bb3a3'").run();
+  }
   // events 대표 이미지 컬럼 (기존 배포 업그레이드)
   const evTbl = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='events'").first();
   if (evTbl) {
