@@ -976,3 +976,13 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 }
 @media (max-width:560px){.hero-illus{aspect-ratio:1/1}}
 @media (max-width:520px){.feat-cards{grid-template-columns:1fr}}
+
+/* 브랜드 쇼케이스 밴드 (참고: 야경 밴드) */
+.showcase{position:relative;overflow:hidden;background:linear-gradient(160deg,var(--brand-900),#0a1512);color:#fff;padding:clamp(56px,8vw,96px) 0;text-align:center;margin:8px 0}
+.sc-sky{position:absolute;left:0;right:0;bottom:0;height:60%;line-height:0}
+.sc-sky svg{width:100%;height:100%}
+.sc-inner{position:relative;z-index:1}
+.sc-big{font-size:clamp(2rem,6vw,4rem);font-weight:800;letter-spacing:.02em;text-shadow:0 4px 30px var(--brand-ring);margin-bottom:10px}
+.sc-sub{color:rgba(255,255,255,.82);font-size:clamp(.95rem,1.6vw,1.1rem);margin-bottom:22px}
+.showcase .btn-primary{background:#fff;color:var(--brand-900)}
+.showcase .btn-primary:hover{background:var(--brand-100)}

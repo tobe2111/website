@@ -141,6 +141,8 @@ const FC_ICONS = {
   map: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg>',
   news: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l14-6v14L3 13z"/><path d="M17 8a3 3 0 0 1 0 8"/><path d="M6 13v4a2 2 0 0 0 2 2h1"/></svg>',
 };
+// 쇼케이스 밴드 스카이라인 실루엣 (브랜드색)
+const SHOWCASE_SKYLINE = '<svg viewBox="0 0 1200 220" preserveAspectRatio="xMidYMax slice" aria-hidden="true"><g fill="var(--brand-700)" opacity="0.55"><rect x="40" y="120" width="60" height="100"/><rect x="110" y="90" width="46" height="130"/><rect x="165" y="140" width="70" height="80"/><rect x="250" y="70" width="52" height="150"/><rect x="315" y="110" width="80" height="110"/><rect x="410" y="150" width="60" height="70"/><rect x="486" y="96" width="48" height="124"/><rect x="548" y="130" width="72" height="90"/><rect x="636" y="84" width="54" height="136"/><rect x="704" y="120" width="66" height="100"/><rect x="786" y="150" width="58" height="70"/><rect x="858" y="100" width="50" height="120"/><rect x="922" y="132" width="76" height="88"/><rect x="1012" y="74" width="52" height="146"/><rect x="1078" y="122" width="82" height="98"/></g><g fill="var(--brand-500)" opacity="0.5"><rect x="120" y="104" width="8" height="8"/><rect x="136" y="120" width="8" height="8"/><rect x="262" y="88" width="8" height="8"/><rect x="330" y="128" width="8" height="8"/><rect x="500" y="112" width="8" height="8"/><rect x="648" y="100" width="8" height="8"/><rect x="720" y="140" width="8" height="8"/><rect x="1024" y="92" width="8" height="8"/></g></svg>';
 
 // 섹션 카탈로그: 편집 가능한 필드 정의 (관리자 UI 자동 생성용)
 export const SECTION_CATALOG = {
@@ -195,6 +197,13 @@ export const SECTION_CATALOG = {
     label: "동네 새소식 (가게 소식 피드)",
     fields: [{ key: "title", label: "제목", type: "text" }],
   },
+  showcase: {
+    label: "브랜드 쇼케이스 (야경 밴드)",
+    fields: [
+      { key: "title", label: "큰 문구", type: "text" },
+      { key: "lead", label: "아래 문구", type: "text" },
+    ],
+  },
   cta: {
     label: "가입 유도 배너",
     fields: [
@@ -215,6 +224,7 @@ export function defaultLayout(assocName = "우리 상인회") {
     { type: "mapbanner", enabled: true, title: "우리 동네 점포 지도", subtitle: "" },
     { type: "notices", enabled: true, title: "동네 소식" },
     { type: "events", enabled: true, title: "다가오는 행사" },
+    { type: "showcase", enabled: true, title: "", lead: "" },
     { type: "cta", enabled: true, title: "아직 회원이 아니신가요?", body: "지금 업체를 등록하면 나만의 업체 페이지에 사진·영상을 올리고 상권 홍보에 함께할 수 있습니다.", buttonLabel: "무료로 업체 등록하기" },
   ];
 }
@@ -235,6 +245,11 @@ export function parseLayout(json, assocName) {
     if (!out.some((s) => s.type === "featurecards")) {
       const h = out.findIndex((s) => s.type === "hero");
       out.splice(h >= 0 ? h + 1 : 0, 0, { type: "featurecards", enabled: true, title: "", lead: "" });
+    }
+    // 개편 업그레이드: 쇼케이스가 없으면 행사 뒤에 주입
+    if (!out.some((s) => s.type === "showcase")) {
+      const e = out.findIndex((s) => s.type === "events");
+      out.splice(e >= 0 ? e + 1 : out.length, 0, { type: "showcase", enabled: true, title: "", lead: "" });
     }
     // 구버전 업그레이드: 동네 새소식 섹션이 없으면 업체 섹션 뒤에 추가
     if (!out.some((s) => s.type === "updates")) {
@@ -315,6 +330,17 @@ function renderSection(s, deps) {
           <span class="mb-map" aria-hidden="true"><svg viewBox="0 0 24 24" width="86" height="86" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg></span>
           <span class="mb-chev" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></span>
         </a></div></section>`;
+    }
+    case "showcase": {
+      const nm = (deps.assoc && deps.assoc.name) || "우리 상인회";
+      const big = esc(s.title || nm);
+      const sub = esc(s.lead || (deps.assoc && deps.assoc.tagline) || "우리 동네 상권의 오늘을 함께 만들어 갑니다.");
+      return `<section class="showcase"><div class="sc-sky" aria-hidden="true">${SHOWCASE_SKYLINE}</div>
+        <div class="container sc-inner">
+          <p class="sc-big">${big}</p>
+          <p class="sc-sub">${sub}</p>
+          <a class="btn btn-primary" href="${deps.base}/businesses">가입 점포 둘러보기</a>
+        </div></section>`;
     }
     case "cta":
       return `<section class="section"><div class="container">
