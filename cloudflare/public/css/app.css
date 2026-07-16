@@ -986,3 +986,34 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .sc-sub{color:rgba(255,255,255,.82);font-size:clamp(.95rem,1.6vw,1.1rem);margin-bottom:22px}
 .showcase .btn-primary{background:#fff;color:var(--brand-900)}
 .showcase .btn-primary:hover{background:var(--brand-100)}
+
+/* ===================== 프리미엄 폴리시 (v3.1) ===================== */
+:root{
+  /* 더 부드럽고 층진 그림자 (프리미엄) */
+  --sh-1:0 1px 2px rgba(20,30,28,.05);
+  --sh-2:0 10px 30px rgba(20,30,28,.09), 0 2px 8px rgba(20,30,28,.04);
+  --sh-3:0 30px 70px rgba(20,30,28,.15), 0 10px 24px rgba(20,30,28,.06);
+  /* 따뜻한 오프화이트 (순백 대비 고급감) */
+  --bg:#fcfbf9; --bg-alt:#f3f2ee; --surface-2:#f4f3ef;
+}
+/* 스크롤 리빌 */
+html.reveal-on .reveal{opacity:0;transform:translateY(28px);transition:opacity .8s var(--ease),transform .8s var(--ease)}
+html.reveal-on .reveal.in{opacity:1;transform:none}
+/* 프리미엄 타이포 — Pretendard, 큰 디스플레이 + 조밀한 자간 */
+.hi-title{font-weight:800;letter-spacing:-.035em;line-height:1.12}
+.hi-eyebrow{letter-spacing:.18em;font-size:clamp(11px,1.2vw,13px);opacity:.82;font-weight:600}
+.sc-big{letter-spacing:-.03em;font-weight:800}
+.section-title{letter-spacing:-.03em}
+.feat-intro h2{letter-spacing:-.03em;font-weight:800}
+.feat-card .fc-txt strong{letter-spacing:-.02em}
+/* 일러스트 무광 톤 + 하단 소프트 페이드 (만화 톤 완화 → 고급) */
+.hi-svg{filter:saturate(.86) contrast(.98)}
+.hero-illus::after{content:"";position:absolute;left:0;right:0;bottom:0;height:34%;background:linear-gradient(transparent,rgba(252,251,249,.16));pointer-events:none}
+/* 헤더 글래스 (스크롤 시 반투명 블러) */
+.site-header.scrolled{background:rgba(252,251,249,.72);-webkit-backdrop-filter:saturate(180%) blur(16px);backdrop-filter:saturate(180%) blur(16px);border-bottom:1px solid var(--line-soft);box-shadow:var(--sh-1)}
+:root[data-theme="dark"] .site-header.scrolled{background:rgba(18,22,21,.72)}
+/* 카드 미세 상호작용 정돈 */
+.feat-card{will-change:transform}
+.market-card{transition:transform .25s var(--ease),box-shadow .3s}
+.market-card:hover{transform:translateY(-4px)}
+@media (prefers-reduced-motion:reduce){.market-card:hover{transform:none}}
