@@ -13,12 +13,14 @@ const HERO_ILLUS = `<svg class="hi-svg" viewBox="0 0 1200 470" preserveAspectRat
 </defs>
 <rect width="1200" height="470" fill="url(#sky)"/>
 <!-- clouds -->
-<g fill="#ffffff" opacity="0.9">
+<g class="hi-cloud hi-cloud-a" fill="#ffffff" opacity="0.9">
  <ellipse cx="200" cy="66" rx="54" ry="19"/><ellipse cx="250" cy="74" rx="38" ry="15"/><ellipse cx="150" cy="76" rx="34" ry="13"/>
+</g>
+<g class="hi-cloud hi-cloud-b" fill="#ffffff" opacity="0.9">
  <ellipse cx="960" cy="56" rx="60" ry="21"/><ellipse cx="1020" cy="66" rx="42" ry="16"/>
 </g>
 <!-- sun -->
-<circle cx="1090" cy="86" r="34" fill="#ffffff" opacity="0.55"/>
+<circle class="hi-sun" cx="1090" cy="86" r="34" fill="#ffffff" opacity="0.55"/>
 <!-- ground -->
 <rect y="322" width="1200" height="148" fill="#e8e4d9"/>
 <rect y="322" width="1200" height="12" fill="#dcd6c7"/>
@@ -102,13 +104,13 @@ const HERO_ILLUS = `<svg class="hi-svg" viewBox="0 0 1200 470" preserveAspectRat
 
 <!-- 가로수 -->
 <g>
- <g><rect x="250" y="300" width="7" height="30" fill="#9c7a58"/><circle cx="253" cy="292" r="20" fill="#a6c49c"/><circle cx="240" cy="300" r="14" fill="#b6cfab"/><circle cx="266" cy="300" r="14" fill="#b6cfab"/></g>
- <g><rect x="610" y="298" width="7" height="32" fill="#9c7a58"/><circle cx="613" cy="290" r="20" fill="#a6c49c"/><circle cx="600" cy="298" r="14" fill="#b6cfab"/><circle cx="626" cy="298" r="14" fill="#b6cfab"/></g>
- <g><rect x="862" y="298" width="7" height="32" fill="#9c7a58"/><circle cx="865" cy="290" r="19" fill="#a6c49c"/><circle cx="853" cy="298" r="13" fill="#b6cfab"/><circle cx="877" cy="298" r="13" fill="#b6cfab"/></g>
+ <g class="hi-tree hi-tree-1"><rect x="250" y="300" width="7" height="30" fill="#9c7a58"/><circle cx="253" cy="292" r="20" fill="#a6c49c"/><circle cx="240" cy="300" r="14" fill="#b6cfab"/><circle cx="266" cy="300" r="14" fill="#b6cfab"/></g>
+ <g class="hi-tree hi-tree-2"><rect x="610" y="298" width="7" height="32" fill="#9c7a58"/><circle cx="613" cy="290" r="20" fill="#a6c49c"/><circle cx="600" cy="298" r="14" fill="#b6cfab"/><circle cx="626" cy="298" r="14" fill="#b6cfab"/></g>
+ <g class="hi-tree hi-tree-3"><rect x="862" y="298" width="7" height="32" fill="#9c7a58"/><circle cx="865" cy="290" r="19" fill="#a6c49c"/><circle cx="853" cy="298" r="13" fill="#b6cfab"/><circle cx="877" cy="298" r="13" fill="#b6cfab"/></g>
 </g>
 <!-- 가로등 -->
 <g stroke="#9a958a" stroke-width="4" fill="none"><line x1="470" y1="330" x2="470" y2="270"/><line x1="740" y1="330" x2="740" y2="270"/></g>
-<g fill="#ecd9a0"><circle cx="470" cy="266" r="7"/><circle cx="740" cy="266" r="7"/></g>
+<g class="hi-lamp" fill="#ecd9a0"><circle cx="470" cy="266" r="7"/><circle cx="740" cy="266" r="7"/></g>
 
 <!-- 푸드카트 -->
 <g>

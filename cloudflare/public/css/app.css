@@ -1017,3 +1017,21 @@ html.reveal-on .reveal.in{opacity:1;transform:none}
 .market-card{transition:transform .25s var(--ease),box-shadow .3s}
 .market-card:hover{transform:translateY(-4px)}
 @media (prefers-reduced-motion:reduce){.market-card:hover{transform:none}}
+/* 히어로 일러스트 앰비언트 미세 모션 — 잔잔한 생동감 (transform/opacity만, GPU 친화).
+   prefers-reduced-motion: no-preference 안에서만 정의 → 모션 최소화 설정이면 완전 정지. */
+@media (prefers-reduced-motion: no-preference){
+  .hi-cloud{will-change:transform}
+  .hi-cloud-a{animation:hiDriftA 26s ease-in-out infinite}
+  .hi-cloud-b{animation:hiDriftB 32s ease-in-out infinite}
+  .hi-sun{animation:hiSun 9s ease-in-out infinite}
+  .hi-tree{transform-box:fill-box;transform-origin:50% 100%;will-change:transform}
+  .hi-tree-1{animation:hiSway 6.5s ease-in-out infinite}
+  .hi-tree-2{animation:hiSway 7.4s ease-in-out -1.2s infinite}
+  .hi-tree-3{animation:hiSway 8s ease-in-out -2.6s infinite}
+  .hi-lamp{animation:hiGlow 5s ease-in-out infinite}
+}
+@keyframes hiDriftA{0%,100%{transform:translateX(0)}50%{transform:translateX(22px)}}
+@keyframes hiDriftB{0%,100%{transform:translateX(0)}50%{transform:translateX(-18px)}}
+@keyframes hiSun{0%,100%{opacity:.5}50%{opacity:.66}}
+@keyframes hiSway{0%,100%{transform:rotate(-1.1deg)}50%{transform:rotate(1.1deg)}}
+@keyframes hiGlow{0%,100%{opacity:1}50%{opacity:.72}}
