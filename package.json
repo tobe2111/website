@@ -7,11 +7,8 @@
     "node": ">=22.5.0"
   },
   "scripts": {
-    "start": "node --experimental-sqlite src/server.js",
-    "seed": "node --experimental-sqlite src/seed.js",
-    "reset": "node --experimental-sqlite src/seed.js --reset",
-    "test:s3": "node src/s3.selftest.js",
-    "test": "node --experimental-sqlite --test test/*.test.js"
+    "test": "node --experimental-sqlite --test cloudflare/test/*.test.js",
+    "test:e2e": "node cloudflare/test-e2e/smoke.mjs"
   },
   "license": "MIT"
 }
