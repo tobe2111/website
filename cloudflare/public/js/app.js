@@ -25,17 +25,6 @@
     });
   }
 
-  // 다크 모드 토글 (초기 적용은 head 의 theme.js 가 담당 — 저장값 > OS 설정 > 라이트)
-  var themeBtn = document.getElementById("themeToggle");
-  if (themeBtn) {
-    themeBtn.addEventListener("click", function () {
-      var cur = document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
-      var next = cur === "dark" ? "light" : "dark";
-      document.documentElement.setAttribute("data-theme", next);
-      try { localStorage.setItem("theme", next); } catch (e) {}
-    });
-  }
-
   if (header) {
     var onScroll = function () {
       header.classList.toggle("scrolled", (window.scrollY || 0) > 8);
