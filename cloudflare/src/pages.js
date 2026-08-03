@@ -143,7 +143,7 @@ export async function home(ctx) {
   const lay = parseLayout(assoc.home_layout, assoc.name);
   // 독립 쿼리는 병렬로 — D1 은 쿼리마다 네트워크 왕복이라 직렬 대기가 TTFB 로 직결됨
   const [{ items }, notices, events, stats, cats, names, recentUpdates] = await Promise.all([
-    D.listBusinessesPaged(db, assoc.id, { perPage: 6 }),
+    D.listBusinessesPaged(db, assoc.id, { perPage: 8 }), // 4열 그리드에 맞춰 2줄이 꽉 차게 (6개는 마지막 줄이 비어 보임)
     D.listNotices(db, assoc.id, 5),
     D.listEvents(db, assoc.id, true),
     D.stats(db, assoc.id),
@@ -298,16 +298,24 @@ export async function businessDetail(ctx) {
     ${hasGeo ? `<div id="bizMap" class="biz-map" data-lat="${b.lat}" data-lng="${b.lng}" data-name="${esc(b.name)}"></div>` : ""}
     <p class="biz-way">${b.address ? `${PIN_SVG} ${esc(b.address)} · ` : ""}<a href="${esc(naverLink)}" target="_blank" rel="noopener">네이버 지도에서 길찾기 →</a></p>` : "";
   const body = `
-  <section class="biz-hero"><div class="container">${pending}
-    <span class="chip chip-light">${esc(b.category)}</span>${bizStatusBadge(b)}<h1>${esc(b.name)}</h1>
-    <p class="biz-desc">${esc(b.description || "소개가 곧 등록됩니다.")}</p>
-    <ul class="biz-contact">
-      ${b.address ? `<li>${PIN_SVG} ${esc(b.address)}</li>` : ""}${b.phone ? `<li>${PHONE_SVG} <a href="tel:${esc(b.phone)}">${esc(b.phone)}</a></li>` : ""}${b.hours ? `<li>${CLOCK_SVG} ${esc(b.hours)}</li>` : ""}
-    </ul>
-    <div class="biz-actions">
-      <button type="button" class="btn btn-share" data-share data-share-title="${esc(b.name)} — ${esc(assoc.name)}">${SHARE_SVG} 가게 공유하기</button>
-      ${snsButtons(b)}
-    </div></div></section>
+  <section class="biz-hero"><div class="container biz-hero-inner">${pending}
+    <div class="biz-hero-lead">
+      <span class="chip chip-light">${esc(b.category)}</span>${bizStatusBadge(b)}<h1>${esc(b.name)}</h1>
+      <p class="biz-desc">${esc(b.description || "소개가 곧 등록됩니다.")}</p>
+      <div class="biz-actions">
+        <button type="button" class="btn btn-share" data-share data-share-title="${esc(b.name)} — ${esc(assoc.name)}">${SHARE_SVG} 가게 공유하기</button>
+        ${snsButtons(b)}
+      </div>
+    </div>
+    <aside class="biz-panel">
+      <ul class="biz-contact">
+        ${b.address ? `<li>${PIN_SVG}<span class="bc-label">주소</span><span class="bc-val">${esc(b.address)}</span></li>` : ""}${b.phone ? `<li>${PHONE_SVG}<span class="bc-label">전화</span><a class="bc-val" href="tel:${esc(b.phone)}">${esc(b.phone)}</a></li>` : ""}${b.hours ? `<li>${CLOCK_SVG}<span class="bc-label">영업시간</span><span class="bc-val">${esc(b.hours)}</span></li>` : ""}
+      </ul>
+      <div class="biz-panel-actions">
+        ${b.phone ? `<a class="btn btn-primary btn-block" href="tel:${esc(b.phone)}">전화 걸기</a>` : ""}
+        ${b.address || b.lat != null ? `<a class="btn btn-ghost btn-block" href="${esc(b.sns_naver || `https://map.naver.com/p/search/${encodeURIComponent(b.address || b.name)}`)}" target="_blank" rel="noopener">길찾기</a>` : ""}
+      </div>
+    </aside></div></section>
   <section class="section"><div class="container">
     ${updateFeed}
     ${couponSection}
