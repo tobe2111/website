@@ -1104,11 +1104,12 @@ html.reveal-on .reveal.in{opacity:1;transform:none}
 .hf-label{font-size:.8rem;color:rgba(255,255,255,.42)}
 .hf-val{font-size:.86rem;line-height:1.55;color:rgba(255,255,255,.88);min-width:0;overflow-wrap:anywhere}
 a.hf-val:hover{text-decoration:underline}
-.hp-counts{display:grid;grid-template-columns:repeat(auto-fit,minmax(74px,1fr));gap:8px;margin:16px 0 18px}
-.hp-counts div{display:grid;gap:4px;padding:11px 8px;border-radius:var(--r-md);background:rgba(255,255,255,.05);text-align:center}
-.hp-counts dt{order:2;font-size:.68rem;color:rgba(255,255,255,.42);letter-spacing:.01em}
-.hp-counts dd{order:1;font-size:.98rem;font-weight:600;letter-spacing:-.02em;color:#fff}
-.hp-panel .btn-primary{background:#fff;color:var(--ink-deep)}
+/* 숫자도 정보 행으로 — 타일로 만들면 바로 아래 버튼과 헷갈립니다 */
+.hp-counts{display:grid;gap:1px;margin:0 0 18px}
+.hp-counts div{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:11px 0;border-bottom:1px solid rgba(255,255,255,.07)}
+.hp-counts dt{font-size:.8rem;color:rgba(255,255,255,.42)}
+.hp-counts dd{font-size:.92rem;font-weight:600;letter-spacing:-.02em;color:#fff}
+.hp-panel .btn-primary{margin-top:4px;background:#fff;color:var(--ink-deep)}
 .hp-panel .btn-primary:hover{background:rgba(255,255,255,.86)}
 @media (max-width:940px){
   .hp-inner{grid-template-columns:1fr;text-align:center;gap:30px;padding-block:clamp(48px,8vw,72px) clamp(80px,10vw,104px)}
