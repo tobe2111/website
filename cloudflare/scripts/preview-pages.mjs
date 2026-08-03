@@ -106,6 +106,56 @@ const eventsBody = `<section class="section page-top"><div class="container">
     <div class="event-rsvp"><span class="rsvp-count">참가 신청 ${3 + i}곳</span></div></article>`).join("")}</div>
 </div></section>`;
 
-const MODES = { list: listBody, detail: detailBody, map: mapBody, notices: noticesBody, article: articleBody, events: eventsBody };
+
+// ── 로그인 / 가입 (인증 카드)
+const MARK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9l1.2-4.2A1 1 0 0 1 6.2 4h11.6a1 1 0 0 1 1 .8L20 9"/><path d="M4 9v10a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9"/></svg>';
+const authHead = (t, sub) => `<div class="auth-head"><span class="mark auth-mark">${MARK}</span><h1 class="auth-title">${t}</h1><p class="auth-sub">${sub}</p></div>`;
+const loginBody = `<section class="section page-top"><div class="container auth-wrap"><div class="auth-card">
+  ${authHead("로그인", "상인회 회원·관리자 로그인")}
+  <form method="post" action="#" class="stack-form">
+    <label>이메일<input type="email" name="email" required /></label>
+    <label>비밀번호<input type="password" name="password" required /></label>
+    <label class="totp-login">2단계 인증 코드 <small>(설정한 경우만)</small><input type="text" name="totp" placeholder="000000" /></label>
+    <button class="btn btn-primary btn-block">로그인</button>
+  </form>
+  <p class="auth-note"><a href="#">비밀번호를 잊으셨나요?</a></p></div></div></section>`;
+const registerBody = `<section class="section page-top"><div class="container auth-wrap"><div class="auth-card">
+  ${authHead("리스터코퍼레이션 가입", "점포 정보를 등록하고 사진·소식을 공유하세요.")}
+  <form method="post" action="#" class="stack-form">
+    <label>대표자 성함<input type="text" required /></label>
+    <label>이메일<input type="email" required /></label>
+    <label>비밀번호 (8자 이상)<input type="password" required /></label>
+    <label>점포명<input type="text" required /></label>
+    <label>업종<select>${CATS.map((c) => `<option>${c}</option>`).join("")}</select></label>
+    <label class="check"><input type="checkbox" required /> <a href="#">개인정보 수집·이용</a>에 동의합니다.</label>
+    <button class="btn btn-primary btn-block">가입 신청</button>
+  </form><p class="auth-note">가입 후 관리자 승인 시 일반에 공개됩니다.</p></div></div></section>`;
+
+// ── 회원 게시판
+const boardBody = `<section class="section page-top"><div class="container">
+  <div class="section-head"><p class="section-eyebrow">BOARD</p><h2 class="section-title">회원 게시판</h2><p class="section-lead">글 24</p></div>
+  <form method="get" action="#" class="board-search"><input type="search" placeholder="제목·내용 검색"><button class="btn btn-ghost btn-sm">검색</button></form>
+  <ul class="board-list">${Array.from({ length: 7 }, (_, i) => `<li class="board-row${i === 0 ? " pinned" : ""}">
+    ${i === 0 ? '<span class="board-pin"><i class="pin-mini">공지</i></span>' : ""}
+    <a class="board-title" href="#">상권 활성화 아이디어 모집합니다 ${i + 1}</a>
+    <span class="board-meta">김상인 · 2026.07.${String(10 + i).padStart(2, "0")} · 댓글 ${i}</span></li>`).join("")}</ul>
+  <nav class="pager"><span class="pg disabled">‹ 이전</span><span class="pg cur">1</span><a class="pg" href="#">2</a><a class="pg" href="#">다음 ›</a></nav>
+</div></section>`;
+
+// ── 투표
+const pollsBody = `<section class="section page-top"><div class="container">
+  <div class="section-head"><p class="section-eyebrow">VOTE</p><h2 class="section-title">안건 투표</h2><p class="section-lead">회원만 참여할 수 있습니다.</p></div>
+  ${Array.from({ length: 2 }, (_, i) => `<div class="panel poll-card${i ? " is-closed" : ""}">
+    <h3 class="panel-title">공동 판촉 행사 예산안 ${i + 1}</h3>
+    <p class="poll-body">하반기 공동 판촉 행사 예산을 500만원으로 편성하는 안건입니다. 마감 2026.08.${20 + i}</p>
+    ${i ? "" : '<div class="poll-actions"><button class="btn btn-sm btn-primary">찬성</button><button class="btn btn-sm btn-ghost">반대</button><button class="btn btn-sm btn-ghost">기권</button></div>'}
+    <div class="poll-results">
+      <div class="poll-bar"><span class="pb-label">찬성</span><span class="pb-track"><span class="pb-fill is-yes" style="width:62%"></span></span><span class="pb-pct">62%</span></div>
+      <div class="poll-bar"><span class="pb-label">반대</span><span class="pb-track"><span class="pb-fill is-no" style="width:24%"></span></span><span class="pb-pct">24%</span></div>
+      <div class="poll-bar"><span class="pb-label">기권</span><span class="pb-track"><span class="pb-fill is-abs" style="width:14%"></span></span><span class="pb-pct">14%</span></div>
+    </div></div>`).join("")}
+</div></section>`;
+
+const MODES = { login: loginBody, register: registerBody, board: boardBody, polls: pollsBody, list: listBody, detail: detailBody, map: mapBody, notices: noticesBody, article: articleBody, events: eventsBody };
 const mode = process.argv[3] || "detail";
 writeFileSync(process.argv[2], layout({ title: mode, assoc, base, user: null, body: MODES[mode] || detailBody }));

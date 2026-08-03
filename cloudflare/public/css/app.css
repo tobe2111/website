@@ -296,7 +296,9 @@ a.bc-val:hover{text-decoration:underline}
 .auth-card{width:100%;max-width:440px;background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow-lg);padding:clamp(28px,5vw,42px)}
 .auth-title{font-size:1.7rem;font-weight:900}
 .auth-sub{color:var(--muted);margin:6px 0 22px}
-.auth-note{margin-top:14px;font-size:.84rem;color:var(--muted);background:var(--bg-alt);padding:12px 14px;border-radius:10px}
+.auth-note{margin-top:14px;font-size:.84rem;color:var(--muted);background:var(--bg-alt);padding:12px 14px;border-radius:var(--r-sm)}
+/* 회색 박스 안에서 링크가 본문과 같은 색이라 눌리는 줄 몰랐습니다 (예: '비밀번호를 잊으셨나요?') */
+.auth-note a{color:var(--brand-700);font-weight:600;text-decoration:underline;text-underline-offset:2px}
 .form-divider{margin:8px 0 2px;font-weight:700;color:var(--green-700);font-size:.92rem;border-top:1px solid var(--line);padding-top:16px}
 
 /* ---------- Forms ---------- */
@@ -308,8 +310,12 @@ a.bc-val:hover{text-decoration:underline}
 .stack-form input:focus,.stack-form select:focus,.stack-form textarea:focus,.caption-input:focus{outline:none;border-color:var(--brand-600);box-shadow:0 0 0 3px var(--brand-ring)}
 .stack-form textarea{resize:vertical}
 .form-two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.check{display:flex;align-items:center;gap:8px;font-weight:500}
-.check input{width:auto}
+/* 동의 체크박스 — `.stack-form label` (클래스+요소) 이 `.check` 보다 우선순위가 높아
+   display:grid 와 min-height:46px 가 그대로 적용되고 있었습니다. 그 결과 가입 폼에서
+   체크박스가 46px 사각형으로 커지고 "개인정보 수집·이용 / 에 동의합니다." 가 세로로 쪼개졌습니다. */
+.check,.stack-form label.check{display:flex;align-items:center;gap:8px;font-weight:500;font-size:.92rem}
+.check input,.stack-form label.check input{width:auto;min-height:0;height:auto;flex:none;margin:0;accent-color:var(--brand-700)}
+.check a{text-decoration:underline;text-underline-offset:2px}
 
 /* ---------- Flash ---------- */
 .flash{padding:14px 18px;border-radius:12px;font-weight:600;margin-bottom:22px;font-size:.95rem}
@@ -374,10 +380,10 @@ a.bc-val:hover{text-decoration:underline}
 .article-image{width:100%;max-height:440px;object-fit:cover;border-radius:var(--radius);margin:6px 0 22px;box-shadow:var(--shadow)}
 
 /* ---------- Board ---------- */
-.board-list{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow);margin-top:8px}
-.board-row{display:flex;align-items:center;gap:10px;padding:15px 20px;flex-wrap:wrap}
-.board-row+.board-row{border-top:1px solid var(--line)}
-.board-row.pinned{background:var(--green-50)}
+.board-list{background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--r-lg);overflow:hidden;box-shadow:none;margin-top:8px}
+.board-row{display:flex;align-items:center;gap:10px;padding:13px 18px;flex-wrap:wrap}
+.board-row+.board-row{border-top:1px solid var(--line-soft)}
+.board-row.pinned{background:var(--bg-alt)} /* '공지' 배지가 이미 있어 초록 배경까지 깔 필요는 없습니다 */
 .board-pin{flex:none}
 .board-title{flex:1;min-width:200px;font-weight:600;color:var(--ink)}
 .board-title:hover{color:var(--green-700)}
@@ -1181,9 +1187,9 @@ a.hf-val:hover{text-decoration:underline}
 .stat-card.stat-alert .stat-num{color:var(--wait-fg)}
 /* 인증 화면 프리미엄 — 카드 뒤 은은한 브랜드 글로우 + 리치 섀도우 */
 .auth-wrap{position:relative}
-.auth-wrap::before{content:"";position:absolute;left:50%;top:-48px;transform:translateX(-50%);width:min(760px,120%);height:440px;background:radial-gradient(58% 60% at 50% 0%,var(--brand-100),transparent 72%);opacity:.75;z-index:0;pointer-events:none}
-.auth-card{position:relative;z-index:1;box-shadow:0 26px 64px rgba(18,48,32,.13),0 4px 14px rgba(18,48,32,.06)}
-.auth-mark{background:linear-gradient(150deg,var(--brand-500),var(--brand-700));color:#fff}
+.auth-wrap::before{content:"";position:absolute;left:50%;top:-48px;transform:translateX(-50%);width:min(760px,120%);height:440px;background:radial-gradient(58% 60% at 50% 0%,var(--brand-tint),transparent 72%);opacity:.6;z-index:0;pointer-events:none}
+.auth-card{position:relative;z-index:1;box-shadow:0 18px 48px rgba(20,30,28,.09),0 3px 10px rgba(20,30,28,.05)}
+.auth-mark{background:var(--brand-700);color:#fff} /* 그라디언트 → 단색 (버튼·마크 규칙 통일) */
 
 /* ===================== 안내 섹션 (v7) =====================
    점포가 아직 없는 상권에서도 홈이 비지 않도록, 상인회 자신의 정보로 밀도를 만드는 블록들.
