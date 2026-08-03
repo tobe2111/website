@@ -131,11 +131,13 @@ img,video{max-width:100%;display:block}
 .section.page-top{padding-top:clamp(40px,6vw,64px)}
 .section-alt{background:var(--bg-alt)}
 .section-dark{background:var(--ink-deep);color:#fff}
-.section-head{max-width:720px;margin:0 auto clamp(34px,5vw,52px);text-align:center}
-.section-eyebrow{font-weight:800;font-size:.8rem;letter-spacing:.12em;color:var(--green-600)}
-.section-dark .section-eyebrow{color:var(--amber)}
-.section-title{font-size:clamp(1.6rem,4.5vw,2.4rem);font-weight:900;letter-spacing:-.03em;margin-top:8px}
-.section-lead{margin-top:12px;color:var(--muted);font-size:1.02rem}
+/* 페이지 헤더 — 홈의 섹션 헤더와 같은 규칙(좌측 정렬 + 밑줄)으로 통일.
+   가운데 정렬 + 초록 eyebrow + 900 굵기 조합은 홈만 고치고 나니 혼자 튀었습니다. */
+.section-head{max-width:none;margin:0 0 clamp(22px,3vw,30px);padding-bottom:14px;border-bottom:1px solid var(--line-soft);text-align:left}
+.section-eyebrow{font-weight:600;font-size:.74rem;letter-spacing:.1em;color:var(--muted)}
+.section-dark .section-eyebrow{color:rgba(255,255,255,.5)}
+.section-title{font-size:clamp(1.35rem,2.4vw,1.8rem);font-weight:700;letter-spacing:-.03em;margin-top:6px}
+.section-lead{margin-top:6px;color:var(--muted);font-size:.92rem}
 .section-dark .section-lead{color:rgba(255,255,255,.82)}
 .section-more{text-align:center;margin-top:32px}
 .cta-inner{text-align:center;max-width:640px;margin-inline:auto}
@@ -144,7 +146,7 @@ img,video{max-width:100%;display:block}
 /* ---------- Chips / badges ---------- */
 .chip{display:inline-block;font-size:.78rem;font-weight:700;color:var(--green-700);background:var(--green-50);padding:5px 12px;border-radius:999px;margin-bottom:10px}
 .chip-light{background:rgba(255,255,255,.2);color:#fff}
-.chip-filters{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-bottom:34px}
+.chip-filters{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:26px} /* 헤더가 좌측 정렬이라 가운데 정렬은 어긋납니다 */
 .chip-filter{font-size:.9rem;font-weight:600;color:var(--ink-soft);background:var(--surface);border:1px solid var(--line);padding:8px 16px;border-radius:999px;transition:all .2s}
 .chip-filter em{font-style:normal;color:var(--muted);font-size:.82em}
 .chip-filter:hover{border-color:var(--green-500)}
@@ -218,10 +220,28 @@ img,video{max-width:100%;display:block}
 .biz-hero::before{content:"";position:absolute;border-radius:50%;filter:blur(90px);z-index:0;pointer-events:none;width:620px;height:620px;left:-8%;top:-64%;background:radial-gradient(circle,color-mix(in oklab,var(--brand),transparent 76%),transparent 68%);animation:hpFloat1 26s ease-in-out infinite}
 .biz-hero h1{font-size:clamp(1.7rem,4vw,2.5rem);font-weight:700;letter-spacing:-.035em;margin:6px 0 14px}
 .biz-desc{font-size:1.05rem;line-height:1.75;max-width:680px;color:rgba(255,255,255,.68)}
-.biz-contact{display:flex;flex-wrap:wrap;gap:10px 26px;margin-top:22px}
-.biz-contact li{display:flex;gap:8px;align-items:center;font-size:1rem}
-.biz-contact a:hover{text-decoration:underline}
-.biz-section-title{font-size:1.4rem;font-weight:800;margin:8px 0 20px}
+/* 점포 상세 히어로 — 홈과 같은 좌우 2단. 손님이 가장 먼저 찾는 전화·길찾기를 첫 화면에 올립니다 */
+.biz-hero-inner{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:clamp(28px,4vw,56px);align-items:center}
+.biz-hero-lead{min-width:0}
+.biz-panel{background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.13);border-radius:var(--r-lg);padding:8px 22px 20px;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+.biz-contact{display:grid;gap:1px;margin:0 0 16px}
+.biz-contact li{display:grid;grid-template-columns:20px 62px minmax(0,1fr);align-items:start;gap:9px;padding:12px 0;border-bottom:1px solid rgba(255,255,255,.08);font-size:.88rem}
+.biz-contact li svg{width:15px;height:15px;color:rgba(255,255,255,.4);margin-top:2px}
+.bc-label{font-size:.8rem;color:rgba(255,255,255,.42)}
+.bc-val{line-height:1.55;color:rgba(255,255,255,.9);overflow-wrap:anywhere}
+a.bc-val:hover{text-decoration:underline}
+.biz-panel-actions{display:grid;gap:8px}
+.biz-panel .btn-primary{background:#fff;color:var(--ink-deep)}
+.biz-panel .btn-primary:hover{background:rgba(255,255,255,.86)}
+.biz-panel .btn-ghost{background:transparent;color:#fff;border-color:rgba(255,255,255,.28)}
+.biz-panel .btn-ghost:hover{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.5)}
+@media (max-width:940px){
+  .biz-hero-inner{grid-template-columns:1fr;gap:26px}
+  .biz-panel{max-width:460px}
+}
+/* 점포 상세의 소제목 — 홈 섹션 헤더와 같은 결(밑줄 + 700)로 통일 */
+.biz-section-title{font-size:1.15rem;font-weight:700;letter-spacing:-.025em;margin:38px 0 18px;padding-bottom:12px;border-bottom:1px solid var(--line-soft)}
+.biz-section-title:first-child{margin-top:0}
 .gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:40px}
 .gallery-item{position:relative;border:none;padding:0;border-radius:var(--radius-sm);overflow:hidden;background:#000;box-shadow:var(--shadow);cursor:pointer;display:block;width:100%;transition:transform .2s var(--ease),box-shadow .2s}
 .gallery-item:hover{transform:translateY(-4px);box-shadow:var(--shadow-lg)}
@@ -536,12 +556,12 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .geo-search{display:flex;gap:8px;margin-bottom:8px}
 .geo-search input{flex:1;min-width:0}
 .geo-search .btn{flex:none;white-space:nowrap}
-/* 쿠폰 — 매장 제시형 (점선 테두리 + 펀치홀 티켓 모양) */
+/* 쿠폰 — 매장 제시형. 초록 점선 + 잘린 펀치홀은 조악해 보여, 왼쪽 브랜드 띠 + 실선 카드로 정돈 */
 .coupon-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px;margin-bottom:34px}
-.coupon-card{position:relative;display:grid;gap:5px;padding:18px 20px 16px 26px;background:var(--surface);border:2px dashed var(--brand);border-radius:14px;overflow:hidden}
-.coupon-punch{position:absolute;left:-9px;top:50%;transform:translateY(-50%);width:18px;height:18px;border-radius:50%;background:var(--bg);border:2px dashed var(--brand)}
-.coupon-title{font-size:1.08rem;font-weight:800;color:var(--brand-700)}
-.coupon-terms{font-size:.9rem;color:var(--ink-soft)}
+.coupon-card{position:relative;display:grid;gap:5px;padding:18px 20px 16px 24px;background:var(--surface);border:1px solid var(--line-soft);border-left:3px solid var(--brand-700);border-radius:var(--r-md);overflow:hidden}
+.coupon-punch{display:none}
+.coupon-title{font-size:1rem;font-weight:600;letter-spacing:-.02em;color:var(--ink)}
+.coupon-terms{font-size:.88rem;color:var(--ink-soft)}
 .coupon-meta{font-size:.78rem;color:var(--muted)}
 /* 대시보드 쿠폰 목록 */
 .coupon-admin-list{display:grid;gap:8px;margin-bottom:6px}
@@ -723,16 +743,16 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .product-card{margin:0;background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--sh-1);transition:transform .22s var(--ease),box-shadow .25s}
 .product-card:hover{transform:translateY(-3px);box-shadow:var(--sh-2)}
 .product-card.is-sold{opacity:.72}
-.product-photo{position:relative;aspect-ratio:1/1;background:radial-gradient(115% 90% at 50% 15%,var(--brand-50),var(--surface-2));display:grid;place-items:center;overflow:hidden}
+.product-photo{position:relative;aspect-ratio:1/1;background:var(--surface-2);display:grid;place-items:center;overflow:hidden}
 .product-photo img{width:100%;height:100%;object-fit:cover;transition:transform .45s var(--ease)}
 .product-card:hover .product-photo img{transform:scale(1.05)}
-.product-noimg{color:var(--brand-300);display:grid;place-items:center}
+.product-noimg{color:var(--muted);opacity:.5;display:grid;place-items:center}
 @media (prefers-reduced-motion:reduce){.product-card:hover .product-photo img{transform:none}}
 .product-sold{position:absolute;top:10px;left:10px;padding:4px 10px;border-radius:999px;background:rgba(0,0,0,.6);background:color-mix(in oklab,#000,transparent 35%);color:#fff;font-size:.72rem;font-weight:700;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
 .product-card figcaption{padding:12px 14px 14px}
 .product-caption-top{display:flex;flex-direction:column;align-items:flex-start;gap:2px} /* 가격은 항상 이름 아래 — 카드마다 배치가 달라지지 않게 */
-.product-name{font-size:1rem;font-weight:700;color:var(--ink)}
-.product-price{font-size:.92rem;font-weight:700;color:var(--brand-700);white-space:nowrap}
+.product-name{font-size:.98rem;font-weight:600;letter-spacing:-.02em;color:var(--ink)}
+.product-price{font-size:.92rem;font-weight:600;color:var(--ink);white-space:nowrap}
 .product-desc{margin-top:5px;font-size:.85rem;color:var(--muted);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 /* 대시보드: 제품 관리 목록 */
 .prod-list{display:grid;gap:10px;margin-bottom:8px}
@@ -911,9 +931,11 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 
 /* 시안 세부 반영: 업체 카드 본문 / 소식 아이콘 / 푸터 / SNS 버튼 */
 .mc-cat{display:block;font-size:.76rem;font-weight:600;color:var(--brand-700);margin-bottom:3px}
-.mc-meta{display:flex;align-items:center;gap:6px;margin-top:7px;font-size:.82rem;color:var(--muted);overflow:hidden}
-.mc-meta svg{flex:none;color:var(--brand-600)}
-.mc-meta span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* `.market-body p` (클래스+요소) 가 `.mc-meta` 보다 우선순위가 높아 -webkit-box 가 살아남았고,
+   그 결과 핀 아이콘이 주소 위에 따로 한 줄을 차지하고 있었습니다. 선택자를 맞춰 되돌립니다. */
+.market-body p.mc-meta{display:flex;align-items:center;gap:6px;margin-top:7px;font-size:.82rem;color:var(--muted);overflow:hidden;-webkit-line-clamp:none;line-clamp:none}
+.mc-meta svg{flex:none;color:var(--muted)}
+.mc-meta span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 .market-open{position:absolute;top:10px;left:10px;right:auto}
 .market-open .badge::before{content:"";width:7px;height:7px;border-radius:999px;background:var(--ok);display:inline-block}
 .notice-ico.is-recruit{background:#fdf0e3;color:#c2680f}

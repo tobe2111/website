@@ -16,4 +16,4 @@
 node_modules/
 
 # 디자인 확인용 로컬 프리뷰 산출물 (scripts/preview-home.mjs)
-/cloudflare/public/__preview*.html
+/cloudflare/public/__*.html
