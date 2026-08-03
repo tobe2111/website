@@ -156,6 +156,59 @@ const pollsBody = `<section class="section page-top"><div class="container">
     </div></div>`).join("")}
 </div></section>`;
 
-const MODES = { login: loginBody, register: registerBody, board: boardBody, polls: pollsBody, list: listBody, detail: detailBody, map: mapBody, notices: noticesBody, article: articleBody, events: eventsBody };
+
+// ── 사장님 대시보드 (내 업체)
+const dashBody = `<section class="dash"><div class="container">
+  <div class="dash-head"><div><p class="section-eyebrow">MY BUSINESS</p><h1 class="dash-title">샘플 가게 <span class="badge badge-ok">승인</span></h1>
+    <p class="dash-sub">공개 주소: <a href="#">/t/리스터코퍼레이션/business/sample</a></p></div>
+    <div class="dash-head-actions"><form class="inline-form"><button class="btn btn-sm btn-ghost">오늘 임시휴무</button></form>
+    <a href="#" class="btn btn-ghost btn-sm">전자서명</a></div></div>
+  <section class="panel onboard"><h2 class="panel-title">시작하기</h2>
+    <ul class="onboard-list">
+      <li class="done"><span class="ob-check">✓</span><a href="#">가게 정보 채우기</a></li>
+      <li><span class="ob-check"></span><a href="#">사진 3장 이상 올리기</a></li>
+      <li><span class="ob-check"></span><a href="#">대표 메뉴 등록하기</a></li>
+    </ul></section>
+  <div class="dash-grid">
+    <section class="panel"><h2 class="panel-title">업체 정보</h2>
+      <form class="stack-form">
+        <label>업체명<input type="text" value="샘플 가게" /></label>
+        <label>업종<select>${CATS.map((c) => `<option>${c}</option>`).join("")}</select></label>
+        <label>소개<textarea rows="4">동네에서 오래 사랑받아 온 가게입니다.</textarea></label>
+        <div class="form-two"><label>전화<input type="tel" value="02-1234-5600" /></label><label>영업시간<input type="text" value="10:00–21:00" /></label></div>
+        <label>주소<input type="text" value="서울 서초구 어딘가 1길" /></label>
+        <div class="form-divider">SNS 링크 <small style="font-weight:400;color:var(--muted)">(선택 · 가게 페이지에 버튼으로 표시)</small></div>
+        <div class="form-two"><label>인스타그램<input type="url" placeholder="instagram.com/가게계정" /></label><label>유튜브<input type="url" placeholder="youtube.com/@채널" /></label></div>
+        <button class="btn btn-primary">정보 저장</button></form></section>
+    <section class="panel"><h2 class="panel-title">사진 업로드</h2>
+      <form class="upload-form">
+        <label class="file-drop"><input type="file" /><span class="file-drop-text">📁 사진 선택 (최대 8MB)</span></label>
+        <input type="text" placeholder="설명 (선택)" class="caption-input" />
+        <button class="btn btn-primary">업로드</button></form>
+      <div class="media-grid" style="margin-top:14px">${Array.from({ length: 3 }, (_, i) => `<figure class="media-tile"><div style="aspect-ratio:1;background:var(--surface-2)"></div>
+        <figcaption><span class="media-kind">🖼 사진</span><button class="link-danger">삭제</button></figcaption></figure>`).join("")}</div></section>
+  </div></div></section>`;
+
+// ── 관리자 대시보드
+const adminBody = `<section class="dash"><div class="container">
+  <div class="dash-head"><div><p class="section-eyebrow">ADMIN · 리스터코퍼레이션</p><h1 class="dash-title">관리자 대시보드</h1></div>
+    <div class="dash-head-actions"><a href="#" class="btn btn-ghost btn-sm">홈 구성 편집</a><a href="#" class="btn btn-primary btn-sm">공지 쓰기</a></div></div>
+  <div class="stat-cards">
+    <div class="stat-card"><span class="stat-num">42</span><span class="stat-label">가입 점포</span></div>
+    <div class="stat-card stat-alert"><span class="stat-num">3</span><span class="stat-label">승인 대기</span></div>
+    <div class="stat-card"><span class="stat-num">12</span><span class="stat-label">공지</span></div>
+    <div class="stat-card"><span class="stat-num">3</span><span class="stat-label">행사</span></div>
+    <div class="stat-card"><span class="stat-num">128</span><span class="stat-label">사진</span></div>
+  </div>
+  <section class="panel"><h2 class="panel-title">승인 대기 점포</h2>
+    <div class="table-scroll"><table class="admin-table">
+      <thead><tr><th>점포</th><th>업종</th><th>대표자</th><th>신청일</th><th>처리</th></tr></thead>
+      <tbody>${Array.from({ length: 3 }, (_, i) => `<tr><td><strong>샘플 가게 ${i + 1}</strong><br /><small>서울 서초구 어딘가 ${i + 1}길</small></td>
+        <td>${CATS[i]}</td><td>김상인</td><td>2026.07.${20 + i}</td>
+        <td><span class="actions-cell"><button class="btn btn-xs btn-primary">승인</button><button class="btn btn-xs btn-ghost">반려</button></span></td></tr>`).join("")}</tbody>
+    </table></div></section>
+</div></section>`;
+
+const MODES = { dash: dashBody, admin: adminBody, login: loginBody, register: registerBody, board: boardBody, polls: pollsBody, list: listBody, detail: detailBody, map: mapBody, notices: noticesBody, article: articleBody, events: eventsBody };
 const mode = process.argv[3] || "detail";
 writeFileSync(process.argv[2], layout({ title: mode, assoc, base, user: null, body: MODES[mode] || detailBody }));

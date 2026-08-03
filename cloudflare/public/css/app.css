@@ -299,7 +299,7 @@ a.bc-val:hover{text-decoration:underline}
 .auth-note{margin-top:14px;font-size:.84rem;color:var(--muted);background:var(--bg-alt);padding:12px 14px;border-radius:var(--r-sm)}
 /* 회색 박스 안에서 링크가 본문과 같은 색이라 눌리는 줄 몰랐습니다 (예: '비밀번호를 잊으셨나요?') */
 .auth-note a{color:var(--brand-700);font-weight:600;text-decoration:underline;text-underline-offset:2px}
-.form-divider{margin:8px 0 2px;font-weight:700;color:var(--green-700);font-size:.92rem;border-top:1px solid var(--line);padding-top:16px}
+.form-divider{margin:8px 0 2px;font-weight:600;color:var(--ink-soft);font-size:.9rem;border-top:1px solid var(--line-soft);padding-top:16px}
 
 /* ---------- Forms ---------- */
 .stack-form{display:grid;gap:16px}
@@ -336,10 +336,12 @@ a.bc-val:hover{text-decoration:underline}
 
 /* ---------- Upload ---------- */
 .upload-form{display:grid;gap:14px}
-.file-drop{border:2px dashed var(--green-500);border-radius:var(--radius-sm);padding:28px 20px;text-align:center;cursor:pointer;background:var(--green-50);transition:background .2s,border-color .2s;display:block}
-.file-drop:hover,.file-drop.drag{background:#daf0e6;border-color:var(--green-700)}
+/* 사진 올리는 자리 — 초록 점선 + 초록 배경은 튀기만 하고 눌러야 할 곳으로 안 읽힙니다 */
+.file-drop{border:1.5px dashed var(--line);border-radius:var(--r-md);padding:26px 20px;text-align:center;cursor:pointer;background:var(--bg-alt);transition:background .2s,border-color .2s;display:block}
+.file-drop:hover,.file-drop.drag{background:var(--brand-tint);border-color:var(--brand-500)}
 .file-drop input{display:none}
-.file-drop-text{color:var(--green-700);font-weight:600}
+.file-drop-text{color:var(--ink-soft);font-weight:600}
+.file-drop:hover .file-drop-text,.file-drop.drag .file-drop-text{color:var(--brand-700)}
 .file-drop-text small{color:var(--muted);font-weight:400}
 .media-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px}
 .media-tile{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--surface)}
@@ -471,7 +473,8 @@ a.bc-val:hover{text-decoration:underline}
 
 /* ---------- Notifications ---------- */
 .panel-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
-.panel-head .panel-title{margin-bottom:0}
+/* 제목이 버튼과 한 줄에 놓이는 패널에서는 제목만 밑줄이 그어져 어색하므로 해제 */
+.panel-head .panel-title{margin-bottom:0;padding-bottom:0;border-bottom:0}
 .notif-list{display:grid;gap:2px;margin-top:8px}
 .notif-list li{display:flex;align-items:center;gap:10px;padding:11px 12px;border-radius:9px;transition:background .2s}
 .notif-list li.unread{background:var(--green-50)}
@@ -811,7 +814,7 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .nf-desc{color:var(--muted);line-height:1.65;margin-bottom:24px}
 .nf-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
 /* 온보딩 체크리스트 */
-.onboard{border:1px solid color-mix(in oklab,var(--brand),transparent 65%);background:linear-gradient(180deg,var(--brand-50),var(--surface))}
+.onboard{border:1px solid var(--line);background:var(--surface)}
 .onboard-list{display:grid;gap:4px;list-style:none;margin:0;padding:0}
 .onboard-list li{display:flex;align-items:center;gap:11px;padding:9px 4px}
 .onboard-list a{font-size:.95rem;font-weight:600;color:var(--ink)}
@@ -1177,13 +1180,13 @@ a.hf-val:hover{text-decoration:underline}
 .hero-img-cur img{width:100%;max-width:360px;aspect-ratio:16 / 6;object-fit:cover;border-radius:var(--r-md);border:1px solid var(--line-soft);display:block;margin:2px 0 8px}
 /* ===================== 관리자 프리미엄 정돈 (v6) ===================== */
 .dash-title{letter-spacing:-.03em;font-weight:800}
-/* 패널 제목 왼쪽 브랜드 킥 바 */
-.panel-title{position:relative;padding-left:14px;letter-spacing:-.02em}
-.panel-title::before{content:"";position:absolute;left:0;top:.14em;bottom:.14em;width:4px;border-radius:3px;background:linear-gradient(var(--brand-500),var(--brand-700))}
+/* 패널 제목 — 초록 킥 바를 빼고 공개 페이지의 섹션 헤더와 같은 규칙(밑줄)으로 */
+.panel-title{position:relative;padding:0 0 12px;margin-bottom:16px;border-bottom:1px solid var(--line-soft);font-size:1.05rem;font-weight:700;letter-spacing:-.025em}
+.panel-title::before{content:none}
 /* 통계 카드: 프리미엄 대시보드 톤 */
 .stat-card{transition:transform .2s var(--ease),box-shadow .25s,border-color .2s}
 .stat-card:hover{transform:translateY(-3px);box-shadow:var(--sh-2)}
-.stat-num{color:var(--brand-800);letter-spacing:-.03em}
+.stat-num{color:var(--ink);letter-spacing:-.03em;font-weight:700} /* 숫자는 정보지 브랜드 강조 대상이 아닙니다 */
 .stat-card.stat-alert .stat-num{color:var(--wait-fg)}
 /* 인증 화면 프리미엄 — 카드 뒤 은은한 브랜드 글로우 + 리치 섀도우 */
 .auth-wrap{position:relative}
