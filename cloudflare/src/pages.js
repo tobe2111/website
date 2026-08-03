@@ -143,7 +143,7 @@ export async function home(ctx) {
   const lay = parseLayout(assoc.home_layout, assoc.name);
   // 독립 쿼리는 병렬로 — D1 은 쿼리마다 네트워크 왕복이라 직렬 대기가 TTFB 로 직결됨
   const [{ items }, notices, events, stats, cats, names, recentUpdates] = await Promise.all([
-    D.listBusinessesPaged(db, assoc.id, { perPage: 6 }),
+    D.listBusinessesPaged(db, assoc.id, { perPage: 8 }), // 4열 그리드에 맞춰 2줄이 꽉 차게 (6개는 마지막 줄이 비어 보임)
     D.listNotices(db, assoc.id, 5),
     D.listEvents(db, assoc.id, true),
     D.stats(db, assoc.id),

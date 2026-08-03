@@ -7,8 +7,6 @@ const FC_ICONS = {
   map: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg>',
   news: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l14-6v14L3 13z"/><path d="M17 8a3 3 0 0 1 0 8"/><path d="M6 13v4a2 2 0 0 0 2 2h1"/></svg>',
 };
-// 쇼케이스 밴드 스카이라인 실루엣 (브랜드색)
-const SHOWCASE_SKYLINE = '<svg viewBox="0 0 1200 220" preserveAspectRatio="xMidYMax slice" aria-hidden="true"><g fill="var(--brand-700)" opacity="0.55"><rect x="40" y="120" width="60" height="100"/><rect x="110" y="90" width="46" height="130"/><rect x="165" y="140" width="70" height="80"/><rect x="250" y="70" width="52" height="150"/><rect x="315" y="110" width="80" height="110"/><rect x="410" y="150" width="60" height="70"/><rect x="486" y="96" width="48" height="124"/><rect x="548" y="130" width="72" height="90"/><rect x="636" y="84" width="54" height="136"/><rect x="704" y="120" width="66" height="100"/><rect x="786" y="150" width="58" height="70"/><rect x="858" y="100" width="50" height="120"/><rect x="922" y="132" width="76" height="88"/><rect x="1012" y="74" width="52" height="146"/><rect x="1078" y="122" width="82" height="98"/></g><g fill="var(--brand-500)" opacity="0.5"><rect x="120" y="104" width="8" height="8"/><rect x="136" y="120" width="8" height="8"/><rect x="262" y="88" width="8" height="8"/><rect x="330" y="128" width="8" height="8"/><rect x="500" y="112" width="8" height="8"/><rect x="648" y="100" width="8" height="8"/><rect x="720" y="140" width="8" height="8"/><rect x="1024" y="92" width="8" height="8"/></g></svg>';
 
 // 섹션 카탈로그: 편집 가능한 필드 정의 (관리자 UI 자동 생성용)
 export const SECTION_CATALOG = {
@@ -198,13 +196,21 @@ function renderSection(s, deps) {
         </a></div></section>`;
     }
     case "showcase": {
+      // 상호를 거대하게 반복하는 대신, 한 줄 문장 + 실제 숫자를 보여줍니다.
       const nm = (deps.assoc && deps.assoc.name) || "우리 상인회";
-      const big = esc(s.title || nm);
-      const sub = esc(s.lead || (deps.assoc && deps.assoc.tagline) || "우리 동네 상권의 오늘을 함께 만들어 갑니다.");
-      return `<section class="showcase"><div class="sc-sky" aria-hidden="true">${SHOWCASE_SKYLINE}</div>
+      const big = esc(s.title || (deps.assoc && deps.assoc.tagline) || "우리 동네 상권의 오늘을 함께 만들어 갑니다.");
+      const sub = esc(s.lead || "");
+      const st = deps.stats || {};
+      const nums = [["가입 점포", st.businesses], ["공지·소식", st.notices], ["행사", st.events]]
+        .filter(([, v]) => Number(v) > 0)
+        .map(([k, v]) => `<div><dt>${k}</dt><dd>${Number(v).toLocaleString("ko-KR")}</dd></div>`)
+        .join("");
+      return `<section class="showcase">
         <div class="container sc-inner">
+          <p class="sc-eyebrow">${esc(nm)}</p>
           <p class="sc-big">${big}</p>
-          <p class="sc-sub">${sub}</p>
+          ${sub ? `<p class="sc-sub">${sub}</p>` : ""}
+          ${nums ? `<dl class="sc-stats">${nums}</dl>` : ""}
           <a class="btn btn-primary" href="${deps.base}/businesses">가입 점포 둘러보기</a>
         </div></section>`;
     }
@@ -222,30 +228,9 @@ function renderSection(s, deps) {
   }
 }
 
-// 프리미엄 에디토리얼 히어로용 랜드마크 실루엣 — 반투명 그라데이션으로 녹색 배경 위에 원근 레이어.
-// 예술의전당 갓지붕 · 우면산 능선 · 오피스 스카이라인 · 세빛섬 · 반포대교.
-const HERO_SKYLINE = `<svg class="hp-sky-svg" viewBox="0 0 1200 340" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
-<defs>
- <linearGradient id="hpFar" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff" stop-opacity=".13"/><stop offset="1" stop-color="#ffffff" stop-opacity=".04"/></linearGradient>
- <linearGradient id="hpMid" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#03130d" stop-opacity=".16"/><stop offset="1" stop-color="#03130d" stop-opacity=".32"/></linearGradient>
- <linearGradient id="hpNear" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#010c07" stop-opacity=".32"/><stop offset="1" stop-color="#010c07" stop-opacity=".52"/></linearGradient>
-</defs>
-<path d="M0 158 Q 240 96 480 138 Q 720 178 960 126 Q 1092 100 1200 138 L1200 340 L0 340 Z" fill="url(#hpFar)"/>
-<g fill="url(#hpMid)">
- <rect x="150" y="182" width="64" height="158" rx="3"/><rect x="228" y="150" width="50" height="190" rx="3"/><rect x="292" y="206" width="58" height="134" rx="3"/>
- <path d="M472 200 L520 132 L568 200 Z"/><ellipse cx="520" cy="200" rx="64" ry="9"/><rect x="484" y="200" width="72" height="140"/>
- <rect x="602" y="172" width="56" height="168" rx="3"/><rect x="676" y="150" width="70" height="190" rx="3"/><rect x="764" y="196" width="52" height="144" rx="3"/>
- <rect x="900" y="178" width="60" height="162" rx="3"/><rect x="978" y="158" width="46" height="182" rx="3"/><rect x="1040" y="200" width="60" height="140" rx="3"/>
-</g>
-<g fill="url(#hpNear)">
- <rect x="0" y="300" width="1200" height="40"/>
- <path d="M470 300 q0 -30 30 -30 q30 0 30 30 z"/><path d="M544 300 q0 -40 38 -40 q38 0 38 40 z"/><path d="M628 300 q0 -28 30 -28 q30 0 30 28 z"/>
- <rect x="150" y="292" width="360" height="7"/><rect x="196" y="299" width="5" height="16"/><rect x="300" y="299" width="5" height="16"/><rect x="404" y="299" width="5" height="16"/>
-</g>
-</svg>`;
-
 function heroSection(s, deps) {
-  // 프리미엄 에디토리얼 히어로: 딥 그린 그라데이션 + 부드럽게 흐르는 광원 + 랜드마크 실루엣 + 중앙 검색.
+  // 에디토리얼 히어로: 잉크 톤 배경 + 은은한 브랜드 광원 + 중앙 검색.
+  // (사각형 실루엣 스카이라인은 만화처럼 보여 제거했습니다.)
   const base = deps.base;
   const eyebrow = esc(s.eyebrow || "함께 만드는 우리 동네");
   const name = (deps.assoc && deps.assoc.name) || "우리 상인회";
@@ -256,7 +241,7 @@ function heroSection(s, deps) {
   const photo = deps.heroImage;
   const bg = photo
     ? `<div class="hp-photo" style="background-image:url('${String(photo).replace(/['"\\]/g, "")}')"></div><div class="hp-photo-veil"></div>`
-    : `<span class="hp-glow hp-glow-1"></span><span class="hp-glow hp-glow-2"></span><div class="hp-skyline">${HERO_SKYLINE}</div>`;
+    : `<span class="hp-glow hp-glow-1"></span><span class="hp-glow hp-glow-2"></span>`;
   return `<section class="hero-pro${photo ? " has-photo" : ""}">
     <div class="hero-pro-bg" aria-hidden="true">${bg}</div>
     <div class="container hp-inner">
