@@ -187,7 +187,7 @@ img,video{max-width:100%;display:block}
 /* ---------- Notice list ---------- */
 .notice-list{background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--sh-1)}
 .notice-list li+li{border-top:1px solid var(--line-soft)}
-.notice-list a{display:flex;align-items:center;gap:14px;padding:15px 18px;transition:background .2s}
+.notice-list a{display:flex;align-items:center;gap:13px;padding:13px 18px;transition:background .2s}
 .notice-list a:hover{background:var(--bg-alt)}
 .notice-list li.empty{padding:24px;justify-content:center}
 .notice-ico{flex:none;display:grid;place-items:center;width:42px;height:42px;border-radius:12px;background:var(--bg-alt);color:var(--ink-soft)}
@@ -202,8 +202,11 @@ img,video{max-width:100%;display:block}
 .tag-important{background:var(--no-bg);color:var(--no-fg)}
 
 /* ---------- Event grid ---------- */
-.event-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(320px,100%),1fr));gap:14px}
-.event-card{display:flex;gap:16px;align-items:flex-start;background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--r-lg);padding:20px;box-shadow:none;transition:border-color .2s,box-shadow .25s,transform .22s var(--ease)}
+.event-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(340px,100%),1fr));gap:14px}
+/* 참가 신청 줄(.event-rsvp)은 카드 '아래 전체 폭' 띠로 설계됐는데, flex row 카드에서는
+   세 번째 칸이 되어 "참가/신청/3곳"처럼 세로로 쪼개져 있었습니다. grid 로 바꿔 아래 줄에 붙입니다. */
+.event-card{display:grid;grid-template-columns:auto minmax(0,1fr);gap:0 16px;align-items:start;background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--r-lg);padding:20px;box-shadow:none;overflow:hidden;transition:border-color .2s,box-shadow .25s,transform .22s var(--ease)}
+.event-card .event-rsvp{grid-column:1/-1;margin:16px -20px -20px;padding:11px 20px}
 .event-card:hover{transform:translateY(-2px);border-color:var(--line);box-shadow:var(--sh-2)}
 .event-date{flex:none;width:56px;height:56px;border-radius:var(--r-md);background:var(--brand-tint);color:var(--brand-700);display:grid;place-items:center;align-content:center;line-height:1}
 .event-date .d{font-size:1.35rem;font-weight:700;letter-spacing:-.03em}
@@ -285,7 +288,7 @@ a.bc-val:hover{text-decoration:underline}
 /* ---------- Article (notice detail) ---------- */
 .article-head{display:flex;align-items:center;gap:12px;margin-bottom:12px}
 .article-head time{color:var(--muted);font-size:.9rem}
-.article-title{font-size:clamp(1.5rem,4vw,2.1rem);font-weight:900;letter-spacing:-.02em;margin-bottom:24px}
+.article-title{font-size:clamp(1.5rem,4vw,2.05rem);font-weight:700;letter-spacing:-.03em;line-height:1.35;margin-bottom:24px}
 .article-body{font-size:1.05rem;color:var(--ink-soft);line-height:1.9}
 
 /* ---------- Auth ---------- */
@@ -393,13 +396,15 @@ a.bc-val:hover{text-decoration:underline}
 
 /* ---------- Map ---------- */
 .store-map{width:100%;height:clamp(340px,60vh,560px);border-radius:var(--radius);border:1px solid var(--line);box-shadow:var(--shadow);overflow:hidden;margin-bottom:22px;background:var(--bg-alt)}
-.map-fallback{display:flex;gap:12px;align-items:flex-start;background:var(--green-50);border:1px solid var(--line);border-radius:var(--radius);padding:18px 22px;margin-bottom:20px;color:var(--ink-soft)}
-.mf-ico{flex:none;color:var(--brand-600);margin-top:1px}
-.map-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
-.map-store{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-sm);padding:16px 18px;display:grid;gap:6px;box-shadow:var(--shadow)}
-.map-store-name{font-weight:700;font-size:1.05rem;color:var(--ink)}
-.map-store-addr{font-size:.9rem;color:var(--muted)}
-.map-store-link{font-size:.88rem;font-weight:600;color:var(--green-700)}
+.map-fallback{display:flex;gap:12px;align-items:flex-start;background:var(--bg-alt);border:1px solid var(--line-soft);border-radius:var(--r-md);padding:16px 20px;margin-bottom:18px;color:var(--ink-soft);font-size:.92rem}
+.mf-ico{flex:none;color:var(--muted);margin-top:1px}
+.map-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+/* grid 자식이라 inline-block 배지가 카드 폭 전체로 늘어나 있었습니다 */
+.map-store{background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--r-lg);padding:16px 18px;display:grid;gap:6px;justify-items:start;box-shadow:none}
+.map-store .chip{margin-bottom:0}
+.map-store-name{font-weight:600;font-size:1rem;letter-spacing:-.02em;color:var(--ink)}
+.map-store-addr{font-size:.88rem;color:var(--muted)}
+.map-store-link{font-size:.86rem;font-weight:600;color:var(--brand-700)}
 .pick-map{width:100%;height:260px;border-radius:var(--radius-sm);border:1px solid var(--line);overflow:hidden;background:var(--bg-alt)}
 
 /* ---------- E-sign ---------- */
@@ -585,6 +590,8 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .biz-way a{font-weight:700;color:var(--brand-700)}
 /* 행사: 캘린더 추가 링크 */
 .event-cal{display:inline-flex;align-items:center;gap:5px;font-size:.8rem;font-weight:600;margin-top:6px;color:var(--brand-700)}
+/* .event-info 는 블록이라 장소와 '캘린더에 추가' 가 한 줄에 달라붙어 있었습니다 */
+.event-info .event-cal{display:flex;width:max-content;margin-top:8px}
 .epc-body .event-cal{color:rgba(255,255,255,.92)}
 .event-cal:hover{text-decoration:underline}
 /* 검색 자동완성 드롭다운 (초성 검색) */
@@ -656,7 +663,7 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .pb-fill.is-abs{background:#b9c2bc}
 .pb-pct{font-size:.82rem;color:var(--muted);text-align:right}
 /* 행사 참가 신청 */
-.event-rsvp{display:flex;align-items:center;gap:10px;padding:10px 16px;border-top:1px dashed var(--line-soft)}
+.event-rsvp{display:flex;align-items:center;flex-wrap:wrap;gap:10px;padding:10px 16px;border-top:1px solid var(--line-soft);background:var(--bg-alt)}
 .event-photo-card .event-rsvp{background:var(--surface)}
 .rsvp-count{font-size:.82rem;font-weight:700;color:var(--brand-700)}
 .rsvp-names{font-size:.82rem}

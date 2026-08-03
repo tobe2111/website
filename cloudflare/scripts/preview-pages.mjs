@@ -62,8 +62,50 @@ const detailBody = `
   <div class="section-more"><a href="#" class="btn btn-ghost btn-sm">← 다른 점포 보기</a></div>
 </div></section>`;
 
+
+// ── 점포 지도
+const mapBody = `<section class="section page-top"><div class="container">
+  <div class="section-head"><p class="section-eyebrow">MAP</p><h2 class="section-title">가입 점포 지도</h2><p class="section-lead">리스터코퍼레이션 가입 점포 6곳</p></div>
+  <div class="chip-filters"><a href="#" class="chip-filter active">전체</a>${CATS.map((c) => `<a href="#" class="chip-filter">${c}</a>`).join("")}</div>
+  <div class="map-fallback"><span class="mf-ico"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg></span><p>인터랙티브 지도는 관리자가 네이버 지도 키를 설정하면 표시됩니다. 아래 목록에서 각 점포의 네이버 지도를 열 수 있습니다.</p></div>
+  <ul class="map-list">${Array.from({ length: 6 }, (_, i) => `<li class="map-store" data-lat="1" data-lng="1">
+    <a href="#" class="map-store-name">샘플 가게 ${i + 1}</a><span class="chip">${CATS[i % CATS.length]}</span>
+    <span class="map-store-addr">${PIN} 서울 서초구 어딘가 ${i + 1}길</span>
+    <a class="map-store-link" href="#">네이버 지도에서 열기 →</a></li>`).join("")}</ul>
+</div></section>`;
+
+// ── 공지 목록
+const noticeRow = (i) => `<li><a href="#"><span class="notice-ico${i === 0 ? " is-pinned" : ""}"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h6"/></svg></span>
+  <span class="notice-main"><span class="notice-title">${i === 0 ? '<i class="pin-mini">공지</i>' : ""}상인회 정기 총회 및 하반기 사업 계획 안내 ${i + 1}</span><span class="notice-meta">2026.07.${String(10 + i).padStart(2, "0")}</span></span>
+  <span class="notice-tag${i === 0 ? " tag-important" : ""}">${i === 0 ? "중요" : "안내"}</span>
+  <span class="notice-chev"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5l7 7-7 7"/></svg></span></a></li>`;
+const noticesBody = `<section class="section page-top"><div class="container">
+  <div class="section-head"><p class="section-eyebrow">NOTICE</p><h2 class="section-title">공지사항</h2><p class="section-lead">총 8</p></div>
+  <form method="get" action="#" class="board-search"><input type="search" placeholder="제목·내용 검색"><button class="btn btn-ghost btn-sm">검색</button></form>
+  <div class="chip-filters"><a href="#" class="chip-filter active">전체</a><a href="#" class="chip-filter">안내 <em>5</em></a><a href="#" class="chip-filter">혜택 <em>3</em></a></div>
+  <ul class="notice-list">${Array.from({ length: 6 }, (_, i) => noticeRow(i)).join("")}</ul>
+  <nav class="pager"><span class="pg disabled">‹ 이전</span><span class="pg cur">1</span><a class="pg" href="#">2</a><a class="pg" href="#">다음 ›</a></nav>
+</div></section>`;
+
+// ── 공지 상세
+const articleBody = `<section class="section page-top"><div class="container narrow">
+  <a href="#" class="back-link">← 공지 목록</a>
+  <div class="article-head"><span class="notice-tag tag-important">중요</span><time>2026.07.10</time></div>
+  <h1 class="article-title">상인회 정기 총회 및 하반기 사업 계획 안내</h1>
+  <div class="article-body">안녕하세요, 회원 여러분.<br /><br />2026년 하반기 정기 총회를 아래와 같이 개최합니다. 상권 활성화 사업 계획과 예산안을 함께 논의할 예정이니 많은 참석 부탁드립니다.<br /><br />일시: 2026년 8월 20일(목) 오후 7시<br />장소: 상인회 사무실 2층 회의실<br /><br />참석이 어려우신 분은 사무실로 미리 연락 주시기 바랍니다.</div>
+  <div class="article-actions"><button type="button" class="btn btn-share">공지 공유하기</button></div>
+</div></section>`;
+
+// ── 행사
+const eventsBody = `<section class="section page-top"><div class="container">
+  <div class="section-head"><p class="section-eyebrow">EVENTS</p><h2 class="section-title">행사·소식</h2><p class="section-lead">회원은 행사별로 참가 신청을 할 수 있습니다.</p></div>
+  <div class="event-grid">${Array.from({ length: 3 }, (_, i) => `<article class="event-card"><div class="event-date"><span class="d">${12 + i}</span><span class="m">8월</span></div>
+    <div class="event-info"><div class="ev-head"><h3>여름 골목 축제 ${i + 1}</h3><span class="dday">D-${9 + i}</span></div>
+    <p>가게마다 준비한 특별 할인과 먹거리 부스가 열립니다.</p><span class="event-place">${PIN} 중앙로 일대</span>
+    <a class="event-cal" href="#">캘린더에 추가</a></div>
+    <div class="event-rsvp"><span class="rsvp-count">참가 신청 ${3 + i}곳</span></div></article>`).join("")}</div>
+</div></section>`;
+
+const MODES = { list: listBody, detail: detailBody, map: mapBody, notices: noticesBody, article: articleBody, events: eventsBody };
 const mode = process.argv[3] || "detail";
-writeFileSync(process.argv[2], layout({
-  title: mode === "list" ? "가입 점포" : "샘플 가게", assoc, base, user: null,
-  body: mode === "list" ? listBody : detailBody,
-}));
+writeFileSync(process.argv[2], layout({ title: mode, assoc, base, user: null, body: MODES[mode] || detailBody }));
