@@ -175,7 +175,8 @@ export async function seedDemo(db, assoc, { emailDomain = "demo.kr" } = {}) {
   await run(`UPDATE associations SET tagline=?, phone=?, email=?, address=?, map_lat=?, map_lng=?, map_zoom=? WHERE id=?`,
     "골목마다 사람이 있고, 가게마다 이야기가 있습니다", "02-9410-1004", "office@demo.kr",
     "서울 서초구 서초대로 78길 22, 2층", 37.4903, 127.0176, 16, aid);
-  await run(`UPDATE associations SET hero_image=? WHERE id=?`, "/img/demo/street.jpg", aid);
+  // 히어로 배경은 비워 둡니다 — 커버 이미지를 배경으로 늘리면 건물 윤곽이 거대하게 잡혀 어색합니다.
+  await run(`UPDATE associations SET hero_image='', logo=? WHERE id=?`, "/img/demo/logo.svg", aid);
 
   // ---- 점포 + 사장님 계정 ----
   const ownerIds = [];
