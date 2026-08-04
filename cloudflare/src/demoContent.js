@@ -12,9 +12,9 @@ const at = (o) => new Date(Date.now() + o * DAY).toISOString().slice(0, 19).repl
 export const DEMO_PASSWORD = "demo1234";
 
 const BIZ = [
-  { slug: "hanam-gukbap", name: "하남돼지국밥", cat: "음식점", owner: "김정식",
+  { slug: "goeul-gukbap", name: "고을돼지국밥", cover: "gukbap", cat: "음식점", owner: "김정식",
     desc: "23년째 같은 자리에서 가마솥으로 우려낸 국물을 냅니다. 점심에는 줄이 길어 11시 30분 전에 오시길 권합니다.",
-    addr: "서울 서초구 서초대로 78길 12", tel: "02-533-1284", hours: "09:00-21:30 · 매주 일요일 휴무",
+    addr: "서울 서초구 서초대로 78길 12", tel: "02-9410-1284", hours: "09:00-21:30 · 매주 일요일 휴무",
     lat: 37.4923, lng: 127.0292,
     products: [["돼지국밥", "9,000원", "24시간 끓인 사골 육수. 밥 추가 무료."],
                ["수육백반", "13,000원", "앞다리살 수육에 국밥 한 그릇."],
@@ -23,9 +23,9 @@ const BIZ = [
     coupons: [["공기밥 무제한", "국밥류 주문 시", 90]],
     updates: ["오늘 김치를 새로 담갔습니다. 아삭할 때 드시러 오세요.", "이번 주 토요일은 재료 준비로 오후 3시에 문 엽니다."] },
 
-  { slug: "seocho-bakehouse", name: "서초 베이크하우스", cat: "카페·디저트", owner: "이현주",
+  { slug: "seocho-bakehouse", name: "서초 베이크하우스", cover: "bakery", cat: "카페·디저트", owner: "이현주",
     desc: "매일 새벽 4시에 반죽을 시작합니다. 당일 구운 빵만 판매하고 남은 빵은 다음 날로 넘기지 않습니다.",
-    addr: "서울 서초구 반포대로 30길 8", tel: "02-586-7742", hours: "08:00-20:00",
+    addr: "서울 서초구 반포대로 30길 8", tel: "02-9410-7742", hours: "08:00-20:00",
     lat: 37.4871, lng: 127.0141, insta: "https://instagram.com/seocho_bakehouse",
     products: [["소금버터롤", "3,200원", "오전 10시, 오후 4시 두 번 구워 나옵니다."],
                ["통밀 캄파뉴", "8,500원", "우리밀 통밀 30%. 하루 12개 한정."],
@@ -34,9 +34,9 @@ const BIZ = [
     coupons: [["아메리카노 1,000원 할인", "빵 2개 이상 구매 시", 60]],
     updates: ["내일 아침 캄파뉴 굽습니다. 오전 10시쯤 나와요.", "여름 한정 복숭아 타르트 시작했습니다."] },
 
-  { slug: "mirae-sewing", name: "미래수선", cat: "생활·서비스", owner: "박순자",
+  { slug: "mirae-sewing", name: "미래수선", cover: "sewing", cat: "생활·서비스", owner: "박순자",
     desc: "옷 수선, 지퍼 교체, 기장 수선까지 30년 경력으로 봐 드립니다. 급한 건은 당일도 가능합니다.",
-    addr: "서울 서초구 서초중앙로 24길 5", tel: "02-522-9038", hours: "09:30-19:00 · 일요일 휴무",
+    addr: "서울 서초구 서초중앙로 24길 5", tel: "02-9410-9038", hours: "09:30-19:00 · 일요일 휴무",
     lat: 37.4948, lng: 127.0163,
     products: [["바지 기장 수선", "5,000원", "당일 가능."],
                ["지퍼 교체", "8,000원~", "지퍼 종류에 따라 다릅니다."],
@@ -44,9 +44,9 @@ const BIZ = [
     coupons: [],
     updates: ["장마철 눅눅해진 겨울옷, 지금 맡기시면 여유 있게 봐 드립니다."] },
 
-  { slug: "nampo-fish", name: "남포수산", cat: "농수축산", owner: "정만석",
+  { slug: "nampo-fish", name: "남포수산", cover: "fish", cat: "농수축산", owner: "정만석",
     desc: "새벽 노량진에서 직접 보고 떼 옵니다. 회는 주문 후에 뜨고, 손질은 무료입니다.",
-    addr: "서울 서초구 방배로 42길 3", tel: "02-591-6620", hours: "10:00-21:00",
+    addr: "서울 서초구 방배로 42길 3", tel: "02-9410-6620", hours: "10:00-21:00",
     lat: 37.4816, lng: 127.0007,
     products: [["광어회 (小)", "28,000원", "2~3인분. 초장·상추 포함."],
                ["연어회 300g", "22,000원", "노르웨이산."],
@@ -55,9 +55,9 @@ const BIZ = [
     coupons: [["매운탕거리 서비스", "회 3만원 이상 구매 시", 120]],
     updates: ["오늘 전복 좋은 게 들어왔습니다.", "추석 선물세트 예약 받습니다. 전화 주세요."] },
 
-  { slug: "banpo-hair", name: "반포 헤어살롱", cat: "생활·서비스", owner: "최유진",
+  { slug: "banpo-hair", name: "반포 헤어살롱", cover: "hair", cat: "생활·서비스", owner: "최유진",
     desc: "예약제로 운영해 기다리지 않으셔도 됩니다. 두피 상태를 먼저 보고 시술을 정합니다.",
-    addr: "서울 서초구 신반포로 45길 11", tel: "02-535-2211", hours: "10:00-20:00 · 월요일 휴무",
+    addr: "서울 서초구 신반포로 45길 11", tel: "02-9410-2211", hours: "10:00-20:00 · 월요일 휴무",
     lat: 37.5041, lng: 127.0113, insta: "https://instagram.com/banpo_hair",
     products: [["커트", "25,000원", "샴푸·드라이 포함."],
                ["뿌리 염색", "60,000원", "새치 커버 가능."],
@@ -65,27 +65,27 @@ const BIZ = [
     coupons: [["첫 방문 20% 할인", "예약 후 방문 시 1회 한정", 180]],
     updates: ["9월 예약 열렸습니다. 주말은 빨리 마감돼요."] },
 
-  { slug: "chaekbang-seocho", name: "동네책방 서초", cat: "교육·문화", owner: "한지원",
+  { slug: "chaekbang-seocho", name: "동네책방 서초", cover: "book", cat: "교육·문화", owner: "한지원",
     desc: "작은 서점입니다. 매주 목요일 저녁에 독서모임을 하고, 원하시는 책은 주문해 드립니다.",
-    addr: "서울 서초구 효령로 31길 7", tel: "02-583-4409", hours: "11:00-21:00 · 화요일 휴무",
+    addr: "서울 서초구 효령로 31길 7", tel: "02-9410-4409", hours: "11:00-21:00 · 화요일 휴무",
     lat: 37.4879, lng: 127.0203,
     products: [["이달의 책 꾸러미", "25,000원", "책 1권 + 책방지기 편지."],
                ["독서모임 참가비", "10,000원", "매주 목요일 저녁 7시 30분."]],
     coupons: [],
     updates: ["이번 달 독서모임 책은 『아무튼, 계단』입니다. 두 자리 남았어요."] },
 
-  { slug: "jeil-mart", name: "제일마트", cat: "농수축산", owner: "오경택",
+  { slug: "jeil-mart", name: "제일마트", cover: "mart", cat: "농수축산", owner: "오경택",
     desc: "동네 슈퍼입니다. 과일은 매일 아침 들어오고, 무거운 건 근처는 배달해 드립니다.",
-    addr: "서울 서초구 사평대로 20길 4", tel: "02-596-3311", hours: "08:00-23:00",
+    addr: "서울 서초구 사평대로 20길 4", tel: "02-9410-3311", hours: "08:00-23:00",
     lat: 37.4962, lng: 127.0248,
     products: [["제철 과일 모둠", "15,000원", "그날 좋은 것으로 담습니다."],
                ["계란 한 판", "7,900원", "무항생제."]],
     coupons: [["2만원 이상 무료 배달", "반경 1km 이내", 365]],
     updates: ["복숭아 들어왔습니다. 지금이 제일 답니다.", "생수 6개들이 행사합니다."] },
 
-  { slug: "sonmat-banchan", name: "손맛반찬", cat: "음식점", owner: "윤미경",
+  { slug: "sonmat-banchan", name: "손맛반찬", cover: "banchan", cat: "음식점", owner: "윤미경",
     desc: "매일 아침 만든 반찬만 진열합니다. 조미료를 쓰지 않아 간이 세지 않습니다.",
-    addr: "서울 서초구 서초대로 50길 9", tel: "02-521-7788", hours: "09:00-20:00 · 일요일 휴무",
+    addr: "서울 서초구 서초대로 50길 9", tel: "02-9410-7788", hours: "09:00-20:00 · 일요일 휴무",
     lat: 37.4901, lng: 127.0119,
     products: [["멸치볶음", "5,000원", "국물용 아닌 볶음용 멸치만 씁니다."],
                ["장조림", "9,000원", "홍두깨살."],
@@ -95,9 +95,13 @@ const BIZ = [
     updates: ["오이소박이 담갔습니다. 이번 주까지만 나갑니다."] },
 ];
 
+// 한국식 날짜 표기 (요일 포함) — 공지 본문이 실제 달력과 어긋나지 않게
+const WD = ["일", "월", "화", "수", "목", "금", "토"];
+const kdate = (o) => { const d = new Date(Date.now() + o * DAY); return `${d.getMonth() + 1}월 ${d.getDate()}일(${WD[d.getDay()]})`; };
+
 const NOTICES = [
-  { t: "2026년 하반기 정기총회 안내", tag: "공지", pin: 1, d: 2,
-    b: "회원 여러분 안녕하세요.\n\n2026년 하반기 정기총회를 아래와 같이 엽니다.\n\n일시: 8월 28일(금) 저녁 7시\n장소: 상인회 사무실 2층 회의실\n안건: 하반기 사업계획, 공동판촉 예산, 임원 보선\n\n참석이 어려우신 분은 사무실로 미리 연락 주시면 서면으로 의견 받겠습니다." },
+  { t: "하반기 정기총회 안내", tag: "공지", pin: 1, d: 2,
+    b: `회원 여러분 안녕하세요.\n\n하반기 정기총회를 아래와 같이 엽니다.\n\n일시: ${kdate(20)} 저녁 7시\n장소: 상인회 사무실 2층 회의실\n안건: 하반기 사업계획, 공동판촉 예산, 임원 보선\n\n참석이 어려우신 분은 사무실로 미리 연락 주시면 서면으로 의견 받겠습니다.` },
   { t: "여름철 쓰레기 배출 시간 변경 안내", tag: "안내", pin: 0, d: 5,
     b: "무더위로 악취 민원이 늘어 8월 한 달간 배출 시간을 조정합니다.\n\n기존: 저녁 7시 이후 → 변경: 저녁 8시 이후\n\n음식물은 반드시 전용 용기에 담아 내주시고, 상자는 접어서 묶어 주세요. 협조 부탁드립니다." },
   { t: "소상공인 시설개선 지원사업 신청 접수", tag: "혜택", pin: 0, d: 9,
@@ -169,8 +173,9 @@ export async function seedDemo(db, assoc, { emailDomain = "demo.kr" } = {}) {
 
   // ---- 상인회 소개 정보 ----
   await run(`UPDATE associations SET tagline=?, phone=?, email=?, address=?, map_lat=?, map_lng=?, map_zoom=? WHERE id=?`,
-    "골목마다 사람이 있고, 가게마다 이야기가 있습니다", "02-585-1004", "office@demo.kr",
+    "골목마다 사람이 있고, 가게마다 이야기가 있습니다", "02-9410-1004", "office@demo.kr",
     "서울 서초구 서초대로 78길 22, 2층", 37.4903, 127.0176, 16, aid);
+  await run(`UPDATE associations SET hero_image=? WHERE id=?`, "/img/demo/street.jpg", aid);
 
   // ---- 점포 + 사장님 계정 ----
   const ownerIds = [];
@@ -187,7 +192,11 @@ export async function seedDemo(db, assoc, { emailDomain = "demo.kr" } = {}) {
       VALUES (?,?,?,?,?,?,?,?,?,?,?, 'approved', ?, 'self', ?, ?)`,
       aid, uid, b.name, b.slug || slugify(b.name), b.cat, b.desc, b.tel, b.addr, b.hours,
       b.lat, b.lng, b.insta || "", at(-60 + i * 3), at(-i));
+    if (i === 4) await run(`UPDATE businesses SET day_off_date=? WHERE association_id=? AND slug=?`, ymd(0), aid, b.slug); // 한 곳은 '오늘 휴무' — 전부 영업중이면 오히려 가짜처럼 보임
     const bid = await firstId(`SELECT id FROM businesses WHERE association_id=? AND slug=?`, aid, b.slug);
+    // 대표 이미지 — 워커에 함께 배포된 정적 커버(/img/demo/*.jpg). 외부 호스트 의존 없음.
+    if (b.cover) await run(`INSERT INTO media (business_id, kind, filename, thumb, caption) VALUES (?,'image',?,?,?)`,
+      bid, `/img/demo/${b.cover}.jpg`, `/img/demo/${b.cover}.jpg`, `${b.name} 대표 이미지`);
 
     for (let j = 0; j < b.products.length; j++) {
       const [n, price, d] = b.products[j];
