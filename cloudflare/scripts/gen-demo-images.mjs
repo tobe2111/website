@@ -22,7 +22,12 @@ export const COVERS = {
   book:    ["#eaeee6", "#5a7a4c", s('<path d="M4 4.5h6a2.5 2.5 0 0 1 2.5 2.5v12A2 2 0 0 0 10.5 17H4z"/><path d="M20 4.5h-6A2.5 2.5 0 0 0 11.5 7v12a2 2 0 0 1 2-2H20z"/>')],
   mart:    ["#e9f1e5", "#4f8f42", s('<path d="M3 5h2.2l2.3 10.4a2 2 0 0 0 2 1.6h7.6a2 2 0 0 0 2-1.5L21 8H6"/><circle cx="10" cy="20" r="1.3"/><circle cx="17" cy="20" r="1.3"/>')],
   banchan: ["#f5eddd", "#b8842f", s('<rect x="3" y="9" width="8" height="7" rx="1.4"/><rect x="13" y="9" width="8" height="7" rx="1.4"/><path d="M3 6.5h8M13 6.5h8"/>')],
-  // 히어로 배경 — 상권 골목 실루엣 (가로로 길게)
+  cafe:    ["#f2ece4", "#a8794e", s('<path d="M4 9h13v6a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5z"/><path d="M17 10h2.2a2.4 2.4 0 0 1 0 5H17"/><path d="M8 5.5c0-.9.9-1.2.9-2.1M12 5.5c0-.9.9-1.2.9-2.1"/>')],
+  meat:    ["#f4e8e6", "#a85a4d", s('<path d="M12 4c4.4 0 8 3.1 8 7 0 2.6-1.6 4.4-3.4 5.4-1.6.9-2.6 1.5-2.9 3.1-.2 1-1 1.5-1.9 1.5-2.2 0-3.6-1.5-3.6-3.4 0-1.3.6-2 .6-2.9 0-.6-.4-1-1.2-1.3C5.6 12.6 4 11.2 4 9c0-2.8 3.6-5 8-5z"/><circle cx="10" cy="10" r="1.6"/>')],
+  flower:  ["#f1e9f0", "#8f5f8c", s('<circle cx="12" cy="8" r="3"/><circle cx="7.5" cy="11.5" r="3"/><circle cx="16.5" cy="11.5" r="3"/><path d="M12 14v7M9.5 18h5"/>')],
+  fashion: ["#eeecf3", "#6b6591", s('<path d="M9 4l3 2 3-2 5 3-2.5 4L16 10v10H8V10l-1.5 1L4 7z"/>')],
+  laundry: ["#e7eef2", "#4a7a92", s('<rect x="4" y="3.5" width="16" height="17" rx="2.5"/><circle cx="12" cy="13.5" r="4.2"/><path d="M8 7h3"/>')],
+  pharmacy:["#e7f0ea", "#3f8060", s('<path d="M9.5 3.5h5v6h6v5h-6v6h-5v-6h-6v-5h6z"/>')],
 };
 
 const card = (bg, fg, svg, wide) => `<!doctype html><meta charset="utf-8"><style>
