@@ -104,6 +104,82 @@ test("두 번 눌러도 데이터가 중복되지 않는다", async () => {
   assert.equal(n.u, 25, "사장님 계정이 25개 그대로");
 });
 
+// ── 전자서명: 데이터만 밀어 넣은 게 아니라 실제 봉인 절차를 탔는지
+import { verifySignature, contentHash } from "../src/esign.js";
+
+test("전자서명 문서와 서명이 채워진다", async () => {
+  const docs = db()._db.prepare(`SELECT * FROM documents WHERE association_id=? ORDER BY id`).all(assoc.id);
+  assert.equal(docs.length, 3, "문서 3건");
+  assert.ok(docs.some((d) => d.ordered === 1), "순차 서명 문서가 있다");
+  assert.ok(docs.some((d) => d.closed === 1), "마감된 문서가 있다");
+  const n = db()._db.prepare(`SELECT
+    (SELECT COUNT(*) FROM signatures WHERE document_id IN (SELECT id FROM documents WHERE association_id=?)) s,
+    (SELECT COUNT(*) FROM signature_requests WHERE document_id IN (SELECT id FROM documents WHERE association_id=?)) r`)
+    .get(assoc.id, assoc.id);
+  assert.equal(n.s, 17, "서명 17건");
+  assert.equal(n.r, 24, "서명 요청 24건");
+});
+
+test("모든 데모 서명이 봉인 검증을 통과한다", async () => {
+  const docs = db()._db.prepare(`SELECT * FROM documents WHERE association_id=?`).all(assoc.id);
+  for (const d of docs) {
+    assert.equal(await contentHash(d.body), d.content_hash, `본문 해시가 맞아야 함: ${d.title}`);
+    const sigs = db()._db.prepare(`SELECT * FROM signatures WHERE document_id=?`).all(d.id);
+    for (const s of sigs) {
+      const v = await verifySignature(env, s, d);
+      assert.deepEqual(v, { sealOk: true, contentOk: true, valid: true }, `${d.title} / ${s.signer_name}`);
+    }
+  }
+});
+
+test("본문이 한 글자라도 바뀌면 검증이 깨진다", async () => {
+  const d = db()._db.prepare(`SELECT * FROM documents WHERE association_id=? LIMIT 1`).get(assoc.id);
+  const s = db()._db.prepare(`SELECT * FROM signatures WHERE document_id=? LIMIT 1`).get(d.id);
+  const v = await verifySignature(env, s, { ...d, body: d.body + " " });
+  assert.equal(v.contentOk, false, "위조된 본문은 통과하면 안 됨");
+  assert.equal(v.valid, false);
+});
+
+test("검증 코드 페이지가 '유효'로 뜬다", async () => {
+  const s = db()._db.prepare(`SELECT s.* FROM signatures s JOIN documents d ON d.id=s.document_id
+    WHERE d.association_id=? LIMIT 1`).get(assoc.id);
+  const r = await req("GET", "/verify/" + s.verify_code);
+  assert.equal(r.status, 200);
+  const html = await r.text();
+  assert.match(html, /유효/, "검증 결과가 유효로 표시");
+  assert.match(html, new RegExp(s.signer_name), "서명자 이름 표시");
+});
+
+test("데모 사장님 계정에 서명할 문서가 남아 있다", async () => {
+  const g = await req("GET", "/login");
+  const seed = (g.headers.getSetCookie?.() || []).find((c) => c.startsWith("sc_csrf_seed="))?.split(";")[0] || "";
+  const tk = (/name="_csrf" value="([^"]+)"/.exec(await g.text()) || [])[1];
+  const lr = await req("POST", "/login", { cookie: seed, body: { _csrf: tk, email: "owner1@demo.kr", password: "demo1234" } });
+  assert.equal(lr.status, 303, "데모 계정 로그인");
+  const jar = [seed, ...(lr.headers.getSetCookie?.() || []).map((c) => c.split(";")[0])].join("; ");
+
+  const r = await req("GET", T + "/sign", { cookie: jar });
+  assert.equal(r.status, 200);
+  const html = await r.text();
+  assert.match(html, /서명 필요/, "서명할 문서가 남아 있어야 시연이 됨");
+  assert.match(html, /야시장 공동 운영 동의서/);
+  assert.match(html, /서명 완료/, "이미 서명한 내역도 보여야 함");
+});
+
+test("관리자 문서 화면에 서명 현황과 이미지가 나온다", async () => {
+  const list = await req("GET", T + "/admin/documents", { cookie });
+  assert.equal(list.status, 200);
+  assert.match(await list.text(), /여름 골목 야시장 공동 운영 동의서/);
+
+  const d = db()._db.prepare(`SELECT id FROM documents WHERE association_id=? AND ordered=1`).get(assoc.id);
+  const detail = await req("GET", T + "/admin/documents/" + d.id, { cookie });
+  assert.equal(detail.status, 200);
+  const html = await detail.text();
+  assert.match(html, /3\/5/, "순차 문서 서명 진행률");
+  assert.match(html, /서명 차례/, "다음 차례 표시");
+  assert.match(html, /\/img\/demo\/sign\/\d+\.png/, "서명 이미지가 붙어 있어야 함");
+});
+
 test("다른 상인회의 데이터는 건드리지 않는다", async () => {
   const other = await D.createAssociation(db(), { slug: "other", name: "다른 상인회" });
   await db().prepare(`INSERT INTO notices (association_id, title, body) VALUES (?,?,?)`).bind(other.id, "남의 공지", "본문").run();
@@ -114,7 +190,16 @@ test("다른 상인회의 데이터는 건드리지 않는다", async () => {
 });
 
 // ── 영업 상태 판정 (정기휴무 요일 반영)
-import { openNow, closedToday } from "../src/util.js";
+import { openNow, closedToday, kstStamp } from "../src/util.js";
+
+test("화면에 보이는 시각은 KST 로 환산한다", () => {
+  assert.equal(kstStamp("2026-08-03T01:44:35.962Z"), "2026-08-03 10:44");
+  assert.equal(kstStamp("2026-08-03 23:10:00"), "2026-08-04 08:10", "UTC 자정을 넘기면 날짜도 넘어가야 함");
+  assert.equal(kstStamp("2026-08-03 23:10:00", { year: false }), "08-04 08:10");
+  assert.equal(kstStamp(""), "");
+  assert.equal(kstStamp("알 수 없음"), "알 수 없음", "해석할 수 없으면 원문 그대로");
+});
+
 const SUN = Date.parse("2026-08-09T03:00:00Z"); // 일요일 정오 KST
 const MON = Date.parse("2026-08-10T03:00:00Z"); // 월요일 정오 KST
 const SAT = Date.parse("2026-08-08T03:00:00Z"); // 토요일 정오 KST

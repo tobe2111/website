@@ -3,11 +3,20 @@
 // 문구는 실제 상인회가 쓸 법한 내용으로 작성 (자리표시자·로렘입숨 없음).
 import { hashPassword } from "./crypto.js";
 import { slugify } from "./util.js";
+import * as D from "./db.js";
+import { contentHash, sealRecord, newVerifyCode } from "./esign.js";
 
 // 날짜는 실행 시점 기준 상대값 — 언제 돌려도 행사가 '다가오는' 상태로 보입니다.
 const DAY = 86400000;
 const ymd = (o) => new Date(Date.now() + o * DAY).toISOString().slice(0, 10);
 const at = (o) => new Date(Date.now() + o * DAY).toISOString().slice(0, 19).replace("T", " ");
+// 서명 시각 — 저장은 UTC 지만 사람이 보는 건 KST 입니다. 새벽 3시에 줄줄이 서명한 기록이
+// 남아 있으면 만들어 낸 티가 나므로, 낮 시간대(KST 09~20시)로 흩뜨립니다.
+const signedAtIso = (dayOffset, k) => {
+  const d = new Date(Date.now() + dayOffset * DAY);
+  d.setUTCHours(((k * 5 + 3) % 12), (k * 17 + 11) % 60, (k * 13) % 60, 0); // UTC 0~11시 = KST 9~20시
+  return d.toISOString();
+};
 
 export const DEMO_PASSWORD = "demo1234";
 
@@ -304,18 +313,72 @@ const POLLS = [
     b: "하반기 공동 판촉 예산을 500만원으로 편성하는 안건입니다. 총회 전 사전 의견 수렴입니다." },
 ];
 
+// ───────── 전자서명 문서 ─────────
+// to/signed 는 BIZ 인덱스입니다. 0번(고을돼지국밥 김정식 = 배포용 데모 계정 owner1)은
+// 1번 문서에서 일부러 미서명으로 남기고, 2번 문서에서는 '서명 차례'가 되도록 배치했습니다.
+// 데모 계정으로 로그인하면 실제로 서명해 볼 수 있는 문서가 남아 있어야 하기 때문입니다.
+const YEAR = new Date().getFullYear();
+const DOCS = [
+  { title: "여름 골목 야시장 공동 운영 동의서", created: -6, due: 7, ordered: 0, closed: 0,
+    to: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], signed: [1, 2, 3, 4, 5, 6, 7, 8, 9],
+    body: `여름 골목 야시장(이하 "행사")의 공동 운영에 관하여 아래 내용에 동의합니다.
+
+1. 행사 기간에는 점포 앞 1.5m 이내에 적치물을 두지 않습니다.
+2. 부스를 운영하는 점포는 소화기 1대를 비치하고, 화기를 쓸 때는 상인회 안전담당의 확인을 받습니다.
+3. 행사 한정 메뉴의 가격은 평소 판매가를 넘지 않게 정합니다.
+4. 공동 홍보물(현수막·전단·SNS)에 우리 점포의 상호와 대표 메뉴가 실리는 것에 동의합니다.
+5. 영업 중 나온 쓰레기는 각 점포가 마감 후 직접 모아 지정 장소에 내놓습니다.
+
+본 동의서는 행사 종료일까지 유효합니다. 서명 후 철회를 원하시면 상인회 사무실로 서면 통보해 주십시오.` },
+
+  { title: "하반기 공동 판촉 예산 집행 위임장", created: -3, due: 10, ordered: 1, closed: 0,
+    to: [3, 6, 9, 0, 12], signed: [3, 6, 9],
+    body: `하반기 공동 판촉 예산(금 오백만원)의 집행을 아래와 같이 상인회 집행부에 위임합니다.
+
+1. 위임 범위: 공동 전단 제작, 상권 지도 인쇄, 온라인 광고 집행에 한합니다.
+2. 집행 한도: 건당 150만원, 총액 500만원을 넘지 않습니다.
+3. 정산: 매월 말일 기준 집행 내역과 증빙을 회원에게 공개합니다.
+4. 잔액: 회계연도가 끝났을 때 남은 금액은 다음 해 예산으로 넘깁니다.
+
+본 위임은 하반기 정기총회 의결을 따르며, 총회에서 부결되면 효력을 잃습니다.
+※ 순차 서명 문서입니다. 앞 순번의 서명이 끝난 뒤에 서명하실 수 있습니다.` },
+
+  { title: `${YEAR}년 상반기 회계 결산 확인서`, created: -34, due: null, ordered: 0, closed: 1,
+    to: [0, 1, 2, 3, 4], signed: [0, 1, 2, 3, 4],
+    body: `상반기 회계 결산 내역을 확인하였으며, 아래 사항에 이의가 없음을 확인합니다.
+
+수입  회비 12,600,000원 · 구청 보조금 8,000,000원 · 행사 수입 3,240,000원
+지출  공동 판촉 6,480,000원 · 시설 유지(청소·CCTV) 5,120,000원 · 사무 운영 4,310,000원
+잔액  7,930,000원 (상인회 명의 통장 보관)
+
+감사에서 증빙이 빠진 건은 없었습니다. 세부 내역은 사무실에서 열람하실 수 있습니다.` },
+];
+
+// 서명 기록에 남는 접속 정보. IP 는 문서용으로 예약된 203.0.113.0/24(TEST-NET-3)만 씁니다 —
+// 실제로 쓰이는 주소를 데모에 박아 두면 엉뚱한 가입자의 주소가 화면에 남습니다.
+const SIGN_IP = (i) => "203.0.113." + (20 + i);
+const SIGN_UA = [
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
+  "Mozilla/5.0 (Linux; Android 14; SM-S926N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+];
+
 /**
  * 대상 상인회를 데모 콘텐츠로 채웁니다.
  * 기존 콘텐츠(점포·공지·행사·게시글·투표)와 데모 사장님 계정은 먼저 지웁니다 —
  * 삭제 범위는 이 상인회로 한정되며 다른 상인회는 건드리지 않습니다.
  * 상인회 관리자(ADMIN)와 슈퍼 관리자 계정은 지우지 않습니다.
  */
-export async function seedDemo(db, assoc, { emailDomain = "demo.kr" } = {}) {
+export async function seedDemo(env, db, assoc, { emailDomain = "demo.kr" } = {}) {
   const aid = assoc.id;
   const run = (sql, ...args) => db.prepare(sql).bind(...args).run();
   const firstId = async (sql, ...args) => (await db.prepare(sql).bind(...args).first())?.id ?? null;
 
   // ---- 정리 (이 상인회 한정) ----
+  // 서명·서명요청은 문서를 지우기 전에 먼저 지웁니다(외래키 CASCADE 에 기대지 않음).
+  for (const t of ["signatures", "signature_requests"])
+    await run(`DELETE FROM ${t} WHERE document_id IN (SELECT id FROM documents WHERE association_id=?)`, aid);
+  await run(`DELETE FROM documents WHERE association_id=?`, aid);
   await run(`DELETE FROM comments WHERE post_id IN (SELECT id FROM posts WHERE association_id=?)`, aid);
   await run(`DELETE FROM post_images WHERE post_id IN (SELECT id FROM posts WHERE association_id=?)`, aid);
   await run(`DELETE FROM poll_votes WHERE poll_id IN (SELECT id FROM polls WHERE association_id=?)`, aid);
@@ -390,6 +453,49 @@ export async function seedDemo(db, assoc, { emailDomain = "demo.kr" } = {}) {
     await run(`INSERT INTO polls (association_id, title, body, closes_at, closed, created_at) VALUES (?,?,?,?,?,?)`,
       aid, pl.t, pl.b, ymd(pl.close), pl.closed, at(-7));
 
+  // ---- 전자서명 ----
+  // 데이터를 직접 밀어 넣지 않고 실제 서명 경로를 그대로 탑니다:
+  // 본문 SHA-256 해시 → 서명 요청 생성 → 서명 레코드를 Ed25519 로 봉인.
+  // 그래서 /verify/<코드> 에서 '유효' 로 검증되고, 본문을 한 글자라도 고치면 즉시 깨집니다.
+  const adminId = await firstId(`SELECT id FROM users WHERE association_id=? AND role='ADMIN' ORDER BY id LIMIT 1`, aid);
+  const tbase = "/t/" + encodeURIComponent(assoc.slug);
+  const notis = [];
+  let signCount = 0;
+  for (let di = 0; di < DOCS.length; di++) {
+    const spec = DOCS[di];
+    const doc = await D.createDocument(db, {
+      associationId: aid, title: spec.title, body: spec.body,
+      contentHash: await contentHash(spec.body), createdBy: adminId,
+      ordered: spec.ordered, dueDate: spec.due == null ? "" : ymd(spec.due),
+    });
+    // 생성 시각도 낮 시간대로 — 세 문서가 모두 같은 분(데모를 채운 그 순간)에 만들어져 있으면 티가 납니다.
+    await run(`UPDATE documents SET created_at=? WHERE id=?`,
+      signedAtIso(spec.created, di * 3).slice(0, 19).replace("T", " "), doc.id);
+    await D.createSignatureRequests(db, doc.id, spec.to.map((i) => ownerIds[i]));
+
+    for (let k = 0; k < spec.signed.length; k++) {
+      const i = spec.signed[k];
+      const rec = {
+        documentId: doc.id, userId: ownerIds[i], signerName: BIZ[i].owner,
+        contentHash: doc.content_hash, signedAt: signedAtIso(spec.created + 1 + Math.floor(k / 2), k), ip: SIGN_IP(i),
+      };
+      await D.createSignature(db, {
+        ...rec,
+        signatureImage: `/img/demo/sign/${i + 1}.png`,
+        userAgent: SIGN_UA[(i + k) % SIGN_UA.length],
+        verifyCode: newVerifyCode(),
+        recordHash: await sealRecord(env, rec),
+      });
+      signCount++;
+      notis.push([rec.signedAt, `${rec.signerName}님이 '${spec.title}'에 전자서명했습니다.`, `${tbase}/admin/documents/${doc.id}`]);
+    }
+    if (spec.closed) await D.closeDocument(db, doc.id);
+  }
+  // 알림함은 최근 서명 몇 건만 — 열일곱 건이 한꺼번에 쌓여 있으면 오히려 방치된 화면처럼 보입니다.
+  for (const [ts, msg, link] of notis.sort((a, b) => (a[0] < b[0] ? 1 : -1)).slice(0, 4))
+    await run(`INSERT INTO notifications (association_id, kind, message, link, created_at) VALUES (?,'signed',?,?,?)`,
+      aid, msg, link, ts.slice(0, 19).replace("T", " "));
+
   return {
     businesses: BIZ.length,
     products: BIZ.reduce((n, b) => n + b.products.length, 0),
@@ -397,6 +503,7 @@ export async function seedDemo(db, assoc, { emailDomain = "demo.kr" } = {}) {
     updates: BIZ.reduce((n, b) => n + b.updates.length, 0),
     notices: NOTICES.length, events: EVENTS.length,
     posts: POSTS.length, polls: POLLS.length,
+    documents: DOCS.length, signatures: signCount,
     ownerEmail: `owner1@${emailDomain}`, password: DEMO_PASSWORD,
   };
 }

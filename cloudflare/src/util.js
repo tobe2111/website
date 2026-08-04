@@ -52,6 +52,21 @@ export function fmtBytes(n) {
   return (n / 1024 / 1024 / 1024).toFixed(2) + " GB";
 }
 
+// 저장된 시각은 모두 UTC 입니다(D1 의 datetime('now') 도, 앱이 남기는 ISO 도).
+// 그대로 찍으면 한국 사용자에게 9시간 어긋난 시각이 보이므로 화면에는 KST 로 환산해 보여 줍니다.
+// month=true 면 "08-04 14:30", 아니면 "2026-08-04 14:30".
+export function kstStamp(v, { year = true } = {}) {
+  const s = String(v ?? "").trim();
+  if (!s) return "";
+  const norm = s.includes("T") ? s : s.replace(" ", "T");
+  const t = Date.parse(/[zZ]|[+-]\d{2}:?\d{2}$/.test(norm) ? norm : norm + "Z");
+  if (Number.isNaN(t)) return s;
+  const d = new Date(t + 9 * 3600 * 1000);
+  const p = (n) => String(n).padStart(2, "0");
+  const date = `${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}`;
+  return `${year ? d.getUTCFullYear() + "-" : ""}${date} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
+}
+
 // 영업시간 문자열에 적힌 정기휴무 요일이 오늘인지 (KST 기준).
 // "09:00-21:30 · 매주 일요일 휴무" 처럼 시간과 휴무일이 한 줄에 같이 적히는 경우가 많은데,
 // 시간만 보고 판단하면 일요일에도 '영업중'으로 표시돼 손님에게 잘못된 정보가 나갑니다.

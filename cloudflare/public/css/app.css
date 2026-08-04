@@ -555,6 +555,8 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .audit-action{font-weight:700;color:var(--green-700)}
 .audit-detail{color:var(--ink-soft)}
 .audit-meta{margin-left:auto;color:var(--muted);font-size:.82rem}
+/* 시각 옆 표준시 표기 — 서명 기록은 몇 시에 했는지가 증빙이라 기준을 밝혀 둡니다 */
+.tz{color:var(--muted);font-size:.78em;letter-spacing:.04em}
 .map-cluster{display:flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:50%;background:var(--green-700);color:#fff;font-weight:800;border:3px solid rgba(255,255,255,.85);box-shadow:0 2px 8px rgba(0,0,0,.3);font-size:.9rem}
 /* 지도 핀 — 브랜드색 스토어프론트 (디자인 시스템 v2) */
 .map-pin{width:34px;height:43px;filter:drop-shadow(0 3px 5px rgba(0,0,0,.35));transition:transform .15s ease;transform-origin:50% 100%;cursor:pointer;animation:pin-drop .3s ease-out}
