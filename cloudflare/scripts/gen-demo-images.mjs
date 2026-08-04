@@ -23,7 +23,6 @@ export const COVERS = {
   mart:    ["#e9f1e5", "#4f8f42", s('<path d="M3 5h2.2l2.3 10.4a2 2 0 0 0 2 1.6h7.6a2 2 0 0 0 2-1.5L21 8H6"/><circle cx="10" cy="20" r="1.3"/><circle cx="17" cy="20" r="1.3"/>')],
   banchan: ["#f5eddd", "#b8842f", s('<rect x="3" y="9" width="8" height="7" rx="1.4"/><rect x="13" y="9" width="8" height="7" rx="1.4"/><path d="M3 6.5h8M13 6.5h8"/>')],
   // 히어로 배경 — 상권 골목 실루엣 (가로로 길게)
-  street:  ["#141a17", "#3f5a4c", s('<path d="M2 20h20M4 20V9l4-3 4 3v11M12 20V6l5-3 5 3v14"/><path d="M6 12h1.6M6 15h1.6M15 9h1.6M15 12h1.6M15 15h1.6M19 9h1M19 12h1"/>', 1.1)],
 };
 
 const card = (bg, fg, svg, wide) => `<!doctype html><meta charset="utf-8"><style>

@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="리스터코퍼레이션">
+  <rect width="64" height="64" rx="15" fill="#0b8a46"/>
+  <path d="M19 19h26M19 19v9h26M45 28v8H19M19 36v9h26" fill="none" stroke="#ffffff"
+        stroke-width="6.5" stroke-linecap="square" stroke-linejoin="miter"/>
+</svg>
