@@ -73,7 +73,7 @@ test("버튼을 누르면 콘텐츠가 채워지고 공개 페이지에 나온�
   const home = await req("GET", T);
   assert.equal(home.status, 200);
   const html = await home.text();
-  assert.match(html, /하남돼지국밥/, "점포가 홈에 노출");
+  assert.match(html, /고을돼지국밥/, "점포가 홈에 노출");
   assert.match(html, /정기총회/, "공지가 홈에 노출");
   assert.match(html, /야시장/, "행사가 홈에 노출");
   assert.match(html, /골목마다 사람이 있고/, "상인회 태그라인 반영");
@@ -86,7 +86,7 @@ test("행사는 항상 미래 날짜라 '다가오는 행사'에 남는다", () 
 });
 
 test("공개 페이지가 모두 200 으로 뜬다", async () => {
-  for (const path of [T, T + "/businesses", T + "/map", T + "/notices", T + "/events", T + "/business/hanam-gukbap"]) {
+  for (const path of [T, T + "/businesses", T + "/map", T + "/notices", T + "/events", T + "/business/goeul-gukbap"]) {
     const r = await req("GET", path);
     assert.equal(r.status, 200, path);
   }

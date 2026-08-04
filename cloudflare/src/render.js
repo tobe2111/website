@@ -126,5 +126,6 @@ export const assetUrl = (path) => `${path}?v=${ASSET_VER}`;
 export function mediaUrl(key) {
   if (!key) return "";
   if (/^https?:\/\//.test(key)) return key;
+  if (key.startsWith("/")) return key; // 워커에 함께 배포된 정적 이미지(/img/...) — R2 경유 없음
   return MEDIA_BASE ? `${MEDIA_BASE}/${key}` : `/media/${key}`;
 }
