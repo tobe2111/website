@@ -63,12 +63,12 @@ test("버튼을 누르면 콘텐츠가 채워지고 공개 페이지에 나온�
     (SELECT COUNT(*) FROM posts WHERE association_id=?) po,
     (SELECT COUNT(*) FROM users WHERE association_id=? AND role='MERCHANT') u`)
     .get(assoc.id, assoc.id, assoc.id, assoc.id, assoc.id, assoc.id);
-  assert.equal(counts.b, 8, "점포 8곳");
-  assert.ok(counts.p >= 20, "메뉴 20개 이상");
+  assert.equal(counts.b, 25, "점포 25곳");
+  assert.ok(counts.p >= 55, "메뉴 55개 이상");
   assert.equal(counts.n, 6, "공지 6건");
   assert.equal(counts.e, 3, "행사 3건");
   assert.equal(counts.po, 4, "게시글 4개");
-  assert.equal(counts.u, 8, "사장님 계정 8개");
+  assert.equal(counts.u, 25, "사장님 계정 25개");
 
   const home = await req("GET", T);
   assert.equal(home.status, 200);
@@ -99,9 +99,9 @@ test("두 번 눌러도 데이터가 중복되지 않는다", async () => {
     (SELECT COUNT(*) FROM businesses WHERE association_id=?) b,
     (SELECT COUNT(*) FROM notices WHERE association_id=?) n,
     (SELECT COUNT(*) FROM users WHERE association_id=? AND role='MERCHANT') u`).get(assoc.id, assoc.id, assoc.id);
-  assert.equal(n.b, 8, "점포가 8곳 그대로");
+  assert.equal(n.b, 25, "점포가 25곳 그대로");
   assert.equal(n.n, 6, "공지가 6건 그대로");
-  assert.equal(n.u, 8, "사장님 계정이 8개 그대로");
+  assert.equal(n.u, 25, "사장님 계정이 25개 그대로");
 });
 
 test("다른 상인회의 데이터는 건드리지 않는다", async () => {

@@ -1,5 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="상인회 플랫폼">
   <rect width="512" height="512" rx="112" fill="#0b8a46"/>
-  <path d="M152 152h208M152 152v72h208M360 224v64H152M152 288v72h208" fill="none" stroke="#ffffff"
-        stroke-width="52" stroke-linecap="square" stroke-linejoin="miter"/>
+  <path d="M118 214l30-84a26 26 0 0 1 24-18h168a26 26 0 0 1 24 18l30 84" fill="none" stroke="#fff"
+        stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M138 214v170a10 10 0 0 0 10 10h216a10 10 0 0 0 10-10V214" fill="none" stroke="#fff"
+        stroke-width="34" stroke-linejoin="round"/>
+  <path d="M212 394V292h88v102" fill="none" stroke="#fff" stroke-width="34" stroke-linejoin="round"/>
 </svg>
