@@ -52,6 +52,14 @@ export function fmtBytes(n) {
   return (n / 1024 / 1024 / 1024).toFixed(2) + " GB";
 }
 
+// 화면에 '주소'로 보여 주는 경로는 사람이 읽을 수 있게 되돌립니다.
+// 한글 slug 테넌트는 base 가 /t/%EB%A6%AC%EC%8A%A4… 처럼 인코딩돼 있어서
+// 그대로 찍으면 사장님 화면의 '공개 주소'가 알아볼 수 없는 문자열이 됩니다.
+// (링크의 href 는 인코딩된 원본을 그대로 써야 하므로 표시용으로만 씁니다.)
+export function prettyPath(p) {
+  try { return decodeURIComponent(String(p ?? "")); } catch { return String(p ?? ""); }
+}
+
 // 저장된 시각은 모두 UTC 입니다(D1 의 datetime('now') 도, 앱이 남기는 ISO 도).
 // 그대로 찍으면 한국 사용자에게 9시간 어긋난 시각이 보이므로 화면에는 KST 로 환산해 보여 줍니다.
 // month=true 면 "08-04 14:30", 아니면 "2026-08-04 14:30".

@@ -63,12 +63,12 @@ test("버튼을 누르면 콘텐츠가 채워지고 공개 페이지에 나온�
     (SELECT COUNT(*) FROM posts WHERE association_id=?) po,
     (SELECT COUNT(*) FROM users WHERE association_id=? AND role='MERCHANT') u`)
     .get(assoc.id, assoc.id, assoc.id, assoc.id, assoc.id, assoc.id);
-  assert.equal(counts.b, 25, "점포 25곳");
+  assert.equal(counts.b, 25, "승인된 점포 25곳");
   assert.ok(counts.p >= 55, "메뉴 55개 이상");
   assert.equal(counts.n, 6, "공지 6건");
   assert.equal(counts.e, 3, "행사 3건");
   assert.equal(counts.po, 4, "게시글 4개");
-  assert.equal(counts.u, 25, "사장님 계정 25개");
+  assert.equal(counts.u, 28, "사장님 계정 28개 (승인 25 + 신청 3)");
 
   const home = await req("GET", T);
   assert.equal(home.status, 200);
@@ -99,9 +99,60 @@ test("두 번 눌러도 데이터가 중복되지 않는다", async () => {
     (SELECT COUNT(*) FROM businesses WHERE association_id=?) b,
     (SELECT COUNT(*) FROM notices WHERE association_id=?) n,
     (SELECT COUNT(*) FROM users WHERE association_id=? AND role='MERCHANT') u`).get(assoc.id, assoc.id, assoc.id);
-  assert.equal(n.b, 25, "점포가 25곳 그대로");
+  assert.equal(n.b, 28, "점포가 28곳 그대로 (승인 25 + 신청 3)");
   assert.equal(n.n, 6, "공지가 6건 그대로");
-  assert.equal(n.u, 25, "사장님 계정이 25개 그대로");
+  assert.equal(n.u, 28, "사장님 계정이 28개 그대로");
+});
+
+test("투표에 실제 표가 들어가 결과 막대가 채워진다", async () => {
+  const r = await req("GET", T + "/polls", { cookie });
+  assert.equal(r.status, 200);
+  const html = await r.text();
+  assert.match(html, /찬성 <b>13표<\/b>/, "진행 중 안건 찬성 13표");
+  assert.match(html, /총 19명 참여/, "진행 중 안건 참여 19명");
+  assert.match(html, /총 22명 참여/, "마감된 안건 참여 22명");
+  assert.doesNotMatch(html, /총 0명 참여/, "0표짜리 빈 안건이 남아 있으면 안 됨");
+});
+
+test("데모 계정은 진행 중인 안건에 아직 투표하지 않았다", () => {
+  const open = db()._db.prepare(`SELECT id FROM polls WHERE association_id=? AND closed=0`).get(assoc.id);
+  const me = db()._db.prepare(`SELECT id FROM users WHERE email='owner1@demo.kr'`).get();
+  const v = db()._db.prepare(`SELECT COUNT(*) n FROM poll_votes WHERE poll_id=? AND user_id=?`).get(open.id, me.id);
+  assert.equal(v.n, 0, "시연 중에 직접 눌러 볼 수 있어야 함");
+});
+
+test("행사 참가·회비·승인 대기가 채워진다", async () => {
+  const n = db()._db.prepare(`SELECT
+    (SELECT COUNT(*) FROM event_rsvps WHERE association_id=?) r,
+    (SELECT COUNT(*) FROM dues WHERE association_id=?) d,
+    (SELECT COUNT(DISTINCT period) FROM dues WHERE association_id=?) dp,
+    (SELECT COUNT(*) FROM businesses WHERE association_id=? AND status='pending') pend,
+    (SELECT COUNT(*) FROM businesses WHERE association_id=? AND status='rejected') rej,
+    (SELECT COUNT(*) FROM audit_log WHERE association_id=?) a`)
+    .get(assoc.id, assoc.id, assoc.id, assoc.id, assoc.id, assoc.id);
+  assert.equal(n.r, 43, "행사 참가 신청 43건");
+  assert.equal(n.d, 68, "회비 납부 기록 68건");
+  assert.equal(n.dp, 3, "회비는 최근 3개월치");
+  assert.equal(n.pend, 2, "승인 대기 2곳");
+  assert.equal(n.rej, 1, "반려 1곳");
+  assert.ok(n.a >= 8, "감사 로그가 남아 있어야 함");
+});
+
+test("승인 대기 점포는 공개 목록에 나오지 않는다", async () => {
+  const r = await req("GET", T + "/businesses");
+  const html = await r.text();
+  assert.doesNotMatch(html, /모둠분식/, "승인 전 점포가 손님 화면에 노출되면 안 됨");
+  assert.doesNotMatch(html, /에스씨마케팅/, "반려된 점포가 노출되면 안 됨");
+});
+
+test("관리자 화면에 승인 대기·회비·참가 현황이 보인다", async () => {
+  const r = await req("GET", T + "/admin", { cookie });
+  assert.equal(r.status, 200);
+  const html = await r.text();
+  assert.match(html, /모둠분식/, "승인 대기 점포");
+  assert.match(html, /참가 15곳/, "행사 참가 인원");
+  assert.match(html, /19\/28 납부/, "회비 장부 현황");
+  assert.doesNotMatch(html, /셀프 등록률<\/span><span class="stat-num">100%/, "계측이 전부 100% 면 지표 구실을 못 함");
 });
 
 // ── 전자서명: 데이터만 밀어 넣은 게 아니라 실제 봉인 절차를 탔는지

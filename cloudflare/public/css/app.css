@@ -361,8 +361,11 @@ a.bc-val:hover{text-decoration:underline}
 .admin-table th,.admin-table td{text-align:left;padding:13px 14px;border-bottom:1px solid var(--line);vertical-align:middle}
 .admin-table th{font-size:.82rem;color:var(--muted);font-weight:700;background:var(--bg-alt)}
 .admin-table small{color:var(--muted)}
-.actions-cell{display:flex;gap:6px;flex-wrap:wrap}
-.actions-cell form{display:inline}
+/* td 에 display:flex 를 주면 그 칸이 표 레이아웃에서 빠져나가 같은 행의 다른 칸과
+   높이·구분선이 어긋납니다(회비 장부·업체 승인 표에서 버튼만 아래로 밀려 보이던 원인).
+   칸은 칸으로 두고 간격은 자식 요소에 줍니다. */
+.actions-cell>form,.actions-cell>a,.actions-cell>button{display:inline-block;vertical-align:middle;margin:2px 0}
+.actions-cell>*+*{margin-left:6px}
 .admin-mini-list{margin-top:16px;display:grid;gap:8px}
 .admin-mini-list li{display:flex;align-items:center;gap:12px;padding:11px 14px;background:var(--bg-alt);border-radius:10px}
 .admin-mini-list .notice-title{white-space:normal}

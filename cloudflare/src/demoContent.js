@@ -306,11 +306,51 @@ const POSTS = [
                [4, "과속방지턱도 같이 알아보면 좋겠습니다."]] },
 ];
 
+// 투표는 결과가 있어야 기능으로 보입니다. yes/no/abstain 은 BIZ 인덱스.
+// 진행 중인 안건에서 0번(데모 계정)은 빼 뒀습니다 — 시연 중에 직접 한 표 넣어 보시라고.
 const POLLS = [
   { t: "야시장 부스 배치 방식", closed: 0, close: 6,
-    b: "여름 골목 야시장 부스 자리를 어떤 방식으로 정할까요? 게시판 의견을 모아 안건으로 올립니다." },
+    b: "여름 골목 야시장 부스 자리를 어떤 방식으로 정할까요? 게시판 의견을 모아 안건으로 올립니다.",
+    yes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], no: [14, 15, 16, 17], abstain: [18, 19] },
   { t: "공동 판촉 예산 500만원 편성", closed: 1, close: -3,
-    b: "하반기 공동 판촉 예산을 500만원으로 편성하는 안건입니다. 총회 전 사전 의견 수렴입니다." },
+    b: "하반기 공동 판촉 예산을 500만원으로 편성하는 안건입니다. 총회 전 사전 의견 수렴입니다.",
+    yes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16], no: [17, 18, 19], abstain: [20, 21] },
+];
+
+// 행사 참가 신청 (BIZ 인덱스). 야시장은 0번을 빼 시연 때 '참가 신청'을 눌러 볼 수 있게 둡니다.
+const RSVPS = [
+  [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 16, 19],
+  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 15, 17, 18, 20, 21, 22, 24],
+  [2, 4, 6, 8, 10, 12, 14, 16],
+];
+
+// 회비 장부 — [몇 달 전, 납부한 회원 수]. 이번 달은 일부러 걷히는 중인 상태로 둡니다.
+const DUES = [[0, 19], [1, 25], [2, 24]];
+
+// 승인 대기·반려 점포. 관리자 화면의 승인 흐름을 시연하려면 대기 건이 있어야 합니다.
+// 공개 목록에는 승인된 점포만 나오므로 손님 화면에는 영향이 없습니다.
+const APPLICANTS = [
+  { slug: "modeum-tteokbokki", name: "모둠분식", cat: "음식점", owner: "허진영", status: "pending", days: 1,
+    desc: "떡볶이와 순대를 합니다. 이번에 상인회에 가입하려고 신청드립니다.",
+    addr: "서울 서초구 효령로 29길 8", tel: "02-9410-2626", hours: "11:00-21:00" },
+  { slug: "seocho-bike", name: "서초자전거", cat: "생활·서비스", owner: "남기훈", status: "pending", days: 3,
+    desc: "자전거 수리와 판매를 합니다. 골목 안쪽이라 상인회 지도에 꼭 실리고 싶습니다.",
+    addr: "서울 서초구 방배로 33", tel: "02-9410-9494", hours: "10:00-19:30 · 일요일 휴무" },
+  { slug: "unknown-shop", name: "(주)에스씨마케팅", cat: "기타", owner: "정보경", status: "rejected", days: 12,
+    desc: "온라인 마케팅 대행업체입니다.",
+    addr: "서울 강남구 테헤란로 152", tel: "02-9410-0001", hours: "09:00-18:00" },
+];
+
+// 감사 로그 — 사무국이 실제로 하는 일들. [며칠 전, 행위, 상세]
+const AUDIT = [
+  [1, "공지등록", "하반기 정기총회 안내"],
+  [2, "업체승인", "초록채소 승인"],
+  [4, "회비체크", "8월분 납부 19건 기록"],
+  [5, "서명문서생성", "여름 골목 야시장 공동 운영 동의서"],
+  [6, "행사등록", "여름 골목 야시장"],
+  [9, "업체반려", "(주)에스씨마케팅 — 상권 내 점포가 아님"],
+  [12, "임시비밀번호", "박순자님 임시 비밀번호 발급"],
+  [16, "브랜딩변경", "대표색·로고 교체"],
 ];
 
 // ───────── 전자서명 문서 ─────────
@@ -387,6 +427,10 @@ export async function seedDemo(env, db, assoc, { emailDomain = "demo.kr" } = {})
   await run(`DELETE FROM media WHERE business_id IN (SELECT id FROM businesses WHERE association_id=?)`, aid);
   await run(`DELETE FROM event_rsvps WHERE event_id IN (SELECT id FROM events WHERE association_id=?)`, aid);
   await run(`DELETE FROM businesses WHERE association_id=?`, aid);
+  await run(`DELETE FROM dues WHERE association_id=?`, aid);
+  // 감사 로그도 이 상인회 것만 비웁니다. 콘텐츠를 통째로 갈아 끼우는 자리라
+  // 지워진 대상에 대한 기록만 남아 있으면 오히려 읽는 사람을 헷갈리게 합니다.
+  await run(`DELETE FROM audit_log WHERE association_id=?`, aid);
   await run(`DELETE FROM users WHERE association_id=? AND role='MERCHANT'`, aid);
 
   // ---- 상인회 소개 정보 ----
@@ -407,10 +451,13 @@ export async function seedDemo(env, db, assoc, { emailDomain = "demo.kr" } = {})
     const uid = await firstId(`SELECT id FROM users WHERE email=?`, email);
     ownerIds.push(uid);
 
+    // source: 사장님이 직접 등록했는지(self) 사무국이 대신 넣었는지(proxy).
+    // 관리자 화면의 '셀프 등록률' 이 재는 값이라 전부 self 로 두면 100% 가 찍혀 계측이 무의미해집니다.
+    // updated_at 도 흩뿌립니다 — 25곳이 모두 최근 갱신이면 '최근 30일 갱신률' 도 늘 100% 입니다.
     await run(`INSERT INTO businesses (association_id, owner_id, name, slug, category, description, phone, address, hours, lat, lng, status, sns_instagram, source, created_at, updated_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?, 'approved', ?, 'self', ?, ?)`,
+      VALUES (?,?,?,?,?,?,?,?,?,?,?, 'approved', ?, ?, ?, ?)`,
       aid, uid, b.name, b.slug || slugify(b.name), b.cat, b.desc, b.tel, b.addr, b.hours,
-      b.lat, b.lng, b.insta || "", at(-60 + i * 3), at(-i));
+      b.lat, b.lng, b.insta || "", i % 3 === 2 ? "proxy" : "self", at(-60 + i * 3), at(-Math.round(i * 2.4)));
     if (i === 4 || i === 17) await run(`UPDATE businesses SET day_off_date=? WHERE association_id=? AND slug=?`, ymd(0), aid, b.slug); // 두 곳은 '오늘 휴무' — 전부 영업중이면 오히려 가짜처럼 보임
     const bid = await firstId(`SELECT id FROM businesses WHERE association_id=? AND slug=?`, aid, b.slug);
     // 대표 이미지 — 워커에 함께 배포된 정적 커버(/img/demo/*.jpg). 외부 호스트 의존 없음.
@@ -434,9 +481,15 @@ export async function seedDemo(env, db, assoc, { emailDomain = "demo.kr" } = {})
   for (const n of NOTICES)
     await run(`INSERT INTO notices (association_id, title, body, tag, pinned, created_at) VALUES (?,?,?,?,?,?)`,
       aid, n.t, n.b, n.tag, n.pin, at(-n.d));
-  for (const e of EVENTS)
+  for (let ei = 0; ei < EVENTS.length; ei++) {
+    const e = EVENTS[ei];
     await run(`INSERT INTO events (association_id, title, event_date, place, description) VALUES (?,?,?,?,?)`,
       aid, e.t, ymd(e.d), e.place, e.desc);
+    const evId = await firstId(`SELECT id FROM events WHERE association_id=? AND title=? ORDER BY id DESC LIMIT 1`, aid, e.t);
+    for (const i of RSVPS[ei] || [])
+      await run(`INSERT INTO event_rsvps (event_id, association_id, user_id, created_at) VALUES (?,?,?,?)`,
+        evId, aid, ownerIds[i], at(-8 + i * 0.2));
+  }
 
   // ---- 게시판 · 투표 ----
   for (const post of POSTS) {
@@ -449,9 +502,15 @@ export async function seedDemo(env, db, assoc, { emailDomain = "demo.kr" } = {})
         pid, ownerIds[who], body, at(-post.d + (j + 1) * 0.2));
     }
   }
-  for (const pl of POLLS)
+  for (const pl of POLLS) {
     await run(`INSERT INTO polls (association_id, title, body, closes_at, closed, created_at) VALUES (?,?,?,?,?,?)`,
       aid, pl.t, pl.b, ymd(pl.close), pl.closed, at(-7));
+    const plId = await firstId(`SELECT id FROM polls WHERE association_id=? AND title=? ORDER BY id DESC LIMIT 1`, aid, pl.t);
+    for (const [choice, list] of [["yes", pl.yes], ["no", pl.no], ["abstain", pl.abstain]])
+      for (const i of list || [])
+        await run(`INSERT INTO poll_votes (poll_id, user_id, choice, created_at) VALUES (?,?,?,?)`,
+          plId, ownerIds[i], choice, at(-6 + i * 0.15));
+  }
 
   // ---- 전자서명 ----
   // 데이터를 직접 밀어 넣지 않고 실제 서명 경로를 그대로 탑니다:
@@ -495,6 +554,37 @@ export async function seedDemo(env, db, assoc, { emailDomain = "demo.kr" } = {})
   for (const [ts, msg, link] of notis.sort((a, b) => (a[0] < b[0] ? 1 : -1)).slice(0, 4))
     await run(`INSERT INTO notifications (association_id, kind, message, link, created_at) VALUES (?,'signed',?,?,?)`,
       aid, msg, link, ts.slice(0, 19).replace("T", " "));
+
+  // ---- 승인 대기·반려 점포 ----
+  for (let i = 0; i < APPLICANTS.length; i++) {
+    const a = APPLICANTS[i];
+    const pw = await hashPassword(DEMO_PASSWORD);
+    const email = `applicant${i + 1}@${emailDomain}`;
+    await run(`INSERT INTO users (association_id, email, password_hash, salt, name, role) VALUES (?,?,?,?,?,'MERCHANT')`,
+      aid, email, pw.hash, pw.salt, a.owner);
+    const uid = await firstId(`SELECT id FROM users WHERE email=?`, email);
+    await run(`INSERT INTO businesses (association_id, owner_id, name, slug, category, description, phone, address, hours, status, source, created_at, updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?, 'self', ?, ?)`,
+      aid, uid, a.name, a.slug, a.cat, a.desc, a.tel, a.addr, a.hours, a.status, at(-a.days), at(-a.days));
+    if (a.status === "pending")
+      await run(`INSERT INTO notifications (association_id, kind, message, link, created_at) VALUES (?,'business',?,?,?)`,
+        aid, `${a.name} — 입점 신청이 들어왔습니다.`, `${tbase}/admin#p-biz`, at(-a.days));
+  }
+
+  // ---- 회비 장부 ----
+  const now = new Date();
+  for (const [back, paid] of DUES) {
+    const d = new Date(now.getFullYear(), now.getMonth() - back, 1);
+    const period = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    for (let i = 0; i < Math.min(paid, ownerIds.length); i++)
+      await run(`INSERT INTO dues (association_id, user_id, period, memo, created_at) VALUES (?,?,?,?,?)`,
+        aid, ownerIds[i], period, "", at(-back * 30 + 4));
+  }
+
+  // ---- 감사 로그 ----
+  for (const [days, action, detail] of AUDIT)
+    await run(`INSERT INTO audit_log (association_id, user_id, actor_name, action, detail, created_at) VALUES (?,?,?,?,?,?)`,
+      aid, adminId, "상인회 사무국", action, detail, at(-days));
 
   return {
     businesses: BIZ.length,
