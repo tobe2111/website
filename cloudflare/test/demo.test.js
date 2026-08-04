@@ -112,3 +112,32 @@ test("다른 상인회의 데이터는 건드리지 않는다", async () => {
   const n = db()._db.prepare(`SELECT COUNT(*) n FROM notices WHERE association_id=?`).get(other.id);
   assert.equal(n.n, 1, "다른 상인회 공지가 그대로 남아야 함");
 });
+
+// ── 영업 상태 판정 (정기휴무 요일 반영)
+import { openNow, closedToday } from "../src/util.js";
+const SUN = Date.parse("2026-08-09T03:00:00Z"); // 일요일 정오 KST
+const MON = Date.parse("2026-08-10T03:00:00Z"); // 월요일 정오 KST
+const SAT = Date.parse("2026-08-08T03:00:00Z"); // 토요일 정오 KST
+
+test("영업시간 줄에 적힌 정기휴무 요일을 반영한다", () => {
+  const h = "09:00-21:30 · 매주 일요일 휴무";
+  assert.equal(openNow(h, SUN), false, "일요일 휴무인데 일요일에 영업중으로 나오면 안 됨");
+  assert.equal(openNow(h, MON), true, "월요일에는 영업중");
+
+  assert.equal(openNow("10:00-20:00 · 월요일 휴무", MON), false);
+  assert.equal(openNow("10:00-20:00 · 주말 휴무", SAT), false, "주말 휴무 — 토요일");
+  assert.equal(openNow("10:00-20:00 · 주말 휴무", SUN), false, "주말 휴무 — 일요일");
+  assert.equal(openNow("10:00-20:00 · 주말 휴무", MON), true);
+  assert.equal(openNow("10:00-20:00 · 토·일 휴무", SAT), false, "요일 나열");
+});
+
+test("'연중무휴'를 휴무로 오해하지 않는다", () => {
+  assert.equal(closedToday("연중무휴 10:00-20:00", SUN), false);
+  assert.equal(openNow("연중무휴 10:00-20:00", SUN), true);
+});
+
+test("휴무 표기가 없으면 종전대로 시간만 본다", () => {
+  assert.equal(openNow("08:00-23:00", SUN), true);
+  assert.equal(openNow("08:00-23:00", MON), true);
+  assert.equal(openNow("", MON), null, "영업시간 미기재는 판단 불가(null)");
+});

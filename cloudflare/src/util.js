@@ -52,10 +52,31 @@ export function fmtBytes(n) {
   return (n / 1024 / 1024 / 1024).toFixed(2) + " GB";
 }
 
+// 영업시간 문자열에 적힌 정기휴무 요일이 오늘인지 (KST 기준).
+// "09:00-21:30 · 매주 일요일 휴무" 처럼 시간과 휴무일이 한 줄에 같이 적히는 경우가 많은데,
+// 시간만 보고 판단하면 일요일에도 '영업중'으로 표시돼 손님에게 잘못된 정보가 나갑니다.
+const WEEK = "일월화수목금토";
+export function closedToday(hours, nowMs = Date.now()) {
+  const s = String(hours || "");
+  if (!/휴무|휴점|정기휴일/.test(s)) return false; // '연중무휴' 는 '무휴' 라 여기 걸리지 않습니다
+  const dow = new Date(nowMs + 9 * 3600 * 1000).getUTCDay();
+  // '휴무' 라는 낱말 바로 앞 구간만 봅니다. 구분자로 자르면 "토·일 휴무" 처럼
+  // 가운뎃점이 요일 구분에도 쓰이는 표기에서 앞 요일을 놓칩니다.
+  for (const m of s.matchAll(/휴무|휴점|정기휴일/g)) {
+    const before = s.slice(Math.max(0, m.index - 12), m.index);
+    if (/주말/.test(before) && (dow === 0 || dow === 6)) return true;
+    if (/평일/.test(before) && dow >= 1 && dow <= 5) return true;
+    for (const d of before.match(/[월화수목금토일](?=요일|[·,/\s])/g) || [])
+      if (WEEK.indexOf(d) === dow) return true;
+  }
+  return false;
+}
+
 // 영업시간 문자열에서 "HH:MM - HH:MM" 을 찾아 현재(KST) 영업 여부 판단. 없으면 null.
 export function openNow(hours, nowMs = Date.now()) {
   const s = String(hours || "");
   if (/휴무|휴점|closed/i.test(s) && !/\d/.test(s)) return false;
+  if (closedToday(s, nowMs)) return false;
   const m = /(\d{1,2}):(\d{2})\s*[-~–—]\s*(\d{1,2}):(\d{2})/.exec(s);
   if (!m) return null;
   const start = (+m[1]) * 60 + (+m[2]);
