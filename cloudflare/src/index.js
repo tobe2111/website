@@ -41,6 +41,7 @@ const GLOBAL = [
   ["GET", "/super", pages.superConsole, "SUPERADMIN"],
   ["POST", "/super/association", api.superCreateAssociation, "SUPERADMIN"],
   ["POST", "/super/association/:id/toggle", api.superToggleAssociation, "SUPERADMIN"],
+  ["POST", "/super/association/:id/demo", api.superSeedDemo, "SUPERADMIN"],
   ["POST", "/super/association/:id/domain", api.superSetDomain, "SUPERADMIN"],
   ["POST", "/super/association/:id/plan", api.superSetPlan, "SUPERADMIN"],
   ["POST", "/super/association/:id/mapkey", api.superSetMapKey, "SUPERADMIN"],
