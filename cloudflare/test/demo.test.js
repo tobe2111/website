@@ -46,6 +46,13 @@ test("슈퍼 콘솔에 '데모 채우기' 버튼이 있다", async () => {
   assert.match(await r.text(), /데모 채우기/);
 });
 
+test("채우기 전에는 '데모 미적용'으로 보인다", async () => {
+  const r = await req("GET", "/super", { cookie });
+  const html = await r.text();
+  assert.match(html, /데모 미적용/, "아직 안 채운 상인회는 그렇게 표시돼야 함");
+  assert.doesNotMatch(html, /데모 적용 \d/, "채운 적 없는데 시각이 뜨면 안 됨");
+});
+
 test("데모 채우기는 슈퍼 관리자만 실행할 수 있다", async () => {
   const r = await req("POST", `/super/association/${assoc.id}/demo`, { body: { _csrf: token } });
   assert.notEqual(r.status, 303, "비로그인 요청이 통과하면 안 됨");
@@ -77,6 +84,13 @@ test("버튼을 누르면 콘텐츠가 채워지고 공개 페이지에 나온�
   assert.match(html, /정기총회/, "공지가 홈에 노출");
   assert.match(html, /야시장/, "행사가 홈에 노출");
   assert.match(html, /골목마다 사람이 있고/, "상인회 태그라인 반영");
+});
+
+test("채우고 나면 슈퍼 콘솔에 적용 시각이 남는다", async () => {
+  const r = await req("GET", "/super", { cookie });
+  const html = await r.text();
+  assert.match(html, /✓ 데모 적용 \d{2}-\d{2} \d{2}:\d{2}/, "언제 채웠는지 보여야 누른 걸 알 수 있음");
+  assert.match(html, /데모 다시 채우기/, "이미 채운 곳은 버튼 문구도 바뀌어야 함");
 });
 
 test("행사는 항상 미래 날짜라 '다가오는 행사'에 남는다", () => {

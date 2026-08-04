@@ -1238,6 +1238,7 @@ export async function superConsole(ctx) {
   const auditLog = await D.listAudit(db, null, 15);
   const pendingApps = await D.listApplications(db, "pending");
   const usage = await D.usageByAssociation(db);
+  const demoSeeded = new Map((await D.demoSeedStamps(db)).map((r) => [r.aid, r.seeded_at]));
   const platformMode = (await D.getSetting(db, "platform_mode")) === "1";
   const siteName = (await D.getSetting(db, "site_name")) || "상인회 플랫폼";
   const operator = (await D.getSetting(db, "operator")) || "";
@@ -1269,7 +1270,10 @@ export async function superConsole(ctx) {
     <td>${a.active ? '<span class="badge badge-ok">활성</span>' : '<span class="badge badge-no">비활성</span>'}</td>
     <td class="actions-cell"><a class="btn btn-xs btn-ghost" href="/t/${esc(a.slug)}/admin">관리</a>
       <form method="post" action="/super/association/${a.id}/toggle"><button class="btn btn-xs btn-ghost">${a.active ? "비활성화" : "활성화"}</button></form>
-      <form method="post" action="/super/association/${a.id}/demo" data-confirm="'${esc(a.name)}' 을(를) 데모용 샘플 사이트로 채웁니다.&#10;&#10;⚠️ 이 상인회의 기존 점포·공지·행사·게시글이 모두 삭제되고 데모 콘텐츠로 대체됩니다. (다른 상인회는 영향 없음)&#10;&#10;계속할까요?"><button class="btn btn-xs btn-ghost" title="영업 소개용 샘플 콘텐츠(점포 8곳·메뉴·공지·행사·게시판)를 한 번에 채웁니다">데모 채우기</button></form></td></tr>`).join("") || `<tr><td colspan="5" class="empty">상인회가 없습니다.</td></tr>`;
+      <span class="demo-cell">${demoSeeded.has(a.id)
+        ? `<small class="demo-stamp" title="마지막으로 데모 콘텐츠를 채운 시각">✓ 데모 적용 ${esc(kstStamp(demoSeeded.get(a.id), { year: false }))}</small>`
+        : `<small class="demo-stamp is-none">데모 미적용</small>`}
+      <form method="post" action="/super/association/${a.id}/demo" data-confirm="'${esc(a.name)}' 을(를) 데모용 샘플 사이트로 채웁니다.&#10;&#10;⚠️ 이 상인회의 기존 점포·공지·행사·게시글이 모두 삭제되고 데모 콘텐츠로 대체됩니다. (다른 상인회는 영향 없음)&#10;&#10;계속할까요?"><button class="btn btn-xs btn-ghost" title="영업 소개용 샘플 콘텐츠(점포 25곳·메뉴·공지·행사·게시판·투표·전자서명)를 한 번에 채웁니다">${demoSeeded.has(a.id) ? "데모 다시 채우기" : "데모 채우기"}</button></form></span></td></tr>`).join("") || `<tr><td colspan="5" class="empty">상인회가 없습니다.</td></tr>`;
   const body = `<section class="dash"><div class="container">
     <div class="dash-head"><div><p class="section-eyebrow">SUPER</p><h1 class="dash-title">플랫폼 관리</h1></div>
       <div class="dash-head-actions"><form method="post" action="/logout"><button class="btn btn-ghost btn-sm">로그아웃</button></form></div></div>${flashOf(query)}
