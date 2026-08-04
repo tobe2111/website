@@ -670,12 +670,12 @@ export async function superCreateAssociation(ctx) {
 // 데모 콘텐츠 채우기 — 영업 소개용 샘플 사이트를 버튼 하나로 만들기 위한 기능.
 // 대상 상인회의 기존 콘텐츠와 사장님 계정을 지우고 데모 세트를 넣습니다(다른 상인회는 무관).
 export async function superSeedDemo(ctx) {
-  const { db, params } = ctx;
+  const { db, env, params } = ctx;
   const a = await D.getAssociationById(db, Number(params.id));
   if (!a) return back("/super", "상인회를 찾을 수 없습니다.", true);
-  const r = await seedDemo(db, a);
-  await audit(ctx, "데모콘텐츠", `${a.name} — 점포 ${r.businesses}곳·공지 ${r.notices}건·행사 ${r.events}건`, a.id);
-  return back("/super", `'${a.name}' 에 데모 콘텐츠를 채웠습니다. 점포 ${r.businesses}곳 · 메뉴 ${r.products}개 · 공지 ${r.notices}건 · 행사 ${r.events}건. 사장님 데모 계정 ${r.ownerEmail} / 비밀번호 ${r.password} (시연 후 반드시 변경하세요)`);
+  const r = await seedDemo(env, db, a);
+  await audit(ctx, "데모콘텐츠", `${a.name} — 점포 ${r.businesses}곳·공지 ${r.notices}건·행사 ${r.events}건·서명문서 ${r.documents}건`, a.id);
+  return back("/super", `'${a.name}' 에 데모 콘텐츠를 채웠습니다. 점포 ${r.businesses}곳 · 메뉴 ${r.products}개 · 공지 ${r.notices}건 · 행사 ${r.events}건 · 전자서명 문서 ${r.documents}건(서명 ${r.signatures}명). 사장님 데모 계정 ${r.ownerEmail} / 비밀번호 ${r.password} (시연 후 반드시 변경하세요)`);
 }
 
 export async function superToggleAssociation(ctx) {

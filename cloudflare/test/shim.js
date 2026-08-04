@@ -55,7 +55,9 @@ export function makeAssets() {
       const fp = path.join(ROOT, "public", url.pathname);
       if (!fp.startsWith(path.join(ROOT, "public")) || !fs.existsSync(fp)) return new Response("Not Found", { status: 404 });
       const ext = path.extname(fp);
-      const type = ext === ".css" ? "text/css" : ext === ".js" ? "text/javascript" : "application/octet-stream";
+      const type = { ".css": "text/css", ".js": "text/javascript", ".svg": "image/svg+xml", ".png": "image/png",
+        ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".json": "application/json",
+        ".webmanifest": "application/manifest+json" }[ext] || "application/octet-stream";
       return new Response(fs.readFileSync(fp), { headers: { "content-type": type } });
     },
   };

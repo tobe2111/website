@@ -1,6 +1,6 @@
 // 공개/인증 페이지 핸들러 (async). ctx = { env, db, assoc, base, user, url, query, csrf, params }
 import * as D from "./db.js";
-import { esc, clip, openBadge, openNow, fmtBytes } from "./util.js";
+import { esc, clip, openBadge, openNow, fmtBytes, kstStamp } from "./util.js";
 import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG, ORIGIN, assetUrl } from "./render.js";
 import { verifyInviteToken } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
 import { html, notFoundResponse, back } from "./http.js";
@@ -607,7 +607,7 @@ export async function postDetail(ctx) {
     return `<button type="button" class="gallery-item" data-src="${esc(full)}" data-kind="image" data-poster="" data-caption="" aria-label="사진"><img src="${esc(th)}" alt="" loading="lazy" /></button>`;
   }).join("");
   const cRows = comments.length ? comments.map((c) => `<li class="comment"><div class="comment-head"><strong>${esc(c.author_name || "(탈퇴)")}</strong>
-      <time>${esc(c.created_at.slice(0, 16).replace("T", " "))}</time>
+      <time>${esc(kstStamp(c.created_at))}</time>
       ${(mod || (user && c.author_id === user.id)) ? `<form method="post" action="${base}/board/${p.id}/comment/${c.id}/delete" data-confirm="댓글 삭제?"><button class="link-danger">삭제</button></form>` : ""}</div>
       <div class="comment-body">${esc(c.body).replace(/\n/g, "<br />")}</div></li>`).join("") : `<li class="empty">첫 댓글을 남겨보세요.</li>`;
   const body = `<section class="section page-top"><div class="container narrow">
@@ -931,7 +931,7 @@ export async function admin(ctx) {
       <td class="actions-cell"><form method="post" action="${base}/admin/product/${p.id}/hide"><button class="btn btn-xs btn-ghost">${p.hidden ? "다시 노출" : "숨기기"}</button></form></td></tr>`).join("")}
     </tbody></table></div></section>` : "";
   const auditPanel = `<section class="panel"><h2 class="panel-title">감사 로그 <span class="badge badge-muted">최근 ${auditLog.length}</span></h2>
-    <ul class="audit-list">${auditLog.length ? auditLog.map((a) => `<li><span class="audit-action">${esc(a.action)}</span> <span class="audit-detail">${esc(a.detail)}</span><span class="audit-meta">${esc(a.actor_name)} · ${esc(a.created_at.slice(5, 16).replace("T", " "))}</span></li>`).join("") : `<li class="empty">기록이 없습니다.</li>`}</ul></section>`;
+    <ul class="audit-list">${auditLog.length ? auditLog.map((a) => `<li><span class="audit-action">${esc(a.action)}</span> <span class="audit-detail">${esc(a.detail)}</span><span class="audit-meta">${esc(a.actor_name)} · ${esc(kstStamp(a.created_at, { year: false }))}</span></li>`).join("") : `<li class="empty">기록이 없습니다.</li>`}</ul></section>`;
 
   const bizRows = all.length ? all.map((b) => `<tr><td><a href="${base}/business/${esc(b.slug)}" target="_blank">${esc(b.name)}</a><br /><small>${esc(b.category)}</small></td>
     <td>${esc(b.owner_name)}<br /><small>${esc(b.owner_email)}</small></td><td>${statusBadge(b.status)}</td>
@@ -964,7 +964,7 @@ export async function admin(ctx) {
       <form method="get" action="${base}/admin" class="inline-form"><input type="month" name="due_period" value="${esc(duePeriod)}" data-autosubmit /><button class="btn btn-xs btn-ghost">이동</button></form></div>
     <p class="panel-hint">납부 <b>기록</b>만 남기는 장부입니다(결제 아님). 월을 바꿔 지난 달 현황도 볼 수 있습니다.</p>
     <div class="table-scroll"><table class="admin-table"><thead><tr><th>회원</th><th>${esc(duePeriod)}</th><th>처리</th></tr></thead><tbody>${dueRows}</tbody></table></div></section>`;
-  const notifRows = notifs.length ? notifs.map((n) => `<li class="${n.is_read ? "" : "unread"}"><span class="notif-dot"></span><a href="${esc(n.link || base + "/admin")}" class="notif-msg">${esc(n.message)}</a><time>${esc(n.created_at.slice(5, 16).replace("T", " "))}</time></li>`).join("") : `<li class="empty">알림이 없습니다.</li>`;
+  const notifRows = notifs.length ? notifs.map((n) => `<li class="${n.is_read ? "" : "unread"}"><span class="notif-dot"></span><a href="${esc(n.link || base + "/admin")}" class="notif-msg">${esc(n.message)}</a><time>${esc(kstStamp(n.created_at, { year: false }))}</time></li>`).join("") : `<li class="empty">알림이 없습니다.</li>`;
   const noticeCats = NOTICE_CATEGORIES.map((c) => `<option value="${esc(c)}"${c === "안내" ? " selected" : ""}>${esc(c)}</option>`).join("");
 
   const body = `<section class="dash"><div class="container">
@@ -1154,7 +1154,7 @@ export async function adminDocuments(ctx) {
   const today = new Date().toISOString().slice(0, 10);
   const docs = await D.listDocuments(db, assoc.id);
   const rows = docs.length ? docs.map((d) => `<tr><td><a href="${base}/admin/documents/${d.id}">${esc(d.title)}</a>
-    ${d.ordered ? '<span class="badge badge-info">순차</span>' : ""}${d.due_date ? `<span class="badge ${d.due_date < today ? "badge-no" : "badge-wait"}">기한 ${esc(d.due_date)}</span>` : ""}<br /><small>${esc(d.created_at.slice(0, 16).replace("T", " "))}</small></td>
+    ${d.ordered ? '<span class="badge badge-info">순차</span>' : ""}${d.due_date ? `<span class="badge ${d.due_date < today ? "badge-no" : "badge-wait"}">기한 ${esc(d.due_date)}</span>` : ""}<br /><small>${esc(kstStamp(d.created_at))}</small></td>
     <td>${d.sign_count}명</td><td>${d.closed ? '<span class="badge badge-no">마감</span>' : '<span class="badge badge-ok">진행중</span>'}</td>
     <td class="actions-cell"><a class="btn btn-xs btn-ghost" href="${base}/admin/documents/${d.id}">보기</a>${d.closed ? "" : `<form method="post" action="${base}/admin/documents/${d.id}/close" data-confirm="마감할까요?"><button class="btn btn-xs btn-ghost">마감</button></form>`}</td></tr>`).join("") : `<tr><td colspan="4" class="empty">문서가 없습니다.</td></tr>`;
   const members = await D.listUsersByAssociation(db, assoc.id, "MERCHANT");
@@ -1186,7 +1186,7 @@ export async function adminDocumentDetail(ctx) {
   const rows = sigs.length ? sigs.map((sig, i) => { const v = verds[i]; const badge = v.valid ? '<span class="badge badge-ok">유효</span>' : '<span class="badge badge-no">위변조 의심</span>';
     return `<tr><td>${esc(sig.signer_name)}<br /><small>${esc(sig.signer_email)}</small></td>
       <td>${sig.signature_image ? `<img src="${esc(mediaUrl(sig.signature_image))}" alt="서명" class="sig-thumb" />` : "-"}</td>
-      <td><small>${esc(sig.signed_at.slice(0, 16).replace("T", " "))}<br />IP ${esc(sig.ip)}</small></td>
+      <td><small>${esc(kstStamp(sig.signed_at))} <span class="tz">KST</span><br />IP ${esc(sig.ip)}</small></td>
       <td>${badge}<br /><a href="/verify/${esc(sig.verify_code)}" target="_blank"><small>검증 ${esc(sig.verify_code.slice(0, 8))}…</small></a></td></tr>`; }).join("") : `<tr><td colspan="4" class="empty">아직 서명이 없습니다.</td></tr>`;
   const rc = await D.requestCounts(db, d.id);
   const reqStatus = await D.listRequestStatus(db, d.id);
@@ -1222,7 +1222,7 @@ export async function verifyPage(ctx) {
     const badge = v.valid ? '<span class="badge badge-ok">유효한 서명</span>' : '<span class="badge badge-no">위변조 의심</span>';
     inner = `<div class="verify-result">${badge}
       <table class="verify-table"><tr><th>문서</th><td>${esc(doc ? doc.title : "(삭제됨)")}</td></tr>
-      <tr><th>서명자</th><td>${esc(sig.signer_name)}</td></tr><tr><th>서명 시각</th><td>${esc(sig.signed_at)}</td></tr>
+      <tr><th>서명자</th><td>${esc(sig.signer_name)}</td></tr><tr><th>서명 시각</th><td>${esc(kstStamp(sig.signed_at))} <span class="tz">KST</span></td></tr>
       <tr><th>봉인(Ed25519)</th><td>${v.sealOk ? "무결 ✅" : "손상 ❌"}</td></tr><tr><th>문서 본문</th><td>${v.contentOk ? "원본 일치 ✅" : "변경됨 ❌"}</td></tr>
       <tr><th>알고리즘</th><td>${esc(algorithm)}</td></tr></table></div>`;
   }
@@ -1334,7 +1334,7 @@ export async function superConsole(ctx) {
       <thead><tr><th>상인회</th><th>개별 도메인</th><th>플랜</th><th>상태</th><th>관리</th></tr></thead><tbody>${rows}</tbody></table></div></section>
     ${usagePanel}
     <section class="panel"><h2 class="panel-title">감사 로그 (플랫폼)</h2>
-      <ul class="audit-list">${auditLog.length ? auditLog.map((a) => `<li><span class="audit-action">${esc(a.action)}</span> <span class="audit-detail">${esc(a.detail)}</span><span class="audit-meta">${esc(a.actor_name)} · ${esc(a.created_at.slice(5, 16).replace("T", " "))}</span></li>`).join("") : `<li class="empty">기록이 없습니다.</li>`}</ul></section></div></section>`;
+      <ul class="audit-list">${auditLog.length ? auditLog.map((a) => `<li><span class="audit-action">${esc(a.action)}</span> <span class="audit-detail">${esc(a.detail)}</span><span class="audit-meta">${esc(a.actor_name)} · ${esc(kstStamp(a.created_at, { year: false }))}</span></li>`).join("") : `<li class="empty">기록이 없습니다.</li>`}</ul></section></div></section>`;
   return html(layout({ title: "슈퍼 관리자", user, body, csrf }));
 }
 
