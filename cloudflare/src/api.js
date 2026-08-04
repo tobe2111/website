@@ -977,6 +977,77 @@ export async function rejectApplication(ctx) {
   return back("/super", "신청을 반려했습니다.");
 }
 
+// ---------- 슈퍼: 영업 파이프라인 ----------
+export const SALES_STAGES = { new: "신규", contacted: "연락함", meeting: "미팅", proposal: "제안" };
+
+// 직접 발굴한 상인회를 파이프라인에 올립니다(공개 신청 폼을 거치지 않은 건).
+export async function superAddProspect(ctx) {
+  const { db, form } = ctx;
+  const assocName = cap((form.get("assoc_name") || "").trim(), 100);
+  if (!assocName) return back("/super", "상인회 이름을 입력해 주세요.", true);
+  const email = cap((form.get("contact_email") || "").toLowerCase().trim(), 120);
+  if (email && !EMAIL_RE.test(email)) return back("/super", "이메일 형식이 올바르지 않습니다.", true);
+  await D.createProspect(db, {
+    assocName, contactEmail: email,
+    contactName: cap(form.get("contact_name"), 60),
+    contactPhone: cap(form.get("contact_phone"), 40),
+    message: cap(form.get("message"), 2000),
+  });
+  await audit(ctx, "영업등록", assocName, null);
+  return back("/super", `'${assocName}' 을(를) 영업 목록에 추가했습니다.`);
+}
+
+export async function superSetApplicationStage(ctx) {
+  const { db, form, params } = ctx;
+  const app = await D.getApplication(db, Number(params.id));
+  if (!app) return back("/super", "대상을 찾을 수 없습니다.", true);
+  const stage = form.get("stage");
+  if (!Object.keys(SALES_STAGES).includes(stage)) return back("/super", "잘못된 단계입니다.", true);
+  const next = (form.get("next_action_at") || "").trim();
+  if (next && !/^\d{4}-\d{2}-\d{2}$/.test(next)) return back("/super", "다음 연락일 형식이 올바르지 않습니다.", true);
+  await D.setApplicationStage(db, app.id, stage, next);
+  await audit(ctx, "영업단계", `${app.assoc_name} → ${SALES_STAGES[stage]}${next ? ` (다음 ${next})` : ""}`, null);
+  return back("/super", `'${app.assoc_name}' 단계를 '${SALES_STAGES[stage]}' 로 바꿨습니다.`);
+}
+
+export async function superAddApplicationNote(ctx) {
+  const { db, user, form, params } = ctx;
+  const app = await D.getApplication(db, Number(params.id));
+  if (!app) return back("/super", "대상을 찾을 수 없습니다.", true);
+  const body = cap((form.get("body") || "").trim(), 1000);
+  if (!body) return back("/super", "메모 내용을 입력해 주세요.", true);
+  await D.addApplicationNote(db, { applicationId: app.id, actorName: user.name || user.email, body });
+  return back("/super", `'${app.assoc_name}' 에 기록을 남겼습니다.`);
+}
+
+// ---------- 슈퍼: 상인회 관리자 비밀번호 재발급 ----------
+// "로그인이 안 된다" 는 문의가 오면 운영자가 바로 처리할 수 있어야 합니다.
+// 상인회 관리자(ADMIN)는 자기 상인회 화면에서도 자기 비밀번호를 재발급할 수 없어 여기서만 가능합니다.
+export async function superResetAdminPassword(ctx) {
+  const { db, params } = ctx;
+  const target = await D.getUserById(db, Number(params.id));
+  if (!target || target.role !== "ADMIN") return back("/super", "대상 관리자를 찾을 수 없습니다.", true);
+  const temp = Math.random().toString(36).slice(2, 10);
+  const { hash, salt } = await hashPassword(temp);
+  await D.updateUserPassword(db, target.id, hash, salt);
+  await audit(ctx, "관리자비번재발급", target.email, null);
+  return back("/super", `${target.email} 임시 비밀번호: ${temp} — 전달 후 변경 안내하세요.`);
+}
+
+// ---------- 슈퍼: 상인회 삭제 ----------
+// 되돌릴 수 없으므로 slug 를 정확히 입력해야만 진행됩니다.
+export async function superDeleteAssociation(ctx) {
+  const { db, form, params } = ctx;
+  const a = await D.getAssociationById(db, Number(params.id));
+  if (!a) return back("/super", "상인회를 찾을 수 없습니다.", true);
+  if ((form.get("confirm_slug") || "").trim() !== a.slug)
+    return back("/super", `삭제하려면 주소(${a.slug})를 정확히 입력해야 합니다.`, true);
+  const n = await D.countMembers(db, a.id);
+  await D.deleteAssociationDeep(db, a.id);
+  await audit(ctx, "상인회삭제", `${a.name} (/t/${a.slug}) — 회원 ${n}명 포함 전체 삭제`, null);
+  return back("/super", `'${a.name}' 을(를) 삭제했습니다. 점포·회원·게시물이 모두 함께 지워졌습니다.`);
+}
+
 // ---------- 슈퍼: 상인회 플랜 변경 ----------
 // 상인회별 네이버 지도 키 (비우면 플랫폼 공용) — 도메인 10개 초과 확장용
 export async function superSetMapKey(ctx) {

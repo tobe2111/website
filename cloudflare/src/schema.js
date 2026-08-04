@@ -37,9 +37,22 @@ CREATE TABLE IF NOT EXISTS applications (
   contact_phone TEXT NOT NULL DEFAULT '',
   message       TEXT NOT NULL DEFAULT '',
   status        TEXT NOT NULL DEFAULT 'pending',  -- pending|approved|rejected
+  stage         TEXT NOT NULL DEFAULT 'new',      -- 영업 단계: new|contacted|meeting|proposal (status=pending 동안만 의미)
+  source        TEXT NOT NULL DEFAULT 'apply',    -- apply=공개 신청 폼 / direct=운영자가 직접 발굴
+  next_action_at TEXT NOT NULL DEFAULT '',        -- 다음 연락 예정일 (YYYY-MM-DD)
   created_at    TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_app_status ON applications(status, created_at);
+
+-- 영업 기록 (연락·미팅 메모). 신청 건마다 시간순으로 쌓입니다.
+CREATE TABLE IF NOT EXISTS application_notes (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  application_id INTEGER NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
+  actor_name     TEXT NOT NULL DEFAULT '',
+  body           TEXT NOT NULL,
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_appnote_app ON application_notes(application_id, created_at);
 
 CREATE TABLE IF NOT EXISTS users (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -307,7 +320,7 @@ CREATE TABLE IF NOT EXISTS settings (
 
 // 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
 // 마이그레이션 세대 — migrateColumns 에 단계를 추가할 때마다 +1
-const SCHEMA_VERSION = "15";
+const SCHEMA_VERSION = "16";
 
 export async function ensureSchema(db) {
   const has = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='associations'").first();
@@ -412,7 +425,23 @@ async function migrateColumns(db) {
   // applications 표가 없으면 생성 (기존 배포 업그레이드)
   const appTbl = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='applications'").first();
   if (!appTbl) {
-    await db.prepare("CREATE TABLE applications (id INTEGER PRIMARY KEY AUTOINCREMENT, assoc_name TEXT NOT NULL, contact_name TEXT NOT NULL DEFAULT '', contact_email TEXT NOT NULL, contact_phone TEXT NOT NULL DEFAULT '', message TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'pending', created_at TEXT NOT NULL DEFAULT (datetime('now')))").run();
+    await db.prepare("CREATE TABLE applications (id INTEGER PRIMARY KEY AUTOINCREMENT, assoc_name TEXT NOT NULL, contact_name TEXT NOT NULL DEFAULT '', contact_email TEXT NOT NULL, contact_phone TEXT NOT NULL DEFAULT '', message TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'pending', stage TEXT NOT NULL DEFAULT 'new', source TEXT NOT NULL DEFAULT 'apply', next_action_at TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT (datetime('now')))").run();
     await db.prepare("CREATE INDEX IF NOT EXISTS idx_app_status ON applications(status, created_at)").run();
+  } else {
+    // v16: 영업 파이프라인 (단계·발굴 경로·다음 연락일)
+    const acols = (await db.prepare("PRAGMA table_info(applications)").all()).results || [];
+    if (!acols.some((c) => c.name === "stage"))
+      await db.prepare("ALTER TABLE applications ADD COLUMN stage TEXT NOT NULL DEFAULT 'new'").run();
+    if (!acols.some((c) => c.name === "source"))
+      await db.prepare("ALTER TABLE applications ADD COLUMN source TEXT NOT NULL DEFAULT 'apply'").run();
+    if (!acols.some((c) => c.name === "next_action_at"))
+      await db.prepare("ALTER TABLE applications ADD COLUMN next_action_at TEXT NOT NULL DEFAULT ''").run();
   }
+  // v16: 영업 기록 (연락·미팅 메모)
+  await db.prepare(`CREATE TABLE IF NOT EXISTS application_notes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    application_id INTEGER NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
+    actor_name TEXT NOT NULL DEFAULT '', body TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')))`).run();
+  await db.prepare("CREATE INDEX IF NOT EXISTS idx_appnote_app ON application_notes(application_id, created_at)").run();
 }

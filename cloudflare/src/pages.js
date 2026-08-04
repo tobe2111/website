@@ -2,7 +2,7 @@
 import * as D from "./db.js";
 import { esc, clip, openBadge, openNow, fmtBytes, kstStamp, prettyPath } from "./util.js";
 import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG, ORIGIN, assetUrl } from "./render.js";
-import { verifyInviteToken } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
+import { verifyInviteToken, SALES_STAGES } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
 import { html, notFoundResponse, back } from "./http.js";
 import { galleryItem } from "./media-render.js";
 import { providerLabel } from "./embed.js";
@@ -1239,6 +1239,13 @@ export async function superConsole(ctx) {
   const pendingApps = await D.listApplications(db, "pending");
   const usage = await D.usageByAssociation(db);
   const demoSeeded = new Map((await D.demoSeedStamps(db)).map((r) => [r.aid, r.seeded_at]));
+  const appNotes = await D.listApplicationNotes(db);
+  const lastAct = new Map((await D.lastActivityByAssociation(db)).map((r) => [r.aid, r.last_at]));
+  const adminsBy = new Map();
+  for (const u of await D.listAllAdmins(db)) {
+    if (!adminsBy.has(u.association_id)) adminsBy.set(u.association_id, []);
+    adminsBy.get(u.association_id).push(u);
+  }
   const platformMode = (await D.getSetting(db, "platform_mode")) === "1";
   const siteName = (await D.getSetting(db, "site_name")) || "상인회 플랫폼";
   const operator = (await D.getSetting(db, "operator")) || "";
@@ -1250,15 +1257,51 @@ export async function superConsole(ctx) {
     </tbody></table></div>
     <p class="panel-hint">R2 무료 한도 10GB 기준 사용량입니다. 사진은 업로드 시 자동 축소(WebP)되어 저장됩니다.</p></section>`;
   const planOpts = (cur) => PLAN_KEYS.map((k) => `<option value="${k}"${k === cur ? " selected" : ""}>${esc(PLANS[k].label)}</option>`).join("");
-  const appsPanel = `<section class="panel panel-accent"><h2 class="panel-title">입점 신청 <span class="badge ${pendingApps.length ? "badge-wait" : "badge-muted"}">${pendingApps.length}건 대기</span></h2>
-    ${pendingApps.length ? `<div class="table-scroll"><table class="admin-table"><thead><tr><th>상인회</th><th>연락처</th><th>메모</th><th>처리</th></tr></thead><tbody>
-      ${pendingApps.map((a) => `<tr><td>${esc(a.assoc_name)}<br /><small>${esc(a.created_at.slice(0, 10))}</small></td>
-        <td>${esc(a.contact_name || "-")}<br /><small>${esc(a.contact_email)}${a.contact_phone ? " · " + esc(a.contact_phone) : ""}</small></td>
-        <td><small>${esc(clip(a.message, 80))}</small></td>
-        <td class="actions-cell"><form method="post" action="/super/application/${a.id}/approve" data-confirm="승인하고 상인회·관리자 계정을 발급할까요?"><button class="btn btn-xs btn-primary">승인·발급</button></form>
-          <form method="post" action="/super/application/${a.id}/reject" data-confirm="반려할까요?"><button class="btn btn-xs btn-ghost">반려</button></form></td></tr>`).join("")}
-      </tbody></table></div>` : `<p class="panel-hint">대기 중인 신청이 없습니다. 공개 신청 주소: <a href="/apply" target="_blank">/apply</a></p>`}</section>`;
-  const rows = list.map((a) => `<tr><td><a href="/t/${esc(a.slug)}" target="_blank">${esc(a.name)}</a><br /><small>/t/${esc(a.slug)}</small></td>
+  // 영업 파이프라인 — 신청/발굴 건을 단계별로 굴리고, 연락 기록을 그 자리에 남깁니다.
+  const noteMap = new Map();
+  for (const n of appNotes) { if (!noteMap.has(n.application_id)) noteMap.set(n.application_id, []); noteMap.get(n.application_id).push(n); }
+  const todayStr = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+  const stageCount = (k) => pendingApps.filter((a) => (a.stage || "new") === k).length;
+  const dueSoon = pendingApps.filter((a) => a.next_action_at && a.next_action_at <= todayStr).length;
+  const appCards = pendingApps.map((a) => {
+    const st = SALES_STAGES[a.stage] ? a.stage : "new";
+    const notes = noteMap.get(a.id) || [];
+    const overdue = a.next_action_at && a.next_action_at <= todayStr;
+    return `<article class="lead-card${overdue ? " is-due" : ""}">
+      <div class="lead-head">
+        <div><h3>${esc(a.assoc_name)} ${a.source === "direct" ? '<span class="badge badge-info">직접 발굴</span>' : '<span class="badge badge-muted">신청</span>'}</h3>
+          <p class="lead-contact">${esc(a.contact_name || "담당자 미상")}${a.contact_email ? ` · <a href="mailto:${esc(a.contact_email)}">${esc(a.contact_email)}</a>` : ""}${a.contact_phone ? ` · <a href="tel:${esc(a.contact_phone)}">${esc(a.contact_phone)}</a>` : ""}</p>
+          <p class="lead-meta">등록 ${esc(a.created_at.slice(0, 10))}${a.next_action_at ? ` · <b class="${overdue ? "lead-due" : ""}">다음 연락 ${esc(a.next_action_at)}</b>` : ""}</p></div>
+        <span class="stage-badge stage-${st}">${esc(SALES_STAGES[st])}</span></div>
+      ${a.message ? `<p class="lead-msg">${esc(clip(a.message, 220))}</p>` : ""}
+      <form method="post" action="/super/application/${a.id}/stage" class="lead-stage">
+        <select name="stage">${Object.entries(SALES_STAGES).map(([k, v]) => `<option value="${k}"${k === st ? " selected" : ""}>${esc(v)}</option>`).join("")}</select>
+        <input type="date" name="next_action_at" value="${esc(a.next_action_at || "")}" title="다음 연락 예정일" />
+        <button class="btn btn-xs btn-ghost">단계 저장</button></form>
+      <form method="post" action="/super/application/${a.id}/note" class="lead-note">
+        <input type="text" name="body" maxlength="1000" placeholder="연락·미팅 기록 (예: 회장님 통화, 다음 주 화요일 방문 약속)" required />
+        <button class="btn btn-xs btn-ghost">기록</button></form>
+      ${notes.length ? `<ul class="lead-log">${notes.slice(0, 5).map((n) => `<li><span>${esc(n.body)}</span><time>${esc(kstStamp(n.created_at, { year: false }))} · ${esc(n.actor_name)}</time></li>`).join("")}${notes.length > 5 ? `<li class="lead-more">외 ${notes.length - 5}건</li>` : ""}</ul>` : ""}
+      <div class="lead-actions">
+        <form method="post" action="/super/application/${a.id}/approve" data-confirm="'${esc(a.assoc_name)}' 을(를) 승인하고 상인회·관리자 계정을 발급할까요?"><button class="btn btn-xs btn-primary">승인·발급</button></form>
+        <form method="post" action="/super/application/${a.id}/reject" data-confirm="반려할까요? 목록에서 사라집니다."><button class="btn btn-xs btn-ghost">반려</button></form></div>
+    </article>`;
+  }).join("");
+  const appsPanel = `<section class="panel panel-accent"><div class="panel-head"><h2 class="panel-title">영업 파이프라인 <span class="badge ${pendingApps.length ? "badge-wait" : "badge-muted"}">${pendingApps.length}건 진행</span>${dueSoon ? ` <span class="badge badge-no">연락할 때 ${dueSoon}건</span>` : ""}</h2></div>
+    <p class="panel-hint">공개 신청(<a href="/apply" target="_blank">/apply</a>)으로 들어온 건과 직접 발굴한 상인회를 함께 관리합니다. 승인하면 홈과 관리자 계정이 바로 발급됩니다.</p>
+    ${pendingApps.length ? `<div class="stage-strip">${Object.entries(SALES_STAGES).map(([k, v]) => `<span class="stage-chip stage-${k}">${esc(v)} <b>${stageCount(k)}</b></span>`).join("")}</div>
+    <div class="lead-grid">${appCards}</div>` : `<p class="panel-hint">진행 중인 건이 없습니다.</p>`}
+    <details class="lead-add"><summary class="btn btn-ghost btn-sm">＋ 직접 발굴한 상인회 추가</summary>
+      <form method="post" action="/super/prospect" class="stack-form compact">
+        <div class="form-two"><label>상인회 이름<input type="text" name="assoc_name" required maxlength="100" placeholder="예: 방배동 먹자골목 상인회" /></label>
+          <label>담당자<input type="text" name="contact_name" maxlength="60" placeholder="예: 김회장" /></label></div>
+        <div class="form-two"><label>이메일 (선택)<input type="email" name="contact_email" /></label>
+          <label>연락처 (선택)<input type="text" name="contact_phone" maxlength="40" /></label></div>
+        <label>메모<textarea name="message" rows="2" maxlength="2000" placeholder="어디서 알게 됐는지, 규모, 관심사 등"></textarea></label>
+        <button class="btn btn-primary btn-sm">영업 목록에 추가</button></form></details></section>`;
+  const rows = list.map((a) => `<tr><td><a href="/t/${esc(a.slug)}" target="_blank">${esc(a.name)}</a><br /><small>/t/${esc(a.slug)}</small>
+      <ul class="admin-mini">${(adminsBy.get(a.id) || []).map((u) => `<li><span title="${esc(u.name)}">${esc(u.email)}</span>
+        <form method="post" action="/super/admin/${u.id}/reset-password" data-confirm="${esc(u.email)} 의 임시 비밀번호를 발급할까요?&#10;기존 비밀번호는 즉시 무효가 됩니다."><button class="btn btn-xs btn-ghost" title="로그인이 안 될 때 임시 비밀번호를 발급합니다">임시 비번</button></form></li>`).join("") || `<li class="admin-none">관리자 계정 없음</li>`}</ul></td>
     <td><form method="post" action="/super/association/${a.id}/domain" class="domain-form">
       <input type="text" name="domain" value="${esc(a.custom_domain || "")}" placeholder="예: seocho-market.kr" />
       <button class="btn btn-xs btn-ghost">저장</button></form>
@@ -1267,13 +1310,21 @@ export async function superConsole(ctx) {
       <input type="text" name="map_client_id" value="${esc(a.map_client_id || "")}" placeholder="지도 키(선택·공용이면 비움)" />
       <button class="btn btn-xs btn-ghost">저장</button></form></td>
     <td><form method="post" action="/super/association/${a.id}/plan" class="plan-form"><select name="plan">${planOpts(a.plan || "free")}</select><button class="btn btn-xs btn-ghost">변경</button></form></td>
-    <td>${a.active ? '<span class="badge badge-ok">활성</span>' : '<span class="badge badge-no">비활성</span>'}</td>
+    <td>${a.active ? '<span class="badge badge-ok">활성</span>' : '<span class="badge badge-no">비활성</span>'}
+      ${(() => { const t = lastAct.get(a.id); if (!t) return `<small class="act-stamp is-cold">활동 없음</small>`;
+        const days = Math.floor((Date.now() - Date.parse(t.includes("T") ? t : t.replace(" ", "T") + "Z")) / 86400000);
+        return `<small class="act-stamp${days >= 30 ? " is-cold" : ""}" title="점포·공지·행사·게시글·서명을 통틀어 마지막으로 움직인 시각">${days <= 0 ? "오늘 활동" : `${days}일 전 활동`}</small>`; })()}</td>
     <td class="actions-cell"><a class="btn btn-xs btn-ghost" href="/t/${esc(a.slug)}/admin">관리</a>
       <form method="post" action="/super/association/${a.id}/toggle"><button class="btn btn-xs btn-ghost">${a.active ? "비활성화" : "활성화"}</button></form>
       <span class="demo-cell">${demoSeeded.has(a.id)
         ? `<small class="demo-stamp" title="마지막으로 데모 콘텐츠를 채운 시각">✓ 데모 적용 ${esc(kstStamp(demoSeeded.get(a.id), { year: false }))}</small>`
         : `<small class="demo-stamp is-none">데모 미적용</small>`}
-      <form method="post" action="/super/association/${a.id}/demo" data-confirm="'${esc(a.name)}' 을(를) 데모용 샘플 사이트로 채웁니다.&#10;&#10;⚠️ 이 상인회의 기존 점포·공지·행사·게시글이 모두 삭제되고 데모 콘텐츠로 대체됩니다. (다른 상인회는 영향 없음)&#10;&#10;계속할까요?"><button class="btn btn-xs btn-ghost" title="영업 소개용 샘플 콘텐츠(점포 25곳·메뉴·공지·행사·게시판·투표·전자서명)를 한 번에 채웁니다">${demoSeeded.has(a.id) ? "데모 다시 채우기" : "데모 채우기"}</button></form></span></td></tr>`).join("") || `<tr><td colspan="5" class="empty">상인회가 없습니다.</td></tr>`;
+      <form method="post" action="/super/association/${a.id}/demo" data-confirm="'${esc(a.name)}' 을(를) 데모용 샘플 사이트로 채웁니다.&#10;&#10;⚠️ 이 상인회의 기존 점포·공지·행사·게시글이 모두 삭제되고 데모 콘텐츠로 대체됩니다. (다른 상인회는 영향 없음)&#10;&#10;계속할까요?"><button class="btn btn-xs btn-ghost" title="영업 소개용 샘플 콘텐츠(점포 25곳·메뉴·공지·행사·게시판·투표·전자서명)를 한 번에 채웁니다">${demoSeeded.has(a.id) ? "데모 다시 채우기" : "데모 채우기"}</button></form></span>
+      <details class="danger-del"><summary class="btn btn-xs btn-ghost">삭제</summary>
+        <form method="post" action="/super/association/${a.id}/delete" data-confirm="정말 '${esc(a.name)}' 을(를) 삭제할까요?&#10;&#10;⚠️ 점포·회원 계정·공지·게시글·서명 기록이 모두 사라지며 되돌릴 수 없습니다.">
+          <p class="del-warn">되돌릴 수 없습니다. 확인용으로 주소 <code>${esc(a.slug)}</code> 를 입력하세요.</p>
+          <input type="text" name="confirm_slug" placeholder="${esc(a.slug)}" required autocomplete="off" />
+          <button class="btn btn-xs btn-danger">영구 삭제</button></form></details></td></tr>`).join("") || `<tr><td colspan="5" class="empty">상인회가 없습니다.</td></tr>`;
   const body = `<section class="dash"><div class="container">
     <div class="dash-head"><div><p class="section-eyebrow">SUPER</p><h1 class="dash-title">플랫폼 관리</h1></div>
       <div class="dash-head-actions"><form method="post" action="/logout"><button class="btn btn-ghost btn-sm">로그아웃</button></form></div></div>${flashOf(query)}

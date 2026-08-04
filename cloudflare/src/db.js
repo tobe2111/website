@@ -40,6 +40,20 @@ export const listApplications = (db, status = null) => status
   : all(db, "SELECT * FROM applications ORDER BY created_at DESC");
 export const countPendingApplications = async (db) => (await first(db, "SELECT COUNT(*) AS n FROM applications WHERE status='pending'")).n;
 export const setApplicationStatus = (db, id, status) => run(db, "UPDATE applications SET status=? WHERE id=?", status, id);
+// 영업 파이프라인 — 단계·다음 연락일·메모
+export const setApplicationStage = (db, id, stage, nextActionAt) =>
+  run(db, "UPDATE applications SET stage=?, next_action_at=? WHERE id=?", stage, nextActionAt || "", id);
+export async function createProspect(db, { assocName, contactName, contactEmail, contactPhone, message }) {
+  await run(db, `INSERT INTO applications (assoc_name, contact_name, contact_email, contact_phone, message, source)
+    VALUES (?,?,?,?,?, 'direct')`, assocName, contactName || "", contactEmail || "", contactPhone || "", message || "");
+  return first(db, "SELECT * FROM applications WHERE id=?", await lastId(db));
+}
+export const addApplicationNote = (db, { applicationId, actorName, body }) =>
+  run(db, "INSERT INTO application_notes (application_id, actor_name, body) VALUES (?,?,?)", applicationId, actorName || "", body);
+// 대기 중인 건들의 메모를 한 번에 (건별 조회로 N+1 내지 않도록)
+export const listApplicationNotes = (db) =>
+  all(db, `SELECT n.* FROM application_notes n JOIN applications a ON a.id=n.application_id
+    WHERE a.status='pending' ORDER BY n.created_at DESC, n.id DESC`);
 export const saveHomeLayout = (db, id, json) => run(db, "UPDATE associations SET home_layout=? WHERE id=?", json, id);
 
 // ----- Settings (자동 생성 키·설정 저장) -----
@@ -482,6 +496,38 @@ export function demoSeedStamps(db) {
   return all(db, `SELECT association_id AS aid, MAX(created_at) AS seeded_at
     FROM audit_log WHERE action='데모콘텐츠' AND association_id IS NOT NULL GROUP BY association_id`);
 }
+// 상인회별 마지막 활동 시각. 죽어가는 고객을 눈으로 찾으려면 누적 수치가 아니라
+// '언제 마지막으로 뭔가 했는지'가 필요합니다. 점포 갱신·공지·행사·게시글·가게소식·서명을 모두 봅니다.
+export function lastActivityByAssociation(db) {
+  return all(db, `SELECT a.id AS aid, MAX(x.ts) AS last_at FROM associations a LEFT JOIN (
+      SELECT association_id, MAX(COALESCE(updated_at, created_at)) AS ts FROM businesses GROUP BY association_id
+      UNION ALL SELECT association_id, MAX(created_at) FROM notices GROUP BY association_id
+      UNION ALL SELECT association_id, MAX(created_at) FROM events GROUP BY association_id
+      UNION ALL SELECT association_id, MAX(created_at) FROM posts GROUP BY association_id
+      UNION ALL SELECT association_id, MAX(created_at) FROM updates GROUP BY association_id
+      UNION ALL SELECT association_id, MAX(created_at) FROM documents GROUP BY association_id
+    ) x ON x.association_id = a.id GROUP BY a.id`);
+}
+
+// 모든 상인회 관리자(ADMIN) 계정 — 슈퍼 콘솔에서 연락처 확인·비밀번호 재발급용
+export const listAllAdmins = (db) =>
+  all(db, "SELECT id, association_id, name, email FROM users WHERE role='ADMIN' ORDER BY association_id, id");
+
+// 상인회 완전 삭제. 외래키 CASCADE 에 기대지 않고 자식 표부터 순서대로 지웁니다
+// (D1 의 FK 강제 설정에 따라 조용히 고아 행이 남는 사고를 막기 위함).
+export async function deleteAssociationDeep(db, aid) {
+  const viaPosts = ["comments", "post_images"];
+  for (const t of viaPosts) await run(db, `DELETE FROM ${t} WHERE post_id IN (SELECT id FROM posts WHERE association_id=?)`, aid);
+  await run(db, "DELETE FROM poll_votes WHERE poll_id IN (SELECT id FROM polls WHERE association_id=?)", aid);
+  for (const t of ["signatures", "signature_requests"])
+    await run(db, `DELETE FROM ${t} WHERE document_id IN (SELECT id FROM documents WHERE association_id=?)`, aid);
+  await run(db, "DELETE FROM media WHERE business_id IN (SELECT id FROM businesses WHERE association_id=?)", aid);
+  for (const t of ["documents", "posts", "polls", "event_rsvps", "notices", "events", "products",
+                   "coupons", "updates", "notifications", "dues", "audit_log", "businesses", "users"])
+    await run(db, `DELETE FROM ${t} WHERE association_id=?`, aid);
+  await run(db, "DELETE FROM associations WHERE id=?", aid);
+}
+
 // 상인회별 사용량 (회원·미디어·저장용량)
 export function usageByAssociation(db) {
   return all(db, `SELECT a.id, a.name, a.slug, a.plan,

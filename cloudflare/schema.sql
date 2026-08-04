@@ -35,9 +35,22 @@ CREATE TABLE IF NOT EXISTS applications (
   contact_phone TEXT NOT NULL DEFAULT '',
   message       TEXT NOT NULL DEFAULT '',
   status        TEXT NOT NULL DEFAULT 'pending',  -- pending|approved|rejected
+  stage         TEXT NOT NULL DEFAULT 'new',      -- 영업 단계: new|contacted|meeting|proposal (status=pending 동안만 의미)
+  source        TEXT NOT NULL DEFAULT 'apply',    -- apply=공개 신청 폼 / direct=운영자가 직접 발굴
+  next_action_at TEXT NOT NULL DEFAULT '',        -- 다음 연락 예정일 (YYYY-MM-DD)
   created_at    TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_app_status ON applications(status, created_at);
+
+-- 영업 기록 (연락·미팅 메모). 신청 건마다 시간순으로 쌓입니다.
+CREATE TABLE IF NOT EXISTS application_notes (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  application_id INTEGER NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
+  actor_name     TEXT NOT NULL DEFAULT '',
+  body           TEXT NOT NULL,
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_appnote_app ON application_notes(application_id, created_at);
 
 CREATE TABLE IF NOT EXISTS users (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
