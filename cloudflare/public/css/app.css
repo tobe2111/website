@@ -370,6 +370,54 @@ a.bc-val:hover{text-decoration:underline}
 .demo-cell{display:inline-block;vertical-align:middle;text-align:center}
 .demo-stamp{display:block;margin-bottom:3px;font-size:.74rem;color:var(--green-700);white-space:nowrap}
 .demo-stamp.is-none{color:var(--muted)}
+
+/* 상인회 목록 — 관리자 계정 / 마지막 활동 / 삭제 */
+.admin-mini{margin:6px 0 0;padding:0;list-style:none;display:grid;gap:4px}
+.admin-mini li{display:flex;align-items:center;gap:6px;font-size:.8rem;color:var(--muted)}
+.admin-mini span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px}
+.admin-none{opacity:.7}
+.act-stamp{display:block;margin-top:4px;font-size:.76rem;color:var(--muted);white-space:nowrap}
+.act-stamp.is-cold{color:#b4530f}
+.btn-danger{background:#b4231d;border-color:#b4231d;color:#fff}
+.btn-danger:hover{background:#94100b;border-color:#94100b}
+.danger-del{display:inline-block;margin-left:6px;vertical-align:middle}
+.danger-del>summary{list-style:none;cursor:pointer}
+.danger-del>summary::-webkit-details-marker{display:none}
+.danger-del[open]>summary{color:#b4231d}
+.danger-del form{margin-top:6px;padding:10px;border:1px solid #e6c4c2;border-radius:var(--r-md);background:#fdf6f5;width:230px}
+.danger-del input{width:100%;margin-bottom:6px}
+.del-warn{margin:0 0 6px;font-size:.78rem;line-height:1.45;color:#8a2b26}
+.del-warn code{background:#fff;padding:1px 4px;border-radius:4px}
+
+/* 영업 파이프라인 */
+.stage-strip{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 14px}
+.stage-chip{padding:5px 11px;border-radius:999px;background:var(--bg-alt);border:1px solid var(--line);font-size:.82rem;color:var(--muted)}
+.stage-chip b{color:var(--ink)}
+/* align-items:start — 카드 높이를 줄에 맞춰 늘리면 짧은 카드 아래가 텅 비어 보입니다 */
+.lead-grid{display:grid;gap:14px;align-items:start;grid-template-columns:repeat(auto-fill,minmax(340px,1fr))}
+.lead-card{border:1px solid var(--line);border-radius:var(--r-lg);padding:16px;background:var(--bg)}
+.lead-card.is-due{border-color:#e0b48a;background:#fffaf3}
+.lead-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.lead-head h3{margin:0 0 4px;font-size:1.02rem}
+.lead-contact,.lead-meta{margin:0;font-size:.82rem;color:var(--muted);line-height:1.55}
+.lead-due{color:#b4530f}
+.lead-msg{margin:10px 0 0;font-size:.88rem;line-height:1.6;color:var(--ink-soft,var(--muted))}
+.stage-badge{flex:none;padding:4px 10px;border-radius:999px;font-size:.78rem;font-weight:700;background:var(--bg-alt);color:var(--muted)}
+.stage-badge.stage-contacted{background:#e8f0fb;color:#2b5f9e}
+.stage-badge.stage-meeting{background:#fdf1dc;color:#8a5a12}
+.stage-badge.stage-proposal{background:#e7f3ea;color:var(--green-700)}
+.lead-stage,.lead-note{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+.lead-stage select,.lead-stage input,.lead-note input{padding:6px 9px;font-size:.84rem;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--bg)}
+.lead-note input{flex:1;min-width:150px}
+.lead-log{margin:10px 0 0;padding:10px 0 0;border-top:1px dashed var(--line);list-style:none;display:grid;gap:7px}
+.lead-log li{font-size:.83rem;line-height:1.5}
+.lead-log time{display:block;font-size:.75rem;color:var(--muted)}
+.lead-more{color:var(--muted);font-size:.78rem}
+.lead-actions{display:flex;gap:6px;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+.lead-add{margin-top:16px}
+.lead-add>summary{list-style:none;display:inline-block}
+.lead-add>summary::-webkit-details-marker{display:none}
+.lead-add form{margin-top:12px}
 .admin-mini-list{margin-top:16px;display:grid;gap:8px}
 .admin-mini-list li{display:flex;align-items:center;gap:12px;padding:11px 14px;background:var(--bg-alt);border-radius:10px}
 .admin-mini-list .notice-title{white-space:normal}
