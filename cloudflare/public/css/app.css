@@ -366,6 +366,10 @@ a.bc-val:hover{text-decoration:underline}
    칸은 칸으로 두고 간격은 자식 요소에 줍니다. */
 .actions-cell>form,.actions-cell>a,.actions-cell>button{display:inline-block;vertical-align:middle;margin:2px 0}
 .actions-cell>*+*{margin-left:6px}
+/* '데모 채우기' 는 눌렀는지 알 수 있어야 해서 마지막 적용 시각을 버튼 바로 위에 붙입니다 */
+.demo-cell{display:inline-block;vertical-align:middle;text-align:center}
+.demo-stamp{display:block;margin-bottom:3px;font-size:.74rem;color:var(--green-700);white-space:nowrap}
+.demo-stamp.is-none{color:var(--muted)}
 .admin-mini-list{margin-top:16px;display:grid;gap:8px}
 .admin-mini-list li{display:flex;align-items:center;gap:12px;padding:11px 14px;background:var(--bg-alt);border-radius:10px}
 .admin-mini-list .notice-title{white-space:normal}

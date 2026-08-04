@@ -475,6 +475,13 @@ export async function platformStats(db) {
     storage: (await first(db, "SELECT COALESCE(SUM(size),0) AS n FROM media")).n,
   };
 }
+// 상인회별 '데모 채우기' 마지막 실행 시각.
+// 데모를 채우면 그 상인회의 감사 로그가 비워지고 '데모콘텐츠' 기록이 한 건 남으므로,
+// 별도 저장 없이 그 기록만 보면 됩니다. 목록 전체를 한 번에 가져와 N+1 을 피합니다.
+export function demoSeedStamps(db) {
+  return all(db, `SELECT association_id AS aid, MAX(created_at) AS seeded_at
+    FROM audit_log WHERE action='데모콘텐츠' AND association_id IS NOT NULL GROUP BY association_id`);
+}
 // 상인회별 사용량 (회원·미디어·저장용량)
 export function usageByAssociation(db) {
   return all(db, `SELECT a.id, a.name, a.slug, a.plan,
