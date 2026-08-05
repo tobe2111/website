@@ -11,6 +11,7 @@ import { contentHash, sealRecord, newVerifyCode } from "./esign.js";
 import { turnstileVerify } from "./turnstile.js";
 import { planOf } from "./plans.js";
 import { seedDemo } from "./demoContent.js";
+import { seedStarter } from "./starterContent.js";
 
 const BOARD_MAX_IMAGES = 6;
 const MAX_EMBEDS = 30;
@@ -163,7 +164,14 @@ export async function addVideoEmbed(ctx) {
   const maxEmbeds = planOf(assoc).maxEmbeds;
   if ((await D.countEmbeds(db, b.id)) >= maxEmbeds) return back(base + "/dashboard", `영상 링크는 최대 ${maxEmbeds}개까지 가능합니다.`, true);
   const parsed = parseEmbed(form.get("url") || "");
-  if (!parsed) return back(base + "/dashboard", "지원하는 영상 링크가 아닙니다. (유튜브·쇼츠·인스타 릴스·네이버TV)", true);
+  // naver.me·bit.ly 같은 단축 주소는 서버에서 원본을 알 수 없어 그대로는 못 씁니다.
+  // 왜 안 되는지 알려 주지 않으면 사장님이 같은 주소를 계속 붙여넣게 됩니다.
+  if (!parsed) {
+    const short = /(?:naver\.me|bit\.ly|han\.gl|vo\.la|url\.kr|me2\.do)\//i.test(form.get("url") || "");
+    return back(base + "/dashboard", short
+      ? "단축 주소는 사용할 수 없습니다. 영상을 열어 주소창에 뜨는 원래 주소(tv.naver.com/v/… 또는 youtu.be/…)를 붙여넣어 주세요."
+      : "지원하는 영상 링크가 아닙니다. (유튜브·쇼츠·인스타 릴스·네이버TV)", true);
+  }
   await D.addMedia(db, { businessId: b.id, kind: "embed", provider: parsed.provider, embedId: parsed.id, caption: cap((form.get("caption") || "").trim(), 200) });
   return back(base + "/dashboard", "영상 링크를 추가했습니다.");
 }
@@ -664,8 +672,10 @@ export async function superCreateAssociation(ctx) {
   const assoc = await D.createAssociation(db, { slug, name, brandColor: color, tagline: cap(form.get("tagline"), 200) || undefined });
   const { hash, salt } = await hashPassword(adminPassword);
   await D.createUser(db, { email: adminEmail, passwordHash: hash, salt, name: cap(form.get("admin_name"), 60) || "관리자", role: "ADMIN", associationId: assoc.id });
+  // 빈 화면으로 넘기지 않도록 시작 세트를 함께 넣습니다(공지·가입 동의서).
+  const st = await seedStarter(ctx.env, db, assoc, { createdBy: null });
   await audit(ctx, "상인회생성", `${name} (/t/${assoc.slug})`, null);
-  return back("/super", `'${name}' 상인회가 생성되었습니다. (주소: /t/${assoc.slug}, 관리자: ${adminEmail})`);
+  return back("/super", `'${name}' 상인회가 생성되었습니다. (주소: /t/${assoc.slug}, 관리자: ${adminEmail}) 시작 공지 ${st.notices}건과 가입 동의서를 함께 넣었습니다.`);
 }
 // 데모 콘텐츠 채우기 — 영업 소개용 샘플 사이트를 버튼 하나로 만들기 위한 기능.
 // 대상 상인회의 기존 콘텐츠와 사장님 계정을 지우고 데모 세트를 넣습니다(다른 상인회는 무관).
@@ -955,6 +965,7 @@ export async function approveApplication(ctx) {
   const { hash, salt } = await hashPassword(temp);
   await D.createUser(db, { email: app.contact_email, passwordHash: hash, salt, name: app.assoc_name + " 관리자", role: "ADMIN", associationId: assoc.id });
   await D.setApplicationStatus(db, app.id, "approved");
+  await seedStarter(ctx.env, db, assoc, { createdBy: null }); // 개설 즉시 쓸 수 있게 첫 공지·가입 동의서 포함
   await audit(ctx, "입점승인", `${app.assoc_name} (${app.contact_email})`, null);
   // 이메일 설정 시: 신청자에게 접속 안내 자동 발송
   if (emailEnabled(ctx.env)) {
@@ -1032,6 +1043,20 @@ export async function superResetAdminPassword(ctx) {
   await D.updateUserPassword(db, target.id, hash, salt);
   await audit(ctx, "관리자비번재발급", target.email, null);
   return back("/super", `${target.email} 임시 비밀번호: ${temp} — 전달 후 변경 안내하세요.`);
+}
+
+// ---------- 슈퍼: 실전용 시작 세트 ----------
+// 빈 사이트로 고객사에 넘기지 않기 위한 것. 비어 있는 항목만 채우므로 여러 번 눌러도 안전합니다.
+export async function superSeedStarter(ctx) {
+  const { db, user, params } = ctx;
+  const a = await D.getAssociationById(db, Number(params.id));
+  if (!a) return back("/super", "상인회를 찾을 수 없습니다.", true);
+  const r = await seedStarter(ctx.env, db, a, { createdBy: user.id });
+  if (!r.notices && !r.documents)
+    return back("/super", `'${a.name}' 은(는) 이미 ${r.skipped.join("·")}이(가) 있어 넣을 것이 없었습니다.`);
+  await audit(ctx, "시작세트", `${a.name} — 공지 ${r.notices}건·서명문서 ${r.documents}건`, a.id);
+  const skip = r.skipped.length ? ` (${r.skipped.join("·")}은(는) 이미 있어 건너뜀)` : "";
+  return back("/super", `'${a.name}' 에 시작 세트를 넣었습니다. 공지 ${r.notices}건 · 전자서명 문서 ${r.documents}건${skip}`);
 }
 
 // ---------- 슈퍼: 상인회 삭제 ----------

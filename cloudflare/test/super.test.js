@@ -178,3 +178,115 @@ test("오래 잠든 상인회는 눈에 띄게 표시된다", async () => {
   const html = await (await req("GET", "/super", { cookie })).text();
   assert.match(html, /class="act-stamp is-cold"/, "30일 넘게 조용하면 강조돼야 함");
 });
+
+// ── 실전용 시작 세트 (빈 곳만 채움 · 가짜 점포/회원 없음)
+test("새 상인회를 만들면 시작 세트가 함께 들어간다", async () => {
+  const r = await req("POST", "/super/association", { cookie, body: { _csrf: token,
+    name: "새길 상인회", admin_email: "new@saegil.kr", admin_password: "saegil12345", admin_name: "사무국" } });
+  assert.equal(r.status, 303);
+  const a = await D.getAssociationBySlug(db(), "새길-상인회");
+  assert.ok(a, "상인회가 생성돼야 함");
+  const n = db()._db.prepare(`SELECT
+    (SELECT COUNT(*) FROM notices WHERE association_id=?) n,
+    (SELECT COUNT(*) FROM documents WHERE association_id=?) d,
+    (SELECT COUNT(*) FROM businesses WHERE association_id=?) b,
+    (SELECT COUNT(*) FROM users WHERE association_id=? AND role='MERCHANT') m`).get(a.id, a.id, a.id, a.id);
+  assert.equal(n.n, 3, "첫 공지 3건");
+  assert.equal(n.d, 1, "가입 동의서 1건");
+  assert.equal(n.b, 0, "가짜 점포를 만들면 안 됨");
+  assert.equal(n.m, 0, "가짜 회원을 만들면 안 됨");
+});
+
+test("시작 세트 공지에 상인회 이름이 실제로 들어간다", async () => {
+  const a = await D.getAssociationBySlug(db(), "새길-상인회");
+  const row = db()._db.prepare(`SELECT title, body FROM notices WHERE association_id=? AND pinned=1`).get(a.id);
+  assert.match(row.title, /새길 상인회/, "자리표시자가 아니라 실제 이름");
+  const doc = db()._db.prepare(`SELECT body FROM documents WHERE association_id=?`).get(a.id);
+  assert.match(doc.body, /새길 상인회에 가입을 신청하며/);
+  assert.doesNotMatch(doc.body + row.body, /\{\{|OOO|○○○/, "자리표시자가 남으면 안 됨");
+});
+
+test("시작 세트는 이미 있는 내용을 덮어쓰지 않는다", async () => {
+  const a = await D.getAssociationBySlug(db(), "새길-상인회");
+  await db().prepare(`UPDATE notices SET title='상인회가 직접 고친 공지' WHERE association_id=? AND pinned=1`).bind(a.id).run();
+  const r = await req("POST", `/super/association/${a.id}/starter`, { cookie, body: { _csrf: token } });
+  assert.equal(r.status, 303);
+  const n = db()._db.prepare(`SELECT COUNT(*) n FROM notices WHERE association_id=?`).get(a.id);
+  assert.equal(n.n, 3, "다시 눌러도 늘어나지 않아야 함");
+  assert.ok(db()._db.prepare(`SELECT 1 x FROM notices WHERE association_id=? AND title='상인회가 직접 고친 공지'`).get(a.id),
+    "고쳐 쓴 공지가 살아 있어야 함");
+});
+
+test("신청을 승인해도 시작 세트가 함께 들어간다", async () => {
+  const app = await D.createProspect(db(), { assocName: "시작세트 상인회", contactEmail: "start@demo.kr" });
+  const r = await req("POST", `/super/application/${app.id}/approve`, { cookie, body: { _csrf: token } });
+  assert.equal(r.status, 303);
+  const a = await D.getAssociationBySlug(db(), "시작세트-상인회");
+  const n = db()._db.prepare(`SELECT
+    (SELECT COUNT(*) FROM notices WHERE association_id=?) n,
+    (SELECT COUNT(*) FROM documents WHERE association_id=?) d`).get(a.id, a.id);
+  assert.equal(n.n, 3);
+  assert.equal(n.d, 1);
+  assert.equal((await req("GET", "/t/" + encodeURIComponent("시작세트-상인회"))).status, 200, "개설 직후 홈이 비어 있지 않아야 함");
+});
+
+// ── 선택 연동 점검
+test("연동 점검 패널이 켜짐/안 켜짐을 보여 준다", async () => {
+  const html = await (await req("GET", "/super", { cookie })).text();
+  assert.match(html, /선택 연동 점검/);
+  assert.match(html, /방문 통계/);
+  assert.match(html, /MEDIA_PUBLIC_BASE/);
+  assert.match(html, /안 켜짐/, "설정 안 된 항목은 그렇게 표시");
+});
+
+test("연동 값이 있으면 켜짐으로 바뀌고 값 자체는 안 보인다", async () => {
+  const env2 = makeEnv({ CF_ANALYTICS_TOKEN: "abc123", MEDIA_PUBLIC_BASE: "https://pub-x.r2.dev" });
+  const pw = await hashPassword("super1234");
+  await D.createUser(env2.DB, { email: "s2@platform.kr", passwordHash: pw.hash, salt: pw.salt, name: "운영자", role: "SUPERADMIN", associationId: null });
+  const fetch2 = (path, init) => worker.fetch(new Request(BASE + path, init), env2, { waitUntil() {}, passThroughOnException() {} });
+  const g = await fetch2("/login");
+  const seed = (g.headers.getSetCookie?.() || []).find((c) => c.startsWith("sc_csrf_seed="))?.split(";")[0] || "";
+  const tk = (/name="_csrf" value="([^"]+)"/.exec(await g.text()) || [])[1];
+  const lr = await fetch2("/login", { method: "POST", headers: { cookie: seed, origin: BASE, "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ _csrf: tk, email: "s2@platform.kr", password: "super1234" }) });
+  const jar = [seed, ...(lr.headers.getSetCookie?.() || []).map((c) => c.split(";")[0])].join("; ");
+  const html = await (await fetch2("/super", { headers: { cookie: jar } })).text();
+  assert.match(html, /2\/5 켜짐/, "설정한 두 항목이 켜짐으로 세어져야 함");
+  // 값 자체는 패널에 찍지 않습니다. (CF 방문 통계 토큰은 비콘 스크립트에 들어가는 공개 값이라
+  //  페이지 다른 곳에는 정상적으로 나타납니다 — 그래서 패널 구간만 잘라 확인합니다.)
+  const panel = html.slice(html.indexOf("선택 연동 점검")).split("</section>")[0];
+  assert.doesNotMatch(panel, /abc123|pub-x\.r2\.dev/, "값 자체는 패널에 노출되면 안 됨");
+});
+
+// ── 영상 링크: 실제로 들어오는 주소 형태를 받아 주는지 (외부 접속 없이 파서만 검증)
+import { parseEmbed } from "../src/embed.js";
+
+test("사장님이 실제로 복사하는 영상 주소 형태를 모두 받는다", () => {
+  const ok = {
+    "https://m.youtube.com/watch?v=dQw4w9WgXcQ": "youtube",
+    "https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=42s": "youtube",
+    "https://youtu.be/dQw4w9WgXcQ?si=abcdef": "youtube",
+    "https://www.youtube.com/shorts/dQw4w9WgXcQ": "youtube",
+    "https://music.youtube.com/watch?v=dQw4w9WgXcQ": "youtube",
+    "https://tv.naver.com/v/12345678": "navertv",
+    "https://m.tv.naver.com/v/12345678": "navertv",
+    "https://www.instagram.com/reel/CxYz12abc/": "instagram",
+  };
+  for (const [url, provider] of Object.entries(ok)) {
+    const r = parseEmbed(url);
+    assert.ok(r, `받아야 하는 주소: ${url}`);
+    assert.equal(r.provider, provider, url);
+  }
+});
+
+test("단축 주소는 왜 안 되는지 알려 준다", async () => {
+  const a = await D.createAssociation(db(), { slug: "vid", name: "영상테스트" });
+  const pw = await hashPassword("merch1234");
+  const owner = await D.createUser(db(), { email: "vid@demo.kr", passwordHash: pw.hash, salt: pw.salt, name: "사장님", role: "MERCHANT", associationId: a.id });
+  await db().prepare(`INSERT INTO businesses (association_id, owner_id, name, slug, status) VALUES (?,?,?,?,'approved')`).bind(a.id, owner.id, "가게", "shop").run();
+  const l = await login("vid@demo.kr", "merch1234");
+  const r = await req("POST", "/t/vid/dashboard/media/embed", { cookie: l.jar, body: { _csrf: l.tk, url: "https://naver.me/xAbCdEf" } });
+  const msg = new URL(r.headers.get("location"), BASE).searchParams.get("msg") || "";
+  assert.match(msg, /단축 주소/, "그냥 '지원 안 함' 이 아니라 이유를 알려 줘야 함");
+  assert.equal(parseEmbed("https://naver.me/xAbCdEf"), null);
+});

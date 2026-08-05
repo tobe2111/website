@@ -288,16 +288,16 @@ const EVENTS = [
 ];
 
 const POSTS = [
-  { t: "야시장 부스 배치 어떻게 할까요?", pin: 1, d: 1, by: 0,
+  { t: "야시장 부스 배치 어떻게 할까요?", pin: 1, d: 1, by: 0, images: ["yasijang-layout"],
     b: "야시장 부스 자리를 어떻게 나눌지 의견 모읍니다.\n\n작년처럼 추첨으로 할지, 업종별로 묶을지 고민입니다. 먹거리끼리 붙여 놓으면 손님 동선은 좋은데 연기가 몰린다는 이야기가 있었습니다.\n\n편하게 의견 남겨 주세요.",
     comments: [[1, "업종별로 묶되 먹거리는 골목 입구 쪽에 두면 어떨까요. 연기가 빠집니다."],
                [3, "추첨이 제일 말이 없습니다. 작년에도 별 탈 없었고요."],
                [5, "저는 업종별 찬성입니다. 손님이 돌아보기 편해요."]] },
-  { t: "간판 조명 같이 바꾸실 분 계신가요", pin: 0, d: 4, by: 4,
+  { t: "간판 조명 같이 바꾸실 분 계신가요", pin: 0, d: 4, by: 4, images: ["signage-quote"],
     b: "지원사업으로 간판 조명을 바꾸려는데, 여러 집이 같이 하면 시공비를 깎아 준다고 합니다.\n\n세 집 이상이면 견적 다시 받아 보겠습니다. 관심 있으시면 댓글이나 사무실로 알려 주세요.",
     comments: [[6, "저희도 관심 있습니다. 견적 나오면 공유해 주세요."],
                [7, "저희 가게도 넣어 주세요."]] },
-  { t: "주차장 뒤편 무단투기 사진 올립니다", pin: 0, d: 8, by: 2,
+  { t: "주차장 뒤편 무단투기, 어떻게 할까요", pin: 0, d: 8, by: 2,
     b: "아침마다 주차장 뒤에 종량제 봉투가 아닌 쓰레기가 쌓입니다.\n\n우리 상권 사람은 아닌 것 같은데, CCTV 달았으니 좀 나아지길 바랍니다. 혹시 목격하시면 사무실로 알려 주세요.",
     comments: [[3, "저도 새벽에 본 적 있습니다. 옆 골목에서 들고 오더군요."]] },
   { t: "점심시간 배달 오토바이 속도 문제", pin: 0, d: 13, by: 7,
@@ -496,6 +496,10 @@ export async function seedDemo(env, db, assoc, { emailDomain = "demo.kr" } = {})
     await run(`INSERT INTO posts (association_id, author_id, title, body, pinned, created_at) VALUES (?,?,?,?,?,?)`,
       aid, ownerIds[post.by], post.t, post.b, post.pin, at(-post.d));
     const pid = await firstId(`SELECT id FROM posts WHERE association_id=? AND title=? ORDER BY id DESC LIMIT 1`, aid, post.t);
+    // 첨부는 '사진' 이 아니라 실제로 게시판에 올라오는 자료(배치도·견적 비교)입니다.
+    for (const img of post.images || [])
+      await run(`INSERT INTO post_images (post_id, filename, thumb) VALUES (?,?,?)`,
+        pid, `/img/demo/post/${img}.png`, `/img/demo/post/${img}.png`);
     for (let j = 0; j < post.comments.length; j++) {
       const [who, body] = post.comments[j];
       await run(`INSERT INTO comments (post_id, author_id, body, created_at) VALUES (?,?,?,?)`,

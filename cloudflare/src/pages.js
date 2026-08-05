@@ -1,6 +1,6 @@
 // 공개/인증 페이지 핸들러 (async). ctx = { env, db, assoc, base, user, url, query, csrf, params }
 import * as D from "./db.js";
-import { esc, clip, openBadge, openNow, fmtBytes, kstStamp, prettyPath } from "./util.js";
+import { esc, clip, openBadge, openNow, fmtBytes, kstStamp, kstDate, prettyPath } from "./util.js";
 import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG, ORIGIN, assetUrl } from "./render.js";
 import { verifyInviteToken, SALES_STAGES } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
 import { html, notFoundResponse, back } from "./http.js";
@@ -163,7 +163,7 @@ export async function home(ctx) {
     suggestNames: names.map((r) => r.name),
     updatesHtml: recentUpdates.map((u) => `<a class="update-card" href="${base}/business/${esc(u.biz_slug)}">
       ${u.image ? `<span class="uc-img"><img src="${esc(mediaUrl(u.image))}" alt="" loading="lazy" /></span>` : ""}
-      <span class="uc-body"><strong>${esc(u.biz_name)}</strong><p>${esc(u.body)}</p><time>${esc(u.created_at.slice(5, 10).replace("-", "."))}</time></span></a>`).join(""),
+      <span class="uc-body"><strong>${esc(u.biz_name)}</strong><p>${esc(u.body)}</p><time>${esc(kstDate(u.created_at, ".").slice(5))}</time></span></a>`).join(""),
   });
   // 검색엔진 구조화 데이터: 상인회 = 조직 + 사이트 검색액션(사이트링크 검색창)
   const homeUrl = `${ORIGIN}${base}/`;
@@ -277,7 +277,7 @@ export async function businessDetail(ctx) {
   const updateFeed = updates.length ? `<h2 class="biz-section-title">가게 소식</h2>
     <ul class="update-feed">${updates.map((u) => `<li class="update-item">
       ${u.image ? `<img class="update-img" src="${esc(mediaUrl(u.image))}" alt="" loading="lazy" />` : ""}
-      <div class="update-body"><p>${esc(u.body)}</p><time>${esc(u.created_at.slice(0, 10).replace(/-/g, "."))}</time></div></li>`).join("")}</ul>` : "";
+      <div class="update-body"><p>${esc(u.body)}</p><time>${esc(kstDate(u.created_at, "."))}</time></div></li>`).join("")}</ul>` : "";
   // 이런 가게는 어때요 (같은 업종)
   const recommend = others.length ? `<h2 class="biz-section-title">이런 가게는 어때요</h2>
     <div class="market-grid recommend-grid">${others.map((x) => businessCard(base, x, otherCovers.get(x.id))).join("")}</div>` : "";
@@ -419,7 +419,7 @@ function noticeRows(base, list) {
     ${n.image ? `<img class="notice-ico notice-thumb-img" src="${esc(mediaUrl(n.image))}" alt="" loading="lazy" />` : `<span class="notice-ico${n.pinned ? " is-pinned" : ""}${/모집|참여|이벤트/.test(n.tag) ? " is-recruit" : ""}">${noticeIco(n)}</span>`}
     <span class="notice-main">
       <span class="notice-title">${n.pinned ? '<em class="pin-mini">고정</em>' : ""}${esc(n.title)}</span>
-      <span class="notice-meta">${esc(n.tag)} · ${esc(n.created_at.slice(0, 10).replace(/-/g, "."))}</span>
+      <span class="notice-meta">${esc(n.tag)} · ${esc(kstDate(n.created_at, "."))}</span>
     </span>
     <span class="notice-chev">${CHEV_SVG}</span></a></li>`).join("")
     : `<li class="empty">등록된 공지가 없습니다.</li>`;
@@ -465,7 +465,7 @@ export async function noticeDetail(ctx) {
   if (!n || n.association_id !== assoc.id) return notFoundResponse(ctx);
   const body = `<section class="section page-top"><div class="container narrow">
     <a href="${base}/notices" class="back-link">← 공지 목록</a>
-    <div class="article-head"><span class="notice-tag${n.pinned ? " tag-important" : ""}">${esc(n.tag)}</span><time>${esc(n.created_at.slice(0, 10).replace(/-/g, "."))}</time></div>
+    <div class="article-head"><span class="notice-tag${n.pinned ? " tag-important" : ""}">${esc(n.tag)}</span><time>${esc(kstDate(n.created_at, "."))}</time></div>
     <h1 class="article-title">${esc(n.title)}</h1>
     ${n.image ? `<img class="article-image" src="${esc(mediaUrl(n.image))}" alt="${esc(n.title)}" />` : ""}
     <div class="article-body">${esc(n.body).replace(/\n/g, "<br />")}</div>
@@ -579,7 +579,7 @@ export async function board(ctx) {
     return `<li class="board-row${p.pinned ? " pinned" : ""}">${p.pinned ? `<span class="board-pin">📌</span>` : ""}
       ${thumb ? `<a href="${base}/board/${p.id}" class="board-thumb"><img src="${esc(mediaUrl(thumb))}" alt="" loading="lazy" /></a>` : ""}
       <a href="${base}/board/${p.id}" class="board-title">${esc(p.title)}${cnt ? ` <span class="board-clip">📎${cnt > 1 ? cnt : ""}</span>` : ""}</a>
-      <span class="board-meta">${esc(p.author_name || "(탈퇴)")} · ${esc(p.created_at.slice(0, 10).replace(/-/g, "."))}${p.comment_count ? ` · 💬 ${p.comment_count}` : ""}</span></li>`;
+      <span class="board-meta">${esc(p.author_name || "(탈퇴)")} · ${esc(kstDate(p.created_at, "."))}${p.comment_count ? ` · 💬 ${p.comment_count}` : ""}</span></li>`;
   }).join("") : `<li class="empty">${q ? "검색 결과가 없습니다." : "아직 게시글이 없습니다."}</li>`;
   const body = `<section class="section page-top"><div class="container">
     <div class="section-head"><p class="section-eyebrow">BOARD</p><h2 class="section-title">회원 게시판</h2><p class="section-lead">글 ${total}</p></div>
@@ -612,7 +612,7 @@ export async function postDetail(ctx) {
       <div class="comment-body">${esc(c.body).replace(/\n/g, "<br />")}</div></li>`).join("") : `<li class="empty">첫 댓글을 남겨보세요.</li>`;
   const body = `<section class="section page-top"><div class="container narrow">
     <a href="${base}/board" class="back-link">← 게시판</a>
-    <div class="article-head">${p.pinned ? `<span class="notice-tag tag-important">고정</span>` : ""}<time>${esc(p.created_at.slice(0, 16).replace("T", " "))}</time></div>
+    <div class="article-head">${p.pinned ? `<span class="notice-tag tag-important">고정</span>` : ""}<time>${esc(kstStamp(p.created_at))}</time></div>
     <h1 class="article-title">${esc(p.title)}</h1>
     <p class="post-author">작성자: ${esc(p.author_name || "(탈퇴)")}${p.updated_at ? ` · <span class="post-edited">수정됨</span>` : ""}</p>
     <div class="article-body">${esc(p.body).replace(/\n/g, "<br />")}</div>
@@ -782,7 +782,7 @@ export async function dashboard(ctx) {
         <button class="btn btn-primary btn-sm">소식 올리기</button></form>
       ${updates.length ? `<ul class="update-feed compact">${updates.map((u) => `<li class="update-item">
         ${u.image ? `<img class="update-img" src="${esc(mediaUrl(u.image))}" alt="" loading="lazy" />` : ""}
-        <div class="update-body"><p>${esc(u.body)}</p><time>${esc(u.created_at.slice(0, 10).replace(/-/g, "."))}</time></div>
+        <div class="update-body"><p>${esc(u.body)}</p><time>${esc(kstDate(u.created_at, "."))}</time></div>
         <form method="post" action="${base}/dashboard/updates/${u.id}/delete" data-confirm="이 소식을 삭제할까요?"><button class="link-danger">삭제</button></form></li>`).join("")}</ul>` : ""}</section>
     <section class="panel" id="d-coupons"><h2 class="panel-title">쿠폰·혜택 <span class="badge badge-muted">${coupons.length}/5</span></h2>
       <p class="panel-hint">손님이 매장에서 <strong>이 화면을 보여주면</strong> 제공하는 혜택입니다. 결제·발급 기능이 없어 부담 없이 운영할 수 있어요. 기한이 지나면 자동으로 내려갑니다.</p>
@@ -870,7 +870,7 @@ export async function dashboard(ctx) {
           <input type="text" name="caption" placeholder="설명 (선택)" class="caption-input" />
           <button class="btn btn-primary btn-block">업로드</button></form>
         <h3 class="panel-subtitle">🎬 영상 링크 추가</h3>
-        <p class="panel-hint">유튜브·쇼츠·인스타 릴스·네이버TV 주소를 붙여넣으세요.</p>
+        <p class="panel-hint">유튜브·쇼츠·인스타 릴스·네이버TV 주소를 붙여넣으세요. <small>단축 주소(naver.me/…)는 안 됩니다 — 영상을 열어 주소창의 원래 주소를 복사해 주세요.</small></p>
         <form method="post" action="${base}/dashboard/media/embed" class="stack-form compact">
           <input type="url" name="url" placeholder="영상 주소(링크)" required /><input type="text" name="caption" placeholder="설명 (선택)" maxlength="200" />
           <button class="btn btn-primary btn-sm">영상 링크 추가</button></form>
@@ -1112,7 +1112,7 @@ export async function signList(ctx) {
   const all = await D.listDocuments(db, assoc.id);
   const signedFlags = await Promise.all(all.map((d) => D.hasSigned(db, d.id, user.id)));
   const todoRows = todo.length ? todo.map((d) => `<li><a href="${base}/sign/${d.id}"><span class="notice-tag tag-important">서명 필요</span>
-    <span class="notice-title">${esc(d.title)}${d.ordered ? ' <span class="badge badge-info">순차</span>' : ""}${d.due_date ? ` <span class="badge badge-wait">~${esc(d.due_date)}</span>` : ""}</span><time>${esc(d.created_at.slice(0, 10).replace(/-/g, "."))}</time></a></li>`).join("") : `<li class="empty">서명할 문서가 없습니다.</li>`;
+    <span class="notice-title">${esc(d.title)}${d.ordered ? ' <span class="badge badge-info">순차</span>' : ""}${d.due_date ? ` <span class="badge badge-wait">~${esc(d.due_date)}</span>` : ""}</span><time>${esc(kstDate(d.created_at, "."))}</time></a></li>`).join("") : `<li class="empty">서명할 문서가 없습니다.</li>`;
   const doneRows = all.filter((_, i) => signedFlags[i]).map((d) => `<li><span class="notice-tag badge-ok">서명 완료</span><span class="notice-title">${esc(d.title)}</span></li>`).join("") || `<li class="empty">서명 내역이 없습니다.</li>`;
   const body = `<section class="section page-top"><div class="container narrow">
     <a href="${base}/dashboard" class="back-link">← 내 업체</a>
@@ -1232,7 +1232,7 @@ export async function verifyPage(ctx) {
 
 // ================= 슈퍼관리자 =================
 export async function superConsole(ctx) {
-  const { db, user, query, csrf } = ctx;
+  const { db, env, user, query, csrf } = ctx;
   const ps = await D.platformStats(db);
   const list = await D.listAllAssociations(db);
   const auditLog = await D.listAudit(db, null, 15);
@@ -1251,6 +1251,20 @@ export async function superConsole(ctx) {
   const operator = (await D.getSetting(db, "operator")) || "";
   const contactEmail = (await D.getSetting(db, "contact_email")) || "";
   const contactPhone = (await D.getSetting(db, "contact_phone")) || "";
+  // 선택 연동 점검 — 무엇이 아직 안 켜졌는지 한눈에. 값 자체는 보여 주지 않습니다(시크릿).
+  const wired = [
+    ["사진 직접 서빙", !!env.MEDIA_PUBLIC_BASE, "MEDIA_PUBLIC_BASE", "R2 버킷에 공개 도메인을 켜고 그 주소를 워커 변수에 넣으면 사진이 워커를 거치지 않고 CDN 직행합니다."],
+    ["방문 통계", !!env.CF_ANALYTICS_TOKEN, "CF_ANALYTICS_TOKEN", "Cloudflare Web Analytics 에서 사이트를 추가하고 발급된 토큰을 넣으면 모든 페이지에 자동 삽입됩니다."],
+    ["이메일 자동 발송", !!(env.RESEND_API_KEY && env.MAIL_FROM), "RESEND_API_KEY · MAIL_FROM", "비밀번호 재설정·입점 승인 안내가 자동 발송됩니다. 없으면 화면 안내로 대체됩니다."],
+    ["네이버 지도", !!env.NAVER_MAP_CLIENT_ID, "NAVER_MAP_CLIENT_ID", "지도가 안 뜨면 Maps 콘솔의 Web 서비스 URL 에 이 사이트 도메인이 등록됐는지 확인하세요."],
+    ["봇 차단(캡차)", !!(env.TURNSTILE_SITE_KEY && env.TURNSTILE_SECRET), "TURNSTILE_SITE_KEY · TURNSTILE_SECRET", "가입·문의 폼에 Cloudflare Turnstile 이 붙습니다. 없어도 폼은 정상 동작합니다."],
+  ];
+  const wiredPanel = `<section class="panel"><h2 class="panel-title">선택 연동 점검 <span class="badge ${wired.every((w) => w[1]) ? "badge-ok" : "badge-muted"}">${wired.filter((w) => w[1]).length}/${wired.length} 켜짐</span></h2>
+    <p class="panel-hint">모두 선택 사항입니다. 꺼져 있어도 사이트는 정상 동작하며, 값은 <b>Workers &amp; Pages → 이 워커 → Settings → Variables</b> 에서 넣습니다.</p>
+    <ul class="wire-list">${wired.map(([label, on, keys, help]) => `<li class="${on ? "is-on" : ""}">
+      <span class="wire-dot" aria-hidden="true"></span>
+      <div><b>${esc(label)}</b> <span class="badge ${on ? "badge-ok" : "badge-muted"}">${on ? "켜짐" : "안 켜짐"}</span>
+        <p>${esc(help)}</p><code>${esc(keys)}</code></div></li>`).join("")}</ul></section>`;
   const usagePanel = `<section class="panel"><h2 class="panel-title">상인회별 사용량 <span class="badge badge-muted">R2 총 ${fmtBytes(ps.storage)}</span></h2>
     <div class="table-scroll"><table class="admin-table"><thead><tr><th>상인회</th><th>회원</th><th>미디어</th><th>저장용량</th><th>플랜</th></tr></thead><tbody>
       ${usage.length ? usage.map((u) => `<tr><td>${esc(u.name)}</td><td>${u.members}명</td><td>${u.media_count}개</td><td>${fmtBytes(u.storage)}</td><td>${esc((PLANS[u.plan] || PLANS.free).label)}</td></tr>`).join("") : `<tr><td colspan="5" class="empty">데이터 없음</td></tr>`}
@@ -1271,7 +1285,7 @@ export async function superConsole(ctx) {
       <div class="lead-head">
         <div><h3>${esc(a.assoc_name)} ${a.source === "direct" ? '<span class="badge badge-info">직접 발굴</span>' : '<span class="badge badge-muted">신청</span>'}</h3>
           <p class="lead-contact">${esc(a.contact_name || "담당자 미상")}${a.contact_email ? ` · <a href="mailto:${esc(a.contact_email)}">${esc(a.contact_email)}</a>` : ""}${a.contact_phone ? ` · <a href="tel:${esc(a.contact_phone)}">${esc(a.contact_phone)}</a>` : ""}</p>
-          <p class="lead-meta">등록 ${esc(a.created_at.slice(0, 10))}${a.next_action_at ? ` · <b class="${overdue ? "lead-due" : ""}">다음 연락 ${esc(a.next_action_at)}</b>` : ""}</p></div>
+          <p class="lead-meta">등록 ${esc(kstDate(a.created_at))}${a.next_action_at ? ` · <b class="${overdue ? "lead-due" : ""}">다음 연락 ${esc(a.next_action_at)}</b>` : ""}</p></div>
         <span class="stage-badge stage-${st}">${esc(SALES_STAGES[st])}</span></div>
       ${a.message ? `<p class="lead-msg">${esc(clip(a.message, 220))}</p>` : ""}
       <form method="post" action="/super/application/${a.id}/stage" class="lead-stage">
@@ -1316,6 +1330,7 @@ export async function superConsole(ctx) {
         return `<small class="act-stamp${days >= 30 ? " is-cold" : ""}" title="점포·공지·행사·게시글·서명을 통틀어 마지막으로 움직인 시각">${days <= 0 ? "오늘 활동" : `${days}일 전 활동`}</small>`; })()}</td>
     <td class="actions-cell"><a class="btn btn-xs btn-ghost" href="/t/${esc(a.slug)}/admin">관리</a>
       <form method="post" action="/super/association/${a.id}/toggle"><button class="btn btn-xs btn-ghost">${a.active ? "비활성화" : "활성화"}</button></form>
+      <form method="post" action="/super/association/${a.id}/starter" data-confirm="'${esc(a.name)}' 에 시작 세트를 넣을까요?&#10;&#10;첫 공지 3건과 가입 동의서를 넣습니다. 이미 있는 것은 건드리지 않습니다."><button class="btn btn-xs btn-ghost" title="실전용 — 비어 있는 항목만 채웁니다(가짜 점포·회원 없음)">시작 세트</button></form>
       <span class="demo-cell">${demoSeeded.has(a.id)
         ? `<small class="demo-stamp" title="마지막으로 데모 콘텐츠를 채운 시각">✓ 데모 적용 ${esc(kstStamp(demoSeeded.get(a.id), { year: false }))}</small>`
         : `<small class="demo-stamp is-none">데모 미적용</small>`}
@@ -1388,6 +1403,7 @@ export async function superConsole(ctx) {
       <div class="table-scroll"><table class="admin-table">
       <thead><tr><th>상인회</th><th>개별 도메인</th><th>플랜</th><th>상태</th><th>관리</th></tr></thead><tbody>${rows}</tbody></table></div></section>
     ${usagePanel}
+    ${wiredPanel}
     <section class="panel"><h2 class="panel-title">감사 로그 (플랫폼)</h2>
       <ul class="audit-list">${auditLog.length ? auditLog.map((a) => `<li><span class="audit-action">${esc(a.action)}</span> <span class="audit-detail">${esc(a.detail)}</span><span class="audit-meta">${esc(a.actor_name)} · ${esc(kstStamp(a.created_at, { year: false }))}</span></li>`).join("") : `<li class="empty">기록이 없습니다.</li>`}</ul></section></div></section>`;
   return html(layout({ title: "슈퍼 관리자", user, body, csrf }));

@@ -250,6 +250,11 @@ a.bc-val:hover{text-decoration:underline}
 .gallery-item:hover{transform:translateY(-4px);box-shadow:var(--shadow-lg)}
 .gallery-item img,.gallery-item video{width:100%;aspect-ratio:1/1;object-fit:cover;background:#111;display:block}
 .gallery-item figcaption{background:var(--surface);color:var(--ink-soft);font-size:.86rem;padding:8px 12px;text-align:left}
+/* 게시판 첨부는 사진만 오지 않습니다 — 배치도·견적서 같은 자료가 정사각형으로 잘리면
+   내용을 못 읽습니다. 잘라내지 않고 전체가 보이게 둡니다. */
+.post-gallery{grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}
+.post-gallery .gallery-item{background:var(--bg-alt)}
+.post-gallery .gallery-item img{aspect-ratio:4/3;object-fit:contain;background:var(--bg-alt)}
 .gallery-item .play-badge{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:56px;height:56px;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;display:grid;place-items:center;font-size:1.3rem;padding-left:4px;pointer-events:none;transition:background .2s}
 .gallery-item.is-video:hover .play-badge{background:var(--green-600)}
 .gallery-item.is-video::before{content:"🎬 영상";position:absolute;top:8px;left:8px;z-index:1;font-size:.72rem;font-weight:700;color:#fff;background:rgba(0,0,0,.5);padding:3px 9px;border-radius:999px}
@@ -388,6 +393,14 @@ a.bc-val:hover{text-decoration:underline}
 .danger-del input{width:100%;margin-bottom:6px}
 .del-warn{margin:0 0 6px;font-size:.78rem;line-height:1.45;color:#8a2b26}
 .del-warn code{background:#fff;padding:1px 4px;border-radius:4px}
+
+/* 선택 연동 점검 */
+.wire-list{margin:0;padding:0;list-style:none;display:grid;gap:12px}
+.wire-list li{display:flex;gap:10px;align-items:flex-start}
+.wire-list p{margin:4px 0 5px;font-size:.85rem;line-height:1.6;color:var(--muted)}
+.wire-list code{font-size:.76rem;color:var(--muted);background:var(--bg-alt);padding:2px 6px;border-radius:4px}
+.wire-dot{flex:none;width:9px;height:9px;margin-top:7px;border-radius:50%;background:var(--line)}
+.wire-list li.is-on .wire-dot{background:var(--green-600)}
 
 /* 영업 파이프라인 */
 .stage-strip{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 14px}
