@@ -75,6 +75,13 @@ export function kstStamp(v, { year = true } = {}) {
   return `${year ? d.getUTCFullYear() + "-" : ""}${date} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
 }
 
+// 날짜만 보여 줄 때. UTC 자정 근처 글은 KST 로 바꾸면 날짜가 하루 넘어갑니다.
+// sep 로 구분자를 바꿉니다 ("2026-08-05" / "2026.08.05").
+export function kstDate(v, sep = "-") {
+  const s = kstStamp(v);
+  return s ? s.slice(0, 10).replace(/-/g, sep) : "";
+}
+
 // 영업시간 문자열에 적힌 정기휴무 요일이 오늘인지 (KST 기준).
 // "09:00-21:30 · 매주 일요일 휴무" 처럼 시간과 휴무일이 한 줄에 같이 적히는 경우가 많은데,
 // 시간만 보고 판단하면 일요일에도 '영업중'으로 표시돼 손님에게 잘못된 정보가 나갑니다.
