@@ -85,9 +85,13 @@ function navHtml(base, user, active) {
   if (user) {
     items.push(link(`${base}/board`, "회원 게시판"));
     items.push(link(`${base}/polls`, "투표"));
-    if (user.role === "MERCHANT") items.push(link(`${base}/dashboard`, "내 업체"));
-    if (user.role === "ADMIN" || user.role === "SUPERADMIN") items.push(link(`${base}/admin`, "관리자"));
-    if (user.role === "SUPERADMIN") items.push(link(`/super`, "슈퍼"));
+    // 운영 메뉴는 손님용 메뉴와 섞지 않고 오른쪽에 따로 묶습니다.
+    // '슈퍼'(플랫폼 콘솔)는 이 상인회의 메뉴가 아니므로 여기 두지 않습니다 —
+    // 상인회 홈페이지 위에 플랫폼 운영 도구가 얹혀 있는 것처럼 보입니다. 계정 화면에서 들어갑니다.
+    const ops = [];
+    if (user.role === "MERCHANT") ops.push(link(`${base}/dashboard`, "내 업체"));
+    if (user.role === "ADMIN" || user.role === "SUPERADMIN") ops.push(link(`${base}/admin`, "관리자"));
+    if (ops.length) items.push(`<span class="nav-ops">${ops.join("")}</span>`);
     items.push(`<form method="post" action="/logout" class="nav-logout"><button class="btn btn-ghost btn-sm">로그아웃</button></form>`);
   } else {
     items.push(link(`/login`, "로그인"));

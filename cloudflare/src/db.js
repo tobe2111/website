@@ -509,6 +509,10 @@ export function lastActivityByAssociation(db) {
     ) x ON x.association_id = a.id GROUP BY a.id`);
 }
 
+// 슈퍼 관리자 계정 목록 — "누가 이 콘솔에 들어올 수 있는가" 를 눈으로 확인하기 위한 것.
+export const listSuperAdmins = (db) =>
+  all(db, "SELECT id, name, email, created_at, totp_enabled FROM users WHERE role='SUPERADMIN' ORDER BY id");
+
 // 모든 상인회 관리자(ADMIN) 계정 — 슈퍼 콘솔에서 연락처 확인·비밀번호 재발급용
 export const listAllAdmins = (db) =>
   all(db, "SELECT id, association_id, name, email FROM users WHERE role='ADMIN' ORDER BY association_id, id");

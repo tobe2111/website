@@ -1259,6 +1259,14 @@ export async function superConsole(ctx) {
     ["네이버 지도", !!env.NAVER_MAP_CLIENT_ID, "NAVER_MAP_CLIENT_ID", "지도가 안 뜨면 Maps 콘솔의 Web 서비스 URL 에 이 사이트 도메인이 등록됐는지 확인하세요."],
     ["봇 차단(캡차)", !!(env.TURNSTILE_SITE_KEY && env.TURNSTILE_SECRET), "TURNSTILE_SITE_KEY · TURNSTILE_SECRET", "가입·문의 폼에 Cloudflare Turnstile 이 붙습니다. 없어도 폼은 정상 동작합니다."],
   ];
+  const supers = await D.listSuperAdmins(db);
+  const superPanel = `<section class="panel"><h2 class="panel-title">이 콘솔에 접근 가능한 계정 <span class="badge ${supers.length > 1 ? "badge-wait" : "badge-ok"}">${supers.length}개</span></h2>
+    <p class="panel-hint">슈퍼 관리자만 이 화면과 상인회 생성·삭제를 쓸 수 있습니다. 상인회 관리자·사장님 계정으로는 주소를 직접 입력해도 들어올 수 없습니다.
+      ${supers.length > 1 ? " <b>계정이 둘 이상입니다 — 모르는 계정이 있으면 즉시 확인하세요.</b>" : ""}</p>
+    <ul class="wire-list">${supers.map((u) => `<li class="is-on"><span class="wire-dot" aria-hidden="true"></span>
+      <div><b>${esc(u.email)}</b> <span class="badge ${u.totp_enabled ? "badge-ok" : "badge-muted"}">${u.totp_enabled ? "2단계 인증 사용" : "2단계 인증 없음"}</span>
+        <p>${esc(u.name || "")} · 생성 ${esc(kstDate(u.created_at))}</p></div></li>`).join("")}</ul>
+    ${supers.some((u) => !u.totp_enabled) ? `<p class="panel-hint">이 계정 하나가 뚫리면 모든 상인회 데이터가 열립니다. <a href="/account">계정 설정</a>에서 2단계 인증을 켜 두시길 권합니다.</p>` : ""}</section>`;
   const wiredPanel = `<section class="panel"><h2 class="panel-title">선택 연동 점검 <span class="badge ${wired.every((w) => w[1]) ? "badge-ok" : "badge-muted"}">${wired.filter((w) => w[1]).length}/${wired.length} 켜짐</span></h2>
     <p class="panel-hint">모두 선택 사항입니다. 꺼져 있어도 사이트는 정상 동작하며, 값은 <b>Workers &amp; Pages → 이 워커 → Settings → Variables</b> 에서 넣습니다.</p>
     <ul class="wire-list">${wired.map(([label, on, keys, help]) => `<li class="${on ? "is-on" : ""}">
@@ -1403,6 +1411,7 @@ export async function superConsole(ctx) {
       <div class="table-scroll"><table class="admin-table">
       <thead><tr><th>상인회</th><th>개별 도메인</th><th>플랜</th><th>상태</th><th>관리</th></tr></thead><tbody>${rows}</tbody></table></div></section>
     ${usagePanel}
+    ${superPanel}
     ${wiredPanel}
     <section class="panel"><h2 class="panel-title">감사 로그 (플랫폼)</h2>
       <ul class="audit-list">${auditLog.length ? auditLog.map((a) => `<li><span class="audit-action">${esc(a.action)}</span> <span class="audit-detail">${esc(a.detail)}</span><span class="audit-meta">${esc(a.actor_name)} · ${esc(kstStamp(a.created_at, { year: false }))}</span></li>`).join("") : `<li class="empty">기록이 없습니다.</li>`}</ul></section></div></section>`;
@@ -1432,8 +1441,15 @@ export function account(ctx) {
     twofa = `<p class="panel-hint">인증 앱으로 로그인을 한 단계 더 보호합니다. (관리자 계정 권장)</p>
       <form method="post" action="/account/2fa/setup"><button class="btn btn-primary btn-sm">2단계 인증 설정 시작</button></form>`;
   }
+  // 슈퍼 콘솔 입구는 여기 둡니다 — 상인회 사이트 메뉴에 두면 그 상인회의 기능처럼 보입니다.
+  const superLink = user.role === "SUPERADMIN"
+    ? `<section class="panel panel-accent"><h2 class="panel-title">플랫폼 운영</h2>
+        <p class="panel-hint">상인회 개설·영업 관리·사용량은 슈퍼 콘솔에서 봅니다. 상인회 홈페이지와는 별개의 화면입니다.</p>
+        <a class="btn btn-primary btn-sm" href="/super">슈퍼 콘솔 열기</a></section>`
+    : "";
   const body = `<section class="section page-top"><div class="container narrow">
     <h1 class="article-title">계정 설정</h1>${flashOf(query)}
+    ${superLink}
     <section class="panel"><h2 class="panel-title">비밀번호 변경</h2>
       <form method="post" action="/account/password" class="stack-form">
         <label>현재 비밀번호<input type="password" name="current" required autocomplete="current-password" /></label>

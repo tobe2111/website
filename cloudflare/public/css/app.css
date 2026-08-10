@@ -100,6 +100,9 @@ img,video{max-width:100%;display:block}
 .main-nav a.btn-primary,.main-nav a.btn-primary:hover{color:#fff} /* 내비 링크색이 버튼 흰 글자를 덮지 않도록 */
 .is-busy{opacity:.65;cursor:wait}
 .nav-logout{display:inline-flex;margin-left:2px}
+/* 운영 메뉴(내 업체·관리자)는 손님용 메뉴와 구분 — 상인회 홈이 관리 도구처럼 보이지 않게 */
+.nav-ops{display:inline-flex;align-items:center;gap:2px;margin-left:10px;padding-left:10px;border-left:1px solid var(--line)}
+.nav-ops a{font-size:12.5px;color:var(--muted)}
 .nav-toggle{display:none;flex-direction:column;gap:5px;width:44px;height:44px;border:none;background:transparent;cursor:pointer;padding:10px;border-radius:10px}
 .nav-toggle span{height:2.5px;background:var(--ink);border-radius:2px;transition:transform .3s var(--ease),opacity .2s}
 .nav-toggle[aria-expanded="true"] span:nth-child(1){transform:translateY(7.5px) rotate(45deg)}
@@ -596,6 +599,9 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
   .main-nav a+a{border-top:1px solid var(--line-soft)}
   .main-nav .btn{margin-top:10px;justify-content:center}
   .nav-logout{margin-left:0}
+  /* 모바일에선 세로 목록이라 왼쪽 구분선 대신 위쪽 구분선으로 */
+  .nav-ops{display:flex;flex-direction:column;align-items:stretch;margin:0;padding:0;border-left:none;border-top:1px solid var(--line-soft)}
+  .nav-ops a{font-size:1.05rem;color:var(--ink-soft)}
 }
 @media (max-width:600px){
   .stat-cards{grid-template-columns:repeat(2,1fr)}
