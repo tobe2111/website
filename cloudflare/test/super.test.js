@@ -290,3 +290,95 @@ test("단축 주소는 왜 안 되는지 알려 준다", async () => {
   assert.match(msg, /단축 주소/, "그냥 '지원 안 함' 이 아니라 이유를 알려 줘야 함");
   assert.equal(parseEmbed("https://naver.me/xAbCdEf"), null);
 });
+
+// ── 상인회 사이트 메뉴에 플랫폼 콘솔이 섞이지 않아야 함
+test("상인회 홈페이지 메뉴에 '슈퍼'가 보이지 않는다", async () => {
+  const { a } = await makeAssoc("nav-check");
+  const html = await (await req("GET", "/t/nav-check", { cookie })).text();
+  const nav = html.slice(html.indexOf('class="main-nav"'), html.indexOf("</nav>"));
+  assert.doesNotMatch(nav, />슈퍼</, "플랫폼 콘솔은 상인회 메뉴가 아님");
+  assert.doesNotMatch(nav, /href="\/super"/);
+  assert.match(nav, /관리자/, "상인회 관리자 메뉴는 남아 있어야 함");
+  assert.match(nav, /nav-ops/, "운영 메뉴는 손님 메뉴와 구분되어야 함");
+  assert.ok(a);
+});
+
+test("슈퍼 콘솔 입구는 계정 화면에 있다", async () => {
+  const r = await req("GET", "/account", { cookie });
+  assert.equal(r.status, 200);
+  const html = await r.text();
+  assert.match(html, /슈퍼 콘솔 열기/);
+  assert.match(html, /href="\/super"/);
+});
+
+test("상인회 관리자에게는 슈퍼 콘솔 입구가 보이지 않는다", async () => {
+  const { admin } = await makeAssoc("nav-admin");
+  const l = await login(admin.email, "admin1234");
+  const html = await (await req("GET", "/t/nav-admin/account", { cookie: l.jar })).text();
+  assert.doesNotMatch(html, /슈퍼 콘솔 열기/);
+});
+
+// ── 접근 통제: 슈퍼 콘솔은 슈퍼 관리자 전용인가 (말이 아니라 실제 응답으로 확인)
+const SUPER_GETS = ["/super"];
+const SUPER_POSTS = ["/super/association", "/super/prospect", "/super/platform-mode", "/super/platform-info"];
+
+test("비로그인 상태로는 슈퍼 콘솔에 들어갈 수 없다", async () => {
+  for (const p of SUPER_GETS) {
+    const r = await req("GET", p);
+    assert.notEqual(r.status, 200, p);
+    assert.match(r.headers.get("location") || "/login", /\/login/, `${p} 는 로그인으로 보내야 함`);
+  }
+  for (const p of SUPER_POSTS) {
+    const r = await req("POST", p, { body: { _csrf: token, name: "침입", assoc_name: "침입" } });
+    assert.notEqual(r.status, 303, `${p} 가 처리되면 안 됨`);
+  }
+});
+
+test("사장님 계정으로는 슈퍼 콘솔에 들어갈 수 없다", async () => {
+  const { owner } = await makeAssoc("acl-merchant");
+  const l = await login(owner.email, "merch1234");
+  assert.ok(l.ok);
+  const r = await req("GET", "/super", { cookie: l.jar });
+  assert.equal(r.status, 403, "사장님은 403");
+  const p = await req("POST", "/super/prospect", { cookie: l.jar, body: { _csrf: l.tk, assoc_name: "사장님이만든것" } });
+  assert.notEqual(p.status, 303);
+  assert.equal(db()._db.prepare(`SELECT COUNT(*) n FROM applications WHERE assoc_name='사장님이만든것'`).get().n, 0);
+});
+
+test("상인회 관리자 계정으로도 슈퍼 콘솔에 들어갈 수 없다", async () => {
+  const { admin, a } = await makeAssoc("acl-admin");
+  const l = await login(admin.email, "admin1234");
+  assert.ok(l.ok);
+  assert.equal((await req("GET", "/super", { cookie: l.jar })).status, 403, "상인회 관리자도 403");
+  // 자기 상인회 관리 화면은 그대로 됩니다
+  assert.equal((await req("GET", "/t/acl-admin/admin", { cookie: l.jar })).status, 200);
+  // 남의 상인회는 못 봅니다
+  const other = await makeAssoc("acl-other");
+  assert.equal((await req("GET", "/t/acl-other/admin", { cookie: l.jar })).status, 403, "다른 상인회 관리 화면은 막혀야 함");
+  // 삭제 같은 슈퍼 전용 기능도 막힙니다
+  const d = await req("POST", `/super/association/${other.a.id}/delete`, { cookie: l.jar, body: { _csrf: l.tk, confirm_slug: "acl-other" } });
+  assert.notEqual(d.status, 303);
+  assert.ok(await D.getAssociationById(db(), other.a.id), "상인회가 지워지면 안 됨");
+  assert.ok(a);
+});
+
+test("슈퍼 계정이 몇 개인지 콘솔에서 확인할 수 있다", async () => {
+  const html = await (await req("GET", "/super", { cookie })).text();
+  assert.match(html, /이 콘솔에 접근 가능한 계정/);
+  assert.match(html, /super@platform\.kr/);
+  assert.match(html, /2단계 인증 없음/, "2FA 미설정이면 그렇게 표시");
+});
+
+test("보조 정보가 하나 실패해도 콘솔 본 기능은 열린다", async () => {
+  // 운영 DB 업그레이드가 덜 된 상황을 흉내 냅니다 — 표 하나가 없어도 콘솔이 통째로 죽으면 안 됩니다.
+  db()._db.exec("DROP TABLE application_notes");
+  const r = await req("GET", "/super", { cookie });
+  assert.equal(r.status, 200, "500 이 아니라 화면이 떠야 함");
+  const html = await r.text();
+  assert.match(html, /일부 정보를 불러오지 못했습니다/, "실패한 항목을 알려 줘야 함");
+  assert.match(html, /영업 기록/, "어느 항목이 실패했는지 밝혀야 함");
+  assert.match(html, /상인회 목록/, "본 기능은 그대로 보여야 함");
+  db()._db.exec(`CREATE TABLE application_notes (id INTEGER PRIMARY KEY AUTOINCREMENT,
+    application_id INTEGER NOT NULL, actor_name TEXT NOT NULL DEFAULT '', body TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')))`);
+});

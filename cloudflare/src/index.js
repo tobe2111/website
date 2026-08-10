@@ -1,5 +1,5 @@
 // Cloudflare Worker 진입점 — 라우팅 · 테넌트 해석 · 인증 · CSRF · 보안헤더
-import { parseCookies } from "./util.js";
+import { parseCookies, esc } from "./util.js";
 import { SESSION_COOKIE, CSRF_COOKIE, ensureCsrfSeed, csrfToken, csrfValid, userFromToken, ROLES } from "./auth.js";
 import * as D from "./db.js";
 import * as pages from "./pages.js";
@@ -202,10 +202,27 @@ export default {
       return await handle(request, env);
     } catch (e) {
       console.error(e && e.stack || e); // 상세는 로그로만 (wrangler tail / 대시보드)
+      // 운영자(슈퍼 관리자)에게는 오류 요지를 화면에 보여 줍니다.
+      // 로그를 볼 수 없는 환경에서 "일시적인 오류" 만 뜨면 원인을 좁힐 방법이 없습니다.
+      // 일반 방문자에게는 종전대로 아무것도 노출하지 않습니다.
+      let detail = "";
+      try {
+        const tok = parseCookies(request.headers.get("cookie") || "")[SESSION_COOKIE];
+        if (tok) {
+          const secret = await resolveSessionSecret(env);
+          const u = await userFromToken(env.DB, tok, secret);
+          if (u && u.role === ROLES.SUPERADMIN) {
+            const msg = String((e && e.message) || e).slice(0, 400);
+            const at = String((e && e.stack) || "").split("\n").slice(1, 4).join("\n").slice(0, 600);
+            detail = `<pre style="max-width:820px;margin:24px auto;text-align:left;white-space:pre-wrap;word-break:break-all;background:#f6f4ef;border:1px solid #e0dbcf;border-radius:10px;padding:16px;font-size:.85rem;line-height:1.6">${esc(msg)}${at ? "\n\n" + esc(at) : ""}</pre>
+              <p style="color:#888;font-size:.85rem">이 상세 내용은 슈퍼 관리자에게만 보입니다.</p>`;
+          }
+        }
+      } catch {}
       return html(`<section style="text-align:center;padding:80px 20px;font-family:system-ui">
         <h1 style="font-size:2rem">일시적인 오류가 발생했습니다</h1>
         <p style="color:#666">잠시 후 다시 시도해 주세요.</p>
-        <p><a href="/" style="color:#0b6e4f;font-weight:700">홈으로</a></p></section>`, 500);
+        <p><a href="/" style="color:#0b6e4f;font-weight:700">홈으로</a></p>${detail}</section>`, 500);
     }
   },
   // 주간 정기 작업 (wrangler.toml [triggers].crons) — 암호화 백업 + 운영 리포트 메일
@@ -315,8 +332,13 @@ async function handle(request, env) {
   }
 
   // 전역 라우트
+  // ⚠️ 여기에 권한 검사가 빠져 있었습니다. 테넌트 분기 두 곳에는 authorize() 가 있는데
+  //    이 분기에만 없어서, 플랫폼 도메인에서 /super · /account 같은 인증 경로가 무방비였습니다.
+  //    (로그인하지 않아도 /super 가 그대로 열렸습니다.) 같은 검사를 반드시 통과시킵니다.
   const g = matchRoute(GLOBAL, request.method, pathname);
   if (g) {
+    const ok = authorize(user, g.auth, null);
+    if (ok !== true) return finalize(typeof ok === "string" ? redirect(ok) : forbidden(), setCookies, env, timing);
     const res = await g.handler({ ...baseCtx, params: g.params });
     return finalize(res, setCookies, env, timing, canon);
   }
