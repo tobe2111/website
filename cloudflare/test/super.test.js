@@ -368,3 +368,17 @@ test("슈퍼 계정이 몇 개인지 콘솔에서 확인할 수 있다", async (
   assert.match(html, /super@platform\.kr/);
   assert.match(html, /2단계 인증 없음/, "2FA 미설정이면 그렇게 표시");
 });
+
+test("보조 정보가 하나 실패해도 콘솔 본 기능은 열린다", async () => {
+  // 운영 DB 업그레이드가 덜 된 상황을 흉내 냅니다 — 표 하나가 없어도 콘솔이 통째로 죽으면 안 됩니다.
+  db()._db.exec("DROP TABLE application_notes");
+  const r = await req("GET", "/super", { cookie });
+  assert.equal(r.status, 200, "500 이 아니라 화면이 떠야 함");
+  const html = await r.text();
+  assert.match(html, /일부 정보를 불러오지 못했습니다/, "실패한 항목을 알려 줘야 함");
+  assert.match(html, /영업 기록/, "어느 항목이 실패했는지 밝혀야 함");
+  assert.match(html, /상인회 목록/, "본 기능은 그대로 보여야 함");
+  db()._db.exec(`CREATE TABLE application_notes (id INTEGER PRIMARY KEY AUTOINCREMENT,
+    application_id INTEGER NOT NULL, actor_name TEXT NOT NULL DEFAULT '', body TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')))`);
+});

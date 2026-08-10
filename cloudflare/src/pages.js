@@ -1238,11 +1238,21 @@ export async function superConsole(ctx) {
   const auditLog = await D.listAudit(db, null, 15);
   const pendingApps = await D.listApplications(db, "pending");
   const usage = await D.usageByAssociation(db);
-  const demoSeeded = new Map((await D.demoSeedStamps(db)).map((r) => [r.aid, r.seeded_at]));
-  const appNotes = await D.listApplicationNotes(db);
-  const lastAct = new Map((await D.lastActivityByAssociation(db)).map((r) => [r.aid, r.last_at]));
+  // 보조 정보(데모 시각·영업 메모·마지막 활동·관리자 목록)는 하나가 실패해도
+  // 콘솔 전체가 500 으로 죽지 않게 각각 감쌉니다. 상인회 목록·승인 같은 본 기능은
+  // 못 쓰게 되면 안 되는 화면이기 때문입니다. 실패한 항목은 화면에 그대로 알립니다.
+  const loadWarnings = [];
+  const soft = async (label, fn, fallback) => {
+    try { return await fn(); } catch (e) {
+      loadWarnings.push(`${label}: ${String((e && e.message) || e).slice(0, 200)}`);
+      return fallback;
+    }
+  };
+  const demoSeeded = new Map((await soft("데모 적용 시각", () => D.demoSeedStamps(db), [])).map((r) => [r.aid, r.seeded_at]));
+  const appNotes = await soft("영업 기록", () => D.listApplicationNotes(db), []);
+  const lastAct = new Map((await soft("마지막 활동", () => D.lastActivityByAssociation(db), [])).map((r) => [r.aid, r.last_at]));
   const adminsBy = new Map();
-  for (const u of await D.listAllAdmins(db)) {
+  for (const u of await soft("관리자 계정", () => D.listAllAdmins(db), [])) {
     if (!adminsBy.has(u.association_id)) adminsBy.set(u.association_id, []);
     adminsBy.get(u.association_id).push(u);
   }
@@ -1259,7 +1269,7 @@ export async function superConsole(ctx) {
     ["네이버 지도", !!env.NAVER_MAP_CLIENT_ID, "NAVER_MAP_CLIENT_ID", "지도가 안 뜨면 Maps 콘솔의 Web 서비스 URL 에 이 사이트 도메인이 등록됐는지 확인하세요."],
     ["봇 차단(캡차)", !!(env.TURNSTILE_SITE_KEY && env.TURNSTILE_SECRET), "TURNSTILE_SITE_KEY · TURNSTILE_SECRET", "가입·문의 폼에 Cloudflare Turnstile 이 붙습니다. 없어도 폼은 정상 동작합니다."],
   ];
-  const supers = await D.listSuperAdmins(db);
+  const supers = await soft("슈퍼 계정 목록", () => D.listSuperAdmins(db), []);
   const superPanel = `<section class="panel"><h2 class="panel-title">이 콘솔에 접근 가능한 계정 <span class="badge ${supers.length > 1 ? "badge-wait" : "badge-ok"}">${supers.length}개</span></h2>
     <p class="panel-hint">슈퍼 관리자만 이 화면과 상인회 생성·삭제를 쓸 수 있습니다. 상인회 관리자·사장님 계정으로는 주소를 직접 입력해도 들어올 수 없습니다.
       ${supers.length > 1 ? " <b>계정이 둘 이상입니다 — 모르는 계정이 있으면 즉시 확인하세요.</b>" : ""}</p>
@@ -1351,6 +1361,7 @@ export async function superConsole(ctx) {
   const body = `<section class="dash"><div class="container">
     <div class="dash-head"><div><p class="section-eyebrow">SUPER</p><h1 class="dash-title">플랫폼 관리</h1></div>
       <div class="dash-head-actions"><form method="post" action="/logout"><button class="btn btn-ghost btn-sm">로그아웃</button></form></div></div>${flashOf(query)}
+    ${loadWarnings.length ? `<div class="flash flash-err"><b>일부 정보를 불러오지 못했습니다.</b> 나머지 기능은 그대로 쓰실 수 있습니다.<br />${loadWarnings.map((w) => esc(w)).join("<br />")}</div>` : ""}
     <div class="promo"><div class="promo-inner"><span class="mark" style="width:56px;height:56px;font-size:1.7rem;background:rgba(255,255,255,.18)">＋</span>
       <div><h2>새 상인회 사이트를 5분 만에</h2><p>클릭 한 번으로 상인회 홈·관리자 계정을 발급합니다. 운영 중 ${ps.associations}곳 · 가입 점포 ${ps.businesses}곳.</p></div>
       <a href="#new-assoc" class="btn btn-lg">새 사이트 만들기</a></div></div>
