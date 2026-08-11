@@ -1558,6 +1558,12 @@ export async function adminApi(ctx) {
 }
 
 // 전자계약 셀프 가입 — 영업을 거치지 않고 바로 시작한다.
+// 전자계약 독립 제품 화면의 브랜드. 상인회 껍데기(상점 아이콘·"상인회 플랫폼")를 쓰지 않는다.
+export const esignProduct = async (db) => ({
+  name: (await D.getSetting(db, "esign_brand")) || "전자계약",
+  home: "/esign",
+});
+
 export async function esignSignupForm(ctx) {
   const { db, env, csrf, query, user } = ctx;
   if (user) return redirect("/account");
@@ -1593,7 +1599,7 @@ export async function esignSignupForm(ctx) {
       <p class="panel-hint">지금은 셀프 가입을 받지 않고 있습니다. 아래로 문의해 주시면 계약서 양식까지 함께 옮겨 드립니다.</p>
       <p><a href="/apply?kind=esign" class="btn btn-primary btn-block">문의 남기기</a></p>
       <p class="auth-note">이미 계정이 있으신가요? <a href="/login">로그인</a></p></div></div></section>`;
-  return html(layout({ title: "전자계약 시작하기", body, csrf, base: "",
+  return html(layout({ title: "시작하기", body, csrf, base: "", product: await esignProduct(db),
     description: "가입 없이 링크로 서명하는 전자계약을 1분 만에 시작하세요.",
     scripts: turnstileScript(env) }));
 }
@@ -1602,7 +1608,8 @@ export async function esignSignupForm(ctx) {
 // 상인회 랜딩과 섞으면 "우리는 상인회가 아닌데" 하고 나가 버린다. 따로 둔다.
 export async function esignLanding(ctx) {
   const { db, csrf, query, url } = ctx;
-  const siteName = (await D.getSetting(db, "site_name")) || "전자계약";
+  // site_name 은 상인회 플랫폼 이름이다 — 전자계약 랜딩에 쓰면 상인회 간판이 그대로 걸린다
+  const siteName = (await D.getSetting(db, "esign_brand")) || "전자계약";
   const origin = url.origin;
   const step = (n, t, d) => `<div class="es-step"><span class="es-n">${n}</span><div><h3>${esc(t)}</h3><p>${esc(d)}</p></div></div>`;
   const body = `
@@ -1675,7 +1682,7 @@ export async function esignLanding(ctx) {
       <a href="/esign/signup" class="btn btn-primary btn-lg">무료로 시작하기</a>
       <a href="/apply?kind=esign" class="btn btn-ghost btn-lg">도입 문의</a></div>
   </div></section>`;
-  return html(layout({ title: `전자계약 — ${siteName}`, base: "", user: ctx.user, body, csrf,
+  return html(layout({ title: "", base: "", user: ctx.user, body, csrf, product: { name: siteName, home: "/esign" },
     description: "가입 없이 링크로 서명하는 전자계약. 서명·도장 자리를 계약서 위에 놓고 보내면 그 자리에서 체결됩니다. 위변조 검증·증적 패키지·API 연동 지원." }));
 }
 
@@ -2068,7 +2075,7 @@ export async function verifyPage(ctx) {
       <tr><th>알고리즘</th><td>${esc(algorithm)}</td></tr></table></div>`;
   }
   const body = `<section class="section page-top"><div class="container narrow"><h1 class="article-title">전자서명 검증</h1>${inner}</div></section>`;
-  return html(layout({ title: "서명 검증", body, csrf }));
+  return html(layout({ title: "문서 진위확인", body, csrf, user: ctx.user, product: await esignProduct(db) }));
 }
 
 // ================= 슈퍼관리자 =================
@@ -2096,6 +2103,11 @@ export async function superConsole(ctx) {
   for (const u of await soft("관리자 계정", () => D.listAllAdmins(db), [])) {
     if (!adminsBy.has(u.association_id)) adminsBy.set(u.association_id, []);
     adminsBy.get(u.association_id).push(u);
+  }
+  const aliasBy = new Map();
+  for (const r of await D.listSlugAliases(db)) {
+    if (!aliasBy.has(r.association_id)) aliasBy.set(r.association_id, []);
+    aliasBy.get(r.association_id).push(r.slug);
   }
   const platformMode = (await D.getSetting(db, "platform_mode")) === "1";
   const siteName = (await D.getSetting(db, "site_name")) || "상인회 플랫폼";
@@ -2353,7 +2365,11 @@ export async function superConsole(ctx) {
           <label>연락처 (선택)<input type="text" name="contact_phone" maxlength="40" /></label></div>
         <label>메모<textarea name="message" rows="2" maxlength="2000" placeholder="어디서 알게 됐는지, 규모, 관심사 등"></textarea></label>
         <button class="btn btn-primary btn-sm">영업 목록에 추가</button></form></details></section>`;
-  const rows = list.map((a) => `<tr><td><a href="/t/${esc(a.slug)}" target="_blank">${esc(a.name)}</a><br /><small>/t/${esc(a.slug)}</small>
+  const rows = list.map((a) => `<tr><td><a href="/t/${esc(a.slug)}" target="_blank">${esc(a.name)}</a>
+      <form method="post" action="/super/association/${a.id}/slug" class="domain-form" title="주소를 바꿔도 옛 주소로 들어온 사람은 새 주소로 자동 이동합니다.">
+        <span class="slug-pre">/t/</span><input type="text" name="slug" value="${esc(a.slug)}" pattern="[a-z0-9-]+" maxlength="40" />
+        <button class="btn btn-xs btn-ghost">주소</button></form>
+      ${(aliasBy.get(a.id) || []).length ? `<small class="domain-hint">옛 주소 ${(aliasBy.get(a.id) || []).map((x) => esc(prettyPath(x))).join(", ")} → 자동 이동</small>` : ""}
       <ul class="admin-mini">${(adminsBy.get(a.id) || []).map((u) => `<li><span title="${esc(u.name)}">${esc(u.email)}</span>
         <form method="post" action="/super/admin/${u.id}/reset-password" data-confirm="${esc(u.email)} 의 임시 비밀번호를 발급할까요?&#10;기존 비밀번호는 즉시 무효가 됩니다."><button class="btn btn-xs btn-ghost" title="로그인이 안 될 때 임시 비밀번호를 발급합니다">임시 비번</button></form></li>`).join("") || `<li class="admin-none">관리자 계정 없음</li>`}</ul></td>
     <td><form method="post" action="/super/association/${a.id}/domain" class="domain-form">
@@ -2637,7 +2653,7 @@ export async function platformLanding(ctx) {
     <h2 class="section-title">지금 우리 상권도 시작해보세요</h2>
     <p class="section-lead">신청은 무료입니다. 검토 후 관리자 계정을 발급해 드립니다.</p>
     <a href="/apply" class="btn btn-primary btn-lg">무료 신청하기</a></div></section>`;
-  return html(layout({ title: "상인회 홈페이지 플랫폼", body, csrf, description: "상인회·번영회를 위한 홈페이지를 서버·개발 없이 5분 만에. 점포 안내·지도·공지·게시판·전자서명." }));
+  return html(layout({ title: "상인회 홈페이지 플랫폼", body, csrf, product: { name: "상인회 플랫폼", home: "/", mark: "storefront", nav: false }, description: "상인회·번영회를 위한 홈페이지를 서버·개발 없이 5분 만에. 점포 안내·지도·공지·게시판·전자서명." }));
 }
 
 // 셀프 입점 신청 폼 (공개)
@@ -2680,8 +2696,8 @@ function legalWrap(title, inner, info, csrf) {
 export async function terms(ctx) {
   const info = await platformInfo(ctx.db);
   const inner = `
-    <h2>제1조 (목적)</h2><p>본 약관은 <b>${esc(info.siteName)}</b>(이하 "서비스")가 제공하는 상인회·소상공인 홈페이지 및 관련 기능의 이용 조건과 절차, 이용자와 운영자의 권리·의무를 규정함을 목적으로 합니다.</p>
-    <h2>제2조 (정의)</h2><p>"이용자"란 서비스에 접속하여 이 약관에 따라 서비스를 이용하는 상인회·회원·방문자를 말합니다. "회원"이란 계정을 등록한 이용자를 말합니다.</p>
+    <h2>제1조 (목적)</h2><p>본 약관은 <b>${esc(info.siteName)}</b>(이하 "서비스")가 제공하는 <b>상인회·소상공인 홈페이지</b>와 <b>전자계약(전자서명)</b> 및 관련 기능의 이용 조건과 절차, 이용자와 운영자의 권리·의무를 규정함을 목적으로 합니다. 두 서비스는 각각 단독으로도 이용할 수 있습니다.</p>
+    <h2>제2조 (정의)</h2><p>"이용자"란 서비스에 접속하여 이 약관에 따라 서비스를 이용하는 상인회·기업·회원·방문자를 말합니다. "회원"이란 계정을 등록한 이용자를 말합니다. "서명자"란 계정 없이 전달받은 링크로 전자서명하는 이용자를 말합니다.</p>
     <h2>제3조 (서비스의 제공)</h2><p>서비스는 점포 안내·지도, 공지·소식, 회원 게시판, 전자 동의서(전자서명) 등을 제공합니다. 운영자는 서비스 내용을 변경하거나 중단할 수 있으며, 중대한 변경 시 사전에 공지합니다.</p>
     <h2>제4조 (회원의 의무)</h2><p>회원은 타인의 권리를 침해하거나 법령·공서양속에 반하는 게시물을 등록해서는 안 되며, 계정 정보를 안전하게 관리할 책임이 있습니다.</p>
     <h2>제5조 (게시물의 관리)</h2><p>운영자·상인회 관리자는 관련 법령을 위반하거나 부적절한 게시물을 사전 통지 없이 삭제·이동할 수 있습니다.</p>

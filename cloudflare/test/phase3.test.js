@@ -105,13 +105,13 @@ test("슈퍼: 새 상인회 생성(멀티테넌트) + 격리", async () => {
   assert.match(await r.text(), /플랫폼 관리/);
   r = await post(j, "/super/association", { name: "강남 상인회", admin_email: "gadmin@x.kr", admin_password: "admin1234", admin_name: "강남관리자" });
   assert.equal(r.status, 303);
-  const gangnam = await D.getAssociationBySlug(env.DB, "강남-상인회");
+  const gangnam = await D.getAssociationBySlug(env.DB, "gangnam");
   assert.ok(gangnam, "새 상인회 생성");
   // 새 상인회 홈 접근
-  assert.equal((await worker.fetch(new Request(BASE + "/t/강남-상인회"), env)).status, 200);
+  assert.equal((await worker.fetch(new Request(BASE + "/t/gangnam"), env)).status, 200);
   // 격리: 서초 관리자는 강남 관리자 페이지 접근 불가(403)
   const sa = jar(); await login(sa, "admin@s.kr", "admin1234");
-  assert.equal((await get(sa, "/t/강남-상인회/admin")).status, 403);
+  assert.equal((await get(sa, "/t/gangnam/admin")).status, 403);
 });
 
 test("권한: 비관리자 admin 접근 차단", async () => {

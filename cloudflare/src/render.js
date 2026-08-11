@@ -4,13 +4,23 @@ import { esc } from "./util.js";
 // 디자인 시스템 v2 — 브랜드 매장 아이콘(스토어프론트)
 export const STOREFRONT_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9l1.2-4.2A1 1 0 0 1 6.2 4h11.6a1 1 0 0 1 1 .8L20 9"/><path d="M4 9v10a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9"/></svg>';
 
-export function layout({ title, assoc, base = "", user = null, body, activeNav = "", description = "", scripts = "", csrf = "", ogImage = "", jsonLd = null }) {
-  const nav = assoc ? navHtml(base, user, activeNav, assoc.kind) : "";
-  const brand = assoc ? esc(assoc.name) : "상인회 플랫폼";
+// 전자계약 제품 아이콘 — 문서와 서명선. 상점 아이콘(STOREFRONT)을 쓰면 상인회 서비스로 읽힌다.
+export const ESIGN_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M8.5 16.5c1.2-2.4 2-2.4 2.6-1.2.5 1 1.2 1.2 2 .4"/></svg>';
+
+// product: 상인회에 속하지 않은 '독립 제품' 화면(전자계약 랜딩·가입·검증)에서 쓰는 껍데기.
+//   { name, nav } — 이걸 주면 브랜드 이름·아이콘·상단 메뉴가 전부 그 제품 것으로 바뀐다.
+// 주지 않으면 종전과 같다(상인회 테넌트 화면 또는 플랫폼 공용 화면).
+export function layout({ title, assoc, base = "", user = null, body, activeNav = "", description = "", scripts = "", csrf = "", ogImage = "", jsonLd = null, product = null }) {
+  const nav = assoc ? navHtml(base, user, activeNav, assoc.kind)
+    : product && product.nav !== false ? productNav(user, activeNav) : "";
+  // 상인회에 속하지 않은 화면의 이름: 제품이 지정되면 그 제품, 아니면 운영사.
+  // 예전 기본값("상인회 플랫폼")은 전자계약 고객에게 남의 서비스 간판으로 보였다.
+  const brand = assoc ? esc(assoc.name) : product ? esc(product.name) : "리스터코퍼레이션";
+  const mark = assoc || (product && product.mark === "storefront") || (!product && !assoc) ? STOREFRONT_SVG : ESIGN_SVG;
   const meta = description ? `<meta name="description" content="${esc(description)}" />` : "";
   // 카카오톡·SNS 공유 미리보기 (og:image 는 절대 URL 필수)
   // ogImage: R2 키 또는 URL. 미지정 시 상인회 로고 사용.
-  const ogRaw = ogImage || (assoc && assoc.logo) || "";
+  const ogRaw = ogImage || (assoc && assoc.logo) || ""; // 제품 화면은 assoc 가 없으므로 상인회 로고가 붙지 않는다
   const ogUrl = ogRaw ? mediaUrl(ogRaw) : "";
   const ogImgAbs = ogUrl ? (/^https?:\/\//.test(ogUrl) ? ogUrl : ORIGIN + ogUrl) : "";
   const og = `
@@ -51,7 +61,7 @@ ${assoc ? `<link rel="alternate" type="application/rss+xml" title="${brand} 공�
 <a class="skip-link" href="#main">본문 바로가기</a>
 <header class="site-header" id="siteHeader">
   <div class="container header-inner">
-    <a class="brand" href="${base || "/"}">${assoc && assoc.logo ? `<img class="brand-logo" src="${esc(mediaUrl(assoc.logo))}" alt="" />` : `<span class="brand-mark">${STOREFRONT_SVG}</span>`}<span>${brand}</span></a>
+    <a class="brand" href="${product ? product.home || "/esign" : base || "/"}">${assoc && assoc.logo ? `<img class="brand-logo" src="${esc(mediaUrl(assoc.logo))}" alt="" />` : `<span class="brand-mark">${mark}</span>`}<span>${brand}</span></a>
     <button class="nav-toggle" id="navToggle" aria-label="메뉴 열기" aria-expanded="false"><span></span><span></span><span></span></button>
     <nav class="main-nav" id="mainNav">${nav}</nav>
   </div>
@@ -62,7 +72,7 @@ ${assoc ? `<link rel="alternate" type="application/rss+xml" title="${brand} 공�
     <nav class="foot-policy"><a href="/privacy" class="strong">개인정보처리방침</a><span class="sep"></span><a href="/terms">이용약관</a>${assoc ? `<span class="sep"></span><a href="${base}/contact">문의하기</a>` : ""}</nav>
   </div>
   <div class="foot-bottom">
-    <span class="foot-mark" aria-hidden="true">${STOREFRONT_SVG}</span>
+    <span class="foot-mark" aria-hidden="true">${mark}</span>
     <div class="foot-info">
       <strong>${brand}</strong>
       ${assoc && (assoc.phone || assoc.address) ? `<p>${assoc.address ? esc(assoc.address) : ""}${assoc.phone ? `${assoc.address ? " · " : ""}문의 ${esc(assoc.phone)}` : ""}</p>` : ""}
@@ -72,6 +82,20 @@ ${assoc ? `<link rel="alternate" type="application/rss+xml" title="${brand} 공�
 </div></footer>
 <script src="${assetUrl("/js/app.js")}" defer></script>${scripts}
 </body></html>`;
+}
+
+// 독립 제품(전자계약) 상단 메뉴 — 상인회 메뉴(점포·지도·게시판)는 한 줄도 들어가지 않는다.
+function productNav(user, active) {
+  const link = (href, label) => `<a href="${href}"${active === href ? ' class="active" aria-current="page"' : ""}>${label}</a>`;
+  const items = [link("/esign", "소개"), link("/verify", "문서 진위확인")];
+  if (user) {
+    items.push(link("/account", "내 계정"));
+    items.push(`<form method="post" action="/logout" class="nav-logout"><button class="btn btn-ghost btn-sm">로그아웃</button></form>`);
+  } else {
+    items.push(link("/login", "로그인"));
+    items.push(`<a href="/esign/signup" class="btn btn-primary btn-sm">시작하기</a>`);
+  }
+  return items.join("");
 }
 
 function navHtml(base, user, active, kind = "merchant") {
@@ -100,6 +124,8 @@ function navHtml(base, user, active, kind = "merchant") {
     const ops = [];
     if (user.role === "MERCHANT" && !esign) ops.push(link(`${base}/dashboard`, "내 업체"));
     if (user.role === "ADMIN" || user.role === "SUPERADMIN") ops.push(link(`${base}/admin`, "관리자"));
+    // 담당자는 /admin 이 403 이다 — 갈 수 있는 곳(계약서 목록)으로 보낸다
+    else if (user.role === "STAFF") ops.push(link(`${base}/admin/documents`, "계약서"));
     if (ops.length) items.push(`<span class="nav-ops">${ops.join("")}</span>`);
     items.push(`<form method="post" action="/logout" class="nav-logout"><button class="btn btn-ghost btn-sm">로그아웃</button></form>`);
   } else {

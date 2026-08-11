@@ -60,6 +60,7 @@ const GLOBAL = [
   ["POST", "/super/association", api.superCreateAssociation, "SUPERADMIN"],
   ["POST", "/super/association/:id/toggle", api.superToggleAssociation, "SUPERADMIN"],
   ["POST", "/super/association/:id/demo", api.superSeedDemo, "SUPERADMIN"],
+  ["POST", "/super/association/:id/slug", api.superSetSlug, "SUPERADMIN"],
   ["POST", "/super/association/:id/domain", api.superSetDomain, "SUPERADMIN"],
   ["POST", "/super/association/:id/plan", api.superSetPlan, "SUPERADMIN"],
   ["POST", "/super/association/:id/mapkey", api.superSetMapKey, "SUPERADMIN"],
@@ -370,6 +371,13 @@ async function handle(request, env) {
   }
   if (t) {
     const assoc = assocPre || (await D.getAssociationBySlug(db, t.slug));
+    if (!assoc) {
+      // 옛 주소로 들어왔으면 새 주소로 영구 이동 — 이미 나간 알림톡 버튼·명함 링크가 죽지 않는다
+      const moved = await D.getAssociationByAlias(db, t.slug);
+      if (moved && (moved.active || (user && user.role === ROLES.SUPERADMIN)))
+        return finalize(redirect(`/t/${moved.slug}${t.subpath === "/" ? "" : t.subpath}${url.search}`, 301),
+          setCookies, env, timing);
+    }
     if (!assoc || (!assoc.active && !(user && user.role === ROLES.SUPERADMIN)))
       return finalize(notFoundResponse({ base: t.base }), setCookies, env, timing);
     assoc._base = t.base;

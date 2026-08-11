@@ -10,6 +10,24 @@ async function lastId(db) { return (await first(db, "SELECT last_insert_rowid() 
 // ----- Associations -----
 export const getAssociationBySlug = (db, slug) => first(db, "SELECT * FROM associations WHERE slug = ?", slug);
 export const getAssociationById = (db, id) => first(db, "SELECT * FROM associations WHERE id = ?", id);
+// 옛 주소 → 조직. 주소를 바꿔도 이미 나간 링크(알림톡 버튼·명함·검색결과)가 죽지 않게 한다.
+export const getAssociationByAlias = (db, slug) =>
+  first(db, "SELECT a.* FROM slug_aliases s JOIN associations a ON a.id = s.association_id WHERE s.slug = ?", slug);
+export const listSlugAliases = (db) => all(db, "SELECT slug, association_id FROM slug_aliases ORDER BY association_id, slug");
+export const addSlugAlias = (db, slug, associationId) =>
+  run(db, "INSERT OR IGNORE INTO slug_aliases (slug, association_id) VALUES (?,?)", slug, associationId);
+// 주소 변경 — 옛 주소는 alias 로 남기고, 혹시 새 주소가 다른 조직의 옛 주소였다면 그 alias 는 치운다.
+export async function renameAssociationSlug(db, id, next) {
+  const cur = await getAssociationById(db, id);
+  if (!cur || cur.slug === next) return { ok: false, reason: "same" };
+  if (await getAssociationBySlug(db, next)) return { ok: false, reason: "taken" };
+  const alias = await getAssociationByAlias(db, next);
+  if (alias && alias.id !== id) return { ok: false, reason: "taken" };
+  await run(db, "DELETE FROM slug_aliases WHERE slug=?", next);
+  await run(db, "UPDATE associations SET slug=? WHERE id=?", next, id);
+  await addSlugAlias(db, cur.slug, id);
+  return { ok: true, from: cur.slug, to: next };
+}
 export const listActiveAssociations = (db) => all(db, "SELECT * FROM associations WHERE active = 1 ORDER BY name");
 export const listAllAssociations = (db) => all(db, "SELECT * FROM associations ORDER BY created_at DESC");
 // 최근 생성된 조직 수 — 셀프 가입 폭주를 막기 위한 상한 판정

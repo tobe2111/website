@@ -538,11 +538,20 @@ CREATE TABLE IF NOT EXISTS message_log (
   created_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_msglog_assoc ON message_log(association_id, created_at);
+
+-- 옛 주소(slug) → 조직. 주소를 짧은 영문으로 바꿔도 이미 나간 링크·알림톡·명함이 살아 있어야 한다.
+-- 새 주소로 301 이동시킨다. 지우지 않는 한 영구히 유지된다.
+CREATE TABLE IF NOT EXISTS slug_aliases (
+  slug           TEXT PRIMARY KEY,
+  association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_slug_alias_assoc ON slug_aliases(association_id);
 `;
 
 // 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
 // 마이그레이션 세대 — migrateColumns 에 단계를 추가할 때마다 +1
-export const SCHEMA_VERSION = "31";
+export const SCHEMA_VERSION = "32";
 
 export async function ensureSchema(db) {
   const has = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='associations'").first();
@@ -805,4 +814,31 @@ async function migrateColumns(db) {
     actor_name TEXT NOT NULL DEFAULT '', body TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now')))`).run();
   await db.prepare("CREATE INDEX IF NOT EXISTS idx_appnote_app ON application_notes(application_id, created_at)").run();
+
+  // v32: 주소(slug)를 짧은 영문으로.
+  // 한글 slug 는 링크로 복사될 때 한 글자가 9바이트(%EC%84%9C…)로 늘어나 알림톡 버튼·명함에 쓸 수 없다.
+  // 이미 나간 링크를 살려 두기 위해 옛 주소를 alias 로 남기고 새 주소로 301 이동시킨다.
+  await db.prepare(`CREATE TABLE IF NOT EXISTS slug_aliases (
+    slug TEXT PRIMARY KEY,
+    association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')))`).run();
+  await db.prepare("CREATE INDEX IF NOT EXISTS idx_slug_alias_assoc ON slug_aliases(association_id)").run();
+  await romanizeSlugs(db);
+}
+
+// 비ASCII slug 를 로마자 slug 로 옮긴다. 옛 주소는 alias 로 보존.
+// 이미 영문인 조직은 건드리지 않는다(주소가 바뀌면 안 되는 쪽이 훨씬 크다).
+async function romanizeSlugs(db) {
+  const { slugify } = await import("./util.js");
+  const rows = (await db.prepare("SELECT id, slug, name FROM associations").all()).results || [];
+  const taken = new Set(rows.map((r) => r.slug));
+  for (const r of rows) {
+    if (!/[^\x00-\x7F]/.test(r.slug)) continue; // 이미 영문·숫자 주소
+    let base = slugify(r.name) || "biz";
+    let next = base, n = 1;
+    while (taken.has(next)) next = `${base}-${++n}`;
+    await db.prepare("INSERT OR IGNORE INTO slug_aliases (slug, association_id) VALUES (?,?)").bind(r.slug, r.id).run();
+    await db.prepare("UPDATE associations SET slug=? WHERE id=?").bind(next, r.id).run();
+    taken.delete(r.slug); taken.add(next);
+  }
 }

@@ -1,4 +1,5 @@
 // 순수 유틸 (Node/Workers 공통)
+import { romanize, coreName } from "./roman.js";
 export function esc(s) {
   return String(s ?? "")
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
@@ -7,15 +8,24 @@ export function esc(s) {
 export function cap(s, n) {
   return String(s == null ? "" : s).slice(0, n);
 }
-// 주소에 쓸 짧은 이름. 한글을 남기는 이유: 국내 서비스라 `/t/한빛법무법인` 이 주소창에서
-// 그대로 읽히는 편이 낫다. 다만 퍼센트 인코딩하면 한 글자가 9바이트로 불어나므로
-// 길이를 잘라 둔다 — 안 자르면 긴 상호 하나로 알림톡 버튼 링크가 300자를 넘는다.
-const SLUG_MAX = 40;
+// 주소에 쓸 짧은 영문 이름.
+// 한글을 그대로 두면 `/t/서초구-상인회` 가 복사될 때 `/t/%EC%84%9C…` 로 늘어난다
+// (한 글자 = 9바이트). 알림톡 버튼·명함·구두 안내 어디에도 쓰기 어렵다.
+// 그래서 로마자로 옮기고, 조직 형태를 나타내는 흔한 말(상인회·법무법인…)은 떼고,
+// 24자에서 자른다. "서초구 상인회" → seochogu, "한빛법무법인" → hanbit
+const SLUG_MAX = 24;
 export function slugify(name) {
-  const base = String(name).trim().toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-+|-+$/g, "")
-    .slice(0, SLUG_MAX).replace(/-+$/g, "");
-  return base || "biz";
+  const core = coreName(name);
+  const full = romanize(core).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  if (full.length <= SLUG_MAX) return full || "biz";
+  // 길면 낱말 경계에서 자른다 — 한가운데서 자르면 뜻 없는 조각이 남는다("…-seochog")
+  let out = "";
+  for (const w of full.split("-")) {
+    if (!out) { out = w.slice(0, SLUG_MAX); continue; }
+    if (out.length + 1 + w.length > SLUG_MAX) break;
+    out += "-" + w;
+  }
+  return out.replace(/-+$/g, "") || "biz";
 }
 export function parseCookies(header = "") {
   const out = {};

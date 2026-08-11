@@ -42,14 +42,14 @@ test("빈 D1: 표 자동 생성 + 계정 없으면 /setup 리다이렉트 + 설�
 
   // 계정·상인회 생성 확인
   assert.equal(await D.countUsers(env.DB), 2);
-  assert.ok(await D.getAssociationBySlug(env.DB, "서초구-상인회"), "상인회 생성");
+  assert.ok(await D.getAssociationBySlug(env.DB, "seochogu"), "상인회 생성");
   assert.equal((await D.getUserByEmail(env.DB, "super@p.kr")).role, "SUPERADMIN");
 
   // 세션 시크릿이 DB 에 자동 저장됐는지
   assert.ok(await D.getSetting(env.DB, "session_secret"), "세션 시크릿 자동 생성·저장");
 
   // 이제 홈 정상(더 이상 /setup 리다이렉트 아님)
-  assert.equal((await worker.fetch(new Request(BASE + "/t/서초구-상인회"), env)).status, 200);
+  assert.equal((await worker.fetch(new Request(BASE + "/t/seochogu"), env)).status, 200);
 
   // 로그인 동작 (자동 생성된 시크릿으로 세션 서명·검증)
   const j2 = jar();

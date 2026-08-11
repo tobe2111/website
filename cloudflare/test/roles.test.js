@@ -331,3 +331,67 @@ test("담당자 화면에는 자기가 못 가는 곳(관리자·API) 링크가 
   const adminHtml = await docsHtml("boss@h.kr");
   assert.match(adminHtml, /href="[^"]*\/admin\/api"/, "관리자에게는 그대로 보여야 함");
 });
+
+// ---------- 주소(slug) 영문화 ----------
+test("한글 이름은 짧은 영문 주소가 된다", async () => {
+  const { slugify } = await import("../src/util.js");
+  assert.equal(slugify("서초구 상인회"), "seochogu");
+  assert.equal(slugify("한빛법무법인"), "hanbit");
+  assert.equal(slugify("강남역 상점가"), "gangnamyeok");
+  assert.equal(slugify("주식회사 가나다"), "ganada");
+  assert.equal(slugify("ABC Corp"), "abc-corp", "이미 영문이면 그대로");
+  assert.equal(slugify("!!!"), "biz");
+  for (const n of ["서울특별시 서초구 상인번영회", "아주아주아주아주아주긴이름주식회사"]) {
+    const s = slugify(n);
+    assert.ok(s.length <= 24 && !s.endsWith("-"), `${n} → ${s}`);
+    assert.ok(!/[^a-z0-9-]/.test(s), `영문·숫자·하이픈만: ${s}`);
+  }
+});
+
+test("옛 한글 주소 DB 는 자동으로 영문 주소가 되고, 옛 주소는 301 로 이어진다", async () => {
+  const e2 = makeEnv();
+  const { ensureSchema } = await import("../src/schema.js");
+  const old = await D.createAssociation(e2.DB, { slug: "서초구-상인회", name: "서초구 상인회" });
+  await D.createAssociation(e2.DB, { slug: "keep-me", name: "그대로 상인회" });
+  const hh = await hashPassword("password1234"); // 계정이 하나도 없으면 모든 요청이 /setup 으로 간다
+  await D.createUser(e2.DB, { email: "a@s.kr", passwordHash: hh.hash, salt: hh.salt, name: "관리자", role: "ADMIN", associationId: old.id });
+  await D.setSetting(e2.DB, "schema_version", "31"); // 옛 세대로 되돌려 마이그레이션을 태운다
+  await ensureSchema(e2.DB);
+
+  const moved = await D.getAssociationById(e2.DB, old.id);
+  assert.equal(moved.slug, "seochogu", "영문 주소로 이동");
+  assert.equal((await D.getAssociationBySlug(e2.DB, "keep-me")).slug, "keep-me", "이미 영문인 곳은 안 건드림");
+
+  const r = await worker.fetch(new Request(`${BASE}/t/${encodeURIComponent("서초구-상인회")}/notices?page=2`,
+    { redirect: "manual" }), e2);
+  assert.equal(r.status, 301, "옛 주소는 영구 이동");
+  assert.equal(r.headers.get("location"), "/t/seochogu/notices?page=2", "경로·쿼리까지 그대로 이어져야");
+});
+
+test("슈퍼가 주소를 바꾸면 옛 주소가 alias 로 남는다", async () => {
+  const e2 = makeEnv();
+  const a = await D.createAssociation(e2.DB, { slug: "gangnamsijang", name: "강남시장 상인회" });
+  assert.equal((await D.renameAssociationSlug(e2.DB, a.id, "gangnam")).ok, true);
+  assert.equal((await D.getAssociationById(e2.DB, a.id)).slug, "gangnam");
+  assert.equal((await D.getAssociationByAlias(e2.DB, "gangnamsijang")).id, a.id);
+  // 남이 쓰는 주소로는 못 바꾼다
+  const b = await D.createAssociation(e2.DB, { slug: "seochogu", name: "서초구 상인회" });
+  assert.equal((await D.renameAssociationSlug(e2.DB, b.id, "gangnam")).ok, false);
+  // 남의 옛 주소로도 못 바꾼다 (301 이 엉뚱한 곳으로 가면 안 된다)
+  assert.equal((await D.renameAssociationSlug(e2.DB, b.id, "gangnamsijang")).ok, false);
+});
+
+// ---------- 전자계약 제품 화면 ----------
+test("/esign 에는 상인회 간판이 하나도 없다", async () => {
+  const e2 = makeEnv();
+  await D.createAssociation(e2.DB, { slug: "seochogu", name: "서초구 상인회" });
+  await D.setSetting(e2.DB, "site_name", "서초구 상인회 플랫폼");
+  const h = await hashPassword("password1234");
+  await D.createUser(e2.DB, { email: "a@s.kr", passwordHash: h.hash, salt: h.salt, name: "관리자", role: "ADMIN", associationId: 1 });
+  for (const p of ["/esign", "/esign/signup", "/verify"]) {
+    const html = await (await worker.fetch(new Request(BASE + p), e2)).text();
+    assert.ok(!/상인회/.test(html), `${p} 에 '상인회' 가 남아 있음`);
+    assert.match(html, /<title>[^<]*전자계약<\/title>/, `${p} 제목이 제품 이름이어야`);
+    assert.match(html, /href="\/esign\/signup"/, `${p} 에 제품 메뉴가 있어야`);
+  }
+});

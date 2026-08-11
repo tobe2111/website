@@ -184,7 +184,7 @@ test("새 상인회를 만들면 시작 세트가 함께 들어간다", async ()
   const r = await req("POST", "/super/association", { cookie, body: { _csrf: token,
     name: "새길 상인회", admin_email: "new@saegil.kr", admin_password: "saegil12345", admin_name: "사무국" } });
   assert.equal(r.status, 303);
-  const a = await D.getAssociationBySlug(db(), "새길-상인회");
+  const a = await D.getAssociationBySlug(db(), "saegil");
   assert.ok(a, "상인회가 생성돼야 함");
   const n = db()._db.prepare(`SELECT
     (SELECT COUNT(*) FROM notices WHERE association_id=?) n,
@@ -198,7 +198,7 @@ test("새 상인회를 만들면 시작 세트가 함께 들어간다", async ()
 });
 
 test("시작 세트 공지에 상인회 이름이 실제로 들어간다", async () => {
-  const a = await D.getAssociationBySlug(db(), "새길-상인회");
+  const a = await D.getAssociationBySlug(db(), "saegil");
   const row = db()._db.prepare(`SELECT title, body FROM notices WHERE association_id=? AND pinned=1`).get(a.id);
   assert.match(row.title, /새길 상인회/, "자리표시자가 아니라 실제 이름");
   const doc = db()._db.prepare(`SELECT body FROM documents WHERE association_id=?`).get(a.id);
@@ -207,7 +207,7 @@ test("시작 세트 공지에 상인회 이름이 실제로 들어간다", async
 });
 
 test("시작 세트는 이미 있는 내용을 덮어쓰지 않는다", async () => {
-  const a = await D.getAssociationBySlug(db(), "새길-상인회");
+  const a = await D.getAssociationBySlug(db(), "saegil");
   await db().prepare(`UPDATE notices SET title='상인회가 직접 고친 공지' WHERE association_id=? AND pinned=1`).bind(a.id).run();
   const r = await req("POST", `/super/association/${a.id}/starter`, { cookie, body: { _csrf: token } });
   assert.equal(r.status, 303);
@@ -221,13 +221,13 @@ test("신청을 승인해도 시작 세트가 함께 들어간다", async () => 
   const app = await D.createProspect(db(), { assocName: "시작세트 상인회", contactEmail: "start@demo.kr" });
   const r = await req("POST", `/super/application/${app.id}/approve`, { cookie, body: { _csrf: token } });
   assert.equal(r.status, 303);
-  const a = await D.getAssociationBySlug(db(), "시작세트-상인회");
+  const a = await D.getAssociationBySlug(db(), "sijakseteu");
   const n = db()._db.prepare(`SELECT
     (SELECT COUNT(*) FROM notices WHERE association_id=?) n,
     (SELECT COUNT(*) FROM documents WHERE association_id=?) d`).get(a.id, a.id);
   assert.equal(n.n, 3);
   assert.equal(n.d, 1);
-  assert.equal((await req("GET", "/t/" + encodeURIComponent("시작세트-상인회"))).status, 200, "개설 직후 홈이 비어 있지 않아야 함");
+  assert.equal((await req("GET", "/t/" + encodeURIComponent("sijakseteu"))).status, 200, "개설 직후 홈이 비어 있지 않아야 함");
 });
 
 // ── 선택 연동 점검

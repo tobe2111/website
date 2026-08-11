@@ -1820,6 +1820,21 @@ export async function setupSubmit(ctx) {
 }
 
 // ---------- 슈퍼: 상인회별 개별 도메인 연결 ----------
+// 주소(slug) 바꾸기 — 옛 주소는 자동으로 alias 로 남아 301 로 이어진다.
+export async function superSetSlug(ctx) {
+  const { db, form, params } = ctx;
+  const a = await D.getAssociationById(db, Number(params.id));
+  if (!a) return back("/super", "조직을 찾을 수 없습니다.", true);
+  const want = (form.get("slug") || "").toLowerCase().trim();
+  if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(want) || want.length > 40)
+    return back("/super", "주소는 영문 소문자·숫자·하이픈만 쓸 수 있습니다. (예: seocho)", true);
+  if (RESERVED_SLUGS.has(want)) return back("/super", `'${want}' 는 시스템이 쓰는 주소라 사용할 수 없습니다.`, true);
+  const r = await D.renameAssociationSlug(db, a.id, want);
+  if (!r.ok) return back("/super", r.reason === "taken" ? "이미 쓰이고 있는 주소입니다." : "주소가 그대로입니다.", true);
+  await audit(ctx, "주소변경", `${a.name}: /t/${r.from} → /t/${r.to}`, null);
+  return back("/super", `'${a.name}' 주소를 /t/${r.to} 로 바꿨습니다. 옛 주소 /t/${r.from} 로 들어와도 새 주소로 이동합니다.`);
+}
+
 export async function superSetDomain(ctx) {
   const { db, form, params } = ctx;
   const a = await D.getAssociationById(db, Number(params.id));

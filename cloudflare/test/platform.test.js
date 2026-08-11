@@ -35,13 +35,13 @@ test("셀프 입점 신청 → 슈퍼 승인 → 상인회·관리자 자동 발
   const loc = decodeURIComponent(r.headers.get("location"));
   const temp = (/임시비번 (\w+)/.exec(loc) || [])[1];
   assert.ok(temp, "임시 비밀번호 발급");
-  const gn = await D.getAssociationBySlug(env.DB, "강남시장-상인회");
+  const gn = await D.getAssociationBySlug(env.DB, "gangnamsijang");
   assert.ok(gn, "상인회 발급");
   assert.equal((await D.getUserByEmail(env.DB, "gn@ex.kr")).role, "ADMIN");
   const j2 = jar();
   r = await post(env, j2, "/login", { email: "gn@ex.kr", password: temp }, "/login");
   assert.equal(r.status, 303);
-  assert.match(decodeURIComponent(r.headers.get("location")), /강남시장-상인회\/admin/);
+  assert.match(decodeURIComponent(r.headers.get("location")), /gangnamsijang\/admin/);
   assert.equal((await D.getApplication(env.DB, apps[0].id)).status, "approved");
 });
 
