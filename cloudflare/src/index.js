@@ -15,6 +15,12 @@ const _usersConfirmed = new WeakSet(); // DB 별 "계정 존재" 확인 캐시
 
 // 라우트: [method, pattern, handler, auth]
 const GLOBAL = [
+  // 외부(비회원) 서명 — 로그인 없이 HMAC 토큰만으로 접근. 권한 검사는 핸들러 안에서 토큰으로 한다.
+  ["GET",  "/esign/:token", pages.extSignForm],
+  ["POST", "/esign/:token", api.extSign],
+  ["POST", "/esign/:token/decline", api.extDecline],
+  ["POST", "/esign/:token/otp", api.extOtpSend],
+  ["POST", "/esign/:token/otp/verify", api.extOtpVerify],
   ["GET", "/login", pages.loginForm],
   ["POST", "/login", api.login],
   ["POST", "/logout", api.logout, "USER"],
@@ -148,6 +154,8 @@ const TENANT = [
   ["POST", "/admin/templates/:id/delete", api.adminDeleteTemplate, "ADMIN"],
   ["GET",  "/admin/documents/:id/fields", pages.adminDocFields, "ADMIN"],
   ["POST", "/admin/documents/:id/fields", api.adminSaveFields, "ADMIN"],
+  ["POST", "/admin/documents/:id/external", api.adminAddExternalSigner, "ADMIN"],
+  ["POST", "/admin/documents/:id/external/:sid/delete", api.adminRemoveExternalSigner, "ADMIN"],
   ["GET",  "/documents/:id/paper", pages.documentPaper, "MEMBER"],
   ["GET",  "/documents/:id/evidence", pages.documentEvidence, "MEMBER"],
 ];

@@ -21,9 +21,15 @@ export function canonicalString({ documentId, userId, signerName, contentHash: c
   if (Number(ver) >= 3) base.push(fieldsHash || "");
   return base.join(SEP);
 }
+// 서명자 식별자 — 회원은 숫자 id, 외부 서명자는 "x{id}".
+// 서로 다른 이름공간을 써야 "회원 7번"과 "외부 서명자 7번"의 봉인이 겹치지 않는다.
+// 필드 담당자 참조 — 회원은 양수 id, 외부 서명자는 음수(-id). doc_fields.assignee 와 같은 규칙.
+export const signerRef = (s) => (s.external_id ? -s.external_id : s.user_id || 0);
+export const signerKey = (s) =>
+  s.external_id ? `x${s.external_id}` : String(s.user_id == null ? "" : s.user_id);
 export function canonicalFromSig(s) {
   return canonicalString({
-    documentId: s.document_id, userId: s.user_id, signerName: s.signer_name,
+    documentId: s.document_id, userId: signerKey(s), signerName: s.signer_name,
     contentHash: s.content_hash, signedAt: s.signed_at, ip: s.ip,
     prevHash: s.prev_hash || "", fieldsHash: s.fields_hash || "", ver: s.seal_ver || 1,
   });
@@ -98,7 +104,7 @@ export async function verifySignature(env, sig, doc) {
   if ((sig.seal_ver || 1) >= 3 && env && env.DB) {
     try {
       const { listFilledBy } = await import("./db.js");
-      const live = await fieldsHashOf(await listFilledBy(env.DB, sig.document_id, sig.user_id));
+      const live = await fieldsHashOf(await listFilledBy(env.DB, sig.document_id, signerRef(sig)));
       fieldsOk = live === (sig.fields_hash || "");
       fieldsChecked = true;
     } catch { fieldsChecked = false; }

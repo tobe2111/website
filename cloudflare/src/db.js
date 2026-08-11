@@ -420,33 +420,32 @@ export const listDocuments = (db, aid) =>
   all(db, "SELECT d.*, (SELECT COUNT(*) FROM signatures s WHERE s.document_id=d.id) AS sign_count FROM documents d WHERE d.association_id=? ORDER BY d.created_at DESC", aid);
 export const closeDocument = (db, id) => run(db, "UPDATE documents SET closed=1 WHERE id=?", id);
 
-const TURN_OK = `(d.ordered = 0 OR NOT EXISTS (
-  SELECT 1 FROM signature_requests rp JOIN signature_requests rme ON rme.document_id=d.id AND rme.user_id=?
-  WHERE rp.document_id=d.id AND rp.sign_order < rme.sign_order AND rp.declined_at=''
-    AND NOT EXISTS (SELECT 1 FROM signatures sp WHERE sp.document_id=rp.document_id AND sp.user_id=rp.user_id)))`;
+// 순차 서명 대기 판정 — 내 앞 순번에 아직 서명하지 않은 사람이 있는가.
+// 회원과 외부 서명자를 같은 sign_order 축에서 함께 본다(둘 중 하나만 보면 순서가 어긋난다).
+const TURN_OK = `(d.ordered = 0 OR (
+  NOT EXISTS (
+    SELECT 1 FROM signature_requests rp JOIN signature_requests rme ON rme.document_id=d.id AND rme.user_id=?
+    WHERE rp.document_id=d.id AND rp.sign_order < rme.sign_order AND rp.declined_at=''
+      AND NOT EXISTS (SELECT 1 FROM signatures sp WHERE sp.document_id=rp.document_id AND sp.user_id=rp.user_id))
+  AND NOT EXISTS (
+    SELECT 1 FROM external_signers ep JOIN signature_requests rme2 ON rme2.document_id=d.id AND rme2.user_id=?
+    WHERE ep.document_id=d.id AND ep.sign_order < rme2.sign_order AND ep.declined_at=''
+      AND NOT EXISTS (SELECT 1 FROM signatures se WHERE se.document_id=ep.document_id AND se.external_id=ep.id))))`;
 const TO_SIGN = `d.association_id=? AND d.closed=0 AND (d.due_date='' OR d.due_date >= date('now'))
   AND NOT EXISTS (SELECT 1 FROM signatures s WHERE s.document_id=d.id AND s.user_id=?)
   AND NOT EXISTS (SELECT 1 FROM signature_requests rd WHERE rd.document_id=d.id AND rd.user_id=? AND rd.declined_at != '')
   AND (EXISTS (SELECT 1 FROM signature_requests r WHERE r.document_id=d.id AND r.user_id=?)
        OR NOT EXISTS (SELECT 1 FROM signature_requests r2 WHERE r2.document_id=d.id))
   AND ${TURN_OK}`;
-export const listDocumentsToSign = (db, aid, uid) => all(db, `SELECT d.* FROM documents d WHERE ${TO_SIGN} ORDER BY d.created_at DESC`, aid, uid, uid, uid, uid);
-export const countDocumentsToSign = async (db, aid, uid) => (await first(db, `SELECT COUNT(*) AS n FROM documents d WHERE ${TO_SIGN}`, aid, uid, uid, uid, uid)).n;
+export const listDocumentsToSign = (db, aid, uid) => all(db, `SELECT d.* FROM documents d WHERE ${TO_SIGN} ORDER BY d.created_at DESC`, aid, uid, uid, uid, uid, uid);
+export const countDocumentsToSign = async (db, aid, uid) => (await first(db, `SELECT COUNT(*) AS n FROM documents d WHERE ${TO_SIGN}`, aid, uid, uid, uid, uid, uid)).n;
 // 대상이 지정된 문서(요청 행이 존재)는 대상자만 서명 가능 — 목록(TO_SIGN)과 동일한 규칙을 액션에도 강제
 export async function canReceiveSign(db, docId, uid) {
   const any = await first(db, "SELECT 1 AS x FROM signature_requests WHERE document_id=? LIMIT 1", docId);
   if (!any) return true; // 대상 미지정 문서 = 회원 전체 대상
   return !!(await first(db, "SELECT 1 AS x FROM signature_requests WHERE document_id=? AND user_id=?", docId, uid));
 }
-export async function canSignNow(db, doc, uid) {
-  if (!doc.ordered) return true;
-  const mine = await first(db, "SELECT sign_order FROM signature_requests WHERE document_id=? AND user_id=?", doc.id, uid);
-  if (!mine) return true;
-  const pending = (await first(db, `SELECT COUNT(*) AS n FROM signature_requests r WHERE r.document_id=? AND r.sign_order<?
-    AND r.declined_at=''
-    AND NOT EXISTS (SELECT 1 FROM signatures s WHERE s.document_id=r.document_id AND s.user_id=r.user_id)`, doc.id, mine.sign_order)).n;
-  return pending === 0;
-}
+export const canSignNow = (db, doc, uid) => canSignNowAny(db, doc, { userId: uid });
 export function isPastDue(doc) {
   if (!doc.due_date) return false;
   return doc.due_date < new Date().toISOString().slice(0, 10);
@@ -459,12 +458,17 @@ export const listRequestStatus = (db, documentId) =>
     EXISTS (SELECT 1 FROM signatures s WHERE s.document_id=r.document_id AND s.user_id=u.id) AS signed
     FROM signature_requests r JOIN users u ON u.id=r.user_id WHERE r.document_id=? ORDER BY r.sign_order ASC, u.name`, documentId);
 export async function requestCounts(db, documentId) {
-  const total = (await first(db, "SELECT COUNT(*) AS n FROM signature_requests WHERE document_id=?", documentId)).n;
-  const signed = (await first(db, `SELECT COUNT(*) AS n FROM signature_requests r WHERE r.document_id=?
-    AND EXISTS (SELECT 1 FROM signatures s WHERE s.document_id=r.document_id AND s.user_id=r.user_id)`, documentId)).n;
-  return { total, signed };
+  const r = await first(db, `SELECT
+    (SELECT COUNT(*) FROM signature_requests WHERE document_id=?1) AS mt,
+    (SELECT COUNT(*) FROM signature_requests r WHERE r.document_id=?1
+      AND EXISTS (SELECT 1 FROM signatures s WHERE s.document_id=r.document_id AND s.user_id=r.user_id)) AS ms,
+    (SELECT COUNT(*) FROM external_signers WHERE document_id=?1) AS et,
+    (SELECT COUNT(*) FROM external_signers e WHERE e.document_id=?1
+      AND EXISTS (SELECT 1 FROM signatures s WHERE s.document_id=e.document_id AND s.external_id=e.id)) AS es`, documentId);
+  return { total: r.mt + r.et, signed: r.ms + r.es, members: r.mt, externals: r.et };
 }
 export const hasSigned = async (db, documentId, uid) => !!(await first(db, "SELECT 1 FROM signatures WHERE document_id=? AND user_id=?", documentId, uid));
+export const hasSignedExt = async (db, documentId, eid) => !!(await first(db, "SELECT 1 FROM signatures WHERE document_id=? AND external_id=?", documentId, eid));
 // 서명 사슬의 마지막 봉인값 (플랫폼 전체 기준 — 어느 상인회의 기록을 지워도 사슬이 끊긴다)
 export const lastSealHash = async (db) => {
   const r = await first(db, "SELECT record_hash FROM signatures ORDER BY id DESC LIMIT 1");
@@ -473,13 +477,59 @@ export const lastSealHash = async (db) => {
 export const listSignatureChain = (db) =>
   all(db, "SELECT id, record_hash, prev_hash, seal_ver FROM signatures ORDER BY id");
 export async function createSignature(db, r) {
-  await run(db, `INSERT INTO signatures (document_id, user_id, signer_name, signature_image, content_hash, ip, user_agent, verify_code, record_hash, signed_at, prev_hash, seal_ver, verify_level, fields_hash)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, r.documentId, r.userId, r.signerName, r.signatureImage, r.contentHash, r.ip, r.userAgent, r.verifyCode, r.recordHash, r.signedAt, r.prevHash || "", r.sealVer || 3, r.verifyLevel || "password", r.fieldsHash || "");
+  await run(db, `INSERT INTO signatures (document_id, user_id, external_id, signer_name, signature_image, content_hash, ip, user_agent, verify_code, record_hash, signed_at, prev_hash, seal_ver, verify_level, fields_hash)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, r.documentId, r.externalId ? null : r.userId, r.externalId || null, r.signerName, r.signatureImage, r.contentHash, r.ip, r.userAgent, r.verifyCode, r.recordHash, r.signedAt, r.prevHash || "", r.sealVer || 3, r.verifyLevel || "password", r.fieldsHash || "");
   return first(db, "SELECT * FROM signatures WHERE id=?", await lastId(db));
 }
 export const listSignatures = (db, documentId) =>
-  all(db, "SELECT s.*, u.email AS signer_email FROM signatures s JOIN users u ON u.id=s.user_id WHERE s.document_id=? ORDER BY s.signed_at DESC", documentId);
+  all(db, `SELECT s.*, COALESCE(u.email, e.email, '') AS signer_email,
+      CASE WHEN s.external_id IS NULL THEN 'member' ELSE 'external' END AS signer_kind,
+      COALESCE(e.org, '') AS signer_org
+    FROM signatures s
+    LEFT JOIN users u ON u.id = s.user_id
+    LEFT JOIN external_signers e ON e.id = s.external_id
+    WHERE s.document_id=? ORDER BY s.signed_at DESC`, documentId);
 export const getSignatureByCode = (db, code) => first(db, "SELECT * FROM signatures WHERE verify_code=?", code);
+
+// ----- 외부(비회원) 서명자 -----
+export const listExternalSigners = (db, documentId) =>
+  all(db, `SELECT e.*, EXISTS (SELECT 1 FROM signatures s WHERE s.document_id=e.document_id AND s.external_id=e.id) AS signed
+    FROM external_signers e WHERE e.document_id=? ORDER BY e.sign_order, e.id`, documentId);
+export const getExternalSigner = (db, id) => first(db, "SELECT * FROM external_signers WHERE id=?", id);
+export async function addExternalSigner(db, { documentId, name, email = "", phone = "", org = "", signOrder = 0 }) {
+  await run(db, `INSERT INTO external_signers (document_id, name, email, phone, org, sign_order)
+    VALUES (?,?,?,?,?,?)`, documentId, name, email, normalizePhone(phone), org, signOrder);
+  return getExternalSigner(db, await lastId(db));
+}
+export const removeExternalSigner = (db, id, documentId) =>
+  run(db, "DELETE FROM external_signers WHERE id=? AND document_id=?", id, documentId);
+export const markExternalOpened = (db, id) =>
+  run(db, "UPDATE external_signers SET opened_at=datetime('now') WHERE id=? AND opened_at=''", id);
+export const declineExternal = (db, id, reason) =>
+  run(db, "UPDATE external_signers SET declined_at=datetime('now'), decline_reason=? WHERE id=?", reason, id);
+
+// 순차 서명에서 외부 서명자의 차례인가 — 회원·외부를 같은 sign_order 축에서 함께 본다.
+export async function canSignNowAny(db, doc, { userId = 0, externalId = 0 }) {
+  if (!doc.ordered) return true;
+  const mine = externalId
+    ? await first(db, "SELECT sign_order FROM external_signers WHERE id=?", externalId)
+    : await first(db, "SELECT sign_order FROM signature_requests WHERE document_id=? AND user_id=?", doc.id, userId);
+  if (!mine) return true;
+  const a = (await first(db, `SELECT COUNT(*) AS n FROM signature_requests r WHERE r.document_id=? AND r.sign_order<?
+    AND r.declined_at='' AND NOT EXISTS (SELECT 1 FROM signatures s WHERE s.document_id=r.document_id AND s.user_id=r.user_id)`,
+    doc.id, mine.sign_order)).n;
+  const b = (await first(db, `SELECT COUNT(*) AS n FROM external_signers e WHERE e.document_id=? AND e.sign_order<?
+    AND e.declined_at='' AND NOT EXISTS (SELECT 1 FROM signatures s WHERE s.document_id=e.document_id AND s.external_id=e.id)`,
+    doc.id, mine.sign_order)).n;
+  return a + b === 0;
+}
+// 다음 순번 — 회원과 외부를 합쳐 계산
+export const nextSignOrder = async (db, documentId) => {
+  const r = await first(db, `SELECT MAX(o) AS m FROM (
+    SELECT MAX(sign_order) AS o FROM signature_requests WHERE document_id=?1
+    UNION ALL SELECT MAX(sign_order) AS o FROM external_signers WHERE document_id=?1)`, documentId);
+  return (r && r.m ? r.m : 0) + 1;
+};
 
 // ----- 문서 감사 추적 -----
 // 열람은 자주 일어나므로, 같은 사람의 연속 열람은 10분에 한 번만 남긴다(기록 폭주 방지).
@@ -545,10 +595,11 @@ export async function setFieldValue(db, { fieldId, documentId, userId, value = "
     fieldId, documentId, userId, value, image, imageHash);
 }
 // 봉인 대상 — 이 사람이 채운 값들 (좌표까지 함께 봉인해 자리 이동 조작을 막는다)
-export const listFilledBy = (db, documentId, uid) =>
+// ref: 회원은 양수 user_id, 외부 서명자는 음수(-external_id)
+export const listFilledBy = (db, documentId, ref) =>
   all(db, `SELECT f.id, f.kind, f.page, f.x, f.y, f.w, f.h, v.value, v.image_hash
     FROM doc_fields f JOIN doc_field_values v ON v.field_id=f.id
-    WHERE f.document_id=? AND v.user_id=? ORDER BY f.id`, documentId, uid);
+    WHERE f.document_id=? AND v.user_id=? ORDER BY f.id`, documentId, ref);
 
 // ----- Stats -----
 export async function stats(db, aid) {
@@ -764,6 +815,23 @@ export async function otpVerifiedRecently(db, documentId, userId) {
   const r = await first(db, `SELECT 1 AS ok FROM sign_otp WHERE document_id=? AND user_id=?
     AND verified_at != '' AND verified_at > datetime('now','-30 minutes')`, documentId, userId);
   return !!r;
+}
+
+// 외부 서명자 본인확인 — 회원용과 같은 규칙(5분 만료·5회 시도)을 별도 표에 둔다.
+export async function upsertExtOtp(db, { externalId, codeHash, phone }) {
+  await run(db, `INSERT INTO ext_otp (external_id, code_hash, phone, attempts, verified_at, expires_at)
+    VALUES (?,?,?,0,'', datetime('now', '+${OTP_TTL_MIN} minutes'))
+    ON CONFLICT(external_id) DO UPDATE SET
+      code_hash=excluded.code_hash, phone=excluded.phone, attempts=0, verified_at='',
+      expires_at=excluded.expires_at, created_at=datetime('now')`, externalId, codeHash, phone || "");
+}
+export const getExtOtp = (db, externalId) => first(db, "SELECT * FROM ext_otp WHERE external_id=?", externalId);
+export const bumpExtOtpAttempt = (db, id) => run(db, "UPDATE ext_otp SET attempts=attempts+1 WHERE id=?", id);
+export const markExtOtpVerified = (db, id) => run(db, "UPDATE ext_otp SET verified_at=datetime('now') WHERE id=?", id);
+export const clearExtOtp = (db, externalId) => run(db, "DELETE FROM ext_otp WHERE external_id=?", externalId);
+export async function extOtpVerifiedRecently(db, externalId) {
+  return !!(await first(db, `SELECT 1 AS ok FROM ext_otp WHERE external_id=?
+    AND verified_at != '' AND verified_at > datetime('now','-30 minutes')`, externalId));
 }
 
 // ----- 서명 사슬 앵커 (시점 증거) -----

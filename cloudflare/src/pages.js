@@ -11,6 +11,7 @@ import { verifySignature, publicKeyJwk, publicKeyFingerprint, keyStorage, algori
 import { renderPaper, fieldBox, FIELD_KINDS, paginate, pageCount } from "./paper.js";
 import { BUILTIN, builtinById, isBuiltinId, normalizeTemplate, extractVars, applyVars, resolveFieldPages } from "./templates.js";
 import { buildEvidence } from "./evidence.js";
+import { resolveExtToken, makeExtToken, extSignUrl } from "./extsign.js";
 import { text } from "./http.js";
 import { parseLayout, renderHome, SECTION_CATALOG } from "./homeLayout.js";
 import { turnstileWidget, turnstileScript } from "./turnstile.js";
@@ -1196,7 +1197,9 @@ export async function signForm(ctx) {
   // 지면에 배치된 필드가 있으면 "계약서 위에서 직접 채우는" 방식으로, 없으면 종래의 단일 서명란으로.
   const fields = await D.listFieldsWithValues(db, d.id);
   const reqs = fields.length ? await D.listRequestStatus(db, d.id) : [];
-  const nameOf = (id) => { const u = reqs.find((r) => r.id === id); return u ? u.name : ""; };
+  const extNames2 = fields.length ? await D.listExternalSigners(db, d.id) : [];
+  const nameOf = (ref) => { if (ref < 0) { const e = extNames2.find((x) => x.id === -ref); return e ? e.name : ""; }
+    const u = reqs.find((r) => r.id === ref); return u ? u.name : ""; };
   const myFields = fields.filter((f) => !f.value && !f.image && (f.assignee === user.id || f.assignee === 0));
   const hasSignField = myFields.some((f) => f.kind === "sign");
   const docView = fields.length
@@ -1280,13 +1283,13 @@ export async function adminDocuments(ctx) {
   return html(layout({ title: "전자서명 문서", assoc, base, user, body, csrf }));
 }
 export async function adminDocumentDetail(ctx) {
-  const { db, env, assoc, base, user, params, csrf } = ctx;
+  const { db, env, assoc, base, user, params, csrf, query } = ctx;
   const d = await D.getDocument(db, Number(params.id));
   if (!d || d.association_id !== assoc.id) return notFoundResponse(ctx);
   const sigs = await D.listSignatures(db, d.id);
   const verds = await Promise.all(sigs.map((sig) => verifySignature(env, sig, d)));
   const rows = sigs.length ? sigs.map((sig, i) => { const v = verds[i]; const badge = v.valid ? '<span class="badge badge-ok">유효</span>' : '<span class="badge badge-no">위변조 의심</span>';
-    return `<tr><td>${esc(sig.signer_name)}<br /><small>${esc(sig.signer_email)}</small></td>
+    return `<tr><td>${esc(sig.signer_name)}${sig.signer_kind === "external" ? ' <span class="badge badge-info">외부</span>' : ""}<br /><small>${esc(sig.signer_email)}${sig.signer_org ? ` · ${esc(sig.signer_org)}` : ""}</small></td>
       <td>${sig.signature_image ? `<img src="${esc(mediaUrl(sig.signature_image))}" alt="서명" class="sig-thumb" />` : "-"}</td>
       <td><small>${esc(kstStamp(sig.signed_at))} <span class="tz">KST</span><br />IP ${esc(sig.ip)}</small></td>
       <td>${badge}<br /><a href="/certificate/${esc(sig.verify_code)}" target="_blank"><small>확인서</small></a> · <a href="/verify/${esc(sig.verify_code)}" target="_blank"><small>검증</small></a></td></tr>`; }).join("") : `<tr><td colspan="4" class="empty">아직 서명이 없습니다.</td></tr>`;
@@ -1296,6 +1299,30 @@ export async function adminDocumentDetail(ctx) {
   const events = await D.listDocEvents(db, d.id);
   const pct = rc.total ? Math.round((rc.signed / rc.total) * 100) : 0;
   const nextTurn = d.ordered ? reqStatus.find((u) => !u.signed && !u.declined_at) : null;
+  const exts = await D.listExternalSigners(db, d.id);
+  const extToken = query && query.get ? query.get("extlink") : "";
+  const extRows = exts.length ? exts.map((e) => `<li><span class="req-order">${e.sign_order}</span>
+      <span class="req-name">${esc(e.name)}</span> <small>${esc(e.org || "")}${e.email ? ` · ${esc(e.email)}` : ""}${e.phone ? ` · ${esc(D.maskPhone(e.phone))}` : ""}</small>
+      <span class="badge badge-info">외부</span>
+      ${e.signed ? '<span class="badge badge-ok">완료</span>' : e.declined_at ? `<span class="badge badge-no">거절</span><br /><small class="decline-why">사유: ${esc(e.decline_reason || "")}</small>`
+        : `<span class="badge badge-wait">${e.opened_at ? "열람함 · 미서명" : "미열람"}</span>`}
+      ${e.signed ? "" : `<form method="post" action="${base}/admin/documents/${d.id}/external/${e.id}/delete" class="inline-form" data-confirm="${esc(e.name)}님을 서명자에서 빼시겠습니까?"><button class="btn btn-xs btn-ghost">삭제</button></form>`}
+    </li>`).join("") : "";
+  const extPanel = `<section class="panel"><h2 class="panel-title">외부 서명자 <span class="badge badge-muted">${exts.length}</span></h2>
+    <p class="panel-hint">회원이 아닌 계약 상대방(임차인·거래처 등)에게 <b>가입 없이 서명할 수 있는 링크</b>를 보냅니다.
+      링크는 위조할 수 없는 서명값이 붙어 있어 다른 사람이 열 수 없습니다.</p>
+    ${extRows ? `<ul class="req-list">${extRows}</ul>` : ""}
+    ${extToken ? `<div class="invite-box"><p class="invite-box-title">✅ 서명 링크가 만들어졌습니다</p>
+      <input type="text" class="invite-url" value="${esc(`${ORIGIN}/esign/${extToken}`)}" readonly data-select-all />
+      <span class="pill-row"><button type="button" class="btn btn-sm btn-primary" data-share data-share-url="${esc(`${ORIGIN}/esign/${extToken}`)}" data-share-title="${esc(d.title)} 전자서명">카톡으로 보내기 / 복사</button></span>
+      <p class="panel-hint">이 링크는 지금만 표시됩니다. 필요하면 복사해 두세요 (다시 보려면 서명자를 새로 추가해야 합니다).</p></div>` : ""}
+    ${d.closed ? "" : `<form method="post" action="${base}/admin/documents/${d.id}/external" class="stack-form compact">
+      <div class="form-two"><label>이름<input type="text" name="name" required maxlength="60" placeholder="예: 홍길동" /></label>
+        <label>소속·상호 (선택)<input type="text" name="org" maxlength="80" placeholder="예: ○○상사" /></label></div>
+      <div class="form-two"><label>이메일<input type="email" name="email" maxlength="120" placeholder="link@example.com" /></label>
+        <label>휴대폰<input type="tel" name="phone" maxlength="13" inputmode="numeric" placeholder="010-1234-5678" /></label></div>
+      <p class="panel-hint">둘 중 하나는 필요합니다 — 그 연락처로 링크와 본인확인 번호가 갑니다.</p>
+      <button class="btn btn-primary btn-sm">서명 링크 발급</button></form>`}</section>`;
   const reqPanel = rc.total ? `<section class="panel"><h2 class="panel-title">서명 현황 <span class="badge ${rc.signed === rc.total ? "badge-ok" : "badge-wait"}">${rc.signed}/${rc.total} (${pct}%)</span>${d.ordered ? ' <span class="badge badge-info">순차</span>' : ""}</h2>
     <div class="progress"><span style="width:${pct}%"></span></div>
     <ul class="req-list">${reqStatus.map((u) => `<li>${d.ordered ? `<span class="req-order">${u.sign_order}</span>` : ""}<span class="req-name">${esc(u.name)}</span> <small>${esc(u.email)}</small> ${u.signed ? '<span class="badge badge-ok">완료</span>' : u.declined_at ? `<span class="badge badge-no">거절</span><br /><small class="decline-why">사유: ${esc(u.decline_reason || "")}</small>` : (d.ordered ? (nextTurn && nextTurn.id === u.id ? '<span class="badge badge-wait">서명 차례</span>' : '<span class="badge badge-muted">대기</span>') : '<span class="badge badge-wait">미서명</span>')}</li>`).join("")}</ul>
@@ -1310,6 +1337,7 @@ export async function adminDocumentDetail(ctx) {
         <a href="${base}/admin/documents/${d.id}/fields" class="btn btn-ghost btn-sm">🖊 필드 배치${fieldN ? ` (${fieldN})` : ""}</a>
         <button type="button" class="btn btn-ghost btn-sm" data-print>🖨 인쇄/PDF</button></div></div>
     ${reqPanel}
+    ${extPanel}
     <section class="panel"><h2 class="panel-title">문서 본문</h2><div class="doc-body">${docBody(d.body)}</div>
       ${d.attachment ? `<p class="doc-attach">📎 <a href="${esc(mediaUrl(d.attachment))}" target="_blank" rel="noopener">${esc(d.attachment_name || "계약서.pdf")}</a></p>` : ""}
       <p class="doc-hash">해시: <code>${esc(d.content_hash)}</code></p></section>
@@ -1398,6 +1426,100 @@ export async function adminTemplates(ctx) {
   return html(layout({ title: "계약서 서식", assoc, base, user, body, csrf }));
 }
 
+// ================= 외부(비회원) 서명 =================
+// 로그인 없이 링크만으로 들어오는 화면. 인증은 오직 HMAC 토큰 + (선택) 본인확인이다.
+// 상인회 사이트의 레이아웃을 쓰되 로그인 메뉴는 의미가 없으므로 user=null 로 그린다.
+export async function extSignForm(ctx) {
+  const { db, env, params, query, csrf, url } = ctx;
+  const signer = await resolveExtToken(db, env.SESSION_SECRET, params.token || "");
+  if (!signer) return notFoundResponse(ctx);
+  const d = await D.getDocument(db, signer.document_id);
+  if (!d) return notFoundResponse(ctx);
+  const assoc = await D.getAssociationById(db, d.association_id);
+  if (!assoc) return notFoundResponse(ctx);
+  const base = "";
+  const to = `/esign/${encodeURIComponent(params.token)}`;
+  await D.markExternalOpened(db, signer.id);
+  await D.logDocEvent(db, { documentId: d.id, userId: -signer.id, actorName: signer.name, kind: "viewed",
+    detail: "외부 서명자", ip: ctx.ip || "", userAgent: ctx.request.headers.get("user-agent") || "", dedupeMin: 10 });
+
+  const shellPage = (inner, title) => html(layout({ title, assoc, base, user: null, body:
+    `<section class="section page-top"><div class="container">
+      <div class="ext-head"><p class="section-eyebrow">${esc(assoc.name)} · 전자서명</p>
+        <h1 class="article-title">${esc(d.title)}</h1>
+        <p class="ext-who">${esc(signer.name)}${signer.org ? ` <small>(${esc(signer.org)})</small>` : ""} 님께 서명을 요청했습니다.</p></div>
+      ${inner}</div></section>`, csrf }));
+
+  if (await D.hasSignedExt(db, d.id, signer.id))
+    return shellPage(`<div class="flash flash-ok">이미 서명을 마치셨습니다. 확인서는 등록하신 연락처로 보내드렸습니다.</div>
+      <p><a href="/documents/${d.id}/paper?t=${encodeURIComponent(params.token)}" class="btn btn-ghost btn-sm">계약서 완성본 보기</a></p>`, d.title);
+  if (signer.declined_at)
+    return shellPage(`<div class="flash flash-warn">이 계약의 서명을 거절하셨습니다.<br /><small>사유: ${esc(signer.decline_reason || "")}</small></div>`, d.title);
+  if (d.closed) return shellPage(`<div class="flash flash-warn">마감된 문서입니다.</div>`, d.title);
+  if (D.isPastDue(d)) return shellPage(`<div class="flash flash-warn">서명 기한(${esc(d.due_date)})이 지났습니다. 요청하신 분께 문의해 주세요.</div>`, d.title);
+  if (!(await D.canSignNowAny(db, d, { externalId: signer.id })))
+    return shellPage(`<div class="flash flash-warn">순차 서명 문서입니다. 앞 순번의 서명이 끝나면 다시 이 링크로 들어와 주세요.</div>
+      <div class="paper-wrap">${renderPaper(d.body, { fieldsFor: () => "" })}</div>`, d.title);
+
+  // 본인확인 — 연락처가 있으면 그쪽으로만 보낸다(링크가 유출돼도 서명은 완성되지 않는다)
+  const needOtp = await otpRequired(db);
+  const otpDone = needOtp ? await D.extOtpVerifiedRecently(db, signer.id) : true;
+  const canReach = D.isValidPhone(signer.phone || "") || !!signer.email;
+  const otpBlock = !needOtp || otpDone ? "" : `<section class="panel panel-accent otp-gate">
+    <h2 class="panel-title">본인확인</h2>
+    ${canReach ? `<p class="panel-hint">본인 확인을 위해 <b>${esc(D.isValidPhone(signer.phone) ? D.maskPhone(signer.phone) : maskEmail(signer.email))}</b> 로 인증번호를 보냅니다.</p>
+      <div class="form-two">
+        <form method="post" action="${to}/otp" class="stack-form compact"><button class="btn btn-ghost btn-sm">인증번호 받기</button></form>
+        <form method="post" action="${to}/otp/verify" class="stack-form compact">
+          <label>인증번호 6자리<input type="text" name="code" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" required autocomplete="one-time-code" /></label>
+          <button class="btn btn-primary btn-sm">확인</button></form></div>`
+      : `<div class="flash flash-warn">연락처가 등록되어 있지 않아 본인확인을 할 수 없습니다. 요청하신 분께 문의해 주세요.</div>`}</section>`;
+
+  const fields = await D.listFieldsWithValues(db, d.id);
+  const reqs = await D.listRequestStatus(db, d.id);
+  const exts = await D.listExternalSigners(db, d.id);
+  const nameOf = (ref) => { if (ref < 0) { const e = exts.find((x) => x.id === -ref); return e ? e.name : ""; }
+    const u = reqs.find((r) => r.id === ref); return u ? u.name : ""; };
+  const myRef = -signer.id;
+  const myFields = fields.filter((f) => !f.value && !f.image && (f.assignee === myRef || f.assignee === 0));
+  const hasSignField = myFields.some((f) => f.kind === "sign");
+  const docView = fields.length
+    ? `<div class="paper-wrap">${renderPaper(d.body, { mode: otpDone ? "fill" : "view",
+        fieldsFor: fieldsRenderer(fields, { mode: otpDone ? "fill" : "view", myId: myRef, nameOf }) })}</div>`
+    : `<div class="doc-body">${docBody(d.body)}</div>`;
+  const inner = `${flashOf(query)}${otpBlock}
+    ${fields.length && otpDone ? `<div class="field-progress" id="fieldProgress"></div>
+      <button type="button" class="btn btn-ghost btn-sm field-jump" id="fieldJump" hidden>다음 항목으로 이동 ↓</button>` : ""}
+    ${docView}
+    ${d.attachment ? `<p class="doc-attach">📎 계약서 원문: <a href="${esc(mediaUrl(d.attachment))}" target="_blank" rel="noopener">${esc(d.attachment_name || "계약서.pdf")}</a></p>` : ""}
+    <p class="doc-hash">문서 해시: <code>${esc(d.content_hash)}</code></p>
+    ${otpDone ? `<form method="post" action="${to}" class="stack-form sign-form" id="signForm">
+      ${hasSignField ? "" : `<label>서명<div class="sign-pad-wrap"><canvas id="signPad" class="sign-pad" width="600" height="200"></canvas><button type="button" class="btn btn-ghost btn-xs sign-clear" id="signClear">지우기</button></div></label>`}
+      <input type="hidden" name="signature" id="signatureData" /><input type="hidden" name="fields" id="fieldValues" />
+      <label>서명자 성명<input type="text" name="signer_name" id="signerName" value="${esc(signer.name)}" required maxlength="60" /></label>
+      <label class="check"><input type="checkbox" name="consent" value="1" required /> 위 내용을 확인했으며 본인이 전자서명하는 데 동의합니다.</label>
+      <button class="btn btn-primary btn-block" id="signSubmit">전자서명 제출</button></form>` : ""}
+    <p class="auth-note">서명 시 서명자·시각·IP·기기·문서해시가 기록되고 Ed25519 디지털 서명으로 봉인됩니다.
+      서명이 끝나면 확인서를 ${signer.email ? esc(maskEmail(signer.email)) : "등록된 연락처"}로 보내드립니다.</p>
+    <details class="decline-box"><summary>이 계약에 동의할 수 없습니다 (거절)</summary>
+      <form method="post" action="${to}/decline" class="stack-form compact" data-confirm="거절하면 이 링크로는 더 이상 서명할 수 없습니다. 계속할까요?">
+        <label>거절 사유<textarea name="reason" rows="3" required maxlength="300"></textarea></label>
+        <button class="btn btn-ghost btn-sm">서명 거절</button></form></details>
+    ${fields.length && otpDone ? `<div class="fd-back" id="fieldDialog" hidden><div class="fd-box">
+      <h3 class="fd-title" id="fdTitle"></h3><div id="fdBody"></div>
+      <div class="fd-actions"><button type="button" class="btn btn-ghost btn-sm" id="fdCancel">취소</button>
+        <button type="button" class="btn btn-primary btn-sm" id="fdOk">확인</button></div></div></div>` : ""}`;
+  const scripts = `<script src="${assetUrl("/js/sign.js")}" defer></script>` +
+    (fields.length ? `<script src="${assetUrl("/js/paper.js")}" defer></script>` : "");
+  return html(layout({ title: `서명: ${d.title}`, assoc, base, user: null, csrf, scripts, body:
+    `<section class="section page-top"><div class="container">
+      <div class="ext-head"><p class="section-eyebrow">${esc(assoc.name)} · 전자서명</p>
+        <h1 class="article-title">${esc(d.title)}</h1>
+        <p class="ext-who">${esc(signer.name)}${signer.org ? ` <small>(${esc(signer.org)})</small>` : ""} 님께 서명을 요청했습니다.</p></div>
+      ${inner}</div></section>` }));
+}
+const maskEmail = (e) => { const [a, b] = String(e || "").split("@"); return b ? `${a.slice(0, 2)}${"*".repeat(Math.max(1, a.length - 2))}@${b}` : ""; };
+
 // 증적 패키지 — 소송·분쟁에 그대로 낼 수 있는 한 벌(ZIP). 서명자도 자기 계약 것은 받을 수 있다.
 export async function documentEvidence(ctx) {
   const { db, env, assoc, user, params } = ctx;
@@ -1430,7 +1552,9 @@ export async function adminDocFields(ctx) {
   const signedAny = (await D.listSignatures(db, d.id)).length > 0;
   const reqs = await D.listRequestStatus(db, d.id);
   const fields = await D.listFields(db, d.id);
-  const nameOf = (id) => { const u = reqs.find((r) => r.id === id); return u ? u.name : ""; };
+  const extForName = await D.listExternalSigners(db, d.id);
+  const nameOf = (ref) => { if (ref < 0) { const e = extForName.find((x) => x.id === -ref); return e ? e.name : ""; }
+    const u = reqs.find((r) => r.id === ref); return u ? u.name : ""; };
   const paper = renderPaper(d.body, { mode: "edit", fieldsFor: fieldsRenderer(fields, { mode: "edit", nameOf }) });
   // 이미 서명이 시작된 문서는 지면을 바꿀 수 없다 — 서명자가 본 화면과 달라지면 봉인의 의미가 사라진다
   if (signedAny) {
@@ -1443,8 +1567,11 @@ export async function adminDocFields(ctx) {
   }
   const palette = Object.entries(FIELD_KINDS).map(([k, v], i) =>
     `<button type="button" class="fp-item${i === 0 ? " on" : ""}" data-kind="${esc(k)}">${v.icon} ${esc(v.label)}</button>`).join("");
+  // 외부 서명자는 음수(-id)로 구분한다 — 회원 id 와 겹치지 않는 이름공간
+  const extList = await D.listExternalSigners(db, d.id);
   const assigneeOpts = `<option value="0" data-name="">누구나(먼저 서명하는 사람)</option>` +
-    reqs.map((r) => `<option value="${r.id}" data-name="${esc(r.name)}">${esc(r.name)}</option>`).join("");
+    reqs.map((r) => `<option value="${r.id}" data-name="${esc(r.name)}">${esc(r.name)}</option>`).join("") +
+    extList.map((e) => `<option value="${-e.id}" data-name="${esc(e.name)}">${esc(e.name)} (외부)</option>`).join("");
   const body = `<section class="dash"><div class="container">
     <div class="dash-head"><div><p class="section-eyebrow">E-SIGN · 필드 배치</p><h1 class="dash-title">${esc(d.title)}</h1>
       <p class="dash-sub"><a href="${base}/admin/documents/${d.id}">← 문서로</a> · 서명 대상 ${sigs.total}명</p></div></div>
@@ -1481,7 +1608,9 @@ export async function documentPaper(ctx) {
   const reqs = await D.listRequestStatus(db, d.id);
   const rc = await D.requestCounts(db, d.id);
   const done = rc.total > 0 && rc.signed === rc.total;
-  const nameOf = (id) => { const u = reqs.find((r) => r.id === id); return u ? u.name : ""; };
+  const extNames = await D.listExternalSigners(db, d.id);
+  const nameOf = (ref) => { if (ref < 0) { const e = extNames.find((x) => x.id === -ref); return e ? e.name : ""; }
+    const u = reqs.find((r) => r.id === ref); return u ? u.name : ""; };
   const paper = renderPaper(d.body, {
     fieldsFor: fieldsRenderer(fields, { mode: "view", nameOf }),
     watermark: done ? "" : "미완성",

@@ -10,6 +10,7 @@ import { cap, sniffImage, EMAIL_RE, MAX_IMAGE_BYTES, slugify, esc } from "./util
 import { contentHash, sealRecord, newVerifyCode, SEAL_VER, fieldsHashOf } from "./esign.js";
 import { isFieldKind, round4, FIELD_KINDS, pageCount } from "./paper.js";
 import { builtinById, isBuiltinId, normalizeTemplate, extractVars, applyVars, resolveFieldPages } from "./templates.js";
+import { resolveExtToken, makeExtToken, extSignUrl } from "./extsign.js";
 import { turnstileVerify } from "./turnstile.js";
 import { planOf } from "./plans.js";
 import { seedDemo } from "./demoContent.js";
@@ -759,6 +760,200 @@ export async function adminCreateDocument(ctx) {
   await audit(ctx, "서명문서생성", title);
   return back(base + "/admin/documents", ordered ? "순차 서명 문서를 생성했습니다." : "문서를 생성했습니다.");
 }
+// ================= 외부(비회원) 서명 =================
+// 이 경로에는 로그인 세션이 없다. 권한의 근거는 오직 HMAC 토큰이며, 토큰이 가리키는
+// 서명자 본인의 자리에만 쓸 수 있다. 아래 모든 핸들러가 같은 검증을 먼저 통과한다.
+async function extCtx(ctx) {
+  const signer = await resolveExtToken(ctx.db, ctx.env.SESSION_SECRET, ctx.params.token || "");
+  if (!signer) return null;
+  const doc = await D.getDocument(ctx.db, signer.document_id);
+  if (!doc) return null;
+  const assoc = await D.getAssociationById(ctx.db, doc.association_id);
+  if (!assoc) return null;
+  return { signer, doc, assoc, to: `/esign/${encodeURIComponent(ctx.params.token)}` };
+}
+
+export async function extSign(ctx) {
+  const { db, env, form, ip, request } = ctx;
+  const c = await extCtx(ctx);
+  if (!c) return back("/", "링크가 올바르지 않습니다.", true);
+  const { signer, doc: d, assoc, to } = c;
+  if (d.closed) return back(to, "마감된 문서입니다.", true);
+  if (D.isPastDue(d)) return back(to, "서명 기한이 지났습니다.", true);
+  if (signer.declined_at) return back(to, "이미 거절하신 계약입니다.", true);
+  if (await D.hasSignedExt(db, d.id, signer.id)) return back(to, "이미 서명하셨습니다.", true);
+  if (!(await D.canSignNowAny(db, d, { externalId: signer.id }))) return back(to, "앞 순번의 서명이 완료된 후 서명할 수 있습니다.", true);
+  if (form.get("consent") !== "1") return back(to, "동의 확인란에 체크해 주세요.", true);
+
+  let verifyLevel = "link"; // 링크 소지만으로 확인된 상태
+  if (await otpRequired(db)) {
+    if (!(await D.extOtpVerifiedRecently(db, signer.id))) return back(to, "본인확인을 먼저 완료해 주세요.", true);
+    verifyLevel = "otp";
+  }
+  const myRef = -signer.id;
+  const allFields = await D.listFieldsWithValues(db, d.id);
+  const myFields = allFields.filter((f) => !f.value && !f.image && (f.assignee === myRef || f.assignee === 0));
+  let fieldResult = { signKey: "", hadSignField: false };
+  if (myFields.length) {
+    fieldResult = await applyFieldValues({ ...ctx, user: { id: myRef } }, d, myFields, form.get("fields"));
+    if (fieldResult.error) return back(to, fieldResult.error, true);
+  }
+  let sigKey = fieldResult.signKey || "";
+  if (!fieldResult.hadSignField) {
+    const bytes = pngFromDataUrl(form.get("signature"));
+    if (!bytes) return back(to, "서명을 입력해 주세요.", true);
+    sigKey = storage.enabled(env) ? await storage.save(env, bytes, "image/png") : "";
+  }
+  const signerName = cap((form.get("signer_name") || "").replace(/[\x00-\x1f\x7f]/g, " ").trim(), 60) || signer.name;
+  const signedAt = new Date().toISOString();
+  const prevHash = await D.lastSealHash(db);
+  const fieldsHash = await fieldsHashOf(await D.listFilledBy(db, d.id, myRef));
+  // 봉인 안의 서명자 식별자는 "x{id}" — 회원 id 와 절대 겹치지 않는 이름공간
+  const recordHash = await sealRecord(env, { documentId: d.id, userId: `x${signer.id}`, signerName,
+    contentHash: d.content_hash, signedAt, ip, prevHash, fieldsHash, ver: SEAL_VER });
+  const verifyCode = newVerifyCode();
+  await D.createSignature(db, { documentId: d.id, externalId: signer.id, signerName, signatureImage: sigKey,
+    contentHash: d.content_hash, ip, userAgent: cap(request.headers.get("user-agent") || "", 200),
+    verifyCode, recordHash, signedAt, prevHash, sealVer: SEAL_VER, verifyLevel, fieldsHash });
+  await D.logDocEvent(db, { documentId: d.id, userId: myRef, actorName: signerName, kind: "signed",
+    detail: `외부 서명자 · 본인확인 ${verifyLevel} · 검증코드 ${verifyCode}`, ip, userAgent: uaOf(ctx) });
+  await D.createNotification(db, { associationId: assoc.id, kind: "signed",
+    message: `${signerName}님(외부)이 '${d.title}'에 전자서명했습니다.`, link: `/t/${assoc.slug}/admin/documents/${d.id}` });
+
+  // 확인서 사본 — "받은 적 없다"는 분쟁을 막는 증거. 실패해도 서명은 이미 유효하다.
+  try {
+    const certUrl = `${new URL(request.url).origin}/certificate/${verifyCode}`;
+    if (D.isValidPhone(signer.phone || "")) {
+      await sendOne(env, db, { assoc, kind: "sign_request", to: signer.phone,
+        text: `[${assoc.name}] '${d.title}' 전자서명이 완료되었습니다. 확인서는 아래에서 보실 수 있습니다.`,
+        buttonName: "확인서 보기", buttonUrl: certUrl });
+    }
+    if (emailEnabled(env) && signer.email) {
+      await sendEmail(env, { to: signer.email, subject: `[${assoc.name}] 전자서명 완료 — ${d.title}`,
+        html: mailShell(`${esc(assoc.name)} 전자서명 완료`,
+          `<p>${esc(signerName)}님, '<b>${esc(d.title)}</b>' 전자서명이 완료되었습니다.</p>
+           <p>검증 코드: <b>${esc(verifyCode)}</b></p>${mailButton(certUrl, "전자서명 확인서 보기")}`) });
+    }
+  } catch {}
+  return back(to, `전자서명이 완료되었습니다. 검증 코드: ${verifyCode}`);
+}
+
+export async function extDecline(ctx) {
+  const { db, form, ip } = ctx;
+  const c = await extCtx(ctx);
+  if (!c) return back("/", "링크가 올바르지 않습니다.", true);
+  const { signer, doc: d, assoc, to } = c;
+  if (await D.hasSignedExt(db, d.id, signer.id)) return back(to, "이미 서명한 계약은 거절할 수 없습니다.", true);
+  const reason = cap((form.get("reason") || "").trim(), 300);
+  if (!reason) return back(to, "거절 사유를 입력해 주세요.", true);
+  await D.declineExternal(db, signer.id, reason);
+  await D.logDocEvent(ctx.db, { documentId: d.id, userId: -signer.id, actorName: signer.name, kind: "declined",
+    detail: `외부 서명자: ${reason.slice(0, 80)}`, ip, userAgent: uaOf(ctx) });
+  await D.createNotification(db, { associationId: assoc.id, kind: "sign_declined",
+    message: `${signer.name}님(외부)이 '${d.title}' 서명을 거절했습니다.`, link: `/t/${assoc.slug}/admin/documents/${d.id}` });
+  return back(to, "서명을 거절하셨습니다. 요청하신 분께 사유가 전달됩니다.");
+}
+
+export async function extOtpSend(ctx) {
+  const { db, env } = ctx;
+  const c = await extCtx(ctx);
+  if (!c) return back("/", "링크가 올바르지 않습니다.", true);
+  const { signer, doc: d, assoc, to } = c;
+  const hasPhone = D.isValidPhone(signer.phone || "");
+  if (!hasPhone && !signer.email) return back(to, "연락처가 등록되어 있지 않아 본인확인을 할 수 없습니다.", true);
+  const cur = await D.getExtOtp(db, signer.id);
+  if (cur && Date.parse(cur.created_at.replace(" ", "T") + "Z") > Date.now() - 60 * 1000)
+    return back(to, "인증번호를 방금 보냈습니다. 1분 뒤에 다시 요청해 주세요.", true);
+  const code = String(Math.floor(100000 + Math.random() * 900000));
+  await D.upsertExtOtp(db, { externalId: signer.id, codeHash: await sha256Hex(`ext|${signer.id}|${code}`), phone: signer.phone });
+  const msg = `[${assoc.name}] 전자서명 본인확인 번호는 ${code} 입니다. ${D.OTP_TTL_MIN}분 안에 입력해 주세요.`;
+  let via = "";
+  if (hasPhone && notifyEnabled(env)) {
+    const r = await sendOne(env, db, { assoc, kind: "sign_request", to: signer.phone, text: msg });
+    if (r.ok) via = `${D.maskPhone(signer.phone)} 으로 알림톡을`;
+    else if (r.insufficient) { await D.clearExtOtp(db, signer.id); return back(to, "발송 크레딧이 부족해 인증번호를 보내지 못했습니다. 요청하신 분께 문의해 주세요.", true); }
+  }
+  if (!via && emailEnabled(env) && signer.email) {
+    await sendEmail(env, { to: signer.email, subject: `[${assoc.name}] 전자서명 본인확인 번호`,
+      html: mailShell("본인확인 번호", `<p>아래 번호를 서명 화면에 입력해 주세요.</p><p style="font-size:28px;font-weight:800;letter-spacing:.1em">${esc(code)}</p><p style="color:#888">${D.OTP_TTL_MIN}분 후 만료됩니다.</p>`) }).catch(() => {});
+    via = "등록된 이메일로";
+  }
+  if (!via) { await D.clearExtOtp(db, signer.id); return back(to, "인증번호를 보낼 수단이 없습니다. 요청하신 분께 문의해 주세요.", true); }
+  await D.logDocEvent(db, { documentId: d.id, userId: -signer.id, actorName: signer.name, kind: "otp_sent", detail: "외부 서명자", ip: ctx.ip || "" });
+  return back(to, `${via} 인증번호를 보냈습니다. ${D.OTP_TTL_MIN}분 안에 입력해 주세요.`);
+}
+
+export async function extOtpVerify(ctx) {
+  const { db, form } = ctx;
+  const c = await extCtx(ctx);
+  if (!c) return back("/", "링크가 올바르지 않습니다.", true);
+  const { signer, doc: d, to } = c;
+  const rec = await D.getExtOtp(db, signer.id);
+  if (!rec) return back(to, "먼저 인증번호를 요청해 주세요.", true);
+  if (rec.attempts >= D.OTP_MAX_ATTEMPTS) return back(to, "시도 횟수를 초과했습니다. 인증번호를 다시 요청해 주세요.", true);
+  if (Date.parse(rec.expires_at.replace(" ", "T") + "Z") < Date.now()) return back(to, "인증번호가 만료되었습니다. 다시 요청해 주세요.", true);
+  const input = (form.get("code") || "").replace(/\D/g, "");
+  await D.bumpExtOtpAttempt(db, rec.id);
+  const ok = input.length === 6 && (await sha256Hex(`ext|${signer.id}|${input}`)) === rec.code_hash;
+  if (!ok) return back(to, `인증번호가 올바르지 않습니다. (남은 시도 ${Math.max(0, D.OTP_MAX_ATTEMPTS - rec.attempts - 1)}회)`, true);
+  await D.markExtOtpVerified(db, rec.id);
+  await D.logDocEvent(db, { documentId: d.id, userId: -signer.id, actorName: signer.name, kind: "otp_ok", detail: "외부 서명자", ip: ctx.ip || "" });
+  return back(to, "본인확인이 완료되었습니다. 아래에서 서명해 주세요.");
+}
+
+// 관리자: 외부 서명자 추가 → 서명 링크 발급(+ 알림톡·이메일 발송)
+export async function adminAddExternalSigner(ctx) {
+  const { db, env, form, base, assoc, params, request } = ctx;
+  const d = await D.getDocument(db, Number(params.id));
+  const to = `${base}/admin/documents/${d ? d.id : ""}`;
+  if (!d || d.association_id !== assoc.id) return back(base + "/admin/documents", "문서를 찾을 수 없습니다.", true);
+  if (d.closed) return back(to, "마감된 문서입니다.", true);
+  const name = cap((form.get("name") || "").replace(/[\x00-\x1f\x7f]/g, " ").trim(), 60);
+  const email = cap((form.get("email") || "").toLowerCase().trim(), 120);
+  const phone = D.normalizePhone(form.get("phone") || "");
+  const org = cap((form.get("org") || "").trim(), 80);
+  if (!name) return back(to, "서명자 이름을 입력해 주세요.", true);
+  if (email && !EMAIL_RE.test(email)) return back(to, "이메일 형식을 확인해 주세요.", true);
+  if (phone && !D.isValidPhone(phone)) return back(to, "휴대폰 번호 형식을 확인해 주세요.", true);
+  if (!email && !phone) return back(to, "링크를 보낼 이메일 또는 휴대폰 중 하나는 필요합니다.", true);
+  if ((await D.listExternalSigners(db, d.id)).length >= 20) return back(to, "외부 서명자는 최대 20명까지 추가할 수 있습니다.", true);
+
+  const signOrder = await D.nextSignOrder(db, d.id);
+  const signer = await D.addExternalSigner(db, { documentId: d.id, name, email, phone, org, signOrder });
+  const token = await makeExtToken(env.SESSION_SECRET, signer.id, d.id);
+  const link = extSignUrl(new URL(request.url).origin, token);
+
+  let sent = "";
+  if (phone && notifyEnabled(env)) {
+    const r = await sendOne(env, db, { assoc, kind: "sign_request", to: phone,
+      text: `[${assoc.name}] ${name}님, '${d.title}' 전자서명을 요청드립니다.${d.due_date ? ` 기한: ${d.due_date}` : ""}`,
+      buttonName: "서명하러 가기", buttonUrl: link });
+    if (r.ok) sent = "알림톡을 보냈습니다.";
+  }
+  if (!sent && email && emailEnabled(env)) {
+    await sendEmail(env, { to: email, subject: `[${assoc.name}] 전자서명 요청 — ${d.title}`,
+      html: mailShell(`${esc(assoc.name)} 전자서명 요청`,
+        `<p>${esc(name)}님, 서명이 필요한 계약서가 도착했습니다.</p><p><b>${esc(d.title)}</b>${d.due_date ? ` (기한: ${d.due_date})` : ""}</p>
+         ${mailButton(link, "계약서 확인하고 서명하기")}<p style="font-size:12px;color:#888">가입 없이 이 링크로 바로 서명하실 수 있습니다.</p>`) }).catch(() => {});
+    sent = "이메일을 보냈습니다.";
+  }
+  await audit(ctx, "외부서명자추가", `${d.title}: ${name}`);
+  return redirect(`${to}?extlink=${encodeURIComponent(token)}&msg=${encodeURIComponent(`${name}님을 추가했습니다. ${sent || "아래 링크를 직접 전달해 주세요."}`)}`);
+}
+
+export async function adminRemoveExternalSigner(ctx) {
+  const { db, base, assoc, params } = ctx;
+  const d = await D.getDocument(db, Number(params.id));
+  if (!d || d.association_id !== assoc.id) return back(base + "/admin/documents", "문서를 찾을 수 없습니다.", true);
+  const to = `${base}/admin/documents/${d.id}`;
+  const signer = await D.getExternalSigner(db, Number(params.sid) || 0);
+  if (!signer || signer.document_id !== d.id) return back(to, "서명자를 찾을 수 없습니다.", true);
+  if (await D.hasSignedExt(db, d.id, signer.id)) return back(to, "이미 서명한 사람은 삭제할 수 없습니다.", true);
+  await D.removeExternalSigner(db, signer.id, d.id);
+  await audit(ctx, "외부서명자삭제", `${d.title}: ${signer.name}`);
+  return back(to, "외부 서명자를 삭제했습니다.");
+}
+
 // ---------- 서명 본인확인 OTP ----------
 // 목적: "로그인한 계정 = 본인"이라는 전제를 보강한다. 계정을 빌려줬거나 세션이 탈취돼도
 //       본인 휴대폰이 없으면 서명을 완성할 수 없다.
@@ -967,6 +1162,7 @@ export async function adminSaveFields(ctx) {
   const pages = pageCount(d.body);
   // 담당자로 지정할 수 있는 사람은 이 문서의 서명 대상뿐 (엉뚱한 회원을 지정해 지면을 오염시키는 것 차단)
   const allowed = new Set((await D.listRequestStatus(db, d.id)).map((r) => r.id));
+  for (const e of await D.listExternalSigners(db, d.id)) allowed.add(-e.id); // 외부 서명자는 음수
   const fields = [];
   for (const f of raw) {
     if (!f || !isFieldKind(f.kind)) return back(to, "알 수 없는 필드 종류가 있습니다.", true);

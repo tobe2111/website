@@ -279,10 +279,15 @@ CREATE TABLE IF NOT EXISTS documents (
   created_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- 서명 기록.
+-- user_id 와 external_id 중 하나만 채워진다(회원 서명 / 외부 서명자 서명).
+-- users 로의 외래키를 두지 않는 이유: 계정을 지웠다고 이미 체결된 계약의 서명이
+-- 사라지면 안 된다. 문서·상인회가 사라질 때만 함께 사라진다(document_id 의 CASCADE).
 CREATE TABLE IF NOT EXISTS signatures (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
   document_id     INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
-  user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id         INTEGER,
+  external_id     INTEGER,
   signer_name     TEXT NOT NULL,
   signature_image TEXT NOT NULL DEFAULT '',
   content_hash    TEXT NOT NULL,
@@ -294,9 +299,10 @@ CREATE TABLE IF NOT EXISTS signatures (
   prev_hash       TEXT NOT NULL DEFAULT '',  -- 직전 서명의 봉인값 — 서명 사슬(체인)
   seal_ver        INTEGER NOT NULL DEFAULT 3,-- 봉인 문자열 버전 (1=구버전, 2=체인, 3=필드값 포함)
   fields_hash     TEXT NOT NULL DEFAULT '',   -- 이 서명자가 채운 필드값·좌표의 해시 (v3 봉인 대상)
-  signed_at       TEXT NOT NULL DEFAULT (datetime('now')),
-  UNIQUE (document_id, user_id)
+  signed_at       TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sig_doc_user ON signatures(document_id, user_id) WHERE user_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sig_doc_ext  ON signatures(document_id, external_id) WHERE external_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS signature_requests (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -379,6 +385,37 @@ CREATE TABLE IF NOT EXISTS doc_events (
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_docev_doc ON doc_events(document_id, created_at);
+
+-- 외부(비회원) 서명자 — 우리 서비스에 가입하지 않은 계약 상대방.
+-- 가입·로그인 없이 링크 하나로 서명한다. 링크는 HMAC 토큰이라 위조·추측이 불가능하고,
+-- 본인확인(OTP)은 여기 적힌 연락처로만 보내진다.
+CREATE TABLE IF NOT EXISTS external_signers (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  document_id    INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+  name           TEXT NOT NULL,
+  email          TEXT NOT NULL DEFAULT '',
+  phone          TEXT NOT NULL DEFAULT '',
+  org            TEXT NOT NULL DEFAULT '',   -- 소속·상호(표시용)
+  sign_order     INTEGER NOT NULL DEFAULT 0,
+  declined_at    TEXT NOT NULL DEFAULT '',
+  decline_reason TEXT NOT NULL DEFAULT '',
+  opened_at      TEXT NOT NULL DEFAULT '',   -- 링크를 처음 연 시각
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_extsigner_doc ON external_signers(document_id, sign_order);
+
+-- 외부 서명자용 본인확인 코드 (회원용 sign_otp 와 같은 규칙, 대상만 다름)
+CREATE TABLE IF NOT EXISTS ext_otp (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  external_id INTEGER NOT NULL REFERENCES external_signers(id) ON DELETE CASCADE,
+  code_hash   TEXT NOT NULL,
+  phone       TEXT NOT NULL DEFAULT '',
+  attempts    INTEGER NOT NULL DEFAULT 0,
+  verified_at TEXT NOT NULL DEFAULT '',
+  expires_at  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (external_id)
+);
 CREATE INDEX IF NOT EXISTS idx_notif_assoc ON notifications(association_id, is_read);
 CREATE INDEX IF NOT EXISTS idx_media_business ON media(business_id);
 CREATE INDEX IF NOT EXISTS idx_business_assoc ON businesses(association_id, status);
@@ -469,7 +506,7 @@ CREATE INDEX IF NOT EXISTS idx_msglog_assoc ON message_log(association_id, creat
 
 // 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
 // 마이그레이션 세대 — migrateColumns 에 단계를 추가할 때마다 +1
-export const SCHEMA_VERSION = "28";
+export const SCHEMA_VERSION = "29";
 
 export async function ensureSchema(db) {
   const has = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='associations'").first();
@@ -584,6 +621,40 @@ async function migrateColumns(db) {
   if (mcols.length && !mcols.some((c) => c.name === "cost_base")) {
     await db.prepare("ALTER TABLE message_log ADD COLUMN cost_base INTEGER NOT NULL DEFAULT 0").run();
     await db.prepare("ALTER TABLE message_log ADD COLUMN ref TEXT NOT NULL DEFAULT ''").run();
+  }
+  // v29: 외부(비회원) 서명자
+  const extTbl = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='external_signers'").first();
+  if (!extTbl) {
+    await db.prepare(`CREATE TABLE external_signers (id INTEGER PRIMARY KEY AUTOINCREMENT, document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE, name TEXT NOT NULL, email TEXT NOT NULL DEFAULT '', phone TEXT NOT NULL DEFAULT '', org TEXT NOT NULL DEFAULT '', sign_order INTEGER NOT NULL DEFAULT 0, declined_at TEXT NOT NULL DEFAULT '', decline_reason TEXT NOT NULL DEFAULT '', opened_at TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT (datetime('now')))`).run();
+    await db.prepare("CREATE INDEX IF NOT EXISTS idx_extsigner_doc ON external_signers(document_id, sign_order)").run();
+    await db.prepare(`CREATE TABLE ext_otp (id INTEGER PRIMARY KEY AUTOINCREMENT, external_id INTEGER NOT NULL REFERENCES external_signers(id) ON DELETE CASCADE, code_hash TEXT NOT NULL, phone TEXT NOT NULL DEFAULT '', attempts INTEGER NOT NULL DEFAULT 0, verified_at TEXT NOT NULL DEFAULT '', expires_at TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE (external_id))`).run();
+  }
+  // signatures 에 external_id 를 더하고 user_id 를 비울 수 있게 — 컬럼 제약을 바꾸는 것이라
+  // SQLite 에선 표를 다시 만드는 수밖에 없다. 기존 행은 그대로 옮긴다(무손실).
+  const sg2 = (await db.prepare("PRAGMA table_info(signatures)").all()).results || [];
+  if (sg2.length && !sg2.some((c) => c.name === "external_id")) {
+    await db.prepare(`CREATE TABLE signatures_new (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+      user_id INTEGER, external_id INTEGER,
+      signer_name TEXT NOT NULL, signature_image TEXT NOT NULL DEFAULT '',
+      content_hash TEXT NOT NULL, ip TEXT NOT NULL DEFAULT '', user_agent TEXT NOT NULL DEFAULT '',
+      verify_code TEXT NOT NULL UNIQUE, record_hash TEXT NOT NULL,
+      verify_level TEXT NOT NULL DEFAULT 'password', prev_hash TEXT NOT NULL DEFAULT '',
+      seal_ver INTEGER NOT NULL DEFAULT 3, fields_hash TEXT NOT NULL DEFAULT '',
+      signed_at TEXT NOT NULL DEFAULT (datetime('now')))`).run();
+    const cols = new Set(sg2.map((c) => c.name));
+    const pick = (n, d) => (cols.has(n) ? n : d);
+    await db.prepare(`INSERT INTO signatures_new (id, document_id, user_id, external_id, signer_name, signature_image,
+      content_hash, ip, user_agent, verify_code, record_hash, verify_level, prev_hash, seal_ver, fields_hash, signed_at)
+      SELECT id, document_id, user_id, NULL, signer_name, signature_image, content_hash, ip, user_agent, verify_code,
+        record_hash, ${pick("verify_level", "'password'")}, ${pick("prev_hash", "''")}, ${pick("seal_ver", "1")},
+        ${pick("fields_hash", "''")}, signed_at FROM signatures`).run();
+    await db.prepare("DROP TABLE signatures").run();
+    await db.prepare("ALTER TABLE signatures_new RENAME TO signatures").run();
+    await db.prepare("CREATE INDEX IF NOT EXISTS idx_sig_doc ON signatures(document_id)").run();
+    await db.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_sig_doc_user ON signatures(document_id, user_id) WHERE user_id IS NOT NULL").run();
+    await db.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_sig_doc_ext ON signatures(document_id, external_id) WHERE external_id IS NOT NULL").run();
   }
   // v28: 문서 감사 추적 (열람·인증·서명 이력)
   const evTbl2 = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='doc_events'").first();
