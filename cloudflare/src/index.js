@@ -127,12 +127,12 @@ const TENANT = [
   ["POST", "/dashboard/updates", api.updateAdd, "MERCHANT"],
   ["POST", "/dashboard/updates/:id/delete", api.updateDelete, "MERCHANT"],
   ["POST", "/dashboard/dayoff", api.dayOffToggle, "MERCHANT"],
-  ["GET", "/sign", pages.signList, "MERCHANT"],
-  ["GET", "/sign/:id", pages.signForm, "MERCHANT"],
-  ["POST", "/sign/:id", api.memberSign, "MERCHANT"],
-  ["POST", "/sign/:id/decline", api.memberDeclineSign, "MERCHANT"],
-  ["POST", "/sign/:id/otp", api.signOtpSend, "MERCHANT"],
-  ["POST", "/sign/:id/otp/verify", api.signOtpVerify, "MERCHANT"],
+  ["GET", "/sign", pages.signList, "SIGNER"],
+  ["GET", "/sign/:id", pages.signForm, "SIGNER"],
+  ["POST", "/sign/:id", api.memberSign, "SIGNER"],
+  ["POST", "/sign/:id/decline", api.memberDeclineSign, "SIGNER"],
+  ["POST", "/sign/:id/otp", api.signOtpSend, "SIGNER"],
+  ["POST", "/sign/:id/otp/verify", api.signOtpVerify, "SIGNER"],
   ["GET", "/admin", pages.admin, "ADMIN"],
   ["POST", "/admin/business/:id/status", api.adminBusinessStatus, "ADMIN"],
   ["POST", "/admin/notice", api.adminCreateNotice, "ADMIN"],
@@ -147,31 +147,32 @@ const TENANT = [
   ["POST", "/admin/members/add", api.adminAddMember, "ADMIN"],
   ["POST", "/admin/invite", api.adminCreateInvite, "ADMIN"],
   ["POST", "/admin/admins/add", api.adminAddAdmin, "ADMIN"],
+  ["POST", "/admin/user/:id/revoke", api.adminRevokeRole, "ADMIN"],
   ["POST", "/admin/polls", api.adminCreatePoll, "ADMIN"],
   ["POST", "/admin/polls/:id/close", api.adminClosePoll, "ADMIN"],
   ["POST", "/admin/dues", api.adminDueToggle, "ADMIN"],
   ["POST", "/admin/product/:id/hide", api.adminProductHide, "ADMIN"],
   ["GET", "/admin/members.csv", pages.adminExportMembers, "ADMIN"],
   ["GET", "/admin/export.json", pages.adminExportAll, "ADMIN"],
-  ["GET", "/admin/documents", pages.adminDocuments, "ADMIN"],
+  ["GET", "/admin/documents", pages.adminDocuments, "STAFF"],
   ["POST", "/admin/credit/order", api.adminCreditOrder, "ADMIN"],
-  ["POST", "/admin/documents", api.adminCreateDocument, "ADMIN"],
-  ["GET",  "/admin/documents/new", pages.adminDocumentNew, "ADMIN"],
-  ["GET", "/admin/documents/:id", pages.adminDocumentDetail, "ADMIN"],
-  ["POST", "/admin/documents/:id/edit", api.adminEditDocument, "ADMIN"],
-  ["POST", "/admin/documents/:id/close", api.adminCloseDocument, "ADMIN"],
-  ["POST", "/admin/documents/:id/remind", api.adminRemindDocument, "ADMIN"],
+  ["POST", "/admin/documents", api.adminCreateDocument, "STAFF"],
+  ["GET",  "/admin/documents/new", pages.adminDocumentNew, "STAFF"],
+  ["GET", "/admin/documents/:id", pages.adminDocumentDetail, "STAFF"],
+  ["POST", "/admin/documents/:id/edit", api.adminEditDocument, "STAFF"],
+  ["POST", "/admin/documents/:id/close", api.adminCloseDocument, "STAFF"],
+  ["POST", "/admin/documents/:id/remind", api.adminRemindDocument, "STAFF"],
   ["GET",  "/admin/api", pages.adminApi, "ADMIN"],
   ["POST", "/admin/api", api.adminCreateApiKey, "ADMIN"],
   ["POST", "/admin/api/:id/revoke", api.adminRevokeApiKey, "ADMIN"],
   ["POST", "/admin/api/:id/webhook", api.adminSetWebhook, "ADMIN"],
-  ["GET",  "/admin/templates", pages.adminTemplates, "ADMIN"],
-  ["POST", "/admin/templates", api.adminSaveTemplate, "ADMIN"],
-  ["POST", "/admin/templates/:id/delete", api.adminDeleteTemplate, "ADMIN"],
-  ["GET",  "/admin/documents/:id/fields", pages.adminDocFields, "ADMIN"],
-  ["POST", "/admin/documents/:id/fields", api.adminSaveFields, "ADMIN"],
-  ["POST", "/admin/documents/:id/external", api.adminAddExternalSigner, "ADMIN"],
-  ["POST", "/admin/documents/:id/external/:sid/delete", api.adminRemoveExternalSigner, "ADMIN"],
+  ["GET",  "/admin/templates", pages.adminTemplates, "STAFF"],
+  ["POST", "/admin/templates", api.adminSaveTemplate, "STAFF"],
+  ["POST", "/admin/templates/:id/delete", api.adminDeleteTemplate, "STAFF"],
+  ["GET",  "/admin/documents/:id/fields", pages.adminDocFields, "STAFF"],
+  ["POST", "/admin/documents/:id/fields", api.adminSaveFields, "STAFF"],
+  ["POST", "/admin/documents/:id/external", api.adminAddExternalSigner, "STAFF"],
+  ["POST", "/admin/documents/:id/external/:sid/delete", api.adminRemoveExternalSigner, "STAFF"],
   ["GET",  "/documents/:id/paper", pages.documentPaper, "MEMBER"],
   ["GET",  "/documents/:id/evidence", pages.documentEvidence, "MEMBER"],
 ];
@@ -236,9 +237,18 @@ function authorize(user, auth, assoc) {
   if (!user) return "/login?err=1&msg=" + encodeURIComponent("로그인이 필요합니다.");
   if (auth === "USER") return true;
   if (auth === "SUPERADMIN") return user.role === ROLES.SUPERADMIN;
-  if (auth === "ADMIN") return user.role === ROLES.SUPERADMIN || (user.role === ROLES.ADMIN && assoc && user.association_id === assoc.id);
-  if (auth === "MERCHANT") return user.role === ROLES.MERCHANT && assoc && user.association_id === assoc.id;
-  if (auth === "MEMBER") return user.role === ROLES.SUPERADMIN || (assoc && user.association_id === assoc.id);
+  const own = assoc && user.association_id === assoc.id; // 이 조직 소속인가
+  // ADMIN — 설정·API 키·과금·담당자 관리. 조직의 주인만.
+  if (auth === "ADMIN") return user.role === ROLES.SUPERADMIN || (user.role === ROLES.ADMIN && own);
+  // STAFF — 계약 업무(문서·서식·외부 서명자). 관리자는 담당자가 하는 것을 당연히 할 수 있다.
+  if (auth === "STAFF") return user.role === ROLES.SUPERADMIN || ((user.role === ROLES.ADMIN || user.role === ROLES.STAFF) && own);
+  // SIGNER — 서명. 이 조직 소속이면 역할과 무관하게 들어올 수 있다(계약을 만든 사람도 서명해야 한다).
+  //   실제로 그 문서의 대상인지는 canReceiveSign 이 판정한다.
+  //   SUPERADMIN 은 일부러 제외한다 — 남의 조직 계약에 플랫폼 운영자의 서명이 남으면 안 된다.
+  if (auth === "SIGNER") return !!own;
+  // MERCHANT — 업체 관리(상인회 전용). 점포주 본인만.
+  if (auth === "MERCHANT") return user.role === ROLES.MERCHANT && own;
+  if (auth === "MEMBER") return user.role === ROLES.SUPERADMIN || own;
   return false;
 }
 

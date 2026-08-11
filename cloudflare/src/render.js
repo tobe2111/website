@@ -91,7 +91,9 @@ function navHtml(base, user, active, kind = "merchant") {
       items.push(link(`${base}/board`, "회원 게시판"));
       items.push(link(`${base}/polls`, "투표"));
     }
-    if (user.role === "MERCHANT") items.push(link(`${base}/sign`, "내 서명"));
+    // 서명은 역할과 무관하다 — 계약을 만든 사람도 서명해야 한다.
+    // 다만 상인회 메뉴는 건드리지 않는다(점포주만 보던 항목을 관리자에게 새로 띄우지 않음).
+    if (user.role === "MERCHANT" || esign) items.push(link(`${base}/sign`, "내 서명"));
     // 운영 메뉴는 손님용 메뉴와 섞지 않고 오른쪽에 따로 묶습니다.
     // '슈퍼'(플랫폼 콘솔)는 이 상인회의 메뉴가 아니므로 여기 두지 않습니다 —
     // 상인회 홈페이지 위에 플랫폼 운영 도구가 얹혀 있는 것처럼 보입니다. 계정 화면에서 들어갑니다.

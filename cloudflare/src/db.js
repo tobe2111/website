@@ -79,6 +79,11 @@ export async function createUser(db, { email, passwordHash, salt, name, role = "
 export const normalizePhone = (p) => String(p || "").replace(/\D/g, "").slice(0, 11);
 export const isValidPhone = (p) => /^01[016789]\d{7,8}$/.test(normalizePhone(p));
 export const maskPhone = (p) => { const d = normalizePhone(p); return d.length < 8 ? "***" : `${d.slice(0, 3)}****${d.slice(-4)}`; };
+// 역할 변경 — 조직 안에서만. 세션 버전을 올려 기존 로그인을 무효화한다
+// (권한을 회수했는데 열려 있던 탭이 계속 동작하면 회수가 아니다).
+export const setUserRole = (db, id, associationId, role) =>
+  run(db, "UPDATE users SET role=?, session_version = session_version + 1 WHERE id=? AND association_id=?",
+    role, id, associationId);
 export const setUserPhone = (db, id, phone) => run(db, "UPDATE users SET phone=? WHERE id=?", normalizePhone(phone), id);
 export const updateUserPassword = (db, id, hash, salt) =>
   run(db, "UPDATE users SET password_hash=?, salt=?, session_version = session_version + 1 WHERE id=?", hash, salt, id);
@@ -92,6 +97,14 @@ export function logAudit(db, { associationId = null, userId = null, actorName = 
 }
 export const listAudit = (db, associationId, limit = 20) =>
   all(db, "SELECT * FROM audit_log WHERE association_id " + (associationId == null ? "IS NULL" : "= ?") + " ORDER BY created_at DESC, id DESC LIMIT ?", ...(associationId == null ? [limit] : [associationId, limit]));
+// 내부 서명자 후보. 전자계약 조직에서는 관리자·담당자도 서명 대상이 될 수 있다
+// (대표가 계약서를 만들고 본인이 날인하는 것은 정당하다). 상인회는 예전처럼 점포주만.
+export const listSignerCandidates = (db, associationId, kind) =>
+  kind === "esign"
+    ? all(db, `SELECT u.id, u.email, u.name, u.role, u.phone, NULL AS business_name
+        FROM users u WHERE u.association_id=? AND u.role IN ('ADMIN','STAFF','MERCHANT')
+        ORDER BY CASE u.role WHEN 'ADMIN' THEN 0 WHEN 'STAFF' THEN 1 ELSE 2 END, u.name`, associationId)
+    : listUsersByAssociation(db, associationId, "MERCHANT");
 export function listUsersByAssociation(db, associationId, role = null) {
   const sql = `SELECT u.id, u.email, u.name, u.role, u.phone, b.name AS business_name
     FROM users u LEFT JOIN businesses b ON b.owner_id = u.id
@@ -445,19 +458,31 @@ const TURN_OK = `(d.ordered = 0 OR (
     SELECT 1 FROM external_signers ep JOIN signature_requests rme2 ON rme2.document_id=d.id AND rme2.user_id=?
     WHERE ep.document_id=d.id AND ep.sign_order < rme2.sign_order AND ep.declined_at=''
       AND NOT EXISTS (SELECT 1 FROM signatures se WHERE se.document_id=ep.document_id AND se.external_id=ep.id))))`;
-const TO_SIGN = `d.association_id=? AND d.closed=0 AND (d.due_date='' OR d.due_date >= date('now'))
+// 서명 대기 목록.
+// '대상을 아무도 지정하지 않은 문서 = 회원 전체 대상' 이라는 오래된 규칙이 있다(상인회의 전체 동의서).
+// 이 규칙은 회원(MERCHANT)에게만 적용한다 — 관리자·담당자까지 끌어들이면, 상인회 관리자가
+// 어느 날 갑자기 '서명 필요' 목록을 보게 된다. 계약을 만드는 사람은 명시적으로 지정됐을 때만
+// 서명 대상이다.
+const toSignSql = (openToAll) => `d.association_id=? AND d.closed=0 AND (d.due_date='' OR d.due_date >= date('now'))
   AND NOT EXISTS (SELECT 1 FROM signatures s WHERE s.document_id=d.id AND s.user_id=?)
   AND NOT EXISTS (SELECT 1 FROM signature_requests rd WHERE rd.document_id=d.id AND rd.user_id=? AND rd.declined_at != '')
-  AND (EXISTS (SELECT 1 FROM signature_requests r WHERE r.document_id=d.id AND r.user_id=?)
+  AND (EXISTS (SELECT 1 FROM signature_requests r WHERE r.document_id=d.id AND r.user_id=?)${openToAll ? `
        OR (NOT EXISTS (SELECT 1 FROM signature_requests r2 WHERE r2.document_id=d.id)
-           AND NOT EXISTS (SELECT 1 FROM external_signers e2 WHERE e2.document_id=d.id)))
+           AND NOT EXISTS (SELECT 1 FROM external_signers e2 WHERE e2.document_id=d.id))` : ""})
   AND ${TURN_OK}`;
-export const listDocumentsToSign = (db, aid, uid) => all(db, `SELECT d.* FROM documents d WHERE ${TO_SIGN} ORDER BY d.created_at DESC`, aid, uid, uid, uid, uid, uid);
-export const countDocumentsToSign = async (db, aid, uid) => (await first(db, `SELECT COUNT(*) AS n FROM documents d WHERE ${TO_SIGN}`, aid, uid, uid, uid, uid, uid)).n;
+// role 기본값이 MERCHANT 인 이유: 기존 호출부의 동작을 그대로 두기 위해서다.
+const openToAllFor = (role) => (role || "MERCHANT") === "MERCHANT";
+export const listDocumentsToSign = (db, aid, uid, role) =>
+  all(db, `SELECT d.* FROM documents d WHERE ${toSignSql(openToAllFor(role))} ORDER BY d.created_at DESC`, aid, uid, uid, uid, uid, uid);
+export const countDocumentsToSign = async (db, aid, uid, role) =>
+  (await first(db, `SELECT COUNT(*) AS n FROM documents d WHERE ${toSignSql(openToAllFor(role))}`, aid, uid, uid, uid, uid, uid)).n;
 // 대상이 지정된 문서(요청 행이 존재)는 대상자만 서명 가능 — 목록(TO_SIGN)과 동일한 규칙을 액션에도 강제
-export async function canReceiveSign(db, docId, uid) {
+export async function canReceiveSign(db, docId, uid, role) {
   const mine = await first(db, "SELECT 1 AS x FROM signature_requests WHERE document_id=? AND user_id=?", docId, uid);
   if (mine) return true;
+  // 관리자·담당자는 명시적으로 지정됐을 때만 대상이다 (목록 규칙과 반드시 같아야 한다 —
+  // 어긋나면 화면에는 안 보이는데 URL 로는 서명이 되거나 그 반대가 된다)
+  if (!openToAllFor(role)) return false;
   // 대상이 하나도 지정되지 않은 문서만 '회원 전체 대상'이다.
   // ⚠️ 외부 서명자도 대상이다 — 이걸 빠뜨리면 API·서식으로 만든 계약(서명자가 전부 외부)이
   //    signature_requests 가 비어 있다는 이유로 조직 회원 전원에게 열린다.

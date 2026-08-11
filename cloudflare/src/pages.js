@@ -3,7 +3,7 @@ import * as D from "./db.js";
 import { esc, clip, openBadge, openNow, fmtBytes, kstStamp, kstDate, prettyPath } from "./util.js";
 import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG, ORIGIN, assetUrl } from "./render.js";
 import { verifyInviteToken, SALES_STAGES, otpRequired, selfSignupOn } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
-import { html, notFoundResponse, back } from "./http.js";
+import { html, notFoundResponse, back, redirect } from "./http.js";
 import { galleryItem } from "./media-render.js";
 import { priceOf, costOf, jeonToWon, notifyEnabled, TEMPLATE_KEYS, TEMPLATES, billingMode, BILLING_MODES } from "./notify.js";
 import { providerLabel } from "./embed.js";
@@ -749,6 +749,8 @@ export function contactForm(ctx) {
 // ================= 대시보드 (내 업체) =================
 export async function dashboard(ctx) {
   const { db, env, assoc, base, user, query, csrf } = ctx;
+  // 전자계약 전용 조직에는 '내 업체'가 없다 — 빈 화면 대신 할 일이 있는 곳으로 보낸다
+  if (assoc.kind === "esign") return redirect(`${base}/sign`);
   const b = await D.getBusinessByOwner(db, user.id);
   if (!b || b.association_id !== assoc.id) return html(layout({ title: "대시보드", assoc, base, user, body: `<section class="section page-top"><div class="container"><p class="empty">연결된 업체가 없습니다.</p></div></section>`, csrf }));
   const media = await D.listMedia(db, b.id);
@@ -947,6 +949,17 @@ export async function admin(ctx) {
     <td>${esc(b.owner_name)}<br /><small>${esc(b.owner_email)}</small></td><td>${statusBadge(b.status)}</td>
     <td class="actions-cell">${b.status !== "approved" ? `<form method="post" action="${base}/admin/business/${b.id}/status"><input type="hidden" name="status" value="approved"><button class="btn btn-xs btn-primary">승인</button></form>` : ""}
       ${b.status !== "rejected" ? `<form method="post" action="${base}/admin/business/${b.id}/status"><input type="hidden" name="status" value="rejected"><button class="btn btn-xs btn-ghost">반려</button></form>` : ""}</td></tr>`).join("") : `<tr><td colspan="4" class="empty">등록된 업체가 없습니다.</td></tr>`;
+  // 전자계약 조직은 '담당자'(관리자·담당자)를 관리한다 — 목록·권한회수·비번 재발급이 필요하다.
+  // 한 번 발급한 계정을 회수할 방법이 없으면 퇴사자가 계약을 계속 만들 수 있다.
+  const staffList = [...admins, ...(await D.listUsersByAssociation(db, assoc.id, "STAFF"))];
+  const roleLabel = (r) => (r === "ADMIN" ? '<span class="badge badge-brand">관리자</span>' : '<span class="badge badge-info">담당자</span>');
+  const staffRows = staffList.length ? staffList.map((m) => `<tr><td>${esc(m.name)}<br /><small>${esc(m.email)}</small></td>
+    <td>${roleLabel(m.role)}<br /><small>${m.role === "ADMIN" ? "설정·API·과금 포함" : "계약서 작성·발송"}</small></td>
+    <td class="actions-cell">
+      ${m.id === user.id ? '<small class="txt-muted">본인</small>' : `
+      <form method="post" action="${base}/admin/user/${m.id}/reset-password" class="inline-form" data-confirm="${esc(m.name)}님의 임시 비밀번호를 발급할까요?&#10;기존 비밀번호는 즉시 무효가 됩니다."><button class="btn btn-xs btn-ghost">임시 비밀번호</button></form>
+      <form method="post" action="${base}/admin/user/${m.id}/revoke" class="inline-form" data-confirm="${esc(m.name)}님의 권한을 회수할까요?&#10;계정과 서명 이력은 그대로 남고, 계약을 만들 수 없게 됩니다."><button class="btn btn-xs btn-ghost">권한 회수</button></form>`}
+    </td></tr>`).join("") : `<tr><td colspan="3" class="empty">담당자가 없습니다.</td></tr>`;
   const memberRows = members.length ? members.map((m) => `<tr><td>${esc(m.name)}<br /><small>${esc(m.email)}</small></td><td>${esc(m.business_name || "-")}</td>
     <td class="actions-cell"><form method="post" action="${base}/admin/user/${m.id}/reset-password" data-confirm="임시 비밀번호를 발급할까요?"><button class="btn btn-xs btn-ghost">임시 비밀번호</button></form></td></tr>`).join("") : `<tr><td colspan="3" class="empty">회원이 없습니다.</td></tr>`;
   const noticeRows2 = notices.map((n) => `<li><span class="notice-tag${n.pinned ? " tag-important" : ""}">${esc(n.tag)}</span><span class="notice-title">${esc(n.title)}</span>
@@ -1044,31 +1057,48 @@ export async function admin(ctx) {
       ${unread ? `<form method="post" action="${base}/admin/notifications/read"><button class="btn btn-xs btn-ghost">모두 읽음</button></form>` : ""}</div>
       <ul class="notif-list">${notifRows}</ul></section>
     ${metricsPanel}
-    <section class="panel" id="p-members"><div class="panel-head"><h2 class="panel-title">회원 관리 <span class="badge badge-muted">${members.length}명</span></h2>
-      <span class="pill-row">${members.length ? `<a class="btn btn-xs btn-ghost" href="${base}/admin/members.csv">명단 CSV</a>` : ""}<a class="btn btn-xs btn-ghost" href="${base}/admin/export.json">전체 백업(JSON)</a></span></div>
-      <div class="table-scroll"><table class="admin-table"><thead><tr><th>회원</th><th>업체</th><th>비밀번호</th></tr></thead><tbody>${memberRows}</tbody></table></div>
+    <section class="panel" id="p-members"><div class="panel-head"><h2 class="panel-title">${isEsign ? "담당자 관리" : "회원 관리"} <span class="badge badge-muted">${isEsign ? staffList.length : members.length}명</span></h2>
+      <span class="pill-row">${members.length && !isEsign ? `<a class="btn btn-xs btn-ghost" href="${base}/admin/members.csv">명단 CSV</a>` : ""}<a class="btn btn-xs btn-ghost" href="${base}/admin/export.json">전체 백업(JSON)</a></span></div>
+      ${isEsign ? `<p class="panel-hint">계약서를 만들고 보내는 사람들입니다. <b>담당자</b>는 계약 업무만 하고 설정·API 키·과금은 볼 수 없습니다.
+        권한을 회수해도 계정과 서명 이력은 남습니다 — 지우면 증거가 사라지기 때문입니다.</p>
+      <div class="table-scroll"><table class="admin-table"><thead><tr><th>이름</th><th>권한</th><th>관리</th></tr></thead><tbody>${staffRows}</tbody></table></div>
+      ${members.length ? `<div class="form-divider">내부 서명자 <span class="badge badge-muted">${members.length}명</span></div>
+        <p class="panel-hint">사내에서 로그인해 서명하는 분들입니다(계약을 만들지는 않습니다).</p>
+        <div class="table-scroll"><table class="admin-table"><thead><tr><th>이름</th><th>비밀번호</th></tr></thead><tbody>${members.map((m) => `<tr><td>${esc(m.name)}<br /><small>${esc(m.email)}</small></td>
+          <td class="actions-cell"><form method="post" action="${base}/admin/user/${m.id}/reset-password" data-confirm="임시 비밀번호를 발급할까요?"><button class="btn btn-xs btn-ghost">임시 비밀번호</button></form></td></tr>`).join("")}</tbody></table></div>` : ""}`
+      : `<div class="table-scroll"><table class="admin-table"><thead><tr><th>회원</th><th>업체</th><th>비밀번호</th></tr></thead><tbody>${memberRows}</tbody></table></div>`}
       ${query.get("invite") ? `<div class="invite-box">
         <p class="invite-box-title">✅ 초대 링크가 만들어졌습니다 <small>(7일 유효)</small></p>
         <input type="text" class="invite-url" value="${esc(`${ORIGIN}${base}/invite?t=${encodeURIComponent(query.get("invite"))}`)}" readonly data-select-all />
         <span class="pill-row"><button type="button" class="btn btn-sm btn-primary" data-share data-share-url="${esc(`${ORIGIN}${base}/invite?t=${encodeURIComponent(query.get("invite"))}`)}" data-share-title="${esc(assoc.name)} 입점 초대">카톡으로 보내기 / 복사</button></span>
         <p class="panel-hint">사장님이 링크를 열어 이메일·비밀번호만 정하면 가게가 <b>승인 절차 없이 바로 공개</b>됩니다.</p></div>` : ""}
-      <details class="help-box" style="margin-top:14px" ${query.get("invite") ? "" : "open"}><summary>📨 사장님 초대 링크 만들기 (가장 쉬운 온보딩)</summary>
+      ${isEsign ? "" : `<details class="help-box" style="margin-top:14px" ${query.get("invite") ? "" : "open"}><summary>📨 사장님 초대 링크 만들기 (가장 쉬운 온보딩)</summary>
         <div class="help-body"><p class="help-lead">가게 이름만 입력해 링크를 만들고 카톡으로 보내세요. 사장님은 이메일·비밀번호만 정하면 끝 — 가게가 바로 공개됩니다.</p>
         <form method="post" action="${base}/admin/invite" class="stack-form compact">
           <div class="form-two"><label>가게 이름<input type="text" name="biz_name" required maxlength="100" /></label><label>업종<select name="category">${CATEGORIES.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("")}</select></label></div>
-          <button class="btn btn-primary btn-sm">초대 링크 만들기</button></form></div></details>
-      <details class="help-box" style="margin-top:14px"><summary>👥 부관리자 추가 (회장·총무 공동 운영)</summary>
+          <button class="btn btn-primary btn-sm">초대 링크 만들기</button></form></div></details>`}
+      ${isEsign ? `<details class="help-box" style="margin-top:14px" open><summary>👤 담당자 추가</summary>
+        <div class="help-body"><p class="help-lead">계약서를 만들고 보낼 사람에게 계정을 발급합니다.
+          <b>담당자</b>는 계약 업무만 하고 설정·API 키·과금은 볼 수 없습니다. <b>관리자</b>는 이 콘솔 전부를 함께 씁니다 — 믿을 수 있는 분에게만 주세요.</p>
+        <form method="post" action="${base}/admin/admins/add" class="stack-form compact">
+          <div class="form-two"><label>성함<input type="text" name="name" required maxlength="60" /></label><label>이메일<input type="email" name="email" required maxlength="120" /></label></div>
+          <div class="form-two"><label>휴대폰 <small>(선택 · 본인확인용)</small><input type="tel" name="phone" maxlength="13" inputmode="numeric" placeholder="010-1234-5678" /></label>
+            <label>권한<select name="role">
+              <option value="STAFF">담당자 — 계약서 작성·발송만</option>
+              <option value="ADMIN">관리자 — 설정·API·과금 포함</option></select></label></div>
+          <button class="btn btn-primary btn-sm">계정 발급 + 임시 비번</button></form></div></details>`
+      : `<details class="help-box" style="margin-top:14px"><summary>👥 부관리자 추가 (회장·총무 공동 운영)</summary>
         <div class="help-body"><p class="help-lead">관리자 권한 계정을 하나 더 발급합니다. 승인·공지·브랜딩 등 이 콘솔의 모든 기능을 함께 쓸 수 있으니 믿을 수 있는 분에게만 발급하세요.</p>
         ${admins.length > 1 ? `<p class="panel-hint">현재 관리자: ${admins.map((u) => esc(u.name || u.email)).join(", ")}</p>` : ""}
         <form method="post" action="${base}/admin/admins/add" class="stack-form compact">
           <div class="form-two"><label>성함<input type="text" name="name" required /></label><label>이메일<input type="email" name="email" required /></label></div>
-          <button class="btn btn-primary btn-sm">부관리자 발급 + 임시 비번</button></form></div></details>
-      <details class="help-box" style="margin-top:14px"><summary>사장님 대신 등록하기 (대행)</summary>
+          <button class="btn btn-primary btn-sm">부관리자 발급 + 임시 비번</button></form></div></details>`}
+      ${isEsign ? "" : `<details class="help-box" style="margin-top:14px"><summary>사장님 대신 등록하기 (대행)</summary>
         <div class="help-body"><p class="help-lead">사장님이 직접 못 하실 때 총무가 대신 계정을 만들어 드립니다. 임시 비밀번호를 전달하세요. (대행 등록은 참여 계측에 '대행'으로 집계됩니다.)</p>
         <form method="post" action="${base}/admin/members/add" class="stack-form compact">
           <div class="form-two"><label>사장님 성함<input type="text" name="name" required /></label><label>이메일<input type="email" name="email" required /></label></div>
           <div class="form-two"><label>업체명<input type="text" name="business_name" required /></label><label>업종<input type="text" name="category" placeholder="예: 음식점" /></label></div>
-          <button class="btn btn-primary btn-sm">대행 등록 + 임시 비번 발급</button></form></div></details></section>
+          <button class="btn btn-primary btn-sm">대행 등록 + 임시 비번 발급</button></form></div></details>`}</section>
     ${isEsign ? "" : duesPanel}
     ${notifyPanel}
     ${auditPanel}
@@ -1153,7 +1183,7 @@ export async function adminExportAll(ctx) {
 
 export async function adminExportMembers(ctx) {
   const { db, assoc } = ctx;
-  const members = await D.listUsersByAssociation(db, assoc.id, "MERCHANT");
+  const members = await D.listSignerCandidates(db, assoc.id, assoc.kind);
   const lines = [["이름", "이메일", "업체명", "역할"], ...members.map((m) => [m.name, m.email, m.business_name || "", m.role])];
   const csv = "﻿" + lines.map((r) => r.map(csvCell).join(",")).join("\r\n");
   return text(csv, 200, { "content-type": "text/csv; charset=utf-8", "content-disposition": `attachment; filename="members_${assoc.slug}.csv"`, "cache-control": "no-store" });
@@ -1162,14 +1192,14 @@ export async function adminExportMembers(ctx) {
 // ================= 전자서명 =================
 export async function signList(ctx) {
   const { db, assoc, base, user, query, csrf } = ctx;
-  const todo = await D.listDocumentsToSign(db, assoc.id, user.id);
+  const todo = await D.listDocumentsToSign(db, assoc.id, user.id, user.role);
   const all = await D.listDocuments(db, assoc.id);
   const signedFlags = await Promise.all(all.map((d) => D.hasSigned(db, d.id, user.id)));
   const todoRows = todo.length ? todo.map((d) => `<li><a href="${base}/sign/${d.id}"><span class="notice-tag tag-important">서명 필요</span>
     <span class="notice-title">${esc(d.title)}${d.ordered ? ' <span class="badge badge-info">순차</span>' : ""}${d.due_date ? ` <span class="badge badge-wait">~${esc(d.due_date)}</span>` : ""}</span><time>${esc(kstDate(d.created_at, "."))}</time></a></li>`).join("") : `<li class="empty">서명할 문서가 없습니다.</li>`;
   const doneRows = all.filter((_, i) => signedFlags[i]).map((d) => `<li><span class="notice-tag badge-ok">서명 완료</span><span class="notice-title">${esc(d.title)}</span></li>`).join("") || `<li class="empty">서명 내역이 없습니다.</li>`;
   const body = `<section class="section page-top"><div class="container narrow">
-    <a href="${base}/dashboard" class="back-link">← 내 업체</a>
+    <a href="${assoc.kind === "esign" ? base + "/" : base + "/dashboard"}" class="back-link">← ${assoc.kind === "esign" ? "홈" : "내 업체"}</a>
     <div class="section-head" style="text-align:left"><p class="section-eyebrow">E-SIGN</p><h1 class="section-title">전자서명</h1></div>${flashOf(query)}
     <h2 class="biz-section-title">서명 대기 (${todo.length})</h2><ul class="notice-list">${todoRows}</ul>
     <h2 class="biz-section-title" style="margin-top:32px">서명 완료</h2><ul class="notice-list">${doneRows}</ul></div></section>`;
@@ -1182,7 +1212,7 @@ export async function signForm(ctx) {
   if (await D.hasSigned(db, d.id, user.id)) return back(base + "/sign", "이미 서명한 문서입니다.");
   if (d.closed) return back(base + "/sign", "마감된 문서입니다.", true);
   if (D.isPastDue(d)) return back(base + "/sign", "서명 기한이 지난 문서입니다.", true);
-  if (!(await D.canReceiveSign(db, d.id, user.id))) return back(base + "/sign", "이 문서의 서명 대상이 아닙니다.", true);
+  if (!(await D.canReceiveSign(db, d.id, user.id, user.role))) return back(base + "/sign", "이 문서의 서명 대상이 아닙니다.", true);
   const meta = `${d.ordered ? '<span class="badge badge-info">순차 서명</span>' : ""}${d.due_date ? `<span class="badge badge-wait">기한 ${esc(d.due_date)}</span>` : ""}`;
   if (!(await D.canSignNow(db, d, user.id))) {
     const wb = `<section class="section page-top"><div class="container narrow"><a href="${base}/sign" class="back-link">← 서명 목록</a>
@@ -1262,7 +1292,7 @@ export async function adminDocuments(ctx) {
     ${d.ordered ? '<span class="badge badge-info">순차</span>' : ""}${d.due_date ? `<span class="badge ${d.due_date < today ? "badge-no" : "badge-wait"}">기한 ${esc(d.due_date)}</span>` : ""}<br /><small>${esc(kstStamp(d.created_at))}</small></td>
     <td>${d.sign_count}명</td><td>${d.closed ? '<span class="badge badge-no">마감</span>' : '<span class="badge badge-ok">진행중</span>'}</td>
     <td class="actions-cell"><a class="btn btn-xs btn-ghost" href="${base}/admin/documents/${d.id}">보기</a>${d.closed ? "" : `<form method="post" action="${base}/admin/documents/${d.id}/close" data-confirm="마감할까요?"><button class="btn btn-xs btn-ghost">마감</button></form>`}</td></tr>`).join("") : `<tr><td colspan="4" class="empty">문서가 없습니다.</td></tr>`;
-  const members = await D.listUsersByAssociation(db, assoc.id, "MERCHANT");
+  const members = await D.listSignerCandidates(db, assoc.id, assoc.kind);
   const checks = members.length ? members.map((m) => `<label class="check member-check"><input type="checkbox" name="members" value="${m.id}" /> ${esc(m.name)} <small>${esc(m.email)}</small></label>`).join("") : `<p class="empty">회원이 없습니다.</p>`;
   const myTpls = (await D.listTemplates(db, assoc.id)).filter((t) => t.association_id === assoc.id).map(normalizeTemplate);
   const card = (t) => `<a class="tpl-card" href="${base}/admin/documents/new?tpl=${encodeURIComponent(t.id)}">
@@ -1381,7 +1411,7 @@ export async function adminDocumentNew(ctx) {
   const src = isBuiltinId(raw) ? builtinById(raw) : await D.getTemplate(db, Number(raw) || 0);
   if (!src || (!isBuiltinId(raw) && src.association_id !== 0 && src.association_id !== assoc.id)) return notFoundResponse(ctx);
   const t = normalizeTemplate(src);
-  const members = await D.listUsersByAssociation(db, assoc.id, "MERCHANT");
+  const members = await D.listSignerCandidates(db, assoc.id, assoc.kind);
   const memberOpts = members.map((m) => `<option value="${m.id}">${esc(m.name)} (${esc(m.email)})</option>`).join("");
   const varInputs = t.vars.length
     ? t.vars.map((v) => `<label>${esc(v)}<input type="text" name="var_${esc(v)}" maxlength="200" placeholder="${esc(v)}" /></label>`).join("")
@@ -1636,10 +1666,12 @@ async function esignHome(ctx) {
   const noticeHtml = notices.length ? `<section class="section section-alt"><div class="container narrow">
     <h2 class="biz-section-title">공지</h2><ul class="notice-list">${notices.map((n) => `<li><a href="${base}/notices/${n.id}">
       <span class="notice-title">${esc(n.title)}</span><time>${esc(kstDate(n.created_at, "."))}</time></a></li>`).join("")}</ul></div></section>` : "";
-  const mine = user && user.role === "MERCHANT"
-    ? `<a href="${base}/sign" class="btn btn-primary btn-lg">서명할 문서 보기</a>`
-    : user ? `<a href="${base}/admin/documents" class="btn btn-primary btn-lg">계약 관리로</a>`
-    : `<a href="/login" class="btn btn-primary btn-lg">로그인</a>`;
+  // 계약을 만드는 사람과 서명하는 사람이 같을 수 있다 — 해당하는 입구를 모두 보여 준다
+  const canManage = user && (user.role === "ADMIN" || user.role === "STAFF");
+  const mine = !user
+    ? `<a href="/login" class="btn btn-primary btn-lg">로그인</a>`
+    : `${canManage ? `<a href="${base}/admin/documents" class="btn btn-primary btn-lg">계약 관리로</a>` : ""}
+       <a href="${base}/sign" class="btn ${canManage ? "btn-ghost" : "btn-primary"} btn-lg">서명할 문서 보기</a>`;
   const body = `<section class="landing-hero"><div class="container">
       <p class="hero-eyebrow">${esc(assoc.name)}</p>
       <h1 class="landing-title">전자계약</h1>
@@ -1816,8 +1848,9 @@ export async function documentEvidence(ctx) {
   const { db, env, assoc, user, params } = ctx;
   const d = await D.getDocument(db, Number(params.id));
   if (!d || d.association_id !== assoc.id) return notFoundResponse(ctx);
-  const isAdmin = user.role !== "MERCHANT";
-  if (!isAdmin && !(await D.canReceiveSign(db, d.id, user.id))) return notFoundResponse(ctx);
+  // 역할 목록에 값을 하나 더했다고 권한이 조용히 늘어나면 안 된다 — 허용 역할을 명시한다
+  const isAdmin = user.role === "ADMIN" || user.role === "STAFF" || user.role === "SUPERADMIN";
+  if (!isAdmin && !(await D.canReceiveSign(db, d.id, user.id, user.role))) return notFoundResponse(ctx);
   const { zip, filename } = await buildEvidence(env, db, d, assoc);
   return new Response(zip, { headers: {
     "content-type": "application/zip",
@@ -1893,8 +1926,9 @@ export async function documentPaper(ctx) {
   const { db, assoc, base, user, params, csrf } = ctx;
   const d = await D.getDocument(db, Number(params.id));
   if (!d || d.association_id !== assoc.id) return notFoundResponse(ctx);
-  const isAdmin = user.role !== "MERCHANT";
-  if (!isAdmin && !(await D.canReceiveSign(db, d.id, user.id))) return notFoundResponse(ctx);
+  // 역할 목록에 값을 하나 더했다고 권한이 조용히 늘어나면 안 된다 — 허용 역할을 명시한다
+  const isAdmin = user.role === "ADMIN" || user.role === "STAFF" || user.role === "SUPERADMIN";
+  if (!isAdmin && !(await D.canReceiveSign(db, d.id, user.id, user.role))) return notFoundResponse(ctx);
   const fields = await D.listFieldsWithValues(db, d.id);
   const reqs = await D.listRequestStatus(db, d.id);
   const rc = await D.requestCounts(db, d.id);

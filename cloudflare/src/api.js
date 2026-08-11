@@ -47,7 +47,12 @@ export async function postLoginPath(db, user) {
   if (user.role === "SUPERADMIN") return "/super";
   const a = user.association_id ? await D.getAssociationById(db, user.association_id) : null;
   const base = a ? `/t/${a.slug}` : "";
+  const esign = !!(a && a.kind === "esign");
   if (user.role === "ADMIN") return base + "/admin";
+  // 담당자는 관리자 콘솔에 들어갈 수 없다 — 일하는 자리인 계약서 목록으로 바로 보낸다
+  if (user.role === "STAFF") return base + "/admin/documents";
+  // 전자계약 조직의 회원에게 '내 업체'는 없다. 빈 화면 대신 서명 목록으로.
+  if (esign) return base + "/sign";
   return base + "/dashboard";
 }
 
@@ -476,6 +481,16 @@ export async function deleteComment(ctx) {
 // ---------- 관리자 ----------
 const isAdmin = canModerateBoard; // 동일 판정 — 중복 정의 통합
 // 감사 로그 기록 (assoc=null 이면 플랫폼/슈퍼)
+// 임시 비밀번호 — Math.random() 은 예측 가능해 계정 탈취에 쓰일 수 있다.
+// 이 값은 사람이 손으로 옮겨 적으므로 헷갈리는 글자(0/O, 1/l/I)는 뺀다.
+const TEMP_ALPHABET = "abcdefghijkmnpqrstuvwxyz23456789";
+export function tempPassword(len = 12) {
+  const b = crypto.getRandomValues(new Uint8Array(len));
+  let out = "";
+  for (let i = 0; i < len; i++) out += TEMP_ALPHABET[b[i] % TEMP_ALPHABET.length];
+  return out;
+}
+
 const audit = (ctx, action, detail = "", assocId) =>
   D.logAudit(ctx.db, { associationId: assocId !== undefined ? assocId : (ctx.assoc ? ctx.assoc.id : null), userId: ctx.user.id, actorName: ctx.user.name, action, detail });
 
@@ -564,8 +579,11 @@ export async function adminReadNotifications(ctx) {
 export async function adminResetUserPassword(ctx) {
   const { db, base, assoc, params } = ctx;
   const target = await D.getUserById(db, Number(params.id));
-  if (!target || target.association_id !== assoc.id || target.role !== "MERCHANT") return back(base + "/admin", "대상 회원을 찾을 수 없습니다.", true);
-  const temp = Math.random().toString(36).slice(2, 10); // 임시 비밀번호
+  if (!target || target.association_id !== assoc.id) return back(base + "/admin", "대상 회원을 찾을 수 없습니다.", true);
+  if (target.role === "SUPERADMIN") return back(base + "/admin", "플랫폼 운영자 계정은 여기서 바꿀 수 없습니다.", true);
+  // 자기 비밀번호는 계정 설정에서 바꾼다. 여기서 되면 세션 탈취자가 곧바로 계정을 굳혀 버린다.
+  if (target.id === ctx.user.id) return back(base + "/admin", "본인 비밀번호는 계정 설정에서 변경해 주세요.", true);
+  const temp = tempPassword();
   const { hash, salt } = await hashPassword(temp);
   await D.updateUserPassword(db, target.id, hash, salt);
   await audit(ctx, "비밀번호재설정", target.email);
@@ -583,7 +601,7 @@ export async function adminAddMember(ctx) {
   if (await D.getUserByEmail(db, email)) return back(base + "/admin", "이미 가입된 이메일입니다.", true);
   if ((await D.countMembers(db, assoc.id)) >= planOf(assoc).maxMembers)
     return back(base + "/admin", "회원 정원이 가득 찼습니다.", true);
-  const temp = Math.random().toString(36).slice(2, 10);
+  const temp = tempPassword();
   const { hash, salt } = await hashPassword(temp);
   const user = await D.createUser(db, { email, passwordHash: hash, salt, name, role: "MERCHANT", associationId: assoc.id });
   await D.createBusiness(db, { associationId: assoc.id, ownerId: user.id, name: businessName, category: cap(form.get("category"), 40), source: "proxy" });
@@ -691,18 +709,45 @@ export async function adminDueToggle(ctx) {
   return redirect(`${base}/admin?due_period=${encodeURIComponent(period)}#p-dues`);
 }
 
+// 권한 회수 — 계정을 지우지 않고 역할만 내린다.
+// 서명 이력·감사 추적이 계정에 매달려 있으므로 삭제하면 증거가 사라진다.
+export async function adminRevokeRole(ctx) {
+  const { db, base, assoc, params, user } = ctx;
+  const target = await D.getUserById(db, Number(params.id) || 0);
+  if (!target || target.association_id !== assoc.id) return back(base + "/admin", "대상을 찾을 수 없습니다.", true);
+  if (target.id === user.id) return back(base + "/admin", "본인 권한은 회수할 수 없습니다.", true);
+  if (target.role !== "ADMIN" && target.role !== "STAFF") return back(base + "/admin", "이미 권한이 없는 계정입니다.", true);
+  // 마지막 관리자를 내리면 그 조직에 들어갈 사람이 없어진다
+  if (target.role === "ADMIN") {
+    const admins = await D.listUsersByAssociation(db, assoc.id, "ADMIN");
+    if (admins.length <= 1) return back(base + "/admin", "마지막 관리자의 권한은 회수할 수 없습니다. 다른 관리자를 먼저 지정해 주세요.", true);
+  }
+  await D.setUserRole(db, target.id, assoc.id, "MERCHANT");
+  await audit(ctx, "권한회수", `${target.name} (${target.email}) ${target.role} → 일반`);
+  return back(base + "/admin", `${target.name}님의 권한을 회수했습니다. 계정과 서명 이력은 그대로 남습니다.`);
+}
+
 // ---------- 부관리자 (회장·총무 등 공동 운영) ----------
 export async function adminAddAdmin(ctx) {
   const { db, base, assoc, user } = ctx;
   const form = ctx.form;
   const name = cap((form.get("name") || "").trim(), 60);
   const email = cap((form.get("email") || "").toLowerCase().trim(), 120);
+  const phone = D.normalizePhone(form.get("phone") || "");
+  // 상인회의 '부관리자'는 회장·총무가 공동 운영하는 자리라 예전처럼 관리자 권한이 기본이다.
+  // 전자계약 조직은 실무자에게 계정을 주는 자리이므로 담당자(STAFF)가 기본 — 관리자 권한은
+  // 일부러 골라야 준다(실수로 API 키·과금까지 열리지 않게). 폼이 role 을 보내면 그것이 우선.
+  const picked = form.get("role");
+  const role = picked === "ADMIN" ? "ADMIN"
+    : picked === "STAFF" ? "STAFF"
+    : (assoc.kind === "esign" ? "STAFF" : "ADMIN");
   if (!name || !EMAIL_RE.test(email)) return back(base + "/admin", "이름·이메일을 확인해 주세요.", true);
+  if (phone && !D.isValidPhone(phone)) return back(base + "/admin", "휴대폰 번호 형식을 확인해 주세요.", true);
   if (await D.getUserByEmail(db, email)) return back(base + "/admin", "이미 가입된 이메일입니다.", true);
-  const temp = Math.random().toString(36).slice(2, 10);
+  const temp = tempPassword();
   const { hash, salt } = await hashPassword(temp);
-  await D.createUser(db, { email, passwordHash: hash, salt, name, role: "ADMIN", associationId: assoc.id });
-  await audit(ctx, "부관리자추가", `${name} (${email}) by ${user.email}`);
+  await D.createUser(db, { email, passwordHash: hash, salt, name, role, associationId: assoc.id, phone });
+  await audit(ctx, role === "ADMIN" ? "부관리자추가" : "담당자추가", `${name} (${email}) by ${user.email}`);
   return back(base + "/admin", `부관리자 발급 완료 — ${name}님 로그인: ${email} / 임시비번 ${temp} (전달 후 비밀번호 변경을 안내하세요)`);
 }
 
@@ -722,7 +767,7 @@ export async function adminCreateDocument(ctx) {
     const vals = {};
     for (const v of tpl.vars) vals[v] = cap((form.get("var_" + v) || "").replace(/[\x00-\x1f\x7f]/g, " ").trim(), 200);
     tplBody = applyVars(tpl.body, vals);
-    const members = await D.listUsersByAssociation(db, assoc.id, "MERCHANT");
+    const members = await D.listSignerCandidates(db, assoc.id, assoc.kind);
     const valid = new Set(members.map((m) => m.id));
     const n = Math.max(1, tpl.parties.length);
     for (let i = 0; i < n; i++) {
@@ -776,14 +821,14 @@ export async function adminCreateDocument(ctx) {
       assignee: partyMap[f.party | 0] || 0, required: f.required ? 1 : 0,
     })).filter((f) => isFieldKind(f.kind) && f.x + f.w <= 1.0001 && f.y + f.h <= 1.0001);
     if (placed.length) await D.replaceFields(db, doc.id, placed);
-    const recips = (await D.listUsersByAssociation(db, assoc.id, "MERCHANT")).filter((m) => signers.includes(m.id));
+    const recips = (await D.listSignerCandidates(db, assoc.id, assoc.kind)).filter((m) => signers.includes(m.id));
     await D.logDocEvent(db, { documentId: doc.id, userId: user.id, actorName: user.name, kind: "created", detail: `서식: ${tpl.title}`, ip: ctx.ip || "", userAgent: uaOf(ctx) });
     await notifyNewDocument(ctx, doc, title, dueDate, ordered, recips);
     await audit(ctx, "서명문서생성", `${title} (서식: ${tpl.title})`);
     return redirect(`${base}/admin/documents/${doc.id}/fields?msg=${encodeURIComponent("서식으로 문서를 만들었습니다. 서명 자리를 확인하고 저장하세요.")}`);
   }
   const target = form.get("target");
-  const members = await D.listUsersByAssociation(db, assoc.id, "MERCHANT");
+  const members = await D.listSignerCandidates(db, assoc.id, assoc.kind);
   let recipients = [];
   if (target === "all") { recipients = members; await D.createSignatureRequests(db, doc.id, members.map((m) => m.id)); }
   else if (target === "select") { const valid = new Map(members.map((m) => [m.id, m])); const chosen = form.getAll("members").map(Number).filter((id) => valid.has(id)); recipients = chosen.map((id) => valid.get(id)); await D.createSignatureRequests(db, doc.id, chosen); }
@@ -1045,7 +1090,7 @@ export async function signOtpSend(ctx) {
   const d = await D.getDocument(db, Number(params.id));
   if (!d || d.association_id !== assoc.id) return back(base + "/sign", "문서를 찾을 수 없습니다.", true);
   if (d.closed || D.isPastDue(d)) return back(base + "/sign", "서명할 수 없는 문서입니다.", true);
-  if (!(await D.canReceiveSign(db, d.id, user.id))) return back(base + "/sign", "이 문서의 서명 대상이 아닙니다.", true);
+  if (!(await D.canReceiveSign(db, d.id, user.id, user.role))) return back(base + "/sign", "이 문서의 서명 대상이 아닙니다.", true);
   if (!D.isValidPhone(user.phone || "")) return back(base + "/sign/" + d.id, "본인확인에 쓸 휴대폰이 없습니다. 계정 설정에서 번호를 등록해 주세요.", true);
   // 재발송 남용 방지 — 직전 발송 후 60초 이내면 거절 (비용·문자 폭탄 방지)
   const cur = await D.getSignOtp(db, d.id, user.id);
@@ -1115,7 +1160,7 @@ export async function memberDeclineSign(ctx) {
   if (!d || d.association_id !== assoc.id) return back(base + "/sign", "문서를 찾을 수 없습니다.", true);
   if (d.closed) return back(base + "/sign", "마감된 문서입니다.", true);
   if (await D.hasSigned(db, d.id, user.id)) return back(base + "/sign", "이미 서명한 문서는 거절할 수 없습니다.", true);
-  if (!(await D.canReceiveSign(db, d.id, user.id))) return back(base + "/sign", "이 문서의 서명 대상이 아닙니다.", true);
+  if (!(await D.canReceiveSign(db, d.id, user.id, user.role))) return back(base + "/sign", "이 문서의 서명 대상이 아닙니다.", true);
   const reason = cap((form.get("reason") || "").trim(), 300);
   if (!reason) return back(base + "/sign/" + d.id, "거절 사유를 입력해 주세요.", true);
   await D.declineSign(db, d.id, user.id, reason);
@@ -1370,7 +1415,7 @@ export async function memberSign(ctx) {
   if (D.isPastDue(d)) return back(base + "/sign", "서명 기한이 지난 문서입니다.", true);
   if (await D.hasSigned(db, d.id, user.id)) return back(base + "/sign", "이미 서명한 문서입니다.", true);
   // 대상 지정 문서는 지정된 회원만 서명 가능 (비대상자의 서명 봉인 위조 차단)
-  if (!(await D.canReceiveSign(db, d.id, user.id))) return back(base + "/sign", "이 문서의 서명 대상이 아닙니다.", true);
+  if (!(await D.canReceiveSign(db, d.id, user.id, user.role))) return back(base + "/sign", "이 문서의 서명 대상이 아닙니다.", true);
   if (!(await D.canSignNow(db, d, user.id))) return back(base + "/sign", "앞 순번의 서명이 완료된 후 서명할 수 있습니다.", true);
   if (form.get("consent") !== "1") return back(base + "/sign/" + d.id, "동의 확인란에 체크해 주세요.", true);
   // 본인확인(OTP)이 켜져 있으면 통과한 사람만 서명할 수 있다 — 화면을 우회한 직접 POST 도 여기서 막힌다
@@ -1820,7 +1865,7 @@ export async function approveApplication(ctx) {
   let slug = slugify(app.assoc_name), n = 1;
   while (await D.getAssociationBySlug(db, slug)) slug = slugify(app.assoc_name) + "-" + (++n);
   const assoc = await D.createAssociation(db, { slug, name: app.assoc_name });
-  const temp = Math.random().toString(36).slice(2, 10);
+  const temp = tempPassword();
   const { hash, salt } = await hashPassword(temp);
   await D.createUser(db, { email: app.contact_email, passwordHash: hash, salt, name: app.assoc_name + " 관리자", role: "ADMIN", associationId: assoc.id });
   await D.setApplicationStatus(db, app.id, "approved");
@@ -1897,7 +1942,7 @@ export async function superResetAdminPassword(ctx) {
   const { db, params } = ctx;
   const target = await D.getUserById(db, Number(params.id));
   if (!target || target.role !== "ADMIN") return back("/super", "대상 관리자를 찾을 수 없습니다.", true);
-  const temp = Math.random().toString(36).slice(2, 10);
+  const temp = tempPassword();
   const { hash, salt } = await hashPassword(temp);
   await D.updateUserPassword(db, target.id, hash, salt);
   await audit(ctx, "관리자비번재발급", target.email, null);
