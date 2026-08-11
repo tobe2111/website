@@ -1438,3 +1438,16 @@ a.cc-val:hover{color:var(--brand-700)}
   .pf-empty{border:none;background:none}
   .pf-tag,.pf-who,.pf-grip{display:none}
 }
+
+/* ===== 슈퍼 콘솔 탭 ===== */
+/* JS 가 붙었을 때만 숨긴다 — 스크립트가 없으면 예전처럼 전부 보이는 문서 */
+.has-supertabs .sgroup{display:none}
+.has-supertabs .sgroup.on{display:block}
+.console-side a.on{background:var(--brand-050);color:var(--brand);box-shadow:inset 0 0 0 1px var(--brand-200)}
+.super-todo{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:18px}
+.super-todo-item{display:flex;align-items:center;gap:10px;padding:12px 16px;background:var(--wait-bg);color:var(--wait-fg);
+  border-radius:var(--r-md);text-decoration:none;font-weight:700;font-size:.9rem;transition:.15s}
+.super-todo-item:hover{filter:brightness(.97)}
+.super-todo-item b{font-size:1.35rem;line-height:1}
+.super-todo.is-clear{padding:10px 16px;background:var(--ok-bg);color:var(--ok-fg);border-radius:var(--r-md);font-weight:600;font-size:.9rem}
+.sgroup > .panel:first-child,.sgroup > .stat-cards:first-child{margin-top:0}

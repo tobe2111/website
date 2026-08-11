@@ -1726,14 +1726,72 @@ export async function superConsole(ctx) {
           <p class="del-warn">되돌릴 수 없습니다. 확인용으로 주소 <code>${esc(a.slug)}</code> 를 입력하세요.</p>
           <input type="text" name="confirm_slug" placeholder="${esc(a.slug)}" required autocomplete="off" />
           <button class="btn btn-xs btn-danger">영구 삭제</button></form></details></td></tr>`).join("") || `<tr><td colspan="5" class="empty">상인회가 없습니다.</td></tr>`;
+  // 콘솔이 한 화면에 14개 패널로 쏟아지던 것을 5개 묶음으로 나눈다.
+  // 왼쪽에서 하나를 고르면 그것만 보인다(JS 꺼져 있으면 전부 보이는 문서로 폴백).
+  const todo = [
+    pendCredits.length ? { n: pendCredits.length, label: "충전 승인 대기", tab: "money" } : null,
+    dueSoon ? { n: dueSoon, label: "오늘 연락할 영업", tab: "sales" } : null,
+    keyMode === "secret" ? null : { n: 1, label: "서명키를 Secret 으로 이전", tab: "settings" },
+  ].filter(Boolean);
+  const todoBar = todo.length
+    ? `<div class="super-todo">${todo.map((t) => `<a href="#s-${t.tab}" class="super-todo-item"><b>${t.n}</b><span>${esc(t.label)}</span></a>`).join("")}</div>`
+    : `<div class="super-todo is-clear"><span>지금 처리할 일이 없습니다 ✓</span></div>`;
+  const TABS = [
+    ["home", "홈", "◎"],
+    ["assoc", "상인회", "▤"],
+    ["sales", "영업", "◈", pendingApps.length],
+    ["money", "알림톡·정산", "₩", pendCredits.length],
+    ["settings", "설정·보안", "⚙", keyMode === "secret" ? 0 : 1],
+  ];
+  const sideNav = `<aside class="console-side"><nav id="superNav">${TABS.map(([id, label, icon, badge]) =>
+    `<a href="#s-${id}" data-tab="${id}">${icon} ${esc(label)}${badge ? `<span class="side-badge">${badge}</span>` : ""}</a>`).join("")}</nav></aside>`;
+
   const body = `<section class="dash"><div class="container">
-    <div class="dash-head"><div><p class="section-eyebrow">SUPER</p><h1 class="dash-title">플랫폼 관리</h1></div>
-      <div class="dash-head-actions"><form method="post" action="/logout"><button class="btn btn-ghost btn-sm">로그아웃</button></form></div></div>${flashOf(query)}
+    <div class="dash-head"><div><p class="section-eyebrow">SUPER</p><h1 class="dash-title">플랫폼 관리</h1>
+      <p class="dash-sub">운영 중 ${ps.associations}곳 · 가입 점포 ${ps.businesses}곳 · 사용자 ${ps.users}명</p></div>
+      <div class="dash-head-actions"><a href="#s-assoc" class="btn btn-primary btn-sm" data-goto="assoc">＋ 새 상인회</a>
+        <form method="post" action="/logout"><button class="btn btn-ghost btn-sm">로그아웃</button></form></div></div>${flashOf(query)}
     ${loadWarnings.length ? `<div class="flash flash-err"><b>일부 정보를 불러오지 못했습니다.</b> 나머지 기능은 그대로 쓰실 수 있습니다.<br />${loadWarnings.map((w) => esc(w)).join("<br />")}</div>` : ""}
-    <div class="promo"><div class="promo-inner"><span class="mark" style="width:56px;height:56px;font-size:1.7rem;background:rgba(255,255,255,.18)">＋</span>
-      <div><h2>새 상인회 사이트를 5분 만에</h2><p>클릭 한 번으로 상인회 홈·관리자 계정을 발급합니다. 운영 중 ${ps.associations}곳 · 가입 점포 ${ps.businesses}곳.</p></div>
-      <a href="#new-assoc" class="btn btn-lg">새 사이트 만들기</a></div></div>
-    ${appsPanel}
+    ${todoBar}
+    <div class="console-grid">${sideNav}<div class="console-main">
+
+      <div class="sgroup" id="s-home" data-tab="home">
+    <div class="stat-cards"><div class="stat-card"><span class="stat-num">${ps.associations}</span><span class="stat-label">상인회</span></div>
+      <div class="stat-card"><span class="stat-num">${ps.businesses}</span><span class="stat-label">승인 업체</span></div>
+      <div class="stat-card"><span class="stat-num">${ps.users}</span><span class="stat-label">사용자</span></div>
+      <div class="stat-card"><span class="stat-num">${ps.media}</span><span class="stat-label">미디어</span></div></div>
+        <section class="panel"><h2 class="panel-title">이번 달 알림톡 손익 <span class="badge ${margin > 0 ? "badge-ok" : "badge-muted"}">${margin.toLocaleString()}원</span></h2>
+          <p class="panel-hint">건당 판매 ${unitPrice.toLocaleString()}원 · 마진율 ${marginPct}%. 자세한 내역은 <a href="#s-money" data-goto="money">알림톡·정산</a> 에서 봅니다.</p></section>
+        ${wiredPanel}
+      </div>
+
+      <div class="sgroup" id="s-assoc" data-tab="assoc">
+    <section class="panel panel-accent" id="new-assoc"><h2 class="panel-title">➕ 새 상인회 (사이트 복제)</h2>
+      <form method="post" action="/super/association" class="stack-form">
+        <div class="form-two"><label>상인회 이름<input type="text" name="name" required /></label><label>대표 색상<input type="color" name="brand_color" value="#0b6e4f" /></label></div>
+        <label>한 줄 소개<input type="text" name="tagline" /></label>
+        <div class="form-divider">관리자 계정</div>
+        <div class="form-two"><label>관리자 이름<input type="text" name="admin_name" /></label><label>관리자 이메일<input type="email" name="admin_email" required /></label></div>
+        <label>관리자 비밀번호 (8자 이상)<input type="password" name="admin_password" required minlength="8" /></label>
+        <button class="btn btn-primary">상인회 생성</button></form></section>
+    <section class="panel"><h2 class="panel-title">상인회 목록</h2>
+      <p class="panel-hint">개별 도메인: 도메인을 입력·저장한 뒤 <b>Cloudflare 대시보드 → 이 워커 → Settings → Domains &amp; Routes → Add → Custom Domain</b> 으로 같은 도메인을 추가해야 실제 접속됩니다(그 도메인이 이 Cloudflare 계정에 등록되어 있어야 함).</p>
+      <div class="table-scroll"><table class="admin-table">
+      <thead><tr><th>상인회</th><th>개별 도메인</th><th>플랜</th><th>상태</th><th>관리</th></tr></thead><tbody>${rows}</tbody></table></div></section>
+        ${usagePanel}
+      </div>
+
+      <div class="sgroup" id="s-sales" data-tab="sales">
+        ${appsPanel}
+      </div>
+
+      <div class="sgroup" id="s-money" data-tab="money">
+        ${notifySuperPanel}
+        ${settlementPanel}
+      </div>
+
+      <div class="sgroup" id="s-settings" data-tab="settings">
+        ${securityPanel}
     <section class="panel"><h2 class="panel-title">플랫폼 설정</h2>
       <form method="post" action="/super/platform-mode" class="stack-form compact">
         <div class="row-toggle"><label class="switch"><input type="checkbox" name="on" value="1"${platformMode ? " checked" : ""} /><span class="track"></span></label>
@@ -1747,18 +1805,7 @@ export async function superConsole(ctx) {
           <label>문의 전화(선택)<input type="text" name="contact_phone" value="${esc(contactPhone)}" maxlength="40" /></label></div>
         <button class="btn btn-ghost btn-sm">정보 저장</button></form>
       <p class="panel-hint">공개 신청: <a href="/apply" target="_blank">/apply</a> · 약관: <a href="/terms" target="_blank">/terms</a> · 개인정보처리방침: <a href="/privacy" target="_blank">/privacy</a></p></section>
-    <div class="stat-cards"><div class="stat-card"><span class="stat-num">${ps.associations}</span><span class="stat-label">상인회</span></div>
-      <div class="stat-card"><span class="stat-num">${ps.businesses}</span><span class="stat-label">승인 업체</span></div>
-      <div class="stat-card"><span class="stat-num">${ps.users}</span><span class="stat-label">사용자</span></div>
-      <div class="stat-card"><span class="stat-num">${ps.media}</span><span class="stat-label">미디어</span></div></div>
-    <section class="panel panel-accent" id="new-assoc"><h2 class="panel-title">➕ 새 상인회 (사이트 복제)</h2>
-      <form method="post" action="/super/association" class="stack-form">
-        <div class="form-two"><label>상인회 이름<input type="text" name="name" required /></label><label>대표 색상<input type="color" name="brand_color" value="#0b6e4f" /></label></div>
-        <label>한 줄 소개<input type="text" name="tagline" /></label>
-        <div class="form-divider">관리자 계정</div>
-        <div class="form-two"><label>관리자 이름<input type="text" name="admin_name" /></label><label>관리자 이메일<input type="email" name="admin_email" required /></label></div>
-        <label>관리자 비밀번호 (8자 이상)<input type="password" name="admin_password" required minlength="8" /></label>
-        <button class="btn btn-primary">상인회 생성</button></form></section>
+        ${superPanel}
     <details class="panel ops-guide"><summary class="panel-title">🧭 운영 가이드 — 도메인·지도·이메일 설정 위치</summary>
       <div class="ops-body">
       <h3>네이버 지도 (도메인 바뀔 때마다!)</h3>
@@ -1785,19 +1832,11 @@ export async function superConsole(ctx) {
       <h3>사진 직접 서빙 (설정 완료 ✓)</h3>
       <p>R2 버킷 공개 도메인(r2.dev) → 워커 변수 <code>MEDIA_PUBLIC_BASE</code>. 트래픽 커지면 커스텀 도메인으로 값만 교체.</p>
       </div></details>
-    <section class="panel"><h2 class="panel-title">상인회 목록</h2>
-      <p class="panel-hint">개별 도메인: 도메인을 입력·저장한 뒤 <b>Cloudflare 대시보드 → 이 워커 → Settings → Domains &amp; Routes → Add → Custom Domain</b> 으로 같은 도메인을 추가해야 실제 접속됩니다(그 도메인이 이 Cloudflare 계정에 등록되어 있어야 함).</p>
-      <div class="table-scroll"><table class="admin-table">
-      <thead><tr><th>상인회</th><th>개별 도메인</th><th>플랜</th><th>상태</th><th>관리</th></tr></thead><tbody>${rows}</tbody></table></div></section>
-    ${securityPanel}
-    ${notifySuperPanel}
-    ${settlementPanel}
-    ${usagePanel}
-    ${superPanel}
-    ${wiredPanel}
     <section class="panel"><h2 class="panel-title">감사 로그 (플랫폼)</h2>
-      <ul class="audit-list">${auditLog.length ? auditLog.map((a) => `<li><span class="audit-action">${esc(a.action)}</span> <span class="audit-detail">${esc(a.detail)}</span><span class="audit-meta">${esc(a.actor_name)} · ${esc(kstStamp(a.created_at, { year: false }))}</span></li>`).join("") : `<li class="empty">기록이 없습니다.</li>`}</ul></section></div></section>`;
-  return html(layout({ title: "슈퍼 관리자", user, body, csrf }));
+      <ul class="audit-list">${auditLog.length ? auditLog.map((a) => `<li><span class="audit-action">${esc(a.action)}</span> <span class="audit-detail">${esc(a.detail)}</span><span class="audit-meta">${esc(a.actor_name)} · ${esc(kstStamp(a.created_at, { year: false }))}</span></li>`).join("") : `<li class="empty">기록이 없습니다.</li>`}</ul></section>      </div>
+
+    </div></div></div></section>`;
+  return html(layout({ title: "슈퍼 관리자", user, body, csrf, scripts: `<script src="${assetUrl("/js/super-tabs.js")}" defer></script>` }));
 }
 
 // ================= 계정 =================
