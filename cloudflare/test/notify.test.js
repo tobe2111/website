@@ -155,3 +155,26 @@ test("충전 신청 → 승인 시에만 잔액 반영", async () => {
   await D.addCredit(db, a.id, o.amount, { memo: `충전 승인 #${o.id}` });
   assert.equal(await D.getBalance(db, a.id), 50000);
 });
+
+test("기존 배포 DB(v16) → v17 자동 마이그레이션으로 알림톡 표·컬럼 생성", async () => {
+  // 실서버는 이미 v16 으로 올라가 있다. 버전이 같으면 패스트패스로 건너뛰므로
+  // 반드시 버전이 올라가야 새 표가 생긴다 — 그 경로를 그대로 재현한다.
+  const { makeD1 } = await import("./shim.js");
+  const { ensureSchema } = await import("../src/schema.js");
+  const old = makeD1(); // 현행 스키마로 생성
+  // v16 배포 상태 흉내: 알림톡 표·컬럼을 제거하고 버전을 16 으로 기록
+  for (const t of ["notify_wallet", "credit_ledger", "credit_orders", "message_log"]) old._db.exec(`DROP TABLE IF EXISTS ${t}`);
+  old._db.exec("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL DEFAULT '')");
+  old._db.exec("INSERT INTO settings (key,value) VALUES ('schema_version','16') ON CONFLICT(key) DO UPDATE SET value='16'");
+
+  await ensureSchema(old);
+
+  const names = old._db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map((r) => r.name);
+  for (const t of ["notify_wallet", "credit_ledger", "credit_orders", "message_log"]) {
+    assert.ok(names.includes(t), `${t} 표가 생성되어야 함`);
+  }
+  const ucols = old._db.prepare("PRAGMA table_info(users)").all().map((c) => c.name);
+  assert.ok(ucols.includes("phone"), "users.phone 컬럼이 생겨야 함");
+  const ver = old._db.prepare("SELECT value FROM settings WHERE key='schema_version'").get();
+  assert.equal(ver.value, "17", "버전이 17로 갱신되어야 다음 콜드스타트에서 건너뛴다");
+});

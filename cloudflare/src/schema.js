@@ -366,7 +366,7 @@ CREATE INDEX IF NOT EXISTS idx_msglog_assoc ON message_log(association_id, creat
 
 // 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
 // 마이그레이션 세대 — migrateColumns 에 단계를 추가할 때마다 +1
-const SCHEMA_VERSION = "16";
+const SCHEMA_VERSION = "17";
 
 export async function ensureSchema(db) {
   const has = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='associations'").first();
@@ -458,12 +458,16 @@ async function migrateColumns(db) {
   if (!cols.some((c) => c.name === "hero_image")) {
     await db.prepare("ALTER TABLE associations ADD COLUMN hero_image TEXT NOT NULL DEFAULT ''").run();
   }
-  // v16: 알림톡 — 회원 휴대폰 + 선불 크레딧/원장/충전신청/발송로그
+  // v17: 알림톡 — 회원 휴대폰 + 선불 크레딧/원장/충전신청/발송로그
   const ucols = (await db.prepare("PRAGMA table_info(users)").all()).results || [];
   if (ucols.length && !ucols.some((c) => c.name === "phone")) {
     await db.prepare("ALTER TABLE users ADD COLUMN phone TEXT NOT NULL DEFAULT ''").run();
   }
-  const v16 = [
+  // 표 존재 여부를 한 번에 조회 — 콜드스타트 왕복 절감 (표마다 조회하면 4회 → 1회)
+  const have = new Set(((await db.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('notify_wallet','credit_ledger','credit_orders','message_log')"
+  ).all()).results || []).map((r) => r.name));
+  const v17 = [
     ["notify_wallet", `CREATE TABLE notify_wallet (association_id INTEGER PRIMARY KEY REFERENCES associations(id) ON DELETE CASCADE, balance INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL DEFAULT (datetime('now')))`, []],
     ["credit_ledger", `CREATE TABLE credit_ledger (id INTEGER PRIMARY KEY AUTOINCREMENT, association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE, kind TEXT NOT NULL, amount INTEGER NOT NULL, balance_after INTEGER NOT NULL, memo TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
       ["CREATE INDEX IF NOT EXISTS idx_ledger_assoc ON credit_ledger(association_id, created_at)"]],
@@ -472,9 +476,10 @@ async function migrateColumns(db) {
     ["message_log", `CREATE TABLE message_log (id INTEGER PRIMARY KEY AUTOINCREMENT, association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE, channel TEXT NOT NULL DEFAULT 'alimtalk', kind TEXT NOT NULL DEFAULT '', recipient TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'sent', cost INTEGER NOT NULL DEFAULT 0, detail TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
       ["CREATE INDEX IF NOT EXISTS idx_msglog_assoc ON message_log(association_id, created_at)"]],
   ];
-  for (const [name, ddl, idx] of v16) {
-    const tbl = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").bind(name).first();
-    if (!tbl) { await db.prepare(ddl).run(); for (const i of idx) await db.prepare(i).run(); }
+  for (const [name, ddl, idx] of v17) {
+    if (have.has(name)) continue;
+    await db.prepare(ddl).run();
+    for (const i of idx) await db.prepare(i).run();
   }
   // events 대표 이미지 컬럼 (기존 배포 업그레이드)
   const evTbl = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='events'").first();

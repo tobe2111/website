@@ -6,7 +6,7 @@
 // 요구:  전역 playwright (npm i -g playwright) + Chromium
 //        (기본 경로 /opt/pw-browsers/chromium — 없으면 playwright 내장 탐색으로 폴백)
 import { execSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, mkdirSync, copyFileSync, readdirSync } from "node:fs";
+import { mkdtempSync, writeFileSync, mkdirSync, cpSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import http from "node:http";
@@ -40,7 +40,8 @@ absorb(r);
 const DIR = mkdtempSync(path.join(tmpdir(), "smoke-"));
 for (const sub of ["css", "js", "img"]) {
   mkdirSync(path.join(DIR, sub), { recursive: true });
-  for (const f of readdirSync(path.join(ROOT, "public", sub))) copyFileSync(path.join(ROOT, "public", sub, f), path.join(DIR, sub, f));
+  // 하위 폴더(예: img/demo)까지 통째로 복사 — 파일만 복사하면 폴더에서 EISDIR 로 죽는다
+  cpSync(path.join(ROOT, "public", sub), path.join(DIR, sub), { recursive: true });
 }
 async function grab(p, file, useCookie) {
   const res = await worker.fetch(new Request("http://localhost" + p, { headers: useCookie ? { cookie: ch() } : {} }), env);
