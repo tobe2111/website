@@ -17,6 +17,10 @@ const TABLES = [
   "updates", "polls", "poll_votes", "event_rsvps", "dues",
   "notices", "events", "posts", "comments", "post_images",
   "documents", "signatures", "signature_requests",
+  // 전자계약 — 필드 배치·채운 값·서식·감사 추적·외부 서명자까지 있어야 계약이 복원된다.
+  // (서명 봉인만 남고 '무엇을 어디에 채웠는지'가 없으면 계약서를 다시 그릴 수 없다)
+  "doc_fields", "doc_field_values", "doc_templates", "doc_events", "external_signers",
+  "notify_wallet", "credit_ledger", "message_log", "chain_anchor", "api_keys",
   "notifications", "applications", "audit_log", "settings",
 ];
 

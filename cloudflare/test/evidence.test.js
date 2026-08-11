@@ -166,3 +166,19 @@ test("본문이 바뀐 뒤 다시 뽑으면 패키지가 '불일치'로 말한�
   const g = readFileSync(path.join(dir2, "x", "4_검증방법.txt"), "utf8");
   assert.match(g, /본문 불일치/, "안내문에도 드러나야 함");
 });
+
+// ---------- 백업 커버리지 ----------
+test("주간 백업이 전자계약 데이터를 빠짐없이 담는다", async () => {
+  const { runBackup } = await import("../src/scheduled.js");
+  const { decryptBackup } = await import("../src/scheduled.js");
+  const r = await runBackup(env);
+  assert.ok(r.key, "백업 파일이 만들어져야 함");
+  const obj = await env.MEDIA.get(r.key);
+  const dump = JSON.parse(await decryptBackup(env.SESSION_SECRET, new Uint8Array(await obj.arrayBuffer())));
+  // 봉인만 남고 '무엇을 어디에 채웠는지'가 없으면 계약서를 다시 그릴 수 없다
+  for (const t of ["documents", "signatures", "doc_fields", "doc_field_values", "doc_events", "external_signers", "doc_templates"])
+    assert.ok(Array.isArray(dump.tables[t]), `${t} 이 백업에 있어야 함`);
+  assert.ok(dump.tables.doc_fields.length >= 2, "배치된 필드가 실제로 담겨야 함");
+  assert.ok(dump.tables.doc_field_values.length >= 2, "채운 값도 담겨야 함");
+  assert.ok(dump.tables.signatures.some((s) => s.fields_hash), "필드 봉인 해시도 함께");
+});
