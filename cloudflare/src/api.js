@@ -7,7 +7,7 @@ import { back, redirect } from "./http.js";
 import * as storage from "./storage.js";
 import { parseEmbed } from "./embed.js";
 import { cap, sniffImage, EMAIL_RE, MAX_IMAGE_BYTES, slugify, esc } from "./util.js";
-import { contentHash, sealRecord, newVerifyCode } from "./esign.js";
+import { contentHash, sealRecord, newVerifyCode, SEAL_VER } from "./esign.js";
 import { turnstileVerify } from "./turnstile.js";
 import { planOf } from "./plans.js";
 import { seedDemo } from "./demoContent.js";
@@ -677,7 +677,7 @@ export async function adminCreateDocument(ctx) {
   }
   const docHash = attHash ? await contentHash(`${body}\n--attachment--\n${attHash}`) : await contentHash(body);
   const doc = await D.createDocument(db, { associationId: assoc.id, title, body, contentHash: docHash, createdBy: user.id, ordered, dueDate });
-  if (attKey) await D.setDocumentAttachment(db, doc.id, attKey, attName);
+  if (attKey) await D.setDocumentAttachment(db, doc.id, attKey, attName, attHash);
   const target = form.get("target");
   const members = await D.listUsersByAssociation(db, assoc.id, "MERCHANT");
   let recipients = [];
@@ -776,9 +776,11 @@ export async function memberSign(ctx) {
   // 제어문자(개행 등) 제거 — 봉인 문자열이 \n 구분이라 이름에 섞이면 인코딩이 모호해짐
   const signerName = cap((form.get("signer_name") || "").replace(/[\x00-\x1f\x7f]/g, " ").trim(), 60) || user.name;
   const signedAt = new Date().toISOString();
-  const recordHash = await sealRecord(env, { documentId: d.id, userId: user.id, signerName, contentHash: d.content_hash, signedAt, ip });
+  // 직전 서명의 봉인값을 이번 봉인에 포함 → 서명들이 사슬로 엮여 중간 기록 삭제·조작이 탐지된다
+  const prevHash = await D.lastSealHash(db);
+  const recordHash = await sealRecord(env, { documentId: d.id, userId: user.id, signerName, contentHash: d.content_hash, signedAt, ip, prevHash, ver: SEAL_VER });
   const verifyCode = newVerifyCode();
-  await D.createSignature(db, { documentId: d.id, userId: user.id, signerName, signatureImage: sigKey, contentHash: d.content_hash, ip, userAgent: cap(request.headers.get("user-agent") || "", 200), verifyCode, recordHash, signedAt });
+  await D.createSignature(db, { documentId: d.id, userId: user.id, signerName, signatureImage: sigKey, contentHash: d.content_hash, ip, userAgent: cap(request.headers.get("user-agent") || "", 200), verifyCode, recordHash, signedAt, prevHash, sealVer: SEAL_VER });
   await D.createNotification(db, { associationId: assoc.id, kind: "signed", message: `${signerName}님이 '${d.title}'에 전자서명했습니다.`, link: base + "/admin/documents/" + d.id });
   return back(base + "/sign", `전자서명이 완료되었습니다. 검증 코드: ${verifyCode}`);
 }

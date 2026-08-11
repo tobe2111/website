@@ -465,9 +465,16 @@ export async function requestCounts(db, documentId) {
   return { total, signed };
 }
 export const hasSigned = async (db, documentId, uid) => !!(await first(db, "SELECT 1 FROM signatures WHERE document_id=? AND user_id=?", documentId, uid));
+// 서명 사슬의 마지막 봉인값 (플랫폼 전체 기준 — 어느 상인회의 기록을 지워도 사슬이 끊긴다)
+export const lastSealHash = async (db) => {
+  const r = await first(db, "SELECT record_hash FROM signatures ORDER BY id DESC LIMIT 1");
+  return r ? r.record_hash : "";
+};
+export const listSignatureChain = (db) =>
+  all(db, "SELECT id, record_hash, prev_hash, seal_ver FROM signatures ORDER BY id");
 export async function createSignature(db, r) {
-  await run(db, `INSERT INTO signatures (document_id, user_id, signer_name, signature_image, content_hash, ip, user_agent, verify_code, record_hash, signed_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?)`, r.documentId, r.userId, r.signerName, r.signatureImage, r.contentHash, r.ip, r.userAgent, r.verifyCode, r.recordHash, r.signedAt);
+  await run(db, `INSERT INTO signatures (document_id, user_id, signer_name, signature_image, content_hash, ip, user_agent, verify_code, record_hash, signed_at, prev_hash, seal_ver)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`, r.documentId, r.userId, r.signerName, r.signatureImage, r.contentHash, r.ip, r.userAgent, r.verifyCode, r.recordHash, r.signedAt, r.prevHash || "", r.sealVer || 2);
   return first(db, "SELECT * FROM signatures WHERE id=?", await lastId(db));
 }
 export const listSignatures = (db, documentId) =>
@@ -628,8 +635,8 @@ export const listUnsigned = (db, documentId) =>
       AND NOT EXISTS (SELECT 1 FROM signatures s WHERE s.document_id=r.document_id AND s.user_id=u.id)
     ORDER BY r.sign_order`, documentId);
 export const markReminded = (db, documentId) => run(db, "UPDATE documents SET last_remind_at=datetime('now') WHERE id=?", documentId);
-export const setDocumentAttachment = (db, id, key, name) =>
-  run(db, "UPDATE documents SET attachment=?, attachment_name=? WHERE id=?", key || "", String(name || "").slice(0, 120), id);
+export const setDocumentAttachment = (db, id, key, name, hash) =>
+  run(db, "UPDATE documents SET attachment=?, attachment_name=?, attachment_hash=? WHERE id=?", key || "", String(name || "").slice(0, 120), hash || "", id);
 // 기한이 임박(D-2 이내)했는데 아직 안 끝난 문서 — 자동 리마인더 대상
 export const listDocsNeedingRemind = (db) =>
   all(db, `SELECT d.*, a.name AS assoc_name, a.slug AS assoc_slug FROM documents d JOIN associations a ON a.id=d.association_id

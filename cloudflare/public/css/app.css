@@ -1346,3 +1346,7 @@ a.cc-val:hover{color:var(--brand-700)}
   .site-header,.site-footer,.no-print{display:none!important}
   .cert-sheet{border:none;box-shadow:none;padding:0}
 }
+.panel-warn{border-color:var(--wait);background:var(--wait-bg)}
+.hint-steps{margin:8px 0 6px 18px;line-height:1.9;font-size:.9rem}
+.hint-steps code{font-size:.82rem}
+.txt-warn{color:var(--no-fg)}

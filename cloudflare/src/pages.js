@@ -7,7 +7,7 @@ import { html, notFoundResponse, back } from "./http.js";
 import { galleryItem } from "./media-render.js";
 import { priceOf, notifyEnabled, TEMPLATE_KEYS } from "./notify.js";
 import { providerLabel } from "./embed.js";
-import { verifySignature, publicKeyJwk, algorithm } from "./esign.js";
+import { verifySignature, publicKeyJwk, publicKeyFingerprint, keyStorage, algorithm, verifyChain } from "./esign.js";
 import { text } from "./http.js";
 import { parseLayout, renderHome, SECTION_CATALOG } from "./homeLayout.js";
 import { turnstileWidget, turnstileScript } from "./turnstile.js";
@@ -1300,6 +1300,17 @@ export async function certificatePage(ctx) {
   return html(layout({ title: "전자서명 확인서", assoc, body, csrf }));
 }
 
+// 서명 공개키 공개 — 제3자가 우리 서버를 믿지 않고도 봉인을 독립 검증할 수 있게 한다.
+// (개인키는 절대 나가지 않는다. 공개키만 노출되며, 이는 공개되어야 정상이다.)
+export async function esignPublicKey(ctx) {
+  const { env } = ctx;
+  const jwk = await publicKeyJwk(env);
+  const fp = await publicKeyFingerprint(env);
+  return text(JSON.stringify({ algorithm: "Ed25519", use: "verify", fingerprint: fp, key: jwk,
+    note: "전자서명 봉인 검증용 공개키입니다. record_hash 를 이 키로 Ed25519 검증하세요." }, null, 2),
+    200, { "content-type": "application/json; charset=utf-8", "cache-control": "public, max-age=3600" });
+}
+
 // 공개 검증
 export async function verifyPage(ctx) {
   const { db, env, params, query, csrf } = ctx;
@@ -1397,6 +1408,28 @@ export async function superConsole(ctx) {
     <td>${(u.sent || 0).toLocaleString()}건</td><td>${(u.revenue || 0).toLocaleString()}원</td>
     <td>${(u.charged || 0).toLocaleString()}원</td><td>${(u.balance || 0).toLocaleString()}원</td></tr>`).join("")
     || `<tr><td colspan="5" class="empty">아직 사용 내역이 없습니다.</td></tr>`;
+  // ----- 전자서명 키·사슬 상태 (보안) -----
+  const keyMode = keyStorage(env);
+  const keyFp = await publicKeyFingerprint(env).catch(() => "(확인 불가)");
+  const chain = verifyChain(await D.listSignatureChain(db));
+  const securityPanel = `<section class="panel ${keyMode === "secret" ? "" : "panel-warn"}"><h2 class="panel-title">전자서명 보안
+      ${keyMode === "secret" ? '<span class="badge badge-ok">키 안전 보관</span>' : '<span class="badge badge-no">키가 DB에 있음</span>'}
+      ${chain.ok ? '<span class="badge badge-ok">서명 사슬 정상</span>' : '<span class="badge badge-no">사슬 끊김</span>'}</h2>
+    ${keyMode === "secret"
+      ? '<p class="panel-hint">서명 개인키가 Cloudflare Secret 에 있습니다. DB 가 유출되어도 봉인을 위조할 수 없습니다.</p>'
+      : `<div class="flash flash-warn"><b>서명 개인키가 데이터베이스에 저장되어 있습니다.</b>
+          D1 을 읽을 수 있는 사람은 과거 서명을 위조할 수 있습니다. 아래 순서로 옮기세요.
+          <ol class="hint-steps">
+            <li><code>node cloudflare/scripts/gen-sign-key.mjs</code> 로 키를 새로 만들거나, 현행 키를 그대로 옮기려면 D1 의 <code>settings.sign_key</code> 값을 복사합니다.</li>
+            <li>Workers &amp; Pages → 이 워커 → Settings → Variables 에 <code>SIGN_PRIVATE_KEY</code> 를 <b>Secret</b> 으로 등록합니다.</li>
+            <li>등록 후 D1 에서 <code>DELETE FROM settings WHERE key='sign_key'</code> 로 사본을 지웁니다.</li>
+          </ol>
+          <b>주의:</b> 키를 <u>새로 만들면</u> 기존 서명은 검증에 실패합니다. 이미 받은 서명이 있으면 반드시 현행 키를 그대로 옮기세요.</div>`}
+    <table class="verify-table"><tr><th>공개키 지문</th><td><code>${esc(keyFp)}</code></td></tr>
+      <tr><th>공개키 배포</th><td><a href="/.well-known/esign-public-key" target="_blank"><code>/.well-known/esign-public-key</code></a> — 제3자 독립 검증용</td></tr>
+      <tr><th>서명 사슬</th><td>${chain.ok ? `연결 정상 (${chain.length}건)` : `<b class="txt-warn">id ${esc(String(chain.brokenAt))} 지점에서 끊김 — 기록이 삭제·변조되었을 수 있습니다</b>`}</td></tr></table>
+    <p class="panel-hint">지문을 따로 적어 두면, 키가 몰래 교체됐는지 확인할 수 있습니다. 서명 사슬은 각 서명이 직전 서명의 봉인값을 포함해 엮인 구조라 중간 기록을 지우면 끊깁니다.</p></section>`;
+
   const notifySuperPanel = `<section class="panel panel-accent"><h2 class="panel-title">알림톡 판매 <span class="badge badge-brand">건당 ${unitPrice.toLocaleString()}원</span>${pendCredits.length ? ` <span class="badge badge-wait">충전 대기 ${pendCredits.length}</span>` : ""}</h2>
     <p class="panel-hint">상인회가 선불로 충전하고 발송할 때마다 차감됩니다. <b>판매단가 − 원가 = 마진</b>이며, 발송 실패는 자동 환불되어 매출로 잡히지 않습니다.
       ${notifyEnabled(env) ? "" : '<b class="txt-warn">아직 알리고 키가 설정되지 않아 실제 발송은 되지 않습니다.</b>'}</p>
@@ -1554,6 +1587,7 @@ export async function superConsole(ctx) {
       <p class="panel-hint">개별 도메인: 도메인을 입력·저장한 뒤 <b>Cloudflare 대시보드 → 이 워커 → Settings → Domains &amp; Routes → Add → Custom Domain</b> 으로 같은 도메인을 추가해야 실제 접속됩니다(그 도메인이 이 Cloudflare 계정에 등록되어 있어야 함).</p>
       <div class="table-scroll"><table class="admin-table">
       <thead><tr><th>상인회</th><th>개별 도메인</th><th>플랜</th><th>상태</th><th>관리</th></tr></thead><tbody>${rows}</tbody></table></div></section>
+    ${securityPanel}
     ${notifySuperPanel}
     ${usagePanel}
     ${superPanel}

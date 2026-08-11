@@ -192,7 +192,9 @@ test("모든 데모 서명이 봉인 검증을 통과한다", async () => {
     const sigs = db()._db.prepare(`SELECT * FROM signatures WHERE document_id=?`).all(d.id);
     for (const s of sigs) {
       const v = await verifySignature(env, s, d);
-      assert.deepEqual(v, { sealOk: true, contentOk: true, valid: true }, `${d.title} / ${s.signer_name}`);
+      assert.equal(v.sealOk, true, `봉인 무결: ${d.title} / ${s.signer_name}`);
+      assert.equal(v.contentOk, true, `본문 무결: ${d.title} / ${s.signer_name}`);
+      assert.equal(v.valid, true, `${d.title} / ${s.signer_name}`);
     }
   }
 });

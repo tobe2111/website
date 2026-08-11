@@ -73,7 +73,7 @@ test("전자서명 키도 자동 생성(env 미설정)", async () => {
   const doc = await D.createDocument(env.DB, { associationId: a.id, title: "T", body: "본문", contentHash: await contentHash("본문"), createdBy: u.id });
   const rec = { documentId: doc.id, userId: u.id, signerName: "관리자", contentHash: doc.content_hash, signedAt: "2026-01-01T00:00:00Z", ip: "1.1.1.1" };
   const sealed = await sealRecord(env, rec);
-  const sig = { document_id: doc.id, user_id: u.id, signer_name: "관리자", content_hash: doc.content_hash, signed_at: rec.signedAt, ip: rec.ip, record_hash: sealed };
+  const sig = { document_id: doc.id, user_id: u.id, signer_name: "관리자", content_hash: doc.content_hash, signed_at: rec.signedAt, ip: rec.ip, record_hash: sealed, prev_hash: "", seal_ver: 2 };
   const v = await verifySignature(env, sig, doc);
   assert.equal(v.valid, true, "자동 생성 키로 봉인·검증 성공");
   assert.ok(await D.getSetting(env.DB, "sign_key"), "서명 키 DB 저장");

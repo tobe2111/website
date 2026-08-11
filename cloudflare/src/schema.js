@@ -274,6 +274,7 @@ CREATE TABLE IF NOT EXISTS documents (
   closed         INTEGER NOT NULL DEFAULT 0,
   attachment      TEXT NOT NULL DEFAULT '',  -- 계약서 PDF(R2 키). 있으면 본문 대신 이 파일이 계약 원문
   attachment_name TEXT NOT NULL DEFAULT '',  -- 원본 파일명(표시용)
+  attachment_hash TEXT NOT NULL DEFAULT '',  -- 첨부 파일 SHA-256 (검증 시 실제 파일과 대조)
   last_remind_at  TEXT NOT NULL DEFAULT '',  -- 마지막 리마인더 발송 — 연타 방지
   created_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -289,6 +290,8 @@ CREATE TABLE IF NOT EXISTS signatures (
   user_agent      TEXT NOT NULL DEFAULT '',
   verify_code     TEXT NOT NULL UNIQUE,
   record_hash     TEXT NOT NULL,
+  prev_hash       TEXT NOT NULL DEFAULT '',  -- 직전 서명의 봉인값 — 서명 사슬(체인)
+  seal_ver        INTEGER NOT NULL DEFAULT 2,-- 봉인 문자열 버전 (1=구버전, 2=체인 포함)
   signed_at       TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE (document_id, user_id)
 );
@@ -371,7 +374,7 @@ CREATE INDEX IF NOT EXISTS idx_msglog_assoc ON message_log(association_id, creat
 
 // 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
 // 마이그레이션 세대 — migrateColumns 에 단계를 추가할 때마다 +1
-const SCHEMA_VERSION = "18";
+export const SCHEMA_VERSION = "20";
 
 export async function ensureSchema(db) {
   const has = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='associations'").first();
@@ -481,6 +484,13 @@ async function migrateColumns(db) {
     ["message_log", `CREATE TABLE message_log (id INTEGER PRIMARY KEY AUTOINCREMENT, association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE, channel TEXT NOT NULL DEFAULT 'alimtalk', kind TEXT NOT NULL DEFAULT '', recipient TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'sent', cost INTEGER NOT NULL DEFAULT 0, detail TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
       ["CREATE INDEX IF NOT EXISTS idx_msglog_assoc ON message_log(association_id, created_at)"]],
   ];
+  // v19: 서명 사슬 — 직전 봉인값·봉인 버전 (기존 서명은 seal_ver=1 로 남아 그대로 검증됨)
+  const scols = (await db.prepare("PRAGMA table_info(signatures)").all()).results || [];
+  if (scols.length && !scols.some((c) => c.name === "prev_hash")) {
+    await db.prepare("ALTER TABLE signatures ADD COLUMN prev_hash TEXT NOT NULL DEFAULT ''").run();
+    // 이미 있던 서명은 구버전 봉인이므로 1 로 표시해야 검증이 깨지지 않는다
+    await db.prepare("ALTER TABLE signatures ADD COLUMN seal_ver INTEGER NOT NULL DEFAULT 1").run();
+  }
   // v18: 전자계약 — 서명 거절 사유, 계약서 PDF 첨부, 리마인더 발송 시각
   const rcols = (await db.prepare("PRAGMA table_info(signature_requests)").all()).results || [];
   if (rcols.length && !rcols.some((c) => c.name === "declined_at")) {
@@ -491,6 +501,7 @@ async function migrateColumns(db) {
   if (dcols.length && !dcols.some((c) => c.name === "attachment")) {
     await db.prepare("ALTER TABLE documents ADD COLUMN attachment TEXT NOT NULL DEFAULT ''").run();
     await db.prepare("ALTER TABLE documents ADD COLUMN attachment_name TEXT NOT NULL DEFAULT ''").run();
+    await db.prepare("ALTER TABLE documents ADD COLUMN attachment_hash TEXT NOT NULL DEFAULT ''").run();
   }
   if (dcols.length && !dcols.some((c) => c.name === "last_remind_at")) {
     await db.prepare("ALTER TABLE documents ADD COLUMN last_remind_at TEXT NOT NULL DEFAULT ''").run();
