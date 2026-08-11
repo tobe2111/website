@@ -138,6 +138,16 @@ export async function superCreditApprove(ctx) {
   await audit(ctx, "충전승인", `#${o.id} ${o.amount}원`, null);
   return back("/super", `${o.amount.toLocaleString()}원을 충전했습니다.`);
 }
+// 슈퍼: 알림톡 원가 설정 (마진 계산 기준)
+export async function superNotifyCost(ctx) {
+  const { db, form } = ctx;
+  const c = parseInt(String(form.get("cost_alimtalk") || "").replace(/[^\d]/g, ""), 10);
+  if (!Number.isFinite(c) || c < 0 || c > 1000) return back("/super", "원가는 0~1000원 사이로 입력해 주세요.", true);
+  await D.setSetting(db, "cost_alimtalk", String(c));
+  await audit(ctx, "알림톡원가", `${c}원`, null);
+  return back("/super", `알림톡 원가를 ${c.toLocaleString()}원으로 저장했습니다. (이후 발송분부터 적용)`);
+}
+
 // 슈퍼: 상인회별 단가 설정 (0 = 플랫폼 기본가 적용)
 export async function superSetUnitPrice(ctx) {
   const { db, params, form } = ctx;

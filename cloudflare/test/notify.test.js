@@ -190,3 +190,39 @@ test("상인회별 단가: 전용가 우선, 0이면 플랫폼 기본가", async
   await D.setUnitPrice(db, big.id, 0);
   assert.equal(await N.priceOf(db, "alimtalk", big.id), 22, "0이면 기본가로 복귀");
 });
+
+test("마진 정산: 발송 시점 원가를 스냅샷해 나중에 원가를 바꿔도 과거가 흔들리지 않는다", async () => {
+  const a1 = await D.createAssociation(db, { slug: "m1", name: "정산A" });
+  const a2 = await D.createAssociation(db, { slug: "m2", name: "정산B" });
+  await D.setSetting(db, "price_alimtalk", "22");
+  await D.setSetting(db, "cost_alimtalk", "9");
+  await D.setSetting(db, "tpl_sign_request", "TPL_X");
+  await D.setUnitPrice(db, a1.id, 15);            // 볼륨 할인 적용
+  await D.addCredit(db, a1.id, 10000); await D.addCredit(db, a2.id, 10000);
+  const envOk = { ...env, ALIGO_API_KEY: "k", ALIGO_USER_ID: "u", ALIGO_SENDER_KEY: "s", ALIGO_SENDER: "02" };
+  const of = globalThis.fetch;
+  globalThis.fetch = async (u) => ({ ok: true, status: 200, json: async () => String(u).includes("token/create") ? { code: 0, token: "T" } : { code: 0, info: { mid: 1 } } });
+  try {
+    for (let i = 0; i < 4; i++) await N.sendOne(envOk, db, { assoc: a1, kind: "sign_request", to: "01011112222", text: "t" });
+    for (let i = 0; i < 2; i++) await N.sendOne(envOk, db, { assoc: a2, kind: "sign_request", to: "01033334444", text: "t" });
+  } finally { globalThis.fetch = of; }
+  const month = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 7);
+  const rows = await D.monthlySettlement(db, month);
+  const r1 = rows.find((r) => r.id === a1.id), r2 = rows.find((r) => r.id === a2.id);
+  assert.equal(r1.revenue, 60, "전용가 15원 × 4건");
+  assert.equal(r1.cost_base, 36, "원가 9원 × 4건");
+  assert.equal(r2.revenue, 44, "기본가 22원 × 2건");
+  assert.equal(r1.revenue - r1.cost_base, 24, "마진 = 매출 − 원가");
+
+  // 원가를 올려도 이미 발송된 건의 원가는 그대로여야 한다
+  await D.setSetting(db, "cost_alimtalk", "12");
+  const after = await D.monthlySettlement(db, month);
+  assert.equal(after.find((r) => r.id === a1.id).cost_base, 36, "과거 원가는 스냅샷이라 불변");
+
+  // 실패 건은 매출·원가 어디에도 잡히지 않는다
+  const before = (await D.monthlySettlement(db, month)).find((r) => r.id === a2.id).sent;
+  globalThis.fetch = async () => { throw new Error("네트워크"); };
+  try { await N.sendOne(envOk, db, { assoc: a2, kind: "sign_request", to: "01033334444", text: "t" }); }
+  finally { globalThis.fetch = of; }
+  assert.equal((await D.monthlySettlement(db, month)).find((r) => r.id === a2.id).sent, before, "실패 건은 정산에서 제외");
+});

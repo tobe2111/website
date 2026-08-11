@@ -393,7 +393,9 @@ CREATE TABLE IF NOT EXISTS message_log (
   kind           TEXT NOT NULL DEFAULT '',          -- sign_request|sign_remind|notice|dues|poll
   recipient      TEXT NOT NULL DEFAULT '',
   status         TEXT NOT NULL DEFAULT 'sent',      -- sent|failed
-  cost           INTEGER NOT NULL DEFAULT 0,
+  cost           INTEGER NOT NULL DEFAULT 0,        -- 상인회에게 받은 판매가(원)
+  cost_base      INTEGER NOT NULL DEFAULT 0,        -- 우리가 CPaaS 에 낸 원가(원) — 발송 시점 스냅샷
+  ref            TEXT NOT NULL DEFAULT '',          -- 대사(對査)용 참조 — 이 플랫폼 발송임을 식별
   detail         TEXT NOT NULL DEFAULT '',
   created_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -402,7 +404,7 @@ CREATE INDEX IF NOT EXISTS idx_msglog_assoc ON message_log(association_id, creat
 
 // 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
 // 마이그레이션 세대 — migrateColumns 에 단계를 추가할 때마다 +1
-export const SCHEMA_VERSION = "24";
+export const SCHEMA_VERSION = "25";
 
 export async function ensureSchema(db) {
   const has = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='associations'").first();
@@ -512,6 +514,12 @@ async function migrateColumns(db) {
     ["message_log", `CREATE TABLE message_log (id INTEGER PRIMARY KEY AUTOINCREMENT, association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE, channel TEXT NOT NULL DEFAULT 'alimtalk', kind TEXT NOT NULL DEFAULT '', recipient TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'sent', cost INTEGER NOT NULL DEFAULT 0, detail TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
       ["CREATE INDEX IF NOT EXISTS idx_msglog_assoc ON message_log(association_id, created_at)"]],
   ];
+  // v25: 마진 계산 — 발송 시점의 원가 스냅샷 + 대사용 참조
+  const mcols = (await db.prepare("PRAGMA table_info(message_log)").all()).results || [];
+  if (mcols.length && !mcols.some((c) => c.name === "cost_base")) {
+    await db.prepare("ALTER TABLE message_log ADD COLUMN cost_base INTEGER NOT NULL DEFAULT 0").run();
+    await db.prepare("ALTER TABLE message_log ADD COLUMN ref TEXT NOT NULL DEFAULT ''").run();
+  }
   // v23: 상인회별 알림톡 단가 (규모·계약에 따라 다르게 받을 수 있게)
   const wcols = (await db.prepare("PRAGMA table_info(notify_wallet)").all()).results || [];
   if (wcols.length && !wcols.some((c) => c.name === "unit_price")) {

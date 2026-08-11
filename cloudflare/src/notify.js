@@ -12,7 +12,17 @@ import * as D from "./db.js";
 // ---------- 설정 ----------
 export const notifyEnabled = (env) => !!(env.ALIGO_API_KEY && env.ALIGO_USER_ID && env.ALIGO_SENDER_KEY && env.ALIGO_SENDER);
 
-const DEFAULT_PRICE = { alimtalk: 22, sms: 33 }; // 원/건 (슈퍼관리자가 변경 가능)
+const DEFAULT_PRICE = { alimtalk: 22, sms: 33 }; // 판매가 기본값 (원/건)
+const DEFAULT_COST = { alimtalk: 9, sms: 20 };   // 원가 기본값 (원/건) — CPaaS 실제 계약가로 슈퍼가 수정
+// 원가 — 마진 계산과 정산의 기준. 발송 시점 값을 로그에 스냅샷으로 남긴다.
+export async function costOf(db, channel) {
+  const v = await D.getSetting(db, channel === "sms" ? "cost_sms" : "cost_alimtalk");
+  const n = parseInt(v || "", 10);
+  return Number.isFinite(n) && n >= 0 ? n : DEFAULT_COST[channel === "sms" ? "sms" : "alimtalk"];
+}
+// 대사(對査) 참조 — CPaaS 계정을 다른 서비스와 공유할 때, 이 플랫폼 발송을 식별하는 표식.
+// 알리고 대시보드는 '템플릿 코드'로 필터할 수 있으므로 그 코드를 함께 남겨 대조 기준으로 삼는다.
+export const REF_PREFIX = "SCM"; // Seocho/Sangin Commerce Messaging
 // 단가 결정 순서: ① 상인회 전용 단가 → ② 플랫폼 기본가 → ③ 코드 기본값
 export async function priceOf(db, channel, assocId = null) {
   if (assocId) {
@@ -91,9 +101,11 @@ export async function sendOne(env, db, { assoc, kind, to, text, buttonName, butt
     return { ok: false, error: "템플릿 코드가 설정되지 않았습니다" };
   }
   const price = await priceOf(db, "alimtalk", assoc.id);
+  const base = await costOf(db, "alimtalk");
+  const ref = `${REF_PREFIX}-${assoc.id}-${tpl}`; // 대사용: 어느 플랫폼·상인회·템플릿인지
   const paid = await D.spendCredit(db, assoc.id, price, `알림톡 ${kind}`);
   if (!paid.ok) {
-    await D.logMessage(db, { associationId: assoc.id, kind, recipient: masked, status: "failed", cost: 0, detail: "잔액 부족" });
+    await D.logMessage(db, { associationId: assoc.id, kind, recipient: masked, status: "failed", cost: 0, ref, detail: "잔액 부족" });
     return { ok: false, error: "크레딧 잔액이 부족합니다", insufficient: true };
   }
   let r;
@@ -101,11 +113,12 @@ export async function sendOne(env, db, { assoc, kind, to, text, buttonName, butt
   catch (e) { r = { ok: false, error: String(e && e.message || e).slice(0, 200) }; }
   if (!r.ok) {
     await D.addCredit(db, assoc.id, price, { kind: "refund", memo: `발송 실패 환불 (${kind})` });
-    await D.logMessage(db, { associationId: assoc.id, kind, recipient: masked, status: "failed", cost: 0, detail: r.error });
+    await D.logMessage(db, { associationId: assoc.id, kind, recipient: masked, status: "failed", cost: 0, ref, detail: r.error });
     return { ok: false, error: r.error };
   }
-  await D.logMessage(db, { associationId: assoc.id, kind, recipient: masked, status: "sent", cost: price, detail: "" });
-  return { ok: true, cost: price };
+  // 원가를 함께 남겨야 나중에 단가를 바꿔도 과거 마진이 흔들리지 않는다
+  await D.logMessage(db, { associationId: assoc.id, kind, recipient: masked, status: "sent", cost: price, costBase: base, ref, detail: r.id ? `mid:${r.id}` : "" });
+  return { ok: true, cost: price, costBase: base };
 }
 
 // 여러 명에게 발송. 잔액이 떨어지면 그 지점에서 멈추고 남은 인원을 알려준다(부분 성공 허용).

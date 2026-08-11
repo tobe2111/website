@@ -612,15 +612,31 @@ export const listPendingCreditOrders = (db) =>
 export const setCreditOrderStatus = (db, id, status) => run(db, "UPDATE credit_orders SET status=? WHERE id=?", status, id);
 
 // ----- 발송 로그 -----
-export const logMessage = (db, { associationId, channel = "alimtalk", kind = "", recipient = "", status = "sent", cost = 0, detail = "" }) =>
-  run(db, "INSERT INTO message_log (association_id, channel, kind, recipient, status, cost, detail) VALUES (?,?,?,?,?,?,?)",
-    associationId, channel, kind, recipient, status, Math.trunc(cost) || 0, String(detail || "").slice(0, 300));
+export const logMessage = (db, { associationId, channel = "alimtalk", kind = "", recipient = "", status = "sent", cost = 0, costBase = 0, ref = "", detail = "" }) =>
+  run(db, "INSERT INTO message_log (association_id, channel, kind, recipient, status, cost, cost_base, ref, detail) VALUES (?,?,?,?,?,?,?,?,?)",
+    associationId, channel, kind, recipient, status, Math.trunc(cost) || 0, Math.trunc(costBase) || 0, String(ref || "").slice(0, 60), String(detail || "").slice(0, 300));
 export const listMessages = (db, aid, limit = 50) =>
   all(db, "SELECT * FROM message_log WHERE association_id=? ORDER BY id DESC LIMIT ?", aid, limit);
 export const messageStats = (db, aid) =>
   first(db, `SELECT COUNT(*) AS n, COALESCE(SUM(cost),0) AS spent,
     COALESCE(SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END),0) AS failed
     FROM message_log WHERE association_id=?`, aid);
+// 월별 정산 — 건수·매출(판매가)·원가·마진. 성공 발송만 집계(실패는 환불되어 매출이 아님).
+export const monthlySettlement = (db, month) =>
+  all(db, `SELECT a.id, a.name,
+      COUNT(m.id) AS sent,
+      COALESCE(SUM(m.cost),0) AS revenue,
+      COALESCE(SUM(m.cost_base),0) AS cost_base
+    FROM message_log m JOIN associations a ON a.id=m.association_id
+    WHERE m.status='sent' AND strftime('%Y-%m', m.created_at)=?
+    GROUP BY a.id, a.name ORDER BY revenue DESC`, month);
+// 대사용: 이 플랫폼이 해당 월에 보낸 총 건수 (CPaaS 대시보드 수치와 맞춰 보는 기준)
+export const monthlySendCount = (db, month) =>
+  first(db, `SELECT COUNT(*) AS sent, COALESCE(SUM(cost),0) AS revenue, COALESCE(SUM(cost_base),0) AS cost_base
+    FROM message_log WHERE status='sent' AND strftime('%Y-%m', created_at)=?`, month);
+export const settlementMonths = (db) =>
+  all(db, `SELECT DISTINCT strftime('%Y-%m', created_at) AS m FROM message_log WHERE status='sent' ORDER BY m DESC LIMIT 12`);
+
 // 플랫폼 전체 사용량·매출(슈퍼) — 판매액 기준
 export const platformMessageUsage = (db) =>
   all(db, `SELECT a.id, a.name, COALESCE(w.balance,0) AS balance,

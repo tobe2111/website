@@ -5,7 +5,7 @@ import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG, ORIGIN, as
 import { verifyInviteToken, SALES_STAGES, otpRequired } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
 import { html, notFoundResponse, back } from "./http.js";
 import { galleryItem } from "./media-render.js";
-import { priceOf, notifyEnabled, TEMPLATE_KEYS } from "./notify.js";
+import { priceOf, costOf, notifyEnabled, TEMPLATE_KEYS } from "./notify.js";
 import { providerLabel } from "./embed.js";
 import { verifySignature, publicKeyJwk, publicKeyFingerprint, keyStorage, algorithm, verifyChain, verifyAnchor } from "./esign.js";
 import { text } from "./http.js";
@@ -1479,6 +1479,47 @@ export async function superConsole(ctx) {
         인증번호 1건도 알림톡 크레딧에서 차감됩니다(상인회 부담). 계정 도용·대리 서명을 막는 가장 효과적인 수단입니다.</p></form>
     <p class="panel-hint">지문을 따로 적어 두면, 키가 몰래 교체됐는지 확인할 수 있습니다. 서명 사슬은 각 서명이 직전 서명의 봉인값을 포함해 엮인 구조라 중간 기록을 지우면 끊깁니다.</p></section>`;
 
+  // ----- 월별 정산 (마진 계산 + 공유 계정 대사) -----
+  const months = await D.settlementMonths(db);
+  const selMonth = (ctx.query && /^\d{4}-\d{2}$/.test(ctx.query.get("m") || "") ? ctx.query.get("m") : null)
+    || (months[0] && months[0].m) || new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 7);
+  const [settle, unitCost] = await Promise.all([D.monthlySettlement(db, selMonth), costOf(db, "alimtalk")]);
+  const sT = settle.reduce((a, r) => ({ sent: a.sent + r.sent, rev: a.rev + r.revenue, base: a.base + r.cost_base }), { sent: 0, rev: 0, base: 0 });
+  const margin = sT.rev - sT.base;
+  const marginPct = sT.rev > 0 ? Math.round((margin / sT.rev) * 100) : 0;
+  const settleRows = settle.length ? settle.map((r) => {
+    const m = r.revenue - r.cost_base;
+    return `<tr><td>${esc(r.name)}</td><td>${r.sent.toLocaleString()}건</td>
+      <td>${r.revenue.toLocaleString()}원</td><td>${r.cost_base.toLocaleString()}원</td>
+      <td><b>${m.toLocaleString()}원</b></td><td>${r.revenue > 0 ? Math.round((m / r.revenue) * 100) : 0}%</td></tr>`;
+  }).join("") : `<tr><td colspan="6" class="empty">이 달 발송 내역이 없습니다.</td></tr>`;
+  const monthOpts = (months.length ? months.map((x) => x.m) : [selMonth]).map((m) =>
+    `<option value="${esc(m)}"${m === selMonth ? " selected" : ""}>${esc(m)}</option>`).join("");
+  const settlementPanel = `<section class="panel" id="p-settle"><div class="panel-head">
+      <h2 class="panel-title">월별 정산 · 마진 <span class="badge ${margin > 0 ? "badge-ok" : "badge-muted"}">${margin.toLocaleString()}원 (${marginPct}%)</span></h2>
+      <form method="get" action="/super" class="inline-form"><select name="m" data-autosubmit>${monthOpts}</select><button class="btn btn-xs btn-ghost">이동</button></form></div>
+    <div class="stat-cards">
+      <div class="stat-card left"><div class="stat-top"><span class="stat-label">발송</span></div><span class="stat-num">${sT.sent.toLocaleString()}</span><div class="stat-delta mut">건 (성공분만)</div></div>
+      <div class="stat-card left"><div class="stat-top"><span class="stat-label">매출</span></div><span class="stat-num">${sT.rev.toLocaleString()}</span><div class="stat-delta mut">원 · 상인회 차감액</div></div>
+      <div class="stat-card left"><div class="stat-top"><span class="stat-label">원가</span></div><span class="stat-num">${sT.base.toLocaleString()}</span><div class="stat-delta mut">원 · 건당 ${unitCost}원 기준</div></div>
+      <div class="stat-card left"><div class="stat-top"><span class="stat-label">마진</span></div><span class="stat-num">${margin.toLocaleString()}</span><div class="stat-delta ${margin > 0 ? "up" : "mut"}">원 (${marginPct}%)</div></div>
+    </div>
+    <div class="table-scroll"><table class="admin-table"><thead><tr><th>상인회</th><th>발송</th><th>매출</th><th>원가</th><th>마진</th><th>마진율</th></tr></thead><tbody>${settleRows}</tbody></table></div>
+    <div class="form-divider">원가 설정 (CPaaS 실제 계약가)</div>
+    <form method="post" action="/super/notify-cost" class="stack-form compact">
+      <label class="mini-label">알림톡 원가 (원/건)<input type="number" name="cost_alimtalk" value="${unitCost}" min="0" max="1000" required /></label>
+      <p class="panel-hint">알리고 청구서의 실제 건당 단가를 넣으세요. <b>발송 시점의 원가가 로그에 함께 저장</b>되므로,
+        나중에 원가를 바꿔도 지난 달 마진은 그대로 유지됩니다.</p>
+      <button class="btn btn-primary btn-sm">원가 저장</button></form>
+    <div class="form-divider">공유 계정 대사(對査)</div>
+    <p class="panel-hint">알리고 계정을 다른 서비스와 함께 쓰신다면, 알리고 대시보드에서 <b>이 플랫폼 템플릿 코드</b>로 필터해
+      건수를 맞춰 보세요. ${selMonth} 기준 이 플랫폼 발송은 <b>${sT.sent.toLocaleString()}건</b>입니다.
+      차이가 나면 그만큼이 다른 서비스 발송분입니다.</p>
+    <table class="verify-table"><tr><th>이 플랫폼 템플릿</th><td>${
+      (await Promise.all(Object.values(TEMPLATE_KEYS).map((k) => D.getSetting(db, k)))).filter(Boolean).map((c) => `<code>${esc(c)}</code>`).join(" · ") || "<span class=\"muted\">아직 등록되지 않음</span>"
+    }</td></tr>
+    <tr><th>발송 참조 코드</th><td><code>SCM-{상인회id}-{템플릿}</code> — 발송 로그에 함께 기록됩니다</td></tr></table></section>`;
+
   const notifySuperPanel = `<section class="panel panel-accent"><h2 class="panel-title">알림톡 판매 <span class="badge badge-brand">건당 ${unitPrice.toLocaleString()}원</span>${pendCredits.length ? ` <span class="badge badge-wait">충전 대기 ${pendCredits.length}</span>` : ""}</h2>
     <p class="panel-hint">상인회가 선불로 충전하고 발송할 때마다 차감됩니다. <b>판매단가 − 원가 = 마진</b>이며, 발송 실패는 자동 환불되어 매출로 잡히지 않습니다.
       ${notifyEnabled(env) ? "" : '<b class="txt-warn">아직 알리고 키가 설정되지 않아 실제 발송은 되지 않습니다.</b>'}</p>
@@ -1639,6 +1680,7 @@ export async function superConsole(ctx) {
       <thead><tr><th>상인회</th><th>개별 도메인</th><th>플랜</th><th>상태</th><th>관리</th></tr></thead><tbody>${rows}</tbody></table></div></section>
     ${securityPanel}
     ${notifySuperPanel}
+    ${settlementPanel}
     ${usagePanel}
     ${superPanel}
     ${wiredPanel}
