@@ -158,6 +158,18 @@ export async function superNotifyCost(ctx) {
 
 // 슈퍼: 상인회별 단가 설정 (0 = 플랫폼 기본가 적용)
 // 슈퍼: 과금 방식 (발송당 / 계약당)
+// 슈퍼: 조직 유형 전환 (상인회 ↔ 전자계약 전용)
+// 데이터는 지우지 않는다 — 보이는 메뉴와 관리자 화면만 달라진다. 되돌리면 그대로 돌아온다.
+export async function superSetKind(ctx) {
+  const { db, form, params } = ctx;
+  const a = await D.getAssociationById(db, Number(params.id) || 0);
+  if (!a) return back("/super", "조직을 찾을 수 없습니다.", true);
+  const kind = form.get("kind") === "esign" ? "esign" : "merchant";
+  await D.setAssociationKind(db, a.id, kind);
+  await audit(ctx, "조직유형변경", `${a.name}: ${kind === "esign" ? "전자계약 전용" : "상인회"}`, null);
+  return back("/super", `'${a.name}' 을(를) ${kind === "esign" ? "전자계약 전용" : "상인회"} 으로 바꿨습니다. 기존 데이터는 그대로 있습니다.`);
+}
+
 export async function superBillingMode(ctx) {
   const { db, form } = ctx;
   const mode = form.get("billing_mode") === "per_doc" ? "per_doc" : "per_send";
@@ -1417,10 +1429,12 @@ export async function superCreateAssociation(ctx) {
   if (!name || !EMAIL_RE.test(adminEmail) || adminPassword.length < 8 || adminPassword.length > 200) return back("/super", "상인회 이름과 관리자 계정을 확인하세요. (비밀번호 8~200자)", true);
   if (await D.getUserByEmail(db, adminEmail)) return back("/super", "이미 사용 중인 관리자 이메일입니다.", true);
   const color = /^#[0-9a-fA-F]{6}$/.test(form.get("brand_color") || "") ? form.get("brand_color") : "#0b6e4f";
+  const kind = form.get("kind") === "esign" ? "esign" : "merchant";
   // 고유 slug
   let slug = slugify(name), n = 1;
   while (await D.getAssociationBySlug(db, slug)) slug = slugify(name) + "-" + (++n);
-  const assoc = await D.createAssociation(db, { slug, name, brandColor: color, tagline: cap(form.get("tagline"), 200) || undefined });
+  const assoc = await D.createAssociation(db, { slug, name, brandColor: color, kind,
+    tagline: cap(form.get("tagline"), 200) || (kind === "esign" ? "종이 없이, 만나지 않고, 법적 효력 있는 계약" : undefined) });
   const { hash, salt } = await hashPassword(adminPassword);
   await D.createUser(db, { email: adminEmail, passwordHash: hash, salt, name: cap(form.get("admin_name"), 60) || "관리자", role: "ADMIN", associationId: assoc.id });
   // 빈 화면으로 넘기지 않도록 시작 세트를 함께 넣습니다(공지·가입 동의서).

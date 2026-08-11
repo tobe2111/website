@@ -12,10 +12,13 @@ export const getAssociationBySlug = (db, slug) => first(db, "SELECT * FROM assoc
 export const getAssociationById = (db, id) => first(db, "SELECT * FROM associations WHERE id = ?", id);
 export const listActiveAssociations = (db) => all(db, "SELECT * FROM associations WHERE active = 1 ORDER BY name");
 export const listAllAssociations = (db) => all(db, "SELECT * FROM associations ORDER BY created_at DESC");
-export async function createAssociation(db, { slug, name, brandColor = "#0b8a46", tagline = "함께 성장하는 우리 동네 상권" }) {
-  await run(db, "INSERT INTO associations (slug, name, brand_color, tagline) VALUES (?, ?, ?, ?)", slug, name, brandColor, tagline);
+export async function createAssociation(db, { slug, name, brandColor = "#0b8a46", tagline = "함께 성장하는 우리 동네 상권", kind = "merchant" }) {
+  await run(db, "INSERT INTO associations (slug, name, brand_color, tagline, kind) VALUES (?, ?, ?, ?, ?)",
+    slug, name, brandColor, tagline, kind === "esign" ? "esign" : "merchant");
   return getAssociationById(db, await lastId(db));
 }
+export const setAssociationKind = (db, id, kind) =>
+  run(db, "UPDATE associations SET kind=? WHERE id=?", kind === "esign" ? "esign" : "merchant", id);
 export function updateAssociation(db, id, f) {
   return run(db, `UPDATE associations SET name=?, tagline=?, brand_color=?, phone=?, email=?, address=?, logo=?, hero_image=?, naver_verification=?, google_verification=? WHERE id=?`,
     f.name, f.tagline, f.brand_color, f.phone, f.email, f.address, f.logo, f.hero_image || "", f.naver_verification || "", f.google_verification || "", id);

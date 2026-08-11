@@ -24,6 +24,10 @@ CREATE TABLE IF NOT EXISTS associations (
   naver_verification TEXT NOT NULL DEFAULT '',  -- 네이버 서치어드바이저 소유 확인 코드
   google_verification TEXT NOT NULL DEFAULT '', -- 구글 서치콘솔 소유 확인 코드
   plan        TEXT NOT NULL DEFAULT 'free',   -- 요금제(free|basic|pro)
+  -- 조직 유형. merchant = 상인회 홈페이지(점포·지도·공지 + 전자계약),
+  --            esign    = 전자계약만 쓰는 조직(법무·부동산·프랜차이즈 등).
+  -- 같은 엔진을 쓰되 손님에게 보이는 메뉴와 관리자 화면이 달라진다.
+  kind        TEXT NOT NULL DEFAULT 'merchant',
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_assoc_domain ON associations(custom_domain) WHERE custom_domain != '';
@@ -538,7 +542,7 @@ CREATE INDEX IF NOT EXISTS idx_msglog_assoc ON message_log(association_id, creat
 
 // 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
 // 마이그레이션 세대 — migrateColumns 에 단계를 추가할 때마다 +1
-export const SCHEMA_VERSION = "30";
+export const SCHEMA_VERSION = "31";
 
 export async function ensureSchema(db) {
   const has = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='associations'").first();
@@ -653,6 +657,11 @@ async function migrateColumns(db) {
   if (mcols.length && !mcols.some((c) => c.name === "cost_base")) {
     await db.prepare("ALTER TABLE message_log ADD COLUMN cost_base INTEGER NOT NULL DEFAULT 0").run();
     await db.prepare("ALTER TABLE message_log ADD COLUMN ref TEXT NOT NULL DEFAULT ''").run();
+  }
+  // v31: 조직 유형 (상인회 / 전자계약 전용)
+  const acol = (await db.prepare("PRAGMA table_info(associations)").all()).results || [];
+  if (acol.length && !acol.some((c) => c.name === "kind")) {
+    await db.prepare("ALTER TABLE associations ADD COLUMN kind TEXT NOT NULL DEFAULT 'merchant'").run();
   }
   // v30: 공개 API 키 + 웹훅 큐
   const akTbl = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='api_keys'").first();

@@ -147,6 +147,8 @@ export async function eventIcs(ctx) {
 
 export async function home(ctx) {
   const { db, assoc, base, user, csrf } = ctx;
+  // 전자계약 전용 조직은 상권 홈페이지가 아니라 '계약 창구'다 — 점포·지도 대신 서명 입구를 낸다.
+  if (assoc.kind === "esign") return esignHome(ctx);
   const lay = parseLayout(assoc.home_layout, assoc.name);
   // 독립 쿼리는 병렬로 — D1 은 쿼리마다 네트워크 왕복이라 직렬 대기가 TTFB 로 직결됨
   const [{ items }, notices, events, stats, cats, names, recentUpdates] = await Promise.all([
@@ -1005,27 +1007,38 @@ export async function admin(ctx) {
 
   const notifRows = notifs.length ? notifs.map((n) => `<li class="${n.is_read ? "" : "unread"}"><span class="notif-dot"></span><a href="${esc(n.link || base + "/admin")}" class="notif-msg">${esc(n.message)}</a><time>${esc(kstStamp(n.created_at, { year: false }))}</time></li>`).join("") : `<li class="empty">알림이 없습니다.</li>`;
   const noticeCats = NOTICE_CATEGORIES.map((c) => `<option value="${esc(c)}"${c === "안내" ? " selected" : ""}>${esc(c)}</option>`).join("");
+  // 전자계약 전용 조직은 점포·회비·홈구성이 없다 — 안 쓰는 화면을 띄우면 콘솔이 어지러워진다
+  const isEsign = assoc.kind === "esign";
+  const docCount = (await D.listDocuments(db, assoc.id)).length;
 
   const body = `<section class="dash"><div class="container">
-    <div class="dash-head"><div><p class="section-eyebrow">ADMIN · ${esc(assoc.name)}</p><h1 class="dash-title">관리자 대시보드</h1>
-      <p class="dash-sub">홈페이지: <a href="${base}" target="_blank">${esc(prettyPath(base))}</a></p></div>
-      <div class="dash-head-actions"><a href="${base}/admin/documents" class="btn btn-ghost btn-sm">전자서명 문서</a></div></div>
+    <div class="dash-head"><div><p class="section-eyebrow">ADMIN · ${esc(assoc.name)}</p><h1 class="dash-title">${isEsign ? "전자계약 관리" : "관리자 대시보드"}</h1>
+      <p class="dash-sub">${isEsign ? "계약 창구" : "홈페이지"}: <a href="${base}" target="_blank">${esc(prettyPath(base))}</a></p></div>
+      <div class="dash-head-actions"><a href="${base}/admin/documents" class="btn btn-primary btn-sm">계약서 만들기</a></div></div>
     ${flashOf(query)}
     <div class="console-grid">
     <aside class="console-side"><nav>
       <a href="#p-stats">${SIDE_SVG.stats} 현황</a><a href="#p-notif">${SIDE_SVG.bell} 알림함${unread ? ` <span class="side-badge">${unread}</span>` : ""}</a>
-      <a href="#p-members">${SIDE_SVG.users} 회원</a><a href="#p-biz">${SIDE_SVG.store} 업체 승인${s.pending ? ` <span class="side-badge">${s.pending}</span>` : ""}</a>
-      <a href="#p-products">${SIDE_SVG.tag} 제품</a><a href="#p-dues">${SIDE_SVG.stats} 회비 장부</a><a href="#p-home">${SIDE_SVG.home} 홈 구성</a><a href="#p-brand">${SIDE_SVG.palette} 브랜딩</a><a href="#p-content">${SIDE_SVG.mega} 공지·행사</a>
+      <a href="#p-members">${SIDE_SVG.users} ${isEsign ? "담당자" : "회원"}</a>
+      ${isEsign ? "" : `<a href="#p-biz">${SIDE_SVG.store} 업체 승인${s.pending ? ` <span class="side-badge">${s.pending}</span>` : ""}</a>
+      <a href="#p-products">${SIDE_SVG.tag} 제품</a><a href="#p-dues">${SIDE_SVG.stats} 회비 장부</a><a href="#p-home">${SIDE_SVG.home} 홈 구성</a>`}
+      <a href="#p-brand">${SIDE_SVG.palette} 브랜딩</a>${isEsign ? "" : `<a href="#p-content">${SIDE_SVG.mega} 공지·행사</a>`}
       <a href="#p-notify">${SIDE_SVG.bell} 알림톡</a>
-      <a href="${base}/polls" class="side-ext">${SIDE_SVG.bell} 안건 투표</a><a href="${base}/admin/documents" class="side-ext">${SIDE_SVG.sign} 전자서명 문서</a><a href="${base}" target="_blank" class="side-ext">${SIDE_SVG.ext} 사이트 보기</a>
+      ${isEsign ? "" : `<a href="${base}/polls" class="side-ext">${SIDE_SVG.bell} 안건 투표</a>`}
+      <a href="${base}/admin/documents" class="side-ext">${SIDE_SVG.sign} 계약서</a>
+      <a href="${base}/admin/templates" class="side-ext">${SIDE_SVG.sign} 서식</a>
+      <a href="${base}/admin/api" class="side-ext">${SIDE_SVG.ext} API 연동</a>
+      <a href="${base}" target="_blank" class="side-ext">${SIDE_SVG.ext} 사이트 보기</a>
     </nav></aside>
     <div class="console-main">
     ${onboardPanel(base, assoc, s, members.length, notices.length)}
     <div class="stat-cards" id="p-stats">
-      <div class="stat-card"><span class="stat-num">${s.businesses}</span><span class="stat-label">승인 업체</span></div>
+      ${isEsign ? `<div class="stat-card"><span class="stat-num">${docCount}</span><span class="stat-label">계약서</span></div>
+      <div class="stat-card"><span class="stat-num">${members.length}</span><span class="stat-label">담당자</span></div>`
+      : `<div class="stat-card"><span class="stat-num">${s.businesses}</span><span class="stat-label">승인 업체</span></div>
       <div class="stat-card${s.pending ? " stat-alert" : ""}"><span class="stat-num">${s.pending}</span><span class="stat-label">승인 대기</span></div>
       <div class="stat-card"><span class="stat-num">${s.notices}</span><span class="stat-label">공지</span></div>
-      <div class="stat-card"><span class="stat-num">${s.events}</span><span class="stat-label">행사</span></div>
+      <div class="stat-card"><span class="stat-num">${s.events}</span><span class="stat-label">행사</span></div>`}
       <div class="stat-card"><span class="stat-num">${s.mediaCount}</span><span class="stat-label">미디어</span></div></div>
     <section class="panel" id="p-notif"><div class="panel-head"><h2 class="panel-title">알림함${unread ? ` <span class="badge badge-wait">${unread}</span>` : ""}</h2>
       ${unread ? `<form method="post" action="${base}/admin/notifications/read"><button class="btn btn-xs btn-ghost">모두 읽음</button></form>` : ""}</div>
@@ -1056,12 +1069,12 @@ export async function admin(ctx) {
           <div class="form-two"><label>사장님 성함<input type="text" name="name" required /></label><label>이메일<input type="email" name="email" required /></label></div>
           <div class="form-two"><label>업체명<input type="text" name="business_name" required /></label><label>업종<input type="text" name="category" placeholder="예: 음식점" /></label></div>
           <button class="btn btn-primary btn-sm">대행 등록 + 임시 비번 발급</button></form></div></details></section>
-    ${duesPanel}
+    ${isEsign ? "" : duesPanel}
     ${notifyPanel}
     ${auditPanel}
-    <section class="panel" id="p-home"><h2 class="panel-title">홈페이지 구성 편집</h2>
+${isEsign ? "" : `    <section class="panel" id="p-home"><h2 class="panel-title">홈페이지 구성 편집</h2>
       <p class="panel-hint">섹션을 켜고 끄거나 순서(▲▼)를 바꾸고 문구를 직접 수정할 수 있습니다.</p>
-      ${layoutEditor(base, lay)}</section>
+      ${layoutEditor(base, lay)}</section>`}
     <section class="panel" id="p-brand"><h2 class="panel-title">상인회 정보 · 브랜딩</h2>
       <form method="post" action="${base}/admin/settings" enctype="multipart/form-data" class="stack-form">
         <div class="form-two"><label>상인회 이름<input type="text" name="name" value="${esc(assoc.name)}" required /></label><label>대표 색상<input type="color" name="brand_color" value="${esc(assoc.brand_color)}" /></label></div>
@@ -1076,10 +1089,10 @@ export async function admin(ctx) {
           <label>구글 서치콘솔 코드<input type="text" name="google_verification" value="${esc(assoc.google_verification || "")}" placeholder="content=&quot;…&quot; 안의 값만" /></label></div>
         <p class="panel-hint">입력하면 모든 페이지에 확인 메타 태그가 자동 삽입됩니다. 등록 후 사이트맵 <code>/sitemap.xml</code> 과 RSS <code>${esc(prettyPath(base))}/feed.xml</code> 을 제출하세요.</p>
         <button class="btn btn-primary btn-sm">브랜딩 저장</button></form></section>
-    <section class="panel" id="p-biz"><h2 class="panel-title">업체 관리</h2><div class="table-scroll"><table class="admin-table">
+    ${isEsign ? "" : `<section class="panel" id="p-biz"><h2 class="panel-title">업체 관리</h2><div class="table-scroll"><table class="admin-table">
       <thead><tr><th>업체</th><th>사장님</th><th>상태</th><th>처리</th></tr></thead><tbody>${bizRows}</tbody></table></div></section>
-    <div id="p-products">${productModPanel}</div>
-    <div class="dash-grid" id="p-content">
+    <div id="p-products">${productModPanel}</div>`}
+    <div class="dash-grid" id="p-content"${isEsign ? ' hidden' : ""}>
       <section class="panel"><h2 class="panel-title">공지·소식</h2>
         <form method="post" action="${base}/admin/notice" enctype="multipart/form-data" class="stack-form compact">
           <input type="text" name="title" placeholder="제목" required /><textarea name="body" rows="3" placeholder="내용"></textarea>
@@ -1494,6 +1507,125 @@ export async function adminApi(ctx) {
       <p class="panel-hint">응답의 <code>sign_url</code> 로 상대방이 가입 없이 바로 서명합니다. 전체 명세는 <a href="/api/v1/docs" target="_blank">/api/v1/docs</a>.</p></section>
     </div></section>`;
   return html(layout({ title: "API 연동", assoc, base, user, body, csrf }));
+}
+
+// 전자계약 제품 소개 (플랫폼 공개 페이지) — 상인회가 아닌 고객이 처음 만나는 화면.
+// 상인회 랜딩과 섞으면 "우리는 상인회가 아닌데" 하고 나가 버린다. 따로 둔다.
+export async function esignLanding(ctx) {
+  const { db, csrf, query, url } = ctx;
+  const siteName = (await D.getSetting(db, "site_name")) || "전자계약";
+  const origin = url.origin;
+  const step = (n, t, d) => `<div class="es-step"><span class="es-n">${n}</span><div><h3>${esc(t)}</h3><p>${esc(d)}</p></div></div>`;
+  const body = `
+  <section class="landing-hero es-hero"><div class="container">
+    <p class="hero-eyebrow">가입 없이 링크 하나로 — 전자계약</p>
+    <h1 class="landing-title">계약서를 보내면,<br /><span>그 자리에서 서명</span>됩니다</h1>
+    <p class="landing-lead">서명·도장 자리를 계약서 위에 놓고 링크를 보내면 끝입니다.
+      상대방은 <b>가입도 앱 설치도 없이</b> 문자로 받은 링크에서 서명하고, 완료되면 양쪽 모두 증적을 받습니다.</p>
+    <div class="hero-actions"><a href="/apply?kind=esign" class="btn btn-primary btn-lg">도입 문의</a>
+      <a href="/api/v1/docs" class="btn btn-ghost btn-lg" target="_blank">API 문서 보기</a></div>
+    <p class="hero-note">계약을 받으신 분이라면 — 문자·메일의 링크를 그대로 열어 주세요. 이 화면에서 로그인할 필요가 없습니다.</p>
+  </div></section>
+
+  <section class="section"><div class="container">
+    <div class="section-head"><p class="section-eyebrow">HOW</p><h2 class="section-title">보내고, 서명받고, 끝</h2></div>
+    <div class="es-steps">
+      ${step(1, "계약서 만들기", "표준 서식(임대차·용역·NDA·동의서)을 고르고 빈칸만 채웁니다. 쓰던 서식을 저장해 재사용할 수도 있습니다.")}
+      ${step(2, "서명 자리 배치", "계약서 위를 클릭해 서명·도장·날짜·체크 자리를 놓습니다. 누가 어디에 채울지 사람별로 지정합니다.")}
+      ${step(3, "링크 발송", "이름과 연락처만 넣으면 카카오 알림톡·메일로 각자의 서명 링크가 갑니다. 순서대로 받게 할 수도 있습니다.")}
+      ${step(4, "본인확인 후 서명", "휴대폰 인증번호로 본인을 확인하고, 계약서 위에서 직접 서명하거나 도장을 찍습니다.")}
+      ${step(5, "증적 확보", "체결되면 완성본·확인서·감사추적·검증절차가 한 벌(ZIP)로 남습니다. 소송에 그대로 제출할 수 있습니다.")}
+    </div>
+  </div></section>
+
+  <section class="section section-alt"><div class="container">
+    <div class="section-head"><p class="section-eyebrow">SECURITY</p><h2 class="section-title">위변조를 어떻게 잡아내는가</h2></div>
+    <div class="feature-grid">
+      ${[["📄", "본문 해시", "계약서 한 글자만 바뀌어도 해시가 달라져 드러납니다"],
+         ["✍️", "Ed25519 봉인", "서명자·시각·IP·기기를 디지털 서명으로 봉인합니다"],
+         ["📍", "입력값·좌표 봉인", "채운 값은 물론 '어느 자리에 채웠는지'까지 봉인해, 자리만 옮기는 조작도 탐지합니다"],
+         ["⛓", "서명 사슬", "각 서명이 직전 서명을 가리켜, 중간 기록을 지우면 사슬이 끊깁니다"],
+         ["⏱", "시점 앵커", "매일 사슬의 머리를 봉인해 '그 시점에 이미 존재했다'를 증명합니다"],
+         ["🔑", "공개키 공개", "공개키를 상시 공개해 누구나 직접 검증할 수 있습니다"],
+        ].map(([i, t, d]) => `<div class="feature-card"><span class="feature-ico">${i}</span><h3>${esc(t)}</h3><p>${esc(d)}</p></div>`).join("")}
+    </div>
+    <p class="panel-hint" style="text-align:center;margin-top:18px">
+      공개키: <a href="/.well-known/esign-public-key" target="_blank"><code>/.well-known/esign-public-key</code></a> ·
+      시점 앵커: <a href="/.well-known/esign-anchors" target="_blank"><code>/.well-known/esign-anchors</code></a></p>
+  </div></section>
+
+  <section class="section"><div class="container narrow">
+    <div class="section-head"><p class="section-eyebrow">API</p><h2 class="section-title">우리 시스템에서 자동으로</h2></div>
+    <p class="landing-lead" style="text-align:center">한 번의 호출로 계약서 생성·서명 링크 발급·발송까지 끝납니다. API 호출은 무료입니다.</p>
+    <pre class="code-block">curl -X POST ${esc(origin)}/api/v1/documents \
+  -H "Authorization: Bearer sk_live_..." \
+  -H "content-type: application/json" \
+  -d '{
+    "title": "○○상가 임대차계약",
+    "template": "b-lease",
+    "variables": { "임대인": "김갑", "임차인": "이을", "보증금": "50,000,000" },
+    "signers": [{ "name": "이을", "phone": "010-1234-5678" }]
+  }'</pre>
+    <p class="panel-hint" style="text-align:center">서명·거절·완료는 웹훅으로 즉시 알려 드립니다. 전체 명세: <a href="/api/v1/docs" target="_blank">/api/v1/docs</a></p>
+  </div></section>
+
+  <section class="section section-alt"><div class="container narrow">
+    <div class="section-head"><h2 class="section-title">받으신 계약이 진짜인지 확인</h2></div>
+    <p class="landing-lead" style="text-align:center">확인서의 검증 코드를 넣으면 누구나 위변조 여부를 확인할 수 있습니다. 로그인은 필요 없습니다.</p>
+    <form method="get" action="/verify" class="stack-form" style="max-width:420px;margin:0 auto">
+      <label>검증 코드<input type="text" name="code" placeholder="확인서에 적힌 코드" required /></label>
+      <button class="btn btn-primary btn-block">검증하기</button></form>
+  </div></section>
+
+  <section class="section"><div class="container narrow" style="text-align:center">
+    <h2 class="section-title">도입 문의</h2>
+    <p class="landing-lead">쓰시는 계약서 양식 그대로 옮겨 드립니다. 연락처만 남겨 주세요.</p>
+    <a href="/apply?kind=esign" class="btn btn-primary btn-lg">문의하기</a>
+  </div></section>`;
+  return html(layout({ title: `전자계약 — ${siteName}`, base: "", user: ctx.user, body, csrf,
+    description: "가입 없이 링크로 서명하는 전자계약. 서명·도장 자리를 계약서 위에 놓고 보내면 그 자리에서 체결됩니다. 위변조 검증·증적 패키지·API 연동 지원." }));
+}
+
+// 전자계약 전용 조직의 홈 — 손님(계약 상대방)과 담당자 둘 다 여기로 들어온다.
+async function esignHome(ctx) {
+  const { db, assoc, base, user, csrf, query } = ctx;
+  const notices = await D.listNotices(db, assoc.id, 3);
+  const noticeHtml = notices.length ? `<section class="section section-alt"><div class="container narrow">
+    <h2 class="biz-section-title">공지</h2><ul class="notice-list">${notices.map((n) => `<li><a href="${base}/notices/${n.id}">
+      <span class="notice-title">${esc(n.title)}</span><time>${esc(kstDate(n.created_at, "."))}</time></a></li>`).join("")}</ul></div></section>` : "";
+  const mine = user && user.role === "MERCHANT"
+    ? `<a href="${base}/sign" class="btn btn-primary btn-lg">서명할 문서 보기</a>`
+    : user ? `<a href="${base}/admin/documents" class="btn btn-primary btn-lg">계약 관리로</a>`
+    : `<a href="/login" class="btn btn-primary btn-lg">로그인</a>`;
+  const body = `<section class="landing-hero"><div class="container">
+      <p class="hero-eyebrow">${esc(assoc.name)}</p>
+      <h1 class="landing-title">전자계약</h1>
+      <p class="landing-lead">${esc(assoc.tagline || "종이 없이, 만나지 않고, 법적 효력 있는 계약을 체결합니다.")}</p>
+      <div class="hero-actions">${mine}</div>
+      <p class="hero-note">계약 상대방은 <b>가입 없이</b> 문자·메일로 받은 링크로 바로 서명합니다.
+        서명하실 분은 받으신 링크를 열어 주세요 — 이 화면에서 로그인할 필요가 없습니다.</p>
+    </div></section>
+    <section class="section"><div class="container">
+      <div class="section-head"><p class="section-eyebrow">HOW IT WORKS</p><h2 class="section-title">계약이 끝나는 과정</h2></div>
+      <div class="feature-grid">${[
+        ["📄", "계약서 작성", "표준 서식을 고르고 빈칸만 채웁니다"],
+        ["🖊", "서명 자리 배치", "서명·도장·날짜 자리를 계약서 위에 놓습니다"],
+        ["📲", "링크 발송", "상대방에게 문자·메일로 서명 링크가 갑니다"],
+        ["🔐", "본인확인·서명", "휴대폰 인증 후 그 자리에서 서명·날인"],
+        ["📦", "증적 확보", "확인서·감사추적·검증절차를 한 벌로 보관"],
+        ["🔎", "누구나 검증", "검증코드로 제3자가 위변조를 확인"],
+      ].map(([i, t, d]) => `<div class="feature-card"><span class="feature-ico">${i}</span><h3>${esc(t)}</h3><p>${esc(d)}</p></div>`).join("")}</div>
+    </div></section>
+    <section class="section section-alt"><div class="container narrow">
+      <div class="section-head"><h2 class="section-title">서명한 계약이 진짜인지 확인</h2></div>
+      <p class="landing-lead" style="text-align:center">확인서에 적힌 검증 코드를 넣으면 누구나 위변조 여부를 확인할 수 있습니다.</p>
+      <form method="get" action="/verify" class="stack-form" style="max-width:420px;margin:0 auto">
+        <label>검증 코드<input type="text" name="code" placeholder="확인서에 적힌 코드" required /></label>
+        <button class="btn btn-primary btn-block">검증하기</button></form>
+    </div></section>
+    ${noticeHtml}`;
+  return html(layout({ title: assoc.name, assoc, base, user, body, csrf, activeNav: `${base}/`,
+    description: `${assoc.name} 전자계약 — 가입 없이 링크로 서명하고, 서명한 계약은 누구나 검증할 수 있습니다.` }));
 }
 
 // ================= 외부(비회원) 서명 =================
@@ -2121,7 +2253,10 @@ export async function superConsole(ctx) {
       <form method="post" action="/super/association/${a.id}/mapkey" class="domain-form" style="margin-top:4px" title="이 상인회만 다른 Maps 앱을 쓰게 할 때 (비우면 공용 키)">
       <input type="text" name="map_client_id" value="${esc(a.map_client_id || "")}" placeholder="지도 키(선택·공용이면 비움)" />
       <button class="btn btn-xs btn-ghost">저장</button></form></td>
-    <td><form method="post" action="/super/association/${a.id}/plan" class="plan-form"><select name="plan">${planOpts(a.plan || "free")}</select><button class="btn btn-xs btn-ghost">변경</button></form></td>
+    <td><form method="post" action="/super/association/${a.id}/plan" class="plan-form"><select name="plan">${planOpts(a.plan || "free")}</select><button class="btn btn-xs btn-ghost">변경</button></form>
+      <form method="post" action="/super/association/${a.id}/kind" class="plan-form" style="margin-top:4px" title="보이는 메뉴와 관리자 화면이 바뀝니다. 데이터는 지워지지 않습니다.">
+        <select name="kind"><option value="merchant"${a.kind !== "esign" ? " selected" : ""}>상인회</option><option value="esign"${a.kind === "esign" ? " selected" : ""}>전자계약</option></select>
+        <button class="btn btn-xs btn-ghost">유형</button></form></td>
     <td>${a.active ? '<span class="badge badge-ok">활성</span>' : '<span class="badge badge-no">비활성</span>'}
       ${(() => { const t = lastAct.get(a.id); if (!t) return `<small class="act-stamp is-cold">활동 없음</small>`;
         const days = Math.floor((Date.now() - Date.parse(t.includes("T") ? t : t.replace(" ", "T") + "Z")) / 86400000);
@@ -2178,9 +2313,13 @@ export async function superConsole(ctx) {
       </div>
 
       <div class="sgroup" id="s-assoc" data-tab="assoc">
-    <section class="panel panel-accent" id="new-assoc"><h2 class="panel-title">➕ 새 상인회 (사이트 복제)</h2>
+    <section class="panel panel-accent" id="new-assoc"><h2 class="panel-title">➕ 새 조직 만들기</h2>
       <form method="post" action="/super/association" class="stack-form">
-        <div class="form-two"><label>상인회 이름<input type="text" name="name" required /></label><label>대표 색상<input type="color" name="brand_color" value="#0b6e4f" /></label></div>
+        <div class="form-two"><label>조직 이름<input type="text" name="name" required /></label><label>대표 색상<input type="color" name="brand_color" value="#0b6e4f" /></label></div>
+        <label>유형<select name="kind">
+          <option value="merchant">상인회 — 점포·지도·공지 홈페이지 + 전자계약</option>
+          <option value="esign">전자계약 전용 — 계약만 (법무·부동산·프랜차이즈 등)</option>
+        </select></label>
         <label>한 줄 소개<input type="text" name="tagline" /></label>
         <div class="form-divider">관리자 계정</div>
         <div class="form-two"><label>관리자 이름<input type="text" name="admin_name" /></label><label>관리자 이메일<input type="email" name="admin_email" required /></label></div>
@@ -2369,6 +2508,7 @@ export async function platformLanding(ctx) {
     <p class="landing-lead">가입 점포 안내·지도, 공지·소식, 회원 게시판, 전자 동의서까지 — 상인회에 꼭 필요한 기능만 담았습니다. 서버·개발 없이 바로 시작하세요.</p>
     <div class="hero-actions"><a href="/apply" class="btn btn-primary btn-lg">무료로 신청하기</a>
       <a href="#features" class="btn btn-ghost btn-lg">기능 둘러보기</a></div>
+    <p class="hero-note">상인회가 아니신가요? <a href="/esign">전자계약만 따로 쓰실 수 있습니다 →</a></p>
   </div></section>
   <section class="section" id="features"><div class="container">
     <div class="section-head"><p class="section-eyebrow">FEATURES</p><h2 class="section-title">상인회에 필요한 모든 것</h2></div>

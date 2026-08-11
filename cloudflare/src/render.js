@@ -5,7 +5,7 @@ import { esc } from "./util.js";
 export const STOREFRONT_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9l1.2-4.2A1 1 0 0 1 6.2 4h11.6a1 1 0 0 1 1 .8L20 9"/><path d="M4 9v10a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9"/></svg>';
 
 export function layout({ title, assoc, base = "", user = null, body, activeNav = "", description = "", scripts = "", csrf = "", ogImage = "", jsonLd = null }) {
-  const nav = assoc ? navHtml(base, user, activeNav) : "";
+  const nav = assoc ? navHtml(base, user, activeNav, assoc.kind) : "";
   const brand = assoc ? esc(assoc.name) : "상인회 플랫폼";
   const meta = description ? `<meta name="description" content="${esc(description)}" />` : "";
   // 카카오톡·SNS 공유 미리보기 (og:image 는 절대 URL 필수)
@@ -74,28 +74,35 @@ ${assoc ? `<link rel="alternate" type="application/rss+xml" title="${brand} 공�
 </body></html>`;
 }
 
-function navHtml(base, user, active) {
+function navHtml(base, user, active, kind = "merchant") {
   const link = (href, label) => `<a href="${href}"${active === href ? ' class="active" aria-current="page"' : ""}>${label}</a>`;
-  let items = [
-    link(`${base}/`, "소개"),
-    link(`${base}/businesses`, "가입 점포"),
-    link(`${base}/map`, "점포 지도"),
-    link(`${base}/notices`, "공지·소식"),
-  ];
+  // 전자계약 전용 조직에는 점포·지도·게시판이 없다 — 쓰지 않을 메뉴를 띄우면 제품이 흐려진다.
+  const esign = kind === "esign";
+  let items = esign
+    ? [link(`${base}/`, "소개"), link(`${base}/notices`, "공지")]
+    : [
+      link(`${base}/`, "소개"),
+      link(`${base}/businesses`, "가입 점포"),
+      link(`${base}/map`, "점포 지도"),
+      link(`${base}/notices`, "공지·소식"),
+    ];
   if (user) {
-    items.push(link(`${base}/board`, "회원 게시판"));
-    items.push(link(`${base}/polls`, "투표"));
+    if (!esign) {
+      items.push(link(`${base}/board`, "회원 게시판"));
+      items.push(link(`${base}/polls`, "투표"));
+    }
+    if (user.role === "MERCHANT") items.push(link(`${base}/sign`, "내 서명"));
     // 운영 메뉴는 손님용 메뉴와 섞지 않고 오른쪽에 따로 묶습니다.
     // '슈퍼'(플랫폼 콘솔)는 이 상인회의 메뉴가 아니므로 여기 두지 않습니다 —
     // 상인회 홈페이지 위에 플랫폼 운영 도구가 얹혀 있는 것처럼 보입니다. 계정 화면에서 들어갑니다.
     const ops = [];
-    if (user.role === "MERCHANT") ops.push(link(`${base}/dashboard`, "내 업체"));
+    if (user.role === "MERCHANT" && !esign) ops.push(link(`${base}/dashboard`, "내 업체"));
     if (user.role === "ADMIN" || user.role === "SUPERADMIN") ops.push(link(`${base}/admin`, "관리자"));
     if (ops.length) items.push(`<span class="nav-ops">${ops.join("")}</span>`);
     items.push(`<form method="post" action="/logout" class="nav-logout"><button class="btn btn-ghost btn-sm">로그아웃</button></form>`);
   } else {
     items.push(link(`/login`, "로그인"));
-    items.push(`<a href="${base}/register" class="btn btn-primary btn-sm">가입</a>`);
+    if (!esign) items.push(`<a href="${base}/register" class="btn btn-primary btn-sm">가입</a>`);
   }
   return items.join("");
 }
