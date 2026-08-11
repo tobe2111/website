@@ -97,6 +97,7 @@ export async function logout(ctx) {
 
 // ---------- 회원가입 ----------
 export async function register(ctx) {
+  if (ctx.assoc && ctx.assoc.kind === "esign") return back(ctx.base + "/", "이 조직은 점포 가입을 받지 않습니다.", true);
   const { db, env, form, addCookie, isProd, base, assoc, ip } = ctx;
   if (!(await turnstileVerify(env, form.get("cf-turnstile-response"), ip))) return back(base + "/register", "봇 방지 확인에 실패했습니다. 다시 시도해 주세요.", true);
   const name = cap((form.get("name") || "").trim(), 60);
@@ -593,20 +594,24 @@ export async function adminResetUserPassword(ctx) {
 // 관리자 대행 등록: 총무가 사장님 대신 회원+업체를 만들고 임시 비번을 전달.
 // source='proxy' 로 태깅 → '셀프 등록률' 계측의 분모/분자에 반영.
 export async function adminAddMember(ctx) {
+  // 전자계약 조직에는 업체가 없다 — 담당자는 '담당자 추가'로, 내부 서명자는 이 경로로 받되
+  // 업체 레코드를 만들지 않는다(만들면 쓰지도 않을 '내 업체' 화면이 열린다).
   const { db, form, base, assoc } = ctx;
   const name = cap((form.get("name") || "").trim(), 60);
   const email = cap((form.get("email") || "").toLowerCase().trim(), 120);
   const businessName = cap((form.get("business_name") || "").trim(), 100);
-  if (!name || !EMAIL_RE.test(email) || !businessName) return back(base + "/admin", "이름·이메일·업체명을 확인해 주세요.", true);
+  const isEsign = assoc.kind === "esign";
+  if (!name || !EMAIL_RE.test(email) || (!isEsign && !businessName))
+    return back(base + "/admin", isEsign ? "이름·이메일을 확인해 주세요." : "이름·이메일·업체명을 확인해 주세요.", true);
   if (await D.getUserByEmail(db, email)) return back(base + "/admin", "이미 가입된 이메일입니다.", true);
   if ((await D.countMembers(db, assoc.id)) >= planOf(assoc).maxMembers)
     return back(base + "/admin", "회원 정원이 가득 찼습니다.", true);
   const temp = tempPassword();
   const { hash, salt } = await hashPassword(temp);
   const user = await D.createUser(db, { email, passwordHash: hash, salt, name, role: "MERCHANT", associationId: assoc.id });
-  await D.createBusiness(db, { associationId: assoc.id, ownerId: user.id, name: businessName, category: cap(form.get("category"), 40), source: "proxy" });
-  await audit(ctx, "회원대행등록", `${name} / ${businessName} (${email})`);
-  return back(base + "/admin", `대행 등록 완료 — ${name}님 로그인: ${email} / 임시비번 ${temp} (사장님께 전달하세요)`);
+  if (!isEsign) await D.createBusiness(db, { associationId: assoc.id, ownerId: user.id, name: businessName, category: cap(form.get("category"), 40), source: "proxy" });
+  await audit(ctx, isEsign ? "서명자등록" : "회원대행등록", `${name}${businessName ? " / " + businessName : ""} (${email})`);
+  return back(base + "/admin", `${isEsign ? "내부 서명자" : "대행"} 등록 완료 — ${name}님 로그인: ${email} / 임시비번 ${temp} (본인에게 전달하세요)`);
 }
 
 // ---------- 가게 소식 (한 줄 피드) ----------
@@ -1671,6 +1676,7 @@ export async function adminCreateInvite(ctx) {
   return redirect(`${base}/admin?invite=${encodeURIComponent(token)}#p-members`);
 }
 export async function acceptInvite(ctx) {
+  if (ctx.assoc && ctx.assoc.kind === "esign") return back(ctx.base + "/", "이 조직은 점포 가입을 받지 않습니다.", true);
   const { db, env, form, addCookie, isProd, base, assoc, ip } = ctx;
   if (rateLimited(ip)) return back(base + "/invite", "시도가 너무 많습니다. 잠시 후 다시 시도해 주세요.", true);
   const inv = await verifyInviteToken(env.SESSION_SECRET, form.get("token"), assoc.id);

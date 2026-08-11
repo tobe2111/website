@@ -368,9 +368,12 @@ export async function businessDetail(ctx) {
 }
 
 export function loginForm(ctx) {
-  const { env, query, csrf } = ctx;
+  const { env, query, csrf, assoc } = ctx;
+  // 전자계약만 쓰는 조직·플랫폼 전역에서 "상인회 회원 로그인"은 남의 옷이다
+  const esign = assoc && assoc.kind === "esign";
+  const sub = esign ? "계약서를 만들고 보내는 분들의 로그인" : assoc ? "상인회 회원·관리자 로그인" : "로그인 후 이용하실 수 있습니다";
   const body = `<section class="section page-top"><div class="container auth-wrap"><div class="auth-card">
-    ${authHead("로그인", "상인회 회원·관리자 로그인")}
+    ${authHead("로그인", sub)}
     ${flash(query.get("msg") || "", query.get("err") ? "err" : "ok")}
     <form method="post" action="/login" class="stack-form">
       <label>이메일<input type="email" name="email" required autocomplete="email" /></label>
@@ -379,7 +382,9 @@ export function loginForm(ctx) {
       ${turnstileWidget(env)}
       <button class="btn btn-primary btn-block">로그인</button>
     </form>
-    <p class="auth-note"><a href="/forgot">비밀번호를 잊으셨나요?</a></p></div></div></section>`;
+    <p class="auth-note"><a href="/forgot">비밀번호를 잊으셨나요?</a></p>
+    ${assoc ? "" : `<p class="auth-note">계정이 없으신가요? <a href="/esign/signup">전자계약 시작하기</a></p>`}
+    </div></div></section>`;
   return html(layout({ title: "로그인", assoc: ctx.assoc, base: ctx.base, body, csrf, scripts: turnstileScript(env) }));
 }
 
@@ -660,6 +665,9 @@ export async function editPost(ctx) {
 
 // ================= 회원가입 =================
 export function registerForm(ctx) {
+  // 전자계약 조직에 '점포 가입'은 없다. 메뉴에서 감췄어도 URL 이 열려 있으면
+  // 업체 레코드가 생겨 쓰지도 않을 대시보드가 딸려 온다.
+  if (ctx.assoc && ctx.assoc.kind === "esign") return notFoundResponse(ctx);
   const { env, assoc, base, query, csrf } = ctx;
   const opts = CATEGORIES.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
   const body = `<section class="section page-top"><div class="container auth-wrap"><div class="auth-card">
@@ -680,6 +688,7 @@ export function registerForm(ctx) {
 
 // ================= 초대 링크 가입 (관리자가 가게 정보를 미리 채움) =================
 export async function invitePage(ctx) {
+  if (ctx.assoc && ctx.assoc.kind === "esign") return notFoundResponse(ctx);
   const { env, assoc, base, query, csrf } = ctx;
   const inv = await verifyInviteToken(env.SESSION_SECRET, query.get("t"), assoc.id);
   if (!inv) {
@@ -1105,9 +1114,9 @@ export async function admin(ctx) {
 ${isEsign ? "" : `    <section class="panel" id="p-home"><h2 class="panel-title">홈페이지 구성 편집</h2>
       <p class="panel-hint">섹션을 켜고 끄거나 순서(▲▼)를 바꾸고 문구를 직접 수정할 수 있습니다.</p>
       ${layoutEditor(base, lay)}</section>`}
-    <section class="panel" id="p-brand"><h2 class="panel-title">상인회 정보 · 브랜딩</h2>
+    <section class="panel" id="p-brand"><h2 class="panel-title">${isEsign ? "조직 정보 · 브랜딩" : "상인회 정보 · 브랜딩"}</h2>
       <form method="post" action="${base}/admin/settings" enctype="multipart/form-data" class="stack-form">
-        <div class="form-two"><label>상인회 이름<input type="text" name="name" value="${esc(assoc.name)}" required /></label><label>대표 색상<input type="color" name="brand_color" value="${esc(assoc.brand_color)}" /></label></div>
+        <div class="form-two"><label>${isEsign ? "조직" : "상인회"} 이름<input type="text" name="name" value="${esc(assoc.name)}" required /></label><label>대표 색상<input type="color" name="brand_color" value="${esc(assoc.brand_color)}" /></label></div>
         <label>한 줄 소개<input type="text" name="tagline" value="${esc(assoc.tagline)}" /></label>
         <div class="form-two"><label>대표 전화<input type="text" name="phone" value="${esc(assoc.phone)}" /></label><label>이메일<input type="email" name="email" value="${esc(assoc.email)}" /></label></div>
         <label>주소<input type="text" name="address" value="${esc(assoc.address)}" /></label>
@@ -1290,7 +1299,7 @@ export async function adminDocuments(ctx) {
   const docs = await D.listDocuments(db, assoc.id);
   const rows = docs.length ? docs.map((d) => `<tr><td><a href="${base}/admin/documents/${d.id}">${esc(d.title)}</a>
     ${d.ordered ? '<span class="badge badge-info">순차</span>' : ""}${d.due_date ? `<span class="badge ${d.due_date < today ? "badge-no" : "badge-wait"}">기한 ${esc(d.due_date)}</span>` : ""}<br /><small>${esc(kstStamp(d.created_at))}</small></td>
-    <td>${d.sign_count}명</td><td>${d.closed ? '<span class="badge badge-no">마감</span>' : '<span class="badge badge-ok">진행중</span>'}</td>
+    <td>${d.sign_count}명${d.author_name ? `<br /><small class="txt-muted">${esc(d.author_name)}</small>` : ""}</td><td>${d.closed ? '<span class="badge badge-no">마감</span>' : '<span class="badge badge-ok">진행중</span>'}</td>
     <td class="actions-cell"><a class="btn btn-xs btn-ghost" href="${base}/admin/documents/${d.id}">보기</a>${d.closed ? "" : `<form method="post" action="${base}/admin/documents/${d.id}/close" data-confirm="마감할까요?"><button class="btn btn-xs btn-ghost">마감</button></form>`}</td></tr>`).join("") : `<tr><td colspan="4" class="empty">문서가 없습니다.</td></tr>`;
   const members = await D.listSignerCandidates(db, assoc.id, assoc.kind);
   const checks = members.length ? members.map((m) => `<label class="check member-check"><input type="checkbox" name="members" value="${m.id}" /> ${esc(m.name)} <small>${esc(m.email)}</small></label>`).join("") : `<p class="empty">회원이 없습니다.</p>`;
@@ -1323,7 +1332,7 @@ export async function adminDocuments(ctx) {
         <p class="panel-hint">순차 서명 시 위 목록 순서대로 서명 요청이 진행됩니다.</p>
         <button class="btn btn-primary">문서 생성 및 서명 요청</button></form></details>
     <section class="panel"><h2 class="panel-title">문서 목록</h2><div class="table-scroll"><table class="admin-table">
-      <thead><tr><th>문서</th><th>서명</th><th>상태</th><th>관리</th></tr></thead><tbody>${rows}</tbody></table></div></section></div></section>`;
+      <thead><tr><th>문서</th><th>서명 · 만든 사람</th><th>상태</th><th>관리</th></tr></thead><tbody>${rows}</tbody></table></div></section></div></section>`;
   return html(layout({ title: "전자서명 문서", assoc, base, user, body, csrf }));
 }
 export async function adminDocumentDetail(ctx) {
@@ -1573,7 +1582,8 @@ export async function esignSignupForm(ctx) {
     : `<section class="section page-top"><div class="container narrow">
       <div class="auth-card panel"><div class="auth-head"><h1 class="auth-title">도입 문의</h1></div>
       <p class="panel-hint">지금은 셀프 가입을 받지 않고 있습니다. 아래로 문의해 주시면 계약서 양식까지 함께 옮겨 드립니다.</p>
-      <p><a href="/apply?kind=esign" class="btn btn-primary btn-block">문의 남기기</a></p></div></div></section>`;
+      <p><a href="/apply?kind=esign" class="btn btn-primary btn-block">문의 남기기</a></p>
+      <p class="auth-note">이미 계정이 있으신가요? <a href="/login">로그인</a></p></div></div></section>`;
   return html(layout({ title: "전자계약 시작하기", body, csrf, base: "",
     description: "가입 없이 링크로 서명하는 전자계약을 1분 만에 시작하세요.",
     scripts: turnstileScript(env) }));
@@ -1594,6 +1604,7 @@ export async function esignLanding(ctx) {
       상대방은 <b>가입도 앱 설치도 없이</b> 문자로 받은 링크에서 서명하고, 완료되면 양쪽 모두 증적을 받습니다.</p>
     <div class="hero-actions"><a href="/esign/signup" class="btn btn-primary btn-lg">무료로 시작하기</a>
       <a href="/api/v1/docs" class="btn btn-ghost btn-lg" target="_blank">API 문서 보기</a></div>
+    <p class="hero-note">이미 쓰고 계신가요? <a href="/login">로그인</a></p>
     <p class="hero-note">계약을 받으신 분이라면 — 문자·메일의 링크를 그대로 열어 주세요. 이 화면에서 로그인할 필요가 없습니다.</p>
   </div></section>
 
@@ -2536,7 +2547,7 @@ export function forgotForm(ctx) {
   const { env, query, csrf } = ctx;
   const auto = emailOn(env);
   const body = `<section class="section page-top"><div class="container auth-wrap"><div class="auth-card">
-    ${authHead("비밀번호 찾기", auto ? "가입한 이메일로 재설정 링크를 보내드립니다." : "가입한 이메일을 입력하면 상인회 관리자에게 재설정 요청이 전달됩니다.")}
+    ${authHead("비밀번호 찾기", auto ? "가입한 이메일로 재설정 링크를 보내드립니다." : `가입한 이메일을 입력하면 ${ctx.assoc && ctx.assoc.kind === "esign" ? "조직 관리자" : "상인회 관리자"}에게 재설정 요청이 전달됩니다.`)}
     ${flashOf(query)}
     <form method="post" action="/forgot" class="stack-form"><label>이메일<input type="email" name="email" required autocomplete="email" /></label>
       <button class="btn btn-primary btn-block">${auto ? "재설정 링크 받기" : "재설정 요청"}</button></form>

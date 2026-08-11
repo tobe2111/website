@@ -435,8 +435,13 @@ export async function createDocument(db, { associationId, title, body, contentHa
   return getDocument(db, await lastId(db));
 }
 export const getDocument = (db, id) => first(db, "SELECT * FROM documents WHERE id=?", id);
+// 만든 사람을 함께 가져온다 — 담당자가 여러 명이면 "누가 보낸 계약인가"가 가장 먼저 필요해진다.
+// created_by 는 ON DELETE SET NULL 이라 계정이 지워져도 목록이 깨지지 않는다(LEFT JOIN).
 export const listDocuments = (db, aid) =>
-  all(db, "SELECT d.*, (SELECT COUNT(*) FROM signatures s WHERE s.document_id=d.id) AS sign_count FROM documents d WHERE d.association_id=? ORDER BY d.created_at DESC", aid);
+  all(db, `SELECT d.*, u.name AS author_name,
+      (SELECT COUNT(*) FROM signatures s WHERE s.document_id=d.id) AS sign_count
+    FROM documents d LEFT JOIN users u ON u.id = d.created_by
+    WHERE d.association_id=? ORDER BY d.created_at DESC`, aid);
 // 서명 시작 전 문서 수정 — 오타 하나 때문에 계약을 새로 만드는 일이 없도록.
 // 본문이 바뀌면 해시도 다시 계산해야 한다(호출부에서 넘긴다).
 export const updateDocument = (db, id, { title, body, contentHash, dueDate, ordered }) =>

@@ -251,3 +251,47 @@ test("임시 비밀번호가 예측 가능한 난수로 만들어지지 않는�
   }
   assert.equal(seen.size, 200, "중복이 나오면 안 됨");
 });
+
+test("문서 목록에 만든 사람이 나온다 (담당자가 여러 명일 때 필요)", async () => {
+  const staff = await D.getUserByEmail(db, "st@law.kr");
+  const d = await D.createDocument(db, { associationId: org.id, title: "작성자 표시", body: "본문",
+    contentHash: await contentHash("본문"), createdBy: staff.id, ordered: 0, dueDate: "" });
+  const row = (await D.listDocuments(db, org.id)).find((x) => x.id === d.id);
+  assert.equal(row.author_name, "담당자");
+  const h = await (await req("GET", "/t/law/admin/documents", { cookie: adminJar })).text();
+  assert.match(h, /만든 사람/);
+});
+
+test("만든 사람 계정이 사라져도 목록이 깨지지 않는다", async () => {
+  const d = await D.createDocument(db, { associationId: org.id, title: "작성자 없음", body: "본문",
+    contentHash: await contentHash("본문"), createdBy: null, ordered: 0, dueDate: "" });
+  const row = (await D.listDocuments(db, org.id)).find((x) => x.id === d.id);
+  assert.equal(row.author_name, null);
+  assert.equal((await req("GET", "/t/law/admin/documents", { cookie: adminJar })).status, 200);
+});
+
+// ---------- 전자계약 조직에서 점포 가입 경로 차단 ----------
+test("전자계약 조직에는 점포 가입·초대가 없다 (메뉴뿐 아니라 URL 도)", async () => {
+  assert.equal((await req("GET", "/t/law/register")).status, 404);
+  assert.equal((await req("GET", "/t/law/invite?t=x")).status, 404);
+  const seed = await req("GET", "/login");
+  const csrf = (/name="_csrf" value="([^"]+)"/.exec(await seed.text()) || [])[1];
+  const r = await req("POST", "/t/law/register", { cookie: cookiesOf(seed), body: {
+    _csrf: csrf, name: "침입", email: "x@law.kr", password: "password1234", business_name: "가게", agree: "1" } });
+  assert.match(r.headers.get("location") || "", /err=1/, "POST 우회도 막혀야 함");
+  assert.equal(await D.getUserByEmail(db, "x@law.kr"), null);
+});
+
+test("상인회는 점포 가입이 그대로 열려 있다 (회귀 방지)", async () => {
+  assert.equal((await req("GET", "/t/mt/register")).status, 200);
+});
+
+test("전자계약 조직의 내부 서명자 등록은 업체를 만들지 않는다", async () => {
+  const csrf = await csrfFrom(adminJar, "/t/law/admin");
+  const r = await req("POST", "/t/law/admin/members/add", { cookie: adminJar, body: {
+    _csrf: csrf, name: "사내결재", email: "gj@law.kr" } });
+  assert.doesNotMatch(r.headers.get("location") || "", /err=1/, "업체명 없이도 등록되어야 함");
+  const u = await D.getUserByEmail(db, "gj@law.kr");
+  assert.equal(u.role, "MERCHANT");
+  assert.equal(await D.getBusinessByOwner(db, u.id), null, "업체 레코드가 생기면 안 됨");
+});
