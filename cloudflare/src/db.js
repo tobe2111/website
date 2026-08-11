@@ -481,6 +481,21 @@ export const listSignatures = (db, documentId) =>
   all(db, "SELECT s.*, u.email AS signer_email FROM signatures s JOIN users u ON u.id=s.user_id WHERE s.document_id=? ORDER BY s.signed_at DESC", documentId);
 export const getSignatureByCode = (db, code) => first(db, "SELECT * FROM signatures WHERE verify_code=?", code);
 
+// ----- 문서 감사 추적 -----
+// 열람은 자주 일어나므로, 같은 사람의 연속 열람은 10분에 한 번만 남긴다(기록 폭주 방지).
+export async function logDocEvent(db, { documentId, userId = 0, actorName = "", kind, detail = "", ip = "", userAgent = "", dedupeMin = 0 }) {
+  if (dedupeMin > 0) {
+    const recent = await first(db, `SELECT 1 AS x FROM doc_events WHERE document_id=? AND user_id=? AND kind=?
+      AND created_at > datetime('now', ?) LIMIT 1`, documentId, userId, kind, `-${dedupeMin} minutes`);
+    if (recent) return false;
+  }
+  await run(db, `INSERT INTO doc_events (document_id, user_id, actor_name, kind, detail, ip, user_agent)
+    VALUES (?,?,?,?,?,?,?)`, documentId, userId, actorName, kind, detail, ip, String(userAgent || "").slice(0, 200));
+  return true;
+}
+export const listDocEvents = (db, documentId) =>
+  all(db, "SELECT * FROM doc_events WHERE document_id=? ORDER BY created_at, id", documentId);
+
 // ----- 계약서 서식(템플릿) -----
 export const listTemplates = (db, aid) =>
   all(db, "SELECT * FROM doc_templates WHERE association_id IN (0, ?) ORDER BY association_id, title", aid);

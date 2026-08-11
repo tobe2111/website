@@ -149,6 +149,7 @@ const TENANT = [
   ["GET",  "/admin/documents/:id/fields", pages.adminDocFields, "ADMIN"],
   ["POST", "/admin/documents/:id/fields", api.adminSaveFields, "ADMIN"],
   ["GET",  "/documents/:id/paper", pages.documentPaper, "MEMBER"],
+  ["GET",  "/documents/:id/evidence", pages.documentEvidence, "MEMBER"],
 ];
 
 function matchRoute(routes, method, path) {

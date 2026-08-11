@@ -10,6 +10,7 @@ import { providerLabel } from "./embed.js";
 import { verifySignature, publicKeyJwk, publicKeyFingerprint, keyStorage, algorithm, verifyChain, verifyAnchor } from "./esign.js";
 import { renderPaper, fieldBox, FIELD_KINDS, paginate, pageCount } from "./paper.js";
 import { BUILTIN, builtinById, isBuiltinId, normalizeTemplate, extractVars, applyVars, resolveFieldPages } from "./templates.js";
+import { buildEvidence } from "./evidence.js";
 import { text } from "./http.js";
 import { parseLayout, renderHome, SECTION_CATALOG } from "./homeLayout.js";
 import { turnstileWidget, turnstileScript } from "./turnstile.js";
@@ -17,6 +18,7 @@ import { otpauthUri } from "./totp.js";
 import { PLANS, PLAN_KEYS } from "./plans.js";
 import { emailEnabled as emailOn } from "./email.js";
 
+const DOC_EVENT_LABEL = { created: "문서 생성", viewed: "계약서 열람", otp_sent: "인증번호 발송", otp_ok: "휴대폰 본인확인", signed: "전자서명 완료", declined: "서명 거절", reminded: "재알림 발송", notified: "알림 발송" };
 const CATEGORIES = ["음식점", "카페·디저트", "생활·서비스", "패션·잡화", "농수축산", "교육·문화", "기타"];
 const NOTICE_CATEGORIES = ["안내", "공지", "소식", "행사", "혜택", "긴급"];
 const qs = (o) => { const p = new URLSearchParams(); for (const [k, v] of Object.entries(o)) if (v != null && v !== "" && !(k === "page" && v === 1)) p.set(k, v); const s = p.toString(); return s ? "?" + s : ""; };
@@ -1188,6 +1190,9 @@ export async function signForm(ctx) {
                <button class="btn btn-primary btn-sm">확인</button></form></div>`
         : `<div class="flash flash-warn">본인확인용 휴대폰이 등록되어 있지 않습니다. <a href="/account">계정 설정</a>에서 번호를 등록한 뒤 다시 시도해 주세요.</div>`}
     </section>`;
+  // 열람 기록 — "못 봤다"는 항변을 막는 증거. 연타로 기록이 폭주하지 않게 10분에 한 번만 남긴다.
+  await D.logDocEvent(db, { documentId: d.id, userId: user.id, actorName: user.name, kind: "viewed",
+    ip: ctx.ip || "", userAgent: ctx.request.headers.get("user-agent") || "", dedupeMin: 10 });
   // 지면에 배치된 필드가 있으면 "계약서 위에서 직접 채우는" 방식으로, 없으면 종래의 단일 서명란으로.
   const fields = await D.listFieldsWithValues(db, d.id);
   const reqs = fields.length ? await D.listRequestStatus(db, d.id) : [];
@@ -1288,6 +1293,7 @@ export async function adminDocumentDetail(ctx) {
   const rc = await D.requestCounts(db, d.id);
   const reqStatus = await D.listRequestStatus(db, d.id);
   const fieldN = await D.countFields(db, d.id);
+  const events = await D.listDocEvents(db, d.id);
   const pct = rc.total ? Math.round((rc.signed / rc.total) * 100) : 0;
   const nextTurn = d.ordered ? reqStatus.find((u) => !u.signed && !u.declined_at) : null;
   const reqPanel = rc.total ? `<section class="panel"><h2 class="panel-title">서명 현황 <span class="badge ${rc.signed === rc.total ? "badge-ok" : "badge-wait"}">${rc.signed}/${rc.total} (${pct}%)</span>${d.ordered ? ' <span class="badge badge-info">순차</span>' : ""}</h2>
@@ -1300,6 +1306,7 @@ export async function adminDocumentDetail(ctx) {
       <div class="dash-head-actions">
         ${d.closed ? "" : `<form method="post" action="${base}/admin/documents/${d.id}/remind" class="inline-form" data-confirm="미서명자에게 알림톡·이메일로 리마인더를 보낼까요? (알림톡은 잔액이 차감됩니다)"><button class="btn btn-primary btn-sm">미서명자 재알림</button></form>`}
         <a href="${base}/documents/${d.id}/paper" class="btn btn-ghost btn-sm">📄 완성본 보기</a>
+        <a href="${base}/documents/${d.id}/evidence" class="btn btn-ghost btn-sm">📦 증적 패키지</a>
         <a href="${base}/admin/documents/${d.id}/fields" class="btn btn-ghost btn-sm">🖊 필드 배치${fieldN ? ` (${fieldN})` : ""}</a>
         <button type="button" class="btn btn-ghost btn-sm" data-print>🖨 인쇄/PDF</button></div></div>
     ${reqPanel}
@@ -1307,7 +1314,13 @@ export async function adminDocumentDetail(ctx) {
       ${d.attachment ? `<p class="doc-attach">📎 <a href="${esc(mediaUrl(d.attachment))}" target="_blank" rel="noopener">${esc(d.attachment_name || "계약서.pdf")}</a></p>` : ""}
       <p class="doc-hash">해시: <code>${esc(d.content_hash)}</code></p></section>
     <section class="panel"><h2 class="panel-title">서명 내역</h2><div class="table-scroll"><table class="admin-table">
-      <thead><tr><th>서명자</th><th>서명</th><th>일시·IP</th><th>검증</th></tr></thead><tbody>${rows}</tbody></table></div></section></div></section>`;
+      <thead><tr><th>서명자</th><th>서명</th><th>일시·IP</th><th>검증</th></tr></thead><tbody>${rows}</tbody></table></div></section>
+    <section class="panel"><h2 class="panel-title">감사 추적 <span class="badge badge-muted">${events.length}건</span></h2>
+      <p class="panel-hint">누가 언제 열람하고 인증하고 서명했는지의 기록입니다. "받은 적 없다·읽은 적 없다"는 항변에 대한 증거이며, 증적 패키지에 함께 담깁니다.</p>
+      <ul class="audit-list">${events.length ? events.slice(-40).reverse().map((e) => `<li><span class="audit-action">${esc(DOC_EVENT_LABEL[e.kind] || e.kind)}</span>
+        <span class="audit-detail">${esc(e.actor_name || "")}${e.detail ? ` — ${esc(e.detail)}` : ""}</span>
+        <span class="audit-meta">${esc(kstStamp(e.created_at, { year: false }))}${e.ip ? ` · ${esc(e.ip)}` : ""}</span></li>`).join("") : `<li class="empty">아직 기록이 없습니다.</li>`}</ul></section>
+    </div></section>`;
   return html(layout({ title: d.title, assoc, base, user, body, csrf }));
 }
 
@@ -1383,6 +1396,21 @@ export async function adminTemplates(ctx) {
         <span class="tpl-meta">빈칸 ${t.vars.length} · 자리 ${t.fields.length}개</span></a>`).join("")}</div></section>
     </div></section>`;
   return html(layout({ title: "계약서 서식", assoc, base, user, body, csrf }));
+}
+
+// 증적 패키지 — 소송·분쟁에 그대로 낼 수 있는 한 벌(ZIP). 서명자도 자기 계약 것은 받을 수 있다.
+export async function documentEvidence(ctx) {
+  const { db, env, assoc, user, params } = ctx;
+  const d = await D.getDocument(db, Number(params.id));
+  if (!d || d.association_id !== assoc.id) return notFoundResponse(ctx);
+  const isAdmin = user.role !== "MERCHANT";
+  if (!isAdmin && !(await D.canReceiveSign(db, d.id, user.id))) return notFoundResponse(ctx);
+  const { zip, filename } = await buildEvidence(env, db, d, assoc);
+  return new Response(zip, { headers: {
+    "content-type": "application/zip",
+    "content-disposition": `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
+    "cache-control": "no-store",
+  } });
 }
 
 // 지면에 놓인 필드를 페이지별로 뿌리는 헬퍼. fields 는 값(value/image)이 붙어 있을 수 있다.

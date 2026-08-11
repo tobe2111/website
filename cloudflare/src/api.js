@@ -16,6 +16,8 @@ import { seedDemo } from "./demoContent.js";
 import { seedStarter } from "./starterContent.js";
 import { TEMPLATE_KEYS, sendMany, sendOne, notifyEnabled, wonToJeon } from "./notify.js";
 
+// ctx.request 는 내부 호출 경로에서 없을 수 있다 — 감사 기록이 본 기능을 죽이면 안 된다
+const uaOf = (ctx) => { try { return ctx.request.headers.get("user-agent") || ""; } catch { return ""; } };
 const BOARD_MAX_IMAGES = 6;
 const MAX_EMBEDS = 30;
 
@@ -742,6 +744,7 @@ export async function adminCreateDocument(ctx) {
     })).filter((f) => isFieldKind(f.kind) && f.x + f.w <= 1.0001 && f.y + f.h <= 1.0001);
     if (placed.length) await D.replaceFields(db, doc.id, placed);
     const recips = (await D.listUsersByAssociation(db, assoc.id, "MERCHANT")).filter((m) => signers.includes(m.id));
+    await D.logDocEvent(db, { documentId: doc.id, userId: user.id, actorName: user.name, kind: "created", detail: `서식: ${tpl.title}`, ip: ctx.ip || "", userAgent: uaOf(ctx) });
     await notifyNewDocument(ctx, doc, title, dueDate, ordered, recips);
     await audit(ctx, "서명문서생성", `${title} (서식: ${tpl.title})`);
     return redirect(`${base}/admin/documents/${doc.id}/fields?msg=${encodeURIComponent("서식으로 문서를 만들었습니다. 서명 자리를 확인하고 저장하세요.")}`);
@@ -751,6 +754,7 @@ export async function adminCreateDocument(ctx) {
   let recipients = [];
   if (target === "all") { recipients = members; await D.createSignatureRequests(db, doc.id, members.map((m) => m.id)); }
   else if (target === "select") { const valid = new Map(members.map((m) => [m.id, m])); const chosen = form.getAll("members").map(Number).filter((id) => valid.has(id)); recipients = chosen.map((id) => valid.get(id)); await D.createSignatureRequests(db, doc.id, chosen); }
+  await D.logDocEvent(db, { documentId: doc.id, userId: user.id, actorName: user.name, kind: "created", ip: ctx.ip || "", userAgent: uaOf(ctx) });
   await notifyNewDocument(ctx, doc, title, dueDate, ordered, recipients);
   await audit(ctx, "서명문서생성", title);
   return back(base + "/admin/documents", ordered ? "순차 서명 문서를 생성했습니다." : "문서를 생성했습니다.");
@@ -792,6 +796,8 @@ export async function signOtpSend(ctx) {
     await D.clearSignOtp(db, d.id, user.id);
     return back(base + "/sign/" + d.id, "인증번호를 보낼 수단이 없습니다. 상인회 관리자에게 문의해 주세요. (알림톡·이메일 모두 미설정)", true);
   }
+  await D.logDocEvent(db, { documentId: d.id, userId: user.id, actorName: user.name, kind: "otp_sent",
+    detail: via.replace(/<[^>]*>/g, ""), ip: ctx.ip || "", userAgent: uaOf(ctx) });
   return back(base + "/sign/" + d.id, `${via} 보냈습니다. ${D.OTP_TTL_MIN}분 안에 입력해 주세요.`);
 }
 
@@ -809,6 +815,8 @@ export async function signOtpVerify(ctx) {
   const ok = input.length === 6 && (await sha256Hex(`otp|${d.id}|${user.id}|${input}`)) === rec.code_hash;
   if (!ok) return back(base + "/sign/" + d.id, `인증번호가 올바르지 않습니다. (남은 시도 ${Math.max(0, D.OTP_MAX_ATTEMPTS - rec.attempts - 1)}회)`, true);
   await D.markOtpVerified(db, rec.id);
+  await D.logDocEvent(db, { documentId: d.id, userId: user.id, actorName: user.name, kind: "otp_ok",
+    detail: D.maskPhone(rec.phone || ""), ip: ctx.ip || "", userAgent: uaOf(ctx) });
   return back(base + "/sign/" + d.id, "본인확인이 완료되었습니다. 아래에서 서명해 주세요.");
 }
 
@@ -835,6 +843,8 @@ export async function memberDeclineSign(ctx) {
   const reason = cap((form.get("reason") || "").trim(), 300);
   if (!reason) return back(base + "/sign/" + d.id, "거절 사유를 입력해 주세요.", true);
   await D.declineSign(db, d.id, user.id, reason);
+  await D.logDocEvent(db, { documentId: d.id, userId: user.id, actorName: user.name, kind: "declined",
+    detail: reason.slice(0, 100), ip: ctx.ip || "", userAgent: uaOf(ctx) });
   await D.createNotification(db, { associationId: assoc.id, kind: "sign_declined", message: `${user.name}님이 '${d.title}' 서명을 거절했습니다.`, link: base + "/admin/documents/" + d.id });
   await audit(ctx, "서명거절", `${d.title}: ${reason.slice(0, 60)}`);
   return back(base + "/sign", "서명을 거절했습니다. 상인회 관리자에게 사유가 전달됩니다.");
@@ -851,6 +861,8 @@ export async function adminRemindDocument(ctx) {
     return back(base + "/admin/documents/" + d.id, "방금 리마인더를 보냈습니다. 6시간 뒤에 다시 보낼 수 있습니다.", true);
   const targets = await D.listUnsigned(db, d.id);
   if (!targets.length) return back(base + "/admin/documents/" + d.id, "미서명자가 없습니다.");
+  await D.logDocEvent(db, { documentId: d.id, userId: ctx.user.id, actorName: ctx.user.name, kind: "reminded",
+    detail: `대상 ${targets.length}명`, ip: ctx.ip || "" });
   const origin = new URL(request.url).origin;
   const link = `${origin}${base}/sign`;
   // 알림톡이 아직 준비되지 않았으면(채널 승인 대기 등) 전원 이메일로 보낸다
@@ -1064,6 +1076,8 @@ export async function memberSign(ctx) {
   const recordHash = await sealRecord(env, { documentId: d.id, userId: user.id, signerName, contentHash: d.content_hash, signedAt, ip, prevHash, fieldsHash, ver: SEAL_VER });
   const verifyCode = newVerifyCode();
   await D.createSignature(db, { documentId: d.id, userId: user.id, signerName, signatureImage: sigKey, contentHash: d.content_hash, ip, userAgent: cap(request.headers.get("user-agent") || "", 200), verifyCode, recordHash, signedAt, prevHash, sealVer: SEAL_VER, verifyLevel, fieldsHash });
+  await D.logDocEvent(db, { documentId: d.id, userId: user.id, actorName: signerName, kind: "signed",
+    detail: `본인확인 ${verifyLevel} · 검증코드 ${verifyCode}`, ip, userAgent: request.headers.get("user-agent") || "" });
   await D.createNotification(db, { associationId: assoc.id, kind: "signed", message: `${signerName}님이 '${d.title}'에 전자서명했습니다.`, link: base + "/admin/documents/" + d.id });
   // 서명자 본인에게 확인서 사본 자동 발송 — "받은 적 없다"는 분쟁을 막는 증거.
   // 실패해도 서명은 이미 유효하므로 전체를 되돌리지 않는다.

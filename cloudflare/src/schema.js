@@ -364,6 +364,21 @@ CREATE TABLE IF NOT EXISTS doc_templates (
   created_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_doctpl_assoc ON doc_templates(association_id, title);
+
+-- 문서 감사 추적 — 누가 언제 열람했고, 인증했고, 서명했는지. "받은 적 없다·읽은 적 없다"는
+-- 항변을 막는 증거이며 증적 패키지의 핵심 구성물이다.
+CREATE TABLE IF NOT EXISTS doc_events (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+  user_id     INTEGER NOT NULL DEFAULT 0,
+  actor_name  TEXT NOT NULL DEFAULT '',
+  kind        TEXT NOT NULL,              -- created|viewed|otp_sent|otp_ok|signed|declined|reminded|notified
+  detail      TEXT NOT NULL DEFAULT '',
+  ip          TEXT NOT NULL DEFAULT '',
+  user_agent  TEXT NOT NULL DEFAULT '',
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_docev_doc ON doc_events(document_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_notif_assoc ON notifications(association_id, is_read);
 CREATE INDEX IF NOT EXISTS idx_media_business ON media(business_id);
 CREATE INDEX IF NOT EXISTS idx_business_assoc ON businesses(association_id, status);
@@ -454,7 +469,7 @@ CREATE INDEX IF NOT EXISTS idx_msglog_assoc ON message_log(association_id, creat
 
 // 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
 // 마이그레이션 세대 — migrateColumns 에 단계를 추가할 때마다 +1
-export const SCHEMA_VERSION = "27";
+export const SCHEMA_VERSION = "28";
 
 export async function ensureSchema(db) {
   const has = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='associations'").first();
@@ -569,6 +584,12 @@ async function migrateColumns(db) {
   if (mcols.length && !mcols.some((c) => c.name === "cost_base")) {
     await db.prepare("ALTER TABLE message_log ADD COLUMN cost_base INTEGER NOT NULL DEFAULT 0").run();
     await db.prepare("ALTER TABLE message_log ADD COLUMN ref TEXT NOT NULL DEFAULT ''").run();
+  }
+  // v28: 문서 감사 추적 (열람·인증·서명 이력)
+  const evTbl2 = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='doc_events'").first();
+  if (!evTbl2) {
+    await db.prepare(`CREATE TABLE doc_events (id INTEGER PRIMARY KEY AUTOINCREMENT, document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE, user_id INTEGER NOT NULL DEFAULT 0, actor_name TEXT NOT NULL DEFAULT '', kind TEXT NOT NULL, detail TEXT NOT NULL DEFAULT '', ip TEXT NOT NULL DEFAULT '', user_agent TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT (datetime('now')))`).run();
+    await db.prepare("CREATE INDEX IF NOT EXISTS idx_docev_doc ON doc_events(document_id, created_at)").run();
   }
   // v27: 계약서 서식(템플릿)
   const tplTbl = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='doc_templates'").first();
