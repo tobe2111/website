@@ -41,6 +41,7 @@ const GLOBAL = [
   ["GET", "/verify/:code", pages.verifyPage],
   ["GET", "/certificate/:code", pages.certificatePage],
   ["GET", "/.well-known/esign-public-key", pages.esignPublicKey],
+  ["GET", "/.well-known/esign-anchors", pages.esignAnchors],
   ["GET", "/super", pages.superConsole, "SUPERADMIN"],
   ["POST", "/super/association", api.superCreateAssociation, "SUPERADMIN"],
   ["POST", "/super/association/:id/toggle", api.superToggleAssociation, "SUPERADMIN"],

@@ -5,6 +5,7 @@
 import { sendEmail, emailEnabled, mailShell } from "./email.js";
 import * as D from "./db.js";
 import { sendMany, priceOf } from "./notify.js";
+import { sealAnchor } from "./esign.js";
 
 const BACKUP_PREFIX = "backups/";
 const MANIFEST_KEY = "backups/index.json"; // R2 list() 없이도 보존 개수를 관리하기 위한 목록
@@ -135,10 +136,39 @@ export async function runSignReminders(env) {
   return { docs: docsDone, sent, skipped };
 }
 
+// 매일: 서명 사슬의 머리를 봉인해 남긴다(시점 증거).
+// "이 시각에 이미 이 서명들이 존재했다"를 사후에 증명한다. 서명이 늘지 않았으면 건너뛴다.
+// 외부 공인 시점확인(TSA)을 붙이면 external 에 응답을 함께 보관한다(env.TSA_URL 설정 시).
+export async function runChainAnchor(env) {
+  const db = env.DB;
+  const headHash = await D.lastSealHash(db);
+  if (!headHash) return { skipped: "서명 없음" };
+  const prev = await D.lastAnchor(db);
+  if (prev && prev.head_hash === headHash) return { skipped: "변경 없음" };
+  const sigCount = await D.countSignatures(db);
+  const anchoredAt = new Date().toISOString();
+  const seal = await sealAnchor(env, { headHash, sigCount, anchoredAt });
+  // 외부 TSA (선택) — RFC3161 서버가 있으면 사슬 머리를 제출해 제3자 시점 증거를 받는다
+  let external = "";
+  if (env.TSA_URL) {
+    try {
+      const res = await fetch(env.TSA_URL, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...(env.TSA_TOKEN ? { authorization: `Bearer ${env.TSA_TOKEN}` } : {}) },
+        body: JSON.stringify({ hash: headHash, alg: "SHA-256" }),
+      });
+      if (res.ok) external = (await res.text()).slice(0, 4000);
+    } catch (e) { external = ""; }
+  }
+  const a = await D.addChainAnchor(db, { headHash, sigCount, anchoredAt, seal, external });
+  return { anchored: a.id, sigCount, external: !!external };
+}
+
 export async function runDaily(env) {
   const reminders = await runSignReminders(env).catch((e) => ({ error: String(e) }));
-  console.log("daily job", JSON.stringify({ reminders }));
-  return { reminders };
+  const anchor = await runChainAnchor(env).catch((e) => ({ error: String(e) }));
+  console.log("daily job", JSON.stringify({ reminders, anchor }));
+  return { reminders, anchor };
 }
 
 export async function runWeekly(env) {

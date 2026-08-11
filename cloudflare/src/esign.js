@@ -109,3 +109,17 @@ export function verifyChain(rows) {
   }
   return { ok: true, length: rows.length };
 }
+
+// 사슬 앵커 봉인 문자열 — 앵커 자체도 Ed25519 로 봉인해 사후 조작을 막는다
+export const anchorCanonical = ({ headHash, sigCount, anchoredAt }) => ["ANCHOR", headHash, sigCount, anchoredAt].join(SEP);
+export async function sealAnchor(env, rec) {
+  const { priv } = await keys(env);
+  return b64uFromBytes(await crypto.subtle.sign({ name: "Ed25519" }, priv, te.encode(anchorCanonical(rec))));
+}
+export async function verifyAnchor(env, a) {
+  const { pub } = await keys(env);
+  try {
+    return await crypto.subtle.verify({ name: "Ed25519" }, pub, bytesFromB64u(a.seal),
+      te.encode(anchorCanonical({ headHash: a.head_hash, sigCount: a.sig_count, anchoredAt: a.anchored_at })));
+  } catch { return false; }
+}

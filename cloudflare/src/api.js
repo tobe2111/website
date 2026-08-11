@@ -826,9 +826,11 @@ export async function memberSign(ctx) {
   if (!(await D.canSignNow(db, d, user.id))) return back(base + "/sign", "앞 순번의 서명이 완료된 후 서명할 수 있습니다.", true);
   if (form.get("consent") !== "1") return back(base + "/sign/" + d.id, "동의 확인란에 체크해 주세요.", true);
   // 본인확인(OTP)이 켜져 있으면 통과한 사람만 서명할 수 있다 — 화면을 우회한 직접 POST 도 여기서 막힌다
+  let verifyLevel = "password";
   if (await otpRequired(db)) {
     if (!D.isValidPhone(user.phone || "")) return back(base + "/sign/" + d.id, "본인확인용 휴대폰이 등록되어 있지 않습니다.", true);
     if (!(await D.otpVerifiedRecently(db, d.id, user.id))) return back(base + "/sign/" + d.id, "휴대폰 본인확인을 먼저 완료해 주세요.", true);
+    verifyLevel = "otp";
   }
   const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(form.get("signature") || "");
   if (!m) return back(base + "/sign/" + d.id, "서명을 입력해 주세요.", true);
@@ -842,9 +844,26 @@ export async function memberSign(ctx) {
   const prevHash = await D.lastSealHash(db);
   const recordHash = await sealRecord(env, { documentId: d.id, userId: user.id, signerName, contentHash: d.content_hash, signedAt, ip, prevHash, ver: SEAL_VER });
   const verifyCode = newVerifyCode();
-  await D.createSignature(db, { documentId: d.id, userId: user.id, signerName, signatureImage: sigKey, contentHash: d.content_hash, ip, userAgent: cap(request.headers.get("user-agent") || "", 200), verifyCode, recordHash, signedAt, prevHash, sealVer: SEAL_VER });
+  await D.createSignature(db, { documentId: d.id, userId: user.id, signerName, signatureImage: sigKey, contentHash: d.content_hash, ip, userAgent: cap(request.headers.get("user-agent") || "", 200), verifyCode, recordHash, signedAt, prevHash, sealVer: SEAL_VER, verifyLevel });
   await D.createNotification(db, { associationId: assoc.id, kind: "signed", message: `${signerName}님이 '${d.title}'에 전자서명했습니다.`, link: base + "/admin/documents/" + d.id });
-  return back(base + "/sign", `전자서명이 완료되었습니다. 검증 코드: ${verifyCode}`);
+  // 서명자 본인에게 확인서 사본 자동 발송 — "받은 적 없다"는 분쟁을 막는 증거.
+  // 실패해도 서명은 이미 유효하므로 전체를 되돌리지 않는다.
+  try {
+    const certUrl = `${new URL(request.url).origin}/certificate/${verifyCode}`;
+    if (D.isValidPhone(user.phone || "")) {
+      await sendOne(env, db, { assoc, kind: "sign_request", to: user.phone,
+        text: `[${assoc.name}] '${d.title}' 전자서명이 완료되었습니다. 확인서는 아래에서 보실 수 있습니다.`,
+        buttonName: "확인서 보기", buttonUrl: certUrl });
+    }
+    if (emailEnabled(env) && user.email) {
+      await sendEmail(env, { to: user.email, subject: `[${assoc.name}] 전자서명 완료 — ${d.title}`,
+        html: mailShell(`${esc(assoc.name)} 전자서명 완료`,
+          `<p>${esc(signerName)}님, '<b>${esc(d.title)}</b>' 전자서명이 완료되었습니다.</p>
+           <p>검증 코드: <b>${esc(verifyCode)}</b></p>${mailButton(certUrl, "전자서명 확인서 보기")}
+           <p style="font-size:12px;color:#888">이 확인서는 서명자·시각·문서해시를 전자서명으로 봉인한 기록입니다. 분쟁 시 증빙으로 쓸 수 있습니다.</p>`) });
+    }
+  } catch {}
+  return back(base + "/sign", `전자서명이 완료되었습니다. 검증 코드: ${verifyCode} — 확인서를 보내드렸습니다.`);
 }
 
 // ---------- 슈퍼관리자 ----------

@@ -7,7 +7,7 @@ import { html, notFoundResponse, back } from "./http.js";
 import { galleryItem } from "./media-render.js";
 import { priceOf, notifyEnabled, TEMPLATE_KEYS } from "./notify.js";
 import { providerLabel } from "./embed.js";
-import { verifySignature, publicKeyJwk, publicKeyFingerprint, keyStorage, algorithm, verifyChain } from "./esign.js";
+import { verifySignature, publicKeyJwk, publicKeyFingerprint, keyStorage, algorithm, verifyChain, verifyAnchor } from "./esign.js";
 import { text } from "./http.js";
 import { parseLayout, renderHome, SECTION_CATALOG } from "./homeLayout.js";
 import { turnstileWidget, turnstileScript } from "./turnstile.js";
@@ -1295,6 +1295,7 @@ export async function certificatePage(ctx) {
       ${row("문서 제목", esc(doc ? doc.title : "(삭제됨)"))}
       ${row("서명자", esc(sig.signer_name))}
       ${row("서명 일시", esc(kstStamp(sig.signed_at)))}
+      ${row("본인확인 수준", { identity: '실명 본인확인 <span class="badge badge-ok">최상</span>', otp: '휴대폰 인증번호 확인 <span class="badge badge-ok">강화</span>' }[sig.verify_level] || '계정 로그인 <span class="badge badge-muted">기본</span>')}
       ${row("서명 IP", esc(sig.ip))}
       ${row("서명 기기", `<small>${esc((sig.user_agent || "").slice(0, 120))}</small>`)}
       ${row("문서 해시 (SHA-256)", `<code class="cert-hash">${esc(sig.content_hash)}</code>`)}
@@ -1306,15 +1307,21 @@ export async function certificatePage(ctx) {
     </table>
     ${sig.signature_image ? `<div class="cert-sign"><p class="mini-label">서명</p><img src="${esc(mediaUrl(sig.signature_image))}" alt="서명 이미지" /></div>` : ""}
     <div class="cert-foot">
-      <p>이 확인서의 진위는 아래 주소에서 누구나 다시 확인할 수 있습니다.</p>
-      <p><a href="${esc(verifyUrl)}"><code>${esc(verifyUrl)}</code></a></p>
+      <div class="cert-verify-row">
+        <div class="cert-qr-box"><div id="certQr" data-url="${esc(verifyUrl)}" aria-label="검증 주소 QR"></div><span class="cert-qr-cap">스캔하면 검증</span></div>
+        <div>
+          <p>이 확인서의 진위는 아래 주소에서 누구나 다시 확인할 수 있습니다.</p>
+          <p><a href="${esc(verifyUrl)}"><code>${esc(verifyUrl)}</code></a></p>
+        </div>
+      </div>
       <p class="cert-note">본 확인서는 서명 시점의 서명자·시각·접속 IP·문서 해시를 Ed25519 전자서명으로 봉인한 기록입니다.
         문서 본문이 한 글자라도 바뀌면 해시가 달라져 “변경됨”으로 표시됩니다.</p>
     </div>
     <div class="cert-actions no-print"><button type="button" class="btn btn-primary btn-sm" data-print>🖨 인쇄 / PDF 저장</button>
       <a class="btn btn-ghost btn-sm" href="/verify/${esc(sig.verify_code)}">검증 페이지</a></div>
   </div></section>`;
-  return html(layout({ title: "전자서명 확인서", assoc, body, csrf }));
+  return html(layout({ title: "전자서명 확인서", assoc, body, csrf,
+    scripts: `<script src="${assetUrl("/js/qr.js")}" defer></script><script src="${assetUrl("/js/cert-qr.js")}" defer></script>` }));
 }
 
 // 서명 공개키 공개 — 제3자가 우리 서버를 믿지 않고도 봉인을 독립 검증할 수 있게 한다.
@@ -1326,6 +1333,18 @@ export async function esignPublicKey(ctx) {
   return text(JSON.stringify({ algorithm: "Ed25519", use: "verify", fingerprint: fp, key: jwk,
     note: "전자서명 봉인 검증용 공개키입니다. record_hash 를 이 키로 Ed25519 검증하세요." }, null, 2),
     200, { "content-type": "application/json; charset=utf-8", "cache-control": "public, max-age=3600" });
+}
+
+// 사슬 앵커 공개 — 제3자가 "언제 시점에 어떤 서명들이 존재했는지"를 확인할 수 있다.
+export async function esignAnchors(ctx) {
+  const { db, env } = ctx;
+  const rows = await D.listAnchors(db, 60);
+  const checked = await Promise.all(rows.map(async (a) => ({
+    anchored_at: a.anchored_at, head_hash: a.head_hash, signatures: a.sig_count,
+    seal_valid: await verifyAnchor(env, a), external_timestamp: !!a.external,
+  })));
+  return text(JSON.stringify({ note: "각 시점의 서명 사슬 머리(head)입니다. 해당 시각에 이미 그 서명들이 존재했음을 증명합니다.", anchors: checked }, null, 2),
+    200, { "content-type": "application/json; charset=utf-8", "cache-control": "public, max-age=600" });
 }
 
 // 공개 검증
@@ -1430,6 +1449,7 @@ export async function superConsole(ctx) {
   const keyFp = await publicKeyFingerprint(env).catch(() => "(확인 불가)");
   const chain = verifyChain(await D.listSignatureChain(db));
   const otpOn = (await D.getSetting(db, "esign_otp")) === "1";
+  const anchor = await D.lastAnchor(db);
   const securityPanel = `<section class="panel ${keyMode === "secret" ? "" : "panel-warn"}"><h2 class="panel-title">전자서명 보안
       ${keyMode === "secret" ? '<span class="badge badge-ok">키 안전 보관</span>' : '<span class="badge badge-no">키가 DB에 있음</span>'}
       ${chain.ok ? '<span class="badge badge-ok">서명 사슬 정상</span>' : '<span class="badge badge-no">사슬 끊김</span>'}</h2>
@@ -1445,7 +1465,11 @@ export async function superConsole(ctx) {
           <b>주의:</b> 키를 <u>새로 만들면</u> 기존 서명은 검증에 실패합니다. 이미 받은 서명이 있으면 반드시 현행 키를 그대로 옮기세요.</div>`}
     <table class="verify-table"><tr><th>공개키 지문</th><td><code>${esc(keyFp)}</code></td></tr>
       <tr><th>공개키 배포</th><td><a href="/.well-known/esign-public-key" target="_blank"><code>/.well-known/esign-public-key</code></a> — 제3자 독립 검증용</td></tr>
-      <tr><th>서명 사슬</th><td>${chain.ok ? `연결 정상 (${chain.length}건)` : `<b class="txt-warn">id ${esc(String(chain.brokenAt))} 지점에서 끊김 — 기록이 삭제·변조되었을 수 있습니다</b>`}</td></tr></table>
+      <tr><th>서명 사슬</th><td>${chain.ok ? `연결 정상 (${chain.length}건)` : `<b class="txt-warn">id ${esc(String(chain.brokenAt))} 지점에서 끊김 — 기록이 삭제·변조되었을 수 있습니다</b>`}</td></tr>
+      <tr><th>시점 앵커</th><td>${anchor
+        ? `${esc(kstStamp(anchor.anchored_at))} · 서명 ${anchor.sig_count}건 ${anchor.external ? '<span class="badge badge-ok">외부 TSA</span>' : '<span class="badge badge-muted">자체 봉인</span>'}
+           · <a href="/.well-known/esign-anchors" target="_blank">공개 목록</a>`
+        : '아직 없음 — 서명이 생기면 매일 자동으로 남습니다'}</td></tr></table>
     <form method="post" action="/super/esign-settings" class="stack-form compact otp-toggle">
       <label class="check"><input type="checkbox" name="esign_otp" value="1"${otpOn ? " checked" : ""} data-autosubmit /> 서명 시 <b>휴대폰 본인확인(인증번호)</b> 요구</label>
       <p class="panel-hint">켜면 서명 직전 회원 휴대폰으로 6자리 인증번호를 보내고, 확인해야 서명이 완료됩니다.

@@ -473,8 +473,8 @@ export const lastSealHash = async (db) => {
 export const listSignatureChain = (db) =>
   all(db, "SELECT id, record_hash, prev_hash, seal_ver FROM signatures ORDER BY id");
 export async function createSignature(db, r) {
-  await run(db, `INSERT INTO signatures (document_id, user_id, signer_name, signature_image, content_hash, ip, user_agent, verify_code, record_hash, signed_at, prev_hash, seal_ver)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`, r.documentId, r.userId, r.signerName, r.signatureImage, r.contentHash, r.ip, r.userAgent, r.verifyCode, r.recordHash, r.signedAt, r.prevHash || "", r.sealVer || 2);
+  await run(db, `INSERT INTO signatures (document_id, user_id, signer_name, signature_image, content_hash, ip, user_agent, verify_code, record_hash, signed_at, prev_hash, seal_ver, verify_level)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`, r.documentId, r.userId, r.signerName, r.signatureImage, r.contentHash, r.ip, r.userAgent, r.verifyCode, r.recordHash, r.signedAt, r.prevHash || "", r.sealVer || 2, r.verifyLevel || "password");
   return first(db, "SELECT * FROM signatures WHERE id=?", await lastId(db));
 }
 export const listSignatures = (db, documentId) =>
@@ -667,3 +667,13 @@ export async function otpVerifiedRecently(db, documentId, userId) {
     AND verified_at != '' AND verified_at > datetime('now','-30 minutes')`, documentId, userId);
   return !!r;
 }
+
+// ----- 서명 사슬 앵커 (시점 증거) -----
+export const countSignatures = async (db) => (await first(db, "SELECT COUNT(*) AS n FROM signatures")).n;
+export async function addChainAnchor(db, { headHash, sigCount, anchoredAt, seal, external }) {
+  await run(db, "INSERT INTO chain_anchor (head_hash, sig_count, anchored_at, seal, external) VALUES (?,?,?,?,?)",
+    headHash, sigCount, anchoredAt, seal || "", external || "");
+  return first(db, "SELECT * FROM chain_anchor WHERE id=?", await lastId(db));
+}
+export const listAnchors = (db, limit = 30) => all(db, "SELECT * FROM chain_anchor ORDER BY id DESC LIMIT ?", limit);
+export const lastAnchor = (db) => first(db, "SELECT * FROM chain_anchor ORDER BY id DESC LIMIT 1");

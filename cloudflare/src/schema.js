@@ -290,6 +290,7 @@ CREATE TABLE IF NOT EXISTS signatures (
   user_agent      TEXT NOT NULL DEFAULT '',
   verify_code     TEXT NOT NULL UNIQUE,
   record_hash     TEXT NOT NULL,
+  verify_level    TEXT NOT NULL DEFAULT 'password', -- 본인확인 수준: password|otp|identity
   prev_hash       TEXT NOT NULL DEFAULT '',  -- 직전 서명의 봉인값 — 서명 사슬(체인)
   seal_ver        INTEGER NOT NULL DEFAULT 2,-- 봉인 문자열 버전 (1=구버전, 2=체인 포함)
   signed_at       TEXT NOT NULL DEFAULT (datetime('now')),
@@ -333,6 +334,18 @@ CREATE TABLE IF NOT EXISTS sign_otp (
   expires_at  TEXT NOT NULL,
   created_at  TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE (document_id, user_id)
+);
+
+-- 서명 사슬 앵커(시점 증거). 매일 사슬 머리(마지막 봉인값)를 봉인해 남긴다.
+-- "이 시점에 이미 이 서명들이 존재했다"를 사후에 증명하는 용도.
+CREATE TABLE IF NOT EXISTS chain_anchor (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  head_hash   TEXT NOT NULL,          -- 앵커 시점의 마지막 서명 봉인값
+  sig_count   INTEGER NOT NULL DEFAULT 0,
+  anchored_at TEXT NOT NULL,
+  seal        TEXT NOT NULL DEFAULT '', -- 위 내용을 Ed25519 로 봉인
+  external    TEXT NOT NULL DEFAULT '', -- 외부 TSA 응답(연동 시) — 없으면 자체 앵커
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS settings (
@@ -388,7 +401,7 @@ CREATE INDEX IF NOT EXISTS idx_msglog_assoc ON message_log(association_id, creat
 
 // 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
 // 마이그레이션 세대 — migrateColumns 에 단계를 추가할 때마다 +1
-export const SCHEMA_VERSION = "21";
+export const SCHEMA_VERSION = "23";
 
 export async function ensureSchema(db) {
   const has = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='associations'").first();
@@ -498,6 +511,11 @@ async function migrateColumns(db) {
     ["message_log", `CREATE TABLE message_log (id INTEGER PRIMARY KEY AUTOINCREMENT, association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE, channel TEXT NOT NULL DEFAULT 'alimtalk', kind TEXT NOT NULL DEFAULT '', recipient TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'sent', cost INTEGER NOT NULL DEFAULT 0, detail TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
       ["CREATE INDEX IF NOT EXISTS idx_msglog_assoc ON message_log(association_id, created_at)"]],
   ];
+  // v22: 사슬 앵커 (시점 증거)
+  const ancTbl = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='chain_anchor'").first();
+  if (!ancTbl) {
+    await db.prepare(`CREATE TABLE chain_anchor (id INTEGER PRIMARY KEY AUTOINCREMENT, head_hash TEXT NOT NULL, sig_count INTEGER NOT NULL DEFAULT 0, anchored_at TEXT NOT NULL, seal TEXT NOT NULL DEFAULT '', external TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT (datetime('now')))`).run();
+  }
   // v21: 서명 본인확인 OTP
   const otpTbl = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='sign_otp'").first();
   if (!otpTbl) {
@@ -509,6 +527,7 @@ async function migrateColumns(db) {
     await db.prepare("ALTER TABLE signatures ADD COLUMN prev_hash TEXT NOT NULL DEFAULT ''").run();
     // 이미 있던 서명은 구버전 봉인이므로 1 로 표시해야 검증이 깨지지 않는다
     await db.prepare("ALTER TABLE signatures ADD COLUMN seal_ver INTEGER NOT NULL DEFAULT 1").run();
+    await db.prepare("ALTER TABLE signatures ADD COLUMN verify_level TEXT NOT NULL DEFAULT 'password'").run();
   }
   // v18: 전자계약 — 서명 거절 사유, 계약서 PDF 첨부, 리마인더 발송 시각
   const rcols = (await db.prepare("PRAGMA table_info(signature_requests)").all()).results || [];
