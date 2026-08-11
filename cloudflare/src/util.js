@@ -121,3 +121,10 @@ export function openBadge(hours) {
   if (st === null) return "";
   return st ? '<span class="badge badge-open">영업중</span>' : '<span class="badge badge-muted">영업종료</span>';
 }
+
+// 이메일 마스킹 — 로그·화면에 원문을 남기지 않는다
+export function maskEmail(e) {
+  const [a, b] = String(e || "").split("@");
+  if (!b) return "";
+  return `${a.slice(0, 2)}${"*".repeat(Math.max(1, a.length - 2))}@${b}`;
+}

@@ -291,6 +291,26 @@ async function remind(ctx, key, assoc, docId) {
   return J({ reminded: sent.length, details: sent });
 }
 
+// ---------- 웹훅 주소 검증 ----------
+// 웹훅 주소는 조직 관리자가 마음대로 넣는 값이고, 그 주소로 '우리 서버가' 요청을 보낸다.
+// 검증하지 않으면 우리를 발판 삼아 남의 서버를 두드리거나(SSRF·증폭), 우리 자신을
+// 가리켜 요청이 되먹임되는 고리를 만들 수 있다. 자체 가입을 열었으므로 더더욱 막아야 한다.
+const BLOCKED_HOSTS = /^(localhost|127\.|0\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.|\[|::1|metadata\.|.*\.local$|.*\.internal$)/i;
+export function checkWebhookUrl(raw, selfOrigin = "") {
+  let u;
+  try { u = new URL(String(raw || "")); } catch { return { ok: false, why: "주소 형식이 올바르지 않습니다." }; }
+  if (u.protocol !== "https:") return { ok: false, why: "https:// 주소만 쓸 수 있습니다." };
+  if (u.username || u.password) return { ok: false, why: "주소에 아이디·비밀번호를 넣을 수 없습니다." };
+  if (u.port && u.port !== "443") return { ok: false, why: "443 포트만 쓸 수 있습니다." };
+  const host = u.hostname.toLowerCase();
+  if (BLOCKED_HOSTS.test(host) || /^\d+\.\d+\.\d+\.\d+$/.test(host))
+    return { ok: false, why: "내부망·IP 주소로는 보낼 수 없습니다. 공개된 도메인을 써 주세요." };
+  if (!host.includes(".")) return { ok: false, why: "공개된 도메인이어야 합니다." };
+  // 우리 자신을 가리키면 요청이 되먹임된다
+  try { if (selfOrigin && host === new URL(selfOrigin).hostname.toLowerCase()) return { ok: false, why: "이 서비스 자신의 주소는 쓸 수 없습니다." }; } catch {}
+  return { ok: true, url: u.toString() };
+}
+
 // ---------- 웹훅 ----------
 // 이벤트가 나면 이 조직의 웹훅 등록 키마다 큐에 넣는다. 실제 발송은 크론이 한다 —
 // 상대 서버가 느리다고 우리 응답이 같이 느려지면 안 되기 때문.
@@ -310,6 +330,9 @@ export async function deliverWebhooks(env, db) {
   let ok = 0, failed = 0;
   for (const w of rows) {
     const ts = Math.floor(Date.now() / 1000);
+    // 저장 시점에 통과했더라도 다시 본다 — 규칙이 생기기 전에 들어온 값이 있을 수 있다
+    const chk = checkWebhookUrl(w.webhook_url, env.PUBLIC_ORIGIN || "");
+    if (!chk.ok) { await D.markWebhookFailed(db, w.id, 6, `주소 거부: ${chk.why}`); failed++; continue; }
     try {
       const sig = await hmacSign(w.webhook_secret, `${ts}.${w.payload}`);
       const res = await fetch(w.webhook_url, { method: "POST", headers: {

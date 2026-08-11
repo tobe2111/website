@@ -789,6 +789,10 @@ export const setCreditOrderStatus = (db, id, status) => run(db, "UPDATE credit_o
 export const logMessage = (db, { associationId, channel = "alimtalk", kind = "", recipient = "", status = "sent", cost = 0, costBase = 0, ref = "", detail = "" }) =>
   run(db, "INSERT INTO message_log (association_id, channel, kind, recipient, status, cost, cost_base, ref, detail) VALUES (?,?,?,?,?,?,?,?,?)",
     associationId, channel, kind, recipient, status, Math.trunc(cost) || 0, Math.trunc(costBase) || 0, String(ref || "").slice(0, 60), String(detail || "").slice(0, 300));
+// 하루 발송 건수 — 남용 상한 판정용 (channel 별)
+export const countMessagesToday = async (db, aid, channel) =>
+  (await first(db, `SELECT COUNT(*) AS n FROM message_log WHERE association_id=? AND channel=?
+    AND created_at > datetime('now','-1 day')`, aid, channel)).n;
 export const listMessages = (db, aid, limit = 50) =>
   all(db, "SELECT * FROM message_log WHERE association_id=? ORDER BY id DESC LIMIT ?", aid, limit);
 export const messageStats = (db, aid) =>

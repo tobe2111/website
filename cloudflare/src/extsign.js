@@ -54,7 +54,7 @@ export async function rememberOrigin(db, origin) {
 // 반환: 보낸 수단("alimtalk" | "email") 또는 null(보낼 수단이 없거나 실패)
 export async function sendSignLink(env, db, { assoc, doc, signer, origin, remind = false }) {
   const { sendOne, notifyEnabled, renderTemplate, templateButton } = await import("./notify.js");
-  const { sendEmail, emailEnabled, mailShell, mailButton } = await import("./email.js");
+  const { sendEmailFor, emailEnabled, mailShell, mailButton } = await import("./email.js");
   const { esc } = await import("./util.js");
   if (!origin) return null; // 절대 주소를 모르면 깨진 링크가 된다 — 보내지 않는다
   const token = await makeExtToken(env.SESSION_SECRET, signer.id, doc.id);
@@ -70,13 +70,14 @@ export async function sendSignLink(env, db, { assoc, doc, signer, origin, remind
     if (r.insufficient) return null; // 잔액 부족 — 이메일로 우회하지 않고 그대로 알린다
   }
   if (signer.email && emailEnabled(env)) {
-    await sendEmail(env, { to: signer.email,
+    const sent = await sendEmailFor(env, db, assoc, { kind, to: signer.email,
       subject: `[${assoc.name}] ${remind ? "전자서명 미완료 안내" : "전자서명 요청"} — ${doc.title}`,
       html: mailShell(`${esc(assoc.name)} 전자서명`,
         `<p>${esc(signer.name)}님, ${remind ? "아직 서명하지 않은 계약서가 있습니다." : "서명이 필요한 계약서가 도착했습니다."}</p>
          <p><b>${esc(doc.title)}</b>${doc.due_date ? ` (기한: ${esc(doc.due_date)})` : ""}</p>
          ${mailButton(link, "계약서 확인하고 서명하기")}
-         <p style="font-size:12px;color:#888">가입 없이 이 링크로 바로 서명하실 수 있습니다.</p>`) }).catch(() => {});
+         <p style="font-size:12px;color:#888">가입 없이 이 링크로 바로 서명하실 수 있습니다.</p>`) }).catch(() => ({}));
+    if (sent && sent.capped) return null; // 상한에 걸렸으면 보낸 척하지 않는다
     return "email";
   }
   return null;

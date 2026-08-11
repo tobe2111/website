@@ -2,6 +2,37 @@
 // 설정: wrangler.toml 또는 대시보드에 RESEND_API_KEY, MAIL_FROM("상인회 플랫폼 <no-reply@도메인>")
 export const emailEnabled = (env) => !!(env.RESEND_API_KEY && env.MAIL_FROM);
 
+// 조직 단위 하루 발송 상한. 자체 가입을 열면 "누구나 우리 메일 계정으로 대량 발송"이 된다 —
+// 도메인 평판이 망가지면 정작 계약 안내 메일이 스팸함으로 간다. 그래서 조직마다 상한을 둔다.
+// 상한을 넘으면 조용히 버리지 않고 실패로 기록해 관리자가 발송 내역에서 이유를 볼 수 있게 한다.
+export const DEFAULT_DAILY_EMAIL_MAX = 200;
+export async function dailyEmailMax(db) {
+  const { getSetting } = await import("./db.js");
+  const n = parseInt((await getSetting(db, "daily_email_max")) || "", 10);
+  return Number.isFinite(n) && n >= 0 ? n : DEFAULT_DAILY_EMAIL_MAX;
+}
+// 조직에 귀속되는 메일은 반드시 이 함수를 거친다(상한 + 기록).
+export async function sendEmailFor(env, db, assoc, { to, subject, html, kind = "" }) {
+  if (!emailEnabled(env)) return { skipped: true };
+  const D = await import("./db.js");
+  const { maskEmail } = await import("./util.js");
+  const masked = maskEmail(to);
+  if (assoc) {
+    const max = await dailyEmailMax(db);
+    if (max > 0 && (await D.countMessagesToday(db, assoc.id, "email")) >= max) {
+      await D.logMessage(db, { associationId: assoc.id, channel: "email", kind, recipient: masked,
+        status: "failed", cost: 0, detail: `하루 발송 상한(${max}건) 초과` });
+      return { capped: true, error: `하루 메일 발송 상한(${max}건)을 넘었습니다.` };
+    }
+  }
+  const r = await sendEmail(env, { to, subject, html });
+  if (assoc) {
+    await D.logMessage(db, { associationId: assoc.id, channel: "email", kind, recipient: masked,
+      status: r.sent ? "sent" : "failed", cost: 0, detail: r.error || "" });
+  }
+  return r;
+}
+
 export async function sendEmail(env, { to, subject, html }) {
   if (!emailEnabled(env)) return { skipped: true };
   try {

@@ -1,7 +1,7 @@
 // 폼 처리 핸들러 (POST). ctx.form 은 파싱된 FormData.
 import * as D from "./db.js";
 import { verifyPassword, hashPassword, hmacSign, hmacVerify, b64uFromBytes, bytesFromB64u, sha256HexBytes, sha256Hex } from "./crypto.js";
-import { sendEmail, emailEnabled, mailShell, mailButton } from "./email.js";
+import { sendEmail, sendEmailFor, emailEnabled, mailShell, mailButton } from "./email.js";
 import { sessionTokenForUser, sessionCookie, clearSessionCookie } from "./auth.js";
 import { back, redirect } from "./http.js";
 import * as storage from "./storage.js";
@@ -11,7 +11,7 @@ import { contentHash, sealRecord, newVerifyCode, SEAL_VER, fieldsHashOf } from "
 import { isFieldKind, round4, FIELD_KINDS, pageCount } from "./paper.js";
 import { builtinById, isBuiltinId, normalizeTemplate, extractVars, applyVars, resolveFieldPages } from "./templates.js";
 import { resolveExtToken, makeExtToken, extSignUrl, sendSignLink, remindExternals, originFor, rememberOrigin } from "./extsign.js";
-import { enqueueDocEvent, newApiKey, hashApiKey, KEY_PREFIX } from "./apiv1.js";
+import { enqueueDocEvent, newApiKey, hashApiKey, KEY_PREFIX, checkWebhookUrl } from "./apiv1.js";
 import { turnstileVerify } from "./turnstile.js";
 import { planOf } from "./plans.js";
 import { seedDemo } from "./demoContent.js";
@@ -810,7 +810,10 @@ export async function adminCreateApiKey(ctx) {
   const to = `${base}/admin/api`;
   const name = cap((form.get("name") || "").trim(), 60) || "기본 키";
   const webhook = cap((form.get("webhook_url") || "").trim(), 300);
-  if (webhook && !/^https:\/\/[^\s]+$/i.test(webhook)) return back(to, "웹훅 주소는 https:// 로 시작해야 합니다.", true);
+  if (webhook) {
+    const chk = checkWebhookUrl(webhook, new URL(ctx.request.url).origin);
+    if (!chk.ok) return back(to, `웹훅 주소를 확인해 주세요 — ${chk.why}`, true);
+  }
   const active = (await D.listApiKeys(db, assoc.id)).filter((k) => !k.revoked_at);
   if (active.length >= 5) return back(to, "활성 키는 최대 5개입니다. 쓰지 않는 키를 먼저 폐기해 주세요.", true);
   const key = newApiKey();
@@ -836,7 +839,10 @@ export async function adminSetWebhook(ctx) {
   const k = await D.getApiKey(db, Number(params.id) || 0);
   if (!k || k.association_id !== assoc.id) return back(to, "키를 찾을 수 없습니다.", true);
   const url = cap((form.get("webhook_url") || "").trim(), 300);
-  if (url && !/^https:\/\/[^\s]+$/i.test(url)) return back(to, "웹훅 주소는 https:// 로 시작해야 합니다.", true);
+  if (url) {
+    const chk = checkWebhookUrl(url, new URL(ctx.request.url).origin);
+    if (!chk.ok) return back(to, `웹훅 주소를 확인해 주세요 — ${chk.why}`, true);
+  }
   await D.setApiKeyWebhook(db, k.id, assoc.id, url);
   return back(to, url ? "웹훅 주소를 저장했습니다." : "웹훅을 껐습니다.");
 }
@@ -913,7 +919,7 @@ export async function extSign(ctx) {
         buttonName: templateButton("sign_done"), buttonUrl: certUrl });
     }
     if (emailEnabled(env) && signer.email) {
-      await sendEmail(env, { to: signer.email, subject: `[${assoc.name}] 전자서명 완료 — ${d.title}`,
+      await sendEmailFor(env, db, assoc, { kind: "sign_done", to: signer.email, subject: `[${assoc.name}] 전자서명 완료 — ${d.title}`,
         html: mailShell(`${esc(assoc.name)} 전자서명 완료`,
           `<p>${esc(signerName)}님, '<b>${esc(d.title)}</b>' 전자서명이 완료되었습니다.</p>
            <p>검증 코드: <b>${esc(verifyCode)}</b></p>${mailButton(certUrl, "전자서명 확인서 보기")}`) });
@@ -961,7 +967,7 @@ export async function extOtpSend(ctx) {
     else if (r.insufficient) { await D.clearExtOtp(db, signer.id); return back(to, "발송 크레딧이 부족해 인증번호를 보내지 못했습니다. 요청하신 분께 문의해 주세요.", true); }
   }
   if (!via && emailEnabled(env) && signer.email) {
-    await sendEmail(env, { to: signer.email, subject: `[${assoc.name}] 전자서명 본인확인 번호`,
+    await sendEmailFor(env, db, assoc, { kind: "sign_otp", to: signer.email, subject: `[${assoc.name}] 전자서명 본인확인 번호`,
       html: mailShell("본인확인 번호", `<p>아래 번호를 서명 화면에 입력해 주세요.</p><p style="font-size:28px;font-weight:800;letter-spacing:.1em">${esc(code)}</p><p style="color:#888">${D.OTP_TTL_MIN}분 후 만료됩니다.</p>`) }).catch(() => {});
     via = "등록된 이메일로";
   }
@@ -1058,7 +1064,7 @@ export async function signOtpSend(ctx) {
     else if (r.insufficient) { await D.clearSignOtp(db, d.id, user.id); return back(base + "/sign/" + d.id, "알림 크레딧이 부족해 인증번호를 보내지 못했습니다. 상인회 관리자에게 문의해 주세요.", true); }
   }
   if (!via && emailEnabled(env) && user.email) {
-    await sendEmail(env, { to: user.email, subject: `[${assoc.name}] 전자서명 본인확인 번호`,
+    await sendEmailFor(env, db, assoc, { kind: "sign_otp", to: user.email, subject: `[${assoc.name}] 전자서명 본인확인 번호`,
       html: mailShell("본인확인 번호", `<p>아래 번호를 서명 화면에 입력해 주세요.</p><p style="font-size:28px;font-weight:800;letter-spacing:.1em">${esc(code)}</p><p style="color:#888">${D.OTP_TTL_MIN}분 후 만료됩니다.</p>`) }).catch(() => {});
     via = `${esc(user.email)} 로 이메일을`;
   }
@@ -1155,8 +1161,8 @@ export async function adminRemindDocument(ctx) {
   // 번호가 없는 사람은 이메일로 (설정된 경우)
   const noPhone = targets.filter((t) => (!canTalk || !t.phone) && t.email);
   if (noPhone.length && emailEnabled(env)) {
-    await Promise.all(noPhone.map((m) => sendEmail(env, {
-      to: m.email, subject: `[${assoc.name}] 전자서명 미완료 안내 — ${d.title}`,
+    await Promise.all(noPhone.map((m) => sendEmailFor(env, db, assoc, {
+      kind: "sign_remind", to: m.email, subject: `[${assoc.name}] 전자서명 미완료 안내 — ${d.title}`,
       html: mailShell(`${esc(assoc.name)} 전자서명`, `<p>${esc(m.name)}님, 아직 서명하지 않은 문서가 있습니다.</p><p><b>${esc(d.title)}</b>${d.due_date ? ` (기한: ${d.due_date})` : ""}</p>${mailButton(link, "서명하러 가기")}`),
     }).catch(() => {})));
     msg += `${msg ? " · " : ""}이메일 ${noPhone.length}건 발송`;
@@ -1214,7 +1220,12 @@ export async function adminEditDocument(ctx) {
 export async function adminCloseDocument(ctx) {
   const { db, base, assoc, params } = ctx;
   const d = await D.getDocument(db, Number(params.id));
-  if (d && d.association_id === assoc.id) { await D.closeDocument(db, d.id); await audit(ctx, "서명문서마감", d.title); }
+  // 남의 조직 문서는 애초에 손대지 못하지만, 그때 "마감했습니다"라고 답하면 안 된다 —
+  // 아무 일도 하지 않고 성공을 보고하는 것은 그 자체로 결함이고, 탐색자에게 힌트도 된다.
+  if (!d || d.association_id !== assoc.id) return back(base + "/admin/documents", "문서를 찾을 수 없습니다.", true);
+  if (d.closed) return back(base + "/admin/documents", "이미 마감된 문서입니다.", true);
+  await D.closeDocument(db, d.id);
+  await audit(ctx, "서명문서마감", d.title);
   return back(base + "/admin/documents", "문서를 마감했습니다.");
 }
 // 서명 요청 안내 메일 — 실패해도 문서 생성 자체는 유효하므로 되돌리지 않는다
@@ -1222,8 +1233,8 @@ async function notifyNewDocument(ctx, doc, title, dueDate, ordered, recipients) 
   if (!emailEnabled(ctx.env) || !recipients || !recipients.length) return;
   const { assoc, base } = ctx;
   const origin = new URL(ctx.request.url).origin;
-  await Promise.all(recipients.filter((m) => m.email).map((m) => sendEmail(ctx.env, {
-    to: m.email,
+  await Promise.all(recipients.filter((m) => m.email).map((m) => sendEmailFor(ctx.env, ctx.db, assoc, {
+    kind: "sign_request", to: m.email,
     subject: `[${assoc.name}] 전자서명 요청 — ${title}`,
     html: mailShell(`${esc(assoc.name)} 전자서명`, `<p>${esc(m.name || "회원")}님, 서명이 필요한 문서가 도착했습니다.</p><p><b>${esc(title)}</b>${dueDate ? ` (기한: ${dueDate})` : ""}${ordered ? " · 순차 서명 문서입니다" : ""}</p>${mailButton(`${origin}${base}/sign`, "서명하러 가기")}`),
   }).catch(() => {})));
@@ -1410,7 +1421,7 @@ export async function memberSign(ctx) {
         buttonName: templateButton("sign_done"), buttonUrl: certUrl });
     }
     if (emailEnabled(env) && user.email) {
-      await sendEmail(env, { to: user.email, subject: `[${assoc.name}] 전자서명 완료 — ${d.title}`,
+      await sendEmailFor(env, db, assoc, { kind: "sign_done", to: user.email, subject: `[${assoc.name}] 전자서명 완료 — ${d.title}`,
         html: mailShell(`${esc(assoc.name)} 전자서명 완료`,
           `<p>${esc(signerName)}님, '<b>${esc(d.title)}</b>' 전자서명이 완료되었습니다.</p>
            <p>검증 코드: <b>${esc(verifyCode)}</b></p>${mailButton(certUrl, "전자서명 확인서 보기")}
