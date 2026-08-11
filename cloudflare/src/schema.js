@@ -62,6 +62,7 @@ CREATE TABLE IF NOT EXISTS users (
   salt            TEXT NOT NULL,
   name            TEXT NOT NULL,
   role            TEXT NOT NULL DEFAULT 'MERCHANT',
+  phone           TEXT NOT NULL DEFAULT '',    -- 휴대폰(알림톡 수신 · 숫자만 저장)
   session_version INTEGER NOT NULL DEFAULT 0,
   totp_secret     TEXT NOT NULL DEFAULT '',    -- 2FA base32 시크릿(빈 값=미설정)
   totp_enabled    INTEGER NOT NULL DEFAULT 0,  -- 2FA 활성화 여부
@@ -316,6 +317,51 @@ CREATE TABLE IF NOT EXISTS settings (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL DEFAULT ''
 );
+
+-- ===== 알림톡 선불 크레딧 (상인회가 충전 → 발송 시 차감) =====
+-- 금액은 모두 '원' 정수. 판매단가는 플랫폼 설정(price_alimtalk/price_sms)에서 읽는다.
+CREATE TABLE IF NOT EXISTS notify_wallet (
+  association_id INTEGER PRIMARY KEY REFERENCES associations(id) ON DELETE CASCADE,
+  balance        INTEGER NOT NULL DEFAULT 0,
+  updated_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- 크레딧 원장(감사 추적) — 충전·차감·환불·수동조정이 모두 남는다
+CREATE TABLE IF NOT EXISTS credit_ledger (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
+  kind           TEXT NOT NULL,               -- charge|spend|refund|adjust
+  amount         INTEGER NOT NULL,            -- 양수=증가, 음수=감소
+  balance_after  INTEGER NOT NULL,
+  memo           TEXT NOT NULL DEFAULT '',
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_ledger_assoc ON credit_ledger(association_id, created_at);
+
+-- 충전 신청 (무통장 입금 → 슈퍼관리자 확인 후 승인 시 잔액 반영)
+CREATE TABLE IF NOT EXISTS credit_orders (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
+  amount         INTEGER NOT NULL,
+  depositor      TEXT NOT NULL DEFAULT '',
+  status         TEXT NOT NULL DEFAULT 'pending',  -- pending|approved|rejected
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_corder_status ON credit_orders(status, created_at);
+
+-- 발송 로그 (수신번호는 마스킹 저장 — 개인정보 최소화)
+CREATE TABLE IF NOT EXISTS message_log (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
+  channel        TEXT NOT NULL DEFAULT 'alimtalk',  -- alimtalk|sms
+  kind           TEXT NOT NULL DEFAULT '',          -- sign_request|sign_remind|notice|dues|poll
+  recipient      TEXT NOT NULL DEFAULT '',
+  status         TEXT NOT NULL DEFAULT 'sent',      -- sent|failed
+  cost           INTEGER NOT NULL DEFAULT 0,
+  detail         TEXT NOT NULL DEFAULT '',
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_msglog_assoc ON message_log(association_id, created_at);
 `;
 
 // 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
@@ -411,6 +457,24 @@ async function migrateColumns(db) {
   // v15: 홈 히어로 배경 사진 컬럼
   if (!cols.some((c) => c.name === "hero_image")) {
     await db.prepare("ALTER TABLE associations ADD COLUMN hero_image TEXT NOT NULL DEFAULT ''").run();
+  }
+  // v16: 알림톡 — 회원 휴대폰 + 선불 크레딧/원장/충전신청/발송로그
+  const ucols = (await db.prepare("PRAGMA table_info(users)").all()).results || [];
+  if (ucols.length && !ucols.some((c) => c.name === "phone")) {
+    await db.prepare("ALTER TABLE users ADD COLUMN phone TEXT NOT NULL DEFAULT ''").run();
+  }
+  const v16 = [
+    ["notify_wallet", `CREATE TABLE notify_wallet (association_id INTEGER PRIMARY KEY REFERENCES associations(id) ON DELETE CASCADE, balance INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL DEFAULT (datetime('now')))`, []],
+    ["credit_ledger", `CREATE TABLE credit_ledger (id INTEGER PRIMARY KEY AUTOINCREMENT, association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE, kind TEXT NOT NULL, amount INTEGER NOT NULL, balance_after INTEGER NOT NULL, memo TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+      ["CREATE INDEX IF NOT EXISTS idx_ledger_assoc ON credit_ledger(association_id, created_at)"]],
+    ["credit_orders", `CREATE TABLE credit_orders (id INTEGER PRIMARY KEY AUTOINCREMENT, association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE, amount INTEGER NOT NULL, depositor TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'pending', created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+      ["CREATE INDEX IF NOT EXISTS idx_corder_status ON credit_orders(status, created_at)"]],
+    ["message_log", `CREATE TABLE message_log (id INTEGER PRIMARY KEY AUTOINCREMENT, association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE, channel TEXT NOT NULL DEFAULT 'alimtalk', kind TEXT NOT NULL DEFAULT '', recipient TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'sent', cost INTEGER NOT NULL DEFAULT 0, detail TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+      ["CREATE INDEX IF NOT EXISTS idx_msglog_assoc ON message_log(association_id, created_at)"]],
+  ];
+  for (const [name, ddl, idx] of v16) {
+    const tbl = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").bind(name).first();
+    if (!tbl) { await db.prepare(ddl).run(); for (const i of idx) await db.prepare(i).run(); }
   }
   // events 대표 이미지 컬럼 (기존 배포 업그레이드)
   const evTbl = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='events'").first();

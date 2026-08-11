@@ -64,11 +64,16 @@ export const setSetting = (db, key, value) => run(db, "INSERT INTO settings (key
 export const countUsers = async (db) => (await first(db, "SELECT COUNT(*) AS n FROM users")).n;
 export const getUserByEmail = (db, email) => first(db, "SELECT * FROM users WHERE email = ?", email);
 export const getUserById = (db, id) => first(db, "SELECT * FROM users WHERE id = ?", id);
-export async function createUser(db, { email, passwordHash, salt, name, role = "MERCHANT", associationId = null }) {
-  await run(db, "INSERT INTO users (association_id, email, password_hash, salt, name, role) VALUES (?, ?, ?, ?, ?, ?)",
-    associationId, email, passwordHash, salt, name, role);
+export async function createUser(db, { email, passwordHash, salt, name, role = "MERCHANT", associationId = null, phone = "" }) {
+  await run(db, "INSERT INTO users (association_id, email, password_hash, salt, name, role, phone) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    associationId, email, passwordHash, salt, name, role, normalizePhone(phone));
   return getUserById(db, await lastId(db));
 }
+// 휴대폰: 숫자만 남겨 저장(하이픈·공백 제거). 010으로 시작하는 10~11자리만 유효로 본다.
+export const normalizePhone = (p) => String(p || "").replace(/\D/g, "").slice(0, 11);
+export const isValidPhone = (p) => /^01[016789]\d{7,8}$/.test(normalizePhone(p));
+export const maskPhone = (p) => { const d = normalizePhone(p); return d.length < 8 ? "***" : `${d.slice(0, 3)}****${d.slice(-4)}`; };
+export const setUserPhone = (db, id, phone) => run(db, "UPDATE users SET phone=? WHERE id=?", normalizePhone(phone), id);
 export const updateUserPassword = (db, id, hash, salt) =>
   run(db, "UPDATE users SET password_hash=?, salt=?, session_version = session_version + 1 WHERE id=?", hash, salt, id);
 export const bumpSessionVersion = (db, id) => run(db, "UPDATE users SET session_version = session_version + 1 WHERE id=?", id);
@@ -82,7 +87,7 @@ export function logAudit(db, { associationId = null, userId = null, actorName = 
 export const listAudit = (db, associationId, limit = 20) =>
   all(db, "SELECT * FROM audit_log WHERE association_id " + (associationId == null ? "IS NULL" : "= ?") + " ORDER BY created_at DESC, id DESC LIMIT ?", ...(associationId == null ? [limit] : [associationId, limit]));
 export function listUsersByAssociation(db, associationId, role = null) {
-  const sql = `SELECT u.id, u.email, u.name, u.role, b.name AS business_name
+  const sql = `SELECT u.id, u.email, u.name, u.role, u.phone, b.name AS business_name
     FROM users u LEFT JOIN businesses b ON b.owner_id = u.id
     WHERE u.association_id = ?` + (role ? " AND u.role = ?" : "") + " ORDER BY u.role, u.created_at DESC";
   return role ? all(db, sql, associationId, role) : all(db, sql, associationId);
@@ -540,3 +545,71 @@ export function usageByAssociation(db) {
       (SELECT COALESCE(SUM(m.size),0) FROM media m JOIN businesses b ON b.id=m.business_id WHERE b.association_id=a.id) AS storage
     FROM associations a ORDER BY storage DESC, members DESC`);
 }
+
+// ===== 알림톡 선불 크레딧 =====
+// 잔액은 notify_wallet 에, 모든 증감은 credit_ledger 에 남긴다(감사 추적).
+// D1 은 대화형 트랜잭션이 없으므로, 차감은 조건부 UPDATE(balance >= ?)로 원자성을 확보한다.
+export async function getBalance(db, aid) {
+  const r = await first(db, "SELECT balance FROM notify_wallet WHERE association_id=?", aid);
+  return r ? r.balance : 0;
+}
+async function ledger(db, aid, kind, amount, balanceAfter, memo) {
+  await run(db, "INSERT INTO credit_ledger (association_id, kind, amount, balance_after, memo) VALUES (?,?,?,?,?)", aid, kind, amount, balanceAfter, memo || "");
+}
+// 충전·환불·수동조정 (증가). 지갑이 없으면 만든다.
+export async function addCredit(db, aid, amount, { kind = "charge", memo = "" } = {}) {
+  const amt = Math.trunc(Number(amount) || 0);
+  if (amt <= 0) return { ok: false, balance: await getBalance(db, aid) };
+  await run(db, "INSERT INTO notify_wallet (association_id, balance) VALUES (?, 0) ON CONFLICT(association_id) DO NOTHING", aid);
+  await run(db, "UPDATE notify_wallet SET balance = balance + ?, updated_at = datetime('now') WHERE association_id=?", amt, aid);
+  const balance = await getBalance(db, aid);
+  await ledger(db, aid, kind, amt, balance, memo);
+  return { ok: true, balance };
+}
+// 차감 — 잔액이 모자라면 아무것도 하지 않고 ok:false (조건부 UPDATE 로 경합 안전)
+export async function spendCredit(db, aid, amount, memo = "") {
+  const amt = Math.trunc(Number(amount) || 0);
+  if (amt <= 0) return { ok: true, balance: await getBalance(db, aid) };
+  await run(db, "INSERT INTO notify_wallet (association_id, balance) VALUES (?, 0) ON CONFLICT(association_id) DO NOTHING", aid);
+  const res = await run(db, "UPDATE notify_wallet SET balance = balance - ?, updated_at = datetime('now') WHERE association_id=? AND balance >= ?", amt, aid, amt);
+  const changed = res && res.meta ? res.meta.changes : 0;
+  const balance = await getBalance(db, aid);
+  if (!changed) return { ok: false, balance };
+  await ledger(db, aid, "spend", -amt, balance, memo);
+  return { ok: true, balance };
+}
+export const listLedger = (db, aid, limit = 50) =>
+  all(db, "SELECT * FROM credit_ledger WHERE association_id=? ORDER BY id DESC LIMIT ?", aid, limit);
+
+// ----- 충전 신청 (무통장 입금 → 슈퍼 승인) -----
+export async function createCreditOrder(db, { associationId, amount, depositor }) {
+  await run(db, "INSERT INTO credit_orders (association_id, amount, depositor) VALUES (?,?,?)", associationId, Math.trunc(amount), depositor || "");
+  return first(db, "SELECT * FROM credit_orders WHERE id=?", await lastId(db));
+}
+export const getCreditOrder = (db, id) => first(db, "SELECT * FROM credit_orders WHERE id=?", id);
+export const listCreditOrders = (db, aid, limit = 20) =>
+  all(db, "SELECT * FROM credit_orders WHERE association_id=? ORDER BY id DESC LIMIT ?", aid, limit);
+export const listPendingCreditOrders = (db) =>
+  all(db, "SELECT o.*, a.name AS assoc_name FROM credit_orders o JOIN associations a ON a.id=o.association_id WHERE o.status='pending' ORDER BY o.id");
+export const setCreditOrderStatus = (db, id, status) => run(db, "UPDATE credit_orders SET status=? WHERE id=?", status, id);
+
+// ----- 발송 로그 -----
+export const logMessage = (db, { associationId, channel = "alimtalk", kind = "", recipient = "", status = "sent", cost = 0, detail = "" }) =>
+  run(db, "INSERT INTO message_log (association_id, channel, kind, recipient, status, cost, detail) VALUES (?,?,?,?,?,?,?)",
+    associationId, channel, kind, recipient, status, Math.trunc(cost) || 0, String(detail || "").slice(0, 300));
+export const listMessages = (db, aid, limit = 50) =>
+  all(db, "SELECT * FROM message_log WHERE association_id=? ORDER BY id DESC LIMIT ?", aid, limit);
+export const messageStats = (db, aid) =>
+  first(db, `SELECT COUNT(*) AS n, COALESCE(SUM(cost),0) AS spent,
+    COALESCE(SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END),0) AS failed
+    FROM message_log WHERE association_id=?`, aid);
+// 플랫폼 전체 사용량·매출(슈퍼) — 판매액 기준
+export const platformMessageUsage = (db) =>
+  all(db, `SELECT a.id, a.name, COALESCE(w.balance,0) AS balance,
+      (SELECT COUNT(*) FROM message_log m WHERE m.association_id=a.id AND m.status='sent') AS sent,
+      (SELECT COALESCE(SUM(m.cost),0) FROM message_log m WHERE m.association_id=a.id) AS revenue,
+      (SELECT COALESCE(SUM(l.amount),0) FROM credit_ledger l WHERE l.association_id=a.id AND l.kind='charge') AS charged
+    FROM associations a LEFT JOIN notify_wallet w ON w.association_id=a.id ORDER BY revenue DESC`);
+// 알림톡 수신 대상 회원 (휴대폰 있는 사람만)
+export const listPhoneMembers = (db, aid) =>
+  all(db, "SELECT id, name, phone FROM users WHERE association_id=? AND role='MERCHANT' AND phone != ''", aid);

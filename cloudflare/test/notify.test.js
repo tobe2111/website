@@ -1,0 +1,157 @@
+// 알림톡 선불 크레딧 · 발송 게이트 검증 (돈 계산이라 경계값까지 확인)
+// 실행: node --experimental-sqlite --test cloudflare/test/*.test.js
+import { test, before, beforeEach } from "node:test";
+import assert from "node:assert/strict";
+import { makeEnv } from "./shim.js";
+import * as D from "../src/db.js";
+import * as N from "../src/notify.js";
+
+let env, db, assoc;
+
+before(async () => {
+  env = makeEnv();
+  db = env.DB;
+  assoc = await D.createAssociation(db, { slug: "seocho", name: "서초구 상인회" });
+});
+
+test("휴대폰 정규화·검증·마스킹", () => {
+  assert.equal(D.normalizePhone("010-1234-5678"), "01012345678");
+  assert.equal(D.normalizePhone(" 010 1234 5678 "), "01012345678");
+  assert.ok(D.isValidPhone("010-1234-5678"));
+  assert.ok(!D.isValidPhone("02-555-1234"));   // 유선번호 거부
+  assert.ok(!D.isValidPhone("0101234"));        // 너무 짧음
+  assert.equal(D.maskPhone("01012345678"), "010****5678");
+});
+
+test("충전 → 잔액 증가 + 원장 기록", async () => {
+  const r = await D.addCredit(db, assoc.id, 30000, { memo: "무통장 입금" });
+  assert.equal(r.ok, true);
+  assert.equal(r.balance, 30000);
+  assert.equal(await D.getBalance(db, assoc.id), 30000);
+  const led = await D.listLedger(db, assoc.id);
+  assert.equal(led[0].kind, "charge");
+  assert.equal(led[0].amount, 30000);
+  assert.equal(led[0].balance_after, 30000);
+});
+
+test("차감 → 잔액 감소, 잔액보다 큰 차감은 거부(잔액 불변)", async () => {
+  const before = await D.getBalance(db, assoc.id);
+  const ok = await D.spendCredit(db, assoc.id, 22, "알림톡 1건");
+  assert.equal(ok.ok, true);
+  assert.equal(ok.balance, before - 22);
+
+  const tooMuch = await D.spendCredit(db, assoc.id, before * 10, "과다");
+  assert.equal(tooMuch.ok, false, "잔액 초과 차감은 실패해야 함");
+  assert.equal(await D.getBalance(db, assoc.id), before - 22, "실패 시 잔액이 변하면 안 됨");
+});
+
+test("잔액 정확히 0까지 쓸 수 있고, 그 다음 건은 거부", async () => {
+  const a = await D.createAssociation(db, { slug: "edge", name: "경계 상인회" });
+  await D.addCredit(db, a.id, 44);                       // 정확히 2건치
+  assert.equal((await D.spendCredit(db, a.id, 22)).ok, true);
+  assert.equal((await D.spendCredit(db, a.id, 22)).ok, true);
+  assert.equal(await D.getBalance(db, a.id), 0);
+  assert.equal((await D.spendCredit(db, a.id, 22)).ok, false, "잔액 0에서 추가 발송 불가");
+  assert.equal(await D.getBalance(db, a.id), 0);
+});
+
+test("판매단가: 기본값 + 슈퍼관리자 설정 반영", async () => {
+  assert.equal(await N.priceOf(db, "alimtalk"), 22);
+  await D.setSetting(db, "price_alimtalk", "18");
+  assert.equal(await N.priceOf(db, "alimtalk"), 18);
+  await D.setSetting(db, "price_alimtalk", "22"); // 원복
+});
+
+test("발송 설정(알리고 키) 없으면 차감 없이 실패 처리", async () => {
+  const a = await D.createAssociation(db, { slug: "nokey", name: "키없음" });
+  await D.addCredit(db, a.id, 1000);
+  const r = await N.sendOne(env, db, { assoc: a, kind: "sign_request", to: "010-1111-2222", text: "테스트" });
+  assert.equal(r.ok, false);
+  assert.equal(await D.getBalance(db, a.id), 1000, "설정 없음은 과금되면 안 됨");
+  const logs = await D.listMessages(db, a.id);
+  assert.equal(logs[0].status, "failed");
+  assert.equal(logs[0].cost, 0);
+});
+
+test("발송 실패 시 크레딧 자동 환불 (차감 → 실패 → 환불로 잔액 복구)", async () => {
+  const a = await D.createAssociation(db, { slug: "refund", name: "환불검증" });
+  await D.addCredit(db, a.id, 1000);
+  await D.setSetting(db, "tpl_sign_request", "TPL_TEST_01");
+  // 알리고 키는 주되, fetch 를 실패시켜 발송 실패 경로를 태운다
+  const envFail = { ...env, ALIGO_API_KEY: "k", ALIGO_USER_ID: "u", ALIGO_SENDER_KEY: "s", ALIGO_SENDER: "0212345678" };
+  const origFetch = globalThis.fetch;
+  globalThis.fetch = async () => { throw new Error("네트워크 오류"); };
+  try {
+    const r = await N.sendOne(envFail, db, { assoc: a, kind: "sign_request", to: "010-1111-2222", text: "테스트" });
+    assert.equal(r.ok, false);
+  } finally { globalThis.fetch = origFetch; }
+  assert.equal(await D.getBalance(db, a.id), 1000, "실패했으면 잔액이 원복되어야 함");
+  const led = await D.listLedger(db, a.id);
+  assert.equal(led[0].kind, "refund", "환불이 원장에 남아야 함");
+  assert.equal(led[1].kind, "spend");
+  const logs = await D.listMessages(db, a.id);
+  assert.equal(logs[0].status, "failed");
+  assert.equal(logs[0].cost, 0, "실패 건은 매출로 잡히면 안 됨");
+});
+
+test("발송 성공 시 차감 확정 + 매출 로그 (수신번호는 마스킹 저장)", async () => {
+  const a = await D.createAssociation(db, { slug: "sendok", name: "발송성공" });
+  await D.addCredit(db, a.id, 1000);
+  await D.setSetting(db, "tpl_sign_request", "TPL_TEST_01");
+  const envOk = { ...env, ALIGO_API_KEY: "k", ALIGO_USER_ID: "u", ALIGO_SENDER_KEY: "s", ALIGO_SENDER: "0212345678" };
+  const origFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => ({
+    ok: true, status: 200,
+    json: async () => String(url).includes("token/create")
+      ? { code: 0, token: "T" }
+      : { code: 0, message: "성공", info: { mid: 123 } },
+  });
+  let r;
+  try { r = await N.sendOne(envOk, db, { assoc: a, kind: "sign_request", to: "010-9876-5432", text: "테스트" }); }
+  finally { globalThis.fetch = origFetch; }
+  assert.equal(r.ok, true);
+  assert.equal(r.cost, 22);
+  assert.equal(await D.getBalance(db, a.id), 978);
+  const logs = await D.listMessages(db, a.id);
+  assert.equal(logs[0].status, "sent");
+  assert.equal(logs[0].cost, 22);
+  assert.equal(logs[0].recipient, "010****5432", "수신번호는 마스킹되어야 함");
+  assert.ok(!logs[0].recipient.includes("9876"), "원본 번호가 로그에 남으면 안 됨");
+});
+
+test("잔액 소진 시 남은 인원 발송을 멈추고 보고", async () => {
+  const a = await D.createAssociation(db, { slug: "bulk", name: "대량발송" });
+  await D.addCredit(db, a.id, 44); // 2건치
+  await D.setSetting(db, "tpl_sign_remind", "TPL_REMIND_01");
+  const envOk = { ...env, ALIGO_API_KEY: "k", ALIGO_USER_ID: "u", ALIGO_SENDER_KEY: "s", ALIGO_SENDER: "0212345678" };
+  const origFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => ({
+    ok: true, status: 200,
+    json: async () => String(url).includes("token/create") ? { code: 0, token: "T" } : { code: 0, info: { mid: 1 } },
+  });
+  let res;
+  try {
+    res = await N.sendMany(envOk, db, {
+      assoc: a, kind: "sign_remind",
+      recipients: [{ phone: "01011112222" }, { phone: "01033334444" }, { phone: "01055556666" }],
+      textFor: () => "서명 부탁드립니다",
+    });
+  } finally { globalThis.fetch = origFetch; }
+  assert.equal(res.sent, 2);
+  assert.equal(res.stopped, true, "잔액 소진 시 중단 플래그");
+  assert.equal(res.cost, 44);
+  assert.equal(await D.getBalance(db, a.id), 0);
+});
+
+test("충전 신청 → 승인 시에만 잔액 반영", async () => {
+  const a = await D.createAssociation(db, { slug: "order", name: "충전신청" });
+  const o = await D.createCreditOrder(db, { associationId: a.id, amount: 50000, depositor: "홍길동" });
+  assert.equal(o.status, "pending");
+  assert.equal(await D.getBalance(db, a.id), 0, "승인 전에는 잔액 0");
+  const pend = await D.listPendingCreditOrders(db);
+  assert.ok(pend.some((p) => p.id === o.id));
+  // 승인 처리
+  await D.setCreditOrderStatus(db, o.id, "approved");
+  await D.addCredit(db, a.id, o.amount, { memo: `충전 승인 #${o.id}` });
+  assert.equal(await D.getBalance(db, a.id), 50000);
+});
