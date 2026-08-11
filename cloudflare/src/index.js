@@ -150,6 +150,7 @@ const TENANT = [
   ["POST", "/admin/documents", api.adminCreateDocument, "ADMIN"],
   ["GET",  "/admin/documents/new", pages.adminDocumentNew, "ADMIN"],
   ["GET", "/admin/documents/:id", pages.adminDocumentDetail, "ADMIN"],
+  ["POST", "/admin/documents/:id/edit", api.adminEditDocument, "ADMIN"],
   ["POST", "/admin/documents/:id/close", api.adminCloseDocument, "ADMIN"],
   ["POST", "/admin/documents/:id/remind", api.adminRemindDocument, "ADMIN"],
   ["GET",  "/admin/api", pages.adminApi, "ADMIN"],

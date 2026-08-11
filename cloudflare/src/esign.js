@@ -128,14 +128,28 @@ export async function publicKeyFingerprint(env) {
 // 서명 사슬 무결성 검사 — 각 기록의 prev_hash 가 실제 직전 기록의 봉인값과 맞는지 확인.
 // 중간 서명을 지우거나 순서를 바꾸면 여기서 끊긴 지점이 드러난다. (v1 구서명은 사슬 대상 제외)
 export function verifyChain(rows) {
-  let prev = "";
+  // 두 사람이 같은 순간에 서명하면 둘 다 같은 '직전 봉인값'을 읽어 갈 수 있다(D1 에는
+  // 대화형 트랜잭션이 없다). 그건 조작이 아니라 동시성의 흔적이므로, 바로 앞 한 줄만
+  // 보고 판정하면 멀쩡한 계약이 '위변조 의심'으로 찍힌다.
+  //
+  // 그래서 "직전 줄과 같은가" 대신 "앞선 어느 줄엔가 존재하는 값인가"로 본다.
+  //   · 중간 기록을 지우면 → 그 값을 가진 줄이 사라져 어디에도 없다 → 탐지된다.
+  //   · 동시 서명이면 → 두 줄이 같은 값을 가리키지만 그 값은 실재한다 → 갈래(fork)로 기록만 한다.
+  const seen = new Set();
+  let forks = 0, prev = "";
   for (const r of rows) {
     if ((r.seal_ver || 1) >= 2) {
-      if ((r.prev_hash || "") !== prev) return { ok: false, brokenAt: r.id, expected: prev, found: r.prev_hash || "" };
+      const p = r.prev_hash || "";
+      if (p !== prev) {
+        if (!(p === "" ? seen.size === 0 : seen.has(p)))
+          return { ok: false, brokenAt: r.id, expected: prev, found: p, length: rows.length };
+        forks++; // 실재하는 값을 가리키지만 바로 앞줄은 아니다 = 동시 서명
+      }
     }
+    seen.add(r.record_hash);
     prev = r.record_hash;
   }
-  return { ok: true, length: rows.length };
+  return { ok: true, length: rows.length, forks };
 }
 
 // 사슬 앵커 봉인 문자열 — 앵커 자체도 Ed25519 로 봉인해 사후 조작을 막는다

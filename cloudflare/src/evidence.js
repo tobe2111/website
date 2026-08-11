@@ -17,7 +17,7 @@ const b64 = (bytes) => {
 };
 const EVENT_LABEL = {
   created: "문서 생성", viewed: "계약서 열람", otp_sent: "인증번호 발송", otp_ok: "휴대폰 본인확인 완료",
-  signed: "전자서명 완료", declined: "서명 거절", reminded: "재알림 발송", notified: "알림 발송",
+  signed: "전자서명 완료", declined: "서명 거절", reminded: "재알림 발송", notified: "알림 발송", edited: "문서 수정(서명 전)",
 };
 const LEVEL_LABEL = { password: "로그인(비밀번호)", otp: "휴대폰 본인확인(OTP)", identity: "신원확인" };
 
@@ -167,22 +167,36 @@ export async function buildEvidence(env, db, doc, assoc) {
   }, null, 2) });
 
   // ⑥ 서명·도장 이미지 원본 (해시 대조용)
+  // 워커 메모리 한도(128MB) 안에서 만들어야 하므로 총량에 상한을 둔다.
+  // 잘렸으면 안내문에 그 사실을 남긴다 — 조용히 빠지면 증거가 없어진 줄 모른다.
+  const MAX_IMAGE_BYTES = 24 * 1024 * 1024;
+  let imgBytes = 0, imgSkipped = 0;
   let n = 0;
   for (const f of fields) {
     if (!f.image) continue;
     const uri = uriOf.get(f.image) || "";
     const m = /^data:([^;]+);base64,(.+)$/.exec(uri);
     if (!m) continue;
+    const bytes = Uint8Array.from(atob(m[2]), (c) => c.charCodeAt(0));
+    if (imgBytes + bytes.length > MAX_IMAGE_BYTES) { imgSkipped++; continue; }
+    imgBytes += bytes.length;
     n++;
     files.push({ name: `6_이미지/${String(n).padStart(2, "0")}_${safeName(f.label || f.kind)}_${(f.image_hash || "").slice(0, 12)}.png`,
-      data: Uint8Array.from(atob(m[2]), (c) => c.charCodeAt(0)) });
+      data: bytes });
   }
+  if (imgSkipped) files.push({ name: "6_이미지/00_안내.txt",
+    data: `이 패키지에는 이미지 ${n}개만 담겼습니다. 용량 한도(${Math.round(MAX_IMAGE_BYTES / 1024 / 1024)}MB)를 넘어 ${imgSkipped}개가 빠졌습니다.\r\n`
+        + `빠진 이미지의 해시는 5_증적.json 의 필드 목록에 그대로 남아 있으므로, 원본을 따로 받아 대조할 수 있습니다.\r\n` });
 
   // ⑦ 첨부 계약서 원문
   if (doc.attachment && env.MEDIA) {
     try {
       const obj = await env.MEDIA.get(doc.attachment);
-      if (obj) files.push({ name: `7_첨부/${safeName(doc.attachment_name || "계약서.pdf")}`, data: new Uint8Array(await obj.arrayBuffer()) });
+      // 첨부가 지나치게 크면 해시만 남긴다(해시는 증적.json 에 이미 있다)
+      if (obj && obj.size <= 32 * 1024 * 1024)
+        files.push({ name: `7_첨부/${safeName(doc.attachment_name || "계약서.pdf")}`, data: new Uint8Array(await obj.arrayBuffer()) });
+      else if (obj)
+        files.push({ name: "7_첨부/안내.txt", data: `첨부 파일이 커서(${Math.round(obj.size / 1024 / 1024)}MB) 패키지에 넣지 않았습니다.\r\n원본과의 대조는 5_증적.json 의 첨부 해시로 하십시오.\r\n` });
     } catch {}
   }
 

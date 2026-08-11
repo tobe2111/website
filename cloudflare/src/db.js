@@ -418,6 +418,14 @@ export async function createDocument(db, { associationId, title, body, contentHa
 export const getDocument = (db, id) => first(db, "SELECT * FROM documents WHERE id=?", id);
 export const listDocuments = (db, aid) =>
   all(db, "SELECT d.*, (SELECT COUNT(*) FROM signatures s WHERE s.document_id=d.id) AS sign_count FROM documents d WHERE d.association_id=? ORDER BY d.created_at DESC", aid);
+// 서명 시작 전 문서 수정 — 오타 하나 때문에 계약을 새로 만드는 일이 없도록.
+// 본문이 바뀌면 해시도 다시 계산해야 한다(호출부에서 넘긴다).
+export const updateDocument = (db, id, { title, body, contentHash, dueDate, ordered }) =>
+  run(db, "UPDATE documents SET title=?, body=?, content_hash=?, due_date=?, ordered=? WHERE id=?",
+    title, body, contentHash, dueDate || "", ordered ? 1 : 0, id);
+// 본문이 짧아져 쪽수가 줄면 마지막 쪽 밖으로 나간 필드를 끌어온다(자리를 잃지 않게)
+export const clampFieldPages = (db, documentId, lastPage) =>
+  run(db, "UPDATE doc_fields SET page=? WHERE document_id=? AND page>?", lastPage, documentId, lastPage);
 export const closeDocument = (db, id) => run(db, "UPDATE documents SET closed=1 WHERE id=?", id);
 
 // 순차 서명 대기 판정 — 내 앞 순번에 아직 서명하지 않은 사람이 있는가.

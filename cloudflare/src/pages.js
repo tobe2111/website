@@ -20,7 +20,7 @@ import { otpauthUri } from "./totp.js";
 import { PLANS, PLAN_KEYS } from "./plans.js";
 import { emailEnabled as emailOn } from "./email.js";
 
-const DOC_EVENT_LABEL = { created: "문서 생성", viewed: "계약서 열람", otp_sent: "인증번호 발송", otp_ok: "휴대폰 본인확인", signed: "전자서명 완료", declined: "서명 거절", reminded: "재알림 발송", notified: "알림 발송" };
+const DOC_EVENT_LABEL = { created: "문서 생성", viewed: "계약서 열람", otp_sent: "인증번호 발송", otp_ok: "휴대폰 본인확인", signed: "전자서명 완료", declined: "서명 거절", reminded: "재알림 발송", notified: "알림 발송", edited: "문서 수정" };
 const CATEGORIES = ["음식점", "카페·디저트", "생활·서비스", "패션·잡화", "농수축산", "교육·문화", "기타"];
 const NOTICE_CATEGORIES = ["안내", "공지", "소식", "행사", "혜택", "긴급"];
 const qs = (o) => { const p = new URLSearchParams(); for (const [k, v] of Object.entries(o)) if (v != null && v !== "" && !(k === "page" && v === 1)) p.set(k, v); const s = p.toString(); return s ? "?" + s : ""; };
@@ -1339,6 +1339,14 @@ export async function adminDocumentDetail(ctx) {
         <button type="button" class="btn btn-ghost btn-sm" data-print>🖨 인쇄/PDF</button></div></div>
     ${reqPanel}
     ${extPanel}
+    ${sigs.length || d.closed ? "" : `<details class="panel"><summary class="panel-title">✏️ 문서 수정 <small>(아직 아무도 서명하지 않았습니다)</small></summary>
+      <p class="panel-hint">서명이 시작되면 잠깁니다. 본문을 고치면 문서 해시가 다시 계산되고, 쪽수가 줄면 마지막 쪽 밖의 필드를 끌어옵니다.</p>
+      <form method="post" action="${base}/admin/documents/${d.id}/edit" class="stack-form">
+        <label>제목<input type="text" name="title" value="${esc(d.title)}" required maxlength="200" /></label>
+        <label>본문<textarea name="body" rows="12" required>${esc(d.body)}</textarea></label>
+        <div class="form-two"><label>서명 기한<input type="date" name="due_date" value="${esc(d.due_date || "")}" /></label>
+          <label class="check check-inline"><input type="checkbox" name="ordered" value="1"${d.ordered ? " checked" : ""} /> 순차 서명</label></div>
+        <button class="btn btn-primary btn-sm">수정 저장</button></form></details>`}
     <section class="panel"><h2 class="panel-title">문서 본문</h2><div class="doc-body">${docBody(d.body)}</div>
       ${d.attachment ? `<p class="doc-attach">📎 <a href="${esc(mediaUrl(d.attachment))}" target="_blank" rel="noopener">${esc(d.attachment_name || "계약서.pdf")}</a></p>` : ""}
       <p class="doc-hash">해시: <code>${esc(d.content_hash)}</code></p></section>

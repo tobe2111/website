@@ -251,3 +251,85 @@ test("확인서에도 입력값 판정이 들어간다", async () => {
   const h = await (await worker.fetch(new Request(`${BASE}/certificate/${sig.verify_code}`), env)).text();
   assert.match(h, /입력값·서명 위치/);
 });
+
+// ---------- 서명 사슬: 동시 서명 vs 기록 삭제 ----------
+test("동시 서명(같은 직전값)을 위변조로 오판하지 않는다", async () => {
+  const { verifyChain } = await import("../src/esign.js");
+  // A 다음에 B·C 가 동시에 서명해 둘 다 A 를 가리키는 상황
+  const rows = [
+    { id: 1, record_hash: "A", prev_hash: "", seal_ver: 3 },
+    { id: 2, record_hash: "B", prev_hash: "A", seal_ver: 3 },
+    { id: 3, record_hash: "C", prev_hash: "A", seal_ver: 3 },
+    { id: 4, record_hash: "D", prev_hash: "C", seal_ver: 3 },
+  ];
+  const r = verifyChain(rows);
+  assert.equal(r.ok, true, "동시 서명은 조작이 아니다");
+  assert.equal(r.forks, 1, "갈래는 갈래대로 기록");
+});
+
+test("중간 기록을 지우면 여전히 잡아낸다", async () => {
+  const { verifyChain } = await import("../src/esign.js");
+  const full = [
+    { id: 1, record_hash: "A", prev_hash: "", seal_ver: 3 },
+    { id: 2, record_hash: "B", prev_hash: "A", seal_ver: 3 },
+    { id: 3, record_hash: "C", prev_hash: "B", seal_ver: 3 },
+  ];
+  assert.equal(verifyChain(full).ok, true);
+  const deleted = [full[0], full[2]]; // B 를 지웠다 → C 의 직전값이 어디에도 없다
+  const r = verifyChain(deleted);
+  assert.equal(r.ok, false, "삭제는 반드시 탐지되어야 함");
+  assert.equal(r.brokenAt, 3);
+  assert.equal(r.found, "B");
+});
+
+test("첫 기록의 직전값이 비어 있지 않으면 잡아낸다 (앞부분 통째 삭제)", async () => {
+  const { verifyChain } = await import("../src/esign.js");
+  const r = verifyChain([{ id: 5, record_hash: "E", prev_hash: "D", seal_ver: 3 }]);
+  assert.equal(r.ok, false, "앞을 통째로 잘라내도 첫 줄에서 드러난다");
+});
+
+// ---------- 서명 전 문서 수정 ----------
+test("서명 전에는 문서를 고칠 수 있고 해시가 다시 계산된다", async () => {
+  const { hashPassword } = await import("../src/crypto.js");
+  const h = await hashPassword("admin1234");
+  await D.updateUserPassword(db, admin.id, h.hash, h.salt);
+  const seed = await worker.fetch(new Request(`${BASE}/login`), env);
+  const j0 = (seed.headers.getSetCookie?.() || []).map((c) => c.split(";")[0]).join("; ");
+  const c0 = (/name="_csrf" value="([^"]+)"/.exec(await seed.text()) || [])[1];
+  const lr = await worker.fetch(new Request(`${BASE}/login`, { method: "POST",
+    headers: { cookie: j0, "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ _csrf: c0, email: "ad@x.kr", password: "admin1234" }).toString() }), env);
+  const jar = [j0, (lr.headers.getSetCookie?.() || []).map((c) => c.split(";")[0]).join("; ")].filter(Boolean).join("; ");
+
+  const d = await D.createDocument(db, { associationId: a.id, title: "오타 있는 계약", body: "제1조 계약금은 백만원으로 한다.",
+    contentHash: await contentHash("제1조 계약금은 백만원으로 한다."), createdBy: admin.id, ordered: 0, dueDate: "" });
+  const path = `/t/s/admin/documents/${d.id}`;
+  const page = await worker.fetch(new Request(BASE + path, { headers: { cookie: jar } }), env);
+  const html = await page.text();
+  assert.match(html, /문서 수정/, "서명 전에는 수정 폼이 보여야 함");
+  const csrf = (/name="_csrf" value="([^"]+)"/.exec(html) || [])[1];
+
+  const fixed = "제1조 계약금은 일천만원으로 한다.";
+  const r = await worker.fetch(new Request(`${BASE}${path}/edit`, { method: "POST",
+    headers: { cookie: jar, "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ _csrf: csrf, title: "수정된 계약", body: fixed }).toString() }), env);
+  assert.doesNotMatch(r.headers.get("location") || "", /err=1/);
+  const after = await D.getDocument(db, d.id);
+  assert.equal(after.title, "수정된 계약");
+  assert.equal(after.body, fixed);
+  assert.equal(after.content_hash, await contentHash(fixed), "해시가 새 본문 기준으로 갱신되어야 함");
+  const ev = await D.listDocEvents(db, d.id);
+  assert.ok(ev.some((e) => e.kind === "edited"), "수정도 감사 추적에 남는다");
+
+  // 서명이 시작되면 잠긴다
+  await D.createSignature(db, { documentId: d.id, userId: admin.id, signerName: "관리자", signatureImage: "",
+    contentHash: after.content_hash, ip: "1.1.1.1", userAgent: "t", verifyCode: "editlock1", recordHash: "x",
+    signedAt: "2026-08-11T00:00:00Z", prevHash: "", sealVer: 3, verifyLevel: "password", fieldsHash: "" });
+  const r2 = await worker.fetch(new Request(`${BASE}${path}/edit`, { method: "POST",
+    headers: { cookie: jar, "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ _csrf: csrf, title: "뒤늦은 수정", body: "몰래 바꾼 본문" }).toString() }), env);
+  assert.match(r2.headers.get("location") || "", /err=1/, "서명 후에는 막혀야 함");
+  assert.equal((await D.getDocument(db, d.id)).title, "수정된 계약", "내용이 바뀌면 안 됨");
+  const locked = await (await worker.fetch(new Request(BASE + path, { headers: { cookie: jar } }), env)).text();
+  assert.doesNotMatch(locked, /✏️ 문서 수정/, "수정 폼도 사라져야 함");
+});

@@ -1137,6 +1137,49 @@ export async function adminRemindDocument(ctx) {
   return back(base + "/admin/documents/" + d.id, msg);
 }
 
+// 서명이 시작되기 전까지는 문서를 고칠 수 있다. 오타 하나로 계약을 새로 만들고
+// 링크를 다시 돌리는 일이 실무에서 가장 잦은 낭비다.
+// 한 명이라도 서명했으면 잠근다 — 서명자가 확인한 내용이 뒤에서 바뀌면 봉인의 뜻이 사라진다.
+export async function adminEditDocument(ctx) {
+  const { db, form, base, assoc, params, user } = ctx;
+  const d = await D.getDocument(db, Number(params.id));
+  if (!d || d.association_id !== assoc.id) return back(base + "/admin/documents", "문서를 찾을 수 없습니다.", true);
+  const to = `${base}/admin/documents/${d.id}`;
+  if ((await D.listSignatures(db, d.id)).length)
+    return back(to, "이미 서명이 시작된 문서는 수정할 수 없습니다. 내용을 바꾸려면 새 문서를 만들어 주세요.", true);
+  if (d.closed) return back(to, "마감된 문서입니다.", true);
+  const title = cap((form.get("title") || "").trim(), 200);
+  const body = cap((form.get("body") || "").trim(), 20000);
+  if (!title || !body) return back(to, "제목과 본문을 입력하세요.", true);
+  let dueDate = ""; const rawDue = (form.get("due_date") || "").trim();
+  if (rawDue) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(rawDue)) return back(to, "기한 형식(YYYY-MM-DD)을 확인하세요.", true);
+    dueDate = rawDue;
+  }
+  const ordered = form.get("ordered") === "1" ? 1 : 0;
+  // 첨부가 있으면 해시 구성이 본문+첨부이므로 같은 규칙으로 다시 계산한다
+  const hash = d.attachment_hash
+    ? await contentHash(`${body}\n--attachment--\n${d.attachment_hash}`)
+    : await contentHash(body);
+  await D.updateDocument(db, d.id, { title, body, contentHash: hash, dueDate, ordered });
+
+  // 본문이 짧아져 쪽수가 줄면 배치해 둔 필드가 없는 쪽에 남는다 — 마지막 쪽으로 끌어온다
+  let moved = 0;
+  const fieldN = await D.countFields(db, d.id);
+  if (fieldN) {
+    const last = pageCount(body) - 1;
+    const rows = await D.listFields(db, d.id);
+    moved = rows.filter((f) => f.page > last).length;
+    if (moved) await D.clampFieldPages(db, d.id, last);
+  }
+  await D.logDocEvent(db, { documentId: d.id, userId: user.id, actorName: user.name, kind: "edited",
+    detail: "본문·제목 수정", ip: ctx.ip || "", userAgent: uaOf(ctx) });
+  await audit(ctx, "서명문서수정", title);
+  return back(to, moved
+    ? `문서를 수정했습니다. 쪽수가 줄어 ${moved}개 필드를 마지막 쪽으로 옮겼습니다 — 배치를 확인해 주세요.`
+    : fieldN ? "문서를 수정했습니다. 본문이 바뀌었으니 필드 배치를 한 번 확인해 주세요." : "문서를 수정했습니다.");
+}
+
 export async function adminCloseDocument(ctx) {
   const { db, base, assoc, params } = ctx;
   const d = await D.getDocument(db, Number(params.id));
