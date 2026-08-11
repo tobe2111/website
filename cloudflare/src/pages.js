@@ -9,7 +9,7 @@ import { priceOf, costOf, jeonToWon, notifyEnabled, TEMPLATE_KEYS, TEMPLATES, bi
 import { providerLabel } from "./embed.js";
 import { verifySignature, publicKeyJwk, publicKeyFingerprint, keyStorage, algorithm, verifyChain, verifyAnchor } from "./esign.js";
 import { renderPaper, fieldBox, FIELD_KINDS, paginate, pageCount } from "./paper.js";
-import { BUILTIN, builtinById, isBuiltinId, normalizeTemplate, extractVars, applyVars, resolveFieldPages } from "./templates.js";
+import { BUILTIN, builtinsFor, builtinById, isBuiltinId, normalizeTemplate, extractVars, applyVars, resolveFieldPages } from "./templates.js";
 import { buildEvidence } from "./evidence.js";
 import { resolveExtToken, makeExtToken, extSignUrl } from "./extsign.js";
 import { KEY_PREFIX } from "./apiv1.js";
@@ -1019,7 +1019,7 @@ export async function admin(ctx) {
           <input type="number" name="amount" value="50000" min="10000" max="5000000" step="1000" required list="chargePresets" />
           <datalist id="chargePresets"><option value="30000"></option><option value="50000"></option><option value="100000"></option><option value="300000"></option></datalist></label>
         <p class="panel-hint">건당 ${unitPrice.toLocaleString()}원 기준 — 5만원이면 약 ${Math.floor(50000 / unitPrice).toLocaleString()}건입니다.</p>
-        <label>입금자명<input type="text" name="depositor" maxlength="40" placeholder="예: 서초구상인회" /></label>
+        <label>입금자명<input type="text" name="depositor" maxlength="40" placeholder="${esc(assoc.name)}" /></label>
         <button class="btn btn-primary btn-sm">충전 신청</button></form>
       <div>${orderRows ? `<p class="mini-label">최근 충전 신청</p><ul class="admin-mini-list">${orderRows}</ul>` : `<p class="panel-hint">충전을 신청하면 운영사가 입금을 확인한 뒤 잔액에 반영합니다.</p>`}</div>
     </div>
@@ -1053,7 +1053,7 @@ export async function admin(ctx) {
       <a href="${base}" target="_blank" class="side-ext">${SIDE_SVG.ext} 사이트 보기</a>
     </nav></aside>
     <div class="console-main">
-    ${onboardPanel(base, assoc, s, members.length, notices.length)}
+    ${onboardPanel(base, assoc, s, members.length, notices.length, { docCount, balance })}
     <div class="stat-cards" id="p-stats">
       ${isEsign ? `<div class="stat-card"><span class="stat-num">${docCount}</span><span class="stat-label">계약서</span></div>
       <div class="stat-card"><span class="stat-num">${members.length}</span><span class="stat-label">담당자</span></div>`
@@ -1152,10 +1152,17 @@ ${isEsign ? "" : `    <section class="panel" id="p-home"><h2 class="panel-title"
 }
 
 // 관리자 온보딩 체크리스트 (모두 완료되면 자동으로 사라짐)
-function onboardPanel(base, assoc, stats, memberCount, noticeCount) {
-  const steps = [
+function onboardPanel(base, assoc, stats, memberCount, noticeCount, esign = {}) {
+  const branded = (assoc.brand_color && assoc.brand_color !== "#0b6e4f") || !!assoc.logo;
+  // 전자계약 조직에는 공지·업체 승인·점포 가입 링크가 없다. 그대로 두면 404 로 가는 체크리스트가 된다.
+  const steps = assoc.kind === "esign" ? [
+    { done: !!(esign.docCount > 0), label: "첫 계약서 만들기 — 표준 서식에서 시작", href: base + "/admin/documents" },
+    { done: memberCount > 0, label: "담당자 계정 발급", href: "#p-members" },
+    { done: (esign.balance || 0) > 0, label: "알림톡 크레딧 충전 — 카카오로 서명 요청 보내기", href: "#p-notify" },
+    { done: branded, label: "대표 색·로고 정하기 — 계약서와 안내 화면에 쓰입니다", href: "#p-brand" },
+  ] : [
     { done: !!(assoc.tagline && assoc.tagline.trim()), label: "상인회 한 줄 소개 쓰기", href: "#p-brand" },
-    { done: assoc.brand_color && assoc.brand_color !== "#0b6e4f" || !!assoc.logo, label: "대표 색·로고 정하기", href: "#p-brand" },
+    { done: branded, label: "대표 색·로고 정하기", href: "#p-brand" },
     { done: noticeCount > 0, label: "첫 공지 올리기", href: "#p-content" },
     { done: memberCount > 0, label: "회원(사장님) 모집 — 가입 링크 공유", href: base + "/register" },
     { done: stats.pending === 0, label: "가입 승인 대기 처리", href: "#p-biz" },
@@ -1295,6 +1302,8 @@ export async function signForm(ctx) {
 
 export async function adminDocuments(ctx) {
   const { db, assoc, base, user, query, csrf } = ctx;
+  // 담당자(STAFF)는 /admin·/admin/api 가 403 이다 — 못 가는 곳으로 가는 링크를 그리면 안 된다
+  const canAdmin = user.role === "ADMIN" || user.role === "SUPERADMIN";
   const today = new Date().toISOString().slice(0, 10);
   const docs = await D.listDocuments(db, assoc.id);
   const rows = docs.length ? docs.map((d) => `<tr><td><a href="${base}/admin/documents/${d.id}">${esc(d.title)}</a>
@@ -1308,16 +1317,16 @@ export async function adminDocuments(ctx) {
     <span class="tpl-title">${esc(t.title)}</span>
     <span class="tpl-sum">${esc(t.summary || `${t.vars.length}개 빈칸`)}</span>
     <span class="tpl-meta">${t.vars.length ? `빈칸 ${t.vars.length}` : "빈칸 없음"} · 자리 ${t.fields.length}개${t.ordered ? " · 순차" : ""}</span></a>`;
-  const tplCards = BUILTIN.map(normalizeTemplate).map(card).join("");
+  const tplCards = builtinsFor(assoc.kind).map(normalizeTemplate).map(card).join("");
   const myCards = myTpls.map(card).join("");
   const body = `<section class="dash"><div class="container">
     <div class="dash-head"><div><p class="section-eyebrow">E-SIGN · ${esc(assoc.name)}</p><h1 class="dash-title">전자서명 문서</h1>
-      <p class="dash-sub"><a href="${base}/admin">← 관리자</a></p></div>
-      <div class="dash-head-actions"><a href="${base}/admin/templates" class="btn btn-ghost btn-sm">📋 서식 관리</a><a href="${base}/admin/api" class="btn btn-ghost btn-sm">🔌 API 연동</a></div></div>${flashOf(query)}
+      <p class="dash-sub">${canAdmin ? `<a href="${base}/admin">← 관리자</a>` : `담당자 · ${esc(user.name)}`}</p></div>
+      <div class="dash-head-actions"><a href="${base}/admin/templates" class="btn btn-ghost btn-sm">📋 서식 관리</a>${canAdmin ? `<a href="${base}/admin/api" class="btn btn-ghost btn-sm">🔌 API 연동</a>` : ""}</div></div>${flashOf(query)}
     <section class="panel panel-accent"><h2 class="panel-title">📋 서식으로 만들기 <span class="badge badge-brand">권장</span></h2>
       <p class="panel-hint">표준 서식을 고르면 본문과 <b>서명·도장 자리까지</b> 그대로 들어옵니다. 빈칸만 채우면 끝입니다.</p>
       <div class="tpl-grid">${tplCards}</div>
-      ${myTpls.length ? `<div class="form-divider">우리 상인회 서식</div><div class="tpl-grid">${myCards}</div>` : ""}
+      ${myTpls.length ? `<div class="form-divider">${assoc.kind === "esign" ? "우리 서식" : "우리 상인회 서식"}</div><div class="tpl-grid">${myCards}</div>` : ""}
     </section>
     <details class="panel"><summary class="panel-title">✏️ 직접 입력해서 만들기</summary>
       <form method="post" action="${base}/admin/documents" class="stack-form" enctype="multipart/form-data">
@@ -1466,7 +1475,7 @@ export async function adminTemplates(ctx) {
   }).join("") : `<tr><td colspan="4" class="empty">저장한 서식이 없습니다.</td></tr>`;
   const docOpts = docs.map((d) => `<option value="${d.id}">${esc(d.title)}</option>`).join("");
   const body = `<section class="dash"><div class="container">
-    <div class="dash-head"><div><p class="section-eyebrow">E-SIGN · 서식</p><h1 class="dash-title">우리 상인회 서식</h1>
+    <div class="dash-head"><div><p class="section-eyebrow">E-SIGN · 서식</p><h1 class="dash-title">${assoc.kind === "esign" ? "우리 서식" : "우리 상인회 서식"}</h1>
       <p class="dash-sub"><a href="${base}/admin/documents">← 문서 목록</a></p></div></div>${flashOf(query)}
     <section class="panel panel-accent"><h2 class="panel-title">문서를 서식으로 저장</h2>
       <p class="panel-hint">이미 만든 문서를 서식으로 저장하면 <b>배치된 서명 자리까지</b> 함께 보관됩니다.
@@ -1480,7 +1489,7 @@ export async function adminTemplates(ctx) {
       <div class="table-scroll"><table class="admin-table">
         <thead><tr><th>서식</th><th>빈칸</th><th>자리</th><th>관리</th></tr></thead><tbody>${rows}</tbody></table></div></section>
     <section class="panel"><h2 class="panel-title">표준 서식 (플랫폼 제공)</h2>
-      <div class="tpl-grid">${BUILTIN.map(normalizeTemplate).map((t) => `<a class="tpl-card" href="${base}/admin/documents/new?tpl=${t.id}">
+      <div class="tpl-grid">${builtinsFor(assoc.kind).map(normalizeTemplate).map((t) => `<a class="tpl-card" href="${base}/admin/documents/new?tpl=${t.id}">
         <span class="tpl-title">${esc(t.title)}</span><span class="tpl-sum">${esc(t.summary)}</span>
         <span class="tpl-meta">빈칸 ${t.vars.length} · 자리 ${t.fields.length}개</span></a>`).join("")}</div></section>
     </div></section>`;

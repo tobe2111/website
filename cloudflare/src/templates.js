@@ -175,6 +175,8 @@ export const BUILTIN = [
   },
   {
     id: "b-join",
+    // 상인회 전용 — 법무법인·중개사에게 '상인회 가입 동의서'가 보이면 서비스를 잘못 이해한다
+    only: "merchant",
     title: "상인회 가입 동의서",
     summary: "회원 가입 — 회칙 준수·개인정보 수집·이용 동의",
     ordered: 0,
@@ -214,6 +216,9 @@ export const BUILTIN = [
 ];
 
 export const builtinById = (id) => BUILTIN.find((t) => t.id === id) || null;
+// 조직 유형에 맞는 내장 서식만. only 가 없으면 어디서나 쓰는 범용 서식이다.
+// (URL 로 직접 부른 경우까지 막지는 않는다 — 남의 조직 데이터가 아니라 빈 서식일 뿐이다)
+export const builtinsFor = (kind) => BUILTIN.filter((t) => !t.only || t.only === (kind || "merchant"));
 export const isBuiltinId = (id) => typeof id === "string" && id.startsWith("b-");
 
 // 서식 → 화면에 보여줄 공통 모양 (내장·저장분을 한 목록으로 다루기 위함)

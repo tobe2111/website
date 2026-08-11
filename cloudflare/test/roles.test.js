@@ -295,3 +295,39 @@ test("전자계약 조직의 내부 서명자 등록은 업체를 만들지 않�
   assert.equal(u.role, "MERCHANT");
   assert.equal(await D.getBusinessByOwner(db, u.id), null, "업체 레코드가 생기면 안 됨");
 });
+
+// 전자계약 조직 콘솔에 남아 있던 상인회 전용 요소들 — 담당자가 못 가는 링크·엉뚱한 서식
+test("전자계약 조직에는 '상인회 가입 동의서' 서식이 보이지 않는다", async () => {
+  const { builtinsFor, BUILTIN } = await import("../src/templates.js");
+  const es = builtinsFor("esign").map((t) => t.id);
+  assert.ok(!es.includes("b-join"), "상인회 전용 서식이 전자계약 조직에 노출됨");
+  assert.ok(es.includes("b-lease") && es.includes("b-nda"), "범용 서식은 남아야 함");
+  assert.equal(builtinsFor("merchant").length, BUILTIN.length, "상인회는 전부 그대로");
+});
+
+test("담당자 화면에는 자기가 못 가는 곳(관리자·API) 링크가 없다", async () => {
+  const e2 = makeEnv();
+  const org = await D.createAssociation(e2.DB, { slug: "ho", name: "한빛", kind: "esign" });
+  const h = await hashPassword("password1234");
+  await D.createUser(e2.DB, { email: "boss@h.kr", passwordHash: h.hash, salt: h.salt, name: "대표", role: "ADMIN", associationId: org.id });
+  await D.createUser(e2.DB, { email: "staff@h.kr", passwordHash: h.hash, salt: h.salt, name: "담당", role: "STAFF", associationId: org.id });
+  const jarFor = async (email) => {
+    const seed = await worker.fetch(new Request(`${BASE}/login`), e2);
+    const j0 = (seed.headers.getSetCookie?.() || []).map((c) => c.split(";")[0]).join("; ");
+    const csrf = (/name="_csrf" value="([^"]+)"/.exec(await seed.text()) || [])[1];
+    const lr = await worker.fetch(new Request(`${BASE}/login`, { method: "POST", redirect: "manual",
+      headers: { cookie: j0, "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ _csrf: csrf, email, password: "password1234" }).toString() }), e2);
+    return [j0, (lr.headers.getSetCookie?.() || []).map((c) => c.split(";")[0]).join("; ")].filter(Boolean).join("; ");
+  };
+  const docsHtml = async (email) => (await worker.fetch(new Request(`${BASE}/t/ho/admin/documents`,
+    { headers: { cookie: await jarFor(email) } }), e2)).text();
+
+  const staffHtml = await docsHtml("staff@h.kr");
+  assert.ok(!/href="[^"]*\/admin"/.test(staffHtml), "담당자에게 관리자 콘솔 링크가 보임 (누르면 403)");
+  assert.ok(!/href="[^"]*\/admin\/api"/.test(staffHtml), "담당자에게 API 링크가 보임 (누르면 403)");
+  assert.ok(!/상인회 가입 동의서/.test(staffHtml), "상인회 서식이 노출됨");
+
+  const adminHtml = await docsHtml("boss@h.kr");
+  assert.match(adminHtml, /href="[^"]*\/admin\/api"/, "관리자에게는 그대로 보여야 함");
+});
