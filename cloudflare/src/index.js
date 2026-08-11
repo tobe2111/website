@@ -16,6 +16,10 @@ const _usersConfirmed = new WeakSet(); // DB 별 "계정 존재" 확인 캐시
 
 // 라우트: [method, pattern, handler, auth]
 const GLOBAL = [
+  // 전자계약 제품 · 셀프 가입 — 아래 /esign/:token 과 자리 수가 같으므로 반드시 먼저 와야 한다
+  // (배열 순서대로 매칭되므로 뒤에 두면 "signup" 이 서명 토큰으로 잡힌다)
+  ["GET",  "/esign/signup", pages.esignSignupForm],
+  ["POST", "/esign/signup", api.esignSignup],
   // 외부(비회원) 서명 — 로그인 없이 HMAC 토큰만으로 접근. 권한 검사는 핸들러 안에서 토큰으로 한다.
   ["GET",  "/esign/:token", pages.extSignForm],
   ["GET",  "/esign/:token/paper", pages.extPaper],
@@ -65,6 +69,7 @@ const GLOBAL = [
   ["POST", "/super/credit/:id", api.superCreditApprove, "SUPERADMIN"],
   ["POST", "/super/notify-settings", api.superNotifySettings, "SUPERADMIN"],
   ["POST", "/super/billing-mode", api.superBillingMode, "SUPERADMIN"],
+  ["POST", "/super/signup-settings", api.superSignupSettings, "SUPERADMIN"],
   ["POST", "/super/association/:id/kind", api.superSetKind, "SUPERADMIN"],
   ["POST", "/super/notify-cost", api.superNotifyCost, "SUPERADMIN"],
   ["POST", "/super/association/:id/unit-price", api.superSetUnitPrice, "SUPERADMIN"],

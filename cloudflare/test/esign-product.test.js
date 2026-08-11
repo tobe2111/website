@@ -165,3 +165,133 @@ test("상인회도 전자계약을 그대로 쓴다", async () => {
   assert.match(h, /서식으로 만들기/);
   assert.match(h, /API 연동/);
 });
+
+// ---------- 셀프 가입 ----------
+const signup = async (body) => {
+  const page = await req("GET", "/esign/signup");
+  const cookie = cookiesOf(page);
+  // 가입이 꺼져 있으면 폼이 없어 토큰도 없다 — 핸들러의 판단을 보고 싶으므로 다른 페이지에서 받아온다
+  let csrf = (/name="_csrf" value="([^"]+)"/.exec(await page.text()) || [])[1] || "";
+  if (!csrf) csrf = (await csrfFrom(cookie, "/login")) || "";
+  const r = await req("POST", "/esign/signup", { cookie, body: { _csrf: csrf, ...body } });
+  return { r, cookie: [cookie, cookiesOf(r)].filter(Boolean).join("; ") };
+};
+const OK = { name: "가나공인중개사", admin_name: "김중개", email: "gana@example.com", password: "password1234", agree: "1" };
+
+test("셀프 가입 화면이 열린다", async () => {
+  const r = await req("GET", "/esign/signup");
+  assert.equal(r.status, 200);
+  const h = await r.text();
+  assert.match(h, /전자계약 시작하기/);
+  assert.match(h, /name="password"/);
+  assert.match(h, /이용약관/, "약관 동의가 있어야 함");
+});
+
+test("스스로 가입하면 전자계약 조직이 만들어지고 바로 로그인된다", async () => {
+  const { r, cookie } = await signup(OK);
+  const loc = r.headers.get("location") || "";
+  assert.match(loc, /\/admin\/documents/, "가입 직후 계약서 화면으로");
+  assert.doesNotMatch(loc, /err=1/);
+
+  const made = (await D.listAllAssociations(db)).find((x) => x.name === OK.name);
+  assert.ok(made, "조직이 생성되어야 함");
+  assert.equal(made.kind, "esign");
+  const admin = await D.getUserByEmail(db, OK.email);
+  assert.equal(admin.role, "ADMIN");
+  assert.equal(admin.association_id, made.id);
+
+  // 세션이 붙어 바로 관리자 화면이 열린다
+  const page = await req("GET", `/t/${made.slug}/admin/documents`, { cookie });
+  assert.equal(page.status, 200, "다시 로그인하지 않아도 들어가야 함");
+  assert.match(await page.text(), /서식으로 만들기/);
+});
+
+test("같은 이메일로는 두 번 가입되지 않는다", async () => {
+  const { r } = await signup({ ...OK, name: "다른이름" });
+  assert.match(r.headers.get("location") || "", /err=1/);
+});
+
+test("이름이 겹쳐도 주소가 충돌하지 않는다", async () => {
+  const { r } = await signup({ ...OK, email: "gana2@example.com" });
+  assert.doesNotMatch(r.headers.get("location") || "", /err=1/);
+  const same = (await D.listAllAssociations(db)).filter((x) => x.name === OK.name);
+  assert.equal(same.length, 2);
+  assert.notEqual(same[0].slug, same[1].slug, "주소가 달라야 함");
+});
+
+test("예약된 주소는 조직 주소로 나가지 않는다", async () => {
+  const { r } = await signup({ ...OK, name: "admin", email: "res@example.com" });
+  assert.doesNotMatch(r.headers.get("location") || "", /err=1/);
+  const made = (await D.listAllAssociations(db)).find((x) => x.name === "admin");
+  assert.notEqual(made.slug, "admin", "다른 경로와 겹치는 주소는 피해야 함");
+});
+
+test("입력이 부실하면 거부된다", async () => {
+  const bad = [
+    [{ ...OK, name: "", email: "a1@example.com" }, "이름 없음"],
+    [{ ...OK, email: "이상한주소" }, "이메일 형식"],
+    [{ ...OK, email: "a2@example.com", password: "123" }, "짧은 비밀번호"],
+    [{ ...OK, email: "a3@example.com", agree: "" }, "약관 미동의"],
+    [{ ...OK, email: "a4@example.com", phone: "12345" }, "번호 형식"],
+  ];
+  for (const [body, why] of bad) {
+    const { r } = await signup(body);
+    assert.match(r.headers.get("location") || "", /err=1/, why);
+  }
+});
+
+test("가입만으로는 발송 크레딧이 생기지 않는다 (체험 0일 때)", async () => {
+  const made = (await D.listAllAssociations(db)).find((x) => x.email !== undefined && x.name === OK.name);
+  assert.equal(await D.getBalance(db, made.id), 0, "돈이 새면 안 된다");
+});
+
+test("체험 크레딧을 켜면 가입 시 지급된다", async () => {
+  await D.setSetting(db, "esign_trial_credit", "3000");
+  const { r } = await signup({ ...OK, name: "체험조직", email: "trial@example.com" });
+  assert.doesNotMatch(r.headers.get("location") || "", /err=1/);
+  const made = (await D.listAllAssociations(db)).find((x) => x.name === "체험조직");
+  assert.equal(await D.getBalance(db, made.id), 3000);
+  await D.setSetting(db, "esign_trial_credit", "0");
+});
+
+test("셀프 가입을 끄면 문의 안내로 바뀌고 제출도 막힌다", async () => {
+  await D.setSetting(db, "esign_self_signup", "0");
+  const h = await (await req("GET", "/esign/signup")).text();
+  assert.match(h, /도입 문의/);
+  assert.doesNotMatch(h, /name="password"/, "폼이 나오면 안 됨");
+  const { r } = await signup({ ...OK, name: "막힌조직", email: "blocked@example.com" });
+  assert.match(r.headers.get("location") || "", /err=1/);
+  assert.ok(!(await D.listAllAssociations(db)).some((x) => x.name === "막힌조직"));
+  await D.setSetting(db, "esign_self_signup", "1");
+});
+
+test("제품 랜딩에서 셀프 가입으로 이어진다", async () => {
+  const h = await (await req("GET", "/esign")).text();
+  assert.match(h, /\/esign\/signup/);
+  assert.match(h, /무료로 시작하기/);
+});
+
+test("가입 경로가 외부 서명 링크를 가리지 않는다", async () => {
+  // /esign/signup 과 /esign/:token 은 자리 수가 같다 — 순서가 어긋나면 서명 링크가 죽는다
+  const made = (await D.listAllAssociations(db)).find((x) => x.name === "체험조직");
+  const d = await D.createDocument(db, { associationId: made.id, title: "충돌 확인", body: "본문",
+    contentHash: "x".repeat(64), createdBy: null, ordered: 0, dueDate: "" });
+  const e = await D.addExternalSigner(db, { documentId: d.id, name: "서명자", email: "s@example.com", signOrder: 1 });
+  const { makeExtToken } = await import("../src/extsign.js");
+  const t = await makeExtToken(env.SESSION_SECRET, e.id, d.id);
+  assert.equal((await req("GET", `/esign/${t}`)).status, 200, "서명 링크가 살아 있어야 함");
+  assert.equal((await req("GET", "/esign/signup")).status, 200, "가입 화면도 살아 있어야 함");
+});
+
+test("슈퍼 콘솔에서 셀프 가입을 끄고 켤 수 있다", async () => {
+  const jar = await loginAs("s@p.kr", "super1234");
+  const h = await (await req("GET", "/super", { cookie: jar })).text();
+  assert.match(h, /셀프 가입/);
+  assert.match(h, /name="trial_credit"/);
+  const csrf = await csrfFrom(jar, "/super");
+  await req("POST", "/super/signup-settings", { cookie: jar, body: { _csrf: csrf, trial_credit: "5000" } });
+  assert.equal(await D.getSetting(db, "esign_self_signup"), "0", "체크 안 하면 꺼진다");
+  assert.equal(await D.getSetting(db, "esign_trial_credit"), "5000");
+  await req("POST", "/super/signup-settings", { cookie: jar, body: { _csrf: csrf, self_signup: "1", trial_credit: "0" } });
+  assert.equal(await D.getSetting(db, "esign_self_signup"), "1");
+});

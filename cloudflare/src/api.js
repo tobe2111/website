@@ -1421,6 +1421,89 @@ export async function memberSign(ctx) {
 }
 
 // ---------- 슈퍼관리자 ----------
+// ================= 전자계약 셀프 가입 =================
+// 영업 없이 스스로 시작하게 한다. 다만 조직이 마구 생기면 정리가 안 되므로:
+//  · 캡차(Turnstile 설정 시) · 하루 생성 상한 · 예약어 차단 · 슈퍼가 언제든 끌 수 있음
+// 발송(=돈)은 크레딧 충전 승인을 거치므로, 가입만으로 비용이 새지는 않는다.
+export const selfSignupOn = async (db) => (await D.getSetting(db, "esign_self_signup")) !== "0";
+const SIGNUP_DAILY_MAX = 20;
+// 다른 경로와 충돌하거나 오해를 부르는 주소는 조직 주소로 내주지 않는다
+const RESERVED_SLUGS = new Set([
+  "admin", "super", "api", "esign", "login", "logout", "register", "account", "setup",
+  "apply", "verify", "certificate", "sign", "documents", "t", "www", "static", "assets",
+  "terms", "privacy", "sitemap", "robots", "feed", "well-known", "media", "img", "css", "js",
+]);
+
+export async function esignSignup(ctx) {
+  const { db, env, form, ip, request, addCookie, isProd } = ctx;
+  const to = "/esign/signup";
+  if (!(await selfSignupOn(db))) return back(to, "지금은 셀프 가입을 받지 않습니다. 도입 문의로 연락 주세요.", true);
+  if (!(await turnstileVerify(env, form.get("cf-turnstile-response"), ip)))
+    return back(to, "봇 확인에 실패했습니다. 다시 시도해 주세요.", true);
+
+  const name = cap((form.get("name") || "").replace(/[\x00-\x1f\x7f]/g, " ").trim(), 100);
+  const adminName = cap((form.get("admin_name") || "").trim(), 60) || "관리자";
+  const email = cap((form.get("email") || "").toLowerCase().trim(), 120);
+  const password = form.get("password") || "";
+  const phone = D.normalizePhone(form.get("phone") || "");
+  if (!name) return back(to, "조직 이름을 입력해 주세요.", true);
+  if (!EMAIL_RE.test(email)) return back(to, "이메일 형식을 확인해 주세요.", true);
+  if (password.length < 8 || password.length > 200) return back(to, "비밀번호는 8자 이상이어야 합니다.", true);
+  if (phone && !D.isValidPhone(phone)) return back(to, "휴대폰 번호 형식을 확인해 주세요.", true);
+  if (form.get("agree") !== "1") return back(to, "약관·개인정보처리방침 동의가 필요합니다.", true);
+  if (await D.getUserByEmail(db, email)) return back(to, "이미 사용 중인 이메일입니다. 로그인해 주세요.", true);
+
+  // 하루 상한 — 스크립트가 조직을 쏟아붓는 것을 막는다
+  const today = (await D.countAssociationsSince(db, "-1 day"));
+  if (today >= SIGNUP_DAILY_MAX) return back(to, "오늘 가입이 많아 잠시 후 다시 시도해 주세요. 급하시면 도입 문의로 연락 주세요.", true);
+
+  let base = slugify(name) || "esign";
+  if (RESERVED_SLUGS.has(base)) base = base + "-co";
+  let slug = base, n = 1;
+  while (await D.getAssociationBySlug(db, slug)) slug = `${base}-${++n}`;
+
+  const assoc = await D.createAssociation(db, { slug, name, kind: "esign",
+    tagline: "종이 없이, 만나지 않고, 법적 효력 있는 계약" });
+  const { hash, salt } = await hashPassword(password);
+  const user = await D.createUser(db, { email, passwordHash: hash, salt, name: adminName, role: "ADMIN", associationId: assoc.id, phone });
+
+  // 체험 크레딧 (기본 0 — 슈퍼가 원하면 켠다). 0 이면 이메일 발송만 되고 알림톡은 충전 후.
+  const trial = parseInt((await D.getSetting(db, "esign_trial_credit")) || "0", 10);
+  if (trial > 0) await D.addCredit(db, assoc.id, trial, { kind: "charge", memo: "가입 체험 크레딧" });
+
+  await D.createNotification(db, { associationId: null, kind: "signup",
+    message: `전자계약 셀프 가입: ${name} (${email})`, link: "/super" });
+  await D.logAudit(db, { associationId: assoc.id, userId: user.id, actorName: adminName,
+    action: "셀프가입", detail: `${name} (/t/${slug})` });
+
+  // 바로 로그인시켜 준다 — 가입하고 다시 로그인하게 만들면 절반이 떨어져 나간다
+  const token = await sessionTokenForUser(user, env.SESSION_SECRET);
+  addCookie(sessionCookie(token, isProd));
+
+  try {
+    if (emailEnabled(env)) {
+      const origin = new URL(request.url).origin;
+      await sendEmail(env, { to: email, subject: `[${name}] 전자계약 시작하기`,
+        html: mailShell("전자계약을 시작하셨습니다", `<p>${esc(adminName)}님, ${esc(name)} 전자계약 공간이 준비되었습니다.</p>
+          <p>주소: <b>${esc(origin)}/t/${esc(slug)}</b></p>
+          ${mailButton(`${origin}/t/${slug}/admin/documents`, "첫 계약서 만들기")}
+          <p style="font-size:12px;color:#888">표준 서식(임대차·용역·비밀유지·동의서)이 준비되어 있어 빈칸만 채우면 바로 보내실 수 있습니다.</p>`) }).catch(() => {});
+    }
+  } catch {}
+  return redirect(`/t/${slug}/admin/documents?msg=${encodeURIComponent("환영합니다! 서식을 고르면 첫 계약서를 바로 만들 수 있습니다.")}`);
+}
+
+// 슈퍼: 셀프 가입 켜기/끄기 + 체험 크레딧
+export async function superSignupSettings(ctx) {
+  const { db, form } = ctx;
+  const on = form.get("self_signup") === "1";
+  await D.setSetting(db, "esign_self_signup", on ? "1" : "0");
+  const trial = Math.max(0, Math.min(100000, parseInt(form.get("trial_credit") || "0", 10) || 0));
+  await D.setSetting(db, "esign_trial_credit", String(trial));
+  await audit(ctx, "셀프가입설정", `${on ? "허용" : "차단"} · 체험 ${trial.toLocaleString()}원`, null);
+  return back("/super", "셀프 가입 설정을 저장했습니다.");
+}
+
 export async function superCreateAssociation(ctx) {
   const { db, form } = ctx;
   const name = cap((form.get("name") || "").trim(), 100);

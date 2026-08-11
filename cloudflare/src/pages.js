@@ -2,7 +2,7 @@
 import * as D from "./db.js";
 import { esc, clip, openBadge, openNow, fmtBytes, kstStamp, kstDate, prettyPath } from "./util.js";
 import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG, ORIGIN, assetUrl } from "./render.js";
-import { verifyInviteToken, SALES_STAGES, otpRequired } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
+import { verifyInviteToken, SALES_STAGES, otpRequired, selfSignupOn } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
 import { html, notFoundResponse, back } from "./http.js";
 import { galleryItem } from "./media-render.js";
 import { priceOf, costOf, jeonToWon, notifyEnabled, TEMPLATE_KEYS, TEMPLATES, billingMode, BILLING_MODES } from "./notify.js";
@@ -1509,6 +1509,46 @@ export async function adminApi(ctx) {
   return html(layout({ title: "API 연동", assoc, base, user, body, csrf }));
 }
 
+// 전자계약 셀프 가입 — 영업을 거치지 않고 바로 시작한다.
+export async function esignSignupForm(ctx) {
+  const { db, env, csrf, query, user } = ctx;
+  if (user) return redirect("/account");
+  const on = await selfSignupOn(db);
+  const trial = parseInt((await D.getSetting(db, "esign_trial_credit")) || "0", 10);
+  const body = on ? `<section class="section page-top"><div class="container narrow">
+    <div class="auth-card panel">
+      <div class="auth-head"><h1 class="auth-title">전자계약 시작하기</h1>
+        <p class="auth-sub">1분이면 됩니다. 신용카드도 설치도 필요 없습니다.</p></div>
+      ${flashOf(query)}
+      <form method="post" action="/esign/signup" class="stack-form">
+        <label>조직·상호 이름<input type="text" name="name" required maxlength="100" placeholder="예: ○○법무법인 · ○○공인중개사" autocomplete="organization" />
+          <small class="field-note">계약서와 알림톡에 이 이름이 표시됩니다.</small></label>
+        <div class="form-two">
+          <label>담당자 이름<input type="text" name="admin_name" maxlength="60" placeholder="홍길동" autocomplete="name" /></label>
+          <label>휴대폰 <small>(선택)</small><input type="tel" name="phone" maxlength="13" inputmode="numeric" placeholder="010-1234-5678" autocomplete="tel" /></label>
+        </div>
+        <label>이메일<input type="email" name="email" required maxlength="120" autocomplete="email" />
+          <small class="field-note">이 주소로 로그인합니다.</small></label>
+        <label>비밀번호<input type="password" name="password" required minlength="8" maxlength="200" autocomplete="new-password" />
+          <small class="field-note">8자 이상</small></label>
+        <label class="check"><input type="checkbox" name="agree" value="1" required />
+          <a href="/terms" target="_blank">이용약관</a>과 <a href="/privacy" target="_blank">개인정보처리방침</a>에 동의합니다.</label>
+        ${turnstileWidget(env)}
+        <button class="btn btn-primary btn-block">무료로 시작하기</button>
+      </form>
+      <p class="auth-note">시작하면 표준 서식(임대차·용역·비밀유지·동의서)이 준비된 상태로 바로 계약서를 만들 수 있습니다.
+        ${trial > 0 ? `가입 시 <b>${trial.toLocaleString()}원</b>의 알림톡 체험 크레딧을 드립니다.` : "이메일 발송은 바로 되고, 카카오 알림톡은 크레딧 충전 후 사용합니다."}</p>
+      <p class="auth-note">이미 계정이 있으신가요? <a href="/login">로그인</a></p>
+    </div></div></section>`
+    : `<section class="section page-top"><div class="container narrow">
+      <div class="auth-card panel"><div class="auth-head"><h1 class="auth-title">도입 문의</h1></div>
+      <p class="panel-hint">지금은 셀프 가입을 받지 않고 있습니다. 아래로 문의해 주시면 계약서 양식까지 함께 옮겨 드립니다.</p>
+      <p><a href="/apply?kind=esign" class="btn btn-primary btn-block">문의 남기기</a></p></div></div></section>`;
+  return html(layout({ title: "전자계약 시작하기", body, csrf, base: "",
+    description: "가입 없이 링크로 서명하는 전자계약을 1분 만에 시작하세요.",
+    scripts: turnstileScript(env) }));
+}
+
 // 전자계약 제품 소개 (플랫폼 공개 페이지) — 상인회가 아닌 고객이 처음 만나는 화면.
 // 상인회 랜딩과 섞으면 "우리는 상인회가 아닌데" 하고 나가 버린다. 따로 둔다.
 export async function esignLanding(ctx) {
@@ -1522,7 +1562,7 @@ export async function esignLanding(ctx) {
     <h1 class="landing-title">계약서를 보내면,<br /><span>그 자리에서 서명</span>됩니다</h1>
     <p class="landing-lead">서명·도장 자리를 계약서 위에 놓고 링크를 보내면 끝입니다.
       상대방은 <b>가입도 앱 설치도 없이</b> 문자로 받은 링크에서 서명하고, 완료되면 양쪽 모두 증적을 받습니다.</p>
-    <div class="hero-actions"><a href="/apply?kind=esign" class="btn btn-primary btn-lg">도입 문의</a>
+    <div class="hero-actions"><a href="/esign/signup" class="btn btn-primary btn-lg">무료로 시작하기</a>
       <a href="/api/v1/docs" class="btn btn-ghost btn-lg" target="_blank">API 문서 보기</a></div>
     <p class="hero-note">계약을 받으신 분이라면 — 문자·메일의 링크를 그대로 열어 주세요. 이 화면에서 로그인할 필요가 없습니다.</p>
   </div></section>
@@ -1578,9 +1618,12 @@ export async function esignLanding(ctx) {
   </div></section>
 
   <section class="section"><div class="container narrow" style="text-align:center">
-    <h2 class="section-title">도입 문의</h2>
-    <p class="landing-lead">쓰시는 계약서 양식 그대로 옮겨 드립니다. 연락처만 남겨 주세요.</p>
-    <a href="/apply?kind=esign" class="btn btn-primary btn-lg">문의하기</a>
+    <h2 class="section-title">지금 시작하세요</h2>
+    <p class="landing-lead">1분이면 됩니다. 신용카드도 설치도 필요 없습니다.<br />
+      쓰시던 계약서 양식을 옮겨 드리길 원하시면 문의를 남겨 주세요.</p>
+    <div class="hero-actions" style="justify-content:center">
+      <a href="/esign/signup" class="btn btn-primary btn-lg">무료로 시작하기</a>
+      <a href="/apply?kind=esign" class="btn btn-ghost btn-lg">도입 문의</a></div>
   </div></section>`;
   return html(layout({ title: `전자계약 — ${siteName}`, base: "", user: ctx.user, body, csrf,
     description: "가입 없이 링크로 서명하는 전자계약. 서명·도장 자리를 계약서 위에 놓고 보내면 그 자리에서 체결됩니다. 위변조 검증·증적 패키지·API 연동 지원." }));
@@ -2045,6 +2088,9 @@ export async function superConsole(ctx) {
   const tplDone = tplVals.filter(Boolean).length;
   const mode = await billingMode(db);
   const baseCost = await costOf(db, "alimtalk");
+  const selfSignup = (await D.getSetting(db, "esign_self_signup")) !== "0";
+  const trialCredit = parseInt((await D.getSetting(db, "esign_trial_credit")) || "0", 10) || 0;
+  const SIGNUP_DAILY_MAX_UI = 20;
   const creditRows = pendCredits.length ? pendCredits.map((o) => `<tr><td>${esc(o.assoc_name)}</td><td>${o.amount.toLocaleString()}원</td>
     <td>${esc(o.depositor || "-")}<br /><small>${esc(kstStamp(o.created_at, { year: false }))}</small></td>
     <td class="actions-cell">
@@ -2160,6 +2206,16 @@ export async function superConsole(ctx) {
     <p class="panel-hint">알림톡은 심사받은 문구와 <b>글자 하나까지</b> 같아야 발송됩니다. 아래 문구를 그대로 복사해 등록하고, 받은 코드를 위 칸에 넣으세요.
       용도별로 템플릿이 따로 필요합니다 — 인증번호를 '서명 요청' 템플릿으로 보내면 문구가 달라 거절됩니다.</p>
     ${tplGuide}
+    <div class="form-divider">전자계약 셀프 가입</div>
+    <form method="post" action="/super/signup-settings" class="stack-form compact">
+      <div class="row-toggle"><label class="switch"><input type="checkbox" name="self_signup" value="1"${selfSignup ? " checked" : ""} /><span class="track"></span></label>
+        <span><b>/esign/signup</b> 에서 스스로 가입해 바로 시작하게 허용 <small style="color:var(--muted)">(끄면 도입 문의만 받음)</small></span></div>
+      <label class="mini-label">가입 체험 크레딧 (원) <small>(0이면 없음 — 이메일은 되고 알림톡은 충전 후)</small>
+        <input type="number" name="trial_credit" value="${trialCredit}" min="0" max="100000" step="1000" /></label>
+      <button class="btn btn-ghost btn-sm">가입 설정 저장</button></form>
+    <p class="panel-hint">가입만으로는 비용이 나가지 않습니다 — 알림톡 발송은 크레딧 충전 승인을 거칩니다.
+      하루 ${SIGNUP_DAILY_MAX_UI}개까지만 만들어지고, 캡차(Turnstile)를 설정하면 봇도 막습니다.
+      셀프 가입한 조직은 아래 목록에 <b>전자계약</b> 유형으로 나타납니다.</p>
     <div class="form-divider">과금 방식</div>
     <form method="post" action="/super/billing-mode" class="stack-form compact">
       <div class="row-toggle"><label class="switch"><input type="checkbox" name="billing_mode" value="per_doc"${mode === "per_doc" ? " checked" : ""} /><span class="track"></span></label>

@@ -1490,3 +1490,4 @@ tr.is-loss td{background:var(--no-bg);color:var(--no-fg)}
   display:grid;place-items:center;font-weight:800;font-size:.95rem}
 .es-step h3{font-size:1rem;font-weight:800;margin-bottom:4px}
 .es-step p{color:var(--ink-soft);line-height:1.65;font-size:.92rem}
+.field-note{display:block;margin-top:4px;color:var(--muted);font-size:.78rem;font-weight:400}
