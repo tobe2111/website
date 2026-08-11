@@ -8,7 +8,8 @@ import { galleryItem } from "./media-render.js";
 import { priceOf, costOf, jeonToWon, notifyEnabled, TEMPLATE_KEYS } from "./notify.js";
 import { providerLabel } from "./embed.js";
 import { verifySignature, publicKeyJwk, publicKeyFingerprint, keyStorage, algorithm, verifyChain, verifyAnchor } from "./esign.js";
-import { renderPaper, fieldBox, FIELD_KINDS, paginate } from "./paper.js";
+import { renderPaper, fieldBox, FIELD_KINDS, paginate, pageCount } from "./paper.js";
+import { BUILTIN, builtinById, isBuiltinId, normalizeTemplate, extractVars, applyVars, resolveFieldPages } from "./templates.js";
 import { text } from "./http.js";
 import { parseLayout, renderHome, SECTION_CATALOG } from "./homeLayout.js";
 import { turnstileWidget, turnstileScript } from "./turnstile.js";
@@ -1241,10 +1242,23 @@ export async function adminDocuments(ctx) {
     <td class="actions-cell"><a class="btn btn-xs btn-ghost" href="${base}/admin/documents/${d.id}">보기</a>${d.closed ? "" : `<form method="post" action="${base}/admin/documents/${d.id}/close" data-confirm="마감할까요?"><button class="btn btn-xs btn-ghost">마감</button></form>`}</td></tr>`).join("") : `<tr><td colspan="4" class="empty">문서가 없습니다.</td></tr>`;
   const members = await D.listUsersByAssociation(db, assoc.id, "MERCHANT");
   const checks = members.length ? members.map((m) => `<label class="check member-check"><input type="checkbox" name="members" value="${m.id}" /> ${esc(m.name)} <small>${esc(m.email)}</small></label>`).join("") : `<p class="empty">회원이 없습니다.</p>`;
+  const myTpls = (await D.listTemplates(db, assoc.id)).filter((t) => t.association_id === assoc.id).map(normalizeTemplate);
+  const card = (t) => `<a class="tpl-card" href="${base}/admin/documents/new?tpl=${encodeURIComponent(t.id)}">
+    <span class="tpl-title">${esc(t.title)}</span>
+    <span class="tpl-sum">${esc(t.summary || `${t.vars.length}개 빈칸`)}</span>
+    <span class="tpl-meta">${t.vars.length ? `빈칸 ${t.vars.length}` : "빈칸 없음"} · 자리 ${t.fields.length}개${t.ordered ? " · 순차" : ""}</span></a>`;
+  const tplCards = BUILTIN.map(normalizeTemplate).map(card).join("");
+  const myCards = myTpls.map(card).join("");
   const body = `<section class="dash"><div class="container">
     <div class="dash-head"><div><p class="section-eyebrow">E-SIGN · ${esc(assoc.name)}</p><h1 class="dash-title">전자서명 문서</h1>
-      <p class="dash-sub"><a href="${base}/admin">← 관리자</a></p></div></div>${flashOf(query)}
-    <section class="panel panel-accent"><h2 class="panel-title">➕ 서명 문서 만들기</h2>
+      <p class="dash-sub"><a href="${base}/admin">← 관리자</a></p></div>
+      <div class="dash-head-actions"><a href="${base}/admin/templates" class="btn btn-ghost btn-sm">📋 서식 관리</a></div></div>${flashOf(query)}
+    <section class="panel panel-accent"><h2 class="panel-title">📋 서식으로 만들기 <span class="badge badge-brand">권장</span></h2>
+      <p class="panel-hint">표준 서식을 고르면 본문과 <b>서명·도장 자리까지</b> 그대로 들어옵니다. 빈칸만 채우면 끝입니다.</p>
+      <div class="tpl-grid">${tplCards}</div>
+      ${myTpls.length ? `<div class="form-divider">우리 상인회 서식</div><div class="tpl-grid">${myCards}</div>` : ""}
+    </section>
+    <details class="panel"><summary class="panel-title">✏️ 직접 입력해서 만들기</summary>
       <form method="post" action="${base}/admin/documents" class="stack-form" enctype="multipart/form-data">
         <label>제목<input type="text" name="title" required placeholder="예: 2026 가입 동의서" /></label>
         <label>본문<textarea name="body" rows="8" required></textarea></label>
@@ -1255,7 +1269,7 @@ export async function adminDocuments(ctx) {
         <label class="check"><input type="radio" name="target" value="select" /> 특정 회원</label>
         <div class="member-picker">${checks}</div>
         <p class="panel-hint">순차 서명 시 위 목록 순서대로 서명 요청이 진행됩니다.</p>
-        <button class="btn btn-primary">문서 생성 및 서명 요청</button></form></section>
+        <button class="btn btn-primary">문서 생성 및 서명 요청</button></form></details>
     <section class="panel"><h2 class="panel-title">문서 목록</h2><div class="table-scroll"><table class="admin-table">
       <thead><tr><th>문서</th><th>서명</th><th>상태</th><th>관리</th></tr></thead><tbody>${rows}</tbody></table></div></section></div></section>`;
   return html(layout({ title: "전자서명 문서", assoc, base, user, body, csrf }));
@@ -1295,6 +1309,80 @@ export async function adminDocumentDetail(ctx) {
     <section class="panel"><h2 class="panel-title">서명 내역</h2><div class="table-scroll"><table class="admin-table">
       <thead><tr><th>서명자</th><th>서명</th><th>일시·IP</th><th>검증</th></tr></thead><tbody>${rows}</tbody></table></div></section></div></section>`;
   return html(layout({ title: d.title, assoc, base, user, body, csrf }));
+}
+
+// 서식에서 문서 만들기 — 빈칸({{변수}})과 당사자만 채우면 본문·배치가 완성된다.
+export async function adminDocumentNew(ctx) {
+  const { db, assoc, base, user, query, csrf } = ctx;
+  const raw = query.get("tpl") || "";
+  const src = isBuiltinId(raw) ? builtinById(raw) : await D.getTemplate(db, Number(raw) || 0);
+  if (!src || (!isBuiltinId(raw) && src.association_id !== 0 && src.association_id !== assoc.id)) return notFoundResponse(ctx);
+  const t = normalizeTemplate(src);
+  const members = await D.listUsersByAssociation(db, assoc.id, "MERCHANT");
+  const memberOpts = members.map((m) => `<option value="${m.id}">${esc(m.name)} (${esc(m.email)})</option>`).join("");
+  const varInputs = t.vars.length
+    ? t.vars.map((v) => `<label>${esc(v)}<input type="text" name="var_${esc(v)}" maxlength="200" placeholder="${esc(v)}" /></label>`).join("")
+    : `<p class="panel-hint">이 서식에는 채울 빈칸이 없습니다.</p>`;
+  // 서식의 필드는 '당사자 1·2' 로 되어 있다 — 실제 회원을 여기에 연결한다
+  const partyRows = (t.parties.length ? t.parties : ["서명자"]).map((p, i) =>
+    `<label>${esc(p)}<select name="party_${i}"${members.length ? " required" : ""}><option value="">— 선택 —</option>${memberOpts}</select></label>`).join("");
+  const preview = renderPaper(applyVars(t.body, {}), { fieldsFor: () => "" });
+  const body = `<section class="dash"><div class="container">
+    <div class="dash-head"><div><p class="section-eyebrow">E-SIGN · 서식</p><h1 class="dash-title">${esc(t.title)}</h1>
+      <p class="dash-sub"><a href="${base}/admin/documents">← 문서 목록</a>${t.builtin ? " · 표준 서식" : " · 우리 서식"}</p></div></div>${flashOf(query)}
+    <div class="tpl-layout">
+      <section class="panel">
+        <form method="post" action="${base}/admin/documents" class="stack-form">
+          <input type="hidden" name="template" value="${esc(String(t.id))}" />
+          <label>문서 제목<input type="text" name="title" required maxlength="200" value="${esc(t.title)}" /></label>
+          ${t.vars.length ? `<div class="form-divider">빈칸 채우기</div><div class="tpl-vars">${varInputs}</div>` : ""}
+          <div class="form-divider">당사자 지정</div>
+          ${members.length ? `<div class="tpl-vars">${partyRows}</div>` : `<p class="flash flash-warn">서명할 회원이 없습니다. 먼저 회원을 등록해 주세요.</p>`}
+          <div class="form-two"><label>서명 기한 (선택)<input type="date" name="due_date" /></label>
+            <label class="check check-inline"><input type="checkbox" name="ordered" value="1"${t.ordered ? " checked" : ""} /> 순차 서명</label></div>
+          <button class="btn btn-primary btn-block"${members.length ? "" : " disabled"}>문서 만들고 서명 요청</button>
+          <p class="panel-hint">만든 뒤에도 <b>필드 배치</b> 화면에서 서명 자리를 옮길 수 있습니다 (서명 시작 전까지).</p>
+        </form>
+      </section>
+      <div class="tpl-preview"><p class="tpl-preview-cap">미리보기 — 빈칸은 밑줄로 표시됩니다</p>
+        <div class="paper-wrap">${preview}</div></div>
+    </div></div></section>`;
+  return html(layout({ title: t.title, assoc, base, user, body, csrf, scripts: `<script src="${assetUrl("/js/paper.js")}" defer></script>` }));
+}
+
+// 우리 상인회 서식 관리 — 만든 문서를 서식으로 저장해 다음부터 재사용
+export async function adminTemplates(ctx) {
+  const { db, assoc, base, user, query, csrf } = ctx;
+  const mine = (await D.listTemplates(db, assoc.id)).filter((t) => t.association_id === assoc.id);
+  const docs = await D.listDocuments(db, assoc.id);
+  const rows = mine.length ? mine.map((t) => { const n = normalizeTemplate(t);
+    return `<tr><td><b>${esc(n.title)}</b><br /><small>${esc(n.summary || "")}</small></td>
+      <td>${n.vars.length ? n.vars.map((v) => `<code class="tpl-var">${esc(v)}</code>`).join(" ") : "<small>없음</small>"}</td>
+      <td>${n.fields.length}개</td>
+      <td class="actions-cell"><a class="btn btn-xs btn-ghost" href="${base}/admin/documents/new?tpl=${n.id}">이 서식으로 만들기</a>
+        <form method="post" action="${base}/admin/templates/${n.id}/delete" data-confirm="'${esc(n.title)}' 서식을 삭제할까요?"><button class="btn btn-xs btn-ghost">삭제</button></form></td></tr>`;
+  }).join("") : `<tr><td colspan="4" class="empty">저장한 서식이 없습니다.</td></tr>`;
+  const docOpts = docs.map((d) => `<option value="${d.id}">${esc(d.title)}</option>`).join("");
+  const body = `<section class="dash"><div class="container">
+    <div class="dash-head"><div><p class="section-eyebrow">E-SIGN · 서식</p><h1 class="dash-title">우리 상인회 서식</h1>
+      <p class="dash-sub"><a href="${base}/admin/documents">← 문서 목록</a></p></div></div>${flashOf(query)}
+    <section class="panel panel-accent"><h2 class="panel-title">문서를 서식으로 저장</h2>
+      <p class="panel-hint">이미 만든 문서를 서식으로 저장하면 <b>배치된 서명 자리까지</b> 함께 보관됩니다.
+        본문에서 매번 달라지는 부분은 <code>{{보증금}}</code> 처럼 바꿔 두면 다음부터 그 칸만 채우면 됩니다.</p>
+      <form method="post" action="${base}/admin/templates" class="stack-form">
+        <div class="form-two"><label>원본 문서<select name="document" required><option value="">— 선택 —</option>${docOpts}</select></label>
+          <label>서식 이름<input type="text" name="title" required maxlength="200" placeholder="예: 우리 상가 표준 임대차" /></label></div>
+        <label>한 줄 설명<input type="text" name="summary" maxlength="120" placeholder="언제 쓰는 서식인지" /></label>
+        <button class="btn btn-primary">서식으로 저장</button></form></section>
+    <section class="panel"><h2 class="panel-title">저장된 서식 <span class="badge badge-muted">${mine.length}</span></h2>
+      <div class="table-scroll"><table class="admin-table">
+        <thead><tr><th>서식</th><th>빈칸</th><th>자리</th><th>관리</th></tr></thead><tbody>${rows}</tbody></table></div></section>
+    <section class="panel"><h2 class="panel-title">표준 서식 (플랫폼 제공)</h2>
+      <div class="tpl-grid">${BUILTIN.map(normalizeTemplate).map((t) => `<a class="tpl-card" href="${base}/admin/documents/new?tpl=${t.id}">
+        <span class="tpl-title">${esc(t.title)}</span><span class="tpl-sum">${esc(t.summary)}</span>
+        <span class="tpl-meta">빈칸 ${t.vars.length} · 자리 ${t.fields.length}개</span></a>`).join("")}</div></section>
+    </div></section>`;
+  return html(layout({ title: "계약서 서식", assoc, base, user, body, csrf }));
 }
 
 // 지면에 놓인 필드를 페이지별로 뿌리는 헬퍼. fields 는 값(value/image)이 붙어 있을 수 있다.

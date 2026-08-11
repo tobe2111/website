@@ -481,6 +481,21 @@ export const listSignatures = (db, documentId) =>
   all(db, "SELECT s.*, u.email AS signer_email FROM signatures s JOIN users u ON u.id=s.user_id WHERE s.document_id=? ORDER BY s.signed_at DESC", documentId);
 export const getSignatureByCode = (db, code) => first(db, "SELECT * FROM signatures WHERE verify_code=?", code);
 
+// ----- 계약서 서식(템플릿) -----
+export const listTemplates = (db, aid) =>
+  all(db, "SELECT * FROM doc_templates WHERE association_id IN (0, ?) ORDER BY association_id, title", aid);
+export const getTemplate = (db, id) => first(db, "SELECT * FROM doc_templates WHERE id=?", id);
+export async function createTemplate(db, t) {
+  await run(db, `INSERT INTO doc_templates (association_id, title, summary, body, fields, parties, ordered, created_by)
+    VALUES (?,?,?,?,?,?,?,?)`, t.associationId | 0, t.title, t.summary || "", t.body,
+    JSON.stringify(t.fields || []), JSON.stringify(t.parties || []), t.ordered ? 1 : 0, t.createdBy || null);
+  return getTemplate(db, await lastId(db));
+}
+export const deleteTemplate = (db, id, aid) =>
+  run(db, "DELETE FROM doc_templates WHERE id=? AND association_id=?", id, aid);
+export const countTemplates = async (db, aid) =>
+  (await first(db, "SELECT COUNT(*) AS n FROM doc_templates WHERE association_id=?", aid)).n;
+
 // ----- 계약서 필드 (서명·도장·입력 자리) -----
 export const listFields = (db, documentId) =>
   all(db, "SELECT * FROM doc_fields WHERE document_id=? ORDER BY page, sort, id", documentId);

@@ -348,6 +348,22 @@ CREATE TABLE IF NOT EXISTS doc_field_values (
   UNIQUE (field_id)
 );
 CREATE INDEX IF NOT EXISTS idx_docfieldval_doc ON doc_field_values(document_id);
+
+-- 계약서 서식 — 본문 + 필드 배치를 한 벌로 저장해 재사용한다.
+-- 본문의 {{변수}} 는 문서를 만들 때 값만 채운다. association_id=0 이면 플랫폼 공용.
+CREATE TABLE IF NOT EXISTS doc_templates (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  association_id INTEGER NOT NULL DEFAULT 0,
+  title          TEXT NOT NULL,
+  summary        TEXT NOT NULL DEFAULT '',
+  body           TEXT NOT NULL,
+  fields         TEXT NOT NULL DEFAULT '[]',   -- 배치 JSON (page -1 = 마지막 쪽)
+  parties        TEXT NOT NULL DEFAULT '[]',   -- 당사자 이름표 JSON (["갑","을"])
+  ordered        INTEGER NOT NULL DEFAULT 0,
+  created_by     INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_doctpl_assoc ON doc_templates(association_id, title);
 CREATE INDEX IF NOT EXISTS idx_notif_assoc ON notifications(association_id, is_read);
 CREATE INDEX IF NOT EXISTS idx_media_business ON media(business_id);
 CREATE INDEX IF NOT EXISTS idx_business_assoc ON businesses(association_id, status);
@@ -438,7 +454,7 @@ CREATE INDEX IF NOT EXISTS idx_msglog_assoc ON message_log(association_id, creat
 
 // 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
 // 마이그레이션 세대 — migrateColumns 에 단계를 추가할 때마다 +1
-export const SCHEMA_VERSION = "26";
+export const SCHEMA_VERSION = "27";
 
 export async function ensureSchema(db) {
   const has = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='associations'").first();
@@ -553,6 +569,12 @@ async function migrateColumns(db) {
   if (mcols.length && !mcols.some((c) => c.name === "cost_base")) {
     await db.prepare("ALTER TABLE message_log ADD COLUMN cost_base INTEGER NOT NULL DEFAULT 0").run();
     await db.prepare("ALTER TABLE message_log ADD COLUMN ref TEXT NOT NULL DEFAULT ''").run();
+  }
+  // v27: 계약서 서식(템플릿)
+  const tplTbl = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='doc_templates'").first();
+  if (!tplTbl) {
+    await db.prepare(`CREATE TABLE doc_templates (id INTEGER PRIMARY KEY AUTOINCREMENT, association_id INTEGER NOT NULL DEFAULT 0, title TEXT NOT NULL, summary TEXT NOT NULL DEFAULT '', body TEXT NOT NULL, fields TEXT NOT NULL DEFAULT '[]', parties TEXT NOT NULL DEFAULT '[]', ordered INTEGER NOT NULL DEFAULT 0, created_by INTEGER REFERENCES users(id) ON DELETE SET NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')))`).run();
+    await db.prepare("CREATE INDEX IF NOT EXISTS idx_doctpl_assoc ON doc_templates(association_id, title)").run();
   }
   // v26: 봉인 v3 — 필드값 해시 컬럼 (기존 서명은 빈 값 + seal_ver 그대로라 검증이 깨지지 않는다)
   const sgc = (await db.prepare("PRAGMA table_info(signatures)").all()).results || [];

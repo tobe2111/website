@@ -9,6 +9,7 @@ import { parseEmbed } from "./embed.js";
 import { cap, sniffImage, EMAIL_RE, MAX_IMAGE_BYTES, slugify, esc } from "./util.js";
 import { contentHash, sealRecord, newVerifyCode, SEAL_VER, fieldsHashOf } from "./esign.js";
 import { isFieldKind, round4, FIELD_KINDS, pageCount } from "./paper.js";
+import { builtinById, isBuiltinId, normalizeTemplate, extractVars, applyVars, resolveFieldPages } from "./templates.js";
 import { turnstileVerify } from "./turnstile.js";
 import { planOf } from "./plans.js";
 import { seedDemo } from "./demoContent.js";
@@ -683,7 +684,30 @@ export async function adminAddAdmin(ctx) {
 // ---------- 전자서명 ----------
 export async function adminCreateDocument(ctx) {
   const { db, form, base, assoc, user } = ctx;
-  const title = cap((form.get("title") || "").trim(), 200), body = cap((form.get("body") || "").trim(), 20000);
+  const title = cap((form.get("title") || "").trim(), 200);
+  // 서식에서 만들기 — 본문의 {{빈칸}} 을 입력값으로 치환하고, 배치까지 그대로 복사한다.
+  const tplId = (form.get("template") || "").trim();
+  let tpl = null, tplBody = "", partyMap = [];
+  if (tplId) {
+    const src = isBuiltinId(tplId) ? builtinById(tplId) : await D.getTemplate(db, Number(tplId) || 0);
+    if (!src) return back(base + "/admin/documents", "서식을 찾을 수 없습니다.", true);
+    if (!isBuiltinId(tplId) && src.association_id !== 0 && src.association_id !== assoc.id)
+      return back(base + "/admin/documents", "다른 상인회의 서식은 쓸 수 없습니다.", true);
+    tpl = normalizeTemplate(src);
+    const vals = {};
+    for (const v of tpl.vars) vals[v] = cap((form.get("var_" + v) || "").replace(/[\x00-\x1f\x7f]/g, " ").trim(), 200);
+    tplBody = applyVars(tpl.body, vals);
+    const members = await D.listUsersByAssociation(db, assoc.id, "MERCHANT");
+    const valid = new Set(members.map((m) => m.id));
+    const n = Math.max(1, tpl.parties.length);
+    for (let i = 0; i < n; i++) {
+      const id = Number(form.get("party_" + i)) || 0;
+      if (id && !valid.has(id)) return back(base + "/admin/documents", "이 상인회 회원만 당사자로 지정할 수 있습니다.", true);
+      partyMap.push(id);
+    }
+    if (!partyMap.some(Boolean)) return back(base + "/admin/documents", "당사자를 한 명 이상 지정해 주세요.", true);
+  }
+  const body = tpl ? cap(tplBody, 20000) : cap((form.get("body") || "").trim(), 20000);
   if (!title || !body) return back(base + "/admin/documents", "제목과 본문을 입력하세요.", true);
   const ordered = form.get("ordered") === "1" ? 1 : 0;
   let dueDate = ""; const rawDue = (form.get("due_date") || "").trim();
@@ -706,20 +730,28 @@ export async function adminCreateDocument(ctx) {
   const docHash = attHash ? await contentHash(`${body}\n--attachment--\n${attHash}`) : await contentHash(body);
   const doc = await D.createDocument(db, { associationId: assoc.id, title, body, contentHash: docHash, createdBy: user.id, ordered, dueDate });
   if (attKey) await D.setDocumentAttachment(db, doc.id, attKey, attName, attHash);
+  // 서식이면 당사자 지정 순서가 곧 서명 순서이고, 배치는 당사자 → 실제 회원으로 옮겨 붙인다
+  if (tpl) {
+    const signers = partyMap.filter(Boolean);
+    await D.createSignatureRequests(db, doc.id, signers);
+    const pages = pageCount(body);
+    const placed = resolveFieldPages(tpl.fields, pages).map((f) => ({
+      kind: f.kind, label: f.label || "", page: f.page,
+      x: round4(f.x), y: round4(f.y), w: round4(f.w), h: round4(f.h),
+      assignee: partyMap[f.party | 0] || 0, required: f.required ? 1 : 0,
+    })).filter((f) => isFieldKind(f.kind) && f.x + f.w <= 1.0001 && f.y + f.h <= 1.0001);
+    if (placed.length) await D.replaceFields(db, doc.id, placed);
+    const recips = (await D.listUsersByAssociation(db, assoc.id, "MERCHANT")).filter((m) => signers.includes(m.id));
+    await notifyNewDocument(ctx, doc, title, dueDate, ordered, recips);
+    await audit(ctx, "서명문서생성", `${title} (서식: ${tpl.title})`);
+    return redirect(`${base}/admin/documents/${doc.id}/fields?msg=${encodeURIComponent("서식으로 문서를 만들었습니다. 서명 자리를 확인하고 저장하세요.")}`);
+  }
   const target = form.get("target");
   const members = await D.listUsersByAssociation(db, assoc.id, "MERCHANT");
   let recipients = [];
   if (target === "all") { recipients = members; await D.createSignatureRequests(db, doc.id, members.map((m) => m.id)); }
   else if (target === "select") { const valid = new Map(members.map((m) => [m.id, m])); const chosen = form.getAll("members").map(Number).filter((id) => valid.has(id)); recipients = chosen.map((id) => valid.get(id)); await D.createSignatureRequests(db, doc.id, chosen); }
-  // 서명 요청 이메일 (RESEND 설정 시) — 실패해도 문서 생성은 유효
-  if (emailEnabled(ctx.env) && recipients.length) {
-    const origin = new URL(ctx.request.url).origin;
-    await Promise.all(recipients.filter((m) => m.email).map((m) => sendEmail(ctx.env, {
-      to: m.email,
-      subject: `[${assoc.name}] 전자서명 요청 — ${title}`,
-      html: mailShell(`${esc(assoc.name)} 전자서명`, `<p>${esc(m.name || "회원")}님, 서명이 필요한 문서가 도착했습니다.</p><p><b>${esc(title)}</b>${dueDate ? ` (기한: ${dueDate})` : ""}${ordered ? " · 순차 서명 문서입니다" : ""}</p>${mailButton(`${origin}${base}/sign`, "서명하러 가기")}`),
-    }).catch(() => {})));
-  }
+  await notifyNewDocument(ctx, doc, title, dueDate, ordered, recipients);
   await audit(ctx, "서명문서생성", title);
   return back(base + "/admin/documents", ordered ? "순차 서명 문서를 생성했습니다." : "문서를 생성했습니다.");
 }
@@ -856,6 +888,57 @@ export async function adminCloseDocument(ctx) {
   if (d && d.association_id === assoc.id) { await D.closeDocument(db, d.id); await audit(ctx, "서명문서마감", d.title); }
   return back(base + "/admin/documents", "문서를 마감했습니다.");
 }
+// 서명 요청 안내 메일 — 실패해도 문서 생성 자체는 유효하므로 되돌리지 않는다
+async function notifyNewDocument(ctx, doc, title, dueDate, ordered, recipients) {
+  if (!emailEnabled(ctx.env) || !recipients || !recipients.length) return;
+  const { assoc, base } = ctx;
+  const origin = new URL(ctx.request.url).origin;
+  await Promise.all(recipients.filter((m) => m.email).map((m) => sendEmail(ctx.env, {
+    to: m.email,
+    subject: `[${assoc.name}] 전자서명 요청 — ${title}`,
+    html: mailShell(`${esc(assoc.name)} 전자서명`, `<p>${esc(m.name || "회원")}님, 서명이 필요한 문서가 도착했습니다.</p><p><b>${esc(title)}</b>${dueDate ? ` (기한: ${dueDate})` : ""}${ordered ? " · 순차 서명 문서입니다" : ""}</p>${mailButton(`${origin}${base}/sign`, "서명하러 가기")}`),
+  }).catch(() => {})));
+}
+
+// 만든 문서를 서식으로 저장 — 본문과 배치를 함께 보관해 다음부터 그대로 찍어낸다.
+export async function adminSaveTemplate(ctx) {
+  const { db, form, base, assoc, user } = ctx;
+  const to = base + "/admin/templates";
+  const title = cap((form.get("title") || "").trim(), 200);
+  const summary = cap((form.get("summary") || "").trim(), 120);
+  const d = await D.getDocument(db, Number(form.get("document")) || 0);
+  if (!title) return back(to, "서식 이름을 입력하세요.", true);
+  if (!d || d.association_id !== assoc.id) return back(to, "원본 문서를 찾을 수 없습니다.", true);
+  if (await D.countTemplates(db, assoc.id) >= 50) return back(to, "서식은 최대 50개까지 저장할 수 있습니다.", true);
+  // 담당자(회원 id)는 서식에 남기지 않는다 — 다음 계약은 다른 사람이 서명한다.
+  // 대신 '몇 번째 당사자' 인지만 남겨 두고, 문서를 만들 때 실제 사람을 연결한다.
+  const rows = await D.listFields(db, d.id);
+  const order = [];
+  for (const f of rows) if (f.assignee && !order.includes(f.assignee)) order.push(f.assignee);
+  const names = await D.listRequestStatus(db, d.id);
+  const parties = order.length
+    ? order.map((id, i) => { const u = names.find((n) => n.id === id); return u ? u.name : `당사자${i + 1}`; })
+    : ["서명자"];
+  const pages = pageCount(d.body);
+  const fields = rows.map((f) => ({
+    kind: f.kind, label: f.label, w: round4(f.w), h: round4(f.h), x: round4(f.x), y: round4(f.y),
+    // 마지막 쪽에 있던 자리는 '끝장' 으로 저장 — 본문 길이가 달라져도 서명란이 끝에 붙는다
+    page: f.page === pages - 1 ? -1 : f.page,
+    party: Math.max(0, order.indexOf(f.assignee)), required: f.required ? 1 : 0,
+  }));
+  await D.createTemplate(db, { associationId: assoc.id, title, summary, body: d.body, fields, parties, ordered: d.ordered, createdBy: user.id });
+  await audit(ctx, "서식저장", title);
+  return back(to, `'${title}' 서식으로 저장했습니다. 본문의 바뀌는 값을 {{변수}} 로 고치면 다음부터 그 칸만 채우면 됩니다.`);
+}
+export async function adminDeleteTemplate(ctx) {
+  const { db, base, assoc, params } = ctx;
+  const t = await D.getTemplate(db, Number(params.id) || 0);
+  if (!t || t.association_id !== assoc.id) return back(base + "/admin/templates", "서식을 찾을 수 없습니다.", true);
+  await D.deleteTemplate(db, t.id, assoc.id);
+  await audit(ctx, "서식삭제", t.title);
+  return back(base + "/admin/templates", "서식을 삭제했습니다.");
+}
+
 // 계약서 필드 배치 저장 — 편집기가 보낸 좌표 묶음을 통째로 교체한다.
 // 서명이 하나라도 시작되면 잠근다: 서명자가 확인한 지면이 사후에 바뀌면 봉인의 의미가 사라진다.
 const MAX_FIELDS = 200;
