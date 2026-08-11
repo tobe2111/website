@@ -321,6 +321,20 @@ CREATE INDEX IF NOT EXISTS idx_notices_assoc ON notices(association_id);
 CREATE INDEX IF NOT EXISTS idx_events_assoc ON events(association_id);
 CREATE INDEX IF NOT EXISTS idx_users_assoc ON users(association_id);
 
+-- 서명 본인확인 OTP (휴대폰 인증번호). 코드는 해시로만 저장하고 짧게 만료된다.
+CREATE TABLE IF NOT EXISTS sign_otp (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  code_hash   TEXT NOT NULL,
+  phone       TEXT NOT NULL DEFAULT '',   -- 발송된 번호(마스킹 표시용)
+  attempts    INTEGER NOT NULL DEFAULT 0,
+  verified_at TEXT NOT NULL DEFAULT '',
+  expires_at  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (document_id, user_id)
+);
+
 CREATE TABLE IF NOT EXISTS settings (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL DEFAULT ''
@@ -374,7 +388,7 @@ CREATE INDEX IF NOT EXISTS idx_msglog_assoc ON message_log(association_id, creat
 
 // 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
 // 마이그레이션 세대 — migrateColumns 에 단계를 추가할 때마다 +1
-export const SCHEMA_VERSION = "20";
+export const SCHEMA_VERSION = "21";
 
 export async function ensureSchema(db) {
   const has = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='associations'").first();
@@ -484,6 +498,11 @@ async function migrateColumns(db) {
     ["message_log", `CREATE TABLE message_log (id INTEGER PRIMARY KEY AUTOINCREMENT, association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE, channel TEXT NOT NULL DEFAULT 'alimtalk', kind TEXT NOT NULL DEFAULT '', recipient TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'sent', cost INTEGER NOT NULL DEFAULT 0, detail TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
       ["CREATE INDEX IF NOT EXISTS idx_msglog_assoc ON message_log(association_id, created_at)"]],
   ];
+  // v21: 서명 본인확인 OTP
+  const otpTbl = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='sign_otp'").first();
+  if (!otpTbl) {
+    await db.prepare(`CREATE TABLE sign_otp (id INTEGER PRIMARY KEY AUTOINCREMENT, document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, code_hash TEXT NOT NULL, phone TEXT NOT NULL DEFAULT '', attempts INTEGER NOT NULL DEFAULT 0, verified_at TEXT NOT NULL DEFAULT '', expires_at TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE (document_id, user_id))`).run();
+  }
   // v19: 서명 사슬 — 직전 봉인값·봉인 버전 (기존 서명은 seal_ver=1 로 남아 그대로 검증됨)
   const scols = (await db.prepare("PRAGMA table_info(signatures)").all()).results || [];
   if (scols.length && !scols.some((c) => c.name === "prev_hash")) {

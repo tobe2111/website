@@ -1350,3 +1350,6 @@ a.cc-val:hover{color:var(--brand-700)}
 .hint-steps{margin:8px 0 6px 18px;line-height:1.9;font-size:.9rem}
 .hint-steps code{font-size:.82rem}
 .txt-warn{color:var(--no-fg)}
+.otp-gate{margin:18px 0}
+.otp-ok{margin:14px 0;padding:10px 14px;background:var(--ok-bg);color:var(--ok-fg);border-radius:var(--r-md);font-size:.9rem;font-weight:600}
+.otp-toggle{margin:14px 0 6px}

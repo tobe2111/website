@@ -1,6 +1,6 @@
 // 폼 처리 핸들러 (POST). ctx.form 은 파싱된 FormData.
 import * as D from "./db.js";
-import { verifyPassword, hashPassword, hmacSign, hmacVerify, b64uFromBytes, bytesFromB64u, sha256HexBytes } from "./crypto.js";
+import { verifyPassword, hashPassword, hmacSign, hmacVerify, b64uFromBytes, bytesFromB64u, sha256HexBytes, sha256Hex } from "./crypto.js";
 import { sendEmail, emailEnabled, mailShell, mailButton } from "./email.js";
 import { sessionTokenForUser, sessionCookie, clearSessionCookie } from "./auth.js";
 import { back, redirect } from "./http.js";
@@ -12,7 +12,7 @@ import { turnstileVerify } from "./turnstile.js";
 import { planOf } from "./plans.js";
 import { seedDemo } from "./demoContent.js";
 import { seedStarter } from "./starterContent.js";
-import { TEMPLATE_KEYS, sendMany, notifyEnabled } from "./notify.js";
+import { TEMPLATE_KEYS, sendMany, sendOne, notifyEnabled } from "./notify.js";
 
 const BOARD_MAX_IMAGES = 6;
 const MAX_EMBEDS = 30;
@@ -695,6 +695,63 @@ export async function adminCreateDocument(ctx) {
   await audit(ctx, "서명문서생성", title);
   return back(base + "/admin/documents", ordered ? "순차 서명 문서를 생성했습니다." : "문서를 생성했습니다.");
 }
+// ---------- 서명 본인확인 OTP ----------
+// 목적: "로그인한 계정 = 본인"이라는 전제를 보강한다. 계정을 빌려줬거나 세션이 탈취돼도
+//       본인 휴대폰이 없으면 서명을 완성할 수 없다.
+export const otpRequired = async (db) => (await D.getSetting(db, "esign_otp")) === "1";
+
+export async function signOtpSend(ctx) {
+  const { db, env, base, assoc, user, params } = ctx;
+  const d = await D.getDocument(db, Number(params.id));
+  if (!d || d.association_id !== assoc.id) return back(base + "/sign", "문서를 찾을 수 없습니다.", true);
+  if (d.closed || D.isPastDue(d)) return back(base + "/sign", "서명할 수 없는 문서입니다.", true);
+  if (!(await D.canReceiveSign(db, d.id, user.id))) return back(base + "/sign", "이 문서의 서명 대상이 아닙니다.", true);
+  if (!D.isValidPhone(user.phone || "")) return back(base + "/sign/" + d.id, "본인확인에 쓸 휴대폰이 없습니다. 계정 설정에서 번호를 등록해 주세요.", true);
+  // 재발송 남용 방지 — 직전 발송 후 60초 이내면 거절 (비용·문자 폭탄 방지)
+  const cur = await D.getSignOtp(db, d.id, user.id);
+  if (cur && Date.parse(cur.created_at.replace(" ", "T") + "Z") > Date.now() - 60 * 1000)
+    return back(base + "/sign/" + d.id, "인증번호를 방금 보냈습니다. 1분 뒤에 다시 요청해 주세요.", true);
+
+  const code = String(Math.floor(100000 + Math.random() * 900000)); // 6자리
+  await D.upsertSignOtp(db, { documentId: d.id, userId: user.id, codeHash: await sha256Hex(`otp|${d.id}|${user.id}|${code}`), phone: user.phone });
+  const r = await sendOne(env, db, {
+    assoc, kind: "sign_request", to: user.phone,
+    text: `[${assoc.name}] 전자서명 본인확인 번호는 ${code} 입니다. ${D.OTP_TTL_MIN}분 안에 입력해 주세요.`,
+  });
+  if (!r.ok) {
+    await D.clearSignOtp(db, d.id, user.id);
+    return back(base + "/sign/" + d.id, r.insufficient
+      ? "알림 크레딧이 부족해 인증번호를 보내지 못했습니다. 상인회 관리자에게 문의해 주세요."
+      : `인증번호 발송에 실패했습니다. (${r.error})`, true);
+  }
+  return back(base + "/sign/" + d.id, `${D.maskPhone(user.phone)} 으로 인증번호를 보냈습니다. ${D.OTP_TTL_MIN}분 안에 입력해 주세요.`);
+}
+
+export async function signOtpVerify(ctx) {
+  const { db, base, assoc, user, form, params } = ctx;
+  const d = await D.getDocument(db, Number(params.id));
+  if (!d || d.association_id !== assoc.id) return back(base + "/sign", "문서를 찾을 수 없습니다.", true);
+  const rec = await D.getSignOtp(db, d.id, user.id);
+  if (!rec) return back(base + "/sign/" + d.id, "먼저 인증번호를 요청해 주세요.", true);
+  if (rec.attempts >= D.OTP_MAX_ATTEMPTS) return back(base + "/sign/" + d.id, "시도 횟수를 초과했습니다. 인증번호를 다시 요청해 주세요.", true);
+  if (Date.parse(rec.expires_at.replace(" ", "T") + "Z") < Date.now())
+    return back(base + "/sign/" + d.id, "인증번호가 만료되었습니다. 다시 요청해 주세요.", true);
+  const input = (form.get("code") || "").replace(/\D/g, "");
+  await D.bumpOtpAttempt(db, rec.id);
+  const ok = input.length === 6 && (await sha256Hex(`otp|${d.id}|${user.id}|${input}`)) === rec.code_hash;
+  if (!ok) return back(base + "/sign/" + d.id, `인증번호가 올바르지 않습니다. (남은 시도 ${Math.max(0, D.OTP_MAX_ATTEMPTS - rec.attempts - 1)}회)`, true);
+  await D.markOtpVerified(db, rec.id);
+  return back(base + "/sign/" + d.id, "본인확인이 완료되었습니다. 아래에서 서명해 주세요.");
+}
+
+// 슈퍼: 서명 본인확인 사용 여부
+export async function superEsignSettings(ctx) {
+  const { db, form } = ctx;
+  await D.setSetting(db, "esign_otp", form.get("esign_otp") === "1" ? "1" : "0");
+  await audit(ctx, "전자서명설정", `본인확인 ${form.get("esign_otp") === "1" ? "사용" : "미사용"}`, null);
+  return back("/super", "전자서명 설정을 저장했습니다.");
+}
+
 // 회원: 서명 거절(반려) — 사유를 남기고 서명 대기에서 빠진다. 되돌리려면 관리자가 문서를 다시 만들어야 한다.
 export async function memberDeclineSign(ctx) {
   const { db, base, assoc, user, form, params } = ctx;
@@ -768,6 +825,11 @@ export async function memberSign(ctx) {
   if (!(await D.canReceiveSign(db, d.id, user.id))) return back(base + "/sign", "이 문서의 서명 대상이 아닙니다.", true);
   if (!(await D.canSignNow(db, d, user.id))) return back(base + "/sign", "앞 순번의 서명이 완료된 후 서명할 수 있습니다.", true);
   if (form.get("consent") !== "1") return back(base + "/sign/" + d.id, "동의 확인란에 체크해 주세요.", true);
+  // 본인확인(OTP)이 켜져 있으면 통과한 사람만 서명할 수 있다 — 화면을 우회한 직접 POST 도 여기서 막힌다
+  if (await otpRequired(db)) {
+    if (!D.isValidPhone(user.phone || "")) return back(base + "/sign/" + d.id, "본인확인용 휴대폰이 등록되어 있지 않습니다.", true);
+    if (!(await D.otpVerifiedRecently(db, d.id, user.id))) return back(base + "/sign/" + d.id, "휴대폰 본인확인을 먼저 완료해 주세요.", true);
+  }
   const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(form.get("signature") || "");
   if (!m) return back(base + "/sign/" + d.id, "서명을 입력해 주세요.", true);
   let bytes; try { bytes = Uint8Array.from(atob(m[1]), (c) => c.charCodeAt(0)); } catch { bytes = null; }

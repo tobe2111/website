@@ -61,3 +61,44 @@ test("문서 첨부 저장·조회", async () => {
   assert.equal(d.attachment, "abc123.pdf");
   assert.equal(d.attachment_name, "임대차계약서.pdf");
 });
+
+// ----- 보안: 봉인 사슬 · OTP -----
+test("서명 사슬: 중간 기록을 지우면 끊긴 지점이 드러난다", async () => {
+  const { verifyChain } = await import("../src/esign.js");
+  const rows = [
+    { id: 1, record_hash: "H1", prev_hash: "", seal_ver: 2 },
+    { id: 2, record_hash: "H2", prev_hash: "H1", seal_ver: 2 },
+    { id: 3, record_hash: "H3", prev_hash: "H2", seal_ver: 2 },
+  ];
+  assert.equal(verifyChain(rows).ok, true);
+  const broken = [rows[0], rows[2]]; // 2번 삭제
+  const r = verifyChain(broken);
+  assert.equal(r.ok, false);
+  assert.equal(r.brokenAt, 3);
+});
+
+test("서명 사슬: 구버전(v1) 서명은 사슬 검사 대상에서 제외돼 계속 유효", async () => {
+  const { verifyChain } = await import("../src/esign.js");
+  const mixed = [
+    { id: 1, record_hash: "H1", prev_hash: "", seal_ver: 1 },
+    { id: 2, record_hash: "H2", prev_hash: "H1", seal_ver: 2 },
+  ];
+  assert.equal(verifyChain(mixed).ok, true, "v1 이 섞여 있어도 사슬이 깨졌다고 하면 안 됨");
+});
+
+test("OTP: 해시로만 저장되고 만료·시도 제한이 걸린다", async () => {
+  const { sha256Hex } = await import("../src/crypto.js");
+  const doc = await D.createDocument(db, { associationId: a.id, title: "T2", body: "b", contentHash: await contentHash("b"), createdBy: u1.id });
+  const code = "123456";
+  await D.upsertSignOtp(db, { documentId: doc.id, userId: u1.id, codeHash: await sha256Hex(`otp|${doc.id}|${u1.id}|${code}`), phone: "01011111111" });
+  const rec = await D.getSignOtp(db, doc.id, u1.id);
+  assert.ok(!String(rec.code_hash).includes(code), "인증번호 평문이 저장되면 안 됨");
+  assert.equal(rec.attempts, 0);
+  assert.equal(rec.verified_at, "");
+  assert.equal(await D.otpVerifiedRecently(db, doc.id, u1.id), false, "확인 전에는 통과로 보면 안 됨");
+  await D.markOtpVerified(db, rec.id);
+  assert.equal(await D.otpVerifiedRecently(db, doc.id, u1.id), true);
+  // 재발송하면 확인 상태가 초기화되어야 함(새 코드로 다시 확인 필요)
+  await D.upsertSignOtp(db, { documentId: doc.id, userId: u1.id, codeHash: "new", phone: "01011111111" });
+  assert.equal(await D.otpVerifiedRecently(db, doc.id, u1.id), false, "재발송 시 확인 상태 초기화");
+});

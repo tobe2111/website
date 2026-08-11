@@ -644,3 +644,26 @@ export const listDocsNeedingRemind = (db) =>
       AND (d.last_remind_at='' OR d.last_remind_at < datetime('now','-20 hour'))
       AND EXISTS (SELECT 1 FROM signature_requests r WHERE r.document_id=d.id AND r.declined_at=''
         AND NOT EXISTS (SELECT 1 FROM signatures s WHERE s.document_id=r.document_id AND s.user_id=r.user_id))`);
+
+// ----- 서명 본인확인 OTP -----
+// 코드는 해시로만 저장(DB 유출 시에도 코드 자체는 노출되지 않음). 5분 만료·5회 시도 제한.
+export const OTP_TTL_MIN = 5;
+export const OTP_MAX_ATTEMPTS = 5;
+export async function upsertSignOtp(db, { documentId, userId, codeHash, phone }) {
+  await run(db, `INSERT INTO sign_otp (document_id, user_id, code_hash, phone, attempts, verified_at, expires_at)
+    VALUES (?,?,?,?,0,'', datetime('now', '+${OTP_TTL_MIN} minutes'))
+    ON CONFLICT(document_id, user_id) DO UPDATE SET
+      code_hash=excluded.code_hash, phone=excluded.phone, attempts=0, verified_at='',
+      expires_at=excluded.expires_at, created_at=datetime('now')`, documentId, userId, codeHash, phone || "");
+}
+export const getSignOtp = (db, documentId, userId) =>
+  first(db, "SELECT * FROM sign_otp WHERE document_id=? AND user_id=?", documentId, userId);
+export const bumpOtpAttempt = (db, id) => run(db, "UPDATE sign_otp SET attempts=attempts+1 WHERE id=?", id);
+export const markOtpVerified = (db, id) => run(db, "UPDATE sign_otp SET verified_at=datetime('now') WHERE id=?", id);
+export const clearSignOtp = (db, documentId, userId) => run(db, "DELETE FROM sign_otp WHERE document_id=? AND user_id=?", documentId, userId);
+// 인증이 유효한가 — 확인 완료 + 30분 이내 (서명 작성 시간 여유)
+export async function otpVerifiedRecently(db, documentId, userId) {
+  const r = await first(db, `SELECT 1 AS ok FROM sign_otp WHERE document_id=? AND user_id=?
+    AND verified_at != '' AND verified_at > datetime('now','-30 minutes')`, documentId, userId);
+  return !!r;
+}

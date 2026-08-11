@@ -2,7 +2,7 @@
 import * as D from "./db.js";
 import { esc, clip, openBadge, openNow, fmtBytes, kstStamp, kstDate, prettyPath } from "./util.js";
 import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG, ORIGIN, assetUrl } from "./render.js";
-import { verifyInviteToken, SALES_STAGES } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
+import { verifyInviteToken, SALES_STAGES, otpRequired } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
 import { html, notFoundResponse, back } from "./http.js";
 import { galleryItem } from "./media-render.js";
 import { priceOf, notifyEnabled, TEMPLATE_KEYS } from "./notify.js";
@@ -1172,17 +1172,34 @@ export async function signForm(ctx) {
       <div class="flash flash-warn">순차 서명 문서입니다. 앞 순번의 서명이 완료되면 서명하실 수 있습니다.</div></div></section>`;
     return html(layout({ title: d.title, assoc, base, user, body: wb, csrf }));
   }
+  // 본인확인(OTP) — 켜져 있으면 인증 전에는 서명 폼을 내주지 않는다
+  const needOtp = await otpRequired(db);
+  const otpDone = needOtp ? await D.otpVerifiedRecently(db, d.id, user.id) : true;
+  const hasPhone = D.isValidPhone(user.phone || "");
+  const otpBlock = !needOtp || otpDone ? "" : `<section class="panel panel-accent otp-gate">
+      <h2 class="panel-title">휴대폰 본인확인</h2>
+      ${hasPhone
+        ? `<p class="panel-hint">본인 확인을 위해 <b>${esc(D.maskPhone(user.phone))}</b> 으로 인증번호를 보냅니다. 확인 후 서명할 수 있습니다.</p>
+           <div class="form-two">
+             <form method="post" action="${base}/sign/${d.id}/otp" class="stack-form compact"><button class="btn btn-ghost btn-sm">인증번호 받기</button></form>
+             <form method="post" action="${base}/sign/${d.id}/otp/verify" class="stack-form compact">
+               <label>인증번호 6자리<input type="text" name="code" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" required autocomplete="one-time-code" /></label>
+               <button class="btn btn-primary btn-sm">확인</button></form></div>`
+        : `<div class="flash flash-warn">본인확인용 휴대폰이 등록되어 있지 않습니다. <a href="/account">계정 설정</a>에서 번호를 등록한 뒤 다시 시도해 주세요.</div>`}
+    </section>`;
   const body = `<section class="section page-top"><div class="container narrow"><a href="${base}/sign" class="back-link">← 서명 목록</a>
     <h1 class="article-title">${esc(d.title)}</h1>${meta ? `<p>${meta}</p>` : ""}
     <div class="doc-body">${docBody(d.body)}</div>
     ${d.attachment ? `<p class="doc-attach">📎 계약서 원문: <a href="${esc(mediaUrl(d.attachment))}" target="_blank" rel="noopener">${esc(d.attachment_name || "계약서.pdf")}</a> <small>— 이 파일의 내용도 해시에 포함되어 봉인됩니다</small></p>` : ""}
     <p class="doc-hash">문서 해시: <code>${esc(d.content_hash)}</code></p>${flashOf(query)}
+    ${otpBlock}
+    ${otpDone ? `${needOtp ? '<p class="otp-ok">✅ 휴대폰 본인확인 완료 — 이 서명에는 본인확인 기록이 함께 남습니다.</p>' : ""}
     <form method="post" action="${base}/sign/${d.id}" class="stack-form sign-form" id="signForm">
       <label>서명<div class="sign-pad-wrap"><canvas id="signPad" class="sign-pad" width="600" height="200"></canvas><button type="button" class="btn btn-ghost btn-xs sign-clear" id="signClear">지우기</button></div></label>
       <input type="hidden" name="signature" id="signatureData" />
       <label>서명자 성명<input type="text" name="signer_name" value="${esc(user.name)}" required /></label>
       <label class="check"><input type="checkbox" name="consent" value="1" required /> 위 내용을 확인했으며 본인이 전자서명하는 데 동의합니다.</label>
-      <button class="btn btn-primary btn-block" id="signSubmit">전자서명 제출</button></form>
+      <button class="btn btn-primary btn-block" id="signSubmit">전자서명 제출</button></form>` : ""}
     <p class="auth-note">서명 시 서명자·시각·IP·기기·문서해시가 기록되고 Ed25519 디지털 서명으로 봉인됩니다.</p>
     <details class="decline-box"><summary>이 문서에 동의할 수 없습니다 (거절)</summary>
       <form method="post" action="${base}/sign/${d.id}/decline" class="stack-form compact" data-confirm="거절하면 이 문서는 서명 목록에서 사라집니다. 계속할까요?">
@@ -1412,6 +1429,7 @@ export async function superConsole(ctx) {
   const keyMode = keyStorage(env);
   const keyFp = await publicKeyFingerprint(env).catch(() => "(확인 불가)");
   const chain = verifyChain(await D.listSignatureChain(db));
+  const otpOn = (await D.getSetting(db, "esign_otp")) === "1";
   const securityPanel = `<section class="panel ${keyMode === "secret" ? "" : "panel-warn"}"><h2 class="panel-title">전자서명 보안
       ${keyMode === "secret" ? '<span class="badge badge-ok">키 안전 보관</span>' : '<span class="badge badge-no">키가 DB에 있음</span>'}
       ${chain.ok ? '<span class="badge badge-ok">서명 사슬 정상</span>' : '<span class="badge badge-no">사슬 끊김</span>'}</h2>
@@ -1428,6 +1446,10 @@ export async function superConsole(ctx) {
     <table class="verify-table"><tr><th>공개키 지문</th><td><code>${esc(keyFp)}</code></td></tr>
       <tr><th>공개키 배포</th><td><a href="/.well-known/esign-public-key" target="_blank"><code>/.well-known/esign-public-key</code></a> — 제3자 독립 검증용</td></tr>
       <tr><th>서명 사슬</th><td>${chain.ok ? `연결 정상 (${chain.length}건)` : `<b class="txt-warn">id ${esc(String(chain.brokenAt))} 지점에서 끊김 — 기록이 삭제·변조되었을 수 있습니다</b>`}</td></tr></table>
+    <form method="post" action="/super/esign-settings" class="stack-form compact otp-toggle">
+      <label class="check"><input type="checkbox" name="esign_otp" value="1"${otpOn ? " checked" : ""} data-autosubmit /> 서명 시 <b>휴대폰 본인확인(인증번호)</b> 요구</label>
+      <p class="panel-hint">켜면 서명 직전 회원 휴대폰으로 6자리 인증번호를 보내고, 확인해야 서명이 완료됩니다.
+        인증번호 1건도 알림톡 크레딧에서 차감됩니다(상인회 부담). 계정 도용·대리 서명을 막는 가장 효과적인 수단입니다.</p></form>
     <p class="panel-hint">지문을 따로 적어 두면, 키가 몰래 교체됐는지 확인할 수 있습니다. 서명 사슬은 각 서명이 직전 서명의 봉인값을 포함해 엮인 구조라 중간 기록을 지우면 끊깁니다.</p></section>`;
 
   const notifySuperPanel = `<section class="panel panel-accent"><h2 class="panel-title">알림톡 판매 <span class="badge badge-brand">건당 ${unitPrice.toLocaleString()}원</span>${pendCredits.length ? ` <span class="badge badge-wait">충전 대기 ${pendCredits.length}</span>` : ""}</h2>
