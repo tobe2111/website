@@ -195,7 +195,7 @@ test("마진 정산: 발송 시점 원가를 스냅샷해 나중에 원가를 �
   const a1 = await D.createAssociation(db, { slug: "m1", name: "정산A" });
   const a2 = await D.createAssociation(db, { slug: "m2", name: "정산B" });
   await D.setSetting(db, "price_alimtalk", "22");
-  await D.setSetting(db, "cost_alimtalk", "9");
+  await D.setSetting(db, "cost_alimtalk_jeon", "650"); // 6.5원
   await D.setSetting(db, "tpl_sign_request", "TPL_X");
   await D.setUnitPrice(db, a1.id, 15);            // 볼륨 할인 적용
   await D.addCredit(db, a1.id, 10000); await D.addCredit(db, a2.id, 10000);
@@ -210,14 +210,14 @@ test("마진 정산: 발송 시점 원가를 스냅샷해 나중에 원가를 �
   const rows = await D.monthlySettlement(db, month);
   const r1 = rows.find((r) => r.id === a1.id), r2 = rows.find((r) => r.id === a2.id);
   assert.equal(r1.revenue, 60, "전용가 15원 × 4건");
-  assert.equal(r1.cost_base, 36, "원가 9원 × 4건");
+  assert.equal(r1.cost_base, 2600, "원가 6.5원 × 4건 = 26원 = 2600전");
   assert.equal(r2.revenue, 44, "기본가 22원 × 2건");
-  assert.equal(r1.revenue - r1.cost_base, 24, "마진 = 매출 − 원가");
+  assert.equal(r1.revenue - N.jeonToWon(r1.cost_base), 34, "마진 = 매출 60 − 원가 26 = 34원");
 
   // 원가를 올려도 이미 발송된 건의 원가는 그대로여야 한다
-  await D.setSetting(db, "cost_alimtalk", "12");
+  await D.setSetting(db, "cost_alimtalk_jeon", "1200"); // 12원으로 인상
   const after = await D.monthlySettlement(db, month);
-  assert.equal(after.find((r) => r.id === a1.id).cost_base, 36, "과거 원가는 스냅샷이라 불변");
+  assert.equal(after.find((r) => r.id === a1.id).cost_base, 2600, "과거 원가는 스냅샷이라 불변");
 
   // 실패 건은 매출·원가 어디에도 잡히지 않는다
   const before = (await D.monthlySettlement(db, month)).find((r) => r.id === a2.id).sent;
@@ -225,4 +225,26 @@ test("마진 정산: 발송 시점 원가를 스냅샷해 나중에 원가를 �
   try { await N.sendOne(envOk, db, { assoc: a2, kind: "sign_request", to: "01033334444", text: "t" }); }
   finally { globalThis.fetch = of; }
   assert.equal((await D.monthlySettlement(db, month)).find((r) => r.id === a2.id).sent, before, "실패 건은 정산에서 제외");
+});
+
+test("소수점 원가(6.5원)를 반올림 없이 정확히 집계한다", async () => {
+  // 정수 '원'으로 저장하면 6.5→6 또는 7 로 반올림돼 1,000건에 500원이 어긋난다.
+  assert.equal(N.wonToJeon(6.5), 650);
+  assert.equal(N.jeonToWon(650), 6.5);
+  const a = await D.createAssociation(db, { slug: "dec", name: "소수점" });
+  await D.setSetting(db, "cost_alimtalk_jeon", "650");
+  await D.setSetting(db, "price_alimtalk", "22");
+  await D.setSetting(db, "tpl_sign_request", "TPL_D");
+  await D.addCredit(db, a.id, 10000);
+  const envOk = { ...env, ALIGO_API_KEY: "k", ALIGO_USER_ID: "u", ALIGO_SENDER_KEY: "s", ALIGO_SENDER: "02" };
+  const of = globalThis.fetch;
+  globalThis.fetch = async (u) => ({ ok: true, status: 200, json: async () => String(u).includes("token/create") ? { code: 0, token: "T" } : { code: 0, info: { mid: 1 } } });
+  try { for (let i = 0; i < 100; i++) await N.sendOne(envOk, db, { assoc: a, kind: "sign_request", to: "01011112222", text: "t" }); }
+  finally { globalThis.fetch = of; }
+  const month = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 7);
+  const row = (await D.monthlySettlement(db, month)).find((r) => r.id === a.id);
+  assert.equal(row.sent, 100);
+  assert.equal(row.revenue, 2200, "판매가 22원 × 100건");
+  assert.equal(N.jeonToWon(row.cost_base), 650, "원가 6.5원 × 100건 = 650원 (반올림 손실 없음)");
+  assert.equal(row.revenue - N.jeonToWon(row.cost_base), 1550, "마진 1,550원");
 });

@@ -394,7 +394,7 @@ CREATE TABLE IF NOT EXISTS message_log (
   recipient      TEXT NOT NULL DEFAULT '',
   status         TEXT NOT NULL DEFAULT 'sent',      -- sent|failed
   cost           INTEGER NOT NULL DEFAULT 0,        -- 상인회에게 받은 판매가(원)
-  cost_base      INTEGER NOT NULL DEFAULT 0,        -- 우리가 CPaaS 에 낸 원가(원) — 발송 시점 스냅샷
+  cost_base      INTEGER NOT NULL DEFAULT 0,        -- 원가 스냅샷 (전 단위 = 0.01원. 알림톡 6.5원 → 650)
   ref            TEXT NOT NULL DEFAULT '',          -- 대사(對査)용 참조 — 이 플랫폼 발송임을 식별
   detail         TEXT NOT NULL DEFAULT '',
   created_at     TEXT NOT NULL DEFAULT (datetime('now'))

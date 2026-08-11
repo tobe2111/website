@@ -5,7 +5,7 @@ import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG, ORIGIN, as
 import { verifyInviteToken, SALES_STAGES, otpRequired } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
 import { html, notFoundResponse, back } from "./http.js";
 import { galleryItem } from "./media-render.js";
-import { priceOf, costOf, notifyEnabled, TEMPLATE_KEYS } from "./notify.js";
+import { priceOf, costOf, jeonToWon, notifyEnabled, TEMPLATE_KEYS } from "./notify.js";
 import { providerLabel } from "./embed.js";
 import { verifySignature, publicKeyJwk, publicKeyFingerprint, keyStorage, algorithm, verifyChain, verifyAnchor } from "./esign.js";
 import { text } from "./http.js";
@@ -1484,13 +1484,15 @@ export async function superConsole(ctx) {
   const selMonth = (ctx.query && /^\d{4}-\d{2}$/.test(ctx.query.get("m") || "") ? ctx.query.get("m") : null)
     || (months[0] && months[0].m) || new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 7);
   const [settle, unitCost] = await Promise.all([D.monthlySettlement(db, selMonth), costOf(db, "alimtalk")]);
-  const sT = settle.reduce((a, r) => ({ sent: a.sent + r.sent, rev: a.rev + r.revenue, base: a.base + r.cost_base }), { sent: 0, rev: 0, base: 0 });
+  // cost_base 는 전(0.01원) 단위 → 합산 후 원으로 환산해야 반올림 오차가 없다
+  const sT = settle.reduce((a, r) => ({ sent: a.sent + r.sent, rev: a.rev + r.revenue, base: a.base + jeonToWon(r.cost_base) }), { sent: 0, rev: 0, base: 0 });
   const margin = sT.rev - sT.base;
   const marginPct = sT.rev > 0 ? Math.round((margin / sT.rev) * 100) : 0;
   const settleRows = settle.length ? settle.map((r) => {
-    const m = r.revenue - r.cost_base;
+    const cb = jeonToWon(r.cost_base);
+    const m = r.revenue - cb;
     return `<tr><td>${esc(r.name)}</td><td>${r.sent.toLocaleString()}건</td>
-      <td>${r.revenue.toLocaleString()}원</td><td>${r.cost_base.toLocaleString()}원</td>
+      <td>${r.revenue.toLocaleString()}원</td><td>${cb.toLocaleString()}원</td>
       <td><b>${m.toLocaleString()}원</b></td><td>${r.revenue > 0 ? Math.round((m / r.revenue) * 100) : 0}%</td></tr>`;
   }).join("") : `<tr><td colspan="6" class="empty">이 달 발송 내역이 없습니다.</td></tr>`;
   const monthOpts = (months.length ? months.map((x) => x.m) : [selMonth]).map((m) =>
@@ -1507,8 +1509,8 @@ export async function superConsole(ctx) {
     <div class="table-scroll"><table class="admin-table"><thead><tr><th>상인회</th><th>발송</th><th>매출</th><th>원가</th><th>마진</th><th>마진율</th></tr></thead><tbody>${settleRows}</tbody></table></div>
     <div class="form-divider">원가 설정 (CPaaS 실제 계약가)</div>
     <form method="post" action="/super/notify-cost" class="stack-form compact">
-      <label class="mini-label">알림톡 원가 (원/건)<input type="number" name="cost_alimtalk" value="${unitCost}" min="0" max="1000" required /></label>
-      <p class="panel-hint">알리고 청구서의 실제 건당 단가를 넣으세요. <b>발송 시점의 원가가 로그에 함께 저장</b>되므로,
+      <label class="mini-label">알림톡 원가 (원/건)<input type="number" name="cost_alimtalk" value="${unitCost}" min="0" max="1000" step="0.1" required /></label>
+      <p class="panel-hint">알리고 청구서의 실제 건당 단가를 넣으세요. <b>소수점 입력 가능</b>(알림톡은 보통 6.5원). <b>발송 시점의 원가가 로그에 함께 저장</b>되므로,
         나중에 원가를 바꿔도 지난 달 마진은 그대로 유지됩니다.</p>
       <button class="btn btn-primary btn-sm">원가 저장</button></form>
     <div class="form-divider">공유 계정 대사(對査)</div>

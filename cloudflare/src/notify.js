@@ -12,14 +12,21 @@ import * as D from "./db.js";
 // ---------- 설정 ----------
 export const notifyEnabled = (env) => !!(env.ALIGO_API_KEY && env.ALIGO_USER_ID && env.ALIGO_SENDER_KEY && env.ALIGO_SENDER);
 
-const DEFAULT_PRICE = { alimtalk: 22, sms: 33 }; // 판매가 기본값 (원/건)
-const DEFAULT_COST = { alimtalk: 9, sms: 20 };   // 원가 기본값 (원/건) — CPaaS 실제 계약가로 슈퍼가 수정
-// 원가 — 마진 계산과 정산의 기준. 발송 시점 값을 로그에 스냅샷으로 남긴다.
-export async function costOf(db, channel) {
-  const v = await D.getSetting(db, channel === "sms" ? "cost_sms" : "cost_alimtalk");
+const DEFAULT_PRICE = { alimtalk: 22, sms: 33 }; // 판매가 기본값 (원/건, 정수)
+
+// 원가는 소수점이 있다(알림톡 6.5원 등). 정수 '원'으로 반올림하면 1,000건에 500원이 어긋나므로
+// 내부적으로 '전(錢) = 0.01원' 단위 정수로 보관·집계하고, 화면에만 원으로 환산해 보여준다.
+const DEFAULT_COST_JEON = { alimtalk: 650, sms: 2000 }; // 6.50원 / 20.00원
+export const jeonToWon = (j) => (Number(j) || 0) / 100;
+export const wonToJeon = (w) => Math.round((Number(w) || 0) * 100);
+// 원가(전 단위). 마진 계산·정산의 기준이며 발송 시점 값을 로그에 스냅샷으로 남긴다.
+export async function costJeonOf(db, channel) {
+  const v = await D.getSetting(db, channel === "sms" ? "cost_sms_jeon" : "cost_alimtalk_jeon");
   const n = parseInt(v || "", 10);
-  return Number.isFinite(n) && n >= 0 ? n : DEFAULT_COST[channel === "sms" ? "sms" : "alimtalk"];
+  return Number.isFinite(n) && n >= 0 ? n : DEFAULT_COST_JEON[channel === "sms" ? "sms" : "alimtalk"];
 }
+// 화면 표시용 (원)
+export const costOf = async (db, channel) => jeonToWon(await costJeonOf(db, channel));
 // 대사(對査) 참조 — CPaaS 계정을 다른 서비스와 공유할 때, 이 플랫폼 발송을 식별하는 표식.
 // 알리고 대시보드는 '템플릿 코드'로 필터할 수 있으므로 그 코드를 함께 남겨 대조 기준으로 삼는다.
 export const REF_PREFIX = "SCM"; // Seocho/Sangin Commerce Messaging
@@ -101,7 +108,7 @@ export async function sendOne(env, db, { assoc, kind, to, text, buttonName, butt
     return { ok: false, error: "템플릿 코드가 설정되지 않았습니다" };
   }
   const price = await priceOf(db, "alimtalk", assoc.id);
-  const base = await costOf(db, "alimtalk");
+  const baseJeon = await costJeonOf(db, "alimtalk"); // 전 단위 — 반올림 손실 없음
   const ref = `${REF_PREFIX}-${assoc.id}-${tpl}`; // 대사용: 어느 플랫폼·상인회·템플릿인지
   const paid = await D.spendCredit(db, assoc.id, price, `알림톡 ${kind}`);
   if (!paid.ok) {
@@ -117,8 +124,8 @@ export async function sendOne(env, db, { assoc, kind, to, text, buttonName, butt
     return { ok: false, error: r.error };
   }
   // 원가를 함께 남겨야 나중에 단가를 바꿔도 과거 마진이 흔들리지 않는다
-  await D.logMessage(db, { associationId: assoc.id, kind, recipient: masked, status: "sent", cost: price, costBase: base, ref, detail: r.id ? `mid:${r.id}` : "" });
-  return { ok: true, cost: price, costBase: base };
+  await D.logMessage(db, { associationId: assoc.id, kind, recipient: masked, status: "sent", cost: price, costBase: baseJeon, ref, detail: r.id ? `mid:${r.id}` : "" });
+  return { ok: true, cost: price, costBaseJeon: baseJeon };
 }
 
 // 여러 명에게 발송. 잔액이 떨어지면 그 지점에서 멈추고 남은 인원을 알려준다(부분 성공 허용).

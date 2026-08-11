@@ -12,7 +12,7 @@ import { turnstileVerify } from "./turnstile.js";
 import { planOf } from "./plans.js";
 import { seedDemo } from "./demoContent.js";
 import { seedStarter } from "./starterContent.js";
-import { TEMPLATE_KEYS, sendMany, sendOne, notifyEnabled } from "./notify.js";
+import { TEMPLATE_KEYS, sendMany, sendOne, notifyEnabled, wonToJeon } from "./notify.js";
 
 const BOARD_MAX_IMAGES = 6;
 const MAX_EMBEDS = 30;
@@ -141,11 +141,13 @@ export async function superCreditApprove(ctx) {
 // 슈퍼: 알림톡 원가 설정 (마진 계산 기준)
 export async function superNotifyCost(ctx) {
   const { db, form } = ctx;
-  const c = parseInt(String(form.get("cost_alimtalk") || "").replace(/[^\d]/g, ""), 10);
-  if (!Number.isFinite(c) || c < 0 || c > 1000) return back("/super", "원가는 0~1000원 사이로 입력해 주세요.", true);
-  await D.setSetting(db, "cost_alimtalk", String(c));
-  await audit(ctx, "알림톡원가", `${c}원`, null);
-  return back("/super", `알림톡 원가를 ${c.toLocaleString()}원으로 저장했습니다. (이후 발송분부터 적용)`);
+  // 알림톡 원가는 6.5원처럼 소수점이 있다 — 전(0.01원) 단위 정수로 환산해 저장
+  const won = parseFloat(String(form.get("cost_alimtalk") || "").replace(/[^\d.]/g, ""));
+  if (!Number.isFinite(won) || won < 0 || won > 1000) return back("/super", "원가는 0~1000원 사이로 입력해 주세요. (소수점 가능, 예: 6.5)", true);
+  const jeon = wonToJeon(won);
+  await D.setSetting(db, "cost_alimtalk_jeon", String(jeon));
+  await audit(ctx, "알림톡원가", `${won}원`, null);
+  return back("/super", `알림톡 원가를 ${won}원으로 저장했습니다. (이후 발송분부터 적용)`);
 }
 
 // 슈퍼: 상인회별 단가 설정 (0 = 플랫폼 기본가 적용)
