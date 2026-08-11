@@ -587,6 +587,15 @@ export async function spendCredit(db, aid, amount, memo = "") {
   await ledger(db, aid, "spend", -amt, balance, memo);
   return { ok: true, balance };
 }
+// 상인회 전용 단가 (0/미설정이면 플랫폼 기본가)
+export const getUnitPrice = async (db, aid) => {
+  const r = await first(db, "SELECT unit_price FROM notify_wallet WHERE association_id=?", aid);
+  return r && r.unit_price > 0 ? r.unit_price : 0;
+};
+export async function setUnitPrice(db, aid, price) {
+  await run(db, "INSERT INTO notify_wallet (association_id, balance) VALUES (?, 0) ON CONFLICT(association_id) DO NOTHING", aid);
+  await run(db, "UPDATE notify_wallet SET unit_price=? WHERE association_id=?", Math.max(0, Math.trunc(price) || 0), aid);
+}
 export const listLedger = (db, aid, limit = 50) =>
   all(db, "SELECT * FROM credit_ledger WHERE association_id=? ORDER BY id DESC LIMIT ?", aid, limit);
 
@@ -617,7 +626,8 @@ export const platformMessageUsage = (db) =>
   all(db, `SELECT a.id, a.name, COALESCE(w.balance,0) AS balance,
       (SELECT COUNT(*) FROM message_log m WHERE m.association_id=a.id AND m.status='sent') AS sent,
       (SELECT COALESCE(SUM(m.cost),0) FROM message_log m WHERE m.association_id=a.id) AS revenue,
-      (SELECT COALESCE(SUM(l.amount),0) FROM credit_ledger l WHERE l.association_id=a.id AND l.kind='charge') AS charged
+      (SELECT COALESCE(SUM(l.amount),0) FROM credit_ledger l WHERE l.association_id=a.id AND l.kind='charge') AS charged,
+      COALESCE(w.unit_price,0) AS unit_price
     FROM associations a LEFT JOIN notify_wallet w ON w.association_id=a.id ORDER BY revenue DESC`);
 // 알림톡 수신 대상 회원 (휴대폰 있는 사람만)
 export const listPhoneMembers = (db, aid) =>

@@ -1357,3 +1357,5 @@ a.cc-val:hover{color:var(--brand-700)}
 .cert-qr-box{flex:none;text-align:center}
 .cert-qr-box svg{width:104px;height:104px;display:block}
 .cert-qr-cap{display:block;margin-top:4px;font-size:.7rem;color:var(--muted)}
+.price-form{gap:4px}
+.price-form input{width:72px;padding:5px 8px;font-size:.85rem}

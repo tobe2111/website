@@ -969,7 +969,7 @@ export async function admin(ctx) {
   // ----- 알림톡: 잔액·충전 신청·발송 이력 -----
   const [balance, msgStats, msgs, orders, unitPrice] = await Promise.all([
     D.getBalance(db, assoc.id), D.messageStats(db, assoc.id), D.listMessages(db, assoc.id, 10),
-    D.listCreditOrders(db, assoc.id, 5), priceOf(db, "alimtalk"),
+    D.listCreditOrders(db, assoc.id, 5), priceOf(db, "alimtalk", assoc.id),
   ]);
   const withPhone = members.filter((m) => m.phone).length;
   const sendable = unitPrice > 0 ? Math.floor(balance / unitPrice) : 0;
@@ -985,11 +985,10 @@ export async function admin(ctx) {
     ${balance < unitPrice ? `<div class="flash flash-warn">잔액이 부족해 알림톡이 발송되지 않습니다. 아래에서 충전을 신청해 주세요.</div>` : ""}
     <div class="form-two">
       <form method="post" action="${base}/admin/credit/order" class="stack-form compact">
-        <label>충전 금액<select name="amount">
-          <option value="30000">30,000원 (약 ${Math.floor(30000 / unitPrice).toLocaleString()}건)</option>
-          <option value="50000">50,000원 (약 ${Math.floor(50000 / unitPrice).toLocaleString()}건)</option>
-          <option value="100000">100,000원 (약 ${Math.floor(100000 / unitPrice).toLocaleString()}건)</option>
-        </select></label>
+        <label>충전 금액 <small>(1만원 이상 · 1,000원 단위)</small>
+          <input type="number" name="amount" value="50000" min="10000" max="5000000" step="1000" required list="chargePresets" />
+          <datalist id="chargePresets"><option value="30000"></option><option value="50000"></option><option value="100000"></option><option value="300000"></option></datalist></label>
+        <p class="panel-hint">건당 ${unitPrice.toLocaleString()}원 기준 — 5만원이면 약 ${Math.floor(50000 / unitPrice).toLocaleString()}건입니다.</p>
         <label>입금자명<input type="text" name="depositor" maxlength="40" placeholder="예: 서초구상인회" /></label>
         <button class="btn btn-primary btn-sm">충전 신청</button></form>
       <div>${orderRows ? `<p class="mini-label">최근 충전 신청</p><ul class="admin-mini-list">${orderRows}</ul>` : `<p class="panel-hint">충전을 신청하면 운영사가 입금을 확인한 뒤 잔액에 반영합니다.</p>`}</div>
@@ -1440,10 +1439,14 @@ export async function superConsole(ctx) {
   const totalRevenue = notifyUsage.reduce((a, u) => a + (u.revenue || 0), 0);
   const totalCharged = notifyUsage.reduce((a, u) => a + (u.charged || 0), 0);
   const totalSent = notifyUsage.reduce((a, u) => a + (u.sent || 0), 0);
-  const notifyRows = notifyUsage.filter((u) => u.sent || u.balance || u.charged).map((u) => `<tr><td>${esc(u.name)}</td>
+  const notifyRows = notifyUsage.map((u) => `<tr><td>${esc(u.name)}</td>
     <td>${(u.sent || 0).toLocaleString()}건</td><td>${(u.revenue || 0).toLocaleString()}원</td>
-    <td>${(u.charged || 0).toLocaleString()}원</td><td>${(u.balance || 0).toLocaleString()}원</td></tr>`).join("")
-    || `<tr><td colspan="5" class="empty">아직 사용 내역이 없습니다.</td></tr>`;
+    <td>${(u.charged || 0).toLocaleString()}원</td><td>${(u.balance || 0).toLocaleString()}원</td>
+    <td><form method="post" action="/super/association/${u.id}/unit-price" class="inline-form price-form">
+      <input type="number" name="unit_price" value="${u.unit_price || 0}" min="0" max="1000" step="1" aria-label="${esc(u.name)} 단가" />
+      <button class="btn btn-xs btn-ghost">저장</button></form>
+      <small>${u.unit_price ? `전용 ${u.unit_price}원` : `기본 ${unitPrice}원`}</small></td></tr>`).join("")
+    || `<tr><td colspan="6" class="empty">상인회가 없습니다.</td></tr>`;
   // ----- 전자서명 키·사슬 상태 (보안) -----
   const keyMode = keyStorage(env);
   const keyFp = await publicKeyFingerprint(env).catch(() => "(확인 불가)");
@@ -1487,7 +1490,8 @@ export async function superConsole(ctx) {
     <div class="form-divider">충전 신청 (입금 확인 후 승인)</div>
     <div class="table-scroll"><table class="admin-table"><thead><tr><th>상인회</th><th>금액</th><th>입금자·신청</th><th>처리</th></tr></thead><tbody>${creditRows}</tbody></table></div>
     <div class="form-divider">상인회별 사용</div>
-    <div class="table-scroll"><table class="admin-table"><thead><tr><th>상인회</th><th>발송</th><th>매출</th><th>충전</th><th>잔액</th></tr></thead><tbody>${notifyRows}</tbody></table></div>
+    <div class="table-scroll"><table class="admin-table"><thead><tr><th>상인회</th><th>발송</th><th>매출</th><th>충전</th><th>잔액</th><th>단가(원/건)</th></tr></thead><tbody>${notifyRows}</tbody></table></div>
+    <p class="panel-hint">단가를 <b>0</b> 으로 두면 플랫폼 기본가(${unitPrice.toLocaleString()}원)를 씁니다. 규모가 큰 상인회에 낮은 단가를, 소규모엔 기본가를 적용하는 식으로 상인회마다 다르게 받을 수 있습니다.</p>
     <div class="form-divider">단가·템플릿 설정</div>
     <form method="post" action="/super/notify-settings" class="stack-form">
       <label class="mini-label">알림톡 판매단가 (원/건)<input type="number" name="price_alimtalk" value="${unitPrice}" min="0" max="1000" required /></label>

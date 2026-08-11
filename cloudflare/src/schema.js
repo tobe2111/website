@@ -358,6 +358,7 @@ CREATE TABLE IF NOT EXISTS settings (
 CREATE TABLE IF NOT EXISTS notify_wallet (
   association_id INTEGER PRIMARY KEY REFERENCES associations(id) ON DELETE CASCADE,
   balance        INTEGER NOT NULL DEFAULT 0,
+  unit_price     INTEGER NOT NULL DEFAULT 0,  -- 이 상인회 전용 단가(원/건). 0 이면 플랫폼 기본가 적용
   updated_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -401,7 +402,7 @@ CREATE INDEX IF NOT EXISTS idx_msglog_assoc ON message_log(association_id, creat
 
 // 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
 // 마이그레이션 세대 — migrateColumns 에 단계를 추가할 때마다 +1
-export const SCHEMA_VERSION = "23";
+export const SCHEMA_VERSION = "24";
 
 export async function ensureSchema(db) {
   const has = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='associations'").first();
@@ -511,6 +512,11 @@ async function migrateColumns(db) {
     ["message_log", `CREATE TABLE message_log (id INTEGER PRIMARY KEY AUTOINCREMENT, association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE, channel TEXT NOT NULL DEFAULT 'alimtalk', kind TEXT NOT NULL DEFAULT '', recipient TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'sent', cost INTEGER NOT NULL DEFAULT 0, detail TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
       ["CREATE INDEX IF NOT EXISTS idx_msglog_assoc ON message_log(association_id, created_at)"]],
   ];
+  // v23: 상인회별 알림톡 단가 (규모·계약에 따라 다르게 받을 수 있게)
+  const wcols = (await db.prepare("PRAGMA table_info(notify_wallet)").all()).results || [];
+  if (wcols.length && !wcols.some((c) => c.name === "unit_price")) {
+    await db.prepare("ALTER TABLE notify_wallet ADD COLUMN unit_price INTEGER NOT NULL DEFAULT 0").run();
+  }
   // v22: 사슬 앵커 (시점 증거)
   const ancTbl = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='chain_anchor'").first();
   if (!ancTbl) {

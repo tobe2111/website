@@ -13,7 +13,12 @@ import * as D from "./db.js";
 export const notifyEnabled = (env) => !!(env.ALIGO_API_KEY && env.ALIGO_USER_ID && env.ALIGO_SENDER_KEY && env.ALIGO_SENDER);
 
 const DEFAULT_PRICE = { alimtalk: 22, sms: 33 }; // 원/건 (슈퍼관리자가 변경 가능)
-export async function priceOf(db, channel) {
+// 단가 결정 순서: ① 상인회 전용 단가 → ② 플랫폼 기본가 → ③ 코드 기본값
+export async function priceOf(db, channel, assocId = null) {
+  if (assocId) {
+    const own = await D.getUnitPrice(db, assocId);
+    if (own > 0) return own;
+  }
   const key = channel === "sms" ? "price_sms" : "price_alimtalk";
   const v = await D.getSetting(db, key);
   const n = parseInt(v || "", 10);
@@ -85,7 +90,7 @@ export async function sendOne(env, db, { assoc, kind, to, text, buttonName, butt
     await D.logMessage(db, { associationId: assoc.id, kind, recipient: masked, status: "failed", cost: 0, detail: "템플릿 코드 미설정" });
     return { ok: false, error: "템플릿 코드가 설정되지 않았습니다" };
   }
-  const price = await priceOf(db, "alimtalk");
+  const price = await priceOf(db, "alimtalk", assoc.id);
   const paid = await D.spendCredit(db, assoc.id, price, `알림톡 ${kind}`);
   if (!paid.ok) {
     await D.logMessage(db, { associationId: assoc.id, kind, recipient: masked, status: "failed", cost: 0, detail: "잔액 부족" });

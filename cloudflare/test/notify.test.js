@@ -178,3 +178,15 @@ test("기존 배포 DB(구버전) → 자동 마이그레이션으로 알림톡 
   const ver = old._db.prepare("SELECT value FROM settings WHERE key='schema_version'").get();
   assert.ok(Number(ver.value) > 16, `버전이 올라가야 다음 콜드스타트에서 건너뛴다 (현재 ${ver.value})`);
 });
+
+test("상인회별 단가: 전용가 우선, 0이면 플랫폼 기본가", async () => {
+  const big = await D.createAssociation(db, { slug: "big2", name: "대형" });
+  const sm = await D.createAssociation(db, { slug: "sm2", name: "소규모" });
+  await D.setSetting(db, "price_alimtalk", "22");
+  assert.equal(await N.priceOf(db, "alimtalk", big.id), 22, "미설정이면 기본가");
+  await D.setUnitPrice(db, big.id, 15);
+  assert.equal(await N.priceOf(db, "alimtalk", big.id), 15, "전용가가 우선");
+  assert.equal(await N.priceOf(db, "alimtalk", sm.id), 22, "다른 상인회는 영향 없음");
+  await D.setUnitPrice(db, big.id, 0);
+  assert.equal(await N.priceOf(db, "alimtalk", big.id), 22, "0이면 기본가로 복귀");
+});

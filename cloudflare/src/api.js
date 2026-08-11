@@ -110,11 +110,14 @@ export async function register(ctx) {
 }
 
 // ---------- 알림톡 크레딧 ----------
-const CHARGE_AMOUNTS = [30000, 50000, 100000];
+// 충전 금액은 자유 입력 — 상인회 규모가 제각각이라 고정 금액만으로는 맞지 않는다.
+// 최소 1만원(소액 입금 확인 부담), 최대 500만원(오입력 방지) 사이 1천원 단위.
+const CHARGE_MIN = 10000, CHARGE_MAX = 5000000, CHARGE_STEP = 1000;
 export async function adminCreditOrder(ctx) {
   const { db, form, base, assoc } = ctx;
-  const amount = parseInt(form.get("amount") || "", 10);
-  if (!CHARGE_AMOUNTS.includes(amount)) return back(base + "/admin", "충전 금액을 다시 선택해 주세요.", true);
+  const amount = parseInt(String(form.get("amount") || "").replace(/[^\d]/g, ""), 10);
+  if (!Number.isFinite(amount) || amount < CHARGE_MIN || amount > CHARGE_MAX || amount % CHARGE_STEP !== 0)
+    return back(base + "/admin", `충전 금액은 ${CHARGE_MIN.toLocaleString()}원 ~ ${CHARGE_MAX.toLocaleString()}원 사이에서 1,000원 단위로 입력해 주세요.`, true);
   await D.createCreditOrder(db, { associationId: assoc.id, amount, depositor: cap(form.get("depositor"), 40) });
   await D.createNotification(db, { associationId: null, kind: "credit_order", message: `${assoc.name}이(가) 알림톡 ${amount.toLocaleString()}원 충전을 신청했습니다.`, link: "/super" });
   await audit(ctx, "충전신청", `${amount}원`);
@@ -135,6 +138,18 @@ export async function superCreditApprove(ctx) {
   await audit(ctx, "충전승인", `#${o.id} ${o.amount}원`, null);
   return back("/super", `${o.amount.toLocaleString()}원을 충전했습니다.`);
 }
+// 슈퍼: 상인회별 단가 설정 (0 = 플랫폼 기본가 적용)
+export async function superSetUnitPrice(ctx) {
+  const { db, params, form } = ctx;
+  const a = await D.getAssociationById(db, Number(params.id));
+  if (!a) return back("/super", "상인회를 찾을 수 없습니다.", true);
+  const p = parseInt(String(form.get("unit_price") || "").replace(/[^\d]/g, ""), 10);
+  if (!Number.isFinite(p) || p < 0 || p > 1000) return back("/super", "단가는 0~1000원 사이로 입력해 주세요. (0 = 기본가 적용)", true);
+  await D.setUnitPrice(db, a.id, p);
+  await audit(ctx, "상인회단가", `${a.name} → ${p === 0 ? "기본가" : p + "원"}`, null);
+  return back("/super", `'${a.name}' 알림톡 단가를 ${p === 0 ? "플랫폼 기본가로" : p.toLocaleString() + "원으로"} 설정했습니다.`);
+}
+
 // 슈퍼: 알림톡 판매단가·템플릿 코드 설정
 export async function superNotifySettings(ctx) {
   const { db, form } = ctx;
