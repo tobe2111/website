@@ -156,7 +156,7 @@ test("충전 신청 → 승인 시에만 잔액 반영", async () => {
   assert.equal(await D.getBalance(db, a.id), 50000);
 });
 
-test("기존 배포 DB(v16) → v17 자동 마이그레이션으로 알림톡 표·컬럼 생성", async () => {
+test("기존 배포 DB(구버전) → 자동 마이그레이션으로 알림톡 표·컬럼 생성", async () => {
   // 실서버는 이미 v16 으로 올라가 있다. 버전이 같으면 패스트패스로 건너뛰므로
   // 반드시 버전이 올라가야 새 표가 생긴다 — 그 경로를 그대로 재현한다.
   const { makeD1 } = await import("./shim.js");
@@ -176,5 +176,5 @@ test("기존 배포 DB(v16) → v17 자동 마이그레이션으로 알림톡 �
   const ucols = old._db.prepare("PRAGMA table_info(users)").all().map((c) => c.name);
   assert.ok(ucols.includes("phone"), "users.phone 컬럼이 생겨야 함");
   const ver = old._db.prepare("SELECT value FROM settings WHERE key='schema_version'").get();
-  assert.equal(ver.value, "17", "버전이 17로 갱신되어야 다음 콜드스타트에서 건너뛴다");
+  assert.ok(Number(ver.value) > 16, `버전이 올라가야 다음 콜드스타트에서 건너뛴다 (현재 ${ver.value})`);
 });

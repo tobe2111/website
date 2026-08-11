@@ -19,7 +19,7 @@ binding = "ASSETS"
 # ① 전체 데이터 암호화 백업 → R2 backups/ (8주 보존, 복호화: scripts/decrypt-backup.mjs)
 # ② 상인회별 주간 운영 리포트 메일 (RESEND_API_KEY 설정 시)
 [triggers]
-crons = ["0 18 * * 0"]
+crons = ["0 18 * * 0", "0 0 * * *"]  # 주간(월 03시 KST) + 매일(09시 KST 서명 기한 리마인더)
 
 # D1 (SQLite) — 무료 티어: 5GB, 하루 5백만 읽기
 [[d1_databases]]

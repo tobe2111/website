@@ -422,15 +422,16 @@ export const closeDocument = (db, id) => run(db, "UPDATE documents SET closed=1 
 
 const TURN_OK = `(d.ordered = 0 OR NOT EXISTS (
   SELECT 1 FROM signature_requests rp JOIN signature_requests rme ON rme.document_id=d.id AND rme.user_id=?
-  WHERE rp.document_id=d.id AND rp.sign_order < rme.sign_order
+  WHERE rp.document_id=d.id AND rp.sign_order < rme.sign_order AND rp.declined_at=''
     AND NOT EXISTS (SELECT 1 FROM signatures sp WHERE sp.document_id=rp.document_id AND sp.user_id=rp.user_id)))`;
 const TO_SIGN = `d.association_id=? AND d.closed=0 AND (d.due_date='' OR d.due_date >= date('now'))
   AND NOT EXISTS (SELECT 1 FROM signatures s WHERE s.document_id=d.id AND s.user_id=?)
+  AND NOT EXISTS (SELECT 1 FROM signature_requests rd WHERE rd.document_id=d.id AND rd.user_id=? AND rd.declined_at != '')
   AND (EXISTS (SELECT 1 FROM signature_requests r WHERE r.document_id=d.id AND r.user_id=?)
        OR NOT EXISTS (SELECT 1 FROM signature_requests r2 WHERE r2.document_id=d.id))
   AND ${TURN_OK}`;
-export const listDocumentsToSign = (db, aid, uid) => all(db, `SELECT d.* FROM documents d WHERE ${TO_SIGN} ORDER BY d.created_at DESC`, aid, uid, uid, uid);
-export const countDocumentsToSign = async (db, aid, uid) => (await first(db, `SELECT COUNT(*) AS n FROM documents d WHERE ${TO_SIGN}`, aid, uid, uid, uid)).n;
+export const listDocumentsToSign = (db, aid, uid) => all(db, `SELECT d.* FROM documents d WHERE ${TO_SIGN} ORDER BY d.created_at DESC`, aid, uid, uid, uid, uid);
+export const countDocumentsToSign = async (db, aid, uid) => (await first(db, `SELECT COUNT(*) AS n FROM documents d WHERE ${TO_SIGN}`, aid, uid, uid, uid, uid)).n;
 // 대상이 지정된 문서(요청 행이 존재)는 대상자만 서명 가능 — 목록(TO_SIGN)과 동일한 규칙을 액션에도 강제
 export async function canReceiveSign(db, docId, uid) {
   const any = await first(db, "SELECT 1 AS x FROM signature_requests WHERE document_id=? LIMIT 1", docId);
@@ -442,6 +443,7 @@ export async function canSignNow(db, doc, uid) {
   const mine = await first(db, "SELECT sign_order FROM signature_requests WHERE document_id=? AND user_id=?", doc.id, uid);
   if (!mine) return true;
   const pending = (await first(db, `SELECT COUNT(*) AS n FROM signature_requests r WHERE r.document_id=? AND r.sign_order<?
+    AND r.declined_at=''
     AND NOT EXISTS (SELECT 1 FROM signatures s WHERE s.document_id=r.document_id AND s.user_id=r.user_id)`, doc.id, mine.sign_order)).n;
   return pending === 0;
 }
@@ -453,7 +455,7 @@ export async function createSignatureRequests(db, documentId, userIds) {
   let i = 0; for (const uid of userIds) { i++; await run(db, "INSERT OR IGNORE INTO signature_requests (document_id, user_id, sign_order) VALUES (?,?,?)", documentId, uid, i); }
 }
 export const listRequestStatus = (db, documentId) =>
-  all(db, `SELECT u.id, u.name, u.email, r.sign_order,
+  all(db, `SELECT u.id, u.name, u.email, u.phone, r.sign_order, r.declined_at, r.decline_reason,
     EXISTS (SELECT 1 FROM signatures s WHERE s.document_id=r.document_id AND s.user_id=u.id) AS signed
     FROM signature_requests r JOIN users u ON u.id=r.user_id WHERE r.document_id=? ORDER BY r.sign_order ASC, u.name`, documentId);
 export async function requestCounts(db, documentId) {
@@ -613,3 +615,25 @@ export const platformMessageUsage = (db) =>
 // 알림톡 수신 대상 회원 (휴대폰 있는 사람만)
 export const listPhoneMembers = (db, aid) =>
   all(db, "SELECT id, name, phone FROM users WHERE association_id=? AND role='MERCHANT' AND phone != ''", aid);
+
+// ----- 전자계약: 거절(반려) · 리마인더 · 첨부 -----
+export const declineSign = (db, documentId, uid, reason) =>
+  run(db, "UPDATE signature_requests SET declined_at=datetime('now'), decline_reason=? WHERE document_id=? AND user_id=?", String(reason || "").slice(0, 300), documentId, uid);
+export const getDeclineOf = (db, documentId, uid) =>
+  first(db, "SELECT declined_at, decline_reason FROM signature_requests WHERE document_id=? AND user_id=? AND declined_at != ''", documentId, uid);
+// 아직 서명도 거절도 안 한 대상자 (리마인더 발송 대상)
+export const listUnsigned = (db, documentId) =>
+  all(db, `SELECT u.id, u.name, u.email, u.phone FROM signature_requests r JOIN users u ON u.id=r.user_id
+    WHERE r.document_id=? AND r.declined_at='' 
+      AND NOT EXISTS (SELECT 1 FROM signatures s WHERE s.document_id=r.document_id AND s.user_id=u.id)
+    ORDER BY r.sign_order`, documentId);
+export const markReminded = (db, documentId) => run(db, "UPDATE documents SET last_remind_at=datetime('now') WHERE id=?", documentId);
+export const setDocumentAttachment = (db, id, key, name) =>
+  run(db, "UPDATE documents SET attachment=?, attachment_name=? WHERE id=?", key || "", String(name || "").slice(0, 120), id);
+// 기한이 임박(D-2 이내)했는데 아직 안 끝난 문서 — 자동 리마인더 대상
+export const listDocsNeedingRemind = (db) =>
+  all(db, `SELECT d.*, a.name AS assoc_name, a.slug AS assoc_slug FROM documents d JOIN associations a ON a.id=d.association_id
+    WHERE d.closed=0 AND d.due_date != '' AND d.due_date >= date('now') AND d.due_date <= date('now','+2 day')
+      AND (d.last_remind_at='' OR d.last_remind_at < datetime('now','-20 hour'))
+      AND EXISTS (SELECT 1 FROM signature_requests r WHERE r.document_id=d.id AND r.declined_at=''
+        AND NOT EXISTS (SELECT 1 FROM signatures s WHERE s.document_id=r.document_id AND s.user_id=r.user_id))`);

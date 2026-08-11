@@ -272,6 +272,9 @@ CREATE TABLE IF NOT EXISTS documents (
   ordered        INTEGER NOT NULL DEFAULT 0,
   due_date       TEXT NOT NULL DEFAULT '',
   closed         INTEGER NOT NULL DEFAULT 0,
+  attachment      TEXT NOT NULL DEFAULT '',  -- 계약서 PDF(R2 키). 있으면 본문 대신 이 파일이 계약 원문
+  attachment_name TEXT NOT NULL DEFAULT '',  -- 원본 파일명(표시용)
+  last_remind_at  TEXT NOT NULL DEFAULT '',  -- 마지막 리마인더 발송 — 연타 방지
   created_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -295,6 +298,8 @@ CREATE TABLE IF NOT EXISTS signature_requests (
   document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
   user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   sign_order  INTEGER NOT NULL DEFAULT 0,
+  declined_at   TEXT NOT NULL DEFAULT '',   -- 거절(반려) 시각 — 비어 있으면 미거절
+  decline_reason TEXT NOT NULL DEFAULT '',  -- 거절 사유
   created_at  TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE (document_id, user_id)
 );
@@ -366,7 +371,7 @@ CREATE INDEX IF NOT EXISTS idx_msglog_assoc ON message_log(association_id, creat
 
 // 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
 // 마이그레이션 세대 — migrateColumns 에 단계를 추가할 때마다 +1
-const SCHEMA_VERSION = "17";
+const SCHEMA_VERSION = "18";
 
 export async function ensureSchema(db) {
   const has = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='associations'").first();
@@ -476,6 +481,20 @@ async function migrateColumns(db) {
     ["message_log", `CREATE TABLE message_log (id INTEGER PRIMARY KEY AUTOINCREMENT, association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE, channel TEXT NOT NULL DEFAULT 'alimtalk', kind TEXT NOT NULL DEFAULT '', recipient TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'sent', cost INTEGER NOT NULL DEFAULT 0, detail TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
       ["CREATE INDEX IF NOT EXISTS idx_msglog_assoc ON message_log(association_id, created_at)"]],
   ];
+  // v18: 전자계약 — 서명 거절 사유, 계약서 PDF 첨부, 리마인더 발송 시각
+  const rcols = (await db.prepare("PRAGMA table_info(signature_requests)").all()).results || [];
+  if (rcols.length && !rcols.some((c) => c.name === "declined_at")) {
+    await db.prepare("ALTER TABLE signature_requests ADD COLUMN declined_at TEXT NOT NULL DEFAULT ''").run();
+    await db.prepare("ALTER TABLE signature_requests ADD COLUMN decline_reason TEXT NOT NULL DEFAULT ''").run();
+  }
+  const dcols = (await db.prepare("PRAGMA table_info(documents)").all()).results || [];
+  if (dcols.length && !dcols.some((c) => c.name === "attachment")) {
+    await db.prepare("ALTER TABLE documents ADD COLUMN attachment TEXT NOT NULL DEFAULT ''").run();
+    await db.prepare("ALTER TABLE documents ADD COLUMN attachment_name TEXT NOT NULL DEFAULT ''").run();
+  }
+  if (dcols.length && !dcols.some((c) => c.name === "last_remind_at")) {
+    await db.prepare("ALTER TABLE documents ADD COLUMN last_remind_at TEXT NOT NULL DEFAULT ''").run();
+  }
   for (const [name, ddl, idx] of v17) {
     if (have.has(name)) continue;
     await db.prepare(ddl).run();

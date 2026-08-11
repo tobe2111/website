@@ -1,6 +1,6 @@
 // 폼 처리 핸들러 (POST). ctx.form 은 파싱된 FormData.
 import * as D from "./db.js";
-import { verifyPassword, hashPassword, hmacSign, hmacVerify, b64uFromBytes, bytesFromB64u } from "./crypto.js";
+import { verifyPassword, hashPassword, hmacSign, hmacVerify, b64uFromBytes, bytesFromB64u, sha256HexBytes } from "./crypto.js";
 import { sendEmail, emailEnabled, mailShell, mailButton } from "./email.js";
 import { sessionTokenForUser, sessionCookie, clearSessionCookie } from "./auth.js";
 import { back, redirect } from "./http.js";
@@ -661,7 +661,23 @@ export async function adminCreateDocument(ctx) {
   let dueDate = ""; const rawDue = (form.get("due_date") || "").trim();
   if (rawDue) { if (!/^\d{4}-\d{2}-\d{2}$/.test(rawDue)) return back(base + "/admin/documents", "기한 형식(YYYY-MM-DD)을 확인하세요.", true);
     if (rawDue < new Date().toISOString().slice(0, 10)) return back(base + "/admin/documents", "기한은 오늘 이후여야 합니다.", true); dueDate = rawDue; }
-  const doc = await D.createDocument(db, { associationId: assoc.id, title, body, contentHash: await contentHash(body), createdBy: user.id, ordered, dueDate });
+  // 계약서 PDF 첨부(선택) — 파일 내용 해시를 본문 해시에 함께 묶어야 봉인이 첨부까지 보호한다
+  let attKey = "", attName = "", attHash = "";
+  const file = form.get("attachment");
+  if (file && typeof file === "object" && file.size > 0) {
+    if (!storage.enabled(ctx.env)) return back(base + "/admin/documents", "파일 저장소(R2)가 연결되지 않아 첨부할 수 없습니다.", true);
+    if (file.size > 10 * 1024 * 1024) return back(base + "/admin/documents", "PDF는 10MB 이하만 첨부할 수 있습니다.", true);
+    const buf = new Uint8Array(await file.arrayBuffer());
+    // 확장자·MIME 이 아니라 실제 선두 바이트(%PDF-)로 판별 — 위장 업로드 차단
+    if (!(buf[0] === 0x25 && buf[1] === 0x50 && buf[2] === 0x44 && buf[3] === 0x46))
+      return back(base + "/admin/documents", "PDF 파일만 첨부할 수 있습니다.", true);
+    attHash = await sha256HexBytes(buf);
+    attKey = await storage.save(ctx.env, buf, "application/pdf");
+    attName = cap(String(file.name || "계약서.pdf").replace(/[\\/\x00-\x1f]/g, ""), 120);
+  }
+  const docHash = attHash ? await contentHash(`${body}\n--attachment--\n${attHash}`) : await contentHash(body);
+  const doc = await D.createDocument(db, { associationId: assoc.id, title, body, contentHash: docHash, createdBy: user.id, ordered, dueDate });
+  if (attKey) await D.setDocumentAttachment(db, doc.id, attKey, attName);
   const target = form.get("target");
   const members = await D.listUsersByAssociation(db, assoc.id, "MERCHANT");
   let recipients = [];
@@ -679,6 +695,62 @@ export async function adminCreateDocument(ctx) {
   await audit(ctx, "서명문서생성", title);
   return back(base + "/admin/documents", ordered ? "순차 서명 문서를 생성했습니다." : "문서를 생성했습니다.");
 }
+// 회원: 서명 거절(반려) — 사유를 남기고 서명 대기에서 빠진다. 되돌리려면 관리자가 문서를 다시 만들어야 한다.
+export async function memberDeclineSign(ctx) {
+  const { db, base, assoc, user, form, params } = ctx;
+  const d = await D.getDocument(db, Number(params.id));
+  if (!d || d.association_id !== assoc.id) return back(base + "/sign", "문서를 찾을 수 없습니다.", true);
+  if (d.closed) return back(base + "/sign", "마감된 문서입니다.", true);
+  if (await D.hasSigned(db, d.id, user.id)) return back(base + "/sign", "이미 서명한 문서는 거절할 수 없습니다.", true);
+  if (!(await D.canReceiveSign(db, d.id, user.id))) return back(base + "/sign", "이 문서의 서명 대상이 아닙니다.", true);
+  const reason = cap((form.get("reason") || "").trim(), 300);
+  if (!reason) return back(base + "/sign/" + d.id, "거절 사유를 입력해 주세요.", true);
+  await D.declineSign(db, d.id, user.id, reason);
+  await D.createNotification(db, { associationId: assoc.id, kind: "sign_declined", message: `${user.name}님이 '${d.title}' 서명을 거절했습니다.`, link: base + "/admin/documents/" + d.id });
+  await audit(ctx, "서명거절", `${d.title}: ${reason.slice(0, 60)}`);
+  return back(base + "/sign", "서명을 거절했습니다. 상인회 관리자에게 사유가 전달됩니다.");
+}
+
+// 관리자: 미서명자에게 리마인더 — 알림톡(잔액 차감) 우선, 번호 없으면 이메일
+export async function adminRemindDocument(ctx) {
+  const { db, env, base, assoc, params, request } = ctx;
+  const d = await D.getDocument(db, Number(params.id));
+  if (!d || d.association_id !== assoc.id) return back(base + "/admin/documents", "문서를 찾을 수 없습니다.", true);
+  if (d.closed) return back(base + "/admin/documents/" + d.id, "마감된 문서입니다.", true);
+  // 연타 방지 — 같은 문서에 6시간 안에 두 번 보내지 않는다(비용·수신자 피로)
+  if (d.last_remind_at && Date.now() - Date.parse(d.last_remind_at.replace(" ", "T") + "Z") < 6 * 3600 * 1000)
+    return back(base + "/admin/documents/" + d.id, "방금 리마인더를 보냈습니다. 6시간 뒤에 다시 보낼 수 있습니다.", true);
+  const targets = await D.listUnsigned(db, d.id);
+  if (!targets.length) return back(base + "/admin/documents/" + d.id, "미서명자가 없습니다.");
+  const origin = new URL(request.url).origin;
+  const link = `${origin}${base}/sign`;
+  const withPhone = targets.filter((t) => t.phone);
+  let msg = "";
+  if (withPhone.length) {
+    const r = await sendMany(env, db, {
+      assoc, kind: "sign_remind", recipients: withPhone,
+      textFor: (m) => `[${assoc.name}] ${m.name}님, '${d.title}' 전자서명이 아직 완료되지 않았습니다.${d.due_date ? ` 기한: ${d.due_date}` : ""}`,
+      buttonName: "서명하러 가기", buttonUrl: link,
+    });
+    msg += `알림톡 ${r.sent}건 발송(${r.cost.toLocaleString()}원 차감)`;
+    if (r.failed) msg += `, 실패 ${r.failed}건`;
+    if (r.stopped) msg += " — 잔액이 부족해 중단되었습니다";
+  }
+  // 번호가 없는 사람은 이메일로 (설정된 경우)
+  const noPhone = targets.filter((t) => !t.phone && t.email);
+  if (noPhone.length && emailEnabled(env)) {
+    await Promise.all(noPhone.map((m) => sendEmail(env, {
+      to: m.email, subject: `[${assoc.name}] 전자서명 미완료 안내 — ${d.title}`,
+      html: mailShell(`${esc(assoc.name)} 전자서명`, `<p>${esc(m.name)}님, 아직 서명하지 않은 문서가 있습니다.</p><p><b>${esc(d.title)}</b>${d.due_date ? ` (기한: ${d.due_date})` : ""}</p>${mailButton(link, "서명하러 가기")}`),
+    }).catch(() => {})));
+    msg += `${msg ? " · " : ""}이메일 ${noPhone.length}건 발송`;
+  }
+  if (!msg) msg = `미서명자 ${targets.length}명에게 보낼 연락처가 없습니다. 회원 휴대폰을 등록해 주세요.`;
+  await D.markReminded(db, d.id);
+  await audit(ctx, "서명리마인더", `${d.title} · 대상 ${targets.length}명`);
+  return back(base + "/admin/documents/" + d.id, msg);
+}
+
 export async function adminCloseDocument(ctx) {
   const { db, base, assoc, params } = ctx;
   const d = await D.getDocument(db, Number(params.id));

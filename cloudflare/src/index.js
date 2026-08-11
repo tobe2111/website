@@ -7,7 +7,7 @@ import * as api from "./api.js";
 import { setMediaBase, setOrigin, setAssetVer, layout } from "./render.js";
 import { html, text, redirect, notFoundResponse, forbidden } from "./http.js";
 import { ensureSchema } from "./schema.js";
-import { runWeekly } from "./scheduled.js";
+import { runWeekly, runDaily } from "./scheduled.js";
 import { resolveSessionSecret } from "./secrets.js";
 
 const _schemaReady = new WeakSet(); // DB 별 스키마 준비 캐시
@@ -39,6 +39,7 @@ const GLOBAL = [
   ["GET", "/robots.txt", pages.robots],
   ["GET", "/verify", pages.verifyPage],
   ["GET", "/verify/:code", pages.verifyPage],
+  ["GET", "/certificate/:code", pages.certificatePage],
   ["GET", "/super", pages.superConsole, "SUPERADMIN"],
   ["POST", "/super/association", api.superCreateAssociation, "SUPERADMIN"],
   ["POST", "/super/association/:id/toggle", api.superToggleAssociation, "SUPERADMIN"],
@@ -107,6 +108,7 @@ const TENANT = [
   ["GET", "/sign", pages.signList, "MERCHANT"],
   ["GET", "/sign/:id", pages.signForm, "MERCHANT"],
   ["POST", "/sign/:id", api.memberSign, "MERCHANT"],
+  ["POST", "/sign/:id/decline", api.memberDeclineSign, "MERCHANT"],
   ["GET", "/admin", pages.admin, "ADMIN"],
   ["POST", "/admin/business/:id/status", api.adminBusinessStatus, "ADMIN"],
   ["POST", "/admin/notice", api.adminCreateNotice, "ADMIN"],
@@ -132,6 +134,7 @@ const TENANT = [
   ["POST", "/admin/documents", api.adminCreateDocument, "ADMIN"],
   ["GET", "/admin/documents/:id", pages.adminDocumentDetail, "ADMIN"],
   ["POST", "/admin/documents/:id/close", api.adminCloseDocument, "ADMIN"],
+  ["POST", "/admin/documents/:id/remind", api.adminRemindDocument, "ADMIN"],
 ];
 
 function matchRoute(routes, method, path) {
@@ -233,7 +236,8 @@ export default {
   async scheduled(event, env, ctx) {
     await ensureSchema(env.DB);
     const full = { ...env, SESSION_SECRET: await resolveSessionSecret(env) };
-    ctx.waitUntil(runWeekly(full));
+    // 크론 표현식으로 분기 — 주간(백업·리포트) vs 매일(서명 기한 리마인더)
+    ctx.waitUntil(event.cron === "0 18 * * 0" ? runWeekly(full) : runDaily(full));
   },
 };
 

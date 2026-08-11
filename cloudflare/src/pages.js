@@ -1174,14 +1174,21 @@ export async function signForm(ctx) {
   }
   const body = `<section class="section page-top"><div class="container narrow"><a href="${base}/sign" class="back-link">← 서명 목록</a>
     <h1 class="article-title">${esc(d.title)}</h1>${meta ? `<p>${meta}</p>` : ""}
-    <div class="doc-body">${docBody(d.body)}</div><p class="doc-hash">문서 해시: <code>${esc(d.content_hash)}</code></p>${flashOf(query)}
+    <div class="doc-body">${docBody(d.body)}</div>
+    ${d.attachment ? `<p class="doc-attach">📎 계약서 원문: <a href="${esc(mediaUrl(d.attachment))}" target="_blank" rel="noopener">${esc(d.attachment_name || "계약서.pdf")}</a> <small>— 이 파일의 내용도 해시에 포함되어 봉인됩니다</small></p>` : ""}
+    <p class="doc-hash">문서 해시: <code>${esc(d.content_hash)}</code></p>${flashOf(query)}
     <form method="post" action="${base}/sign/${d.id}" class="stack-form sign-form" id="signForm">
       <label>서명<div class="sign-pad-wrap"><canvas id="signPad" class="sign-pad" width="600" height="200"></canvas><button type="button" class="btn btn-ghost btn-xs sign-clear" id="signClear">지우기</button></div></label>
       <input type="hidden" name="signature" id="signatureData" />
       <label>서명자 성명<input type="text" name="signer_name" value="${esc(user.name)}" required /></label>
       <label class="check"><input type="checkbox" name="consent" value="1" required /> 위 내용을 확인했으며 본인이 전자서명하는 데 동의합니다.</label>
       <button class="btn btn-primary btn-block" id="signSubmit">전자서명 제출</button></form>
-    <p class="auth-note">서명 시 서명자·시각·IP·기기·문서해시가 기록되고 Ed25519 디지털 서명으로 봉인됩니다.</p></div></section>`;
+    <p class="auth-note">서명 시 서명자·시각·IP·기기·문서해시가 기록되고 Ed25519 디지털 서명으로 봉인됩니다.</p>
+    <details class="decline-box"><summary>이 문서에 동의할 수 없습니다 (거절)</summary>
+      <form method="post" action="${base}/sign/${d.id}/decline" class="stack-form compact" data-confirm="거절하면 이 문서는 서명 목록에서 사라집니다. 계속할까요?">
+        <label>거절 사유<textarea name="reason" rows="3" required maxlength="300" placeholder="예: 3조 임대료 조항에 동의하기 어렵습니다"></textarea></label>
+        <button class="btn btn-ghost btn-sm">서명 거절</button></form>
+      <p class="panel-hint">사유는 상인회 관리자에게 그대로 전달됩니다.</p></details></div></section>`;
   return html(layout({ title: `서명: ${d.title}`, assoc, base, user, body, csrf, scripts: `<script src="${assetUrl("/js/sign.js")}" defer></script>` }));
 }
 
@@ -1199,9 +1206,10 @@ export async function adminDocuments(ctx) {
     <div class="dash-head"><div><p class="section-eyebrow">E-SIGN · ${esc(assoc.name)}</p><h1 class="dash-title">전자서명 문서</h1>
       <p class="dash-sub"><a href="${base}/admin">← 관리자</a></p></div></div>${flashOf(query)}
     <section class="panel panel-accent"><h2 class="panel-title">➕ 서명 문서 만들기</h2>
-      <form method="post" action="${base}/admin/documents" class="stack-form">
+      <form method="post" action="${base}/admin/documents" class="stack-form" enctype="multipart/form-data">
         <label>제목<input type="text" name="title" required placeholder="예: 2026 가입 동의서" /></label>
         <label>본문<textarea name="body" rows="8" required></textarea></label>
+        <label class="mini-label">계약서 PDF 첨부 <small>(선택 · 10MB 이하 · 첨부 내용도 해시에 포함되어 봉인됩니다)</small><input type="file" name="attachment" accept="application/pdf" /></label>
         <div class="form-two"><label>서명 기한 (선택)<input type="date" name="due_date" /></label><label class="check check-inline"><input type="checkbox" name="ordered" value="1" /> 순차 서명</label></div>
         <div class="form-divider">서명 대상</div>
         <label class="check"><input type="radio" name="target" value="all" checked /> 전체 회원</label>
@@ -1223,24 +1231,73 @@ export async function adminDocumentDetail(ctx) {
     return `<tr><td>${esc(sig.signer_name)}<br /><small>${esc(sig.signer_email)}</small></td>
       <td>${sig.signature_image ? `<img src="${esc(mediaUrl(sig.signature_image))}" alt="서명" class="sig-thumb" />` : "-"}</td>
       <td><small>${esc(kstStamp(sig.signed_at))} <span class="tz">KST</span><br />IP ${esc(sig.ip)}</small></td>
-      <td>${badge}<br /><a href="/verify/${esc(sig.verify_code)}" target="_blank"><small>검증 ${esc(sig.verify_code.slice(0, 8))}…</small></a></td></tr>`; }).join("") : `<tr><td colspan="4" class="empty">아직 서명이 없습니다.</td></tr>`;
+      <td>${badge}<br /><a href="/certificate/${esc(sig.verify_code)}" target="_blank"><small>확인서</small></a> · <a href="/verify/${esc(sig.verify_code)}" target="_blank"><small>검증</small></a></td></tr>`; }).join("") : `<tr><td colspan="4" class="empty">아직 서명이 없습니다.</td></tr>`;
   const rc = await D.requestCounts(db, d.id);
   const reqStatus = await D.listRequestStatus(db, d.id);
   const pct = rc.total ? Math.round((rc.signed / rc.total) * 100) : 0;
-  const nextTurn = d.ordered ? reqStatus.find((u) => !u.signed) : null;
+  const nextTurn = d.ordered ? reqStatus.find((u) => !u.signed && !u.declined_at) : null;
   const reqPanel = rc.total ? `<section class="panel"><h2 class="panel-title">서명 현황 <span class="badge ${rc.signed === rc.total ? "badge-ok" : "badge-wait"}">${rc.signed}/${rc.total} (${pct}%)</span>${d.ordered ? ' <span class="badge badge-info">순차</span>' : ""}</h2>
     <div class="progress"><span style="width:${pct}%"></span></div>
-    <ul class="req-list">${reqStatus.map((u) => `<li>${d.ordered ? `<span class="req-order">${u.sign_order}</span>` : ""}<span class="req-name">${esc(u.name)}</span> <small>${esc(u.email)}</small> ${u.signed ? '<span class="badge badge-ok">완료</span>' : (d.ordered ? (nextTurn && nextTurn.id === u.id ? '<span class="badge badge-wait">서명 차례</span>' : '<span class="badge badge-muted">대기</span>') : '<span class="badge badge-wait">미서명</span>')}</li>`).join("")}</ul>
+    <ul class="req-list">${reqStatus.map((u) => `<li>${d.ordered ? `<span class="req-order">${u.sign_order}</span>` : ""}<span class="req-name">${esc(u.name)}</span> <small>${esc(u.email)}</small> ${u.signed ? '<span class="badge badge-ok">완료</span>' : u.declined_at ? `<span class="badge badge-no">거절</span><br /><small class="decline-why">사유: ${esc(u.decline_reason || "")}</small>` : (d.ordered ? (nextTurn && nextTurn.id === u.id ? '<span class="badge badge-wait">서명 차례</span>' : '<span class="badge badge-muted">대기</span>') : '<span class="badge badge-wait">미서명</span>')}</li>`).join("")}</ul>
     ${d.ordered && nextTurn ? `<p class="panel-hint">현재 <b>${esc(nextTurn.name)}</b>님 차례입니다.</p>` : ""}</section>` : `<section class="panel"><p class="panel-hint">전체 공개 문서(누구나 서명 가능).</p></section>`;
   const body = `<section class="dash"><div class="container">
     <div class="dash-head"><div><p class="section-eyebrow">E-SIGN</p><h1 class="dash-title">${esc(d.title)} ${d.closed ? '<span class="badge badge-no">마감</span>' : ""}${d.ordered ? ' <span class="badge badge-info">순차</span>' : ""}${d.due_date ? `<span class="badge ${D.isPastDue(d) ? "badge-no" : "badge-wait"}">기한 ${esc(d.due_date)}</span>` : ""}</h1>
       <p class="dash-sub"><a href="${base}/admin/documents">← 문서 목록</a> · 서명 ${sigs.length}명</p></div>
-      <div class="dash-head-actions"><button type="button" class="btn btn-ghost btn-sm" data-print>🖨 인쇄/PDF</button></div></div>
+      <div class="dash-head-actions">
+        ${d.closed ? "" : `<form method="post" action="${base}/admin/documents/${d.id}/remind" class="inline-form" data-confirm="미서명자에게 알림톡·이메일로 리마인더를 보낼까요? (알림톡은 잔액이 차감됩니다)"><button class="btn btn-primary btn-sm">미서명자 재알림</button></form>`}
+        <button type="button" class="btn btn-ghost btn-sm" data-print>🖨 인쇄/PDF</button></div></div>
     ${reqPanel}
-    <section class="panel"><h2 class="panel-title">문서 본문</h2><div class="doc-body">${docBody(d.body)}</div><p class="doc-hash">해시: <code>${esc(d.content_hash)}</code></p></section>
+    <section class="panel"><h2 class="panel-title">문서 본문</h2><div class="doc-body">${docBody(d.body)}</div>
+      ${d.attachment ? `<p class="doc-attach">📎 <a href="${esc(mediaUrl(d.attachment))}" target="_blank" rel="noopener">${esc(d.attachment_name || "계약서.pdf")}</a></p>` : ""}
+      <p class="doc-hash">해시: <code>${esc(d.content_hash)}</code></p></section>
     <section class="panel"><h2 class="panel-title">서명 내역</h2><div class="table-scroll"><table class="admin-table">
       <thead><tr><th>서명자</th><th>서명</th><th>일시·IP</th><th>검증</th></tr></thead><tbody>${rows}</tbody></table></div></section></div></section>`;
   return html(layout({ title: d.title, assoc, base, user, body, csrf }));
+}
+
+// 전자서명 확인서 — 분쟁 시 제출용. 검증 코드만 있으면 누구나 열람·인쇄할 수 있다(제3자 확인 목적).
+export async function certificatePage(ctx) {
+  const { db, env, params, csrf } = ctx;
+  const sig = await D.getSignatureByCode(db, params.code || "");
+  if (!sig) return notFoundResponse(ctx);
+  const doc = await D.getDocument(db, sig.document_id);
+  const assoc = doc ? await D.getAssociationById(db, doc.association_id) : null;
+  const v = await verifySignature(env, sig, doc);
+  const verifyUrl = `${ORIGIN}/verify/${encodeURIComponent(sig.verify_code)}`;
+  const row = (k, val) => `<tr><th>${esc(k)}</th><td>${val}</td></tr>`;
+  const body = `<section class="section page-top"><div class="container narrow cert-sheet">
+    <div class="cert-head">
+      <p class="section-eyebrow">CERTIFICATE OF ELECTRONIC SIGNATURE</p>
+      <h1 class="article-title">전자서명 확인서</h1>
+      <p class="cert-issuer">${esc(assoc ? assoc.name : "")}</p>
+      <p class="cert-verdict">${v.valid
+        ? '<span class="badge badge-ok">유효 — 봉인·본문 모두 무결</span>'
+        : '<span class="badge badge-no">위변조 의심 — 아래 항목을 확인하세요</span>'}</p>
+    </div>
+    <table class="verify-table cert-table">
+      ${row("문서 제목", esc(doc ? doc.title : "(삭제됨)"))}
+      ${row("서명자", esc(sig.signer_name))}
+      ${row("서명 일시", esc(kstStamp(sig.signed_at)))}
+      ${row("서명 IP", esc(sig.ip))}
+      ${row("서명 기기", `<small>${esc((sig.user_agent || "").slice(0, 120))}</small>`)}
+      ${row("문서 해시 (SHA-256)", `<code class="cert-hash">${esc(sig.content_hash)}</code>`)}
+      ${row("봉인값 (Ed25519)", `<code class="cert-hash">${esc(sig.record_hash)}</code>`)}
+      ${row("본문 무결성", v.contentOk ? "원본과 일치 ✅" : "변경됨 ❌")}
+      ${row("봉인 무결성", v.sealOk ? "무결 ✅" : "손상 ❌")}
+      ${row("검증 코드", `<code>${esc(sig.verify_code)}</code>`)}
+      ${doc && doc.attachment ? row("첨부 계약서", esc(doc.attachment_name || "계약서.pdf")) : ""}
+    </table>
+    ${sig.signature_image ? `<div class="cert-sign"><p class="mini-label">서명</p><img src="${esc(mediaUrl(sig.signature_image))}" alt="서명 이미지" /></div>` : ""}
+    <div class="cert-foot">
+      <p>이 확인서의 진위는 아래 주소에서 누구나 다시 확인할 수 있습니다.</p>
+      <p><a href="${esc(verifyUrl)}"><code>${esc(verifyUrl)}</code></a></p>
+      <p class="cert-note">본 확인서는 서명 시점의 서명자·시각·접속 IP·문서 해시를 Ed25519 전자서명으로 봉인한 기록입니다.
+        문서 본문이 한 글자라도 바뀌면 해시가 달라져 “변경됨”으로 표시됩니다.</p>
+    </div>
+    <div class="cert-actions no-print"><button type="button" class="btn btn-primary btn-sm" data-print>🖨 인쇄 / PDF 저장</button>
+      <a class="btn btn-ghost btn-sm" href="/verify/${esc(sig.verify_code)}">검증 페이지</a></div>
+  </div></section>`;
+  return html(layout({ title: "전자서명 확인서", assoc, body, csrf }));
 }
 
 // 공개 검증

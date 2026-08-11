@@ -3,6 +3,8 @@
 //   있으므로(사진 공개용) 평문 백업을 두면 이메일·해시가 노출된다 — 반드시 암호화 상태로만 저장.
 // - 복호화: node cloudflare/scripts/decrypt-backup.mjs <파일> <SESSION_SECRET>
 import { sendEmail, emailEnabled, mailShell } from "./email.js";
+import * as D from "./db.js";
+import { sendMany, priceOf } from "./notify.js";
 
 const BACKUP_PREFIX = "backups/";
 const MANIFEST_KEY = "backups/index.json"; // R2 list() 없이도 보존 개수를 관리하기 위한 목록
@@ -107,6 +109,36 @@ export async function runWeeklyReports(env) {
     sent++;
   }
   return { sent };
+}
+
+// 매일: 서명 기한이 임박(D-2 이내)한 문서의 미서명자에게 알림톡 자동 리마인더.
+// 크레딧이 없는 상인회는 건너뛴다(과금 실패로 로그만 쌓이지 않도록).
+export async function runSignReminders(env) {
+  const db = env.DB;
+  const docs = await D.listDocsNeedingRemind(db);
+  let sent = 0, docsDone = 0, skipped = 0;
+  for (const d of docs) {
+    const assoc = await D.getAssociationById(db, d.association_id);
+    if (!assoc) continue;
+    const targets = (await D.listUnsigned(db, d.id)).filter((t) => t.phone);
+    if (!targets.length) { await D.markReminded(db, d.id); continue; }
+    const price = await priceOf(db, "alimtalk");
+    if ((await D.getBalance(db, assoc.id)) < price) { skipped++; continue; } // 잔액 없으면 다음날 다시 시도
+    const r = await sendMany(env, db, {
+      assoc, kind: "sign_remind", recipients: targets,
+      textFor: (m) => `[${assoc.name}] ${m.name}님, '${d.title}' 전자서명 기한이 ${d.due_date}까지입니다. 아직 서명이 완료되지 않았습니다.`,
+      buttonName: "서명하러 가기", buttonUrl: `${env.PUBLIC_ORIGIN || ""}/t/${d.assoc_slug}/sign`,
+    });
+    sent += r.sent; docsDone++;
+    await D.markReminded(db, d.id);
+  }
+  return { docs: docsDone, sent, skipped };
+}
+
+export async function runDaily(env) {
+  const reminders = await runSignReminders(env).catch((e) => ({ error: String(e) }));
+  console.log("daily job", JSON.stringify({ reminders }));
+  return { reminders };
 }
 
 export async function runWeekly(env) {

@@ -26,6 +26,11 @@ export async function sha256Hex(text) {
   const buf = await crypto.subtle.digest("SHA-256", enc.encode(String(text ?? "")));
   return [...new Uint8Array(buf)].map((x) => x.toString(16).padStart(2, "0")).join("");
 }
+// 바이너리(첨부 PDF 등) 해시 — 문자열 변환 없이 원본 바이트를 그대로 해싱
+export async function sha256HexBytes(bytes) {
+  const buf = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(buf)].map((x) => x.toString(16).padStart(2, "0")).join("");
+}
 
 // ----- 비밀번호 (PBKDF2) -----
 const PBKDF2_ITERS = 100000;
