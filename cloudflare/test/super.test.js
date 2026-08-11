@@ -233,7 +233,7 @@ test("신청을 승인해도 시작 세트가 함께 들어간다", async () => 
 // ── 선택 연동 점검
 test("연동 점검 패널이 켜짐/안 켜짐을 보여 준다", async () => {
   const html = await (await req("GET", "/super", { cookie })).text();
-  assert.match(html, /선택 연동 점검/);
+  assert.match(html, /있으면 좋은 것/);
   assert.match(html, /방문 통계/);
   assert.match(html, /MEDIA_PUBLIC_BASE/);
   assert.match(html, /안 켜짐/, "설정 안 된 항목은 그렇게 표시");
@@ -251,7 +251,7 @@ test("연동 값이 있으면 켜짐으로 바뀌고 값 자체는 안 보인다
     body: new URLSearchParams({ _csrf: tk, email: "s2@platform.kr", password: "super1234" }) });
   const jar = [seed, ...(lr.headers.getSetCookie?.() || []).map((c) => c.split(";")[0])].join("; ");
   const html = await (await fetch2("/super", { headers: { cookie: jar } })).text();
-  assert.match(html, /2\/5 켜짐/, "설정한 두 항목이 켜짐으로 세어져야 함");
+  assert.match(html, /2\/4 켜짐/, "설정한 두 항목이 켜짐으로 세어져야 함");
   // 값 자체는 패널에 찍지 않습니다. (CF 방문 통계 토큰은 비콘 스크립트에 들어가는 공개 값이라
   //  페이지 다른 곳에는 정상적으로 나타납니다 — 그래서 패널 구간만 잘라 확인합니다.)
   const panel = html.slice(html.indexOf("선택 연동 점검")).split("</section>")[0];
@@ -381,4 +381,65 @@ test("보조 정보가 하나 실패해도 콘솔 본 기능은 열린다", asyn
   db()._db.exec(`CREATE TABLE application_notes (id INTEGER PRIMARY KEY AUTOINCREMENT,
     application_id INTEGER NOT NULL, actor_name TEXT NOT NULL DEFAULT '', body TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now')))`);
+});
+
+// ── 개통 체크리스트 — "지금 뭘 해야 하지"를 사람에게 묻지 않아도 되게 하는 화면
+import { TEMPLATE_KEYS } from "../src/notify.js";
+
+async function superHtml(extra = {}, tplCount = 0) {
+  const e2 = makeEnv(extra);
+  const pw = await hashPassword("super1234");
+  await D.createUser(e2.DB, { email: "chk@platform.kr", passwordHash: pw.hash, salt: pw.salt, name: "운영자", role: "SUPERADMIN", associationId: null });
+  await D.createAssociation(e2.DB, { slug: "hanbit", name: "한빛법무법인", kind: "esign" });
+  const keys = Object.values(TEMPLATE_KEYS);
+  for (let i = 0; i < tplCount; i++) await D.setSetting(e2.DB, keys[i], "TPL_" + i);
+  const f = (p, init) => worker.fetch(new Request(BASE + p, init), e2, { waitUntil() {}, passThroughOnException() {} });
+  const g = await f("/login");
+  const seed = (g.headers.getSetCookie?.() || []).find((c) => c.startsWith("sc_csrf_seed="))?.split(";")[0] || "";
+  const tk = (/name="_csrf" value="([^"]+)"/.exec(await g.text()) || [])[1];
+  const lr = await f("/login", { method: "POST", headers: { cookie: seed, origin: BASE, "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ _csrf: tk, email: "chk@platform.kr", password: "super1234" }) });
+  const jar = [seed, ...(lr.headers.getSetCookie?.() || []).map((c) => c.split(";")[0])].join("; ");
+  return (await f("/super", { headers: { cookie: jar } })).text();
+}
+
+const ALL_ON = {
+  ALIGO_API_KEY: "ZZAPIZZ", ALIGO_USER_ID: "ZZUSERZZ", ALIGO_SENDER_KEY: "ZZSENDKEYZZ", ALIGO_SENDER: "0299998888",
+  RESEND_API_KEY: "re_ZZSECRETZZ", MAIL_FROM: "no-reply@lister.kr",
+};
+
+test("개통 체크리스트: 아무것도 없으면 막고 있는 것 4건을 이름으로 알려준다", async () => {
+  const html = await superHtml();
+  assert.match(html, /개통 체크리스트/);
+  assert.match(html, /4건 남음/);
+  for (const label of ["전자서명 개인키", "알림톡 발송 키", "알림톡 템플릿 코드", "이메일 발송"])
+    assert.match(html, new RegExp(label), `${label} 항목이 있어야`);
+  assert.match(html, /ALIGO_API_KEY/, "어떤 변수를 넣어야 하는지까지");
+  assert.match(html, /RESEND_API_KEY/);
+});
+
+test("개통 체크리스트: 템플릿이 일부만 등록되면 빠진 것을 이름으로 짚어준다", async () => {
+  const html = await superHtml({}, 3);
+  assert.match(html, /알림톡 템플릿 코드 \(3\/5\)/);
+  assert.match(html, /전자서명 본인확인/, "미등록 템플릿 이름이 보여야");
+  assert.ok(!/미등록: <b>전자서명 요청/.test(html), "등록된 것은 미등록 목록에 없어야");
+});
+
+test("개통 체크리스트: 다 갖추면 준비 완료 + 할 일 없음", async () => {
+  const kp = await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]);
+  const html = await superHtml({ ...ALL_ON, SIGN_PRIVATE_KEY: JSON.stringify(await crypto.subtle.exportKey("jwk", kp.privateKey)) }, 5);
+  assert.match(html, /준비 완료/);
+  assert.match(html, /처리할 일이 없습니다/);
+  assert.ok(!/건 남음/.test(html));
+});
+
+test("개통 체크리스트: 시크릿 값 자체는 화면에 절대 찍지 않는다", async () => {
+  const html = await superHtml(ALL_ON, 5);
+  for (const v of ["ZZAPIZZ", "ZZUSERZZ", "ZZSENDKEYZZ", "0299998888", "re_ZZSECRETZZ"])
+    assert.ok(!html.includes(v), `시크릿 값 노출: ${v}`);
+});
+
+test("조직 목록에 유형 배지가 붙는다 (셀렉트를 열지 않아도 구분)", async () => {
+  const html = await superHtml();
+  assert.match(html, /한빛법무법인<\/a>\s*<span class="badge badge-info">전자계약<\/span>/);
 });

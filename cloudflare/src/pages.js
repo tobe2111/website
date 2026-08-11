@@ -2114,13 +2114,12 @@ export async function superConsole(ctx) {
   const operator = (await D.getSetting(db, "operator")) || "";
   const contactEmail = (await D.getSetting(db, "contact_email")) || "";
   const contactPhone = (await D.getSetting(db, "contact_phone")) || "";
-  // 선택 연동 점검 — 무엇이 아직 안 켜졌는지 한눈에. 값 자체는 보여 주지 않습니다(시크릿).
+  // 있으면 좋은 것 — 꺼져 있어도 서비스는 돈다. 값 자체는 보여 주지 않는다(시크릿).
   const wired = [
+    ["봇 차단(캡차)", !!(env.TURNSTILE_SITE_KEY && env.TURNSTILE_SECRET), "TURNSTILE_SITE_KEY · TURNSTILE_SECRET", "셀프 가입·문의 폼에 Cloudflare Turnstile 이 붙습니다. 없어도 폼은 정상 동작합니다."],
+    ["네이버 지도", !!env.NAVER_MAP_CLIENT_ID, "NAVER_MAP_CLIENT_ID", "상인회 홈의 점포 지도. 지도가 안 뜨면 Maps 콘솔의 Web 서비스 URL 에 이 사이트 도메인이 등록됐는지 확인하세요."],
     ["사진 직접 서빙", !!env.MEDIA_PUBLIC_BASE, "MEDIA_PUBLIC_BASE", "R2 버킷에 공개 도메인을 켜고 그 주소를 워커 변수에 넣으면 사진이 워커를 거치지 않고 CDN 직행합니다."],
     ["방문 통계", !!env.CF_ANALYTICS_TOKEN, "CF_ANALYTICS_TOKEN", "Cloudflare Web Analytics 에서 사이트를 추가하고 발급된 토큰을 넣으면 모든 페이지에 자동 삽입됩니다."],
-    ["이메일 자동 발송", !!(env.RESEND_API_KEY && env.MAIL_FROM), "RESEND_API_KEY · MAIL_FROM", "비밀번호 재설정·입점 승인 안내가 자동 발송됩니다. 없으면 화면 안내로 대체됩니다."],
-    ["네이버 지도", !!env.NAVER_MAP_CLIENT_ID, "NAVER_MAP_CLIENT_ID", "지도가 안 뜨면 Maps 콘솔의 Web 서비스 URL 에 이 사이트 도메인이 등록됐는지 확인하세요."],
-    ["봇 차단(캡차)", !!(env.TURNSTILE_SITE_KEY && env.TURNSTILE_SECRET), "TURNSTILE_SITE_KEY · TURNSTILE_SECRET", "가입·문의 폼에 Cloudflare Turnstile 이 붙습니다. 없어도 폼은 정상 동작합니다."],
   ];
   const supers = await soft("슈퍼 계정 목록", () => D.listSuperAdmins(db), []);
   const superPanel = `<section class="panel"><h2 class="panel-title">이 콘솔에 접근 가능한 계정 <span class="badge ${supers.length > 1 ? "badge-wait" : "badge-ok"}">${supers.length}개</span></h2>
@@ -2130,7 +2129,7 @@ export async function superConsole(ctx) {
       <div><b>${esc(u.email)}</b> <span class="badge ${u.totp_enabled ? "badge-ok" : "badge-muted"}">${u.totp_enabled ? "2단계 인증 사용" : "2단계 인증 없음"}</span>
         <p>${esc(u.name || "")} · 생성 ${esc(kstDate(u.created_at))}</p></div></li>`).join("")}</ul>
     ${supers.some((u) => !u.totp_enabled) ? `<p class="panel-hint">이 계정 하나가 뚫리면 모든 상인회 데이터가 열립니다. <a href="/account">계정 설정</a>에서 2단계 인증을 켜 두시길 권합니다.</p>` : ""}</section>`;
-  const wiredPanel = `<section class="panel"><h2 class="panel-title">선택 연동 점검 <span class="badge ${wired.every((w) => w[1]) ? "badge-ok" : "badge-muted"}">${wired.filter((w) => w[1]).length}/${wired.length} 켜짐</span></h2>
+  const wiredPanel = `<section class="panel"><h2 class="panel-title">있으면 좋은 것 <span class="badge ${wired.every((w) => w[1]) ? "badge-ok" : "badge-muted"}">${wired.filter((w) => w[1]).length}/${wired.length} 켜짐</span></h2>
     <p class="panel-hint">모두 선택 사항입니다. 꺼져 있어도 사이트는 정상 동작하며, 값은 <b>Workers &amp; Pages → 이 워커 → Settings → Variables</b> 에서 넣습니다.</p>
     <ul class="wire-list">${wired.map(([label, on, keys, help]) => `<li class="${on ? "is-on" : ""}">
       <span class="wire-dot" aria-hidden="true"></span>
@@ -2173,13 +2172,55 @@ export async function superConsole(ctx) {
       <input type="number" name="unit_price" value="${u.unit_price || 0}" min="0" max="1000" step="1" aria-label="${esc(u.name)} 단가" />
       <button class="btn btn-xs btn-ghost">저장</button></form>
       <small>${u.unit_price ? `전용 ${u.unit_price}원` : `기본 ${unitPrice}원`}</small></td></tr>`).join("")
-    || `<tr><td colspan="6" class="empty">상인회가 없습니다.</td></tr>`;
+    || `<tr><td colspan="6" class="empty">조직이 없습니다.</td></tr>`;
   // ----- 전자서명 키·사슬 상태 (보안) -----
   const keyMode = keyStorage(env);
   const keyFp = await publicKeyFingerprint(env).catch(() => "(확인 불가)");
   const chain = verifyChain(await D.listSignatureChain(db));
   const otpOn = (await D.getSetting(db, "esign_otp")) === "1";
   const anchor = await D.lastAnchor(db);
+
+  // ----- 개통 체크리스트 -----
+  // 여기 걸린 항목은 '있으면 좋은 것'이 아니라 '없으면 기능이 죽는 것'이다.
+  // 예: 템플릿 코드가 비면 그 종류의 알림톡이 통째로 실패한다(잔액은 차감되지 않지만 아무것도 안 나간다).
+  // 이 목록이 없으면 "지금 뭘 해야 하지"를 사람에게 물어야만 알 수 있었다.
+  const tplMissing = [];
+  for (const [kind, key] of Object.entries(TEMPLATE_KEYS)) {
+    if (!((await D.getSetting(db, key)) || "").trim()) tplMissing.push(TEMPLATES[kind] ? TEMPLATES[kind].label : kind);
+  }
+  const tplTotal = Object.keys(TEMPLATE_KEYS).length;
+  const blockers = [
+    { on: keyMode === "secret", label: "전자서명 개인키를 Secret 으로",
+      why: "지금은 키가 D1 에 있습니다. DB 를 읽을 수 있으면 과거 서명을 위조할 수 있습니다.",
+      how: "아래 <b>설정·보안</b> 에 옮기는 순서가 있습니다. 이미 받은 서명이 있으면 <b>현행 키를 그대로</b> 옮기세요 — 새로 만들면 전부 검증 실패합니다.",
+      go: ["#s-settings", "설정·보안으로"] },
+    { on: notifyEnabled(env), label: "알림톡 발송 키",
+      why: "없으면 카카오 알림톡이 한 건도 나가지 않습니다. 서명 요청·재알림·본인확인이 전부 이메일로만 갑니다.",
+      how: "알리고(smartsms.aligo.in) 가입 → 카카오 발신프로필 등록 → 워커 <b>Settings → Variables</b> 에 Secret 4개 등록",
+      code: "ALIGO_API_KEY · ALIGO_USER_ID · ALIGO_SENDER_KEY · ALIGO_SENDER" },
+    { on: tplMissing.length === 0, label: `알림톡 템플릿 코드 (${tplTotal - tplMissing.length}/${tplTotal})`,
+      why: tplMissing.length ? `미등록: <b>${tplMissing.map(esc).join(" · ")}</b> — 이 종류는 발송이 실패합니다.` : "",
+      how: "아래 <b>알림톡·정산</b> 에 카카오에 등록할 문구 원문이 있습니다. 그대로 심사 신청하고, 받은 코드를 같은 화면에 적으세요.",
+      go: ["#s-money", "알림톡·정산으로"] },
+    { on: emailOn(env), label: "이메일 발송",
+      why: "알림톡 심사가 끝나기 전까지 유일한 발송 수단입니다. 비밀번호 재설정 링크도 여기 걸립니다.",
+      how: "Resend(resend.com) 무료 플랜 가입 → 발신 도메인 인증 → 워커 변수에 등록",
+      code: "RESEND_API_KEY · MAIL_FROM" },
+  ];
+  const blocked = blockers.filter((b) => !b.on);
+  const launchPanel = `<section class="panel ${blocked.length ? "panel-warn" : "panel-accent"}">
+    <h2 class="panel-title">개통 체크리스트 <span class="badge ${blocked.length ? "badge-no" : "badge-ok"}">${blocked.length ? `${blocked.length}건 남음` : "준비 완료"}</span></h2>
+    <p class="panel-hint">${blocked.length
+      ? "아래가 <b>지금 기능을 막고 있는 것</b>들입니다. 전부 바깥 서비스 계정 등록이라 이 화면에서 끝나지 않고, 어디서 무엇을 받아 와야 하는지만 적어 두었습니다."
+      : "실서비스에 필요한 것이 모두 켜졌습니다. 실제 계약 1건을 본인 번호로 끝까지 보내 확인해 보세요."}</p>
+    <ul class="wire-list">${blockers.map((b) => `<li class="${b.on ? "is-on" : ""}">
+      <span class="wire-dot" aria-hidden="true"></span>
+      <div><b>${esc(b.label)}</b> <span class="badge ${b.on ? "badge-ok" : "badge-no"}">${b.on ? "완료" : "필요"}</span>
+        ${b.on ? "" : `${b.why ? `<p>${b.why}</p>` : ""}<p>${b.how}</p>
+          ${b.code ? `<code>${esc(b.code)}</code>` : ""}
+          ${b.go ? `<a href="${b.go[0]}" data-goto="${b.go[0].replace("#s-", "")}">${esc(b.go[1])} →</a>` : ""}`}</div></li>`).join("")}</ul>
+  </section>`;
+
   const securityPanel = `<section class="panel ${keyMode === "secret" ? "" : "panel-warn"}"><h2 class="panel-title">전자서명 보안
       ${keyMode === "secret" ? '<span class="badge badge-ok">키 안전 보관</span>' : '<span class="badge badge-no">키가 DB에 있음</span>'}
       ${chain.ok ? '<span class="badge badge-ok">서명 사슬 정상</span>' : '<span class="badge badge-no">사슬 끊김</span>'}</h2>
@@ -2366,6 +2407,7 @@ export async function superConsole(ctx) {
         <label>메모<textarea name="message" rows="2" maxlength="2000" placeholder="어디서 알게 됐는지, 규모, 관심사 등"></textarea></label>
         <button class="btn btn-primary btn-sm">영업 목록에 추가</button></form></details></section>`;
   const rows = list.map((a) => `<tr><td><a href="/t/${esc(a.slug)}" target="_blank">${esc(a.name)}</a>
+      <span class="badge ${a.kind === "esign" ? "badge-info" : "badge-muted"}">${a.kind === "esign" ? "전자계약" : "상인회"}</span>
       <form method="post" action="/super/association/${a.id}/slug" class="domain-form" title="주소를 바꿔도 옛 주소로 들어온 사람은 새 주소로 자동 이동합니다.">
         <span class="slug-pre">/t/</span><input type="text" name="slug" value="${esc(a.slug)}" pattern="[a-z0-9-]+" maxlength="40" />
         <button class="btn btn-xs btn-ghost">주소</button></form>
@@ -2398,20 +2440,20 @@ export async function superConsole(ctx) {
         <form method="post" action="/super/association/${a.id}/delete" data-confirm="정말 '${esc(a.name)}' 을(를) 삭제할까요?&#10;&#10;⚠️ 점포·회원 계정·공지·게시글·서명 기록이 모두 사라지며 되돌릴 수 없습니다.">
           <p class="del-warn">되돌릴 수 없습니다. 확인용으로 주소 <code>${esc(a.slug)}</code> 를 입력하세요.</p>
           <input type="text" name="confirm_slug" placeholder="${esc(a.slug)}" required autocomplete="off" />
-          <button class="btn btn-xs btn-danger">영구 삭제</button></form></details></td></tr>`).join("") || `<tr><td colspan="5" class="empty">상인회가 없습니다.</td></tr>`;
+          <button class="btn btn-xs btn-danger">영구 삭제</button></form></details></td></tr>`).join("") || `<tr><td colspan="5" class="empty">조직이 없습니다.</td></tr>`;
   // 콘솔이 한 화면에 14개 패널로 쏟아지던 것을 5개 묶음으로 나눈다.
   // 왼쪽에서 하나를 고르면 그것만 보인다(JS 꺼져 있으면 전부 보이는 문서로 폴백).
   const todo = [
     pendCredits.length ? { n: pendCredits.length, label: "충전 승인 대기", tab: "money" } : null,
     dueSoon ? { n: dueSoon, label: "오늘 연락할 영업", tab: "sales" } : null,
-    keyMode === "secret" ? null : { n: 1, label: "서명키를 Secret 으로 이전", tab: "settings" },
+    blocked.length ? { n: blocked.length, label: "개통 준비", tab: "home" } : null,
   ].filter(Boolean);
   const todoBar = todo.length
     ? `<div class="super-todo">${todo.map((t) => `<a href="#s-${t.tab}" class="super-todo-item"><b>${t.n}</b><span>${esc(t.label)}</span></a>`).join("")}</div>`
     : `<div class="super-todo is-clear"><span>지금 처리할 일이 없습니다 ✓</span></div>`;
   const TABS = [
-    ["home", "홈", "◎"],
-    ["assoc", "상인회", "▤"],
+    ["home", "홈", "◎", blocked.length],
+    ["assoc", "조직", "▤"],           // 상인회와 전자계약 조직이 함께 들어 있다
     ["sales", "영업", "◈", pendingApps.length],
     ["money", "알림톡·정산", "₩", pendCredits.length],
     ["settings", "설정·보안", "⚙", keyMode === "secret" ? 0 : 1],
@@ -2422,13 +2464,14 @@ export async function superConsole(ctx) {
   const body = `<section class="dash"><div class="container">
     <div class="dash-head"><div><p class="section-eyebrow">SUPER</p><h1 class="dash-title">플랫폼 관리</h1>
       <p class="dash-sub">운영 중 ${ps.associations}곳 · 가입 점포 ${ps.businesses}곳 · 사용자 ${ps.users}명</p></div>
-      <div class="dash-head-actions"><a href="#s-assoc" class="btn btn-primary btn-sm" data-goto="assoc">＋ 새 상인회</a>
+      <div class="dash-head-actions"><a href="#s-assoc" class="btn btn-primary btn-sm" data-goto="assoc">＋ 새 조직</a>
         <form method="post" action="/logout"><button class="btn btn-ghost btn-sm">로그아웃</button></form></div></div>${flashOf(query)}
     ${loadWarnings.length ? `<div class="flash flash-err"><b>일부 정보를 불러오지 못했습니다.</b> 나머지 기능은 그대로 쓰실 수 있습니다.<br />${loadWarnings.map((w) => esc(w)).join("<br />")}</div>` : ""}
     ${todoBar}
     <div class="console-grid">${sideNav}<div class="console-main">
 
       <div class="sgroup" id="s-home" data-tab="home">
+        ${launchPanel}
     <div class="stat-cards"><div class="stat-card"><span class="stat-num">${ps.associations}</span><span class="stat-label">상인회</span></div>
       <div class="stat-card"><span class="stat-num">${ps.businesses}</span><span class="stat-label">승인 업체</span></div>
       <div class="stat-card"><span class="stat-num">${ps.users}</span><span class="stat-label">사용자</span></div>
@@ -2450,11 +2493,11 @@ export async function superConsole(ctx) {
         <div class="form-divider">관리자 계정</div>
         <div class="form-two"><label>관리자 이름<input type="text" name="admin_name" /></label><label>관리자 이메일<input type="email" name="admin_email" required /></label></div>
         <label>관리자 비밀번호 (8자 이상)<input type="password" name="admin_password" required minlength="8" /></label>
-        <button class="btn btn-primary">상인회 생성</button></form></section>
-    <section class="panel"><h2 class="panel-title">상인회 목록</h2>
+        <button class="btn btn-primary">조직 만들기</button></form></section>
+    <section class="panel"><h2 class="panel-title">조직 목록</h2>
       <p class="panel-hint">개별 도메인: 도메인을 입력·저장한 뒤 <b>Cloudflare 대시보드 → 이 워커 → Settings → Domains &amp; Routes → Add → Custom Domain</b> 으로 같은 도메인을 추가해야 실제 접속됩니다(그 도메인이 이 Cloudflare 계정에 등록되어 있어야 함).</p>
       <div class="table-scroll"><table class="admin-table">
-      <thead><tr><th>상인회</th><th>개별 도메인</th><th>플랜</th><th>상태</th><th>관리</th></tr></thead><tbody>${rows}</tbody></table></div></section>
+      <thead><tr><th>조직</th><th>개별 도메인</th><th>플랜</th><th>상태</th><th>관리</th></tr></thead><tbody>${rows}</tbody></table></div></section>
         ${usagePanel}
       </div>
 
