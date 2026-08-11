@@ -491,6 +491,43 @@ export const listSignatures = (db, documentId) =>
     WHERE s.document_id=? ORDER BY s.signed_at DESC`, documentId);
 export const getSignatureByCode = (db, code) => first(db, "SELECT * FROM signatures WHERE verify_code=?", code);
 
+// ----- 공개 API 키 · 웹훅 -----
+export const listApiKeys = (db, aid) =>
+  all(db, "SELECT * FROM api_keys WHERE association_id=? ORDER BY id DESC", aid);
+export const getApiKeyByHash = (db, hash) =>
+  first(db, "SELECT * FROM api_keys WHERE key_hash=? AND revoked_at=''", hash);
+export const getApiKey = (db, id) => first(db, "SELECT * FROM api_keys WHERE id=?", id);
+export async function createApiKey(db, { associationId, name, prefix, keyHash, webhookUrl = "", webhookSecret = "" }) {
+  await run(db, `INSERT INTO api_keys (association_id, name, prefix, key_hash, webhook_url, webhook_secret)
+    VALUES (?,?,?,?,?,?)`, associationId, name, prefix, keyHash, webhookUrl, webhookSecret);
+  return getApiKey(db, await lastId(db));
+}
+export const revokeApiKey = (db, id, aid) =>
+  run(db, "UPDATE api_keys SET revoked_at=datetime('now') WHERE id=? AND association_id=?", id, aid);
+export const setApiKeyWebhook = (db, id, aid, url) =>
+  run(db, "UPDATE api_keys SET webhook_url=? WHERE id=? AND association_id=?", url, id, aid);
+export const touchApiKey = (db, id) =>
+  run(db, "UPDATE api_keys SET last_used_at=datetime('now'), calls=calls+1 WHERE id=?", id);
+
+export const queueWebhook = (db, { keyId, event, payload }) =>
+  run(db, "INSERT INTO webhook_queue (key_id, event, payload) VALUES (?,?,?)", keyId, event, JSON.stringify(payload));
+export const dueWebhooks = (db, limit = 25) =>
+  all(db, `SELECT w.*, k.webhook_url, k.webhook_secret FROM webhook_queue w JOIN api_keys k ON k.id=w.key_id
+    WHERE w.delivered_at='' AND w.next_try_at <= datetime('now') AND k.revoked_at='' AND k.webhook_url != ''
+    ORDER BY w.next_try_at LIMIT ?`, limit);
+export const markWebhookDone = (db, id) =>
+  run(db, "UPDATE webhook_queue SET delivered_at=datetime('now'), last_error='' WHERE id=?", id);
+// 재시도 간격을 점점 늘린다 (1분 → 5 → 25 → …). 6회 실패하면 포기하고 기록만 남긴다.
+export const markWebhookFailed = (db, id, attempts, error) =>
+  run(db, `UPDATE webhook_queue SET attempts=?, last_error=?,
+    next_try_at=datetime('now', ?) WHERE id=?`, attempts, String(error || "").slice(0, 200),
+    `+${Math.min(720, Math.pow(5, Math.min(attempts, 4)))} minutes`, id);
+export const listWebhooks = (db, keyId, limit = 30) =>
+  all(db, "SELECT * FROM webhook_queue WHERE key_id=? ORDER BY id DESC LIMIT ?", keyId, limit);
+export const keysWithWebhook = (db, documentId) =>
+  all(db, `SELECT k.* FROM api_keys k JOIN documents d ON d.association_id=k.association_id
+    WHERE d.id=? AND k.revoked_at='' AND k.webhook_url != ''`, documentId);
+
 // ----- 외부(비회원) 서명자 -----
 export const listExternalSigners = (db, documentId) =>
   all(db, `SELECT e.*, EXISTS (SELECT 1 FROM signatures s WHERE s.document_id=e.document_id AND s.external_id=e.id) AS signed

@@ -12,6 +12,7 @@ import { renderPaper, fieldBox, FIELD_KINDS, paginate, pageCount } from "./paper
 import { BUILTIN, builtinById, isBuiltinId, normalizeTemplate, extractVars, applyVars, resolveFieldPages } from "./templates.js";
 import { buildEvidence } from "./evidence.js";
 import { resolveExtToken, makeExtToken, extSignUrl } from "./extsign.js";
+import { KEY_PREFIX } from "./apiv1.js";
 import { text } from "./http.js";
 import { parseLayout, renderHome, SECTION_CATALOG } from "./homeLayout.js";
 import { turnstileWidget, turnstileScript } from "./turnstile.js";
@@ -1260,7 +1261,7 @@ export async function adminDocuments(ctx) {
   const body = `<section class="dash"><div class="container">
     <div class="dash-head"><div><p class="section-eyebrow">E-SIGN · ${esc(assoc.name)}</p><h1 class="dash-title">전자서명 문서</h1>
       <p class="dash-sub"><a href="${base}/admin">← 관리자</a></p></div>
-      <div class="dash-head-actions"><a href="${base}/admin/templates" class="btn btn-ghost btn-sm">📋 서식 관리</a></div></div>${flashOf(query)}
+      <div class="dash-head-actions"><a href="${base}/admin/templates" class="btn btn-ghost btn-sm">📋 서식 관리</a><a href="${base}/admin/api" class="btn btn-ghost btn-sm">🔌 API 연동</a></div></div>${flashOf(query)}
     <section class="panel panel-accent"><h2 class="panel-title">📋 서식으로 만들기 <span class="badge badge-brand">권장</span></h2>
       <p class="panel-hint">표준 서식을 고르면 본문과 <b>서명·도장 자리까지</b> 그대로 들어옵니다. 빈칸만 채우면 끝입니다.</p>
       <div class="tpl-grid">${tplCards}</div>
@@ -1424,6 +1425,67 @@ export async function adminTemplates(ctx) {
         <span class="tpl-meta">빈칸 ${t.vars.length} · 자리 ${t.fields.length}개</span></a>`).join("")}</div></section>
     </div></section>`;
   return html(layout({ title: "계약서 서식", assoc, base, user, body, csrf }));
+}
+
+// API 연동 콘솔 — 키 발급·웹훅 설정·최근 전송 결과
+export async function adminApi(ctx) {
+  const { db, assoc, base, user, query, csrf } = ctx;
+  const keys = await D.listApiKeys(db, assoc.id);
+  const fresh = query.get("newkey") || "";
+  const active = keys.filter((k) => !k.revoked_at);
+  const recent = active.length ? await D.listWebhooks(db, active[0].id, 15) : [];
+  const rows = keys.length ? keys.map((k) => `<tr class="${k.revoked_at ? "is-revoked" : ""}">
+      <td><b>${esc(k.name || "이름 없음")}</b><br /><code>${esc(k.prefix)}…</code></td>
+      <td>${k.revoked_at ? '<span class="badge badge-no">폐기됨</span>' : '<span class="badge badge-ok">사용 중</span>'}<br />
+        <small>호출 ${k.calls.toLocaleString()}회${k.last_used_at ? ` · 최근 ${esc(kstStamp(k.last_used_at, { year: false }))}` : ""}</small></td>
+      <td>${k.revoked_at ? "-" : `<form method="post" action="${base}/admin/api/${k.id}/webhook" class="domain-form">
+          <input type="url" name="webhook_url" value="${esc(k.webhook_url || "")}" placeholder="https://내서버/webhook" />
+          <button class="btn btn-xs btn-ghost">저장</button></form>
+        ${k.webhook_url ? `<small>서명키 <code>${esc(k.webhook_secret)}</code></small>` : '<small class="txt-muted">웹훅 꺼짐</small>'}`}</td>
+      <td class="actions-cell">${k.revoked_at ? "" : `<form method="post" action="${base}/admin/api/${k.id}/revoke" data-confirm="이 키를 폐기하면 즉시 호출이 막힙니다. 계속할까요?"><button class="btn btn-xs btn-ghost">폐기</button></form>`}</td></tr>`).join("")
+    : `<tr><td colspan="4" class="empty">발급한 키가 없습니다.</td></tr>`;
+  const whRows = recent.length ? recent.map((w) => `<li><span class="audit-action">${esc(w.event)}</span>
+      <span class="audit-detail">${w.delivered_at ? "전송 완료" : w.attempts >= 6 ? `포기 — ${esc(w.last_error)}` : `대기/재시도 ${w.attempts}회${w.last_error ? ` — ${esc(w.last_error)}` : ""}`}</span>
+      <span class="audit-meta">${esc(kstStamp(w.created_at, { year: false }))}</span></li>`).join("")
+    : `<li class="empty">전송 이력이 없습니다.</li>`;
+  const body = `<section class="dash"><div class="container">
+    <div class="dash-head"><div><p class="section-eyebrow">E-SIGN · API</p><h1 class="dash-title">API 연동</h1>
+      <p class="dash-sub"><a href="${base}/admin/documents">← 문서 목록</a> · 우리 시스템에서 계약을 자동으로 만들고 보냅니다</p></div>
+      <div class="dash-head-actions"><a href="/api/v1/docs" target="_blank" class="btn btn-ghost btn-sm">📖 API 문서</a></div></div>${flashOf(query)}
+    ${fresh ? `<div class="invite-box"><p class="invite-box-title">🔑 새 API 키 — <b>지금만 보입니다</b></p>
+      <input type="text" class="invite-url" value="${esc(fresh)}" readonly data-select-all />
+      <p class="panel-hint">이 값은 저장하지 않으므로 다시 볼 수 없습니다. 안전한 곳에 옮겨 두세요.
+        잃어버리면 새 키를 발급하고 이 키를 폐기하면 됩니다.</p></div>` : ""}
+    <section class="panel panel-accent"><h2 class="panel-title">키 발급</h2>
+      <p class="panel-hint">API 호출은 무료입니다. 비용은 <b>알림톡 발송</b>에서만 발생합니다(현재 잔액 기준으로 차감).</p>
+      <form method="post" action="${base}/admin/api" class="stack-form compact">
+        <div class="form-two"><label>키 이름<input type="text" name="name" maxlength="60" placeholder="예: 사내 ERP 연동" /></label>
+          <label>웹훅 주소 (선택)<input type="url" name="webhook_url" maxlength="300" placeholder="https://내서버/esign/webhook" /></label></div>
+        <button class="btn btn-primary btn-sm">API 키 발급</button></form></section>
+    <section class="panel"><h2 class="panel-title">발급된 키 <span class="badge badge-muted">${active.length} 사용 중</span></h2>
+      <div class="table-scroll"><table class="admin-table">
+        <thead><tr><th>키</th><th>상태</th><th>웹훅</th><th>관리</th></tr></thead><tbody>${rows}</tbody></table></div></section>
+    <section class="panel"><h2 class="panel-title">최근 웹훅 전송</h2>
+      <p class="panel-hint">서명·거절·완료가 나면 등록한 주소로 즉시 알립니다. 실패하면 1·5·25·125분 간격으로 최대 6회 다시 시도합니다.
+        요청에는 <code>x-esign-signature</code> 헤더가 붙으며, <code>HMAC-SHA256(서명키, "시각.본문")</code> 으로 검증할 수 있습니다.</p>
+      <ul class="audit-list">${whRows}</ul></section>
+    <section class="panel"><h2 class="panel-title">빠른 시작</h2>
+      <pre class="code-block">curl -X POST ${esc(ORIGIN)}/api/v1/documents \
+  -H "Authorization: Bearer ${esc(KEY_PREFIX)}..." \
+  -H "content-type: application/json" \
+  -d '{
+    "title": "○○상가 임대차계약",
+    "template": "b-lease",
+    "variables": { "임대인": "김갑", "임차인": "이을", "보증금": "50,000,000" },
+    "signers": [
+      { "name": "김갑", "email": "gap@example.com" },
+      { "name": "이을", "phone": "010-1234-5678" }
+    ],
+    "ordered": true
+  }'</pre>
+      <p class="panel-hint">응답의 <code>sign_url</code> 로 상대방이 가입 없이 바로 서명합니다. 전체 명세는 <a href="/api/v1/docs" target="_blank">/api/v1/docs</a>.</p></section>
+    </div></section>`;
+  return html(layout({ title: "API 연동", assoc, base, user, body, csrf }));
 }
 
 // ================= 외부(비회원) 서명 =================

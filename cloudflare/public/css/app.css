@@ -1470,3 +1470,7 @@ a.cc-val:hover{color:var(--brand-700)}
 /* 외부(비회원) 서명 화면 */
 .ext-head{margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--line-soft)}
 .ext-who{margin-top:6px;color:var(--ink-soft);font-size:.95rem}
+.code-block{background:var(--ink);color:#e6edf3;padding:16px;border-radius:var(--r-md);overflow-x:auto;
+  font-family:ui-monospace,Menlo,monospace;font-size:.8rem;line-height:1.6;white-space:pre}
+tr.is-revoked{opacity:.55}
+.txt-muted{color:var(--muted)}

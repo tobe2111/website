@@ -11,6 +11,7 @@ import { contentHash, sealRecord, newVerifyCode, SEAL_VER, fieldsHashOf } from "
 import { isFieldKind, round4, FIELD_KINDS, pageCount } from "./paper.js";
 import { builtinById, isBuiltinId, normalizeTemplate, extractVars, applyVars, resolveFieldPages } from "./templates.js";
 import { resolveExtToken, makeExtToken, extSignUrl } from "./extsign.js";
+import { enqueueDocEvent, newApiKey, hashApiKey, KEY_PREFIX } from "./apiv1.js";
 import { turnstileVerify } from "./turnstile.js";
 import { planOf } from "./plans.js";
 import { seedDemo } from "./demoContent.js";
@@ -760,6 +761,55 @@ export async function adminCreateDocument(ctx) {
   await audit(ctx, "서명문서생성", title);
   return back(base + "/admin/documents", ordered ? "순차 서명 문서를 생성했습니다." : "문서를 생성했습니다.");
 }
+// 웹훅 큐에 넣고, 모두 서명이 끝났으면 완료 이벤트도 함께 남긴다.
+async function notifyWebhook(ctx, doc, event, payload) {
+  try {
+    await enqueueDocEvent(ctx.db, doc.id, event, payload);
+    if (event === "document.signed") {
+      const rc = await D.requestCounts(ctx.db, doc.id);
+      if (rc.total > 0 && rc.signed === rc.total)
+        await enqueueDocEvent(ctx.db, doc.id, "document.completed", { document_id: doc.id, title: doc.title, signers: rc.total });
+    }
+  } catch {}
+}
+
+// 관리자: API 키 발급. 평문은 이 순간에만 보여주고 저장하지 않는다(해시만 보관).
+export async function adminCreateApiKey(ctx) {
+  const { db, form, base, assoc } = ctx;
+  const to = `${base}/admin/api`;
+  const name = cap((form.get("name") || "").trim(), 60) || "기본 키";
+  const webhook = cap((form.get("webhook_url") || "").trim(), 300);
+  if (webhook && !/^https:\/\/[^\s]+$/i.test(webhook)) return back(to, "웹훅 주소는 https:// 로 시작해야 합니다.", true);
+  const active = (await D.listApiKeys(db, assoc.id)).filter((k) => !k.revoked_at);
+  if (active.length >= 5) return back(to, "활성 키는 최대 5개입니다. 쓰지 않는 키를 먼저 폐기해 주세요.", true);
+  const key = newApiKey();
+  const rec = await D.createApiKey(db, { associationId: assoc.id, name, prefix: key.slice(0, KEY_PREFIX.length + 6),
+    keyHash: await hashApiKey(key), webhookUrl: webhook, webhookSecret: randomHexKey() });
+  await audit(ctx, "API키발급", name);
+  return redirect(`${to}?newkey=${encodeURIComponent(key)}&id=${rec.id}`);
+}
+const randomHexKey = () => { const b = crypto.getRandomValues(new Uint8Array(24)); return [...b].map((x) => x.toString(16).padStart(2, "0")).join(""); };
+
+export async function adminRevokeApiKey(ctx) {
+  const { db, base, assoc, params } = ctx;
+  const to = `${base}/admin/api`;
+  const k = await D.getApiKey(db, Number(params.id) || 0);
+  if (!k || k.association_id !== assoc.id) return back(to, "키를 찾을 수 없습니다.", true);
+  await D.revokeApiKey(db, k.id, assoc.id);
+  await audit(ctx, "API키폐기", k.name || k.prefix);
+  return back(to, "키를 폐기했습니다. 이 키로는 더 이상 호출할 수 없습니다.");
+}
+export async function adminSetWebhook(ctx) {
+  const { db, form, base, assoc, params } = ctx;
+  const to = `${base}/admin/api`;
+  const k = await D.getApiKey(db, Number(params.id) || 0);
+  if (!k || k.association_id !== assoc.id) return back(to, "키를 찾을 수 없습니다.", true);
+  const url = cap((form.get("webhook_url") || "").trim(), 300);
+  if (url && !/^https:\/\/[^\s]+$/i.test(url)) return back(to, "웹훅 주소는 https:// 로 시작해야 합니다.", true);
+  await D.setApiKeyWebhook(db, k.id, assoc.id, url);
+  return back(to, url ? "웹훅 주소를 저장했습니다." : "웹훅을 껐습니다.");
+}
+
 // ================= 외부(비회원) 서명 =================
 // 이 경로에는 로그인 세션이 없다. 권한의 근거는 오직 HMAC 토큰이며, 토큰이 가리키는
 // 서명자 본인의 자리에만 쓸 수 있다. 아래 모든 핸들러가 같은 검증을 먼저 통과한다.
@@ -817,6 +867,9 @@ export async function extSign(ctx) {
     verifyCode, recordHash, signedAt, prevHash, sealVer: SEAL_VER, verifyLevel, fieldsHash });
   await D.logDocEvent(db, { documentId: d.id, userId: myRef, actorName: signerName, kind: "signed",
     detail: `외부 서명자 · 본인확인 ${verifyLevel} · 검증코드 ${verifyCode}`, ip, userAgent: uaOf(ctx) });
+
+  // 웹훅 — 고객사 시스템이 진행 상황을 즉시 받아본다. 실제 발송은 크론이 하므로 여기서 막히지 않는다.
+  await notifyWebhook(ctx, d, "document.signed", { document_id: d.id, title: d.title, signer: { kind: "external", id: signer.id, name: signerName } });
   await D.createNotification(db, { associationId: assoc.id, kind: "signed",
     message: `${signerName}님(외부)이 '${d.title}'에 전자서명했습니다.`, link: `/t/${assoc.slug}/admin/documents/${d.id}` });
 
@@ -849,6 +902,9 @@ export async function extDecline(ctx) {
   await D.declineExternal(db, signer.id, reason);
   await D.logDocEvent(ctx.db, { documentId: d.id, userId: -signer.id, actorName: signer.name, kind: "declined",
     detail: `외부 서명자: ${reason.slice(0, 80)}`, ip, userAgent: uaOf(ctx) });
+
+  // 웹훅 — 고객사 시스템이 진행 상황을 즉시 받아본다. 실제 발송은 크론이 하므로 여기서 막히지 않는다.
+  await notifyWebhook(ctx, d, "document.declined", { document_id: d.id, title: d.title, signer: { kind: "external", id: signer.id, name: signer.name } });
   await D.createNotification(db, { associationId: assoc.id, kind: "sign_declined",
     message: `${signer.name}님(외부)이 '${d.title}' 서명을 거절했습니다.`, link: `/t/${assoc.slug}/admin/documents/${d.id}` });
   return back(to, "서명을 거절하셨습니다. 요청하신 분께 사유가 전달됩니다.");
@@ -1038,6 +1094,7 @@ export async function memberDeclineSign(ctx) {
   const reason = cap((form.get("reason") || "").trim(), 300);
   if (!reason) return back(base + "/sign/" + d.id, "거절 사유를 입력해 주세요.", true);
   await D.declineSign(db, d.id, user.id, reason);
+  await notifyWebhook(ctx, d, "document.declined", { document_id: d.id, title: d.title, signer: { kind: "member", id: user.id, name: user.name }, reason });
   await D.logDocEvent(db, { documentId: d.id, userId: user.id, actorName: user.name, kind: "declined",
     detail: reason.slice(0, 100), ip: ctx.ip || "", userAgent: uaOf(ctx) });
   await D.createNotification(db, { associationId: assoc.id, kind: "sign_declined", message: `${user.name}님이 '${d.title}' 서명을 거절했습니다.`, link: base + "/admin/documents/" + d.id });
@@ -1274,6 +1331,9 @@ export async function memberSign(ctx) {
   await D.createSignature(db, { documentId: d.id, userId: user.id, signerName, signatureImage: sigKey, contentHash: d.content_hash, ip, userAgent: cap(request.headers.get("user-agent") || "", 200), verifyCode, recordHash, signedAt, prevHash, sealVer: SEAL_VER, verifyLevel, fieldsHash });
   await D.logDocEvent(db, { documentId: d.id, userId: user.id, actorName: signerName, kind: "signed",
     detail: `본인확인 ${verifyLevel} · 검증코드 ${verifyCode}`, ip, userAgent: request.headers.get("user-agent") || "" });
+
+  // 웹훅 — 고객사 시스템이 진행 상황을 즉시 받아본다. 실제 발송은 크론이 하므로 여기서 막히지 않는다.
+  await notifyWebhook(ctx, d, "document.signed", { document_id: d.id, title: d.title, signer: { kind: "member", id: user.id, name: signerName } });
   await D.createNotification(db, { associationId: assoc.id, kind: "signed", message: `${signerName}님이 '${d.title}'에 전자서명했습니다.`, link: base + "/admin/documents/" + d.id });
   // 서명자 본인에게 확인서 사본 자동 발송 — "받은 적 없다"는 분쟁을 막는 증거.
   // 실패해도 서명은 이미 유효하므로 전체를 되돌리지 않는다.

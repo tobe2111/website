@@ -2,12 +2,13 @@
 import { parseCookies, esc } from "./util.js";
 import { SESSION_COOKIE, CSRF_COOKIE, ensureCsrfSeed, csrfToken, csrfValid, userFromToken, ROLES } from "./auth.js";
 import * as D from "./db.js";
+import * as apiv1 from "./apiv1.js";
 import * as pages from "./pages.js";
 import * as api from "./api.js";
 import { setMediaBase, setOrigin, setAssetVer, layout } from "./render.js";
 import { html, text, redirect, notFoundResponse, forbidden } from "./http.js";
 import { ensureSchema } from "./schema.js";
-import { runWeekly, runDaily } from "./scheduled.js";
+import { runWeekly, runDaily, runWebhooks } from "./scheduled.js";
 import { resolveSessionSecret } from "./secrets.js";
 
 const _schemaReady = new WeakSet(); // DB 별 스키마 준비 캐시
@@ -149,6 +150,10 @@ const TENANT = [
   ["GET", "/admin/documents/:id", pages.adminDocumentDetail, "ADMIN"],
   ["POST", "/admin/documents/:id/close", api.adminCloseDocument, "ADMIN"],
   ["POST", "/admin/documents/:id/remind", api.adminRemindDocument, "ADMIN"],
+  ["GET",  "/admin/api", pages.adminApi, "ADMIN"],
+  ["POST", "/admin/api", api.adminCreateApiKey, "ADMIN"],
+  ["POST", "/admin/api/:id/revoke", api.adminRevokeApiKey, "ADMIN"],
+  ["POST", "/admin/api/:id/webhook", api.adminSetWebhook, "ADMIN"],
   ["GET",  "/admin/templates", pages.adminTemplates, "ADMIN"],
   ["POST", "/admin/templates", api.adminSaveTemplate, "ADMIN"],
   ["POST", "/admin/templates/:id/delete", api.adminDeleteTemplate, "ADMIN"],
@@ -260,7 +265,7 @@ export default {
     await ensureSchema(env.DB);
     const full = { ...env, SESSION_SECRET: await resolveSessionSecret(env) };
     // 크론 표현식으로 분기 — 주간(백업·리포트) vs 매일(서명 기한 리마인더)
-    ctx.waitUntil(event.cron === "0 18 * * 0" ? runWeekly(full) : runDaily(full));
+    ctx.waitUntil(event.cron === "0 18 * * 0" ? runWeekly(full) : event.cron === "*/5 * * * *" ? runWebhooks(full) : runDaily(full));
   },
 };
 
@@ -317,6 +322,13 @@ async function handle(request, env) {
   const csrf = await csrfToken(seed, env.SESSION_SECRET);
   const user = await userFromToken(db, cookies[SESSION_COOKIE], env.SESSION_SECRET);
   const ip = request.headers.get("cf-connecting-ip") || request.headers.get("x-forwarded-for") || "?";
+
+  // 공개 API — 폼·CSRF·세션 체계 밖이다. 인증은 Bearer 키로만 하고 본문은 JSON 이므로
+  // 아래의 formData() 파싱·CSRF 검사보다 먼저 갈라져야 한다.
+  if (pathname === "/api/v1" || pathname.startsWith("/api/v1/")) {
+    const res = await apiv1.handle({ env, db, url, request, ip });
+    return finalize(res, setCookies, env, timing);
+  }
 
   // 폼 파싱(POST)
   let form = null;

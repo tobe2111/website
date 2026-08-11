@@ -164,11 +164,19 @@ export async function runChainAnchor(env) {
   return { anchored: a.id, sigCount, external: !!external };
 }
 
+// 웹훅 전송 — 서명 이벤트를 고객사 서버로 밀어 넣는다. 상대 서버가 느려도 우리 응답이
+// 같이 느려지면 안 되므로, 서명 시점에는 큐에만 넣고 실제 전송은 여기서 한다.
+export async function runWebhooks(env) {
+  const { deliverWebhooks } = await import("./apiv1.js");
+  return deliverWebhooks(env, env.DB);
+}
+
 export async function runDaily(env) {
   const reminders = await runSignReminders(env).catch((e) => ({ error: String(e) }));
   const anchor = await runChainAnchor(env).catch((e) => ({ error: String(e) }));
-  console.log("daily job", JSON.stringify({ reminders, anchor }));
-  return { reminders, anchor };
+  const hooks = await runWebhooks(env).catch((e) => ({ error: String(e) }));
+  console.log("daily job", JSON.stringify({ reminders, anchor, hooks }));
+  return { reminders, anchor, hooks };
 }
 
 export async function runWeekly(env) {

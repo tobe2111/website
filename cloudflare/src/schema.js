@@ -404,6 +404,38 @@ CREATE TABLE IF NOT EXISTS external_signers (
 );
 CREATE INDEX IF NOT EXISTS idx_extsigner_doc ON external_signers(document_id, sign_order);
 
+-- 공개 API 키 — 고객사 시스템이 계약을 자동으로 만들고 발송한다.
+-- 평문 키는 발급 순간에만 보여주고 저장하지 않는다(해시만 보관).
+CREATE TABLE IF NOT EXISTS api_keys (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
+  name           TEXT NOT NULL DEFAULT '',
+  prefix         TEXT NOT NULL,               -- 키 앞자리(목록에서 구분용)
+  key_hash       TEXT NOT NULL UNIQUE,
+  webhook_url    TEXT NOT NULL DEFAULT '',
+  webhook_secret TEXT NOT NULL DEFAULT '',    -- 웹훅 HMAC 서명키
+  scopes         TEXT NOT NULL DEFAULT 'read,write',
+  last_used_at   TEXT NOT NULL DEFAULT '',
+  calls          INTEGER NOT NULL DEFAULT 0,
+  revoked_at     TEXT NOT NULL DEFAULT '',
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_apikey_assoc ON api_keys(association_id);
+
+-- 웹훅 발송 대기·이력. 실패하면 다음 주기에 다시 시도한다(최대 6회, 점점 늦게).
+CREATE TABLE IF NOT EXISTS webhook_queue (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  key_id      INTEGER NOT NULL REFERENCES api_keys(id) ON DELETE CASCADE,
+  event       TEXT NOT NULL,
+  payload     TEXT NOT NULL,
+  attempts    INTEGER NOT NULL DEFAULT 0,
+  next_try_at TEXT NOT NULL DEFAULT (datetime('now')),
+  delivered_at TEXT NOT NULL DEFAULT '',
+  last_error  TEXT NOT NULL DEFAULT '',
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_wh_pending ON webhook_queue(delivered_at, next_try_at);
+
 -- 외부 서명자용 본인확인 코드 (회원용 sign_otp 와 같은 규칙, 대상만 다름)
 CREATE TABLE IF NOT EXISTS ext_otp (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -506,7 +538,7 @@ CREATE INDEX IF NOT EXISTS idx_msglog_assoc ON message_log(association_id, creat
 
 // 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
 // 마이그레이션 세대 — migrateColumns 에 단계를 추가할 때마다 +1
-export const SCHEMA_VERSION = "29";
+export const SCHEMA_VERSION = "30";
 
 export async function ensureSchema(db) {
   const has = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='associations'").first();
@@ -621,6 +653,14 @@ async function migrateColumns(db) {
   if (mcols.length && !mcols.some((c) => c.name === "cost_base")) {
     await db.prepare("ALTER TABLE message_log ADD COLUMN cost_base INTEGER NOT NULL DEFAULT 0").run();
     await db.prepare("ALTER TABLE message_log ADD COLUMN ref TEXT NOT NULL DEFAULT ''").run();
+  }
+  // v30: 공개 API 키 + 웹훅 큐
+  const akTbl = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='api_keys'").first();
+  if (!akTbl) {
+    await db.prepare(`CREATE TABLE api_keys (id INTEGER PRIMARY KEY AUTOINCREMENT, association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE, name TEXT NOT NULL DEFAULT '', prefix TEXT NOT NULL, key_hash TEXT NOT NULL UNIQUE, webhook_url TEXT NOT NULL DEFAULT '', webhook_secret TEXT NOT NULL DEFAULT '', scopes TEXT NOT NULL DEFAULT 'read,write', last_used_at TEXT NOT NULL DEFAULT '', calls INTEGER NOT NULL DEFAULT 0, revoked_at TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT (datetime('now')))`).run();
+    await db.prepare("CREATE INDEX IF NOT EXISTS idx_apikey_assoc ON api_keys(association_id)").run();
+    await db.prepare(`CREATE TABLE webhook_queue (id INTEGER PRIMARY KEY AUTOINCREMENT, key_id INTEGER NOT NULL REFERENCES api_keys(id) ON DELETE CASCADE, event TEXT NOT NULL, payload TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, next_try_at TEXT NOT NULL DEFAULT (datetime('now')), delivered_at TEXT NOT NULL DEFAULT '', last_error TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT (datetime('now')))`).run();
+    await db.prepare("CREATE INDEX IF NOT EXISTS idx_wh_pending ON webhook_queue(delivered_at, next_try_at)").run();
   }
   // v29: 외부(비회원) 서명자
   const extTbl = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='external_signers'").first();
