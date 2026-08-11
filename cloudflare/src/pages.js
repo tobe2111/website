@@ -5,6 +5,7 @@ import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG, ORIGIN, as
 import { verifyInviteToken, SALES_STAGES } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
 import { html, notFoundResponse, back } from "./http.js";
 import { galleryItem } from "./media-render.js";
+import { priceOf, notifyEnabled, TEMPLATE_KEYS } from "./notify.js";
 import { providerLabel } from "./embed.js";
 import { verifySignature, publicKeyJwk, algorithm } from "./esign.js";
 import { text } from "./http.js";
@@ -657,6 +658,7 @@ export function registerForm(ctx) {
     ${authHead(assoc.name + " 가입", "점포 정보를 등록하고 사진·소식을 공유하세요.")}${flashOf(query)}
     <form method="post" action="${base}/register" class="stack-form">
       <label>대표자 성함<input type="text" name="name" required maxlength="60" /></label>
+      <label>휴대폰 <small>(선택 · 서명 요청·공지를 카카오 알림톡으로 받습니다)</small><input type="tel" name="phone" maxlength="13" inputmode="numeric" placeholder="010-1234-5678" autocomplete="tel" /></label>
       <label>이메일<input type="email" name="email" required autocomplete="email" /></label>
       <label>비밀번호 (8자 이상)<input type="password" name="password" required minlength="8" autocomplete="new-password" /></label>
       <label>점포명<input type="text" name="business_name" required maxlength="100" /></label>
@@ -964,6 +966,38 @@ export async function admin(ctx) {
       <form method="get" action="${base}/admin" class="inline-form"><input type="month" name="due_period" value="${esc(duePeriod)}" data-autosubmit /><button class="btn btn-xs btn-ghost">이동</button></form></div>
     <p class="panel-hint">납부 <b>기록</b>만 남기는 장부입니다(결제 아님). 월을 바꿔 지난 달 현황도 볼 수 있습니다.</p>
     <div class="table-scroll"><table class="admin-table"><thead><tr><th>회원</th><th>${esc(duePeriod)}</th><th>처리</th></tr></thead><tbody>${dueRows}</tbody></table></div></section>`;
+  // ----- 알림톡: 잔액·충전 신청·발송 이력 -----
+  const [balance, msgStats, msgs, orders, unitPrice] = await Promise.all([
+    D.getBalance(db, assoc.id), D.messageStats(db, assoc.id), D.listMessages(db, assoc.id, 10),
+    D.listCreditOrders(db, assoc.id, 5), priceOf(db, "alimtalk"),
+  ]);
+  const withPhone = members.filter((m) => m.phone).length;
+  const sendable = unitPrice > 0 ? Math.floor(balance / unitPrice) : 0;
+  const orderRows = orders.length ? orders.map((o) => `<li>${o.amount.toLocaleString()}원 · ${esc(kstStamp(o.created_at, { year: false }))}
+    ${o.status === "approved" ? '<span class="badge badge-ok">충전 완료</span>' : o.status === "rejected" ? '<span class="badge badge-no">반려</span>' : '<span class="badge badge-wait">입금 확인 중</span>'}</li>`).join("") : "";
+  const msgRows = msgs.length ? msgs.map((m) => `<tr><td>${esc(kstStamp(m.created_at, { year: false }))}</td><td>${esc(m.kind || "-")}</td>
+    <td>${esc(m.recipient)}</td><td>${m.status === "sent" ? '<span class="badge badge-ok">발송</span>' : `<span class="badge badge-no">실패</span>`}</td>
+    <td>${m.cost ? m.cost.toLocaleString() + "원" : "-"}</td></tr>`).join("") : `<tr><td colspan="5" class="empty">발송 내역이 없습니다.</td></tr>`;
+  const notifyPanel = `<section class="panel" id="p-notify"><div class="panel-head">
+      <h2 class="panel-title">알림톡 <span class="badge ${balance > 0 ? "badge-ok" : "badge-wait"}">잔액 ${balance.toLocaleString()}원</span></h2></div>
+    <p class="panel-hint">서명 요청·리마인더를 카카오톡으로 보냅니다. 건당 <b>${unitPrice.toLocaleString()}원</b> — 지금 잔액으로 <b>약 ${sendable.toLocaleString()}건</b> 보낼 수 있습니다.
+      알림 받을 회원은 <b>${withPhone}명</b>(휴대폰 등록 기준 · 전체 ${members.length}명)입니다.</p>
+    ${balance < unitPrice ? `<div class="flash flash-warn">잔액이 부족해 알림톡이 발송되지 않습니다. 아래에서 충전을 신청해 주세요.</div>` : ""}
+    <div class="form-two">
+      <form method="post" action="${base}/admin/credit/order" class="stack-form compact">
+        <label>충전 금액<select name="amount">
+          <option value="30000">30,000원 (약 ${Math.floor(30000 / unitPrice).toLocaleString()}건)</option>
+          <option value="50000">50,000원 (약 ${Math.floor(50000 / unitPrice).toLocaleString()}건)</option>
+          <option value="100000">100,000원 (약 ${Math.floor(100000 / unitPrice).toLocaleString()}건)</option>
+        </select></label>
+        <label>입금자명<input type="text" name="depositor" maxlength="40" placeholder="예: 서초구상인회" /></label>
+        <button class="btn btn-primary btn-sm">충전 신청</button></form>
+      <div>${orderRows ? `<p class="mini-label">최근 충전 신청</p><ul class="admin-mini-list">${orderRows}</ul>` : `<p class="panel-hint">충전을 신청하면 운영사가 입금을 확인한 뒤 잔액에 반영합니다.</p>`}</div>
+    </div>
+    <div class="form-divider">발송 이력 <span class="badge badge-muted">누적 ${(msgStats.n || 0).toLocaleString()}건 · ${(msgStats.spent || 0).toLocaleString()}원${msgStats.failed ? ` · 실패 ${msgStats.failed}` : ""}</span></div>
+    <div class="table-scroll"><table class="admin-table"><thead><tr><th>시각</th><th>종류</th><th>수신</th><th>상태</th><th>차감</th></tr></thead><tbody>${msgRows}</tbody></table></div>
+    <p class="panel-hint">실패한 건은 자동으로 환불되어 잔액이 복구됩니다. 수신번호는 개인정보 보호를 위해 가려서 저장합니다.</p></section>`;
+
   const notifRows = notifs.length ? notifs.map((n) => `<li class="${n.is_read ? "" : "unread"}"><span class="notif-dot"></span><a href="${esc(n.link || base + "/admin")}" class="notif-msg">${esc(n.message)}</a><time>${esc(kstStamp(n.created_at, { year: false }))}</time></li>`).join("") : `<li class="empty">알림이 없습니다.</li>`;
   const noticeCats = NOTICE_CATEGORIES.map((c) => `<option value="${esc(c)}"${c === "안내" ? " selected" : ""}>${esc(c)}</option>`).join("");
 
@@ -977,6 +1011,7 @@ export async function admin(ctx) {
       <a href="#p-stats">${SIDE_SVG.stats} 현황</a><a href="#p-notif">${SIDE_SVG.bell} 알림함${unread ? ` <span class="side-badge">${unread}</span>` : ""}</a>
       <a href="#p-members">${SIDE_SVG.users} 회원</a><a href="#p-biz">${SIDE_SVG.store} 업체 승인${s.pending ? ` <span class="side-badge">${s.pending}</span>` : ""}</a>
       <a href="#p-products">${SIDE_SVG.tag} 제품</a><a href="#p-dues">${SIDE_SVG.stats} 회비 장부</a><a href="#p-home">${SIDE_SVG.home} 홈 구성</a><a href="#p-brand">${SIDE_SVG.palette} 브랜딩</a><a href="#p-content">${SIDE_SVG.mega} 공지·행사</a>
+      <a href="#p-notify">${SIDE_SVG.bell} 알림톡</a>
       <a href="${base}/polls" class="side-ext">${SIDE_SVG.bell} 안건 투표</a><a href="${base}/admin/documents" class="side-ext">${SIDE_SVG.sign} 전자서명 문서</a><a href="${base}" target="_blank" class="side-ext">${SIDE_SVG.ext} 사이트 보기</a>
     </nav></aside>
     <div class="console-main">
@@ -1017,6 +1052,7 @@ export async function admin(ctx) {
           <div class="form-two"><label>업체명<input type="text" name="business_name" required /></label><label>업종<input type="text" name="category" placeholder="예: 음식점" /></label></div>
           <button class="btn btn-primary btn-sm">대행 등록 + 임시 비번 발급</button></form></div></details></section>
     ${duesPanel}
+    ${notifyPanel}
     ${auditPanel}
     <section class="panel" id="p-home"><h2 class="panel-title">홈페이지 구성 편집</h2>
       <p class="panel-hint">섹션을 켜고 끄거나 순서(▲▼)를 바꾸고 문구를 직접 수정할 수 있습니다.</p>
@@ -1283,6 +1319,46 @@ export async function superConsole(ctx) {
       <span class="wire-dot" aria-hidden="true"></span>
       <div><b>${esc(label)}</b> <span class="badge ${on ? "badge-ok" : "badge-muted"}">${on ? "켜짐" : "안 켜짐"}</span>
         <p>${esc(help)}</p><code>${esc(keys)}</code></div></li>`).join("")}</ul></section>`;
+  // ----- 알림톡 재판매: 판매단가·템플릿·충전 승인·매출 -----
+  const [pendCredits, notifyUsage, unitPrice] = await Promise.all([
+    D.listPendingCreditOrders(db), D.platformMessageUsage(db), priceOf(db, "alimtalk"),
+  ]);
+  const tplVals = await Promise.all(Object.values(TEMPLATE_KEYS).map((k) => D.getSetting(db, k)));
+  const tplInputs = Object.entries(TEMPLATE_KEYS).map(([kind, key], i) =>
+    `<label class="mini-label">${esc({ sign_request: "서명 요청", sign_remind: "서명 리마인더", notice: "공지" }[kind] || kind)} 템플릿코드
+      <input type="text" name="${esc(key)}" value="${esc(tplVals[i] || "")}" maxlength="60" placeholder="카카오 심사 통과 코드" /></label>`).join("");
+  const creditRows = pendCredits.length ? pendCredits.map((o) => `<tr><td>${esc(o.assoc_name)}</td><td>${o.amount.toLocaleString()}원</td>
+    <td>${esc(o.depositor || "-")}<br /><small>${esc(kstStamp(o.created_at, { year: false }))}</small></td>
+    <td class="actions-cell">
+      <form method="post" action="/super/credit/${o.id}" class="inline-form" data-confirm="입금을 확인했습니다. ${o.amount.toLocaleString()}원을 충전할까요?"><input type="hidden" name="action" value="approve" /><button class="btn btn-xs btn-primary">입금 확인·충전</button></form>
+      <form method="post" action="/super/credit/${o.id}" class="inline-form" data-confirm="반려할까요?"><input type="hidden" name="action" value="reject" /><button class="btn btn-xs btn-ghost">반려</button></form></td></tr>`).join("")
+    : `<tr><td colspan="4" class="empty">대기 중인 충전 신청이 없습니다.</td></tr>`;
+  const totalRevenue = notifyUsage.reduce((a, u) => a + (u.revenue || 0), 0);
+  const totalCharged = notifyUsage.reduce((a, u) => a + (u.charged || 0), 0);
+  const totalSent = notifyUsage.reduce((a, u) => a + (u.sent || 0), 0);
+  const notifyRows = notifyUsage.filter((u) => u.sent || u.balance || u.charged).map((u) => `<tr><td>${esc(u.name)}</td>
+    <td>${(u.sent || 0).toLocaleString()}건</td><td>${(u.revenue || 0).toLocaleString()}원</td>
+    <td>${(u.charged || 0).toLocaleString()}원</td><td>${(u.balance || 0).toLocaleString()}원</td></tr>`).join("")
+    || `<tr><td colspan="5" class="empty">아직 사용 내역이 없습니다.</td></tr>`;
+  const notifySuperPanel = `<section class="panel panel-accent"><h2 class="panel-title">알림톡 판매 <span class="badge badge-brand">건당 ${unitPrice.toLocaleString()}원</span>${pendCredits.length ? ` <span class="badge badge-wait">충전 대기 ${pendCredits.length}</span>` : ""}</h2>
+    <p class="panel-hint">상인회가 선불로 충전하고 발송할 때마다 차감됩니다. <b>판매단가 − 원가 = 마진</b>이며, 발송 실패는 자동 환불되어 매출로 잡히지 않습니다.
+      ${notifyEnabled(env) ? "" : '<b class="txt-warn">아직 알리고 키가 설정되지 않아 실제 발송은 되지 않습니다.</b>'}</p>
+    <div class="stat-cards">
+      <div class="stat-card left"><div class="stat-top"><span class="stat-label">누적 발송</span></div><span class="stat-num">${totalSent.toLocaleString()}</span><div class="stat-delta mut">건</div></div>
+      <div class="stat-card left"><div class="stat-top"><span class="stat-label">발송 매출</span></div><span class="stat-num">${totalRevenue.toLocaleString()}</span><div class="stat-delta mut">원 (차감 확정분)</div></div>
+      <div class="stat-card left"><div class="stat-top"><span class="stat-label">누적 충전</span></div><span class="stat-num">${totalCharged.toLocaleString()}</span><div class="stat-delta mut">원 (입금 기준)</div></div>
+    </div>
+    <div class="form-divider">충전 신청 (입금 확인 후 승인)</div>
+    <div class="table-scroll"><table class="admin-table"><thead><tr><th>상인회</th><th>금액</th><th>입금자·신청</th><th>처리</th></tr></thead><tbody>${creditRows}</tbody></table></div>
+    <div class="form-divider">상인회별 사용</div>
+    <div class="table-scroll"><table class="admin-table"><thead><tr><th>상인회</th><th>발송</th><th>매출</th><th>충전</th><th>잔액</th></tr></thead><tbody>${notifyRows}</tbody></table></div>
+    <div class="form-divider">단가·템플릿 설정</div>
+    <form method="post" action="/super/notify-settings" class="stack-form">
+      <label class="mini-label">알림톡 판매단가 (원/건)<input type="number" name="price_alimtalk" value="${unitPrice}" min="0" max="1000" required /></label>
+      <div class="form-two">${tplInputs}</div>
+      <p class="panel-hint">템플릿 코드는 플랫폼 카카오 채널에 등록·심사 통과된 값이어야 합니다. 비어 있으면 해당 종류는 발송되지 않습니다.</p>
+      <button class="btn btn-primary btn-sm">알림톡 설정 저장</button></form></section>`;
+
   const usagePanel = `<section class="panel"><h2 class="panel-title">상인회별 사용량 <span class="badge badge-muted">R2 총 ${fmtBytes(ps.storage)}</span></h2>
     <div class="table-scroll"><table class="admin-table"><thead><tr><th>상인회</th><th>회원</th><th>미디어</th><th>저장용량</th><th>플랜</th></tr></thead><tbody>
       ${usage.length ? usage.map((u) => `<tr><td>${esc(u.name)}</td><td>${u.members}명</td><td>${u.media_count}개</td><td>${fmtBytes(u.storage)}</td><td>${esc((PLANS[u.plan] || PLANS.free).label)}</td></tr>`).join("") : `<tr><td colspan="5" class="empty">데이터 없음</td></tr>`}
@@ -1421,6 +1497,7 @@ export async function superConsole(ctx) {
       <p class="panel-hint">개별 도메인: 도메인을 입력·저장한 뒤 <b>Cloudflare 대시보드 → 이 워커 → Settings → Domains &amp; Routes → Add → Custom Domain</b> 으로 같은 도메인을 추가해야 실제 접속됩니다(그 도메인이 이 Cloudflare 계정에 등록되어 있어야 함).</p>
       <div class="table-scroll"><table class="admin-table">
       <thead><tr><th>상인회</th><th>개별 도메인</th><th>플랜</th><th>상태</th><th>관리</th></tr></thead><tbody>${rows}</tbody></table></div></section>
+    ${notifySuperPanel}
     ${usagePanel}
     ${superPanel}
     ${wiredPanel}
@@ -1461,6 +1538,11 @@ export function account(ctx) {
   const body = `<section class="section page-top"><div class="container narrow">
     <h1 class="article-title">계정 설정</h1>${flashOf(query)}
     ${superLink}
+    <section class="panel"><h2 class="panel-title">알림 받을 휴대폰</h2>
+      <p class="panel-hint">서명 요청·공지를 카카오 알림톡으로 받습니다. 비워 두면 이메일로만 안내됩니다.</p>
+      <form method="post" action="/account/phone" class="stack-form compact">
+        <label>휴대폰<input type="tel" name="phone" value="${esc(user.phone ? user.phone.replace(/^(\d{3})(\d{3,4})(\d{4})$/, "$1-$2-$3") : "")}" maxlength="13" inputmode="numeric" placeholder="010-1234-5678" autocomplete="tel" /></label>
+        <button class="btn btn-primary btn-sm">저장</button></form></section>
     <section class="panel"><h2 class="panel-title">비밀번호 변경</h2>
       <form method="post" action="/account/password" class="stack-form">
         <label>현재 비밀번호<input type="password" name="current" required autocomplete="current-password" /></label>

@@ -12,6 +12,7 @@ import { turnstileVerify } from "./turnstile.js";
 import { planOf } from "./plans.js";
 import { seedDemo } from "./demoContent.js";
 import { seedStarter } from "./starterContent.js";
+import { TEMPLATE_KEYS, sendMany, notifyEnabled } from "./notify.js";
 
 const BOARD_MAX_IMAGES = 6;
 const MAX_EMBEDS = 30;
@@ -97,12 +98,65 @@ export async function register(ctx) {
   if (await D.getUserByEmail(db, email)) return back(base + "/register", "이미 가입된 이메일입니다.", true);
   if ((await D.countMembers(db, assoc.id)) >= planOf(assoc).maxMembers)
     return back(base + "/register", "회원 정원이 가득 찼습니다. 상인회 관리자에게 문의해 주세요.", true);
+  // 휴대폰은 선택 입력 — 넣었으면 형식만 확인(알림톡 수신용)
+  const phone = D.normalizePhone(form.get("phone"));
+  if (phone && !D.isValidPhone(phone)) return back(base + "/register", "휴대폰 번호 형식을 확인해 주세요. (예: 010-1234-5678)", true);
   const { hash, salt } = await hashPassword(password);
-  const user = await D.createUser(db, { email, passwordHash: hash, salt, name, role: "MERCHANT", associationId: assoc.id });
+  const user = await D.createUser(db, { email, passwordHash: hash, salt, name, role: "MERCHANT", associationId: assoc.id, phone });
   await D.createBusiness(db, { associationId: assoc.id, ownerId: user.id, name: businessName, category: cap(form.get("category"), 40) });
   await D.createNotification(db, { associationId: assoc.id, kind: "new_business", message: `${name}님이 '${businessName}' 업체로 가입했습니다. 승인 대기 중입니다.`, link: base + "/admin" });
   addCookie(sessionCookie(await sessionTokenForUser(user, env.SESSION_SECRET), isProd));
   return back(base + "/dashboard", "가입이 완료되었습니다! 업체 정보를 입력하고 사진을 올려보세요.");
+}
+
+// ---------- 알림톡 크레딧 ----------
+const CHARGE_AMOUNTS = [30000, 50000, 100000];
+export async function adminCreditOrder(ctx) {
+  const { db, form, base, assoc } = ctx;
+  const amount = parseInt(form.get("amount") || "", 10);
+  if (!CHARGE_AMOUNTS.includes(amount)) return back(base + "/admin", "충전 금액을 다시 선택해 주세요.", true);
+  await D.createCreditOrder(db, { associationId: assoc.id, amount, depositor: cap(form.get("depositor"), 40) });
+  await D.createNotification(db, { associationId: null, kind: "credit_order", message: `${assoc.name}이(가) 알림톡 ${amount.toLocaleString()}원 충전을 신청했습니다.`, link: "/super" });
+  await audit(ctx, "충전신청", `${amount}원`);
+  return back(base + "/admin", "충전을 신청했습니다. 입금이 확인되면 잔액에 반영됩니다.");
+}
+// 슈퍼: 충전 승인/반려 — 승인 시에만 잔액이 늘어난다
+export async function superCreditApprove(ctx) {
+  const { db, params, form } = ctx;
+  const o = await D.getCreditOrder(db, Number(params.id));
+  if (!o || o.status !== "pending") return back("/super", "이미 처리된 신청입니다.", true);
+  if (form.get("action") === "reject") {
+    await D.setCreditOrderStatus(db, o.id, "rejected");
+    await audit(ctx, "충전반려", `#${o.id} ${o.amount}원`, null);
+    return back("/super", "충전 신청을 반려했습니다.");
+  }
+  await D.setCreditOrderStatus(db, o.id, "approved");
+  await D.addCredit(db, o.association_id, o.amount, { memo: `충전 승인 #${o.id}${o.depositor ? ` (${o.depositor})` : ""}` });
+  await audit(ctx, "충전승인", `#${o.id} ${o.amount}원`, null);
+  return back("/super", `${o.amount.toLocaleString()}원을 충전했습니다.`);
+}
+// 슈퍼: 알림톡 판매단가·템플릿 코드 설정
+export async function superNotifySettings(ctx) {
+  const { db, form } = ctx;
+  const price = parseInt(form.get("price_alimtalk") || "", 10);
+  if (!Number.isFinite(price) || price < 0 || price > 1000) return back("/super", "판매단가는 0~1000원 사이로 입력해 주세요.", true);
+  await D.setSetting(db, "price_alimtalk", String(price));
+  for (const [kind, key] of Object.entries(TEMPLATE_KEYS)) {
+    const v = (form.get(key) || "").trim().slice(0, 60);
+    if (v !== null) await D.setSetting(db, key, v.replace(/[^\w-]/g, ""));
+  }
+  await audit(ctx, "알림톡설정", `단가 ${price}원`, null);
+  return back("/super", "알림톡 설정을 저장했습니다.");
+}
+
+// ---------- 계정: 알림 휴대폰 ----------
+export async function changePhone(ctx) {
+  const { db, form, user } = ctx;
+  const raw = (form.get("phone") || "").trim();
+  if (!raw) { await D.setUserPhone(db, user.id, ""); return back("/account", "휴대폰 번호를 지웠습니다. 알림톡은 발송되지 않습니다."); }
+  if (!D.isValidPhone(raw)) return back("/account", "휴대폰 번호 형식을 확인해 주세요. (예: 010-1234-5678)", true);
+  await D.setUserPhone(db, user.id, raw);
+  return back("/account", "알림 받을 휴대폰을 저장했습니다.");
 }
 
 // ---------- 계정: 비밀번호 변경 ----------
