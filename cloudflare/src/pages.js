@@ -5,7 +5,7 @@ import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG, ORIGIN, as
 import { verifyInviteToken, SALES_STAGES, otpRequired } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
 import { html, notFoundResponse, back } from "./http.js";
 import { galleryItem } from "./media-render.js";
-import { priceOf, costOf, jeonToWon, notifyEnabled, TEMPLATE_KEYS, TEMPLATES } from "./notify.js";
+import { priceOf, costOf, jeonToWon, notifyEnabled, TEMPLATE_KEYS, TEMPLATES, billingMode, BILLING_MODES } from "./notify.js";
 import { providerLabel } from "./embed.js";
 import { verifySignature, publicKeyJwk, publicKeyFingerprint, keyStorage, algorithm, verifyChain, verifyAnchor } from "./esign.js";
 import { renderPaper, fieldBox, FIELD_KINDS, paginate, pageCount } from "./paper.js";
@@ -1911,6 +1911,8 @@ export async function superConsole(ctx) {
       <pre class="code-block" data-select-all>${esc(t.body)}</pre>
       <p class="panel-hint">변수: ${t.vars.map((v) => `<code>#{${esc(v)}}</code>`).join(" ")}${t.button ? ` · 버튼: <b>${esc(t.button)}</b> (웹링크)` : " · 버튼 없음"}</p></details>`).join("");
   const tplDone = tplVals.filter(Boolean).length;
+  const mode = await billingMode(db);
+  const baseCost = await costOf(db, "alimtalk");
   const creditRows = pendCredits.length ? pendCredits.map((o) => `<tr><td>${esc(o.assoc_name)}</td><td>${o.amount.toLocaleString()}원</td>
     <td>${esc(o.depositor || "-")}<br /><small>${esc(kstStamp(o.created_at, { year: false }))}</small></td>
     <td class="actions-cell">
@@ -2026,6 +2028,14 @@ export async function superConsole(ctx) {
     <p class="panel-hint">알림톡은 심사받은 문구와 <b>글자 하나까지</b> 같아야 발송됩니다. 아래 문구를 그대로 복사해 등록하고, 받은 코드를 위 칸에 넣으세요.
       용도별로 템플릿이 따로 필요합니다 — 인증번호를 '서명 요청' 템플릿으로 보내면 문구가 달라 거절됩니다.</p>
     ${tplGuide}
+    <div class="form-divider">과금 방식</div>
+    <form method="post" action="/super/billing-mode" class="stack-form compact">
+      <div class="row-toggle"><label class="switch"><input type="checkbox" name="billing_mode" value="per_doc"${mode === "per_doc" ? " checked" : ""} /><span class="track"></span></label>
+        <span><b>계약당 과금</b>으로 받기 <small style="color:var(--muted)">(끄면 발송당 과금 — 지금은 <b>${esc(BILLING_MODES[mode])}</b>)</small></span></div>
+      <button class="btn btn-ghost btn-sm">과금 방식 저장</button></form>
+    <p class="panel-hint">${mode === "per_doc"
+      ? `계약을 만들 때 <b>${unitPrice.toLocaleString()}원</b>을 한 번 받고, 그 계약의 서명 요청·본인확인·완료 안내·재알림은 모두 무료입니다. 공지 발송은 이 요금과 별개로 건당 과금됩니다.`
+      : `발송 1건마다 <b>${unitPrice.toLocaleString()}원</b>씩 차감합니다. 서명자·재알림이 늘면 매출도 함께 늘어납니다.`}</p>
     <div class="form-divider">계약 1건에 몇 통이 나가나</div>
     <table class="admin-table tpl-count"><thead><tr><th>단계</th><th>발송</th><th>필수</th></tr></thead><tbody>
       <tr><td>서명 요청</td><td>서명자 1인당 1통</td><td>필수</td></tr>
@@ -2033,11 +2043,25 @@ export async function superConsole(ctx) {
       <tr><td>서명 완료 확인서</td><td>서명자 1인당 1통</td><td>필수</td></tr>
       <tr><td>미완료 재알림</td><td>미서명자 1인당 1통</td><td>보낼 때만</td></tr>
     </tbody></table>
-    <p class="panel-hint"><b>2인 계약 기준</b> — 본인확인 없이 <b>4통</b>(요청 2 + 완료 2), 본인확인을 켜면 <b>6통</b>.
-      재알림 한 번에 미서명자 수만큼 추가됩니다. 원가 ${(await costOf(db, "alimtalk")).toLocaleString()}원 기준으로
-      2인 계약 1건의 발송 원가는 약 <b>${(6 * (await costOf(db, "alimtalk"))).toLocaleString()}원</b>,
-      판매가 ${unitPrice.toLocaleString()}원 기준 매출은 <b>${(6 * unitPrice).toLocaleString()}원</b>입니다.
-      이메일만 등록된 서명자는 알림톡 대신 메일로 나가 비용이 들지 않습니다.</p></section>`;
+    <p class="panel-hint">서명자 1인당 <b>3통</b>(요청·본인확인·완료). 본인확인을 끄면 2통.
+      이메일만 등록된 서명자는 메일로 나가 비용이 들지 않습니다.</p>
+    <div class="form-divider">서명자 수별 손익 <small>(본인확인 켠 기준 · 원가 ${(await costOf(db, "alimtalk")).toLocaleString()}원)</small></div>
+    <div class="table-scroll"><table class="admin-table tpl-count">
+      <thead><tr><th>서명자</th><th>발송</th><th>원가</th><th>매출</th><th>마진</th></tr></thead><tbody>
+      ${[2, 3, 4, 5, 6, 8].map((n) => {
+        const sends = n * 3;
+        const cost = sends * (baseCost);
+        const rev = mode === "per_doc" ? unitPrice : sends * unitPrice;
+        const margin = rev - cost;
+        return `<tr class="${margin < 0 ? "is-loss" : ""}"><td>${n}인</td><td>${sends}통</td>
+          <td>${cost.toLocaleString()}원</td><td>${rev.toLocaleString()}원</td>
+          <td><b>${margin.toLocaleString()}원</b> <small>(${rev ? Math.round((margin / rev) * 100) : 0}%)</small></td></tr>`;
+      }).join("")}</tbody></table></div>
+    ${mode === "per_doc" ? `<p class="panel-hint txt-warn">⚠️ 계약당 정액은 <b>매출이 고정인데 원가는 서명자 수에 비례</b>합니다.
+      현재 단가 ${unitPrice.toLocaleString()}원 기준으로 서명자 <b>${Math.max(1, Math.floor(unitPrice / (3 * baseCost)))}명</b>까지 이익이고,
+      그보다 많으면 손해입니다. 재알림을 보낼수록 손익분기가 더 앞당겨집니다.</p>`
+      : `<p class="panel-hint">발송당 과금은 인원이 늘어도 마진율이 일정합니다(${unitPrice ? Math.round(((unitPrice - baseCost) / unitPrice) * 100) : 0}%).</p>`}
+    </section>`;
 
   const usagePanel = `<section class="panel"><h2 class="panel-title">상인회별 사용량 <span class="badge badge-muted">R2 총 ${fmtBytes(ps.storage)}</span></h2>
     <div class="table-scroll"><table class="admin-table"><thead><tr><th>상인회</th><th>회원</th><th>미디어</th><th>저장용량</th><th>플랜</th></tr></thead><tbody>

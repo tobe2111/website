@@ -63,6 +63,7 @@ const GLOBAL = [
   ["POST", "/super/admin/:id/reset-password", api.superResetAdminPassword, "SUPERADMIN"],
   ["POST", "/super/credit/:id", api.superCreditApprove, "SUPERADMIN"],
   ["POST", "/super/notify-settings", api.superNotifySettings, "SUPERADMIN"],
+  ["POST", "/super/billing-mode", api.superBillingMode, "SUPERADMIN"],
   ["POST", "/super/notify-cost", api.superNotifyCost, "SUPERADMIN"],
   ["POST", "/super/association/:id/unit-price", api.superSetUnitPrice, "SUPERADMIN"],
   ["POST", "/super/esign-settings", api.superEsignSettings, "SUPERADMIN"],

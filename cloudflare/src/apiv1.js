@@ -190,8 +190,16 @@ async function createDocument(ctx, key, assoc) {
     if (!s.email && !s.phone) return fail(400, "no_contact", `'${s.name}' 에게 email 또는 phone 이 필요합니다.`);
   }
 
+  // 계약당 과금이면 여기서 한 번 청구한다 (발송당 과금이면 각 발송에서 나간다)
+  const { billingMode, chargeContract, priceOf } = await import("./notify.js");
+  if ((await billingMode(db)) === "per_doc") {
+    const [bal, price] = [await D.getBalance(db, assoc.id), await priceOf(db, "alimtalk", assoc.id)];
+    if (bal < price) return fail(402, "insufficient_credit",
+      `크레딧 잔액이 부족합니다. (계약 1건 ${price}원 · 잔액 ${bal}원)`);
+  }
   const doc = await D.createDocument(db, { associationId: assoc.id, title, body,
     contentHash: await contentHash(body), createdBy: null, ordered, dueDate });
+  if ((await billingMode(db)) === "per_doc") await chargeContract(db, assoc, { documentId: doc.id, title });
 
   // 서명자 등록 — API 로 만드는 계약은 상대방이 회원이 아닌 것이 보통이므로 전부 외부 서명자로 둔다
   const created = [];

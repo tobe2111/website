@@ -161,6 +161,33 @@ async function sendVia(env, { to, templateCode, text, smsFallback = true, button
   return { ok: true, id: j.info && j.info.mid ? String(j.info.mid) : "" };
 }
 
+// ---------- 과금 방식 ----------
+// per_send : 발송 1건마다 차감 (기본). 인원·재알림이 늘면 매출도 함께 는다.
+// per_doc  : 계약 1건마다 한 번만 차감. 그 계약에서 나가는 서명 관련 발송은 모두 무료.
+//            고객에게 설명하기 쉬운 대신, 서명자가 많거나 재알림이 잦으면 원가가 매출을 넘을 수 있다.
+//            (2인 계약 6통 = 원가 39원. 5인이면 15통 = 97.5원으로 100원에 육박한다)
+// 공지(notice)는 계약과 무관하므로 어느 모드에서든 발송당 과금이다.
+export const BILLING_MODES = { per_send: "발송당", per_doc: "계약당" };
+export async function billingMode(db) {
+  return (await D.getSetting(db, "billing_mode")) === "per_doc" ? "per_doc" : "per_send";
+}
+// 계약 요금에 포함되는 발송 종류 — 이 종류들은 per_doc 모드에서 건별로 차감하지 않는다
+const CONTRACT_KINDS = new Set(["sign_request", "sign_remind", "sign_done", "sign_otp"]);
+export const isContractKind = (kind) => CONTRACT_KINDS.has(kind);
+
+// 계약 1건 요금 청구 — per_doc 모드에서 문서를 만들 때 한 번 부른다.
+// 매출을 message_log 에 'contract' 행으로 남겨야 기존 정산(매출=cost 합계)이 그대로 맞는다.
+export async function chargeContract(db, assoc, { documentId, title }) {
+  const price = await priceOf(db, "alimtalk", assoc.id);
+  if (price <= 0) return { ok: true, cost: 0 }; // 무료 정책
+  const paid = await D.spendCredit(db, assoc.id, price, `전자계약 ${title}`.slice(0, 100));
+  if (!paid.ok) return { ok: false, error: "크레딧 잔액이 부족합니다", balance: paid.balance };
+  await D.logMessage(db, { associationId: assoc.id, channel: "contract", kind: "contract",
+    recipient: "", status: "sent", cost: price, costBase: 0,
+    ref: `${REF_PREFIX}-${assoc.id}-DOC${documentId}`, detail: title.slice(0, 100) });
+  return { ok: true, cost: price };
+}
+
 // ---------- 과금 게이트 ----------
 // 발송 1건 = 잔액 확인 → 선차감 → 발송 → 실패 시 환불. 순서를 이렇게 두면 중복 차감이 없다.
 export async function sendOne(env, db, { assoc, kind, to, text, buttonName, buttonUrl, templateCode }) {
@@ -179,19 +206,23 @@ export async function sendOne(env, db, { assoc, kind, to, text, buttonName, butt
     await D.logMessage(db, { associationId: assoc.id, kind, recipient: masked, status: "failed", cost: 0, detail: "템플릿 코드 미설정" });
     return { ok: false, error: "템플릿 코드가 설정되지 않았습니다" };
   }
-  const price = await priceOf(db, "alimtalk", assoc.id);
   const baseJeon = await costJeonOf(db, "alimtalk"); // 전 단위 — 반올림 손실 없음
   const ref = `${REF_PREFIX}-${assoc.id}-${tpl}`; // 대사용: 어느 플랫폼·상인회·템플릿인지
-  const paid = await D.spendCredit(db, assoc.id, price, `알림톡 ${kind}`);
-  if (!paid.ok) {
-    await D.logMessage(db, { associationId: assoc.id, kind, recipient: masked, status: "failed", cost: 0, ref, detail: "잔액 부족" });
-    return { ok: false, error: "크레딧 잔액이 부족합니다", insufficient: true };
+  // 계약당 과금이면 서명 관련 발송은 이미 계약 요금에 포함되어 있다 — 여기서 또 받으면 이중 과금이다.
+  const perDoc = (await billingMode(db)) === "per_doc" && isContractKind(kind);
+  const price = perDoc ? 0 : await priceOf(db, "alimtalk", assoc.id);
+  if (!perDoc) {
+    const paid = await D.spendCredit(db, assoc.id, price, `알림톡 ${kind}`);
+    if (!paid.ok) {
+      await D.logMessage(db, { associationId: assoc.id, kind, recipient: masked, status: "failed", cost: 0, ref, detail: "잔액 부족" });
+      return { ok: false, error: "크레딧 잔액이 부족합니다", insufficient: true };
+    }
   }
   let r;
   try { r = await sendVia(env, { to: phone, templateCode: tpl, text, buttonName, buttonUrl }); }
   catch (e) { r = { ok: false, error: String(e && e.message || e).slice(0, 200) }; }
   if (!r.ok) {
-    await D.addCredit(db, assoc.id, price, { kind: "refund", memo: `발송 실패 환불 (${kind})` });
+    if (price > 0) await D.addCredit(db, assoc.id, price, { kind: "refund", memo: `발송 실패 환불 (${kind})` });
     await D.logMessage(db, { associationId: assoc.id, kind, recipient: masked, status: "failed", cost: 0, ref, detail: r.error });
     return { ok: false, error: r.error };
   }

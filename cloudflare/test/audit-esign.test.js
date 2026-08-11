@@ -333,3 +333,88 @@ test("서명 전에는 문서를 고칠 수 있고 해시가 다시 계산된다
   const locked = await (await worker.fetch(new Request(BASE + path, { headers: { cookie: jar } }), env)).text();
   assert.doesNotMatch(locked, /✏️ 문서 수정/, "수정 폼도 사라져야 함");
 });
+
+// ---------- 과금 방식: 발송당 vs 계약당 ----------
+test("계약당 과금이면 계약 생성에서 한 번만 받고 서명 발송은 무료다", async () => {
+  const { billingMode, chargeContract, isContractKind } = await import("../src/notify.js");
+  await D.setSetting(db, "billing_mode", "per_doc");
+  await D.setSetting(db, "price_alimtalk", "100");
+  assert.equal(await billingMode(db), "per_doc");
+
+  const before = await D.getBalance(db, a.id);
+  const d = await D.createDocument(db, { associationId: a.id, title: "계약당 과금 계약", body: "본문",
+    contentHash: await contentHash("본문"), createdBy: admin.id, ordered: 0, dueDate: "" });
+  const c = await chargeContract(db, a, { documentId: d.id, title: d.title });
+  assert.equal(c.ok, true);
+  assert.equal(c.cost, 100);
+  assert.equal(await D.getBalance(db, a.id), before - 100, "계약 요금 1회만 차감");
+
+  // 이 계약의 서명 발송은 추가 차감이 없어야 한다
+  const e = await D.addExternalSigner(db, { documentId: d.id, name: "무료수신", phone: "010-2222-3333", signOrder: 1 });
+  const afterCharge = await D.getBalance(db, a.id);
+  sends = [];
+  const restore = stubAligo();
+  try {
+    const { sendSignLink } = await import("../src/extsign.js");
+    for (let i = 0; i < 3; i++) await sendSignLink(env, db, { assoc: a, doc: d, signer: e, origin: BASE });
+  } finally { restore(); }
+  assert.equal(sends.length, 3, "3통이 실제로 나갔다");
+  assert.equal(await D.getBalance(db, a.id), afterCharge, "그런데 잔액은 그대로 (이중 과금 없음)");
+});
+
+test("계약당 과금이어도 원가는 그대로 집계된다 (마진이 흐려지지 않게)", async () => {
+  const logs = await D.listMessages(db, a.id, 20);
+  // 방금 계약당 모드에서 보낸 건들만 (앞선 테스트의 발송당 기록과 섞이지 않게)
+  const masked = D.maskPhone("01022223333");
+  const sendRows = logs.filter((l) => l.channel !== "contract" && l.status === "sent" && l.recipient === masked);
+  assert.equal(sendRows.length, 3, "그 계약에서 나간 3통");
+  assert.ok(sendRows.every((l) => l.cost === 0), "발송 매출은 0");
+  assert.ok(sendRows.every((l) => l.cost_base > 0), "원가는 실제 값으로 남아야 함");
+  const contractRow = logs.find((l) => l.channel === "contract");
+  assert.ok(contractRow, "계약 요금이 매출 행으로 남아야 함");
+  assert.equal(contractRow.cost, 100);
+  assert.match(contractRow.ref, /-DOC\d+$/, "어느 계약의 요금인지 대사할 수 있어야 함");
+});
+
+test("공지는 계약과 무관하므로 계약당 모드에서도 발송당 과금이다", async () => {
+  const { isContractKind } = await import("../src/notify.js");
+  assert.equal(isContractKind("sign_request"), true);
+  assert.equal(isContractKind("sign_otp"), true);
+  assert.equal(isContractKind("notice"), false, "공지는 계약 요금에 포함되지 않는다");
+
+  const before = await D.getBalance(db, a.id);
+  sends = [];
+  const restore = stubAligo();
+  try {
+    const { sendOne } = await import("../src/notify.js");
+    await sendOne(env, db, { assoc: a, kind: "notice", to: "01044445555", text: "공지입니다", templateCode: "TPL_NOTICE" });
+  } finally { restore(); }
+  assert.equal(await D.getBalance(db, a.id), before - 100, "공지는 건당 차감");
+});
+
+test("잔액이 없으면 계약 요금 청구가 실패한다", async () => {
+  const { chargeContract } = await import("../src/notify.js");
+  const poor = await D.createAssociation(db, { slug: "poor", name: "잔액없음" });
+  const d = await D.createDocument(db, { associationId: poor.id, title: "무일푼", body: "본문",
+    contentHash: await contentHash("본문"), createdBy: null, ordered: 0, dueDate: "" });
+  const r = await chargeContract(db, poor, { documentId: d.id, title: d.title });
+  assert.equal(r.ok, false);
+  assert.match(r.error, /잔액/);
+});
+
+test("발송당 모드로 되돌리면 다시 건별로 차감한다", async () => {
+  await D.setSetting(db, "billing_mode", "per_send");
+  const d = await D.createDocument(db, { associationId: a.id, title: "발송당 계약", body: "본문",
+    contentHash: await contentHash("본문"), createdBy: admin.id, ordered: 0, dueDate: "" });
+  const e = await D.addExternalSigner(db, { documentId: d.id, name: "유료수신", phone: "010-6666-7777", signOrder: 1 });
+  const before = await D.getBalance(db, a.id);
+  sends = [];
+  const restore = stubAligo();
+  try {
+    const { sendSignLink } = await import("../src/extsign.js");
+    await sendSignLink(env, db, { assoc: a, doc: d, signer: e, origin: BASE });
+  } finally { restore(); }
+  assert.equal(sends.length, 1);
+  assert.equal(await D.getBalance(db, a.id), before - 100, "발송당 모드에서는 건별 차감");
+  await D.setSetting(db, "price_alimtalk", "22");
+});

@@ -16,7 +16,7 @@ import { turnstileVerify } from "./turnstile.js";
 import { planOf } from "./plans.js";
 import { seedDemo } from "./demoContent.js";
 import { seedStarter } from "./starterContent.js";
-import { TEMPLATE_KEYS, sendMany, sendOne, notifyEnabled, wonToJeon, renderTemplate, templateButton } from "./notify.js";
+import { TEMPLATE_KEYS, sendMany, sendOne, notifyEnabled, wonToJeon, renderTemplate, templateButton, billingMode, chargeContract, BILLING_MODES, priceOf } from "./notify.js";
 
 // ctx.request 는 내부 호출 경로에서 없을 수 있다 — 감사 기록이 본 기능을 죽이면 안 된다
 const uaOf = (ctx) => { try { return ctx.request.headers.get("user-agent") || ""; } catch { return ""; } };
@@ -157,6 +157,15 @@ export async function superNotifyCost(ctx) {
 }
 
 // 슈퍼: 상인회별 단가 설정 (0 = 플랫폼 기본가 적용)
+// 슈퍼: 과금 방식 (발송당 / 계약당)
+export async function superBillingMode(ctx) {
+  const { db, form } = ctx;
+  const mode = form.get("billing_mode") === "per_doc" ? "per_doc" : "per_send";
+  await D.setSetting(db, "billing_mode", mode);
+  await audit(ctx, "과금방식변경", BILLING_MODES[mode], null);
+  return back("/super", `과금 방식을 '${BILLING_MODES[mode]}'로 바꿨습니다. 이미 만들어진 계약에는 소급되지 않습니다.`);
+}
+
 export async function superSetUnitPrice(ctx) {
   const { db, params, form } = ctx;
   const a = await D.getAssociationById(db, Number(params.id));
@@ -732,7 +741,15 @@ export async function adminCreateDocument(ctx) {
     attName = cap(String(file.name || "계약서.pdf").replace(/[\\/\x00-\x1f]/g, ""), 120);
   }
   const docHash = attHash ? await contentHash(`${body}\n--attachment--\n${attHash}`) : await contentHash(body);
+  // 계약당 과금이면 문서를 만드는 시점에 한 번 청구한다. 잔액이 없으면 아예 만들지 않는다 —
+  // 만들어 두고 발송이 안 되면 상대방은 링크를 못 받고 관리자만 헛일을 한다.
+  if ((await billingMode(db)) === "per_doc") {
+    const bal = await D.getBalance(db, assoc.id);
+    const price = await priceOf(db, "alimtalk", assoc.id);
+    if (bal < price) return back(base + "/admin/documents", `크레딧 잔액이 부족합니다. (계약 1건 ${price.toLocaleString()}원 · 잔액 ${bal.toLocaleString()}원)`, true);
+  }
   const doc = await D.createDocument(db, { associationId: assoc.id, title, body, contentHash: docHash, createdBy: user.id, ordered, dueDate });
+  if ((await billingMode(db)) === "per_doc") await chargeContract(db, assoc, { documentId: doc.id, title });
   if (attKey) await D.setDocumentAttachment(db, doc.id, attKey, attName, attHash);
   // 서식이면 당사자 지정 순서가 곧 서명 순서이고, 배치는 당사자 → 실제 회원으로 옮겨 붙인다
   if (tpl) {

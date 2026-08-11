@@ -1478,3 +1478,4 @@ tr.is-revoked{opacity:.55}
 .tpl-reg summary{font-weight:700;font-size:.9rem;cursor:pointer}
 .tpl-reg pre{margin:10px 0;font-size:.78rem;white-space:pre-wrap}
 .tpl-count td,.tpl-count th{font-size:.86rem}
+tr.is-loss td{background:var(--no-bg);color:var(--no-fg)}
