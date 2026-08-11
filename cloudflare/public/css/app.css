@@ -1474,3 +1474,7 @@ a.cc-val:hover{color:var(--brand-700)}
   font-family:ui-monospace,Menlo,monospace;font-size:.8rem;line-height:1.6;white-space:pre}
 tr.is-revoked{opacity:.55}
 .txt-muted{color:var(--muted)}
+.tpl-reg{margin:8px 0;border:1px solid var(--line-soft);border-radius:var(--r-sm);padding:10px 12px}
+.tpl-reg summary{font-weight:700;font-size:.9rem;cursor:pointer}
+.tpl-reg pre{margin:10px 0;font-size:.78rem;white-space:pre-wrap}
+.tpl-count td,.tpl-count th{font-size:.86rem}

@@ -64,6 +64,8 @@ const shell = (title, inner) =>
 export async function buildEvidence(env, db, doc, assoc) {
   const sigs = await D.listSignatures(db, doc.id);
   const reqs = await D.listRequestStatus(db, doc.id);
+  const exts = await D.listExternalSigners(db, doc.id);
+  const counts = await D.requestCounts(db, doc.id);
   const fields = await D.listFieldsWithValues(db, doc.id);
   const events = await D.listDocEvents(db, doc.id);
   const verds = await Promise.all(sigs.map((s) => verifySignature(env, s, doc)));
@@ -79,8 +81,12 @@ export async function buildEvidence(env, db, doc, assoc) {
   for (const f of fields) if (f.image) uriOf.set(f.image, await dataUri(env, f.image));
 
   // ① 계약서 완성본
-  const nameOf = (id) => { const u = reqs.find((r) => r.id === id); return u ? u.name : ""; };
-  const done = reqs.length > 0 && reqs.every((r) => r.signed);
+  // 필드 담당자는 회원(양수)·외부 서명자(음수) 두 갈래다 — 한쪽만 보면 이름이 비어 나온다
+  const nameOf = (ref) => {
+    if (ref < 0) { const e = exts.find((x) => x.id === -ref); return e ? e.name : ""; }
+    const u = reqs.find((r) => r.id === ref); return u ? u.name : "";
+  };
+  const done = counts.total > 0 && counts.signed === counts.total;
   const paper = renderPaper(doc.body, {
     watermark: done ? "" : "미완성",
     fieldsFor: (page) => fields.filter((f) => f.page === page).map((f) =>
@@ -88,7 +94,7 @@ export async function buildEvidence(env, db, doc, assoc) {
         val: f.value || f.image ? { value: f.value || "", imageUrl: uriOf.get(f.image) || "" } : null })).join(""),
   });
   files.push({ name: "1_계약서_완성본.html", data: shell(`${doc.title} — 완성본`,
-    `<h1>${esc(doc.title)}</h1><p class="sub">${esc(assoc ? assoc.name : "")} · 서명 ${sigs.length}/${reqs.length || sigs.length}명${done ? " · 체결 완료" : " · 진행 중"}
+    `<h1>${esc(doc.title)}</h1><p class="sub">${esc(assoc ? assoc.name : "")} · 서명 ${counts.signed}/${counts.total}명${done ? " · 체결 완료" : " · 진행 중"}
      · 브라우저 인쇄로 PDF 저장 가능</p>${paper}`) });
 
   // ② 서명자별 확인서
@@ -100,8 +106,11 @@ export async function buildEvidence(env, db, doc, assoc) {
         <p class="sub">${esc(assoc ? assoc.name : "")} · 검증코드 ${esc(s.verify_code)}</p>
         <table>
         ${row("판정", v.valid ? '<span class="ok">유효 — 봉인·본문·입력값 모두 무결</span>' : '<span class="no">불일치 — 아래 항목 확인</span>')}
+        ${row("세부", `봉인 ${v.sealOk ? "무결" : "<b class=no>손상</b>"} · 본문 ${v.contentOk ? "일치" : "<b class=no>변경됨</b>"}`
+          + ` · 입력값 ${v.fieldsChecked ? (v.fieldsOk ? "일치" : "<b class=no>변경됨</b>") : "해당 없음"}`)}
         ${row("문서", esc(doc.title))}
-        ${row("서명자", `${esc(s.signer_name)} &lt;${esc(s.signer_email || "")}&gt;`)}
+        ${row("서명자", `${esc(s.signer_name)}${s.signer_kind === "external" ? " (외부 서명자)" : ""} &lt;${esc(s.signer_email || "")}&gt;`
+          + (s.signer_org ? `<br /><small>${esc(s.signer_org)}</small>` : ""))}
         ${row("서명 시각", `${esc(kstStamp(s.signed_at))} KST <small>(${esc(s.signed_at)})</small>`)}
         ${row("본인확인", esc(LEVEL_LABEL[s.verify_level] || s.verify_level))}
         ${row("접속 IP", esc(s.ip))}
@@ -138,13 +147,19 @@ export async function buildEvidence(env, db, doc, assoc) {
     필드: fields.map((f) => ({ id: f.id, 종류: f.kind, 이름표: f.label, 쪽: f.page,
       좌표: { x: f.x, y: f.y, w: f.w, h: f.h }, 담당: f.assignee, 필수: !!f.required,
       값: f.value || "", 이미지해시: f.image_hash || "", 입력시각: f.filled_at || null })),
-    서명: sigs.map((s, i) => ({ 검증코드: s.verify_code, 서명자: s.signer_name, 이메일: s.signer_email,
+    서명: sigs.map((s, i) => ({ 검증코드: s.verify_code, 서명자: s.signer_name, 구분: s.signer_kind, 이메일: s.signer_email,
       시각: s.signed_at, IP: s.ip, 기기: s.user_agent, 본인확인: s.verify_level,
       문서해시: s.content_hash, 입력값해시: s.fields_hash || "", 직전봉인: s.prev_hash || "",
       봉인값: s.record_hash, 봉인버전: s.seal_ver, 봉인원문: canonicalFromSig(s),
       판정: { 봉인: verds[i].sealOk, 본문: verds[i].contentOk, 입력값: verds[i].fieldsOk, 종합: verds[i].valid } })),
-    요청: reqs.map((r) => ({ 이름: r.name, 이메일: r.email, 순번: r.sign_order,
-      서명완료: !!r.signed, 거절시각: r.declined_at || null, 거절사유: r.decline_reason || null })),
+    요청: [
+      ...reqs.map((r) => ({ 구분: "회원", 이름: r.name, 이메일: r.email, 순번: r.sign_order,
+        서명완료: !!r.signed, 거절시각: r.declined_at || null, 거절사유: r.decline_reason || null })),
+      ...exts.map((e) => ({ 구분: "외부", 이름: e.name, 이메일: e.email || null, 소속: e.org || null, 순번: e.sign_order,
+        서명완료: !!e.signed, 열람시각: e.opened_at || null,
+        거절시각: e.declined_at || null, 거절사유: e.decline_reason || null })),
+    ],
+    진행: { 서명완료: counts.signed, 전체: counts.total, 체결완료: done },
     감사추적: events.map((e) => ({ 시각: e.created_at, 행위: e.kind, 설명: EVENT_LABEL[e.kind] || e.kind,
       행위자: e.actor_name, 상세: e.detail, IP: e.ip, 기기: e.user_agent })),
     서명사슬: chain,
@@ -231,7 +246,7 @@ function verifyGuide({ doc, assoc, sigs, verds, chain, jwk, fp, env, at }) {
   P("[ 내려받는 시점의 자동 판정 ]");
   for (let i = 0; i < sigs.length; i++) {
     const v = verds[i];
-    P(`  ${sigs[i].signer_name}  봉인 ${v.sealOk ? "OK" : "실패"} / 본문 ${v.contentOk ? "OK" : "불일치"} / 입력값 ${v.fieldsChecked ? (v.fieldsOk ? "OK" : "불일치") : "해당없음"} → ${v.valid ? "유효" : "확인 필요"}`);
+    P(`  ${sigs[i].signer_name}${sigs[i].signer_kind === "external" ? "(외부)" : ""}  봉인 ${v.sealOk ? "OK" : "실패"} / 본문 ${v.contentOk ? "OK" : "불일치"} / 입력값 ${v.fieldsChecked ? (v.fieldsOk ? "OK" : "불일치") : "해당없음"} → ${v.valid ? "유효" : "확인 필요"}`);
   }
   P(`  서명 사슬  ${chain.ok ? `정상 (${chain.length}건)` : `끊김 — 서명 #${chain.brokenAt}`}`);
   if (keyStorage(env) !== "secret") {

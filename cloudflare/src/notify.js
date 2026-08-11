@@ -41,13 +41,85 @@ export async function priceOf(db, channel, assocId = null) {
   const n = parseInt(v || "", 10);
   return Number.isFinite(n) && n >= 0 ? n : DEFAULT_PRICE[channel === "sms" ? "sms" : "alimtalk"];
 }
-// 알림톡 템플릿 코드 — 플랫폼 카카오 채널에 사전 등록·심사된 코드를 슈퍼관리자가 저장
-export const TEMPLATE_KEYS = {
-  sign_request: "tpl_sign_request",
-  sign_remind: "tpl_sign_remind",
-  notice: "tpl_notice",
+// ---------- 알림톡 템플릿 ----------
+// ⚠️ 알림톡은 카카오에 사전 심사받은 문구와 '글자 하나까지' 일치해야 발송된다.
+//    (변수 #{...} 자리만 값이 바뀔 수 있다.) 그래서 문구를 코드 밖에서 만들지 않고
+//    여기 한 곳에 두고, 발송할 때 변수만 갈아 끼운다. 아래 body 를 그대로 복사해
+//    카카오 비즈니스 채널에 등록하고, 받은 템플릿 코드를 슈퍼 콘솔에 입력하면 된다.
+//
+// 용도가 다르면 템플릿도 달라야 한다 — 인증번호를 '서명 요청' 템플릿으로 보내면
+// 문구가 달라 발송이 거절된다(과거 이 문제로 OTP·완료 안내가 모두 실패했다).
+export const TEMPLATES = {
+  sign_request: {
+    key: "tpl_sign_request", label: "전자서명 요청", button: "서명하러 가기",
+    vars: ["상호", "이름", "문서명", "기한"],
+    body: `[#{상호}] 전자서명 요청
+
+#{이름}님, 아래 문서에 서명이 필요합니다.
+
+▶ 문서: #{문서명}
+▶ 기한: #{기한}
+
+버튼을 눌러 내용을 확인하고 서명해 주세요.`,
+  },
+  sign_remind: {
+    key: "tpl_sign_remind", label: "전자서명 미완료 안내", button: "서명하러 가기",
+    vars: ["상호", "이름", "문서명", "기한"],
+    body: `[#{상호}] 전자서명 미완료 안내
+
+#{이름}님, 아직 서명이 완료되지 않았습니다.
+
+▶ 문서: #{문서명}
+▶ 기한: #{기한}
+
+버튼을 눌러 서명을 완료해 주세요.`,
+  },
+  sign_done: {
+    key: "tpl_sign_done", label: "전자서명 완료", button: "확인서 보기",
+    vars: ["상호", "이름", "문서명", "검증코드"],
+    body: `[#{상호}] 전자서명 완료
+
+#{이름}님, '#{문서명}' 전자서명이 완료되었습니다.
+
+▶ 검증코드: #{검증코드}
+
+버튼을 눌러 전자서명 확인서를 확인하실 수 있습니다.`,
+  },
+  sign_otp: {
+    key: "tpl_sign_otp", label: "전자서명 본인확인", button: "",
+    vars: ["상호", "인증번호", "유효시간"],
+    body: `[#{상호}] 전자서명 본인확인
+
+인증번호는 #{인증번호} 입니다.
+#{유효시간}분 안에 입력해 주세요.
+
+본인이 요청하지 않았다면 이 번호를 입력하지 마세요.`,
+  },
+  notice: {
+    key: "tpl_notice", label: "상인회 공지", button: "자세히 보기",
+    vars: ["상호", "제목", "내용"],
+    body: `[#{상호}] #{제목}
+
+#{내용}
+
+자세한 내용은 버튼을 눌러 확인해 주세요.`,
+  },
 };
-export const templateCodeFor = (db, kind) => D.getSetting(db, TEMPLATE_KEYS[kind] || "");
+// 이전 이름 호환 (슈퍼 콘솔·설정 키 조회용)
+export const TEMPLATE_KEYS = Object.fromEntries(Object.entries(TEMPLATES).map(([k, t]) => [k, t.key]));
+export const templateCodeFor = (db, kind) => D.getSetting(db, (TEMPLATES[kind] || {}).key || "");
+
+// 심사받은 문구에 값만 끼워 넣는다. 빈 값은 "-" 로 채운다 —
+// 카카오는 변수 자리가 비면 반려하는 경우가 있어 줄 구조를 무너뜨리지 않는 편이 안전하다.
+export function renderTemplate(kind, vars = {}) {
+  const t = TEMPLATES[kind];
+  if (!t) return "";
+  return t.body.replace(/#\{([^}]+)\}/g, (_, name) => {
+    const v = vars[name.trim()];
+    return v === undefined || v === null || v === "" ? "-" : String(v);
+  });
+}
+export const templateButton = (kind) => (TEMPLATES[kind] || {}).button || "";
 
 // ---------- 제공사 어댑터 (알리고) ----------
 // 알리고는 발송 전 토큰 발급이 필요합니다. 토큰은 짧게 캐시해 재사용.

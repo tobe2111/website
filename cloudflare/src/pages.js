@@ -5,7 +5,7 @@ import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG, ORIGIN, as
 import { verifyInviteToken, SALES_STAGES, otpRequired } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
 import { html, notFoundResponse, back } from "./http.js";
 import { galleryItem } from "./media-render.js";
-import { priceOf, costOf, jeonToWon, notifyEnabled, TEMPLATE_KEYS } from "./notify.js";
+import { priceOf, costOf, jeonToWon, notifyEnabled, TEMPLATE_KEYS, TEMPLATES } from "./notify.js";
 import { providerLabel } from "./embed.js";
 import { verifySignature, publicKeyJwk, publicKeyFingerprint, keyStorage, algorithm, verifyChain, verifyAnchor } from "./esign.js";
 import { renderPaper, fieldBox, FIELD_KINDS, paginate, pageCount } from "./paper.js";
@@ -1514,7 +1514,9 @@ export async function extSignForm(ctx) {
 
   if (await D.hasSignedExt(db, d.id, signer.id))
     return shellPage(`<div class="flash flash-ok">이미 서명을 마치셨습니다. 확인서는 등록하신 연락처로 보내드렸습니다.</div>
-      <p><a href="/documents/${d.id}/paper?t=${encodeURIComponent(params.token)}" class="btn btn-ghost btn-sm">계약서 완성본 보기</a></p>`, d.title);
+      <p class="pill-row"><a href="/esign/${encodeURIComponent(params.token)}/paper" class="btn btn-primary btn-sm">계약서 완성본 보기</a>
+        <a href="/esign/${encodeURIComponent(params.token)}/evidence" class="btn btn-ghost btn-sm">📦 증적 패키지 받기</a></p>
+      <p class="panel-hint">증적 패키지에는 서명된 계약서·확인서·검증 방법이 들어 있습니다. 분쟁 시 그대로 쓰실 수 있습니다.</p>`, d.title);
   if (signer.declined_at)
     return shellPage(`<div class="flash flash-warn">이 계약의 서명을 거절하셨습니다.<br /><small>사유: ${esc(signer.decline_reason || "")}</small></div>`, d.title);
   if (d.closed) return shellPage(`<div class="flash flash-warn">마감된 문서입니다.</div>`, d.title);
@@ -1580,6 +1582,50 @@ export async function extSignForm(ctx) {
         <p class="ext-who">${esc(signer.name)}${signer.org ? ` <small>(${esc(signer.org)})</small>` : ""} 님께 서명을 요청했습니다.</p></div>
       ${inner}</div></section>` }));
 }
+// 외부 서명자가 자기 계약의 완성본·증적을 받는 경로.
+// 회원용 /documents/:id/* 는 로그인이 필요하므로 링크가 통하지 않는다 — 토큰으로 여는 짝을 둔다.
+async function extDocContext(ctx) {
+  const signer = await resolveExtToken(ctx.db, ctx.env.SESSION_SECRET, ctx.params.token || "");
+  if (!signer) return null;
+  const doc = await D.getDocument(ctx.db, signer.document_id);
+  if (!doc) return null;
+  const assoc = await D.getAssociationById(ctx.db, doc.association_id);
+  if (!assoc) return null;
+  return { signer, doc, assoc };
+}
+
+export async function extPaper(ctx) {
+  const c = await extDocContext(ctx);
+  if (!c) return notFoundResponse(ctx);
+  const { doc: d, assoc } = c;
+  const fields = await D.listFieldsWithValues(ctx.db, d.id);
+  const reqs = await D.listRequestStatus(ctx.db, d.id);
+  const exts = await D.listExternalSigners(ctx.db, d.id);
+  const rc = await D.requestCounts(ctx.db, d.id);
+  const done = rc.total > 0 && rc.signed === rc.total;
+  const nameOf = (ref) => { if (ref < 0) { const e = exts.find((x) => x.id === -ref); return e ? e.name : ""; }
+    const u = reqs.find((r) => r.id === ref); return u ? u.name : ""; };
+  const body = `<section class="section page-top"><div class="container">
+    <div class="dash-head no-print"><div><p class="section-eyebrow">${esc(assoc.name)} · 완성본</p><h1 class="dash-title">${esc(d.title)}</h1>
+      <p class="dash-sub"><a href="/esign/${esc(ctx.params.token)}">← 돌아가기</a> · 서명 ${rc.signed}/${rc.total}${done ? " · 체결 완료" : " · 진행 중"}</p></div>
+      <div class="dash-head-actions"><button type="button" class="btn btn-primary btn-sm" data-print>🖨 인쇄 / PDF로 저장</button>
+        ${done ? `<a href="/esign/${esc(ctx.params.token)}/evidence" class="btn btn-ghost btn-sm">📦 증적 패키지</a>` : ""}</div></div>
+    <div class="paper-wrap">${renderPaper(d.body, {
+      fieldsFor: fieldsRenderer(fields, { mode: "view", nameOf }), watermark: done ? "" : "미완성" })}</div></div></section>
+    <style>@media print{@page{size:A4;margin:0}body{background:#fff}}</style>`;
+  return html(layout({ title: `${d.title} — 완성본`, assoc, base: "", user: null, body, csrf: ctx.csrf,
+    scripts: `<script src="${assetUrl("/js/paper.js")}" defer></script>` }));
+}
+
+export async function extEvidence(ctx) {
+  const c = await extDocContext(ctx);
+  if (!c) return notFoundResponse(ctx);
+  // 자기가 서명한 계약의 증거는 본인도 가져갈 수 있어야 한다 (한쪽만 증거를 쥐면 안 된다)
+  const { zip, filename } = await buildEvidence(ctx.env, ctx.db, c.doc, c.assoc);
+  return new Response(zip, { headers: { "content-type": "application/zip",
+    "content-disposition": `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`, "cache-control": "no-store" } });
+}
+
 const maskEmail = (e) => { const [a, b] = String(e || "").split("@"); return b ? `${a.slice(0, 2)}${"*".repeat(Math.max(1, a.length - 2))}@${b}` : ""; };
 
 // 증적 패키지 — 소송·분쟁에 그대로 낼 수 있는 한 벌(ZIP). 서명자도 자기 계약 것은 받을 수 있다.
@@ -1708,7 +1754,7 @@ export async function certificatePage(ctx) {
     </div>
     <table class="verify-table cert-table">
       ${row("문서 제목", esc(doc ? doc.title : "(삭제됨)"))}
-      ${row("서명자", esc(sig.signer_name))}
+      ${row("서명자", esc(sig.signer_name) + (sig.external_id ? ' <span class="badge badge-info">외부 서명자</span>' : ""))}
       ${row("서명 일시", esc(kstStamp(sig.signed_at)))}
       ${row("본인확인 수준", { identity: '실명 본인확인 <span class="badge badge-ok">최상</span>', otp: '휴대폰 인증번호 확인 <span class="badge badge-ok">강화</span>' }[sig.verify_level] || '계정 로그인 <span class="badge badge-muted">기본</span>')}
       ${row("서명 IP", esc(sig.ip))}
@@ -1716,6 +1762,7 @@ export async function certificatePage(ctx) {
       ${row("문서 해시 (SHA-256)", `<code class="cert-hash">${esc(sig.content_hash)}</code>`)}
       ${row("봉인값 (Ed25519)", `<code class="cert-hash">${esc(sig.record_hash)}</code>`)}
       ${row("본문 무결성", v.contentOk ? "원본과 일치 ✅" : "변경됨 ❌")}
+      ${row("입력값·서명 위치", v.fieldsChecked ? (v.fieldsOk ? "원본과 일치 ✅" : "변경됨 ❌") : "해당 없음")}
       ${row("봉인 무결성", v.sealOk ? "무결 ✅" : "손상 ❌")}
       ${row("검증 코드", `<code>${esc(sig.verify_code)}</code>`)}
       ${doc && doc.attachment ? row("첨부 계약서", esc(doc.attachment_name || "계약서.pdf")) : ""}
@@ -1777,8 +1824,10 @@ export async function verifyPage(ctx) {
     const badge = v.valid ? '<span class="badge badge-ok">유효한 서명</span>' : '<span class="badge badge-no">위변조 의심</span>';
     inner = `<div class="verify-result">${badge}
       <table class="verify-table"><tr><th>문서</th><td>${esc(doc ? doc.title : "(삭제됨)")}</td></tr>
-      <tr><th>서명자</th><td>${esc(sig.signer_name)}</td></tr><tr><th>서명 시각</th><td>${esc(kstStamp(sig.signed_at))} <span class="tz">KST</span></td></tr>
+      <tr><th>서명자</th><td>${esc(sig.signer_name)}${sig.external_id ? ' <span class="badge badge-info">외부 서명자</span>' : ""}</td></tr>
+      <tr><th>서명 시각</th><td>${esc(kstStamp(sig.signed_at))} <span class="tz">KST</span></td></tr>
       <tr><th>봉인(Ed25519)</th><td>${v.sealOk ? "무결 ✅" : "손상 ❌"}</td></tr><tr><th>문서 본문</th><td>${v.contentOk ? "원본 일치 ✅" : "변경됨 ❌"}</td></tr>
+      <tr><th>입력값·서명 위치</th><td>${v.fieldsChecked ? (v.fieldsOk ? "원본 일치 ✅" : "변경됨 ❌") : "해당 없음"}</td></tr>
       <tr><th>알고리즘</th><td>${esc(algorithm)}</td></tr></table></div>`;
   }
   const body = `<section class="section page-top"><div class="container narrow"><h1 class="article-title">전자서명 검증</h1>${inner}</div></section>`;
@@ -1842,10 +1891,18 @@ export async function superConsole(ctx) {
   const [pendCredits, notifyUsage, unitPrice] = await Promise.all([
     D.listPendingCreditOrders(db), D.platformMessageUsage(db), priceOf(db, "alimtalk"),
   ]);
-  const tplVals = await Promise.all(Object.values(TEMPLATE_KEYS).map((k) => D.getSetting(db, k)));
-  const tplInputs = Object.entries(TEMPLATE_KEYS).map(([kind, key], i) =>
-    `<label class="mini-label">${esc({ sign_request: "서명 요청", sign_remind: "서명 리마인더", notice: "공지" }[kind] || kind)} 템플릿코드
-      <input type="text" name="${esc(key)}" value="${esc(tplVals[i] || "")}" maxlength="60" placeholder="카카오 심사 통과 코드" /></label>`).join("");
+  // 알림톡은 심사받은 문구와 정확히 일치해야 발송된다 — 등록할 원문을 그대로 보여 주고,
+  // 받은 코드를 여기 적게 한다. 문구를 화면에서 바로 복사할 수 있어야 등록이 어긋나지 않는다.
+  const tplEntries = Object.entries(TEMPLATES);
+  const tplVals = await Promise.all(tplEntries.map(([, t]) => D.getSetting(db, t.key)));
+  const tplInputs = tplEntries.map(([kind, t], i) =>
+    `<label class="mini-label">${esc(t.label)}${tplVals[i] ? ' <span class="badge badge-ok">등록됨</span>' : ' <span class="badge badge-wait">미등록</span>'}
+      <input type="text" name="${esc(t.key)}" value="${esc(tplVals[i] || "")}" maxlength="60" placeholder="카카오 심사 통과 코드" /></label>`).join("");
+  const tplGuide = tplEntries.map(([kind, t]) => `<details class="tpl-reg"><summary>${esc(t.label)} <code>${esc(t.key)}</code>${tplVals[tplEntries.findIndex(([k]) => k === kind)] ? "" : " — 미등록"}</summary>
+      <p class="panel-hint">아래 문구를 <b>그대로</b> 카카오 비즈니스 채널에 등록하세요. 한 글자라도 다르면 발송이 거절됩니다.</p>
+      <pre class="code-block" data-select-all>${esc(t.body)}</pre>
+      <p class="panel-hint">변수: ${t.vars.map((v) => `<code>#{${esc(v)}}</code>`).join(" ")}${t.button ? ` · 버튼: <b>${esc(t.button)}</b> (웹링크)` : " · 버튼 없음"}</p></details>`).join("");
+  const tplDone = tplVals.filter(Boolean).length;
   const creditRows = pendCredits.length ? pendCredits.map((o) => `<tr><td>${esc(o.assoc_name)}</td><td>${o.amount.toLocaleString()}원</td>
     <td>${esc(o.depositor || "-")}<br /><small>${esc(kstStamp(o.created_at, { year: false }))}</small></td>
     <td class="actions-cell">
@@ -1955,8 +2012,24 @@ export async function superConsole(ctx) {
     <form method="post" action="/super/notify-settings" class="stack-form">
       <label class="mini-label">알림톡 판매단가 (원/건)<input type="number" name="price_alimtalk" value="${unitPrice}" min="0" max="1000" required /></label>
       <div class="form-two">${tplInputs}</div>
-      <p class="panel-hint">템플릿 코드는 플랫폼 카카오 채널에 등록·심사 통과된 값이어야 합니다. 비어 있으면 해당 종류는 발송되지 않습니다.</p>
-      <button class="btn btn-primary btn-sm">알림톡 설정 저장</button></form></section>`;
+      <p class="panel-hint">템플릿 코드는 플랫폼 카카오 채널에 등록·심사 통과된 값이어야 합니다. 비어 있으면 <b>그 종류만</b> 발송되지 않습니다(다른 종류는 정상).</p>
+      <button class="btn btn-primary btn-sm">알림톡 설정 저장</button></form>
+    <div class="form-divider">카카오에 등록할 문구 <span class="badge ${tplDone === tplEntries.length ? "badge-ok" : "badge-wait"}">${tplDone}/${tplEntries.length} 등록</span></div>
+    <p class="panel-hint">알림톡은 심사받은 문구와 <b>글자 하나까지</b> 같아야 발송됩니다. 아래 문구를 그대로 복사해 등록하고, 받은 코드를 위 칸에 넣으세요.
+      용도별로 템플릿이 따로 필요합니다 — 인증번호를 '서명 요청' 템플릿으로 보내면 문구가 달라 거절됩니다.</p>
+    ${tplGuide}
+    <div class="form-divider">계약 1건에 몇 통이 나가나</div>
+    <table class="admin-table tpl-count"><thead><tr><th>단계</th><th>발송</th><th>필수</th></tr></thead><tbody>
+      <tr><td>서명 요청</td><td>서명자 1인당 1통</td><td>필수</td></tr>
+      <tr><td>본인확인(OTP)</td><td>서명자 1인당 1통 <small>(재요청 시 추가)</small></td><td>본인확인 켠 경우</td></tr>
+      <tr><td>서명 완료 확인서</td><td>서명자 1인당 1통</td><td>필수</td></tr>
+      <tr><td>미완료 재알림</td><td>미서명자 1인당 1통</td><td>보낼 때만</td></tr>
+    </tbody></table>
+    <p class="panel-hint"><b>2인 계약 기준</b> — 본인확인 없이 <b>4통</b>(요청 2 + 완료 2), 본인확인을 켜면 <b>6통</b>.
+      재알림 한 번에 미서명자 수만큼 추가됩니다. 원가 ${(await costOf(db, "alimtalk")).toLocaleString()}원 기준으로
+      2인 계약 1건의 발송 원가는 약 <b>${(6 * (await costOf(db, "alimtalk"))).toLocaleString()}원</b>,
+      판매가 ${unitPrice.toLocaleString()}원 기준 매출은 <b>${(6 * unitPrice).toLocaleString()}원</b>입니다.
+      이메일만 등록된 서명자는 알림톡 대신 메일로 나가 비용이 들지 않습니다.</p></section>`;
 
   const usagePanel = `<section class="panel"><h2 class="panel-title">상인회별 사용량 <span class="badge badge-muted">R2 총 ${fmtBytes(ps.storage)}</span></h2>
     <div class="table-scroll"><table class="admin-table"><thead><tr><th>상인회</th><th>회원</th><th>미디어</th><th>저장용량</th><th>플랜</th></tr></thead><tbody>

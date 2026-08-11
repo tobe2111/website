@@ -30,3 +30,48 @@ export async function resolveExtToken(db, secret, token) {
 }
 
 export const extSignUrl = (origin, token) => `${origin}/esign/${token}`;
+
+
+// 서명 요청·재알림 링크 보내기 — 외부 서명자는 각자 자기 토큰이 붙은 링크를 받아야 한다.
+// 회원처럼 공용 /sign 주소를 보낼 수 없으므로, 발송을 이 한 곳으로 모아 둔다.
+// 반환: 보낸 수단("alimtalk" | "email") 또는 null(보낼 수단이 없거나 실패)
+export async function sendSignLink(env, db, { assoc, doc, signer, origin, remind = false }) {
+  const { sendOne, notifyEnabled, renderTemplate, templateButton } = await import("./notify.js");
+  const { sendEmail, emailEnabled, mailShell, mailButton } = await import("./email.js");
+  const { esc } = await import("./util.js");
+  const token = await makeExtToken(env.SESSION_SECRET, signer.id, doc.id);
+  const link = extSignUrl(origin, token);
+  // 문구는 심사받은 템플릿 그대로여야 한다 — 여기서 변수만 갈아 끼운다
+  const kind = remind ? "sign_remind" : "sign_request";
+  const text = renderTemplate(kind, { 상호: assoc.name, 이름: signer.name, 문서명: doc.title, 기한: doc.due_date || "미지정" });
+
+  if (D.isValidPhone(signer.phone || "") && notifyEnabled(env)) {
+    const r = await sendOne(env, db, { assoc, kind, to: signer.phone, text,
+      buttonName: templateButton(kind), buttonUrl: link });
+    if (r.ok) return "alimtalk";
+    if (r.insufficient) return null; // 잔액 부족 — 이메일로 우회하지 않고 그대로 알린다
+  }
+  if (signer.email && emailEnabled(env)) {
+    await sendEmail(env, { to: signer.email,
+      subject: `[${assoc.name}] ${remind ? "전자서명 미완료 안내" : "전자서명 요청"} — ${doc.title}`,
+      html: mailShell(`${esc(assoc.name)} 전자서명`,
+        `<p>${esc(signer.name)}님, ${remind ? "아직 서명하지 않은 계약서가 있습니다." : "서명이 필요한 계약서가 도착했습니다."}</p>
+         <p><b>${esc(doc.title)}</b>${doc.due_date ? ` (기한: ${esc(doc.due_date)})` : ""}</p>
+         ${mailButton(link, "계약서 확인하고 서명하기")}
+         <p style="font-size:12px;color:#888">가입 없이 이 링크로 바로 서명하실 수 있습니다.</p>`) }).catch(() => {});
+    return "email";
+  }
+  return null;
+}
+
+// 아직 서명하지 않은(거절하지 않은) 외부 서명자에게 재알림. 순차 문서면 지금 차례인 사람만.
+export async function remindExternals(env, db, { assoc, doc, origin }) {
+  const pending = (await D.listExternalSigners(db, doc.id)).filter((e) => !e.signed && !e.declined_at);
+  let sent = 0, skipped = 0;
+  for (const e of pending) {
+    if (doc.ordered && !(await D.canSignNowAny(db, doc, { externalId: e.id }))) { skipped++; continue; }
+    const via = await sendSignLink(env, db, { assoc, doc, signer: e, origin, remind: true });
+    if (via) sent++; else skipped++;
+  }
+  return { sent, skipped, total: pending.length };
+}

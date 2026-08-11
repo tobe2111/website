@@ -6,6 +6,7 @@ import { sendEmail, emailEnabled, mailShell } from "./email.js";
 import * as D from "./db.js";
 import { sendMany, priceOf } from "./notify.js";
 import { sealAnchor } from "./esign.js";
+import { remindExternals } from "./extsign.js";
 
 const BACKUP_PREFIX = "backups/";
 const MANIFEST_KEY = "backups/index.json"; // R2 list() 없이도 보존 개수를 관리하기 위한 목록
@@ -125,16 +126,24 @@ export async function runSignReminders(env) {
   for (const d of docs) {
     const assoc = await D.getAssociationById(db, d.association_id);
     if (!assoc) continue;
-    const targets = (await D.listUnsigned(db, d.id)).filter((t) => t.phone);
-    if (!targets.length) { await D.markReminded(db, d.id); continue; }
     const price = await priceOf(db, "alimtalk");
     if ((await D.getBalance(db, assoc.id)) < price) { skipped++; continue; } // 잔액 없으면 다음날 다시 시도
-    const r = await sendMany(env, db, {
-      assoc, kind: "sign_remind", recipients: targets,
-      textFor: (m) => `[${assoc.name}] ${m.name}님, '${d.title}' 전자서명 기한이 ${d.due_date}까지입니다. 아직 서명이 완료되지 않았습니다.`,
-      buttonName: "서명하러 가기", buttonUrl: `${env.PUBLIC_ORIGIN || ""}/t/${d.assoc_slug}/sign`,
-    });
-    sent += r.sent; docsDone++;
+    const origin = env.PUBLIC_ORIGIN || "";
+    // 회원 — 공용 서명 목록 주소로
+    const targets = (await D.listUnsigned(db, d.id)).filter((t) => t.phone);
+    if (targets.length) {
+      const r = await sendMany(env, db, {
+        assoc, kind: "sign_remind", recipients: targets,
+        textFor: (m) => `[${assoc.name}] ${m.name}님, '${d.title}' 전자서명 기한이 ${d.due_date}까지입니다. 아직 서명이 완료되지 않았습니다.`,
+        buttonName: "서명하러 가기", buttonUrl: `${origin}/t/${d.assoc_slug}/sign`,
+      });
+      sent += r.sent;
+    }
+    // 외부 서명자 — 각자 자기 토큰 링크로 (공용 주소로는 들어올 수 없다)
+    const ext = await remindExternals(env, db, { assoc, doc: d, origin });
+    sent += ext.sent;
+    if (!targets.length && !ext.total) { await D.markReminded(db, d.id); continue; }
+    docsDone++;
     await D.markReminded(db, d.id);
   }
   return { docs: docsDone, sent, skipped };

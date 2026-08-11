@@ -10,13 +10,13 @@ import { cap, sniffImage, EMAIL_RE, MAX_IMAGE_BYTES, slugify, esc } from "./util
 import { contentHash, sealRecord, newVerifyCode, SEAL_VER, fieldsHashOf } from "./esign.js";
 import { isFieldKind, round4, FIELD_KINDS, pageCount } from "./paper.js";
 import { builtinById, isBuiltinId, normalizeTemplate, extractVars, applyVars, resolveFieldPages } from "./templates.js";
-import { resolveExtToken, makeExtToken, extSignUrl } from "./extsign.js";
+import { resolveExtToken, makeExtToken, extSignUrl, sendSignLink, remindExternals } from "./extsign.js";
 import { enqueueDocEvent, newApiKey, hashApiKey, KEY_PREFIX } from "./apiv1.js";
 import { turnstileVerify } from "./turnstile.js";
 import { planOf } from "./plans.js";
 import { seedDemo } from "./demoContent.js";
 import { seedStarter } from "./starterContent.js";
-import { TEMPLATE_KEYS, sendMany, sendOne, notifyEnabled, wonToJeon } from "./notify.js";
+import { TEMPLATE_KEYS, sendMany, sendOne, notifyEnabled, wonToJeon, renderTemplate, templateButton } from "./notify.js";
 
 // ctx.request 는 내부 호출 경로에서 없을 수 있다 — 감사 기록이 본 기능을 죽이면 안 된다
 const uaOf = (ctx) => { try { return ctx.request.headers.get("user-agent") || ""; } catch { return ""; } };
@@ -877,9 +877,9 @@ export async function extSign(ctx) {
   try {
     const certUrl = `${new URL(request.url).origin}/certificate/${verifyCode}`;
     if (D.isValidPhone(signer.phone || "")) {
-      await sendOne(env, db, { assoc, kind: "sign_request", to: signer.phone,
-        text: `[${assoc.name}] '${d.title}' 전자서명이 완료되었습니다. 확인서는 아래에서 보실 수 있습니다.`,
-        buttonName: "확인서 보기", buttonUrl: certUrl });
+      await sendOne(env, db, { assoc, kind: "sign_done", to: signer.phone,
+        text: renderTemplate("sign_done", { 상호: assoc.name, 이름: signerName, 문서명: d.title, 검증코드: verifyCode }),
+        buttonName: templateButton("sign_done"), buttonUrl: certUrl });
     }
     if (emailEnabled(env) && signer.email) {
       await sendEmail(env, { to: signer.email, subject: `[${assoc.name}] 전자서명 완료 — ${d.title}`,
@@ -922,10 +922,10 @@ export async function extOtpSend(ctx) {
     return back(to, "인증번호를 방금 보냈습니다. 1분 뒤에 다시 요청해 주세요.", true);
   const code = String(Math.floor(100000 + Math.random() * 900000));
   await D.upsertExtOtp(db, { externalId: signer.id, codeHash: await sha256Hex(`ext|${signer.id}|${code}`), phone: signer.phone });
-  const msg = `[${assoc.name}] 전자서명 본인확인 번호는 ${code} 입니다. ${D.OTP_TTL_MIN}분 안에 입력해 주세요.`;
+  const msg = renderTemplate("sign_otp", { 상호: assoc.name, 인증번호: code, 유효시간: D.OTP_TTL_MIN });
   let via = "";
   if (hasPhone && notifyEnabled(env)) {
-    const r = await sendOne(env, db, { assoc, kind: "sign_request", to: signer.phone, text: msg });
+    const r = await sendOne(env, db, { assoc, kind: "sign_otp", to: signer.phone, text: msg });
     if (r.ok) via = `${D.maskPhone(signer.phone)} 으로 알림톡을`;
     else if (r.insufficient) { await D.clearExtOtp(db, signer.id); return back(to, "발송 크레딧이 부족해 인증번호를 보내지 못했습니다. 요청하신 분께 문의해 주세요.", true); }
   }
@@ -979,20 +979,8 @@ export async function adminAddExternalSigner(ctx) {
   const token = await makeExtToken(env.SESSION_SECRET, signer.id, d.id);
   const link = extSignUrl(new URL(request.url).origin, token);
 
-  let sent = "";
-  if (phone && notifyEnabled(env)) {
-    const r = await sendOne(env, db, { assoc, kind: "sign_request", to: phone,
-      text: `[${assoc.name}] ${name}님, '${d.title}' 전자서명을 요청드립니다.${d.due_date ? ` 기한: ${d.due_date}` : ""}`,
-      buttonName: "서명하러 가기", buttonUrl: link });
-    if (r.ok) sent = "알림톡을 보냈습니다.";
-  }
-  if (!sent && email && emailEnabled(env)) {
-    await sendEmail(env, { to: email, subject: `[${assoc.name}] 전자서명 요청 — ${d.title}`,
-      html: mailShell(`${esc(assoc.name)} 전자서명 요청`,
-        `<p>${esc(name)}님, 서명이 필요한 계약서가 도착했습니다.</p><p><b>${esc(d.title)}</b>${d.due_date ? ` (기한: ${d.due_date})` : ""}</p>
-         ${mailButton(link, "계약서 확인하고 서명하기")}<p style="font-size:12px;color:#888">가입 없이 이 링크로 바로 서명하실 수 있습니다.</p>`) }).catch(() => {});
-    sent = "이메일을 보냈습니다.";
-  }
+  const via = await sendSignLink(env, db, { assoc, doc: d, signer, origin: new URL(request.url).origin });
+  const sent = via === "alimtalk" ? "알림톡을 보냈습니다." : via === "email" ? "이메일을 보냈습니다." : "";
   await audit(ctx, "외부서명자추가", `${d.title}: ${name}`);
   return redirect(`${to}?extlink=${encodeURIComponent(token)}&msg=${encodeURIComponent(`${name}님을 추가했습니다. ${sent || "아래 링크를 직접 전달해 주세요."}`)}`);
 }
@@ -1029,12 +1017,12 @@ export async function signOtpSend(ctx) {
 
   const code = String(Math.floor(100000 + Math.random() * 900000)); // 6자리
   await D.upsertSignOtp(db, { documentId: d.id, userId: user.id, codeHash: await sha256Hex(`otp|${d.id}|${user.id}|${code}`), phone: user.phone });
-  const msg = `[${assoc.name}] 전자서명 본인확인 번호는 ${code} 입니다. ${D.OTP_TTL_MIN}분 안에 입력해 주세요.`;
+  const msg = renderTemplate("sign_otp", { 상호: assoc.name, 인증번호: code, 유효시간: D.OTP_TTL_MIN });
   // 알림톡이 준비되지 않았어도(카카오 채널 승인 대기 등) 이메일로 보낼 수 있으면 보낸다.
   // 그래야 알림톡 개통 전에 본인확인을 켜도 서명이 막히지 않는다.
   let via = "";
   if (notifyEnabled(env)) {
-    const r = await sendOne(env, db, { assoc, kind: "sign_request", to: user.phone, text: msg });
+    const r = await sendOne(env, db, { assoc, kind: "sign_otp", to: user.phone, text: msg });
     if (r.ok) via = `${D.maskPhone(user.phone)} 으로 알림톡을`;
     else if (r.insufficient) { await D.clearSignOtp(db, d.id, user.id); return back(base + "/sign/" + d.id, "알림 크레딧이 부족해 인증번호를 보내지 못했습니다. 상인회 관리자에게 문의해 주세요.", true); }
   }
@@ -1112,10 +1100,12 @@ export async function adminRemindDocument(ctx) {
   if (d.last_remind_at && Date.now() - Date.parse(d.last_remind_at.replace(" ", "T") + "Z") < 6 * 3600 * 1000)
     return back(base + "/admin/documents/" + d.id, "방금 리마인더를 보냈습니다. 6시간 뒤에 다시 보낼 수 있습니다.", true);
   const targets = await D.listUnsigned(db, d.id);
-  if (!targets.length) return back(base + "/admin/documents/" + d.id, "미서명자가 없습니다.");
+  const origin = new URL(request.url).origin;
+  // 외부 서명자는 각자 자기 토큰 링크를 받아야 하므로 회원과 발송 경로가 다르다
+  const extResult = await remindExternals(env, db, { assoc, doc: d, origin });
+  if (!targets.length && !extResult.total) return back(base + "/admin/documents/" + d.id, "미서명자가 없습니다.");
   await D.logDocEvent(db, { documentId: d.id, userId: ctx.user.id, actorName: ctx.user.name, kind: "reminded",
     detail: `대상 ${targets.length}명`, ip: ctx.ip || "" });
-  const origin = new URL(request.url).origin;
   const link = `${origin}${base}/sign`;
   // 알림톡이 아직 준비되지 않았으면(채널 승인 대기 등) 전원 이메일로 보낸다
   const canTalk = notifyEnabled(env);
@@ -1124,8 +1114,8 @@ export async function adminRemindDocument(ctx) {
   if (withPhone.length) {
     const r = await sendMany(env, db, {
       assoc, kind: "sign_remind", recipients: withPhone,
-      textFor: (m) => `[${assoc.name}] ${m.name}님, '${d.title}' 전자서명이 아직 완료되지 않았습니다.${d.due_date ? ` 기한: ${d.due_date}` : ""}`,
-      buttonName: "서명하러 가기", buttonUrl: link,
+      textFor: (m) => renderTemplate("sign_remind", { 상호: assoc.name, 이름: m.name, 문서명: d.title, 기한: d.due_date || "미지정" }),
+      buttonName: templateButton("sign_remind"), buttonUrl: link,
     });
     msg += `알림톡 ${r.sent}건 발송(${r.cost.toLocaleString()}원 차감)`;
     if (r.failed) msg += `, 실패 ${r.failed}건`;
@@ -1140,9 +1130,10 @@ export async function adminRemindDocument(ctx) {
     }).catch(() => {})));
     msg += `${msg ? " · " : ""}이메일 ${noPhone.length}건 발송`;
   }
-  if (!msg) msg = `미서명자 ${targets.length}명에게 보낼 연락처가 없습니다. 회원 휴대폰을 등록해 주세요.`;
+  if (extResult.sent) msg += `${msg ? " · " : ""}외부 서명자 ${extResult.sent}명 발송`;
+  if (!msg) msg = `미서명자에게 보낼 연락처가 없습니다. 휴대폰·이메일을 등록해 주세요.`;
   await D.markReminded(db, d.id);
-  await audit(ctx, "서명리마인더", `${d.title} · 대상 ${targets.length}명`);
+  await audit(ctx, "서명리마인더", `${d.title} · 회원 ${targets.length}명 · 외부 ${extResult.sent}명`);
   return back(base + "/admin/documents/" + d.id, msg);
 }
 
@@ -1340,9 +1331,9 @@ export async function memberSign(ctx) {
   try {
     const certUrl = `${new URL(request.url).origin}/certificate/${verifyCode}`;
     if (D.isValidPhone(user.phone || "")) {
-      await sendOne(env, db, { assoc, kind: "sign_request", to: user.phone,
-        text: `[${assoc.name}] '${d.title}' 전자서명이 완료되었습니다. 확인서는 아래에서 보실 수 있습니다.`,
-        buttonName: "확인서 보기", buttonUrl: certUrl });
+      await sendOne(env, db, { assoc, kind: "sign_done", to: user.phone,
+        text: renderTemplate("sign_done", { 상호: assoc.name, 이름: signerName, 문서명: d.title, 검증코드: verifyCode }),
+        buttonName: templateButton("sign_done"), buttonUrl: certUrl });
     }
     if (emailEnabled(env) && user.email) {
       await sendEmail(env, { to: user.email, subject: `[${assoc.name}] 전자서명 완료 — ${d.title}`,

@@ -12,7 +12,6 @@ import { makeExtToken, extSignUrl } from "./extsign.js";
 import { builtinById, isBuiltinId, normalizeTemplate, applyVars, resolveFieldPages } from "./templates.js";
 import { pageCount, isFieldKind, round4 } from "./paper.js";
 import { buildEvidence } from "./evidence.js";
-import { sendOne, notifyEnabled } from "./notify.js";
 
 const J = (data, status = 200, extra = {}) =>
   new Response(JSON.stringify(data, null, 2), {
@@ -237,28 +236,10 @@ async function createDocument(ctx, key, assoc) {
   }) }, 201);
 }
 
-// 서명자에게 링크 보내기 — 알림톡 우선, 없으면 이메일. 보낸 수단을 돌려준다.
+// 서명자에게 링크 보내기 — 문구·템플릿·폴백 규칙은 extsign 한 곳에 모아 두고 그대로 쓴다.
 async function notifySigner(ctx, assoc, doc, signer) {
-  const { db, env } = ctx;
-  const link = signer.url || extSignUrl(ctx.url.origin, await makeExtToken(env.SESSION_SECRET, signer.id, doc.id));
-  if (signer.phone && notifyEnabled(env)) {
-    const r = await sendOne(env, db, { assoc, kind: "sign_request", to: signer.phone,
-      text: `[${assoc.name}] ${signer.name}님, '${doc.title}' 전자서명을 요청드립니다.${doc.due_date ? ` 기한: ${doc.due_date}` : ""}`,
-      buttonName: "서명하러 가기", buttonUrl: link });
-    if (r.ok) return "alimtalk";
-    if (r.insufficient) return null;
-  }
-  if (signer.email) {
-    const { sendEmail, emailEnabled, mailShell, mailButton } = await import("./email.js");
-    if (!emailEnabled(env)) return null;
-    const { esc } = await import("./util.js");
-    await sendEmail(env, { to: signer.email, subject: `[${assoc.name}] 전자서명 요청 — ${doc.title}`,
-      html: mailShell(`${esc(assoc.name)} 전자서명 요청`,
-        `<p>${esc(signer.name)}님, 서명이 필요한 계약서가 도착했습니다.</p><p><b>${esc(doc.title)}</b></p>
-         ${mailButton(link, "계약서 확인하고 서명하기")}`) }).catch(() => {});
-    return "email";
-  }
-  return null;
+  const { sendSignLink } = await import("./extsign.js");
+  return sendSignLink(ctx.env, ctx.db, { assoc, doc, signer, origin: ctx.url.origin });
 }
 
 async function addSigner(ctx, key, assoc, docId) {

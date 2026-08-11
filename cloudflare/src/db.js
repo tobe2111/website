@@ -828,8 +828,10 @@ export const listDocsNeedingRemind = (db) =>
   all(db, `SELECT d.*, a.name AS assoc_name, a.slug AS assoc_slug FROM documents d JOIN associations a ON a.id=d.association_id
     WHERE d.closed=0 AND d.due_date != '' AND d.due_date >= date('now') AND d.due_date <= date('now','+2 day')
       AND (d.last_remind_at='' OR d.last_remind_at < datetime('now','-20 hour'))
-      AND EXISTS (SELECT 1 FROM signature_requests r WHERE r.document_id=d.id AND r.declined_at=''
-        AND NOT EXISTS (SELECT 1 FROM signatures s WHERE s.document_id=r.document_id AND s.user_id=r.user_id))`);
+      AND (EXISTS (SELECT 1 FROM signature_requests r WHERE r.document_id=d.id AND r.declined_at=''
+             AND NOT EXISTS (SELECT 1 FROM signatures s WHERE s.document_id=r.document_id AND s.user_id=r.user_id))
+        OR EXISTS (SELECT 1 FROM external_signers e WHERE e.document_id=d.id AND e.declined_at=''
+             AND NOT EXISTS (SELECT 1 FROM signatures s2 WHERE s2.document_id=e.document_id AND s2.external_id=e.id)))`);
 
 // ----- 서명 본인확인 OTP -----
 // 코드는 해시로만 저장(DB 유출 시에도 코드 자체는 노출되지 않음). 5분 만료·5회 시도 제한.
