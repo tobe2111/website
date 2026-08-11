@@ -741,17 +741,25 @@ export async function signOtpSend(ctx) {
 
   const code = String(Math.floor(100000 + Math.random() * 900000)); // 6자리
   await D.upsertSignOtp(db, { documentId: d.id, userId: user.id, codeHash: await sha256Hex(`otp|${d.id}|${user.id}|${code}`), phone: user.phone });
-  const r = await sendOne(env, db, {
-    assoc, kind: "sign_request", to: user.phone,
-    text: `[${assoc.name}] 전자서명 본인확인 번호는 ${code} 입니다. ${D.OTP_TTL_MIN}분 안에 입력해 주세요.`,
-  });
-  if (!r.ok) {
-    await D.clearSignOtp(db, d.id, user.id);
-    return back(base + "/sign/" + d.id, r.insufficient
-      ? "알림 크레딧이 부족해 인증번호를 보내지 못했습니다. 상인회 관리자에게 문의해 주세요."
-      : `인증번호 발송에 실패했습니다. (${r.error})`, true);
+  const msg = `[${assoc.name}] 전자서명 본인확인 번호는 ${code} 입니다. ${D.OTP_TTL_MIN}분 안에 입력해 주세요.`;
+  // 알림톡이 준비되지 않았어도(카카오 채널 승인 대기 등) 이메일로 보낼 수 있으면 보낸다.
+  // 그래야 알림톡 개통 전에 본인확인을 켜도 서명이 막히지 않는다.
+  let via = "";
+  if (notifyEnabled(env)) {
+    const r = await sendOne(env, db, { assoc, kind: "sign_request", to: user.phone, text: msg });
+    if (r.ok) via = `${D.maskPhone(user.phone)} 으로 알림톡을`;
+    else if (r.insufficient) { await D.clearSignOtp(db, d.id, user.id); return back(base + "/sign/" + d.id, "알림 크레딧이 부족해 인증번호를 보내지 못했습니다. 상인회 관리자에게 문의해 주세요.", true); }
   }
-  return back(base + "/sign/" + d.id, `${D.maskPhone(user.phone)} 으로 인증번호를 보냈습니다. ${D.OTP_TTL_MIN}분 안에 입력해 주세요.`);
+  if (!via && emailEnabled(env) && user.email) {
+    await sendEmail(env, { to: user.email, subject: `[${assoc.name}] 전자서명 본인확인 번호`,
+      html: mailShell("본인확인 번호", `<p>아래 번호를 서명 화면에 입력해 주세요.</p><p style="font-size:28px;font-weight:800;letter-spacing:.1em">${esc(code)}</p><p style="color:#888">${D.OTP_TTL_MIN}분 후 만료됩니다.</p>`) }).catch(() => {});
+    via = `${esc(user.email)} 로 이메일을`;
+  }
+  if (!via) {
+    await D.clearSignOtp(db, d.id, user.id);
+    return back(base + "/sign/" + d.id, "인증번호를 보낼 수단이 없습니다. 상인회 관리자에게 문의해 주세요. (알림톡·이메일 모두 미설정)", true);
+  }
+  return back(base + "/sign/" + d.id, `${via} 보냈습니다. ${D.OTP_TTL_MIN}분 안에 입력해 주세요.`);
 }
 
 export async function signOtpVerify(ctx) {
@@ -773,9 +781,13 @@ export async function signOtpVerify(ctx) {
 
 // 슈퍼: 서명 본인확인 사용 여부
 export async function superEsignSettings(ctx) {
-  const { db, form } = ctx;
-  await D.setSetting(db, "esign_otp", form.get("esign_otp") === "1" ? "1" : "0");
-  await audit(ctx, "전자서명설정", `본인확인 ${form.get("esign_otp") === "1" ? "사용" : "미사용"}`, null);
+  const { db, env, form } = ctx;
+  const on = form.get("esign_otp") === "1";
+  // 발송 수단이 전혀 없는데 켜면 회원이 인증번호를 못 받아 '서명 자체가 불가능'해진다.
+  if (on && !notifyEnabled(env) && !emailEnabled(env))
+    return back("/super", "알림톡·이메일 중 하나는 설정되어야 본인확인을 켤 수 있습니다. (지금 켜면 회원이 서명할 수 없게 됩니다)", true);
+  await D.setSetting(db, "esign_otp", on ? "1" : "0");
+  await audit(ctx, "전자서명설정", `본인확인 ${on ? "사용" : "미사용"}`, null);
   return back("/super", "전자서명 설정을 저장했습니다.");
 }
 
@@ -808,7 +820,9 @@ export async function adminRemindDocument(ctx) {
   if (!targets.length) return back(base + "/admin/documents/" + d.id, "미서명자가 없습니다.");
   const origin = new URL(request.url).origin;
   const link = `${origin}${base}/sign`;
-  const withPhone = targets.filter((t) => t.phone);
+  // 알림톡이 아직 준비되지 않았으면(채널 승인 대기 등) 전원 이메일로 보낸다
+  const canTalk = notifyEnabled(env);
+  const withPhone = canTalk ? targets.filter((t) => t.phone) : [];
   let msg = "";
   if (withPhone.length) {
     const r = await sendMany(env, db, {
@@ -821,7 +835,7 @@ export async function adminRemindDocument(ctx) {
     if (r.stopped) msg += " — 잔액이 부족해 중단되었습니다";
   }
   // 번호가 없는 사람은 이메일로 (설정된 경우)
-  const noPhone = targets.filter((t) => !t.phone && t.email);
+  const noPhone = targets.filter((t) => (!canTalk || !t.phone) && t.email);
   if (noPhone.length && emailEnabled(env)) {
     await Promise.all(noPhone.map((m) => sendEmail(env, {
       to: m.email, subject: `[${assoc.name}] 전자서명 미완료 안내 — ${d.title}`,

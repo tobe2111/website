@@ -102,3 +102,26 @@ test("OTP: 해시로만 저장되고 만료·시도 제한이 걸린다", async 
   await D.upsertSignOtp(db, { documentId: doc.id, userId: u1.id, codeHash: "new", phone: "01011111111" });
   assert.equal(await D.otpVerifiedRecently(db, doc.id, u1.id), false, "재발송 시 확인 상태 초기화");
 });
+
+test("알림톡 개통 전 안전장치: 이메일 폴백 + 수단 없으면 본인확인 못 켬", async () => {
+  const api = await import("../src/api.js");
+  // ① 이메일만 있는 상태 → OTP 가 이메일로 나가고 크레딧은 안 깎인다
+  const e1 = makeEnv({ RESEND_API_KEY: "k", MAIL_FROM: "a@b.c" });
+  const of = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({ id: "1" }) });
+  try {
+    const a1 = await D.createAssociation(e1.DB, { slug: "fb", name: "폴백" });
+    const m = await D.createUser(e1.DB, { email: "m@x.kr", passwordHash: "h", salt: "s", name: "김", role: "MERCHANT", associationId: a1.id, phone: "01011112222" });
+    const doc = await D.createDocument(e1.DB, { associationId: a1.id, title: "T", body: "b", contentHash: await contentHash("b"), createdBy: m.id });
+    await D.addCredit(e1.DB, a1.id, 1000);
+    const r = await api.signOtpSend({ db: e1.DB, env: e1, base: "/t/fb", assoc: a1, user: m, params: { id: String(doc.id) } });
+    assert.match(decodeURIComponent(r.headers.get("location") || ""), /이메일을 보냈습니다/);
+    assert.equal(await D.getBalance(e1.DB, a1.id), 1000, "이메일 폴백은 크레딧을 쓰지 않는다");
+  } finally { globalThis.fetch = of; }
+
+  // ② 알림톡·이메일 모두 없는데 본인확인을 켜면 서명이 전면 차단되므로 막아야 한다
+  const e0 = makeEnv({});
+  const r2 = await api.superEsignSettings({ db: e0.DB, env: e0, form: new URLSearchParams({ esign_otp: "1" }), user: { id: 1, name: "슈퍼", role: "SUPERADMIN" } });
+  assert.match(r2.headers.get("location") || "", /err=1/, "발송 수단 없이 켜지면 안 됨");
+  assert.notEqual(await D.getSetting(e0.DB, "esign_otp"), "1");
+});
