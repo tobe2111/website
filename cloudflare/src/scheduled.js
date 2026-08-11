@@ -6,7 +6,7 @@ import { sendEmail, emailEnabled, mailShell } from "./email.js";
 import * as D from "./db.js";
 import { sendMany, priceOf } from "./notify.js";
 import { sealAnchor } from "./esign.js";
-import { remindExternals } from "./extsign.js";
+import { remindExternals, originFor } from "./extsign.js";
 
 const BACKUP_PREFIX = "backups/";
 const MANIFEST_KEY = "backups/index.json"; // R2 list() 없이도 보존 개수를 관리하기 위한 목록
@@ -128,7 +128,9 @@ export async function runSignReminders(env) {
     if (!assoc) continue;
     const price = await priceOf(db, "alimtalk");
     if ((await D.getBalance(db, assoc.id)) < price) { skipped++; continue; } // 잔액 없으면 다음날 다시 시도
-    const origin = env.PUBLIC_ORIGIN || "";
+    // 크론에는 요청이 없다 — 개별 도메인 → PUBLIC_ORIGIN → 학습해 둔 주소 순으로 찾는다
+    const origin = await originFor(env, db, assoc);
+    if (!origin) { skipped++; continue; } // 주소를 모르면 깨진 링크를 보내느니 다음날로 미룬다
     // 회원 — 공용 서명 목록 주소로
     const targets = (await D.listUnsigned(db, d.id)).filter((t) => t.phone);
     if (targets.length) {

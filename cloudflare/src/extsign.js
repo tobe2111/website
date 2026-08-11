@@ -31,6 +31,23 @@ export async function resolveExtToken(db, secret, token) {
 
 export const extSignUrl = (origin, token) => `${origin}/esign/${token}`;
 
+// 링크에 쓸 절대 주소를 정한다. 상대 경로를 알림톡 버튼에 넣으면 눌러도 아무 데도 가지 않는다.
+//  ① 상인회 개별 도메인 → ② 워커 변수 PUBLIC_ORIGIN → ③ 요청에서 학습해 저장해 둔 값
+// 크론(정기 작업)에는 요청이 없으므로 ③ 이 없으면 발송을 아예 건너뛴다(깨진 링크를 보내느니 안 보낸다).
+export async function originFor(env, db, assoc) {
+  if (assoc && assoc.custom_domain) return `https://${assoc.custom_domain}`;
+  if (env.PUBLIC_ORIGIN) return String(env.PUBLIC_ORIGIN).replace(/\/+$/, "");
+  const saved = await D.getSetting(db, "public_origin");
+  return saved ? saved.replace(/\/+$/, "") : "";
+}
+// 요청이 들어올 때마다 주소를 기억해 둔다 — 크론이 쓸 값을 여기서 확보한다.
+// 값이 같으면 쓰지 않으므로 평상시 DB 쓰기는 없다.
+export async function rememberOrigin(db, origin) {
+  if (!origin || !/^https?:\/\//.test(origin)) return;
+  const cur = await D.getSetting(db, "public_origin");
+  if (cur !== origin) await D.setSetting(db, "public_origin", origin);
+}
+
 
 // 서명 요청·재알림 링크 보내기 — 외부 서명자는 각자 자기 토큰이 붙은 링크를 받아야 한다.
 // 회원처럼 공용 /sign 주소를 보낼 수 없으므로, 발송을 이 한 곳으로 모아 둔다.
@@ -39,6 +56,7 @@ export async function sendSignLink(env, db, { assoc, doc, signer, origin, remind
   const { sendOne, notifyEnabled, renderTemplate, templateButton } = await import("./notify.js");
   const { sendEmail, emailEnabled, mailShell, mailButton } = await import("./email.js");
   const { esc } = await import("./util.js");
+  if (!origin) return null; // 절대 주소를 모르면 깨진 링크가 된다 — 보내지 않는다
   const token = await makeExtToken(env.SESSION_SECRET, signer.id, doc.id);
   const link = extSignUrl(origin, token);
   // 문구는 심사받은 템플릿 그대로여야 한다 — 여기서 변수만 갈아 끼운다

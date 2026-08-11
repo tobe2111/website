@@ -418,3 +418,53 @@ test("발송당 모드로 되돌리면 다시 건별로 차감한다", async () 
   assert.equal(await D.getBalance(db, a.id), before - 100, "발송당 모드에서는 건별 차감");
   await D.setSetting(db, "price_alimtalk", "22");
 });
+
+// ---------- 링크 절대 주소 (크론이 보내는 알림톡) ----------
+test("절대 주소를 모르면 링크를 보내지 않는다 (깨진 링크 방지)", async () => {
+  const { sendSignLink, originFor, rememberOrigin } = await import("../src/extsign.js");
+  const d = await D.createDocument(db, { associationId: a.id, title: "주소 없음", body: "본문",
+    contentHash: await contentHash("본문"), createdBy: admin.id, ordered: 0, dueDate: "" });
+  const e = await D.addExternalSigner(db, { documentId: d.id, name: "수신자", phone: "010-8888-9999", signOrder: 1 });
+  sends = [];
+  const restore = stubAligo();
+  let via;
+  try { via = await sendSignLink(env, db, { assoc: a, doc: d, signer: e, origin: "" }); } finally { restore(); }
+  assert.equal(via, null, "주소가 없으면 발송하지 않는다");
+  assert.equal(sends.length, 0);
+});
+
+test("주소는 개별 도메인 → 워커 변수 → 학습값 순으로 정해진다", async () => {
+  const { originFor, rememberOrigin } = await import("../src/extsign.js");
+  // ③ 학습값
+  assert.equal(await originFor({}, db, a), "", "아직 아무것도 없으면 빈 값");
+  await rememberOrigin(db, "https://learned.example.com");
+  assert.equal(await originFor({}, db, a), "https://learned.example.com");
+  // ② 워커 변수가 우선
+  assert.equal(await originFor({ PUBLIC_ORIGIN: "https://env.example.com/" }, db, a), "https://env.example.com",
+    "끝의 슬래시는 떼어 낸다");
+  // ① 개별 도메인이 가장 우선
+  const withDomain = { ...a, custom_domain: "seocho-market.kr" };
+  assert.equal(await originFor({ PUBLIC_ORIGIN: "https://env.example.com" }, db, withDomain), "https://seocho-market.kr");
+});
+
+test("이상한 값은 학습하지 않는다", async () => {
+  const { rememberOrigin, originFor } = await import("../src/extsign.js");
+  const before = await originFor({}, db, a);
+  await rememberOrigin(db, "javascript:alert(1)");
+  await rememberOrigin(db, "");
+  assert.equal(await originFor({}, db, a), before, "http(s) 가 아니면 무시");
+});
+
+test("링크가 있으면 절대 주소로 나간다", async () => {
+  const { sendSignLink } = await import("../src/extsign.js");
+  const d = await D.createDocument(db, { associationId: a.id, title: "주소 있음", body: "본문",
+    contentHash: await contentHash("본문"), createdBy: admin.id, ordered: 0, dueDate: "" });
+  const e = await D.addExternalSigner(db, { documentId: d.id, name: "수신자2", phone: "010-1010-2020", signOrder: 1 });
+  sends = [];
+  const restore = stubAligo();
+  try { await sendSignLink(env, db, { assoc: a, doc: d, signer: e, origin: "https://my.example.com" }); }
+  finally { restore(); }
+  assert.equal(sends.length, 1);
+  const btn = JSON.parse(sends[0].button);
+  assert.match(btn.button[0].linkMo, /^https:\/\/my\.example\.com\/esign\//, "버튼 링크가 절대 주소여야 함");
+});

@@ -10,7 +10,7 @@ import { cap, sniffImage, EMAIL_RE, MAX_IMAGE_BYTES, slugify, esc } from "./util
 import { contentHash, sealRecord, newVerifyCode, SEAL_VER, fieldsHashOf } from "./esign.js";
 import { isFieldKind, round4, FIELD_KINDS, pageCount } from "./paper.js";
 import { builtinById, isBuiltinId, normalizeTemplate, extractVars, applyVars, resolveFieldPages } from "./templates.js";
-import { resolveExtToken, makeExtToken, extSignUrl, sendSignLink, remindExternals } from "./extsign.js";
+import { resolveExtToken, makeExtToken, extSignUrl, sendSignLink, remindExternals, originFor, rememberOrigin } from "./extsign.js";
 import { enqueueDocEvent, newApiKey, hashApiKey, KEY_PREFIX } from "./apiv1.js";
 import { turnstileVerify } from "./turnstile.js";
 import { planOf } from "./plans.js";
@@ -748,6 +748,8 @@ export async function adminCreateDocument(ctx) {
     const price = await priceOf(db, "alimtalk", assoc.id);
     if (bal < price) return back(base + "/admin/documents", `크레딧 잔액이 부족합니다. (계약 1건 ${price.toLocaleString()}원 · 잔액 ${bal.toLocaleString()}원)`, true);
   }
+  // 정기 작업이 쓸 절대 주소를 여기서 확보해 둔다(크론에는 요청이 없다)
+  await rememberOrigin(db, new URL(ctx.request.url).origin);
   const doc = await D.createDocument(db, { associationId: assoc.id, title, body, contentHash: docHash, createdBy: user.id, ordered, dueDate });
   if ((await billingMode(db)) === "per_doc") await chargeContract(db, assoc, { documentId: doc.id, title });
   if (attKey) await D.setDocumentAttachment(db, doc.id, attKey, attName, attHash);
