@@ -111,3 +111,21 @@ test("행사 이미지: 관리자 업로드가 저장된다 (조용히 버려지
   const ev = (await D.listEvents(env.DB, 1)).find((e) => e.title === "포스터 행사");
   assert.ok(ev.image, "이미지 키가 저장되어야");
 });
+
+// 한글 슬러그 조직에서 안내문이 %25… 로 깨지던 버그.
+// redirect() 가 encodeURI 로 전체를 다시 인코딩해 이미 인코딩된 msg 의 % 가 %25 가 됐다.
+test("한글 슬러그 + 안내문: 이중 인코딩되지 않는다", () => {
+  const loc = back("/t/한빛법무법인/admin/documents", "환영합니다!").headers.get("location");
+  assert.ok(!/%25/.test(loc), `이중 인코딩됨: ${loc}`);
+  const u = new URL(loc, B);
+  assert.equal(decodeURIComponent(u.pathname), "/t/한빛법무법인/admin/documents");
+  assert.equal(u.searchParams.get("msg"), "환영합니다!");
+});
+
+test("슬러그 길이 제한: 긴 상호도 주소가 감당할 만큼만", async () => {
+  const { slugify } = await import("../src/util.js");
+  const s = slugify("주식회사 " + "한빛".repeat(40) + " 법무법인");
+  assert.ok(s.length <= 40, `너무 김: ${s.length}`);
+  assert.ok(!s.endsWith("-"), "끝이 하이픈으로 잘리면 안 됨");
+  assert.equal(slugify("!!!"), "biz");
+});

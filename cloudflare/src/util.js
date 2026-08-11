@@ -7,9 +7,14 @@ export function esc(s) {
 export function cap(s, n) {
   return String(s == null ? "" : s).slice(0, n);
 }
+// 주소에 쓸 짧은 이름. 한글을 남기는 이유: 국내 서비스라 `/t/한빛법무법인` 이 주소창에서
+// 그대로 읽히는 편이 낫다. 다만 퍼센트 인코딩하면 한 글자가 9바이트로 불어나므로
+// 길이를 잘라 둔다 — 안 자르면 긴 상호 하나로 알림톡 버튼 링크가 300자를 넘는다.
+const SLUG_MAX = 40;
 export function slugify(name) {
   const base = String(name).trim().toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-+|-+$/g, "");
+    .replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-+|-+$/g, "")
+    .slice(0, SLUG_MAX).replace(/-+$/g, "");
   return base || "biz";
 }
 export function parseCookies(header = "") {

@@ -13,8 +13,12 @@ export function json(obj, status = 200, headers = {}) {
 }
 export function redirect(location, status = 303, headers = {}) {
   // Location 헤더는 ByteString 이라 비ASCII(한글 슬러그 등)를 퍼센트 인코딩해야 함.
-  // encodeURI 는 기존 %xx·쿼리(? & =)는 보존하고 한글만 인코딩.
-  const loc = /[^\x00-\x7F]/.test(location) ? encodeURI(location) : location;
+  // encodeURI 를 쓰면 안 된다 — 이미 인코딩된 %xx 의 % 까지 %25 로 다시 먹어서
+  // `?msg=%ED%99%98...` 이 `%25ED%2599...` 가 되고, 화면에는 안내문 대신 기호가 뜬다.
+  // 비ASCII 글자만 골라 인코딩하면 기존 %xx·쿼리 구분자는 그대로 남는다.
+  const loc = /[^\x00-\x7F]/.test(location)
+    ? location.replace(/[^\x00-\x7F]+/g, (s) => encodeURIComponent(s))
+    : location;
   return new Response("", { status, headers: { Location: loc, ...headers } });
 }
 // msg 알림과 함께 뒤로 (PRG 패턴) — 대상에 이미 쿼리가 있으면 & 로 잇는다 (?t=토큰?msg=… 오염 방지)
