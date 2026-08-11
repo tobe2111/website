@@ -29,6 +29,19 @@ await D.createUser(env.DB, { email: "s@p.kr", passwordHash: su.hash, salt: su.sa
 const b = await D.createBusiness(env.DB, { associationId: a.id, ownerId: u.id, name: "홍가네분식", category: "음식점", description: "떡볶이" });
 await D.setBusinessStatus(env.DB, b.id, "approved");
 
+// 전자계약 필드 배치 검증용 — 관리자 + 여러 장짜리 계약서 + 배치된 필드
+const apw = await hashPassword("admin1234");
+const adm = await D.createUser(env.DB, { email: "ad@x.kr", passwordHash: apw.hash, salt: apw.salt, name: "관리자", role: "ADMIN", associationId: a.id });
+const { contentHash } = await import(path.join(ROOT, "src/esign.js"));
+const CONTRACT = Array.from({ length: 80 }, (_, i) => `제${i + 1}조 임차인은 본 계약의 조건을 성실히 이행한다.`).join("\n");
+const cdoc = await D.createDocument(env.DB, { associationId: a.id, title: "임대차계약서", body: CONTRACT, contentHash: await contentHash(CONTRACT), createdBy: adm.id, ordered: 0, dueDate: "" });
+await D.createSignatureRequests(env.DB, cdoc.id, [u.id]);
+await D.replaceFields(env.DB, cdoc.id, [
+  { kind: "sign", label: "임차인 서명", page: 0, x: 0.55, y: 0.78, w: 0.22, h: 0.05, assignee: u.id, required: 1 },
+  { kind: "stamp", label: "인감", page: 0, x: 0.8, y: 0.77, w: 0.09, h: 0.064, assignee: u.id, required: 0 },
+  { kind: "date", label: "작성일", page: 0, x: 0.1, y: 0.9, w: 0.16, h: 0.03, assignee: 0, required: 1 },
+]);
+
 const jar = {};
 const ch = () => Object.entries(jar).map(([k, v]) => `${k}=${v}`).join("; ");
 const absorb = (r) => { for (const s of r.headers.getSetCookie?.() || []) { const kv = s.split(";")[0]; const i = kv.indexOf("="); jar[kv.slice(0, i)] = kv.slice(i + 1); } };
@@ -53,6 +66,19 @@ await grab("/t/seocho", "home.html");
 await grab("/t/seocho/map", "map.html");
 await grab("/login", "login.html");
 await grab("/t/seocho/dashboard", "dashboard.html", true);
+await grab(`/t/seocho/sign/${cdoc.id}`, "signfill.html", true);
+// 관리자 세션으로 배치 편집기도 캡처 (별도 쿠키)
+{
+  const ajar = {};
+  const ach = () => Object.entries(ajar).map(([k, v]) => `${k}=${v}`).join("; ");
+  const soak = (res) => { for (const c of res.headers.getSetCookie?.() || []) { const kv = c.split(";")[0]; const i = kv.indexOf("="); ajar[kv.slice(0, i)] = kv.slice(i + 1); } };
+  let ar = await worker.fetch(new Request("http://localhost/login"), env); soak(ar);
+  const at = (/name="_csrf" value="([^"]+)"/.exec(await ar.text()) || [])[1];
+  ar = await worker.fetch(new Request("http://localhost/login", { method: "POST", headers: { cookie: ach(), "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ _csrf: at, email: "ad@x.kr", password: "admin1234" }).toString() }), env);
+  soak(ar);
+  const res = await worker.fetch(new Request(`http://localhost/t/seocho/admin/documents/${cdoc.id}/fields`, { headers: { cookie: ach() } }), env);
+  writeFileSync(path.join(DIR, "fieldedit.html"), (await res.text()).replace(/\?v=[a-z0-9]+/g, ""));
+}
 
 // ---- 정적 서버 ----
 const MIME = { ".html": "text/html", ".css": "text/css", ".js": "text/javascript", ".svg": "image/svg+xml", ".png": "image/png" };
@@ -144,6 +170,91 @@ const ok = (cond, name) => { if (cond) { pass++; console.log("  ✓", name); } e
   await p.click('form[method="post"] button');
   await p.waitForTimeout(80);
   ok(await p.evaluate(() => !!document.querySelector('form[method="post"] button.is-busy:disabled')), "제출 후 버튼 잠금(is-busy)");
+  await p.close();
+}
+
+// 10) 계약서 필드 배치 — 클릭으로 놓고, 드래그로 옮기고, 저장 JSON 이 좌표로 나온다
+{
+  const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  await p.goto(`http://localhost:${PORT}/fieldedit.html`);
+  await p.waitForTimeout(300);
+  const pages = await p.locator(".paper").count();
+  ok(pages > 1, `배치 편집기: 계약서가 여러 장으로 렌더 (${pages}장)`);
+  // 지면이 화면 폭에 맞춰 축소되되 내부 리플로우는 없어야 한다(좌표 고정의 전제)
+  ok(await p.evaluate(() => document.querySelector(".paper").offsetWidth === 794), "지면 내부 폭은 794px 로 고정(축소는 transform 으로만)");
+
+  const before = await p.locator(".pf").count();
+  await p.click('.fp-item[data-kind="stamp"]');
+  await p.locator(".paper").first().scrollIntoViewIfNeeded();
+  const box = await p.locator(".paper").first().boundingBox();
+  // 화면 안에 확실히 들어오는 지점(위쪽 1/4)을 클릭 — 기존 필드가 없는 빈 자리
+  await p.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.22);
+  ok(await p.locator(".pf").count() === before + 1, "지면 클릭으로 도장 필드가 생성됨");
+  ok(await p.locator("#fieldProps").isVisible(), "생성 즉시 속성 패널이 열림");
+
+  const sel = p.locator(".pf-sel");
+  const left0 = await sel.evaluate((el) => parseFloat(el.style.left));
+  const b2 = await sel.boundingBox();
+  await p.mouse.move(b2.x + b2.width / 2, b2.y + b2.height / 2);
+  await p.mouse.down();
+  await p.mouse.move(b2.x + b2.width / 2 + 120, b2.y + b2.height / 2 + 40, { steps: 8 });
+  await p.mouse.up();
+  const left1 = await sel.evaluate((el) => parseFloat(el.style.left));
+  ok(left1 > left0 + 5, "드래그로 필드가 이동함");
+
+  await p.fill("#fpLabel", "법인 인감");
+  const json = await p.evaluate(() => {
+    document.getElementById("fieldsForm").dispatchEvent(new Event("submit", { cancelable: true }));
+    return document.getElementById("fieldsData").value;
+  });
+  const parsed = JSON.parse(json);
+  ok(parsed.length === before + 1, "저장 데이터에 모든 필드가 담김");
+  const stamp = parsed.find((f) => f.label === "법인 인감");
+  ok(!!stamp && stamp.kind === "stamp", "이름표와 종류가 저장 데이터에 반영");
+  ok(stamp.x > 0 && stamp.x < 1 && stamp.y > 0 && stamp.y < 1, "좌표가 0~1 비율로 정규화");
+  await p.close();
+}
+
+// 11) 서명자 화면 — 내 자리 안내, 서명 그리기, 도장 생성, 필수 충족 전 제출 잠금
+{
+  const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  await p.goto(`http://localhost:${PORT}/signfill.html`);
+  await p.waitForTimeout(300);
+  ok(await p.locator(".pf-mine").count() >= 2, "내가 채울 자리가 강조 표시됨");
+  ok((await p.locator("#fieldProgress").textContent()).includes("남은 필수"), "남은 필수 항목 안내");
+  ok(await p.locator("#signSubmit").isDisabled(), "필수 항목 전에는 제출 버튼 잠금");
+
+  // 서명 필드 → 캔버스에 그리기
+  await p.locator('.pf-mine[data-kind="sign"]').click();
+  ok(await p.locator("#fieldDialog").isVisible(), "서명 입력창이 열림");
+  const pad = await p.locator(".fd-pad").boundingBox();
+  await p.mouse.move(pad.x + 30, pad.y + pad.height / 2);
+  await p.mouse.down();
+  await p.mouse.move(pad.x + 200, pad.y + 40, { steps: 10 });
+  await p.mouse.move(pad.x + 320, pad.y + pad.height - 30, { steps: 10 });
+  await p.mouse.up();
+  await p.click("#fdOk");
+  ok(await p.locator('.pf[data-kind="sign"] img').count() === 1, "그린 서명이 계약서 자리에 박힘");
+
+  // 날짜 필드
+  await p.locator('.pf-mine[data-kind="date"]').click();
+  await p.click("#fdOk"); // 오늘 날짜가 기본값
+  ok(await p.locator("#signSubmit").isDisabled() === false, "필수 항목을 다 채우면 제출 잠금 해제");
+  ok((await p.locator("#fieldProgress").textContent()).includes("모두 채웠"), "완료 안내로 바뀜");
+
+  // 도장 생성 (선택 항목)
+  await p.locator('.pf-mine[data-kind="stamp"]').click();
+  await p.click("#fdOk");
+  const stampSrc = await p.locator('.pf[data-kind="stamp"] img').getAttribute("src");
+  ok(!!stampSrc && stampSrc.startsWith("data:image/png"), "이름으로 도장 이미지가 생성됨");
+
+  const payload = await p.evaluate(() => {
+    document.getElementById("signForm").dispatchEvent(new Event("submit", { cancelable: true }));
+    return { fields: document.getElementById("fieldValues").value, sig: document.getElementById("signatureData").value };
+  });
+  const vals = JSON.parse(payload.fields);
+  ok(Object.keys(vals).length === 3, "채운 값 3개가 전송 데이터에 담김");
+  ok(payload.sig.startsWith("data:image/png"), "서명 필드 그림이 대표 서명으로 전달됨");
   await p.close();
 }
 

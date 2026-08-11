@@ -8,6 +8,7 @@ import { galleryItem } from "./media-render.js";
 import { priceOf, costOf, jeonToWon, notifyEnabled, TEMPLATE_KEYS } from "./notify.js";
 import { providerLabel } from "./embed.js";
 import { verifySignature, publicKeyJwk, publicKeyFingerprint, keyStorage, algorithm, verifyChain, verifyAnchor } from "./esign.js";
+import { renderPaper, fieldBox, FIELD_KINDS, paginate } from "./paper.js";
 import { text } from "./http.js";
 import { parseLayout, renderHome, SECTION_CATALOG } from "./homeLayout.js";
 import { turnstileWidget, turnstileScript } from "./turnstile.js";
@@ -1186,26 +1187,48 @@ export async function signForm(ctx) {
                <button class="btn btn-primary btn-sm">확인</button></form></div>`
         : `<div class="flash flash-warn">본인확인용 휴대폰이 등록되어 있지 않습니다. <a href="/account">계정 설정</a>에서 번호를 등록한 뒤 다시 시도해 주세요.</div>`}
     </section>`;
-  const body = `<section class="section page-top"><div class="container narrow"><a href="${base}/sign" class="back-link">← 서명 목록</a>
+  // 지면에 배치된 필드가 있으면 "계약서 위에서 직접 채우는" 방식으로, 없으면 종래의 단일 서명란으로.
+  const fields = await D.listFieldsWithValues(db, d.id);
+  const reqs = fields.length ? await D.listRequestStatus(db, d.id) : [];
+  const nameOf = (id) => { const u = reqs.find((r) => r.id === id); return u ? u.name : ""; };
+  const myFields = fields.filter((f) => !f.value && !f.image && (f.assignee === user.id || f.assignee === 0));
+  const hasSignField = myFields.some((f) => f.kind === "sign");
+  const docView = fields.length
+    ? `<div class="paper-wrap">${renderPaper(d.body, { mode: otpDone ? "fill" : "view", fieldsFor: fieldsRenderer(fields, { mode: otpDone ? "fill" : "view", myId: user.id, nameOf }) })}</div>`
+    : `<div class="doc-body">${docBody(d.body)}</div>`;
+  const fillBar = fields.length && otpDone ? `<div class="field-progress" id="fieldProgress"></div>
+    <button type="button" class="btn btn-ghost btn-sm field-jump" id="fieldJump" hidden>다음 항목으로 이동 ↓</button>` : "";
+  const padBlock = hasSignField ? "" : `<label>서명<div class="sign-pad-wrap"><canvas id="signPad" class="sign-pad" width="600" height="200"></canvas><button type="button" class="btn btn-ghost btn-xs sign-clear" id="signClear">지우기</button></div></label>`;
+  const dialog = fields.length && otpDone ? `<div class="fd-back" id="fieldDialog" hidden><div class="fd-box">
+      <h3 class="fd-title" id="fdTitle"></h3><div id="fdBody"></div>
+      <div class="fd-actions"><button type="button" class="btn btn-ghost btn-sm" id="fdCancel">취소</button>
+        <button type="button" class="btn btn-primary btn-sm" id="fdOk">확인</button></div></div></div>` : "";
+  const body = `<section class="section page-top"><div class="container${fields.length ? "" : " narrow"}"><a href="${base}/sign" class="back-link">← 서명 목록</a>
     <h1 class="article-title">${esc(d.title)}</h1>${meta ? `<p>${meta}</p>` : ""}
-    <div class="doc-body">${docBody(d.body)}</div>
-    ${d.attachment ? `<p class="doc-attach">📎 계약서 원문: <a href="${esc(mediaUrl(d.attachment))}" target="_blank" rel="noopener">${esc(d.attachment_name || "계약서.pdf")}</a> <small>— 이 파일의 내용도 해시에 포함되어 봉인됩니다</small></p>` : ""}
-    <p class="doc-hash">문서 해시: <code>${esc(d.content_hash)}</code></p>${flashOf(query)}
+    ${flashOf(query)}
     ${otpBlock}
+    ${fillBar}
+    ${docView}
+    ${d.attachment ? `<p class="doc-attach">📎 계약서 원문: <a href="${esc(mediaUrl(d.attachment))}" target="_blank" rel="noopener">${esc(d.attachment_name || "계약서.pdf")}</a> <small>— 이 파일의 내용도 해시에 포함되어 봉인됩니다</small></p>` : ""}
+    <p class="doc-hash">문서 해시: <code>${esc(d.content_hash)}</code></p>
     ${otpDone ? `${needOtp ? '<p class="otp-ok">✅ 휴대폰 본인확인 완료 — 이 서명에는 본인확인 기록이 함께 남습니다.</p>' : ""}
     <form method="post" action="${base}/sign/${d.id}" class="stack-form sign-form" id="signForm">
-      <label>서명<div class="sign-pad-wrap"><canvas id="signPad" class="sign-pad" width="600" height="200"></canvas><button type="button" class="btn btn-ghost btn-xs sign-clear" id="signClear">지우기</button></div></label>
+      ${padBlock}
       <input type="hidden" name="signature" id="signatureData" />
-      <label>서명자 성명<input type="text" name="signer_name" value="${esc(user.name)}" required /></label>
+      <input type="hidden" name="fields" id="fieldValues" />
+      <label>서명자 성명<input type="text" name="signer_name" id="signerName" value="${esc(user.name)}" required /></label>
       <label class="check"><input type="checkbox" name="consent" value="1" required /> 위 내용을 확인했으며 본인이 전자서명하는 데 동의합니다.</label>
       <button class="btn btn-primary btn-block" id="signSubmit">전자서명 제출</button></form>` : ""}
+    ${dialog}
     <p class="auth-note">서명 시 서명자·시각·IP·기기·문서해시가 기록되고 Ed25519 디지털 서명으로 봉인됩니다.</p>
     <details class="decline-box"><summary>이 문서에 동의할 수 없습니다 (거절)</summary>
       <form method="post" action="${base}/sign/${d.id}/decline" class="stack-form compact" data-confirm="거절하면 이 문서는 서명 목록에서 사라집니다. 계속할까요?">
         <label>거절 사유<textarea name="reason" rows="3" required maxlength="300" placeholder="예: 3조 임대료 조항에 동의하기 어렵습니다"></textarea></label>
         <button class="btn btn-ghost btn-sm">서명 거절</button></form>
       <p class="panel-hint">사유는 상인회 관리자에게 그대로 전달됩니다.</p></details></div></section>`;
-  return html(layout({ title: `서명: ${d.title}`, assoc, base, user, body, csrf, scripts: `<script src="${assetUrl("/js/sign.js")}" defer></script>` }));
+  const scripts = `<script src="${assetUrl("/js/sign.js")}" defer></script>` +
+    (fields.length ? `<script src="${assetUrl("/js/paper.js")}" defer></script>` : "");
+  return html(layout({ title: `서명: ${d.title}`, assoc, base, user, body, csrf, scripts }));
 }
 
 export async function adminDocuments(ctx) {
@@ -1250,6 +1273,7 @@ export async function adminDocumentDetail(ctx) {
       <td>${badge}<br /><a href="/certificate/${esc(sig.verify_code)}" target="_blank"><small>확인서</small></a> · <a href="/verify/${esc(sig.verify_code)}" target="_blank"><small>검증</small></a></td></tr>`; }).join("") : `<tr><td colspan="4" class="empty">아직 서명이 없습니다.</td></tr>`;
   const rc = await D.requestCounts(db, d.id);
   const reqStatus = await D.listRequestStatus(db, d.id);
+  const fieldN = await D.countFields(db, d.id);
   const pct = rc.total ? Math.round((rc.signed / rc.total) * 100) : 0;
   const nextTurn = d.ordered ? reqStatus.find((u) => !u.signed && !u.declined_at) : null;
   const reqPanel = rc.total ? `<section class="panel"><h2 class="panel-title">서명 현황 <span class="badge ${rc.signed === rc.total ? "badge-ok" : "badge-wait"}">${rc.signed}/${rc.total} (${pct}%)</span>${d.ordered ? ' <span class="badge badge-info">순차</span>' : ""}</h2>
@@ -1261,6 +1285,8 @@ export async function adminDocumentDetail(ctx) {
       <p class="dash-sub"><a href="${base}/admin/documents">← 문서 목록</a> · 서명 ${sigs.length}명</p></div>
       <div class="dash-head-actions">
         ${d.closed ? "" : `<form method="post" action="${base}/admin/documents/${d.id}/remind" class="inline-form" data-confirm="미서명자에게 알림톡·이메일로 리마인더를 보낼까요? (알림톡은 잔액이 차감됩니다)"><button class="btn btn-primary btn-sm">미서명자 재알림</button></form>`}
+        <a href="${base}/documents/${d.id}/paper" class="btn btn-ghost btn-sm">📄 완성본 보기</a>
+        <a href="${base}/admin/documents/${d.id}/fields" class="btn btn-ghost btn-sm">🖊 필드 배치${fieldN ? ` (${fieldN})` : ""}</a>
         <button type="button" class="btn btn-ghost btn-sm" data-print>🖨 인쇄/PDF</button></div></div>
     ${reqPanel}
     <section class="panel"><h2 class="panel-title">문서 본문</h2><div class="doc-body">${docBody(d.body)}</div>
@@ -1269,6 +1295,89 @@ export async function adminDocumentDetail(ctx) {
     <section class="panel"><h2 class="panel-title">서명 내역</h2><div class="table-scroll"><table class="admin-table">
       <thead><tr><th>서명자</th><th>서명</th><th>일시·IP</th><th>검증</th></tr></thead><tbody>${rows}</tbody></table></div></section></div></section>`;
   return html(layout({ title: d.title, assoc, base, user, body, csrf }));
+}
+
+// 지면에 놓인 필드를 페이지별로 뿌리는 헬퍼. fields 는 값(value/image)이 붙어 있을 수 있다.
+function fieldsRenderer(fields, { mode, myId = 0, nameOf = () => "" }) {
+  return (page) => fields.filter((f) => f.page === page).map((f) => {
+    const val = f.value || f.image ? { value: f.value || "", imageUrl: f.image ? mediaUrl(f.image) : "" } : null;
+    return fieldBox(f, { mode, val, mine: mode === "fill" && !val && (f.assignee === myId || f.assignee === 0), assigneeName: nameOf(f.assignee) });
+  }).join("");
+}
+
+// 필드 배치 편집기 — "여기에 서명, 여기에 도장" 을 관리자가 직접 지면 위에 놓는다.
+export async function adminDocFields(ctx) {
+  const { db, assoc, base, user, params, query, csrf } = ctx;
+  const d = await D.getDocument(db, Number(params.id));
+  if (!d || d.association_id !== assoc.id) return notFoundResponse(ctx);
+  const sigs = await D.requestCounts(db, d.id);
+  const signedAny = (await D.listSignatures(db, d.id)).length > 0;
+  const reqs = await D.listRequestStatus(db, d.id);
+  const fields = await D.listFields(db, d.id);
+  const nameOf = (id) => { const u = reqs.find((r) => r.id === id); return u ? u.name : ""; };
+  const paper = renderPaper(d.body, { mode: "edit", fieldsFor: fieldsRenderer(fields, { mode: "edit", nameOf }) });
+  // 이미 서명이 시작된 문서는 지면을 바꿀 수 없다 — 서명자가 본 화면과 달라지면 봉인의 의미가 사라진다
+  if (signedAny) {
+    const b = `<section class="dash"><div class="container">
+      <div class="dash-head"><div><p class="section-eyebrow">E-SIGN</p><h1 class="dash-title">필드 배치 — ${esc(d.title)}</h1></div></div>
+      <div class="flash flash-warn">이미 서명이 시작된 문서입니다. 서명자가 확인한 지면이 바뀌면 안 되므로 배치를 수정할 수 없습니다.</div>
+      <p><a href="${base}/admin/documents/${d.id}" class="btn btn-ghost btn-sm">← 문서로</a></p>
+      <div class="paper-wrap">${renderPaper(d.body, { fieldsFor: fieldsRenderer(fields, { mode: "view", nameOf }) })}</div></div></section>`;
+    return html(layout({ title: "필드 배치", assoc, base, user, body: b, csrf, scripts: `<script src="${assetUrl("/js/paper.js")}" defer></script>` }));
+  }
+  const palette = Object.entries(FIELD_KINDS).map(([k, v], i) =>
+    `<button type="button" class="fp-item${i === 0 ? " on" : ""}" data-kind="${esc(k)}">${v.icon} ${esc(v.label)}</button>`).join("");
+  const assigneeOpts = `<option value="0" data-name="">누구나(먼저 서명하는 사람)</option>` +
+    reqs.map((r) => `<option value="${r.id}" data-name="${esc(r.name)}">${esc(r.name)}</option>`).join("");
+  const body = `<section class="dash"><div class="container">
+    <div class="dash-head"><div><p class="section-eyebrow">E-SIGN · 필드 배치</p><h1 class="dash-title">${esc(d.title)}</h1>
+      <p class="dash-sub"><a href="${base}/admin/documents/${d.id}">← 문서로</a> · 서명 대상 ${sigs.total}명</p></div></div>
+    ${flashOf(query)}
+    <section class="panel">
+      <p class="fp-hint">놓을 종류를 고른 뒤 <b>계약서 위를 클릭</b>하면 그 자리에 필드가 생깁니다. 드래그로 옮기고, 오른쪽 아래 손잡이로 크기를 조절하세요.
+        각 필드는 <b>누가 채울지</b> 지정할 수 있습니다.</p>
+      <div class="fp-bar">${palette}</div>
+      <div class="fp-props" id="fieldProps" hidden>
+        <span class="badge badge-info" id="fpKind"></span>
+        <label>이름표<input type="text" id="fpLabel" maxlength="20" placeholder="예: 임차인 서명" /></label>
+        <label>담당 서명자<select id="fpAssignee">${assigneeOpts}</select></label>
+        <label class="check-inline"><input type="checkbox" id="fpReq" checked /> 필수</label>
+        <button type="button" class="btn btn-ghost btn-sm" id="fpDel">삭제</button>
+      </div>
+      <form method="post" action="${base}/admin/documents/${d.id}/fields" id="fieldsForm">
+        <input type="hidden" name="fields" id="fieldsData" />
+        <button class="btn btn-primary">배치 저장</button></form>
+    </section>
+    <div class="paper-wrap">${paper}</div>
+    <script type="application/json" id="fieldKinds">${JSON.stringify(FIELD_KINDS)}</script>
+    </div></section>`;
+  return html(layout({ title: "필드 배치", assoc, base, user, body, csrf, scripts: `<script src="${assetUrl("/js/paper.js")}" defer></script>` }));
+}
+
+// 완성본 — 채워진 값이 모두 박힌 계약서. 브라우저 인쇄(PDF로 저장)로 그대로 받을 수 있다.
+export async function documentPaper(ctx) {
+  const { db, assoc, base, user, params, csrf } = ctx;
+  const d = await D.getDocument(db, Number(params.id));
+  if (!d || d.association_id !== assoc.id) return notFoundResponse(ctx);
+  const isAdmin = user.role !== "MERCHANT";
+  if (!isAdmin && !(await D.canReceiveSign(db, d.id, user.id))) return notFoundResponse(ctx);
+  const fields = await D.listFieldsWithValues(db, d.id);
+  const reqs = await D.listRequestStatus(db, d.id);
+  const rc = await D.requestCounts(db, d.id);
+  const done = rc.total > 0 && rc.signed === rc.total;
+  const nameOf = (id) => { const u = reqs.find((r) => r.id === id); return u ? u.name : ""; };
+  const paper = renderPaper(d.body, {
+    fieldsFor: fieldsRenderer(fields, { mode: "view", nameOf }),
+    watermark: done ? "" : "미완성",
+  });
+  const backTo = isAdmin ? `${base}/admin/documents/${d.id}` : `${base}/sign`;
+  const body = `<section class="section page-top"><div class="container">
+    <div class="dash-head no-print"><div><p class="section-eyebrow">E-SIGN · 완성본</p><h1 class="dash-title">${esc(d.title)}</h1>
+      <p class="dash-sub"><a href="${backTo}">← 돌아가기</a> · 서명 ${rc.signed}/${rc.total}${done ? " · 체결 완료" : " · 진행 중"}</p></div>
+      <div class="dash-head-actions"><button type="button" class="btn btn-primary btn-sm" data-print>🖨 인쇄 / PDF로 저장</button></div></div>
+    <div class="paper-wrap">${paper}</div></div></section>
+    <style>@media print{@page{size:A4;margin:0}body{background:#fff}}</style>`;
+  return html(layout({ title: `${d.title} — 완성본`, assoc, base, user, body, csrf, scripts: `<script src="${assetUrl("/js/paper.js")}" defer></script>` }));
 }
 
 // 전자서명 확인서 — 분쟁 시 제출용. 검증 코드만 있으면 누구나 열람·인쇄할 수 있다(제3자 확인 목적).

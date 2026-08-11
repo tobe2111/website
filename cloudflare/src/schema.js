@@ -292,7 +292,8 @@ CREATE TABLE IF NOT EXISTS signatures (
   record_hash     TEXT NOT NULL,
   verify_level    TEXT NOT NULL DEFAULT 'password', -- 본인확인 수준: password|otp|identity
   prev_hash       TEXT NOT NULL DEFAULT '',  -- 직전 서명의 봉인값 — 서명 사슬(체인)
-  seal_ver        INTEGER NOT NULL DEFAULT 2,-- 봉인 문자열 버전 (1=구버전, 2=체인 포함)
+  seal_ver        INTEGER NOT NULL DEFAULT 3,-- 봉인 문자열 버전 (1=구버전, 2=체인, 3=필드값 포함)
+  fields_hash     TEXT NOT NULL DEFAULT '',   -- 이 서명자가 채운 필드값·좌표의 해시 (v3 봉인 대상)
   signed_at       TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE (document_id, user_id)
 );
@@ -314,6 +315,39 @@ CREATE INDEX IF NOT EXISTS idx_postimg_post ON post_images(post_id);
 CREATE INDEX IF NOT EXISTS idx_doc_assoc ON documents(association_id);
 CREATE INDEX IF NOT EXISTS idx_sig_doc ON signatures(document_id);
 CREATE INDEX IF NOT EXISTS idx_sigreq_doc ON signature_requests(document_id);
+
+-- 계약서 필드 배치 — "여기에 서명, 여기에 도장, 여기에 날짜" 를 지면 좌표로 저장한다.
+-- 좌표는 페이지 대비 0~1 비율이라 화면 크기·인쇄 배율과 무관하게 같은 자리를 가리킨다.
+CREATE TABLE IF NOT EXISTS doc_fields (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+  kind        TEXT NOT NULL,                  -- sign|stamp|text|date|name|check
+  label       TEXT NOT NULL DEFAULT '',
+  page        INTEGER NOT NULL DEFAULT 0,
+  x           REAL NOT NULL DEFAULT 0,
+  y           REAL NOT NULL DEFAULT 0,
+  w           REAL NOT NULL DEFAULT 0.2,
+  h           REAL NOT NULL DEFAULT 0.04,
+  assignee    INTEGER NOT NULL DEFAULT 0,     -- 서명자 user_id (0 = 서명하는 사람 누구나)
+  required    INTEGER NOT NULL DEFAULT 1,
+  sort        INTEGER NOT NULL DEFAULT 0,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_docfield_doc ON doc_fields(document_id, page, sort);
+
+-- 채워진 값. 이미지(서명 그림·도장)는 R2 키와 함께 바이트 해시를 남겨 사후 교체를 탐지한다.
+CREATE TABLE IF NOT EXISTS doc_field_values (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  field_id    INTEGER NOT NULL REFERENCES doc_fields(id) ON DELETE CASCADE,
+  document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+  user_id     INTEGER NOT NULL DEFAULT 0,
+  value       TEXT NOT NULL DEFAULT '',
+  image       TEXT NOT NULL DEFAULT '',
+  image_hash  TEXT NOT NULL DEFAULT '',
+  filled_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (field_id)
+);
+CREATE INDEX IF NOT EXISTS idx_docfieldval_doc ON doc_field_values(document_id);
 CREATE INDEX IF NOT EXISTS idx_notif_assoc ON notifications(association_id, is_read);
 CREATE INDEX IF NOT EXISTS idx_media_business ON media(business_id);
 CREATE INDEX IF NOT EXISTS idx_business_assoc ON businesses(association_id, status);
@@ -404,7 +438,7 @@ CREATE INDEX IF NOT EXISTS idx_msglog_assoc ON message_log(association_id, creat
 
 // 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
 // 마이그레이션 세대 — migrateColumns 에 단계를 추가할 때마다 +1
-export const SCHEMA_VERSION = "25";
+export const SCHEMA_VERSION = "26";
 
 export async function ensureSchema(db) {
   const has = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='associations'").first();
@@ -519,6 +553,19 @@ async function migrateColumns(db) {
   if (mcols.length && !mcols.some((c) => c.name === "cost_base")) {
     await db.prepare("ALTER TABLE message_log ADD COLUMN cost_base INTEGER NOT NULL DEFAULT 0").run();
     await db.prepare("ALTER TABLE message_log ADD COLUMN ref TEXT NOT NULL DEFAULT ''").run();
+  }
+  // v26: 봉인 v3 — 필드값 해시 컬럼 (기존 서명은 빈 값 + seal_ver 그대로라 검증이 깨지지 않는다)
+  const sgc = (await db.prepare("PRAGMA table_info(signatures)").all()).results || [];
+  if (sgc.length && !sgc.some((c) => c.name === "fields_hash")) {
+    await db.prepare("ALTER TABLE signatures ADD COLUMN fields_hash TEXT NOT NULL DEFAULT ''").run();
+  }
+  // v26: 계약서 필드 배치(서명·도장·입력 자리) + 채워진 값
+  const fTbl = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='doc_fields'").first();
+  if (!fTbl) {
+    await db.prepare(`CREATE TABLE doc_fields (id INTEGER PRIMARY KEY AUTOINCREMENT, document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE, kind TEXT NOT NULL, label TEXT NOT NULL DEFAULT '', page INTEGER NOT NULL DEFAULT 0, x REAL NOT NULL DEFAULT 0, y REAL NOT NULL DEFAULT 0, w REAL NOT NULL DEFAULT 0.2, h REAL NOT NULL DEFAULT 0.04, assignee INTEGER NOT NULL DEFAULT 0, required INTEGER NOT NULL DEFAULT 1, sort INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (datetime('now')))`).run();
+    await db.prepare("CREATE INDEX IF NOT EXISTS idx_docfield_doc ON doc_fields(document_id, page, sort)").run();
+    await db.prepare(`CREATE TABLE doc_field_values (id INTEGER PRIMARY KEY AUTOINCREMENT, field_id INTEGER NOT NULL REFERENCES doc_fields(id) ON DELETE CASCADE, document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE, user_id INTEGER NOT NULL DEFAULT 0, value TEXT NOT NULL DEFAULT '', image TEXT NOT NULL DEFAULT '', image_hash TEXT NOT NULL DEFAULT '', filled_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE (field_id))`).run();
+    await db.prepare("CREATE INDEX IF NOT EXISTS idx_docfieldval_doc ON doc_field_values(document_id)").run();
   }
   // v23: 상인회별 알림톡 단가 (규모·계약에 따라 다르게 받을 수 있게)
   const wcols = (await db.prepare("PRAGMA table_info(notify_wallet)").all()).results || [];

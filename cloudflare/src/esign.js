@@ -1,6 +1,7 @@
 // 전자서명 무결성 (Ed25519 via Web Crypto). 개인키는 env.SIGN_PRIVATE_KEY (JWK 문자열).
 // 키 생성: `node cloudflare/scripts/gen-sign-key.mjs` → 출력을 wrangler secret 으로 등록.
 import { sha256Hex, sha256HexBytes, b64uFromBytes, bytesFromB64u, randomHex } from "./crypto.js";
+import { fieldsCanonical } from "./paper.js";
 const encNL = "\n";
 const te = new TextEncoder();
 
@@ -11,18 +12,27 @@ export const contentHash = (body) => sha256Hex(String(body ?? ""));
 //  v1: [문서, 사용자, 서명자명, 문서해시, 시각, IP]            (구버전 — 기존 서명 검증용으로 유지)
 //  v2: v1 + 직전 서명의 봉인값(prevHash)  → 서명들이 사슬로 엮여
 //      중간 기록을 지우거나 순서를 바꾸면 사슬이 끊겨 탐지된다(부인방지 강화).
-export const SEAL_VER = 2;
-export function canonicalString({ documentId, userId, signerName, contentHash: ch, signedAt, ip, prevHash = "", ver = SEAL_VER }) {
+//  v3: v2 + 필드값 해시(fieldsHash) → 서명자가 계약서의 '어느 자리에 무엇을 채웠는지'까지 봉인.
+//      값만이 아니라 좌표도 해시에 들어가므로, 채운 내용을 그대로 두고 자리만 옮기는 조작도 탐지된다.
+export const SEAL_VER = 3;
+export function canonicalString({ documentId, userId, signerName, contentHash: ch, signedAt, ip, prevHash = "", fieldsHash = "", ver = SEAL_VER }) {
   const base = [documentId, userId, signerName, ch, signedAt, ip];
   if (Number(ver) >= 2) base.push(prevHash || "");
+  if (Number(ver) >= 3) base.push(fieldsHash || "");
   return base.join(SEP);
 }
 export function canonicalFromSig(s) {
   return canonicalString({
     documentId: s.document_id, userId: s.user_id, signerName: s.signer_name,
     contentHash: s.content_hash, signedAt: s.signed_at, ip: s.ip,
-    prevHash: s.prev_hash || "", ver: s.seal_ver || 1,
+    prevHash: s.prev_hash || "", fieldsHash: s.fields_hash || "", ver: s.seal_ver || 1,
   });
+}
+// 필드값 봉인 해시 — 채워진 값 + 좌표를 정규 문자열로 만들어 SHA-256.
+// 아무것도 채우지 않았으면 빈 문자열(구조상 v2 와 동일한 효력).
+export async function fieldsHashOf(rows) {
+  const canon = fieldsCanonical(rows);
+  return canon ? await sha256Hex(canon) : "";
 }
 export const newVerifyCode = () => randomHex(8);
 export const algorithm = "Ed25519";
@@ -82,7 +92,19 @@ export async function verifySignature(env, sig, doc) {
     contentOk = dh.hash === sig.content_hash;
     attachmentChecked = dh.attachmentChecked;
   }
-  return { sealOk, contentOk, valid: sealOk && contentOk, attachmentChecked, hasAttachment: !!(doc && doc.attachment) };
+  // 봉인은 '기록된' 필드 해시를 검증할 뿐이므로, 저장된 값이 사후에 바뀌었는지는 따로 다시 계산해 대조한다.
+  // (이게 없으면 DB 의 입력값·도장 이미지를 갈아끼워도 봉인은 계속 유효해 보인다)
+  let fieldsOk = true, fieldsChecked = false;
+  if ((sig.seal_ver || 1) >= 3 && env && env.DB) {
+    try {
+      const { listFilledBy } = await import("./db.js");
+      const live = await fieldsHashOf(await listFilledBy(env.DB, sig.document_id, sig.user_id));
+      fieldsOk = live === (sig.fields_hash || "");
+      fieldsChecked = true;
+    } catch { fieldsChecked = false; }
+  }
+  return { sealOk, contentOk, fieldsOk, fieldsChecked, valid: sealOk && contentOk && fieldsOk,
+    attachmentChecked, hasAttachment: !!(doc && doc.attachment) };
 }
 export async function publicKeyJwk(env) {
   return (await keys(env)).pubJwk;

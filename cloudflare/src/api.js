@@ -7,7 +7,8 @@ import { back, redirect } from "./http.js";
 import * as storage from "./storage.js";
 import { parseEmbed } from "./embed.js";
 import { cap, sniffImage, EMAIL_RE, MAX_IMAGE_BYTES, slugify, esc } from "./util.js";
-import { contentHash, sealRecord, newVerifyCode, SEAL_VER } from "./esign.js";
+import { contentHash, sealRecord, newVerifyCode, SEAL_VER, fieldsHashOf } from "./esign.js";
+import { isFieldKind, round4, FIELD_KINDS, pageCount } from "./paper.js";
 import { turnstileVerify } from "./turnstile.js";
 import { planOf } from "./plans.js";
 import { seedDemo } from "./demoContent.js";
@@ -855,6 +856,88 @@ export async function adminCloseDocument(ctx) {
   if (d && d.association_id === assoc.id) { await D.closeDocument(db, d.id); await audit(ctx, "서명문서마감", d.title); }
   return back(base + "/admin/documents", "문서를 마감했습니다.");
 }
+// 계약서 필드 배치 저장 — 편집기가 보낸 좌표 묶음을 통째로 교체한다.
+// 서명이 하나라도 시작되면 잠근다: 서명자가 확인한 지면이 사후에 바뀌면 봉인의 의미가 사라진다.
+const MAX_FIELDS = 200;
+export async function adminSaveFields(ctx) {
+  const { db, form, base, assoc, params } = ctx;
+  const d = await D.getDocument(db, Number(params.id));
+  if (!d || d.association_id !== assoc.id) return back(base + "/admin/documents", "문서를 찾을 수 없습니다.", true);
+  const to = `${base}/admin/documents/${d.id}/fields`;
+  if ((await D.listSignatures(db, d.id)).length) return back(to, "이미 서명이 시작된 문서는 배치를 바꿀 수 없습니다.", true);
+  let raw;
+  try { raw = JSON.parse(form.get("fields") || "[]"); } catch { return back(to, "배치 데이터를 읽을 수 없습니다.", true); }
+  if (!Array.isArray(raw)) return back(to, "배치 데이터 형식이 올바르지 않습니다.", true);
+  if (raw.length > MAX_FIELDS) return back(to, `필드는 최대 ${MAX_FIELDS}개까지 놓을 수 있습니다.`, true);
+  const pages = pageCount(d.body);
+  // 담당자로 지정할 수 있는 사람은 이 문서의 서명 대상뿐 (엉뚱한 회원을 지정해 지면을 오염시키는 것 차단)
+  const allowed = new Set((await D.listRequestStatus(db, d.id)).map((r) => r.id));
+  const fields = [];
+  for (const f of raw) {
+    if (!f || !isFieldKind(f.kind)) return back(to, "알 수 없는 필드 종류가 있습니다.", true);
+    const page = Number(f.page) | 0;
+    if (page < 0 || page >= pages) return back(to, "필드가 문서 범위를 벗어났습니다.", true);
+    const assignee = Number(f.assignee) | 0;
+    if (assignee && !allowed.has(assignee)) return back(to, "서명 대상이 아닌 담당자가 지정되었습니다.", true);
+    const x = round4(f.x), y = round4(f.y);
+    const w = Math.max(0.01, round4(f.w)), h = Math.max(0.008, round4(f.h));
+    if (x + w > 1.0001 || y + h > 1.0001) return back(to, "필드가 지면 밖으로 나갔습니다. 위치를 조정해 주세요.", true);
+    fields.push({ kind: f.kind, label: cap(String(f.label || "").replace(/[\x00-\x1f\x7f]/g, " ").trim(), 20),
+      page, x, y, w, h, assignee, required: f.required ? 1 : 0 });
+  }
+  const n = await D.replaceFields(db, d.id, fields);
+  return back(to, n ? `${n}개 필드를 배치했습니다.` : "배치를 모두 지웠습니다.");
+}
+
+// data:image/png;base64 → 바이트. 형식·크기·실제 시그니처까지 확인한다.
+function pngFromDataUrl(s, maxBytes = 500 * 1024) {
+  const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(String(s || ""));
+  if (!m) return null;
+  let bytes;
+  try { bytes = Uint8Array.from(atob(m[1]), (c) => c.charCodeAt(0)); } catch { return null; }
+  if (bytes.length < 64 || bytes.length > maxBytes || sniffImage(bytes) !== "image/png") return null;
+  return bytes;
+}
+
+// 서명자가 채운 필드를 검증하고 저장 — 먼저 전부 검증한 뒤에 쓴다(중간 실패로 반쯤 채워지는 것 방지).
+async function applyFieldValues(ctx, doc, fields, rawJson) {
+  const { db, env, user } = ctx;
+  let raw = {};
+  try { raw = JSON.parse(rawJson || "{}") || {}; } catch { return { error: "입력값을 읽을 수 없습니다." }; }
+  const staged = [];
+  for (const f of fields) {
+    const v = raw[String(f.id)];
+    const label = f.label || (FIELD_KINDS[f.kind] || {}).label || "항목";
+    if (f.kind === "sign" || f.kind === "stamp") {
+      if (!v || !v.image) { if (f.required) return { error: `'${label}' 자리를 채워 주세요.` }; continue; }
+      const bytes = pngFromDataUrl(v.image);
+      if (!bytes) return { error: `'${label}' 이미지가 올바르지 않습니다.` };
+      staged.push({ f, bytes });
+    } else if (f.kind === "check") {
+      const on = !!(v && (v.value === "1" || v.value === 1 || v.value === true));
+      if (!on) { if (f.required) return { error: `'${label}' 에 체크해 주세요.` }; continue; }
+      staged.push({ f, value: "1" });
+    } else {
+      const val = cap(String((v && v.value) || "").replace(/[\x00-\x1f\x7f]/g, " ").trim(), 100);
+      if (!val) { if (f.required) return { error: `'${label}' 을(를) 입력해 주세요.` }; continue; }
+      if (f.kind === "date" && !/^\d{4}-\d{2}-\d{2}$/.test(val)) return { error: `'${label}' 날짜 형식(YYYY-MM-DD)을 확인해 주세요.` };
+      staged.push({ f, value: val });
+    }
+  }
+  let signKey = "";
+  for (const st of staged) {
+    if (st.bytes) {
+      const key = storage.enabled(env) ? await storage.save(env, st.bytes, "image/png") : "";
+      const hash = await sha256HexBytes(st.bytes);
+      await D.setFieldValue(db, { fieldId: st.f.id, documentId: doc.id, userId: user.id, image: key, imageHash: hash });
+      if (st.f.kind === "sign" && !signKey) signKey = key;
+    } else {
+      await D.setFieldValue(db, { fieldId: st.f.id, documentId: doc.id, userId: user.id, value: st.value });
+    }
+  }
+  return { filled: staged.length, signKey, hadSignField: staged.some((st) => st.f.kind === "sign") };
+}
+
 export async function memberSign(ctx) {
   const { db, env, form, base, assoc, user, ip, request } = ctx;
   const d = await D.getDocument(db, Number(ctx.params.id));
@@ -873,19 +956,31 @@ export async function memberSign(ctx) {
     if (!(await D.otpVerifiedRecently(db, d.id, user.id))) return back(base + "/sign/" + d.id, "휴대폰 본인확인을 먼저 완료해 주세요.", true);
     verifyLevel = "otp";
   }
-  const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(form.get("signature") || "");
-  if (!m) return back(base + "/sign/" + d.id, "서명을 입력해 주세요.", true);
-  let bytes; try { bytes = Uint8Array.from(atob(m[1]), (c) => c.charCodeAt(0)); } catch { bytes = null; }
-  if (!bytes || bytes.length < 64 || bytes.length > 500 * 1024 || sniffImage(bytes) !== "image/png") return back(base + "/sign/" + d.id, "서명 이미지가 올바르지 않습니다.", true);
-  const sigKey = storage.enabled(env) ? await storage.save(env, bytes, "image/png") : ""; // R2 미연결 시 이미지 생략(봉인은 유효)
+  // 지면에 배치된 필드 — 내가 채워야 할(아직 비어 있는) 자리만 대상. 화면을 우회한 POST 도 같은 규칙을 받는다.
+  const allFields = await D.listFieldsWithValues(db, d.id);
+  const myFields = allFields.filter((f) => !f.value && !f.image && (f.assignee === user.id || f.assignee === 0));
+  let fieldResult = { signKey: "", hadSignField: false };
+  if (myFields.length) {
+    fieldResult = await applyFieldValues(ctx, d, myFields, form.get("fields"));
+    if (fieldResult.error) return back(base + "/sign/" + d.id, fieldResult.error, true);
+  }
+  // 서명 필드를 채웠으면 그 그림이 곧 대표 서명 — 따로 서명란을 요구하지 않는다
+  let sigKey = fieldResult.signKey || "";
+  if (!fieldResult.hadSignField) {
+    const bytes = pngFromDataUrl(form.get("signature"));
+    if (!bytes) return back(base + "/sign/" + d.id, "서명을 입력해 주세요.", true);
+    sigKey = storage.enabled(env) ? await storage.save(env, bytes, "image/png") : ""; // R2 미연결 시 이미지 생략(봉인은 유효)
+  }
   // 제어문자(개행 등) 제거 — 봉인 문자열이 \n 구분이라 이름에 섞이면 인코딩이 모호해짐
   const signerName = cap((form.get("signer_name") || "").replace(/[\x00-\x1f\x7f]/g, " ").trim(), 60) || user.name;
   const signedAt = new Date().toISOString();
   // 직전 서명의 봉인값을 이번 봉인에 포함 → 서명들이 사슬로 엮여 중간 기록 삭제·조작이 탐지된다
   const prevHash = await D.lastSealHash(db);
-  const recordHash = await sealRecord(env, { documentId: d.id, userId: user.id, signerName, contentHash: d.content_hash, signedAt, ip, prevHash, ver: SEAL_VER });
+  // 내가 채운 값 + 그 자리의 좌표까지 봉인에 넣는다 → 값 위조는 물론 "자리만 옮기는" 조작도 탐지된다
+  const fieldsHash = await fieldsHashOf(await D.listFilledBy(db, d.id, user.id));
+  const recordHash = await sealRecord(env, { documentId: d.id, userId: user.id, signerName, contentHash: d.content_hash, signedAt, ip, prevHash, fieldsHash, ver: SEAL_VER });
   const verifyCode = newVerifyCode();
-  await D.createSignature(db, { documentId: d.id, userId: user.id, signerName, signatureImage: sigKey, contentHash: d.content_hash, ip, userAgent: cap(request.headers.get("user-agent") || "", 200), verifyCode, recordHash, signedAt, prevHash, sealVer: SEAL_VER, verifyLevel });
+  await D.createSignature(db, { documentId: d.id, userId: user.id, signerName, signatureImage: sigKey, contentHash: d.content_hash, ip, userAgent: cap(request.headers.get("user-agent") || "", 200), verifyCode, recordHash, signedAt, prevHash, sealVer: SEAL_VER, verifyLevel, fieldsHash });
   await D.createNotification(db, { associationId: assoc.id, kind: "signed", message: `${signerName}님이 '${d.title}'에 전자서명했습니다.`, link: base + "/admin/documents/" + d.id });
   // 서명자 본인에게 확인서 사본 자동 발송 — "받은 적 없다"는 분쟁을 막는 증거.
   // 실패해도 서명은 이미 유효하므로 전체를 되돌리지 않는다.

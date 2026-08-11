@@ -473,13 +473,52 @@ export const lastSealHash = async (db) => {
 export const listSignatureChain = (db) =>
   all(db, "SELECT id, record_hash, prev_hash, seal_ver FROM signatures ORDER BY id");
 export async function createSignature(db, r) {
-  await run(db, `INSERT INTO signatures (document_id, user_id, signer_name, signature_image, content_hash, ip, user_agent, verify_code, record_hash, signed_at, prev_hash, seal_ver, verify_level)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`, r.documentId, r.userId, r.signerName, r.signatureImage, r.contentHash, r.ip, r.userAgent, r.verifyCode, r.recordHash, r.signedAt, r.prevHash || "", r.sealVer || 2, r.verifyLevel || "password");
+  await run(db, `INSERT INTO signatures (document_id, user_id, signer_name, signature_image, content_hash, ip, user_agent, verify_code, record_hash, signed_at, prev_hash, seal_ver, verify_level, fields_hash)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, r.documentId, r.userId, r.signerName, r.signatureImage, r.contentHash, r.ip, r.userAgent, r.verifyCode, r.recordHash, r.signedAt, r.prevHash || "", r.sealVer || 3, r.verifyLevel || "password", r.fieldsHash || "");
   return first(db, "SELECT * FROM signatures WHERE id=?", await lastId(db));
 }
 export const listSignatures = (db, documentId) =>
   all(db, "SELECT s.*, u.email AS signer_email FROM signatures s JOIN users u ON u.id=s.user_id WHERE s.document_id=? ORDER BY s.signed_at DESC", documentId);
 export const getSignatureByCode = (db, code) => first(db, "SELECT * FROM signatures WHERE verify_code=?", code);
+
+// ----- 계약서 필드 (서명·도장·입력 자리) -----
+export const listFields = (db, documentId) =>
+  all(db, "SELECT * FROM doc_fields WHERE document_id=? ORDER BY page, sort, id", documentId);
+export const countFields = async (db, documentId) =>
+  (await first(db, "SELECT COUNT(*) AS n FROM doc_fields WHERE document_id=?", documentId)).n;
+// 필드 + 채워진 값을 한 번에 (지면 렌더용)
+export const listFieldsWithValues = (db, documentId) =>
+  all(db, `SELECT f.*, v.value, v.image, v.image_hash, v.user_id AS filled_by, v.filled_at
+    FROM doc_fields f LEFT JOIN doc_field_values v ON v.field_id=f.id
+    WHERE f.document_id=? ORDER BY f.page, f.sort, f.id`, documentId);
+// 배치 저장 — 통째로 갈아끼운다(부분 수정 UI 가 없으므로 단순·안전).
+// 이미 서명이 있는 문서는 호출부에서 막는다(서명자가 본 지면이 바뀌면 안 됨).
+export async function replaceFields(db, documentId, fields) {
+  await run(db, "DELETE FROM doc_fields WHERE document_id=?", documentId);
+  let i = 0;
+  for (const f of fields) {
+    i++;
+    await run(db, `INSERT INTO doc_fields (document_id, kind, label, page, x, y, w, h, assignee, required, sort)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?)`, documentId, f.kind, f.label || "", f.page | 0,
+      f.x, f.y, f.w, f.h, f.assignee | 0, f.required ? 1 : 0, i);
+  }
+  return i;
+}
+// 이 사람이 채워야 할 필드 (본인 지정 + 지정 없는 공용 필드)
+export const listFieldsFor = (db, documentId, uid) =>
+  all(db, "SELECT * FROM doc_fields WHERE document_id=? AND (assignee=? OR assignee=0) ORDER BY page, sort, id", documentId, uid);
+export async function setFieldValue(db, { fieldId, documentId, userId, value = "", image = "", imageHash = "" }) {
+  await run(db, `INSERT INTO doc_field_values (field_id, document_id, user_id, value, image, image_hash)
+    VALUES (?,?,?,?,?,?)
+    ON CONFLICT(field_id) DO UPDATE SET value=excluded.value, image=excluded.image,
+      image_hash=excluded.image_hash, user_id=excluded.user_id, filled_at=datetime('now')`,
+    fieldId, documentId, userId, value, image, imageHash);
+}
+// 봉인 대상 — 이 사람이 채운 값들 (좌표까지 함께 봉인해 자리 이동 조작을 막는다)
+export const listFilledBy = (db, documentId, uid) =>
+  all(db, `SELECT f.id, f.kind, f.page, f.x, f.y, f.w, f.h, v.value, v.image_hash
+    FROM doc_fields f JOIN doc_field_values v ON v.field_id=f.id
+    WHERE f.document_id=? AND v.user_id=? ORDER BY f.id`, documentId, uid);
 
 // ----- Stats -----
 export async function stats(db, aid) {
@@ -512,15 +551,18 @@ export function demoSeedStamps(db) {
 }
 // 상인회별 마지막 활동 시각. 죽어가는 고객을 눈으로 찾으려면 누적 수치가 아니라
 // '언제 마지막으로 뭔가 했는지'가 필요합니다. 점포 갱신·공지·행사·게시글·가게소식·서명을 모두 봅니다.
+// ⚠️ UNION ALL 로 6갈래를 합치던 구현은 D1 에서 "too many terms in compound SELECT" 로 실패했습니다.
+//    (D1 의 SQLite 는 compound SELECT 항 수 상한이 로컬 SQLite 보다 훨씬 낮습니다.)
+//    같은 결과를 상관 서브쿼리 + 스칼라 MAX() 로 바꿔 compound SELECT 를 아예 쓰지 않습니다.
+//    시각은 ISO 문자열이라 문자열 비교로도 대소가 맞고, 빈 값은 ''(가장 작음)으로 눌러 둡니다.
 export function lastActivityByAssociation(db) {
-  return all(db, `SELECT a.id AS aid, MAX(x.ts) AS last_at FROM associations a LEFT JOIN (
-      SELECT association_id, MAX(COALESCE(updated_at, created_at)) AS ts FROM businesses GROUP BY association_id
-      UNION ALL SELECT association_id, MAX(created_at) FROM notices GROUP BY association_id
-      UNION ALL SELECT association_id, MAX(created_at) FROM events GROUP BY association_id
-      UNION ALL SELECT association_id, MAX(created_at) FROM posts GROUP BY association_id
-      UNION ALL SELECT association_id, MAX(created_at) FROM updates GROUP BY association_id
-      UNION ALL SELECT association_id, MAX(created_at) FROM documents GROUP BY association_id
-    ) x ON x.association_id = a.id GROUP BY a.id`);
+  const src = (tbl, col = "created_at") =>
+    `COALESCE((SELECT MAX(${col}) FROM ${tbl} WHERE association_id = a.id), '')`;
+  return all(db, `SELECT a.id AS aid, NULLIF(MAX(
+      ${src("businesses", "COALESCE(updated_at, created_at)")},
+      ${src("notices")}, ${src("events")}, ${src("posts")},
+      ${src("updates")}, ${src("documents")}
+    ), '') AS last_at FROM associations a`);
 }
 
 // 슈퍼 관리자 계정 목록 — "누가 이 콘솔에 들어올 수 있는가" 를 눈으로 확인하기 위한 것.
