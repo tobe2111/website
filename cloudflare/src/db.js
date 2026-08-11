@@ -449,15 +449,22 @@ const TO_SIGN = `d.association_id=? AND d.closed=0 AND (d.due_date='' OR d.due_d
   AND NOT EXISTS (SELECT 1 FROM signatures s WHERE s.document_id=d.id AND s.user_id=?)
   AND NOT EXISTS (SELECT 1 FROM signature_requests rd WHERE rd.document_id=d.id AND rd.user_id=? AND rd.declined_at != '')
   AND (EXISTS (SELECT 1 FROM signature_requests r WHERE r.document_id=d.id AND r.user_id=?)
-       OR NOT EXISTS (SELECT 1 FROM signature_requests r2 WHERE r2.document_id=d.id))
+       OR (NOT EXISTS (SELECT 1 FROM signature_requests r2 WHERE r2.document_id=d.id)
+           AND NOT EXISTS (SELECT 1 FROM external_signers e2 WHERE e2.document_id=d.id)))
   AND ${TURN_OK}`;
 export const listDocumentsToSign = (db, aid, uid) => all(db, `SELECT d.* FROM documents d WHERE ${TO_SIGN} ORDER BY d.created_at DESC`, aid, uid, uid, uid, uid, uid);
 export const countDocumentsToSign = async (db, aid, uid) => (await first(db, `SELECT COUNT(*) AS n FROM documents d WHERE ${TO_SIGN}`, aid, uid, uid, uid, uid, uid)).n;
 // 대상이 지정된 문서(요청 행이 존재)는 대상자만 서명 가능 — 목록(TO_SIGN)과 동일한 규칙을 액션에도 강제
 export async function canReceiveSign(db, docId, uid) {
-  const any = await first(db, "SELECT 1 AS x FROM signature_requests WHERE document_id=? LIMIT 1", docId);
-  if (!any) return true; // 대상 미지정 문서 = 회원 전체 대상
-  return !!(await first(db, "SELECT 1 AS x FROM signature_requests WHERE document_id=? AND user_id=?", docId, uid));
+  const mine = await first(db, "SELECT 1 AS x FROM signature_requests WHERE document_id=? AND user_id=?", docId, uid);
+  if (mine) return true;
+  // 대상이 하나도 지정되지 않은 문서만 '회원 전체 대상'이다.
+  // ⚠️ 외부 서명자도 대상이다 — 이걸 빠뜨리면 API·서식으로 만든 계약(서명자가 전부 외부)이
+  //    signature_requests 가 비어 있다는 이유로 조직 회원 전원에게 열린다.
+  const any = await first(db, `SELECT 1 AS x FROM documents d WHERE d.id=?1 AND (
+      EXISTS (SELECT 1 FROM signature_requests r WHERE r.document_id=?1)
+      OR EXISTS (SELECT 1 FROM external_signers e WHERE e.document_id=?1))`, docId);
+  return !any;
 }
 export const canSignNow = (db, doc, uid) => canSignNowAny(db, doc, { userId: uid });
 export function isPastDue(doc) {
