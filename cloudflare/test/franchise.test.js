@@ -165,6 +165,9 @@ test("랜딩 편집: 문구 저장 → 공개 화면 반영, 초기화하면 되
     ty_1: "lead", en_1: "1", f_1_title: "가맹 상담 신청", f_1_buttonLabel: "신청서 보내기", f_1_budgets: "5천 이하\n5천~1억",
     ty_2: "process", f_2_title: "가맹 절차",
   }, "/t/dapong/admin/landing");
+  // 저장은 초안까지만 — 아직 손님 화면은 그대로다
+  assert.doesNotMatch(await (await get(env, jar(), "/t/dapong")).text(), /삼겹살 창업의/);
+  await post(env, j, "/t/dapong/admin/landing/publish", {}, "/t/dapong/admin/landing");
   const html = await (await get(env, jar(), "/t/dapong")).text();
   assert.match(html, /삼겹살 창업의/);
   assert.match(html, /class="fr-hl">정답</); // 강조 단어만 색이 바뀐다
@@ -181,10 +184,13 @@ test("가맹 비용 표: 가려 두면 금액이 HTML 에도 실리지 않는다
   const env = makeEnv();
   await seed(env);
   const j = await login(env);
-  const save = (locked) => post(env, j, "/t/dapong/admin/landing", {
-    order: "0", ty_0: "cost", en_0: "1", f_0_title: "가맹 비용",
-    f_0_items: "가맹비 | 1,000만원 | 부가세 별도", ...(locked ? { f_0_locked: "1" } : {}),
-  }, "/t/dapong/admin/landing");
+  const save = async (locked) => {
+    await post(env, j, "/t/dapong/admin/landing", {
+      order: "0", ty_0: "cost", en_0: "1", f_0_title: "가맹 비용",
+      f_0_items: "가맹비 | 1,000만원 | 부가세 별도", ...(locked ? { f_0_locked: "1" } : {}),
+    }, "/t/dapong/admin/landing");
+    await post(env, j, "/t/dapong/admin/landing/publish", {}, "/t/dapong/admin/landing");
+  };
   await save(true);
   let html = await (await get(env, jar(), "/t/dapong")).text();
   assert.match(html, /가맹비/);
@@ -202,6 +208,7 @@ test("랜딩 섹션은 HTML 을 심을 수 없고, 이미지 주소는 안전한
     order: "0,1", ty_0: "hero", en_0: "1", f_0_title: "<script>alert(1)</script>", f_0_image: "javascript:alert(1)",
     ty_1: "why", en_1: "1", f_1_title: "소개", f_1_image: "https://cdn.example.com/a.jpg",
   }, "/t/dapong/admin/landing");
+  await post(env, j, "/t/dapong/admin/landing/publish", {}, "/t/dapong/admin/landing");
   const html = await (await get(env, jar(), "/t/dapong")).text();
   assert.doesNotMatch(html, /<script>alert\(1\)<\/script>/);
   assert.match(html, /&lt;script&gt;/);
@@ -254,4 +261,190 @@ test("옛 배포 DB 도 자동 마이그레이션으로 상담 DB 를 갖춘다"
   assert.ok(cols.some((c) => c.name === "landing_layout"));
   const t = env.DB._db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='leads'").get();
   assert.ok(t);
+});
+
+// ===== 성과 계측 · 사진 · 사본 · 발행 · 파기 =====
+
+test("광고 출처: 주소의 utm 이 폼에 심기고 신청에 그대로 저장된다", async () => {
+  const env = makeEnv();
+  const a = await seed(env);
+  const html = await (await get(env, jar(), "/t/dapong?utm_source=naver&utm_medium=cpc&utm_campaign=%EB%B4%84%EB%AA%A8%EC%A7%91")).text();
+  assert.match(html, /name="utm_source" value="naver"/);
+  assert.match(html, /name="utm_campaign" value="봄모집"/);
+  await post(env, jar(), "/t/dapong/lead",
+    { ...applyForm, utm_source: "naver", utm_medium: "cpc", utm_campaign: "봄모집", referrer: "https://search.naver.com/x" }, "/t/dapong");
+  const l = (await D.listLeads(env.DB, a.id))[0];
+  assert.equal(l.utm_source, "naver");
+  assert.equal(l.utm_medium, "cpc");
+  assert.equal(l.utm_campaign, "봄모집");
+  assert.match(l.referrer, /naver\.com/);
+  // 상담 DB 화면과 CSV 에도 출처가 나온다
+  const j = await login(env);
+  assert.match(await (await get(env, j, "/t/dapong/admin/leads")).text(), /naver\/cpc/);
+  assert.match(await (await get(env, j, "/t/dapong/admin/leads.csv")).text(), /광고출처/);
+});
+
+test("전환율: 방문 수를 세고 신청 수와 함께 보여준다", async () => {
+  const env = makeEnv();
+  const a = await seed(env);
+  for (let i = 0; i < 4; i++) await get(env, jar(), "/t/dapong");
+  assert.equal(await D.landingViewsSince(env.DB, a.id, 30), 4);
+  await post(env, jar(), "/t/dapong/lead", applyForm, "/t/dapong"); // 폼 토큰 조회로 1회 더 셈
+  const j = await login(env);
+  const html = await (await get(env, j, "/t/dapong/admin/leads")).text();
+  assert.match(html, /30일 전환율/);
+  assert.match(html, /방문 \d+ · 신청 1/);
+  // 미리보기는 관리자 자신의 조회라 방문 수에 넣지 않는다
+  const before = await D.landingViewsSince(env.DB, a.id, 30);
+  await get(env, j, "/t/dapong/admin/landing/preview");
+  assert.equal(await D.landingViewsSince(env.DB, a.id, 30), before);
+});
+
+test("초안·발행: 저장은 초안까지, 발행해야 손님에게 보인다 (미리보기·되돌리기 포함)", async () => {
+  const env = makeEnv();
+  const a = await seed(env);
+  const j = await login(env);
+  const save = (title) => post(env, j, "/t/dapong/admin/landing",
+    { order: "0", ty_0: "hero", en_0: "1", f_0_title: title }, "/t/dapong/admin/landing");
+  await save("초안 제목");
+  assert.equal((await D.getAssociationById(env.DB, a.id)).landing_layout, null); // 발행본은 아직 비어 있다
+  assert.doesNotMatch(await (await get(env, jar(), "/t/dapong")).text(), /초안 제목/);
+  // 관리자는 미리보기로 확인할 수 있다
+  const pv = await (await get(env, j, "/t/dapong/admin/landing/preview")).text();
+  assert.match(pv, /초안 제목/);
+  assert.match(pv, /발행되지 않은 초안/);
+  // 편집 화면은 발행 대기 상태를 알려준다
+  assert.match(await (await get(env, j, "/t/dapong/admin/landing")).text(), /발행되지 않은 수정본 있음/);
+  await post(env, j, "/t/dapong/admin/landing/publish", {}, "/t/dapong/admin/landing");
+  assert.match(await (await get(env, jar(), "/t/dapong")).text(), /초안 제목/);
+  // 새 초안을 쓰다가 버리면 발행본으로 돌아간다
+  await save("버릴 제목");
+  await post(env, j, "/t/dapong/admin/landing/discard", {}, "/t/dapong/admin/landing");
+  assert.equal((await D.getAssociationById(env.DB, a.id)).landing_draft, null);
+  assert.match(await (await get(env, jar(), "/t/dapong")).text(), /초안 제목/);
+});
+
+test("캠페인 사본: /l/주소 로 열리고, 신청·방문이 사본별로 집계된다", async () => {
+  const env = makeEnv();
+  const a = await seed(env);
+  const j = await login(env);
+  await post(env, j, "/t/dapong/admin/landing", { order: "0", ty_0: "hero", en_0: "1", f_0_title: "기본 문구" }, "/t/dapong/admin/landing");
+  await post(env, j, "/t/dapong/admin/landing/publish", {}, "/t/dapong/admin/landing");
+  await post(env, j, "/t/dapong/admin/landing/variant", { name: "인스타 광고용", slug: "insta" }, "/t/dapong/admin/landing");
+  // 사본만 다른 문구로 바꿔 발행 — 기본 랜딩은 그대로여야 한다
+  await post(env, j, "/t/dapong/admin/landing?v=insta",
+    { order: "0,1", ty_0: "hero", en_0: "1", f_0_title: "인스타 전용 문구", ty_1: "lead", en_1: "1", f_1_title: "상담 신청" }, "/t/dapong/admin/landing?v=insta");
+  await post(env, j, "/t/dapong/admin/landing/publish?v=insta", {}, "/t/dapong/admin/landing?v=insta");
+  const vHtml = await (await get(env, jar(), "/t/dapong/l/insta")).text();
+  assert.match(vHtml, /인스타 전용 문구/);
+  assert.match(await (await get(env, jar(), "/t/dapong")).text(), /기본 문구/);
+  assert.equal((await get(env, jar(), "/t/dapong/l/none")).status, 404);
+  // 사본에서 낸 신청은 사본으로 기록되고, 신청 후에도 그 사본으로 돌아온다
+  const r = await post(env, jar(), "/t/dapong/lead", { ...applyForm, variant: "insta" }, "/t/dapong/l/insta");
+  assert.match(r.headers.get("location"), /\/l\/insta\?/);
+  assert.equal((await D.listLeads(env.DB, a.id))[0].variant, "insta");
+  assert.match(await (await get(env, j, "/t/dapong/admin/leads")).text(), /랜딩별 성과/);
+  // 사본을 지워도 이미 받은 신청은 남는다
+  await post(env, j, "/t/dapong/admin/landing/variant/insta/delete", {}, "/t/dapong/admin/landing");
+  assert.equal((await D.listLeads(env.DB, a.id)).length, 1);
+  assert.equal((await get(env, jar(), "/t/dapong/l/insta")).status, 404);
+});
+
+test("사진 보관함: 올린 사진이 목록에 남고 지우면 R2 에서도 사라진다", async () => {
+  const env = makeEnv();
+  const a = await seed(env);
+  const j = await login(env);
+  // 1x1 PNG
+  const png = Buffer.from("89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000a49444154789c6360000002000100ffff03000006000557bfabd4000000004945", "hex");
+  const t = (/name="_csrf" value="([^"]+)"/.exec(await (await get(env, j, "/t/dapong/admin/landing")).text()) || [])[1];
+  const fd = new FormData();
+  fd.set("_csrf", t);
+  fd.append("images", new File([png], "menu.png", { type: "image/png" }));
+  const up = await worker.fetch(new Request(B + "/t/dapong/admin/landing/asset", { method: "POST", headers: { cookie: ch(j) }, body: fd }), env);
+  assert.equal(up.status, 303);
+  const assets = await D.listLandingAssets(env.DB, a.id);
+  assert.equal(assets.length, 1);
+  assert.ok(env.MEDIA._store.has(assets[0].filename));
+  assert.match(await (await get(env, j, "/t/dapong/admin/landing")).text(), /asset-card/);
+  await post(env, j, `/t/dapong/admin/landing/asset/${assets[0].id}/delete`, {}, "/t/dapong/admin/landing");
+  assert.equal((await D.listLandingAssets(env.DB, a.id)).length, 0);
+  assert.ok(!env.MEDIA._store.has(assets[0].filename));
+});
+
+test("보관 기간: 처리 끝난 건만 자동 파기되고 진행 중인 건은 남는다", async () => {
+  const env = makeEnv();
+  const a = await seed(env);
+  const j = await login(env);
+  await post(env, j, "/t/dapong/admin/landing/retention", { days: "30" }, "/t/dapong/admin/landing");
+  assert.equal(await D.getSetting(env.DB, `lead_retention:${a.id}`), "30");
+  const mk = async (name, status) => {
+    const l = await D.createLead(env.DB, { associationId: a.id, name, phone: "010-0000-000" + name.length });
+    env.DB._db.prepare("UPDATE leads SET status=?, created_at=datetime('now','-100 days'), updated_at=datetime('now','-100 days') WHERE id=?").run(status, l.id);
+    return l.id;
+  };
+  await mk("계약자", "contract");
+  await mk("보류자", "drop");
+  const keep = await mk("진행중", "contacted");
+  const { runLeadPurge } = await import("../src/scheduled.js");
+  const r = await runLeadPurge(env);
+  assert.equal(r.deleted, 2);
+  const left = await D.listLeads(env.DB, a.id);
+  assert.equal(left.length, 1);
+  assert.equal(left[0].id, keep);
+});
+
+test("하위 페이지에서도 상담으로 가는 길이 열려 있다 (업무 화면은 예외)", async () => {
+  const env = makeEnv();
+  await seed(env);
+  for (const p of ["/t/dapong/businesses", "/t/dapong/notices"]) {
+    const html = await (await get(env, jar(), p)).text();
+    assert.match(html, /fr-sticky/, `${p} 에 고정 바가 있어야`);
+    assert.match(html, /href="\/t\/dapong\/#apply"/, `${p} 에서 신청으로 갈 수 있어야`);
+  }
+  // 관리자 콘솔은 손님 화면이 아니다 — 고정 바가 표를 가리면 안 된다
+  const j = await login(env);
+  for (const p of ["/t/dapong/admin/leads", "/t/dapong/admin/landing", "/t/dapong/admin"])
+    assert.doesNotMatch(await (await get(env, j, p)).text(), /fr-sticky/, `${p} 에는 고정 바가 없어야`);
+});
+
+test("공유 미리보기: 첫 화면 사진이 og:image 로 나간다", async () => {
+  const env = makeEnv();
+  const a = await seed(env);
+  const j = await login(env);
+  await post(env, j, "/t/dapong/admin/landing",
+    { order: "0", ty_0: "hero", en_0: "1", f_0_title: "제목", f_0_image: "https://cdn.example.com/hero.jpg" }, "/t/dapong/admin/landing");
+  await post(env, j, "/t/dapong/admin/landing/publish", {}, "/t/dapong/admin/landing");
+  assert.match(await (await get(env, jar(), "/t/dapong")).text(), /og:image" content="https:\/\/cdn\.example\.com\/hero\.jpg"/);
+});
+
+test("상담 DB: 50건 넘으면 쪽수로 나누고, 계약서로 바로 이어진다", async () => {
+  const env = makeEnv();
+  const a = await seed(env);
+  for (let i = 0; i < 55; i++) await D.createLead(env.DB, { associationId: a.id, name: `신청자${i}`, phone: `010-1111-${String(1000 + i)}` });
+  const j = await login(env);
+  const p1 = await (await get(env, j, "/t/dapong/admin/leads")).text();
+  assert.match(p1, /class="pager"/);
+  const p2 = await (await get(env, j, "/t/dapong/admin/leads?page=2")).text();
+  assert.match(p2, /신청자0</);       // 오래된 건이 2쪽에
+  assert.doesNotMatch(p1, /신청자0</);
+  // 상담 건에서 계약서 만들기 → 서식 화면이 그 신청자를 물고 간다
+  const id = (await D.listLeads(env.DB, a.id))[0].id;
+  const tpl = await (await get(env, j, `/t/dapong/admin/templates?lead=${id}`)).text();
+  assert.match(tpl, /상담 신청자 <b>신청자54<\/b>/);
+  assert.match(tpl, new RegExp(`documents/new\\?tpl=[^"]*&lead=${id}`));
+});
+
+test("주간 백업에 상담 DB 가 포함된다 (이 제품에서 가장 잃으면 안 되는 자산)", async () => {
+  const env = makeEnv();
+  const a = await seed(env);
+  await D.createLead(env.DB, { associationId: a.id, name: "백업될 사람", phone: "010-9999-8888" });
+  const { runBackup, decryptBackup } = await import("../src/scheduled.js");
+  const r = await runBackup(env);
+  assert.ok(r.key, "백업 파일이 만들어져야");
+  const obj = await env.MEDIA.get(r.key);
+  const dump = JSON.parse(await decryptBackup(env.SESSION_SECRET, new Uint8Array(await obj.arrayBuffer())));
+  assert.equal(dump.tables.leads.length, 1);
+  assert.equal(dump.tables.leads[0].name, "백업될 사람");
+  for (const t of ["landing_variants", "landing_views", "landing_assets"])
+    assert.ok(Array.isArray(dump.tables[t]), `${t} 도 백업에 있어야`);
 });

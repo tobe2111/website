@@ -32,7 +32,7 @@ export function safeSrc(v) {
 const nl2br = (v) => esc(v).replace(/\n/g, "<br />");
 
 // 섹션 카탈로그 — 관리자 편집 화면이 이 정의만 보고 자동으로 만들어진다.
-// type: text | textarea | lines | bool
+// type: text | textarea | lines | bool | image (주소 입력 + 파일 업로드)
 export const LANDING_CATALOG = {
   hero: {
     label: "히어로 (첫 화면)",
@@ -43,7 +43,7 @@ export const LANDING_CATALOG = {
       { key: "subtitle", label: "설명", type: "textarea" },
       { key: "ctaLabel", label: "버튼 문구", type: "text" },
       { key: "note", label: "버튼 아래 작은 글씨", type: "text" },
-      { key: "image", label: "배경 사진 주소 (비우면 브랜딩의 히어로 사진)", type: "text" },
+      { key: "image", label: "배경 사진 (비우면 브랜딩의 히어로 사진)", type: "image" },
     ],
   },
   ticker: {
@@ -56,7 +56,7 @@ export const LANDING_CATALOG = {
       { key: "eyebrow", label: "상단 한 줄", type: "text" },
       { key: "title", label: "제목", type: "text" },
       { key: "body", label: "본문", type: "textarea" },
-      { key: "image", label: "사진 주소", type: "text" },
+      { key: "image", label: "사진", type: "image" },
     ],
   },
   strengths: {
@@ -188,24 +188,13 @@ export function parseLandingLayout(json, brandName) {
 export const serializeLandingLayout = (arr) => JSON.stringify(arr);
 
 // ----- 렌더링 -----
-// deps: { assoc, base, storesHtml, storeCount, noticesHtml, query, turnstile }
+// deps: { assoc, base, storesHtml, storeCount, noticesHtml, turnstile, flash, utm, variant }
+// 고정 하단 바는 여기서 만들지 않는다 — 랜딩뿐 아니라 매장·공지 같은 하위 페이지에도 있어야 해서
+// render.js 의 layout() 이 프랜차이즈 조직의 모든 화면에 붙인다.
 export function renderLanding(layout, deps) {
   const on = layout.filter((s) => s.enabled);
   const hasLead = on.some((s) => s.type === "lead");
-  const body = on.map((s) => renderSection(s, { ...deps, hasLead })).join("\n");
-  return body + stickyBar(deps, hasLead);
-}
-
-// 고정 하단 바 — 모바일에서 스크롤 어디에 있든 전화·신청이 한 번에 닿는다.
-// DB 수집 랜딩에서 이탈을 가장 크게 줄이는 한 조각이라 섹션 구성과 무관하게 항상 붙인다.
-function stickyBar(deps, hasLead) {
-  const a = deps.assoc || {};
-  const tel = String(a.phone || "").replace(/[^0-9+\-]/g, "");
-  if (!tel && !hasLead) return "";
-  return `<div class="fr-sticky">
-    ${tel ? `<a class="fr-sticky-tel" href="tel:${esc(tel)}"><span>가맹 문의</span><strong>${esc(a.phone)}</strong></a>` : ""}
-    ${hasLead ? `<a class="fr-sticky-cta" href="#apply">가맹 상담 신청</a>` : ""}
-  </div>`;
+  return on.map((s) => renderSection(s, { ...deps, hasLead })).join("\n");
 }
 
 function renderSection(s, deps) {
@@ -355,10 +344,16 @@ function leadSection(s, deps) {
   const budgets = splitLines(s.budgets, 1).map(([t]) => t);
   const funnels = splitLines(s.funnels, 1).map(([t]) => t);
   const opt = (list) => list.map((t) => `<option value="${esc(t)}">${esc(t)}</option>`).join("");
+  // 광고 출처는 서버가 이미 알고 있는 값(주소의 utm_*)을 심어 두고, 자바스크립트가 있으면
+  // 유입 페이지(referrer)까지 채운다. 자기신고 항목만 믿으면 절반이 '기타'로 돌아온다.
+  const utm = deps.utm || {};
+  const hidden = (n, v) => `<input type="hidden" name="${n}" value="${esc(v || "")}" data-track="${n}" />`;
   return `<section class="section fr-apply" id="apply"><div class="container narrow">
     ${sectionHead(s.title || "가맹 상담 신청", s.lead, "center")}
     ${deps.flash || ""}
-    <form method="post" action="${base}/lead" class="fr-form stack-form">
+    <form method="post" action="${base}/lead" class="fr-form stack-form" id="leadForm">
+      ${hidden("utm_source", utm.source)}${hidden("utm_medium", utm.medium)}${hidden("utm_campaign", utm.campaign)}
+      ${hidden("referrer", "")}<input type="hidden" name="variant" value="${esc(deps.variant || "")}" />
       <div class="form-two">
         <label>성함 <span class="req">*</span><input type="text" name="name" required maxlength="60" autocomplete="name" /></label>
         <label>연락처 <span class="req">*</span><input type="tel" name="phone" required maxlength="20" inputmode="numeric" placeholder="010-0000-0000" autocomplete="tel" /></label>

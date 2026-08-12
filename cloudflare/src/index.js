@@ -106,6 +106,8 @@ const TENANT = [
   ["GET", "/contact", pages.contactForm],
   // 가맹 상담 신청 — 프랜차이즈 랜딩의 목적. 로그인 없이 누구나 보내는 공개 경로다.
   ["POST", "/lead", api.leadSubmit],
+  // 캠페인별 랜딩 사본 (광고 소재마다 다른 문구 · 전환율 비교)
+  ["GET", "/l/:slug", pages.franchiseVariant],
   ["GET", "/urdeal", pages.urdealPage],
   ["POST", "/contact", api.contactSubmit],
   ["GET", "/board", pages.board, "MEMBER"],
@@ -162,7 +164,15 @@ const TENANT = [
   // 프랜차이즈: 랜딩 편집 + 상담 DB. .csv 는 경로 조각 수가 같은 :id 패턴이 없어 순서에 자유롭다.
   ["GET", "/admin/landing", pages.adminLanding, "ADMIN"],
   ["POST", "/admin/landing", api.adminSaveLanding, "ADMIN"],
+  ["GET", "/admin/landing/preview", pages.adminLandingPreview, "ADMIN"],
+  ["POST", "/admin/landing/publish", api.adminPublishLanding, "ADMIN"],
+  ["POST", "/admin/landing/discard", api.adminDiscardLandingDraft, "ADMIN"],
   ["POST", "/admin/landing/reset", api.adminResetLanding, "ADMIN"],
+  ["POST", "/admin/landing/variant", api.adminCreateLandingVariant, "ADMIN"],
+  ["POST", "/admin/landing/variant/:slug/delete", api.adminDeleteLandingVariant, "ADMIN"],
+  ["POST", "/admin/landing/asset", api.adminUploadLandingAsset, "ADMIN"],
+  ["POST", "/admin/landing/asset/:id/delete", api.adminDeleteLandingAsset, "ADMIN"],
+  ["POST", "/admin/landing/retention", api.adminSetLeadRetention, "ADMIN"],
   ["GET", "/admin/leads", pages.adminLeads, "ADMIN"],
   ["GET", "/admin/leads.csv", pages.adminLeadsCsv, "ADMIN"],
   ["POST", "/admin/leads/:id/status", api.adminLeadStatus, "ADMIN"],

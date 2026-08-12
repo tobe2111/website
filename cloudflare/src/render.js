@@ -67,6 +67,7 @@ ${assoc ? `<link rel="alternate" type="application/rss+xml" title="${brand} 공�
   </div>
 </header>
 <main id="main">${injected}</main>
+${assoc && assoc.kind === "franchise" && !isConsole(body) ? stickyBar(assoc, base) : ""}
 <footer class="site-footer"><div class="container">
   <div class="foot-top">
     <nav class="foot-policy"><a href="/privacy" class="strong">개인정보처리방침</a><span class="sep"></span><a href="/terms">이용약관</a>${assoc ? `<span class="sep"></span><a href="${base}/contact">문의하기</a>` : ""}</nav>
@@ -82,6 +83,22 @@ ${assoc ? `<link rel="alternate" type="application/rss+xml" title="${brand} 공�
 </div></footer>
 <script src="${assetUrl("/js/app.js")}" defer></script>${scripts}
 </body></html>`;
+}
+
+// 관리자·점주가 일하는 화면인가. 이 프로젝트의 콘솔 화면은 예외 없이 <section class="dash"> 로 시작한다.
+// 손님용 고정 바를 업무 화면에 띄우면 표를 가리는 방해물일 뿐이라, 화면 종류로 갈라 준다.
+// (페이지마다 플래그를 넘기는 방식은 새 콘솔 화면을 만들 때 빠뜨리기 쉬워 쓰지 않는다.)
+const isConsole = (body) => /<section class="dash"/.test(String(body));
+
+// 프랜차이즈 고정 하단 바 — 스크롤 어디에 있든 전화·신청이 한 번에 닿는다.
+// 랜딩뿐 아니라 매장 안내·공지 같은 하위 페이지에도 붙인다: 거기서 마음먹은 사람이
+// 갈 곳이 없으면 그대로 나간다. 신청 폼은 랜딩에만 있으므로 늘 랜딩의 #apply 로 보낸다.
+function stickyBar(assoc, base) {
+  const tel = String(assoc.phone || "").replace(/[^0-9+\-]/g, "");
+  return `<div class="fr-sticky">
+    ${tel ? `<a class="fr-sticky-tel" href="tel:${esc(tel)}"><span>가맹 문의</span><strong>${esc(assoc.phone)}</strong></a>` : ""}
+    <a class="fr-sticky-cta" href="${base}/#apply">가맹 상담 신청</a>
+  </div>`;
 }
 
 // 독립 제품 상단 메뉴 — 상인회 메뉴(점포·지도·게시판)는 한 줄도 들어가지 않는다.

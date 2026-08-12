@@ -23,6 +23,9 @@ const TABLES = [
   "doc_fields", "doc_field_values", "doc_templates", "doc_events", "external_signers",
   "notify_wallet", "credit_ledger", "message_log", "chain_anchor", "api_keys",
   "notifications", "applications", "audit_log", "settings",
+  // 프랜차이즈 — 상담 신청(leads)은 이 제품에서 가장 잃으면 안 되는 자산이다.
+  // 랜딩 구성·사본·사진 목록·방문 통계까지 있어야 사고 후에 화면과 성과를 함께 되살릴 수 있다.
+  "leads", "landing_variants", "landing_views", "landing_assets",
 ];
 
 async function aesKey(secret) {
@@ -210,8 +213,25 @@ export async function runDaily(env) {
   const reminders = await runSignReminders(env).catch((e) => ({ error: String(e) }));
   const anchor = await runChainAnchor(env).catch((e) => ({ error: String(e) }));
   const hooks = await runWebhooks(env).catch((e) => ({ error: String(e) }));
-  console.log("daily job", JSON.stringify({ reminders, anchor, hooks }));
-  return { reminders, anchor, hooks };
+  const leads = await runLeadPurge(env).catch((e) => ({ error: String(e) }));
+  console.log("daily job", JSON.stringify({ reminders, anchor, hooks, leads }));
+  return { reminders, anchor, hooks, leads };
+}
+
+// 보관 기간이 지난 상담 신청 파기.
+// "상담이 끝나면 지체 없이 삭제한다"고 처리방침에 써 놓고 사람 손에만 맡기면 실제로는 영원히 남는다.
+// 처리가 끝난 건(계약·보류)만 대상이며, 진행 중인 건은 건드리지 않는다.
+export async function runLeadPurge(env) {
+  const db = env.DB;
+  const assocs = await D.listAllAssociations(db);
+  let deleted = 0;
+  for (const a of assocs) {
+    if (a.kind !== "franchise") continue;
+    const days = parseInt((await D.getSetting(db, `lead_retention:${a.id}`)) || String(D.LEAD_RETENTION_DEFAULT), 10);
+    if (!(days > 0)) continue;
+    deleted += await D.purgeOldLeads(db, a.id, days);
+  }
+  return { deleted };
 }
 
 export async function runWeekly(env) {

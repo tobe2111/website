@@ -83,14 +83,65 @@ export const listApplicationNotes = (db) =>
     WHERE a.status='pending' ORDER BY n.created_at DESC, n.id DESC`);
 export const saveHomeLayout = (db, id, json) => run(db, "UPDATE associations SET home_layout=? WHERE id=?", json, id);
 export const saveLandingLayout = (db, id, json) => run(db, "UPDATE associations SET landing_layout=? WHERE id=?", json, id);
-export const resetLandingLayout = (db, id) => run(db, "UPDATE associations SET landing_layout=NULL WHERE id=?", id);
+export const resetLandingLayout = (db, id) => run(db, "UPDATE associations SET landing_layout=NULL, landing_draft=NULL WHERE id=?", id);
+// 초안: 편집기가 저장하는 자리. 발행하면 초안이 발행본으로 옮겨 가고 초안은 비워진다.
+export const saveLandingDraft = (db, id, json) => run(db, "UPDATE associations SET landing_draft=? WHERE id=?", json, id);
+export const publishLandingDraft = (db, id) =>
+  run(db, "UPDATE associations SET landing_layout=COALESCE(landing_draft, landing_layout), landing_draft=NULL WHERE id=?", id);
+export const discardLandingDraft = (db, id) => run(db, "UPDATE associations SET landing_draft=NULL WHERE id=?", id);
+
+// ----- 캠페인별 랜딩 사본 -----
+export const listLandingVariants = (db, aid) =>
+  all(db, "SELECT * FROM landing_variants WHERE association_id=? ORDER BY created_at", aid);
+export const getLandingVariant = (db, aid, slug) =>
+  first(db, "SELECT * FROM landing_variants WHERE association_id=? AND slug=?", aid, slug);
+export async function createLandingVariant(db, { associationId, slug, name, layout }) {
+  await run(db, "INSERT INTO landing_variants (association_id, slug, name, layout) VALUES (?,?,?,?)",
+    associationId, slug, name || slug, layout || null);
+  return getLandingVariant(db, associationId, slug);
+}
+export const saveLandingVariantDraft = (db, aid, slug, json) =>
+  run(db, "UPDATE landing_variants SET draft=? WHERE association_id=? AND slug=?", json, aid, slug);
+export const publishLandingVariant = (db, aid, slug) =>
+  run(db, "UPDATE landing_variants SET layout=COALESCE(draft, layout), draft=NULL WHERE association_id=? AND slug=?", aid, slug);
+export const discardLandingVariantDraft = (db, aid, slug) =>
+  run(db, "UPDATE landing_variants SET draft=NULL WHERE association_id=? AND slug=?", aid, slug);
+export const deleteLandingVariant = (db, aid, slug) =>
+  run(db, "DELETE FROM landing_variants WHERE association_id=? AND slug=?", aid, slug);
+
+// ----- 랜딩 방문 수 (일자·사본별) -----
+// 신청 수만으로는 "많이 왔는데 안 남긴 건지, 애초에 안 온 건지"를 구분할 수 없다.
+export const bumpLandingView = (db, aid, variant = "") =>
+  run(db, `INSERT INTO landing_views (association_id, variant, day, views) VALUES (?,?,?,1)
+    ON CONFLICT(association_id, variant, day) DO UPDATE SET views = views + 1`, aid, variant, kstToday());
+export const landingViewsSince = async (db, aid, days = 30) =>
+  (await first(db, `SELECT COALESCE(SUM(views),0) AS n FROM landing_views WHERE association_id=? AND day >= ?`,
+    aid, kstDaysAgo(days))).n;
+export const landingViewsByVariant = (db, aid, days = 30) =>
+  all(db, `SELECT variant, COALESCE(SUM(views),0) AS n FROM landing_views WHERE association_id=? AND day >= ?
+    GROUP BY variant`, aid, kstDaysAgo(days));
+
+// ----- 랜딩 사진 보관함 -----
+export async function addLandingAsset(db, { associationId, filename, originalName = "", size = 0 }) {
+  await run(db, "INSERT INTO landing_assets (association_id, filename, original_name, size) VALUES (?,?,?,?)",
+    associationId, filename, originalName, size);
+  return first(db, "SELECT * FROM landing_assets WHERE id=?", await lastId(db));
+}
+export const listLandingAssets = (db, aid, limit = 60) =>
+  all(db, "SELECT * FROM landing_assets WHERE association_id=? ORDER BY created_at DESC, id DESC LIMIT ?", aid, limit);
+export const getLandingAsset = (db, id, aid) =>
+  first(db, "SELECT * FROM landing_assets WHERE id=? AND association_id=?", id, aid);
+export const deleteLandingAsset = (db, id, aid) =>
+  run(db, "DELETE FROM landing_assets WHERE id=? AND association_id=?", id, aid);
 
 // ----- 가맹 상담 신청 (프랜차이즈 랜딩 DB) -----
 export const LEAD_STATUSES = ["new", "contacted", "visit", "contract", "drop"];
 export const LEAD_STATUS_LABEL = { new: "신규", contacted: "연락 완료", visit: "상담·방문", contract: "계약", drop: "보류·종료" };
-export async function createLead(db, { associationId, name, phone = "", email = "", region = "", budget = "", funnel = "", message = "", agreeMarketing = 0, source = "landing" }) {
-  await run(db, `INSERT INTO leads (association_id, name, phone, email, region, budget, funnel, message, agree_marketing, source)
-    VALUES (?,?,?,?,?,?,?,?,?,?)`, associationId, name, phone, email, region, budget, funnel, message, agreeMarketing ? 1 : 0, source);
+export async function createLead(db, { associationId, name, phone = "", email = "", region = "", budget = "", funnel = "", message = "", agreeMarketing = 0, source = "landing", utmSource = "", utmMedium = "", utmCampaign = "", referrer = "", variant = "" }) {
+  await run(db, `INSERT INTO leads (association_id, name, phone, email, region, budget, funnel, message, agree_marketing, source,
+    utm_source, utm_medium, utm_campaign, referrer, variant) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    associationId, name, phone, email, region, budget, funnel, message, agreeMarketing ? 1 : 0, source,
+    utmSource, utmMedium, utmCampaign, referrer, variant);
   return first(db, "SELECT * FROM leads WHERE id=?", await lastId(db));
 }
 export const getLead = (db, id, aid) => first(db, "SELECT * FROM leads WHERE id=? AND association_id=?", id, aid);
@@ -126,6 +177,31 @@ export async function leadStats(db, aid) {
 export const leadFunnelStats = (db, aid) =>
   all(db, `SELECT CASE WHEN funnel='' THEN '미기재' ELSE funnel END AS funnel, COUNT(*) AS n
     FROM leads WHERE association_id=? GROUP BY 1 ORDER BY n DESC`, aid);
+// 광고 출처별 집계 — 신청자 자기신고(funnel)와 달리 링크에 붙여 온 값이라 거짓말을 하지 않는다
+export const leadUtmStats = (db, aid, days = 30) =>
+  all(db, `SELECT CASE WHEN utm_source='' THEN '직접·기타' ELSE utm_source END AS source,
+      CASE WHEN utm_campaign='' THEN '' ELSE utm_campaign END AS campaign, COUNT(*) AS n
+    FROM leads WHERE association_id=? AND created_at > datetime('now', ?)
+    GROUP BY 1,2 ORDER BY n DESC`, aid, `-${Math.max(1, days | 0)} days`);
+// 사본(캠페인)별 신청 수 — 방문 수와 짝지어 전환율을 낸다
+export const leadCountsByVariant = (db, aid, days = 30) =>
+  all(db, `SELECT variant, COUNT(*) AS n FROM leads WHERE association_id=? AND created_at > datetime('now', ?)
+    GROUP BY variant`, aid, `-${Math.max(1, days | 0)} days`);
+export const countLeadsSince = async (db, aid, days = 30) =>
+  (await first(db, "SELECT COUNT(*) AS n FROM leads WHERE association_id=? AND created_at > datetime('now', ?)",
+    aid, `-${Math.max(1, days | 0)} days`)).n;
+
+// 처리 완료된 상담 건의 기본 보관 기간(일). 조직별 설정이 없으면 이 값이 쓰인다.
+export const LEAD_RETENTION_DEFAULT = 365;
+
+// 보관 기간이 지난 상담 건 파기. "상담이 끝나면 지체 없이 삭제한다"고 방침에 써 놓고
+// 사람 손에만 맡기면 실제로는 영원히 남는다 — 매일 크론이 대신 지운다.
+// 처리가 끝난 건(계약·보류)만 대상으로 하고, 진행 중인 건은 건드리지 않는다.
+export const purgeOldLeads = async (db, aid, days) => {
+  const r = await run(db, `DELETE FROM leads WHERE association_id=? AND status IN ('contract','drop')
+    AND COALESCE(NULLIF(updated_at,''), created_at) < datetime('now', ?)`, aid, `-${Math.max(1, days | 0)} days`);
+  return (r && r.meta && r.meta.changes) || 0;
+};
 
 // ----- Settings (자동 생성 키·설정 저장) -----
 export const getSetting = async (db, key) => { const r = await first(db, "SELECT value FROM settings WHERE key=?", key); return r ? r.value : null; };
@@ -334,6 +410,7 @@ export const deleteUpdate = (db, id) => run(db, "DELETE FROM updates WHERE id=?"
 
 // ----- 오늘 임시휴무 (KST 날짜 저장 — 날짜가 지나면 자동 무효) -----
 export const kstToday = () => new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+export const kstDaysAgo = (days) => new Date(Date.now() + 9 * 3600 * 1000 - Math.max(0, days) * 86400000).toISOString().slice(0, 10);
 export const setDayOff = (db, businessId, date) => run(db, "UPDATE businesses SET day_off_date=? WHERE id=?", date || "", businessId);
 export const isDayOff = (b) => !!b && b.day_off_date === kstToday();
 

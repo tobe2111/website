@@ -21,6 +21,8 @@ CREATE TABLE IF NOT EXISTS associations (
   home_layout TEXT,
   landing_layout TEXT,                        -- 프랜차이즈 랜딩페이지 구성(JSON). home_layout 과 따로 둔다 —
                                               -- 유형을 바꿔 가며 써도 서로의 편집 내용이 지워지지 않아야 한다.
+  landing_draft  TEXT,                        -- 편집 중인 초안. 발행 전까지 손님에게는 보이지 않는다
+                                              -- (저장이 곧 발행이면 문구를 고치는 동안 공사판을 보여주게 된다).
   custom_domain TEXT NOT NULL DEFAULT '',
   map_client_id TEXT NOT NULL DEFAULT '',     -- 상인회별 네이버 지도 키 (비우면 플랫폼 공용 키)
   naver_verification TEXT NOT NULL DEFAULT '',  -- 네이버 서치어드바이저 소유 확인 코드
@@ -567,15 +569,55 @@ CREATE TABLE IF NOT EXISTS leads (
   memo            TEXT NOT NULL DEFAULT '',    -- 상담 기록 (관리자만)
   agree_marketing INTEGER NOT NULL DEFAULT 0,
   source          TEXT NOT NULL DEFAULT 'landing',
+  -- 광고 출처. 신청자 자기신고(funnel)만으로는 절반이 '기타'로 와서 예산을 감으로 쓰게 된다.
+  utm_source      TEXT NOT NULL DEFAULT '',
+  utm_medium      TEXT NOT NULL DEFAULT '',
+  utm_campaign    TEXT NOT NULL DEFAULT '',
+  referrer        TEXT NOT NULL DEFAULT '',
+  variant         TEXT NOT NULL DEFAULT '',    -- 어느 랜딩(캠페인 사본)에서 왔는지. '' = 기본 랜딩
   created_at      TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at      TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_lead_assoc ON leads(association_id, created_at);
+
+-- 캠페인별 랜딩 사본. 인스타용·검색광고용 문구를 따로 두고 전환율을 비교한다.
+-- 기본 랜딩은 associations.landing_layout 에 있고, 여기에는 사본만 쌓인다.
+CREATE TABLE IF NOT EXISTS landing_variants (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
+  slug           TEXT NOT NULL,               -- /l/:slug
+  name           TEXT NOT NULL DEFAULT '',
+  layout         TEXT,                        -- 발행본
+  draft          TEXT,                        -- 편집 중 초안
+  created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (association_id, slug)
+);
+
+-- 랜딩 방문 수 (일자·사본별). 신청 수만 알면 '많이 왔는데 안 남긴 건지'를 구분할 수 없다.
+CREATE TABLE IF NOT EXISTS landing_views (
+  association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
+  variant        TEXT NOT NULL DEFAULT '',
+  day            TEXT NOT NULL,               -- KST 기준 YYYY-MM-DD
+  views          INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (association_id, variant, day)
+);
+
+-- 랜딩에 쓰는 사진. 관리자가 올린 뒤 주소를 골라 섹션에 넣는다
+-- (media 표는 점포에 묶여 있어 본사 브랜드 사진을 담을 자리가 없다).
+CREATE TABLE IF NOT EXISTS landing_assets (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
+  filename       TEXT NOT NULL,               -- R2 키
+  original_name  TEXT NOT NULL DEFAULT '',
+  size           INTEGER NOT NULL DEFAULT 0,
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_landing_asset_assoc ON landing_assets(association_id, created_at);
 `;
 
 // 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
 // 마이그레이션 세대 — migrateColumns 에 단계를 추가할 때마다 +1
-export const SCHEMA_VERSION = "33";
+export const SCHEMA_VERSION = "34";
 
 export async function ensureSchema(db) {
   const has = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='associations'").first();
@@ -861,6 +903,31 @@ async function migrateColumns(db) {
     agree_marketing INTEGER NOT NULL DEFAULT 0, source TEXT NOT NULL DEFAULT 'landing',
     created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT '')`).run();
   await db.prepare("CREATE INDEX IF NOT EXISTS idx_lead_assoc ON leads(association_id, created_at)").run();
+
+  // v34: 광고 성과 계측(UTM·방문수) · 캠페인 사본 · 초안 발행 · 랜딩 사진 보관함
+  if (acol.length && !acol.some((c) => c.name === "landing_draft")) {
+    await db.prepare("ALTER TABLE associations ADD COLUMN landing_draft TEXT").run();
+  }
+  const lcol = (await db.prepare("PRAGMA table_info(leads)").all()).results || [];
+  if (lcol.length && !lcol.some((c) => c.name === "utm_source")) {
+    for (const c of ["utm_source", "utm_medium", "utm_campaign", "referrer", "variant"])
+      await db.prepare(`ALTER TABLE leads ADD COLUMN ${c} TEXT NOT NULL DEFAULT ''`).run();
+  }
+  await db.prepare(`CREATE TABLE IF NOT EXISTS landing_variants (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
+    slug TEXT NOT NULL, name TEXT NOT NULL DEFAULT '', layout TEXT, draft TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE (association_id, slug))`).run();
+  await db.prepare(`CREATE TABLE IF NOT EXISTS landing_views (
+    association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
+    variant TEXT NOT NULL DEFAULT '', day TEXT NOT NULL, views INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (association_id, variant, day))`).run();
+  await db.prepare(`CREATE TABLE IF NOT EXISTS landing_assets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
+    filename TEXT NOT NULL, original_name TEXT NOT NULL DEFAULT '', size INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')))`).run();
+  await db.prepare("CREATE INDEX IF NOT EXISTS idx_landing_asset_assoc ON landing_assets(association_id, created_at)").run();
 
   await romanizeSlugs(db);
 }

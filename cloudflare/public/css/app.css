@@ -1651,3 +1651,18 @@ body:has(.fr-sticky){padding-bottom:68px}
   border-radius:var(--r-md);font-size:.9rem}
 .funnel-list li b{color:var(--brand);font-weight:800}
 .lines-input{font-family:var(--mono);font-size:.82rem;line-height:1.7;white-space:pre}
+
+/* 랜딩 편집기 — 사진 보관함 · 이미지 칸 · 초안 미리보기 */
+.asset-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-top:14px}
+.asset-card{background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--r-md);padding:8px;
+  display:flex;flex-direction:column;gap:6px}
+.asset-card img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:var(--r-sm);background:var(--surface-2)}
+.asset-url{font-size:.72rem;font-family:var(--mono);padding:4px 6px;border:1px solid var(--line-soft);
+  border-radius:var(--r-sm);background:var(--surface-2);width:100%}
+.asset-grid li.empty{grid-column:1/-1}
+.img-field{display:grid;gap:6px;padding:10px;border:1px dashed var(--line);border-radius:var(--r-md);background:var(--surface-2)}
+.img-field-preview img{max-height:110px;width:auto;border-radius:var(--r-sm)}
+.draft-mark{color:var(--wait-fg);background:var(--wait-bg);padding:1px 8px;border-radius:var(--r-pill);font-size:.82rem}
+.preview-bar{position:sticky;top:var(--header-h);z-index:50;background:var(--wait-bg);color:var(--wait-fg);
+  border-bottom:1px solid var(--wait);padding:10px 20px;text-align:center;font-size:.9rem;font-weight:700}
+.preview-bar a{margin-left:10px;text-decoration:underline}
