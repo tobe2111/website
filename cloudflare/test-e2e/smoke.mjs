@@ -63,6 +63,12 @@ async function grab(p, file, useCookie) {
   writeFileSync(path.join(DIR, file), h);
 }
 await grab("/t/seocho", "home.html");
+// 모집형 랜딩 — 상담 폼의 임시 보관 동작을 실제 브라우저에서 본다
+{
+  await D.createAssociation(env.DB, { slug: "dapong", name: "다뽕고", kind: "franchise" });
+  await grab("/t/dapong", "landing.html");   // 발행 전에도 기본 구성이 그대로 나온다
+  await grab("/t/dapong?err=1&msg=" + encodeURIComponent("개인정보 수집·이용에 동의해 주세요."), "landing-err.html");
+}
 await grab("/t/seocho/map", "map.html");
 await grab("/login", "login.html");
 await grab("/t/seocho/dashboard", "dashboard.html", true);
@@ -255,6 +261,44 @@ const ok = (cond, name) => { if (cond) { pass++; console.log("  ✓", name); } e
   const vals = JSON.parse(payload.fields);
   ok(Object.keys(vals).length === 3, "채운 값 3개가 전송 데이터에 담김");
   ok(payload.sig.startsWith("data:image/png"), "서명 필드 그림이 대표 서명으로 전달됨");
+  await p.close();
+}
+
+// N) 상담 폼 임시 보관 — 검증에 걸려 되돌아와도 쓰던 값이 살아 있어야 한다.
+//    긴 문의 내용을 다시 치게 만들면 가장 진지한 신청자부터 나간다.
+{
+  const p = await browser.newPage();
+  await p.goto(`http://localhost:${PORT}/landing.html`);
+  await p.fill('[name="name"]', "김창업");
+  await p.fill('[name="phone"]', "010-1234-5678");
+  await p.fill('[name="region"]', "수원 영통");
+  await p.fill('[name="message"]', "상권 분석을 먼저 받아보고 싶습니다. 평일 오후에 통화 가능합니다.");
+  await p.check('[name="agree_marketing"]');
+  // 서버로 실제 전송하지는 않고, 제출 이벤트만 일으켜 보관 동작을 확인한다
+  await p.evaluate(() => document.getElementById("leadForm").dispatchEvent(new Event("submit", { cancelable: true })));
+  const stashed = await p.evaluate(() => {
+    const k = Object.keys(sessionStorage).find((x) => x.startsWith("draft:"));
+    return k ? JSON.parse(sessionStorage.getItem(k)) : null;
+  });
+  ok(stashed && stashed.name === "김창업" && stashed.message.includes("상권 분석"), "상담 폼: 제출 시 입력값 임시 보관");
+  ok(stashed && !("agree_marketing" in stashed), "동의 체크는 보관하지 않음 (본인이 다시 체크해야 동의다)");
+  ok(stashed && !("_csrf" in stashed), "CSRF 토큰은 보관하지 않음");
+
+  // 검증 실패로 되돌아온 화면(err=1) — 값이 복원되어야 한다
+  await p.goto(`http://localhost:${PORT}/landing-err.html?err=1&msg=x`);
+  const restored = await p.evaluate(() => ({
+    name: document.querySelector('[name="name"]').value,
+    message: document.querySelector('[name="message"]').value,
+    agree: document.querySelector('[name="agree"]').checked,
+  }));
+  ok(restored.name === "김창업", "되돌아온 화면에서 성함 복원");
+  ok(restored.message.includes("상권 분석"), "긴 문의 내용도 복원");
+  ok(restored.agree === false, "개인정보 동의는 자동으로 체크되지 않음");
+
+  // 접수 성공(err 없음)이면 보관분을 지운다 — 남겨 둘 이유가 없다
+  await p.goto(`http://localhost:${PORT}/landing.html?msg=${encodeURIComponent("접수되었습니다")}`);
+  const cleared = await p.evaluate(() => Object.keys(sessionStorage).filter((x) => x.startsWith("draft:")).length === 0);
+  ok(cleared, "접수되면 보관분 삭제 (개인정보를 남겨 두지 않는다)");
   await p.close();
 }
 

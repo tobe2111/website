@@ -381,7 +381,7 @@ function leadSection(s, deps) {
   return `<section class="section fr-apply" id="apply"><div class="container narrow">
     ${sectionHead(s.title || "가맹 상담 신청", s.lead, "center")}
     ${deps.flash || ""}
-    <form method="post" action="${base}/lead" class="fr-form stack-form" id="leadForm">
+    <form method="post" action="${base}/lead" class="fr-form stack-form" id="leadForm" data-draft>
       ${hidden("utm_source", utm.source)}${hidden("utm_medium", utm.medium)}${hidden("utm_campaign", utm.campaign)}
       ${hidden("referrer", "")}<input type="hidden" name="variant" value="${esc(deps.variant || "")}" />
       <div class="form-two">

@@ -147,3 +147,44 @@ document.addEventListener("click", (e) => {
     navigator.sendBeacon(`${d.base || ""}/track/call${v ? `?v=${encodeURIComponent(v)}` : ""}`, fd);
   } catch { /* 집계 실패가 전화를 막아서는 안 된다 */ }
 }, { capture: true });
+
+// 상담 폼 임시 보관.
+//
+// 검증에 걸리면(동의 미체크·연락처 오타·봇 방지 실패) 서버가 redirect 로 돌려보내는데,
+// 그때 채워 둔 값이 전부 사라진다. 문의 내용을 길게 쓴 사람일수록 손해가 크고,
+// 그런 사람이 가장 진지한 신청자다. 다시 치게 만들면 그냥 나간다.
+//
+// 값은 브라우저 밖으로 내보내지 않는다. URL 로 되돌리면 이름·전화번호가 서버 로그와
+// 브라우저 기록에 남는다 — 개인정보를 주소창에 실어 나르는 셈이라 하면 안 된다.
+(() => {
+  const form = document.querySelector("form[data-draft]");
+  if (!form || !window.sessionStorage) return;
+  const KEY = "draft:" + form.getAttribute("action");
+  // 동의 체크는 복원하지 않는다. 본인이 직접 체크해야 동의다.
+  // 봇 방지 토큰·허니팟·CSRF 도 값이 아니라 장치라 건드리지 않는다.
+  const skip = new Set(["_csrf", "cf-turnstile-response", "website", "agree", "agree_marketing"]);
+  const fields = () => [...form.elements].filter((el) => el.name && !skip.has(el.name) && el.type !== "checkbox" && el.type !== "hidden");
+
+  const params = new URLSearchParams(location.search);
+  if (params.get("msg") && !params.get("err")) {
+    sessionStorage.removeItem(KEY);                 // 접수됐으면 남겨 둘 이유가 없다
+  } else if (params.get("err")) {
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(KEY) || "{}");
+      let restored = 0;
+      for (const el of fields()) if (saved[el.name] != null && !el.value) { el.value = saved[el.name]; restored++; }
+      if (restored) {
+        const first = form.querySelector('[name="agree"]') || form;
+        first.focus?.({ preventScroll: true });
+      }
+    } catch { /* 복원 실패가 신청을 막아서는 안 된다 */ }
+  }
+
+  form.addEventListener("submit", () => {
+    try {
+      const out = {};
+      for (const el of fields()) if (el.value) out[el.name] = el.value;
+      sessionStorage.setItem(KEY, JSON.stringify(out));
+    } catch { /* 저장 실패는 조용히 넘긴다 */ }
+  });
+})();
