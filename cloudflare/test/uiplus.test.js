@@ -156,3 +156,44 @@ test("기본 색 토큰이 WCAG AA 대비를 만족한다", async () => {
   assert.ok(render.includes(brand), `render.js 폴백 색이 CSS 기본값(${brand})과 다름`);
   assert.ok(schema.includes(`DEFAULT '${brand}'`), `스키마 기본 brand_color 가 ${brand} 와 다름`);
 });
+
+// 사파리(특히 iOS)에서 조용히 무너지는 조합들. WebKit 을 여기서 띄울 수 없으므로
+// '무너질 수 있는 작성 방식'이 코드에 들어오지 못하게 막는 쪽으로 검사한다.
+test("사파리 호환 — 최신 CSS 는 반드시 폴백을 먼저 선언한다", async () => {
+  const fs = await import("node:fs");
+  const css = fs.readFileSync(new URL("../public/css/app.css", import.meta.url), "utf8");
+  // color-mix 는 사파리 16.4+ 다. 그 앞줄에 같은 변수의 정적 값이 있어야 구형에서 살아난다.
+  const lines = css.split("\n");
+  const bad = [];
+  lines.forEach((ln, i) => {
+    const m = /^\s*(--[a-z0-9-]+)\s*:\s*color-mix\(/.exec(ln);
+    if (!m) return;
+    const before = lines.slice(Math.max(0, i - 1), i + 1).join("\n");
+    // 같은 줄 앞쪽 또는 바로 윗줄에 정적 폴백(#hex 또는 rgba)이 있어야 한다
+    if (!new RegExp(`${m[1]}\\s*:\\s*(#|rgba?\\()`).test(before)) bad.push(m[1]);
+  });
+  assert.deepEqual(bad, [], `color-mix 앞에 정적 폴백이 없는 변수: ${bad.join(", ")}`);
+
+  // 주소창 때문에 잘리는 100vh 는 쓰지 않는다 (iOS 에서 화면 아래가 먹힌다)
+  assert.ok(!/\b(height|min-height)\s*:\s*100vh/.test(css), "100vh 대신 dvh 나 다른 방식을 쓰세요");
+  // 손가락으로 그리는 캔버스는 touch-action:none 이 있어야 스크롤에 먹히지 않는다
+  for (const cls of ["sign-pad", "fd-pad"]) {
+    const rule = new RegExp(`\\.${cls}\\{[^}]*\\}`).exec(css);
+    assert.ok(rule && /touch-action\s*:\s*none/.test(rule[0]), `.${cls} 에 touch-action:none 이 필요합니다`);
+  }
+});
+
+test("사파리 호환 — 클라이언트 JS 에 구형 파서가 못 읽는 문법이 없다", async () => {
+  const fs = await import("node:fs");
+  const dir = new URL("../public/js/", import.meta.url);
+  for (const f of fs.readdirSync(dir)) {
+    if (!f.endsWith(".js")) continue;
+    const src = fs.readFileSync(new URL(f, dir), "utf8");
+    // 정규식 lookbehind 는 사파리 16.4 미만에서 '파일 전체'가 문법 오류로 죽는다 (기능 하나가 아니라)
+    assert.ok(!/\(\?<[=!]/.test(src), `${f}: 정규식 lookbehind 는 구형 사파리에서 파일 전체를 죽입니다`);
+    // 클립보드는 권한·HTTPS 제약이 있어 폴백이 필요하다
+    if (/navigator\.clipboard/.test(src))
+      assert.ok(/document\.execCommand/.test(src) && /prompt\(|createElement\("textarea"\)/.test(src),
+        `${f}: 클립보드가 거부됐을 때의 폴백이 없습니다 (HTTPS·권한 조건에서 조용히 실패합니다)`);
+  }
+});

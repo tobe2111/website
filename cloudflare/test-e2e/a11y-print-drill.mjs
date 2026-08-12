@@ -121,6 +121,7 @@ await page.emulateMedia({ media: null });
 console.log("\n── 접근성 ──");
 const CHECK = [
   ["전자계약 랜딩", "/esign"], ["가입", "/esign/signup"], ["로그인", "/login"],
+  ["모집형 랜딩", "/homepage"],
   ["문서 진위확인", "/verify"], ["서명 화면", `/esign/${token}`], ["확인서", `/certificate/${sig.verify_code}`],
 ];
 // 대비 계산 (WCAG) — 배경을 위로 거슬러 올라가 실제 색을 찾는다
