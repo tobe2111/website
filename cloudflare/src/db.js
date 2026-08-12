@@ -136,8 +136,24 @@ export const publishLandingVariant = (db, aid, slug) =>
   run(db, "UPDATE landing_variants SET layout=COALESCE(draft, layout), draft=NULL WHERE association_id=? AND slug=?", aid, slug);
 export const discardLandingVariantDraft = (db, aid, slug) =>
   run(db, "UPDATE landing_variants SET draft=NULL WHERE association_id=? AND slug=?", aid, slug);
-export const deleteLandingVariant = (db, aid, slug) =>
-  run(db, "DELETE FROM landing_variants WHERE association_id=? AND slug=?", aid, slug);
+// 사본을 지우면 그 방문·전화 기록은 '지워진 것' 칸으로 옮긴다.
+//
+// 그냥 두면: 같은 이름으로 사본을 다시 만들었을 때 옛 기록이 새 사본에 붙는다.
+//   "봄모집" 을 접었다가 다음 해 같은 이름으로 다시 열면 작년 숫자가 올해 성과로 보인다.
+// 지워 버리면: 조직 전체 전환율의 분모만 줄어든다. 그 사본으로 들어온 상담(leads)은
+//   기록으로 남아 있어서, 방문만 지우면 전환율이 실제보다 좋아 보인다.
+//
+// 그래서 지우지 않고 옮긴다. 사본 이름은 [a-z0-9-] 만 허용하므로 ':' 가 들어간 이름은
+// 손님이 만든 사본과 절대 부딪히지 않는다. 같은 이름을 여러 번 지우면 묘비 칸에서 합쳐진다.
+export const deleteLandingVariant = async (db, aid, slug) => {
+  await run(db, `INSERT INTO landing_views (association_id, variant, day, views, calls)
+      SELECT association_id, 'deleted:' || variant, day, views, calls
+      FROM landing_views WHERE association_id=? AND variant=?
+    ON CONFLICT(association_id, variant, day)
+      DO UPDATE SET views = views + excluded.views, calls = calls + excluded.calls`, aid, slug);
+  await run(db, "DELETE FROM landing_views WHERE association_id=? AND variant=?", aid, slug);
+  await run(db, "DELETE FROM landing_variants WHERE association_id=? AND slug=?", aid, slug);
+};
 
 // ----- 랜딩 방문 수 (일자·사본별) -----
 // 신청 수만으로는 "많이 왔는데 안 남긴 건지, 애초에 안 온 건지"를 구분할 수 없다.

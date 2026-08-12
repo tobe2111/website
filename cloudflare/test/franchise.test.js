@@ -630,3 +630,44 @@ test("히어로 사진은 미리 받는다 — 광고 유입은 첫 화면이 �
   assert.match(html, /rel="preload"[^>]*href="\/media\/javascript/);
   assert.doesNotMatch(html, /href="javascript:/);
 });
+
+test("사본을 지웠다가 같은 이름으로 다시 만들어도 옛 성과가 붙지 않는다", async () => {
+  const env = makeEnv();
+  const a = await seed(env);
+  const j = await login(env);
+  await post(env, j, "/t/dapong/admin/landing/variant", { name: "봄 모집", slug: "spring" }, "/t/dapong/admin/landing");
+
+  // 작년 봄: 방문 3 · 전화 1 · 신청 1
+  for (let i = 0; i < 3; i++) await D.bumpLandingView(env.DB, a.id, "spring");
+  await D.bumpLandingCall(env.DB, a.id, "spring");
+  await D.createLead(env.DB, { associationId: a.id, name: "김작년", phone: "010-1111-0000", variant: "spring" });
+  const before = await D.landingViewsSince(env.DB, a.id, 30);
+  assert.equal(before, 3);
+
+  await post(env, j, "/t/dapong/admin/landing/variant/spring/delete", {}, "/t/dapong/admin/landing");
+
+  // 조직 전체 방문은 그대로 — 실제로 있었던 트래픽이고, 그때 들어온 상담도 남아 있다.
+  // 방문만 지우면 분모가 줄어 전환율이 실제보다 좋아 보인다.
+  assert.equal(await D.landingViewsSince(env.DB, a.id, 30), 3, "지난 트래픽을 소급해 지우지 않는다");
+  assert.equal((await D.listLeads(env.DB, a.id)).length, 1, "그때 들어온 상담은 그대로 남는다");
+
+  // 올해 봄: 같은 이름으로 다시 만든다
+  await post(env, j, "/t/dapong/admin/landing/variant", { name: "봄 모집", slug: "spring" }, "/t/dapong/admin/landing");
+  const byV = await D.landingViewsByVariant(env.DB, a.id, 30);
+  const fresh = byV.find((r) => r.variant === "spring");
+  assert.equal(fresh, undefined, "새 사본은 0에서 시작한다 (작년 숫자가 올해 성과로 보이면 안 된다)");
+
+  await D.bumpLandingView(env.DB, a.id, "spring");
+  const now = (await D.landingViewsByVariant(env.DB, a.id, 30)).find((r) => r.variant === "spring");
+  assert.equal(now.n, 1);
+  assert.equal(now.calls, 0, "전화 기록도 따라오지 않는다");
+
+  // 묘비는 손님이 만들 수 없는 이름이라 실제 사본과 절대 부딪히지 않는다
+  const tomb = (await D.landingViewsByVariant(env.DB, a.id, 30)).find((r) => r.variant === "deleted:spring");
+  assert.equal(tomb.n, 3);
+  assert.equal(tomb.calls, 1);
+
+  // 관리자 화면의 랜딩별 성과표에는 묘비가 줄로 나타나지 않는다
+  const html = await (await get(env, j, "/t/dapong/admin/leads")).text();
+  assert.doesNotMatch(html, /deleted:spring/);
+});
