@@ -1688,3 +1688,4 @@ body:has(.fr-sticky){padding-bottom:68px}
 .lead-extra{margin:6px 0 0;display:grid;gap:2px}
 .lead-extra li{font-size:.8rem;color:var(--ink-soft)}
 .lead-extra li span{color:var(--muted);margin-right:4px}
+.thin-warn{color:var(--muted);font-weight:600;font-size:.72rem;white-space:nowrap}

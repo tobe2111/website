@@ -600,6 +600,7 @@ CREATE TABLE IF NOT EXISTS landing_views (
   variant        TEXT NOT NULL DEFAULT '',
   day            TEXT NOT NULL,               -- KST 기준 YYYY-MM-DD
   views          INTEGER NOT NULL DEFAULT 0,
+  calls          INTEGER NOT NULL DEFAULT 0,  -- 전화 버튼 클릭. 모바일에서는 이게 상담 폼만큼 큰 전환 경로다
   PRIMARY KEY (association_id, variant, day)
 );
 

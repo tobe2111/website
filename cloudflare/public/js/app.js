@@ -130,3 +130,20 @@ if ("serviceWorker" in navigator) {
     });
   }, 60);
 })();
+
+// 전화 클릭 집계 — 모바일 랜딩에서 통화 버튼은 상담 폼만큼 큰 전환 경로인데,
+// 링크를 눌러 앱이 뜨는 순간 페이지가 사라져 보통 집계에서 빠진다.
+// sendBeacon 은 페이지가 사라져도 전송을 보장하고, 실패해도 전화 연결에는 영향이 없다.
+document.addEventListener("click", (e) => {
+  const a = e.target.closest("[data-track-tel]");
+  if (!a || !navigator.sendBeacon) return;
+  try {
+    const d = document.body.dataset;
+    if (!d.csrf) return;                       // 집계는 못 해도 전화는 걸려야 한다
+    const fd = new FormData();
+    fd.append("_csrf", d.csrf);
+    const v = new URLSearchParams(location.search).get("v")
+      || (location.pathname.match(/\/l\/([^/?#]+)/) || [])[1] || "";
+    navigator.sendBeacon(`${d.base || ""}/track/call${v ? `?v=${encodeURIComponent(v)}` : ""}`, fd);
+  } catch { /* 집계 실패가 전화를 막아서는 안 된다 */ }
+}, { capture: true });

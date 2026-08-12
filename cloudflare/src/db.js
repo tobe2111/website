@@ -144,12 +144,21 @@ export const deleteLandingVariant = (db, aid, slug) =>
 export const bumpLandingView = (db, aid, variant = "") =>
   run(db, `INSERT INTO landing_views (association_id, variant, day, views) VALUES (?,?,?,1)
     ON CONFLICT(association_id, variant, day) DO UPDATE SET views = views + 1`, aid, variant, kstToday());
+// 전화 클릭. 손님이 통화 버튼을 누른 순간을 센다 — 실제 통화 여부는 우리가 알 수 없고,
+// 알 필요도 없다. "이 랜딩이 전화를 걸게 만들었는가"만 보면 광고 판단에는 충분하다.
+export const bumpLandingCall = (db, aid, variant = "") =>
+  run(db, `INSERT INTO landing_views (association_id, variant, day, views, calls) VALUES (?,?,?,0,1)
+    ON CONFLICT(association_id, variant, day) DO UPDATE SET calls = calls + 1`, aid, variant, kstToday());
+export const landingCallsSince = async (db, aid, days = 30) =>
+  (await first(db, `SELECT COALESCE(SUM(calls),0) AS n FROM landing_views WHERE association_id=? AND day >= ?`,
+    aid, kstDaysAgo(days))).n;
+
 export const landingViewsSince = async (db, aid, days = 30) =>
   (await first(db, `SELECT COALESCE(SUM(views),0) AS n FROM landing_views WHERE association_id=? AND day >= ?`,
     aid, kstDaysAgo(days))).n;
 export const landingViewsByVariant = (db, aid, days = 30) =>
-  all(db, `SELECT variant, COALESCE(SUM(views),0) AS n FROM landing_views WHERE association_id=? AND day >= ?
-    GROUP BY variant`, aid, kstDaysAgo(days));
+  all(db, `SELECT variant, COALESCE(SUM(views),0) AS n, COALESCE(SUM(calls),0) AS calls
+    FROM landing_views WHERE association_id=? AND day >= ? GROUP BY variant`, aid, kstDaysAgo(days));
 
 // ----- 랜딩 사진 보관함 -----
 export async function addLandingAsset(db, { associationId, filename, originalName = "", size = 0 }) {

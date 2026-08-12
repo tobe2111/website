@@ -602,6 +602,7 @@ CREATE TABLE IF NOT EXISTS landing_views (
   variant        TEXT NOT NULL DEFAULT '',
   day            TEXT NOT NULL,               -- KST 기준 YYYY-MM-DD
   views          INTEGER NOT NULL DEFAULT 0,
+  calls          INTEGER NOT NULL DEFAULT 0,  -- 전화 버튼 클릭. 모바일에서는 이게 상담 폼만큼 큰 전환 경로다
   PRIMARY KEY (association_id, variant, day)
 );
 
@@ -621,7 +622,7 @@ CREATE INDEX IF NOT EXISTS idx_landing_asset_assoc ON landing_assets(association
 // 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
 // 마이그레이션 세대 — migrateColumns 에 단계를 추가할 때마다 +1
 // 36 = 두 갈래(트렁크 33 · 모집형 35)를 합친 세대. 양쪽 DB 모두 다시 한 번 마이그레이션을 타게 한다.
-export const SCHEMA_VERSION = "37";
+export const SCHEMA_VERSION = "38";
 
 export async function ensureSchema(db) {
   const has = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='associations'").first();
@@ -933,6 +934,11 @@ async function migrateColumns(db) {
     created_at TEXT NOT NULL DEFAULT (datetime('now')))`).run();
   await db.prepare("CREATE INDEX IF NOT EXISTS idx_landing_asset_assoc ON landing_assets(association_id, created_at)").run();
 
+  // v38: 전화 클릭 — 전환율에서 통째로 빠져 있던 경로
+  const vcol = (await db.prepare("PRAGMA table_info(landing_views)").all()).results || [];
+  if (vcol.length && !vcol.some((c) => c.name === "calls")) {
+    await db.prepare("ALTER TABLE landing_views ADD COLUMN calls INTEGER NOT NULL DEFAULT 0").run();
+  }
   // v37: 상담 폼의 업종별 추가 질문 답변
   if (lcol.length && !lcol.some((c) => c.name === "extra")) {
     await db.prepare("ALTER TABLE leads ADD COLUMN extra TEXT NOT NULL DEFAULT ''").run();

@@ -58,7 +58,7 @@ ${assoc ? `<link rel="alternate" type="application/rss+xml" title="${brand} 공�
 <link rel="apple-touch-icon" href="/img/icon-180.png" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" /></head>
-<body>
+<body${assoc && kindById(assoc.kind).usesLanding ? ` data-base="${esc(base)}" data-csrf="${esc(csrf || "")}"` : ""}>
 <a class="skip-link" href="#main">본문 바로가기</a>
 <header class="site-header" id="siteHeader">
   <div class="container header-inner">
@@ -98,7 +98,7 @@ function stickyBar(assoc, base) {
   const tel = String(assoc.phone || "").replace(/[^0-9+\-]/g, "");
   const T = termsOf(assoc.preset); // 업종에 따라 "가맹 상담" ↔ "입학 상담" ↔ "진료 상담"
   return `<div class="fr-sticky">
-    ${tel ? `<a class="fr-sticky-tel" href="tel:${esc(tel)}"><span>${esc(T.consult)} 문의</span><strong>${esc(assoc.phone)}</strong></a>` : ""}
+    ${tel ? `<a class="fr-sticky-tel" data-track-tel href="tel:${esc(tel)}"><span>${esc(T.consult)} 문의</span><strong>${esc(assoc.phone)}</strong></a>` : ""}
     <a class="fr-sticky-cta" href="${base}/#apply">${esc(T.consult)} 신청</a>
   </div>`;
 }

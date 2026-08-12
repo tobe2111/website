@@ -4,6 +4,7 @@ import { esc, cap, clip, openBadge, openNow, fmtBytes, kstStamp, kstDate, pretty
 import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG, ORIGIN, assetUrl } from "./render.js";
 import { verifyInviteToken, SALES_STAGES, otpRequired, selfSignupOn } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
 import { html, notFoundResponse, back, redirect } from "./http.js";
+import { countable } from "./traffic.js";
 import { galleryItem } from "./media-render.js";
 import { priceOf, costOf, jeonToWon, notifyEnabled, TEMPLATE_KEYS, TEMPLATES, billingMode, BILLING_MODES } from "./notify.js";
 import { providerLabel } from "./embed.js";
@@ -247,26 +248,6 @@ function layoutEditor(base, layoutArr, opts = {}) {
 // ================= 프랜차이즈 가맹점 모집 랜딩 =================
 // 방문자가 이 화면에서 할 일은 하나다 — 연락처를 남기는 것. 나머지 섹션은 그 결심을 돕는 근거다.
 
-// 방문으로 셀 조회인가.
-// ① 검색·SNS 크롤러는 손님이 아니다 — 세면 전환율의 분모만 부풀어 광고 판단이 틀어진다.
-// ② 새로고침 연타·스크립트 반복은 한 번으로 본다. 창을 짧게(1분) 잡은 이유가 있다 —
-//    국내 모바일은 CGNAT 라 IP 하나를 여러 사람이 쓴다. 길게 잡으면 서로 다른 방문자가
-//    한 명으로 합쳐져 분모가 줄고, 전환율이 실제보다 좋아 보인다(광고 판단이 틀어진다).
-const BOT_UA = /bot|crawler|spider|crawling|facebookexternalhit|slurp|bingpreview|headlesschrome|curl|wget|python-requests/i;
-const VIEW_DEDUPE_MS = 60 * 1000;
-const viewSeen = new Map();
-function countableVisit(ctx, variant) {
-  let ua = "";
-  try { ua = ctx.request.headers.get("user-agent") || ""; } catch {}
-  if (!ua || BOT_UA.test(ua)) return false;
-  const key = `${ctx.assoc.id}|${variant}|${ctx.ip}`;
-  const now = Date.now(), last = viewSeen.get(key);
-  if (last && now - last < VIEW_DEDUPE_MS) return false;
-  if (viewSeen.size > 10000) viewSeen.clear(); // 메모리 상한 — 정확도보다 안전이 먼저다
-  viewSeen.set(key, now);
-  return true;
-}
-
 // 광고 주소에 붙어 오는 값. 신청자 자기신고(유입 경로)와 달리 거짓말을 하지 않는다.
 const utmOf = (query) => ({
   source: cap(query.get("utm_source") || "", 60),
@@ -287,7 +268,7 @@ async function renderFranchisePage(ctx, { layoutJson, variant = "", preview = fa
   const covers = await D.coverImagesFor(db, items.map((b) => b.id));
   // 방문 수 — 신청 수만 알면 "많이 왔는데 안 남긴 건지"를 영원히 구분할 수 없다.
   // 미리보기는 관리자 자신의 조회라 세지 않는다.
-  if (countView && countableVisit(ctx, variant)) await D.bumpLandingView(db, assoc.id, variant).catch(() => {});
+  if (countView && countable(ctx, variant, "view")) await D.bumpLandingView(db, assoc.id, variant).catch(() => {});
   const heroImage = assoc.hero_image ? mediaUrl(assoc.hero_image) : "";
   const body = renderLanding(lay, {
     assoc, base, variant,
@@ -448,11 +429,12 @@ export async function adminLeads(ctx) {
   const { db, assoc, base, user, csrf, query } = ctx;
   const status = D.LEAD_STATUSES.includes(query.get("status")) ? query.get("status") : "";
   const page = Math.max(1, parseInt(query.get("page") || "1", 10) || 1);
-  const [stats, funnels, utms, views, byVariant, viewsByVariant, variants, since30] = await Promise.all([
+  const [stats, funnels, utms, views, calls, byVariant, viewsByVariant, variants, since30] = await Promise.all([
     D.leadStats(db, assoc.id),
     D.leadFunnelStats(db, assoc.id),
     D.leadUtmStats(db, assoc.id, 30),
     D.landingViewsSince(db, assoc.id, 30),
+    D.landingCallsSince(db, assoc.id, 30),
     D.leadCountsByVariant(db, assoc.id, 30),
     D.landingViewsByVariant(db, assoc.id, 30),
     D.listLandingVariants(db, assoc.id),
@@ -499,11 +481,14 @@ export async function adminLeads(ctx) {
   // 사본별 전환율 — 어느 문구가 실제로 신청을 만들었는지
   const leadByV = new Map(byVariant.map((r) => [r.variant, r.n]));
   const viewByV = new Map(viewsByVariant.map((r) => [r.variant, r.n]));
+  const callByV = new Map(viewsByVariant.map((r) => [r.variant, r.calls || 0]));
   const variantRows = [{ slug: "", name: "기본 랜딩" }, ...variants.map((v) => ({ slug: v.slug, name: v.name || v.slug }))]
     .map((v) => {
-      const n = leadByV.get(v.slug) || 0, w = viewByV.get(v.slug) || 0;
+      const n = leadByV.get(v.slug) || 0, w = viewByV.get(v.slug) || 0, c = callByV.get(v.slug) || 0;
+      const thin = w < 100; // 표본이 얇으면 전환율은 우연이다
       return `<tr><td>${esc(v.name)}${v.slug ? `<br /><small>/l/${esc(v.slug)}</small>` : ""}</td>
-        <td>${w.toLocaleString()}</td><td>${n.toLocaleString()}</td><td><b>${rate(n, w)}</b></td></tr>`;
+        <td>${w.toLocaleString()}</td><td>${n.toLocaleString()}</td><td>${c.toLocaleString()}</td>
+        <td><b>${rate(n + c, w)}</b>${thin ? ` <small class="thin-warn" title="방문 100회 미만입니다. 우연히 높거나 낮게 나올 수 있어 아직 비교하지 마세요.">표본 부족</small>` : ""}</td></tr>`;
     }).join("");
 
   const body = `<section class="dash"><div class="container">
@@ -516,8 +501,8 @@ export async function adminLeads(ctx) {
       <div class="stat-card"><span class="stat-num">${stats.total}</span><span class="stat-label">전체 신청</span></div>
       <div class="stat-card${stats.fresh ? " stat-alert" : ""}"><span class="stat-num">${stats.fresh}</span><span class="stat-label">미처리(신규)</span></div>
       <div class="stat-card"><span class="stat-num">${stats.today}</span><span class="stat-label">오늘</span></div>
-      <div class="stat-card left"><div class="stat-top"><span class="stat-label">30일 전환율</span></div><span class="stat-num">${rate(since30, views)}</span>
-        <div class="stat-delta mut">방문 ${views.toLocaleString()} · 신청 ${since30.toLocaleString()}</div></div>
+      <div class="stat-card left"><div class="stat-top"><span class="stat-label">30일 전환율</span></div><span class="stat-num">${rate(since30 + calls, views)}</span>
+        <div class="stat-delta mut">방문 ${views.toLocaleString()} · 신청 ${since30.toLocaleString()} · 전화 ${calls.toLocaleString()}</div></div>
       <div class="stat-card"><span class="stat-num">${stats.contract}</span><span class="stat-label">계약 성사</span></div>
     </div>
     <section class="panel"><div class="panel-head"><h2 class="panel-title">신청 목록 <span class="badge badge-muted">${leads.length}건</span></h2>
@@ -537,7 +522,9 @@ export async function adminLeads(ctx) {
         <ul class="funnel-list">${funnelRows}</ul></section>
     </div>
     <section class="panel"><h2 class="panel-title">랜딩별 성과 <small>(최근 30일)</small></h2>
-      <div class="table-scroll"><table class="admin-table"><thead><tr><th>랜딩</th><th>방문</th><th>신청</th><th>전환율</th></tr></thead>
+      <p class="panel-hint">전환율은 <b>신청 + 전화</b>를 방문으로 나눈 값입니다. 모바일에서는 폼을 채우기보다 그냥 거는 사람이 많아,
+        전화를 빼고 보면 실제보다 낮게 나옵니다. 방문 100회가 넘기 전에는 사본끼리 비교하지 마세요.</p>
+      <div class="table-scroll"><table class="admin-table"><thead><tr><th>랜딩</th><th>방문</th><th>신청</th><th>전화</th><th>전환율</th></tr></thead>
         <tbody>${variantRows}</tbody></table></div></section>
   </div></section>`;
   return html(layout({ title: "가맹 상담 DB", assoc, base, user, body, csrf }));

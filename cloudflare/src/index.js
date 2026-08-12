@@ -52,6 +52,7 @@ const GLOBAL = [
   ["GET", "/reset", pages.resetForm],
   ["POST", "/reset", api.resetPassword],
   ["GET", "/sitemap.xml", pages.sitemap],
+  ["POST", "/track/call", api.trackCall],
   ["GET", "/robots.txt", pages.robots],
   ["GET", "/verify", pages.verifyPage],
   ["GET", "/verify/:code", pages.verifyPage],

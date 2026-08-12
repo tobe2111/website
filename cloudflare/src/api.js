@@ -5,6 +5,7 @@ import { sendEmail, sendEmailFor, emailEnabled, mailShell, mailButton } from "./
 import { sessionTokenForUser, sessionCookie, clearSessionCookie } from "./auth.js";
 import { back, redirect } from "./http.js";
 import * as storage from "./storage.js";
+import { countable } from "./traffic.js";
 import { parseEmbed } from "./embed.js";
 import { cap, sniffImage, EMAIL_RE, MAX_IMAGE_BYTES, slugify, esc } from "./util.js";
 import { contentHash, sealRecord, newVerifyCode, SEAL_VER, fieldsHashOf } from "./esign.js";
@@ -2021,6 +2022,18 @@ export async function leadSubmit(ctx) {
     }).catch(() => {});
   }
   return at("상담 신청이 접수되었습니다. 남겨주신 연락처로 곧 연락드리겠습니다.");
+}
+
+// 전화 클릭 집계 (sendBeacon). 응답 본문이 필요 없으니 204 로 끝낸다.
+// 아무나 부를 수 있는 공개 주소라, 방문 집계와 같은 잣대로 크롤러·연타를 막는다 —
+// 막지 않으면 전화 클릭 수를 부풀려 광고 판단을 망칠 수 있다.
+export async function trackCall(ctx) {
+  const { db, assoc, query } = ctx;
+  if (!kindById(assoc.kind).usesLanding) return new Response(null, { status: 204 });
+  const variant = cap(query.get("v") || "", 60);
+  const known = variant && (await D.getLandingVariant(db, assoc.id, variant)) ? variant : "";
+  if (countable(ctx, known, "call")) await D.bumpLandingCall(db, assoc.id, known).catch(() => {});
+  return new Response(null, { status: 204 });
 }
 
 // 발행된 랜딩의 상담 폼 정의를 읽어, 거기 있는 질문의 답만 추려 담는다.

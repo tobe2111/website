@@ -573,3 +573,38 @@ test("업종별 추가 질문: 정의한 것만 받고, 선택형은 보기 밖 
   assert.match(csv, /희망 오픈 시기/);
   assert.match(csv, /3개월 내/);
 });
+
+test("전화 클릭도 전환이다 — 집계되고 전환율에 들어간다", async () => {
+  const env = makeEnv();
+  const a = await seed(env);
+  const j = jar();
+  await get(env, j, "/t/dapong");                    // 방문 1 + CSRF 씨앗
+  // 랜딩에 전화 버튼과 스크립트가 읽을 자리가 있어야 한다
+  const html = await (await get(env, j, "/t/dapong")).text();
+  assert.match(html, /data-track-tel/);
+  assert.match(html, /data-base="\/t\/dapong"/);
+
+  await post(env, j, "/t/dapong/track/call", {}, "/t/dapong");
+  const row = await env.DB.prepare("SELECT views, calls FROM landing_views WHERE association_id=?").bind(a.id).first();
+  assert.equal(row.calls, 1);
+
+  // 같은 사람이 연타해도 1분 안에는 한 번 (전화 클릭 수를 부풀리면 광고 판단이 틀어진다)
+  const ip = "203.0.113.77";
+  await post(env, j, "/t/dapong/track/call", {}, "/t/dapong", { "cf-connecting-ip": ip });
+  await post(env, j, "/t/dapong/track/call", {}, "/t/dapong", { "cf-connecting-ip": ip });
+  const after = await env.DB.prepare("SELECT calls FROM landing_views WHERE association_id=?").bind(a.id).first();
+  assert.equal(after.calls, 2, "연타는 한 번으로 센다");
+
+  // 관리자 화면: 전화가 전환율에 포함되고, 표본이 얇으면 그렇다고 말해 준다
+  const admin = await login(env);
+  const dash = await (await get(env, admin, "/t/dapong/admin/leads")).text();
+  assert.match(dash, /전화 2/);
+  assert.match(dash, /표본 부족/);
+
+  // 상인회에서는 집계하지 않는다 (랜딩이 없는 제품이다)
+  const env2 = makeEnv();
+  const b = await seed(env2, "merchant");
+  await post(env2, jar(), "/t/dapong/track/call", {}, "/login");
+  const none = await env2.DB.prepare("SELECT COUNT(*) AS n FROM landing_views WHERE association_id=?").bind(b.id).first();
+  assert.equal(none.n, 0);
+});
