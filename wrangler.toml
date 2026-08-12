@@ -1,8 +1,17 @@
 # Cloudflare Workers 설정 — 서초구 상인회 플랫폼 (무료 티어로 배포 가능)
+#
+# ⚠️ 이 파일이 `cloudflare/` 안이 아니라 저장소 최상단에 있는 이유:
+#    Cloudflare Workers Builds(깃허브 연동 자동 배포)는 대시보드에 설정된 '루트 디렉터리'에서
+#    `npx wrangler deploy` 를 돌린다. 설정이 최상단(/)이면 `cloudflare/` 안의 설정 파일을 찾지
+#    못해 빌드가 통째로 실패한다. 반대로 이 파일이 최상단에 있으면 wrangler 가 상위로 거슬러
+#    올라가며 설정을 찾기 때문에 `cloudflare/` 에서 실행해도 그대로 동작한다 —
+#    즉 어느 설정에서도 배포가 된다. 경로(main·assets)는 이 파일 위치 기준으로 해석된다.
+#    수동 배포는 어느 폴더에서 해도 됩니다:  wrangler deploy
+#
 # 배포 전:  wrangler d1 create seocho-db   /   wrangler r2 bucket create seocho-media
 # 그 뒤 아래 database_id 를 채우고:  wrangler deploy
 name = "website"
-main = "src/index.js"
+main = "cloudflare/src/index.js"
 compatibility_date = "2024-11-01"
 compatibility_flags = ["nodejs_compat"]
 
@@ -12,7 +21,7 @@ compatibility_flags = ["nodejs_compat"]
 binding = "CF_VERSION_METADATA"
 
 [assets]
-directory = "./public"
+directory = "./cloudflare/public"
 binding = "ASSETS"
 
 # 주간 정기 작업 — 매주 일요일 18:00 UTC(월요일 새벽 3시 KST):

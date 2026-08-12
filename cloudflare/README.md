@@ -65,8 +65,10 @@ node --experimental-sqlite scripts/preview-franchise.mjs public/__x.html editor 
 
 ## 구조
 ```
+(저장소 최상단)
+  wrangler.toml        # Workers/D1/R2/ASSETS 바인딩 — 최상단에 두어야 깃허브 자동 배포가
+                       #   빌드 루트 설정(/ 또는 cloudflare)과 무관하게 동작한다
 cloudflare/
-  wrangler.toml        # Workers/D1/R2/ASSETS 바인딩
   schema.sql           # D1 스키마
   src/
     index.js           # fetch 라우터 + 테넌트/인증/CSRF/보안헤더
