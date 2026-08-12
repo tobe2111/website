@@ -1,6 +1,6 @@
 // 공개/인증 페이지 핸들러 (async). ctx = { env, db, assoc, base, user, url, query, csrf, params }
 import * as D from "./db.js";
-import { esc, clip, openBadge, openNow, fmtBytes, kstStamp, kstDate, prettyPath } from "./util.js";
+import { esc, cap, clip, openBadge, openNow, fmtBytes, kstStamp, kstDate, prettyPath } from "./util.js";
 import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG, ORIGIN, assetUrl } from "./render.js";
 import { verifyInviteToken, SALES_STAGES, otpRequired, selfSignupOn } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
 import { html, notFoundResponse, back, redirect } from "./http.js";
@@ -15,6 +15,8 @@ import { resolveExtToken, makeExtToken, extSignUrl } from "./extsign.js";
 import { KEY_PREFIX } from "./apiv1.js";
 import { text } from "./http.js";
 import { parseLayout, renderHome, SECTION_CATALOG } from "./homeLayout.js";
+import { parseLandingLayout, renderLanding, LANDING_CATALOG, safeSrc } from "./franchise.js";
+import { KINDS, KIND_KEYS, PRESETS, PRESET_KEYS, kindOf, kindById, assocTerms } from "./kinds.js";
 import { turnstileWidget, turnstileScript } from "./turnstile.js";
 import { otpauthUri } from "./totp.js";
 import { PLANS, PLAN_KEYS } from "./plans.js";
@@ -147,8 +149,11 @@ export async function eventIcs(ctx) {
 
 export async function home(ctx) {
   const { db, assoc, base, user, csrf } = ctx;
-  // 전자계약 전용 조직은 상권 홈페이지가 아니라 '계약 창구'다 — 점포·지도 대신 서명 입구를 낸다.
-  if (assoc.kind === "esign") return esignHome(ctx);
+  // 어떤 홈을 그릴지는 제품 유형 레지스트리가 정한다 (kinds.js). 새 제품을 더해도 이 분기는 그대로다.
+  //   esign   = 계약 창구(점포·지도 대신 서명 입구), landing = 한 장짜리 모집 화면
+  const home = kindOf(assoc).home;
+  if (home === "esign") return esignHome(ctx);
+  if (home === "landing") return franchiseHome(ctx);
   const lay = parseLayout(assoc.home_layout, assoc.name);
   // 독립 쿼리는 병렬로 — D1 은 쿼리마다 네트워크 왕복이라 직렬 대기가 TTFB 로 직결됨
   const [{ items }, notices, events, stats, cats, names, recentUpdates] = await Promise.all([
@@ -198,17 +203,31 @@ export async function home(ctx) {
     scripts: names.length ? `<script src="${assetUrl("/js/suggest.js")}" defer></script>` : "" }));
 }
 
-function layoutEditor(base, layoutArr) {
+// 섹션 편집기 — 상인회 홈(SECTION_CATALOG)과 프랜차이즈 랜딩(LANDING_CATALOG)이 같은 편집기를 쓴다.
+// 카탈로그 정의만 보고 입력칸을 만들므로, 섹션을 늘려도 이 함수는 그대로다.
+function layoutEditor(base, layoutArr, opts = {}) {
+  const catalog = opts.catalog || SECTION_CATALOG;
+  const action = opts.action || `${base}/admin/layout`;
+  const resetAction = opts.resetAction || `${base}/admin/layout/reset`;
+  const submitLabel = opts.submitLabel || "홈페이지 구성 저장";
   const rows = layoutArr.map((sec, i) => {
-    const cat = SECTION_CATALOG[sec.type];
+    const cat = catalog[sec.type];
     const fields = cat.fields.map((f) => {
       const val = sec[f.key], name = `f_${i}_${f.key}`;
       if (f.type === "bool") return `<label class="check"><input type="checkbox" name="${name}" value="1"${val ? " checked" : ""} /> ${esc(f.label)}</label>`;
+      // lines: 한 줄에 한 항목, 칸은 | 로 나눈 반복 입력 (표 편집기 없이 목록을 다루는 가장 싼 방법)
+      if (f.type === "lines") return `<label class="mini-label">${esc(f.label)}<textarea name="${name}" rows="5" class="lines-input" spellcheck="false"${f.placeholder ? ` placeholder="${esc(f.placeholder)}"` : ""}>${esc(val || "")}</textarea></label>`;
       if (f.type === "textarea") return `<label class="mini-label">${esc(f.label)}<textarea name="${name}" rows="2">${esc(val || "")}</textarea></label>`;
       if (f.type === "select") {
         const cur = val || (f.options[0] && f.options[0][0]);
         return `<label class="mini-label">${esc(f.label)}<select name="${name}">${f.options.map(([ov, ol]) => `<option value="${esc(ov)}"${cur === ov ? " selected" : ""}>${esc(ol)}</option>`).join("")}</select></label>`;
       }
+      // image: 주소를 직접 넣어도 되고, 파일을 고르면 올린 뒤 그 주소로 채워 넣는다.
+      // "사진을 어디에 올려서 주소를 따오지?" 에서 막히는 것이 편집기의 가장 큰 마찰이었다.
+      if (f.type === "image") return `<div class="img-field"><label class="mini-label">${esc(f.label)}
+        <input type="text" name="${name}" value="${esc(val || "")}" placeholder="https://… 또는 아래에서 파일 선택" /></label>
+        <label class="mini-label">파일 올리기<input type="file" name="file_${i}_${f.key}" accept="image/*" /></label>
+        ${safeSrc(val) ? `<span class="img-field-preview"><img src="${esc(safeSrc(val))}" alt="" loading="lazy" /></span>` : ""}</div>`;
       return `<label class="mini-label">${esc(f.label)}<input type="text" name="${name}" value="${esc(val || "")}" /></label>`;
     }).join("");
     return `<div class="layout-row" data-index="${i}"><div class="layout-row-head">
@@ -217,13 +236,312 @@ function layoutEditor(base, layoutArr) {
       <span class="layout-move"><button type="button" class="move-btn" data-dir="up" aria-label="위로">▲</button><button type="button" class="move-btn" data-dir="down" aria-label="아래로">▼</button></span>
     </div><div class="layout-fields">${fields}</div></div>`;
   }).join("");
-  return `<form method="post" action="${base}/admin/layout" class="layout-editor" id="layoutEditor">
+  return `<form method="post" action="${action}" class="layout-editor" id="layoutEditor"${opts.upload ? ' enctype="multipart/form-data"' : ""}>
     <input type="hidden" name="order" id="layoutOrder" value="${layoutArr.map((_, i) => i).join(",")}" />
     <div id="layoutRows">${rows}</div>
-    <div class="layout-actions"><button type="submit" class="btn btn-primary btn-sm">홈페이지 구성 저장</button>
-      <button type="submit" formaction="${base}/admin/layout/reset" class="btn btn-ghost btn-sm" data-confirm="기본 구성으로 되돌릴까요?">기본 구성으로 초기화</button></div></form>`;
+    <div class="layout-actions"><button type="submit" class="btn btn-primary btn-sm">${esc(submitLabel)}</button>
+      ${opts.extra || ""}
+      <button type="submit" formaction="${resetAction}" class="btn btn-ghost btn-sm" data-confirm="기본 구성으로 되돌릴까요?">기본 구성으로 초기화</button></div></form>`;
 }
 
+// ================= 프랜차이즈 가맹점 모집 랜딩 =================
+// 방문자가 이 화면에서 할 일은 하나다 — 연락처를 남기는 것. 나머지 섹션은 그 결심을 돕는 근거다.
+
+// 방문으로 셀 조회인가.
+// ① 검색·SNS 크롤러는 손님이 아니다 — 세면 전환율의 분모만 부풀어 광고 판단이 틀어진다.
+// ② 새로고침 연타·스크립트 반복은 한 번으로 본다. 창을 짧게(1분) 잡은 이유가 있다 —
+//    국내 모바일은 CGNAT 라 IP 하나를 여러 사람이 쓴다. 길게 잡으면 서로 다른 방문자가
+//    한 명으로 합쳐져 분모가 줄고, 전환율이 실제보다 좋아 보인다(광고 판단이 틀어진다).
+const BOT_UA = /bot|crawler|spider|crawling|facebookexternalhit|slurp|bingpreview|headlesschrome|curl|wget|python-requests/i;
+const VIEW_DEDUPE_MS = 60 * 1000;
+const viewSeen = new Map();
+function countableVisit(ctx, variant) {
+  let ua = "";
+  try { ua = ctx.request.headers.get("user-agent") || ""; } catch {}
+  if (!ua || BOT_UA.test(ua)) return false;
+  const key = `${ctx.assoc.id}|${variant}|${ctx.ip}`;
+  const now = Date.now(), last = viewSeen.get(key);
+  if (last && now - last < VIEW_DEDUPE_MS) return false;
+  if (viewSeen.size > 10000) viewSeen.clear(); // 메모리 상한 — 정확도보다 안전이 먼저다
+  viewSeen.set(key, now);
+  return true;
+}
+
+// 광고 주소에 붙어 오는 값. 신청자 자기신고(유입 경로)와 달리 거짓말을 하지 않는다.
+const utmOf = (query) => ({
+  source: cap(query.get("utm_source") || "", 60),
+  medium: cap(query.get("utm_medium") || "", 60),
+  campaign: cap(query.get("utm_campaign") || "", 60),
+});
+
+// 랜딩 한 장을 그린다. 기본 랜딩과 캠페인 사본, 편집 미리보기가 모두 이 함수를 지난다.
+// layoutJson 이 지정되면 그것을, 아니면 조직의 발행본을 쓴다.
+async function renderFranchisePage(ctx, { layoutJson, variant = "", preview = false, countView = true }) {
+  const { db, env, assoc, base, user, csrf, query } = ctx;
+  const lay = parseLandingLayout(layoutJson, assoc.name, assoc.preset);
+  const [{ items }, notices, stats] = await Promise.all([
+    D.listBusinessesPaged(db, assoc.id, { perPage: 8 }),
+    D.listNotices(db, assoc.id, 4),
+    D.stats(db, assoc.id),
+  ]);
+  const covers = await D.coverImagesFor(db, items.map((b) => b.id));
+  // 방문 수 — 신청 수만 알면 "많이 왔는데 안 남긴 건지"를 영원히 구분할 수 없다.
+  // 미리보기는 관리자 자신의 조회라 세지 않는다.
+  if (countView && countableVisit(ctx, variant)) await D.bumpLandingView(db, assoc.id, variant).catch(() => {});
+  const heroImage = assoc.hero_image ? mediaUrl(assoc.hero_image) : "";
+  const body = renderLanding(lay, {
+    assoc, base, variant,
+    storesHtml: items.map((b) => businessCard(base, b, covers.get(b.id))).join(""),
+    storeCount: stats.businesses,
+    heroImage,
+    noticesHtml: notices.length ? noticeRows(base, notices) : "",
+    turnstile: turnstileWidget(env),
+    flash: flashOf(query),
+    utm: utmOf(query),
+  });
+  const homeUrl = `${ORIGIN}${base}/`;
+  const orgLd = {
+    "@context": "https://schema.org", "@type": "Organization",
+    name: assoc.name, url: homeUrl,
+    ...(assoc.tagline ? { description: assoc.tagline } : {}),
+    ...(assoc.logo ? { logo: /^https?:\/\//.test(mediaUrl(assoc.logo)) ? mediaUrl(assoc.logo) : ORIGIN + mediaUrl(assoc.logo) } : {}),
+    ...(assoc.phone ? { telephone: assoc.phone } : {}),
+    ...(assoc.address ? { address: { "@type": "PostalAddress", streetAddress: assoc.address, addressCountry: "KR" } } : {}),
+  };
+  // 카톡·SNS 공유 미리보기: 로고보다 첫 화면 사진이 훨씬 잘 먹힌다.
+  // 히어로 섹션에 따로 넣은 사진이 있으면 그걸, 없으면 브랜딩의 히어로 배경을 쓴다.
+  const heroSec = lay.find((s) => s.type === "hero" && s.enabled);
+  const ogImage = (heroSec && safeSrc(heroSec.image)) || heroImage || "";
+  const banner = preview
+    ? `<div class="preview-bar">미리보기 — 아직 발행되지 않은 초안입니다. 손님에게는 보이지 않습니다.
+        <a href="${base}/admin/landing${variant ? `?v=${encodeURIComponent(variant)}` : ""}">편집으로 돌아가기</a></div>`
+    : "";
+  return html(layout({ title: "", assoc, base, user, body: banner + body, activeNav: `${base}/`, csrf, jsonLd: orgLd, ogImage,
+    description: assoc.tagline || `${assoc.name} 가맹점 모집 — 창업 비용·가맹 절차 안내와 상담 신청.`,
+    scripts: `${turnstileScript(env)}<script src="${assetUrl("/js/lead-track.js")}" defer></script>` }));
+}
+
+async function franchiseHome(ctx) {
+  return renderFranchisePage(ctx, { layoutJson: ctx.assoc.landing_layout });
+}
+
+// 캠페인 사본 — /l/:slug. 인스타용·검색광고용 문구를 따로 두고 전환율을 비교한다.
+export async function franchiseVariant(ctx) {
+  const { db, assoc, params } = ctx;
+  if (assoc.kind !== "franchise") return notFoundResponse(ctx);
+  const v = await D.getLandingVariant(db, assoc.id, String(params.slug || "").slice(0, 40));
+  if (!v) return notFoundResponse(ctx);
+  return renderFranchisePage(ctx, { layoutJson: v.layout || assoc.landing_layout, variant: v.slug });
+}
+
+// 발행 전 초안 미리보기 — 관리자만.
+export async function adminLandingPreview(ctx) {
+  const { db, assoc, query } = ctx;
+  const slug = cap(query.get("v") || "", 40);
+  if (slug) {
+    const v = await D.getLandingVariant(db, assoc.id, slug);
+    if (!v) return notFoundResponse(ctx);
+    return renderFranchisePage(ctx, { layoutJson: v.draft || v.layout || assoc.landing_layout, variant: v.slug, preview: true, countView: false });
+  }
+  return renderFranchisePage(ctx, { layoutJson: assoc.landing_draft || assoc.landing_layout, preview: true, countView: false });
+}
+
+// 랜딩 편집 화면 — 관리자가 문구·순서·표시 여부를 직접 바꾼다.
+// 상인회 관리자 콘솔(/admin)에 끼워 넣지 않고 따로 둔다: 프랜차이즈 관리자에게 회비·투표는 남의 화면이다.
+export async function adminLanding(ctx) {
+  const { db, assoc, base, user, csrf, query } = ctx;
+  const slug = cap(query.get("v") || "", 40);
+  const [variants, assets, stats] = await Promise.all([
+    D.listLandingVariants(db, assoc.id),
+    D.listLandingAssets(db, assoc.id),
+    D.leadStats(db, assoc.id),
+  ]);
+  const cur = slug ? variants.find((v) => v.slug === slug) : null;
+  if (slug && !cur) return notFoundResponse(ctx);
+  // 편집기는 항상 초안을 연다. 초안이 없으면 발행본을 복사해 온 것처럼 보여 준다.
+  const source = cur ? (cur.draft || cur.layout) : (assoc.landing_draft || assoc.landing_layout);
+  const hasDraft = cur ? !!cur.draft : !!assoc.landing_draft;
+  const lay = parseLandingLayout(source, assoc.name, assoc.preset);
+  const qv = cur ? `?v=${encodeURIComponent(cur.slug)}` : "";
+  const publicUrl = cur ? `${base}/l/${encodeURIComponent(cur.slug)}` : `${base}/`;
+  const retention = parseInt((await D.getSetting(db, `lead_retention:${assoc.id}`)) || String(D.LEAD_RETENTION_DEFAULT), 10);
+
+  const variantTabs = [`<a class="pill${cur ? "" : " pill-on"}" href="${base}/admin/landing">기본 랜딩</a>`,
+    ...variants.map((v) => `<a class="pill${cur && cur.slug === v.slug ? " pill-on" : ""}" href="${base}/admin/landing?v=${encodeURIComponent(v.slug)}">${esc(v.name || v.slug)}${v.draft ? " •" : ""}</a>`)].join("");
+  const assetCards = assets.length ? assets.map((a) => `<li class="asset-card">
+    <img src="${esc(mediaUrl(a.filename))}" alt="" loading="lazy" />
+    <input type="text" class="asset-url" value="${esc(mediaUrl(a.filename))}" readonly data-select-all />
+    <form method="post" action="${base}/admin/landing/asset/${a.id}/delete" data-confirm="이 사진을 지울까요?&#10;섹션에 넣어 둔 곳이 있으면 사진이 사라집니다."><button class="link-danger">삭제</button></form>
+  </li>`).join("") : `<li class="empty">아직 올린 사진이 없습니다.</li>`;
+
+  const body = `<section class="dash"><div class="container">
+    <div class="dash-head"><div><p class="section-eyebrow">LANDING · ${esc(assoc.name)}</p><h1 class="dash-title">랜딩페이지 편집</h1>
+      <p class="dash-sub">공개 주소: <a href="${publicUrl}" target="_blank">${esc(prettyPath(publicUrl))}</a>${hasDraft ? ` · <b class="draft-mark">발행되지 않은 수정본 있음</b>` : ""}</p></div>
+      <div class="dash-head-actions"><a href="${base}/admin/leads" class="btn btn-primary btn-sm">상담 DB ${stats.total}건</a>
+        <a href="${base}/admin" class="btn btn-ghost btn-sm">관리자</a></div></div>
+    ${flashOf(query)}
+    ${assoc.kind === "franchise" ? "" : `<div class="flash flash-warn">이 조직의 유형이 <b>프랜차이즈</b>가 아니라서, 발행해도 공개 홈에는 이 랜딩이 아닌 기존 홈페이지가 나옵니다.
+      유형은 플랫폼 운영자가 바꿔 드립니다.</div>`}
+
+    <section class="panel"><div class="panel-head"><h2 class="panel-title">편집할 랜딩</h2>
+      <span class="pill-row">${variantTabs}</span></div>
+      <p class="panel-hint">광고 소재마다 다른 문구를 쓰고 싶으면 <b>사본</b>을 만드세요. 사본은 <code>${esc(prettyPath(base))}/l/주소</code> 로 열리고,
+        상담 신청도 사본별로 따로 집계됩니다. <b>•</b> 표시는 발행되지 않은 수정본이 있다는 뜻입니다.</p>
+      <div class="form-two">
+        <form method="post" action="${base}/admin/landing/variant" class="stack-form compact">
+          <div class="form-two"><label>사본 이름<input type="text" name="name" required maxlength="40" placeholder="예: 인스타 광고용" /></label>
+            <label>주소<input type="text" name="slug" required maxlength="40" pattern="[a-z0-9-]+" placeholder="instagram" /></label></div>
+          <button class="btn btn-primary btn-sm">현재 내용으로 사본 만들기</button></form>
+        ${cur ? `<form method="post" action="${base}/admin/landing/variant/${encodeURIComponent(cur.slug)}/delete" class="stack-form compact"
+            data-confirm="'${esc(cur.name || cur.slug)}' 사본을 지울까요?&#10;이미 받은 상담 신청은 그대로 남습니다.">
+          <p class="panel-hint">지금 <b>${esc(cur.name || cur.slug)}</b> 사본을 편집 중입니다.</p>
+          <button class="btn btn-ghost btn-sm">이 사본 삭제</button></form>` : ""}
+      </div></section>
+
+    <section class="panel"><h2 class="panel-title">사진 보관함</h2>
+      <p class="panel-hint">여기에 올린 뒤 주소를 복사해 섹션에 붙여 넣습니다. 메뉴처럼 여러 장이 필요한 칸은 이 주소를 씁니다.</p>
+      <form method="post" action="${base}/admin/landing/asset" enctype="multipart/form-data" class="stack-form compact">
+        <label class="mini-label">사진 올리기 <small>(여러 장 선택 가능 · 장당 8MB 이하)</small>
+          <input type="file" name="images" accept="image/*" multiple required /></label>
+        <button class="btn btn-primary btn-sm">올리기</button></form>
+      <ul class="asset-grid">${assetCards}</ul></section>
+
+    <section class="panel">
+      <div class="panel-head"><h2 class="panel-title">섹션 구성 ${cur ? `<span class="badge badge-info">${esc(cur.name || cur.slug)}</span>` : ""}</h2>
+        <span class="pill-row"><a class="btn btn-xs btn-ghost" href="${base}/admin/landing/preview${qv}" target="_blank">미리보기</a></span></div>
+      <p class="panel-hint">스위치로 켜고 끄고, ▲▼ 로 순서를 바꾸고, 문구를 직접 고칩니다.
+        <b>한 줄에 하나</b>라고 적힌 칸은 줄바꿈으로 항목을 나누고 <code>|</code> 로 칸을 나눕니다 — 예: <code>가맹비 | 1,000만원 | 부가세 별도</code>.</p>
+      <p class="panel-hint"><b>저장</b>은 초안에만 반영됩니다. 손님에게 보이려면 <b>발행</b>을 눌러야 합니다.</p>
+      ${layoutEditor(base, lay, { catalog: LANDING_CATALOG, action: `${base}/admin/landing${qv}`,
+        resetAction: `${base}/admin/landing/reset${qv}`, submitLabel: "초안 저장", upload: true,
+        extra: `${hasDraft ? `<button type="submit" formaction="${base}/admin/landing/publish${qv}" class="btn btn-primary btn-sm">발행하기</button>
+          <button type="submit" formaction="${base}/admin/landing/discard${qv}" class="btn btn-ghost btn-sm" data-confirm="편집한 초안을 버리고 발행본으로 되돌릴까요?">초안 버리기</button>` : ""}` })}
+      <p class="panel-hint">저장과 동시에 발행하려면 <b>저장 → 발행하기</b> 순서로 두 번 누르세요.</p>
+    </section>
+
+    <section class="panel"><h2 class="panel-title">상담 정보 보관 기간</h2>
+      <p class="panel-hint">처리가 끝난 건(<b>계약</b>·<b>보류·종료</b>)은 이 기간이 지나면 매일 자동으로 지웁니다.
+        진행 중인 건은 지우지 않습니다. 개인정보처리방침의 "상담 종료 시 파기" 약속을 사람 손이 아니라 시스템이 지키게 하는 장치입니다.</p>
+      <form method="post" action="${base}/admin/landing/retention" class="stack-form compact">
+        <label>보관 기간 <small>(일)</small><input type="number" name="days" value="${retention}" min="30" max="3650" required /></label>
+        <button class="btn btn-primary btn-sm">저장</button></form></section>
+  </div></section>`;
+  return html(layout({ title: "랜딩페이지 편집", assoc, base, user, body, csrf,
+    scripts: `<script src="${assetUrl("/js/layout-editor.js")}" defer></script><script src="${assetUrl("/js/upload-resize.js")}" defer></script>` }));
+}
+
+const LEAD_BADGE = { new: "badge-wait", contacted: "badge-info", visit: "badge-brand", contract: "badge-ok", drop: "badge-neutral" };
+const LEAD_PER_PAGE = 50;
+
+// 상담 신청 DB — 이 제품이 파는 것의 실체. 목록·상태·메모·내보내기가 전부 여기 있다.
+export async function adminLeads(ctx) {
+  const { db, assoc, base, user, csrf, query } = ctx;
+  const status = D.LEAD_STATUSES.includes(query.get("status")) ? query.get("status") : "";
+  const page = Math.max(1, parseInt(query.get("page") || "1", 10) || 1);
+  const [stats, funnels, utms, views, byVariant, viewsByVariant, variants, since30] = await Promise.all([
+    D.leadStats(db, assoc.id),
+    D.leadFunnelStats(db, assoc.id),
+    D.leadUtmStats(db, assoc.id, 30),
+    D.landingViewsSince(db, assoc.id, 30),
+    D.leadCountsByVariant(db, assoc.id, 30),
+    D.landingViewsByVariant(db, assoc.id, 30),
+    D.listLandingVariants(db, assoc.id),
+    D.countLeadsSince(db, assoc.id, 30),
+  ]);
+  const total = status ? null : stats.total;
+  const leads = await D.listLeads(db, assoc.id, { status, limit: LEAD_PER_PAGE, offset: (page - 1) * LEAD_PER_PAGE });
+  const pages = total != null ? Math.max(1, Math.ceil(total / LEAD_PER_PAGE)) : (leads.length === LEAD_PER_PAGE ? page + 1 : page);
+  const rate = (n, d) => (d > 0 ? `${((n / d) * 100).toFixed(1)}%` : "-");
+
+  const tab = (v, label, n) => `<a class="pill${status === v ? " pill-on" : ""}" href="${base}/admin/leads${v ? `?status=${v}` : ""}">${esc(label)}${n != null ? ` <b>${n}</b>` : ""}</a>`;
+  const srcLabel = (l) => {
+    const parts = [l.utm_source && `${l.utm_source}${l.utm_medium ? `/${l.utm_medium}` : ""}`, l.utm_campaign].filter(Boolean);
+    if (parts.length) return `<b>${esc(parts.join(" · "))}</b>`;
+    if (l.referrer) { try { return esc(new URL(l.referrer).hostname); } catch { return esc(clip(l.referrer, 30)); } }
+    return "직접·기타";
+  };
+  const rows = leads.length ? leads.map((l) => `<tr>
+    <td><time>${esc(kstStamp(l.created_at, { year: false }))}</time>${l.variant ? `<br /><small class="badge badge-muted">${esc(l.variant)}</small>` : ""}</td>
+    <td><strong>${esc(l.name)}</strong>${l.agree_marketing ? ` <span class="badge badge-muted">수신동의</span>` : ""}
+      ${l.message ? `<details class="lead-msg"><summary>문의 내용</summary><p>${esc(l.message)}</p></details>` : ""}</td>
+    <td>${l.phone ? `<a href="tel:${esc(l.phone)}">${esc(l.phone)}</a>` : "-"}</td>
+    <td>${esc(l.region || "-")}<br /><small>${esc(l.budget || "")}</small></td>
+    <td>${srcLabel(l)}${l.funnel ? `<br /><small>신고: ${esc(l.funnel)}</small>` : ""}</td>
+    <td><span class="badge ${LEAD_BADGE[l.status] || "badge-muted"}">${esc(D.LEAD_STATUS_LABEL[l.status] || l.status)}</span>
+      <form method="post" action="${base}/admin/leads/${l.id}/status" class="inline-form">
+        <select name="status" data-autosubmit>${D.LEAD_STATUSES.map((s) => `<option value="${s}"${s === l.status ? " selected" : ""}>${esc(D.LEAD_STATUS_LABEL[s])}</option>`).join("")}</select>
+        <button class="btn btn-xs btn-ghost">변경</button></form></td>
+    <td><form method="post" action="${base}/admin/leads/${l.id}/memo" class="inline-form">
+        <input type="text" name="memo" value="${esc(l.memo || "")}" maxlength="500" placeholder="상담 메모" />
+        <button class="btn btn-xs btn-ghost">저장</button></form>
+      <span class="pill-row">
+        <a class="btn btn-xs btn-ghost" href="${base}/admin/templates?lead=${l.id}">계약서 만들기</a>
+        <form method="post" action="${base}/admin/leads/${l.id}/delete" class="inline-form" data-confirm="이 신청 건을 지울까요?&#10;개인정보는 복구할 수 없습니다."><button class="link-danger">삭제</button></form></span></td>
+  </tr>`).join("") : `<tr><td colspan="7" class="empty">${status ? "해당 상태의 신청이 없습니다." : "아직 신청이 없습니다. 랜딩페이지를 알리면 여기에 쌓입니다."}</td></tr>`;
+
+  const funnelRows = funnels.length
+    ? funnels.map((f) => `<li><span>${esc(f.funnel)}</span><b>${f.n}건</b></li>`).join("")
+    : `<li class="empty">집계할 기록이 없습니다.</li>`;
+  const utmRows = utms.length
+    ? utms.map((u) => `<li><span>${esc(u.source)}${u.campaign ? ` · ${esc(u.campaign)}` : ""}</span><b>${u.n}건</b></li>`).join("")
+    : `<li class="empty">아직 광고 주소로 들어온 신청이 없습니다.</li>`;
+  // 사본별 전환율 — 어느 문구가 실제로 신청을 만들었는지
+  const leadByV = new Map(byVariant.map((r) => [r.variant, r.n]));
+  const viewByV = new Map(viewsByVariant.map((r) => [r.variant, r.n]));
+  const variantRows = [{ slug: "", name: "기본 랜딩" }, ...variants.map((v) => ({ slug: v.slug, name: v.name || v.slug }))]
+    .map((v) => {
+      const n = leadByV.get(v.slug) || 0, w = viewByV.get(v.slug) || 0;
+      return `<tr><td>${esc(v.name)}${v.slug ? `<br /><small>/l/${esc(v.slug)}</small>` : ""}</td>
+        <td>${w.toLocaleString()}</td><td>${n.toLocaleString()}</td><td><b>${rate(n, w)}</b></td></tr>`;
+    }).join("");
+
+  const body = `<section class="dash"><div class="container">
+    <div class="dash-head"><div><p class="section-eyebrow">LEADS · ${esc(assoc.name)}</p><h1 class="dash-title">가맹 상담 DB</h1>
+      <p class="dash-sub">랜딩페이지로 들어온 상담 신청입니다. 연락 결과를 상태로 남기면 어디까지 진행됐는지 한눈에 보입니다.</p></div>
+      <div class="dash-head-actions"><a href="${base}/admin/leads.csv" class="btn btn-ghost btn-sm">CSV 내려받기</a>
+        <a href="${base}/admin/landing" class="btn btn-primary btn-sm">랜딩 편집</a></div></div>
+    ${flashOf(query)}
+    <div class="stat-cards">
+      <div class="stat-card"><span class="stat-num">${stats.total}</span><span class="stat-label">전체 신청</span></div>
+      <div class="stat-card${stats.fresh ? " stat-alert" : ""}"><span class="stat-num">${stats.fresh}</span><span class="stat-label">미처리(신규)</span></div>
+      <div class="stat-card"><span class="stat-num">${stats.today}</span><span class="stat-label">오늘</span></div>
+      <div class="stat-card left"><div class="stat-top"><span class="stat-label">30일 전환율</span></div><span class="stat-num">${rate(since30, views)}</span>
+        <div class="stat-delta mut">방문 ${views.toLocaleString()} · 신청 ${since30.toLocaleString()}</div></div>
+      <div class="stat-card"><span class="stat-num">${stats.contract}</span><span class="stat-label">계약 성사</span></div>
+    </div>
+    <section class="panel"><div class="panel-head"><h2 class="panel-title">신청 목록 <span class="badge badge-muted">${leads.length}건</span></h2>
+      <span class="pill-row">${tab("", "전체", stats.total)}${D.LEAD_STATUSES.map((s) => tab(s, D.LEAD_STATUS_LABEL[s])).join("")}</span></div>
+      <div class="table-scroll"><table class="admin-table lead-table"><thead><tr>
+        <th>신청 시각</th><th>성함</th><th>연락처</th><th>지역 · 예산</th><th>유입</th><th>상태</th><th>메모 · 처리</th></tr></thead>
+        <tbody>${rows}</tbody></table></div>
+      ${pager((p) => `${base}/admin/leads${qs({ status, page: p })}`, page, pages)}
+      <p class="panel-hint">연락처는 개인정보입니다. 상담이 끝난 건은 보관 기간이 지나면 자동으로 지워집니다 —
+        기간은 <a href="${base}/admin/landing">랜딩 편집</a> 화면에서 바꿉니다.</p></section>
+    <div class="dash-grid">
+      <section class="panel"><h2 class="panel-title">광고 출처 <small>(최근 30일)</small></h2>
+        <p class="panel-hint">링크에 <code>?utm_source=naver&amp;utm_campaign=봄모집</code> 처럼 붙여 두면 어느 광고가 신청을 만들었는지 그대로 쌓입니다.</p>
+        <ul class="funnel-list">${utmRows}</ul></section>
+      <section class="panel"><h2 class="panel-title">유입 경로 <small>(신청자 자기신고)</small></h2>
+        <p class="panel-hint">신청자가 직접 고른 값이라 참고용입니다. 정확한 판단은 위의 광고 출처로 하세요.</p>
+        <ul class="funnel-list">${funnelRows}</ul></section>
+    </div>
+    <section class="panel"><h2 class="panel-title">랜딩별 성과 <small>(최근 30일)</small></h2>
+      <div class="table-scroll"><table class="admin-table"><thead><tr><th>랜딩</th><th>방문</th><th>신청</th><th>전환율</th></tr></thead>
+        <tbody>${variantRows}</tbody></table></div></section>
+  </div></section>`;
+  return html(layout({ title: "가맹 상담 DB", assoc, base, user, body, csrf }));
+}
+
+export async function adminLeadsCsv(ctx) {
+  const { db, assoc } = ctx;
+  const leads = await D.listLeads(db, assoc.id, { limit: 5000 });
+  const rows = [["신청시각", "성함", "연락처", "이메일", "희망지역", "창업예산", "유입경로", "광고출처", "매체", "캠페인", "유입페이지", "랜딩", "문의내용", "상태", "메모", "마케팅수신"],
+    ...leads.map((l) => [kstStamp(l.created_at), l.name, l.phone, l.email, l.region, l.budget, l.funnel,
+      l.utm_source, l.utm_medium, l.utm_campaign, l.referrer, l.variant || "기본", l.message,
+      D.LEAD_STATUS_LABEL[l.status] || l.status, l.memo, l.agree_marketing ? "동의" : ""])];
+  const csv = "﻿" + rows.map((r) => r.map(csvCell).join(",")).join("\r\n");
+  return text(csv, 200, { "content-type": "text/csv; charset=utf-8", "content-disposition": `attachment; filename="leads_${assoc.slug}.csv"`, "cache-control": "no-store" });
+}
 export async function businesses(ctx) {
   const { db, assoc, base, user, query, csrf } = ctx;
   const cat = query.get("category"), q = (query.get("q") || "").trim().slice(0, 60);
@@ -665,9 +983,9 @@ export async function editPost(ctx) {
 
 // ================= 회원가입 =================
 export function registerForm(ctx) {
-  // 전자계약 조직에 '점포 가입'은 없다. 메뉴에서 감췄어도 URL 이 열려 있으면
-  // 업체 레코드가 생겨 쓰지도 않을 대시보드가 딸려 온다.
-  if (ctx.assoc && ctx.assoc.kind === "esign") return notFoundResponse(ctx);
+  // 셀프 가입을 받지 않는 제품에서는 URL 도 닫는다. 메뉴에서만 감추면 업체 레코드가 생겨
+  // 쓰지도 않을 대시보드가 딸려 오고, 모집형에서는 아무나 '가맹점'을 자칭해 목록에 오른다.
+  if (ctx.assoc && !kindOf(ctx.assoc).selfRegister) return notFoundResponse(ctx);
   const { env, assoc, base, query, csrf } = ctx;
   const opts = CATEGORIES.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
   const body = `<section class="section page-top"><div class="container auth-wrap"><div class="auth-card">
@@ -1029,31 +1347,41 @@ export async function admin(ctx) {
 
   const notifRows = notifs.length ? notifs.map((n) => `<li class="${n.is_read ? "" : "unread"}"><span class="notif-dot"></span><a href="${esc(n.link || base + "/admin")}" class="notif-msg">${esc(n.message)}</a><time>${esc(kstStamp(n.created_at, { year: false }))}</time></li>`).join("") : `<li class="empty">알림이 없습니다.</li>`;
   const noticeCats = NOTICE_CATEGORIES.map((c) => `<option value="${esc(c)}"${c === "안내" ? " selected" : ""}>${esc(c)}</option>`).join("");
-  // 전자계약 전용 조직은 점포·회비·홈구성이 없다 — 안 쓰는 화면을 띄우면 콘솔이 어지러워진다
-  const isEsign = assoc.kind === "esign";
+  // 어떤 패널을 띄울지는 제품 유형 레지스트리가 정한다 (kinds.js console 스위치).
+  // 안 쓰는 화면을 띄우면 콘솔이 어지럽고, 새 제품마다 여기에 if 를 더하면 금세 손을 못 댄다.
+  const K = kindOf(assoc);
+  const C = K.console;
+  const T = assocTerms(assoc);
+  const isEsign = K.id === "esign";
+  const isFranchise = C.landing;
   const docCount = (await D.listDocuments(db, assoc.id)).length;
+  const leads = isFranchise ? await D.leadStats(db, assoc.id) : null;
 
   const body = `<section class="dash"><div class="container">
-    <div class="dash-head"><div><p class="section-eyebrow">ADMIN · ${esc(assoc.name)}</p><h1 class="dash-title">${isEsign ? "전자계약 관리" : "관리자 대시보드"}</h1>
-      <p class="dash-sub">${isEsign ? "계약 창구" : "홈페이지"}: <a href="${base}" target="_blank">${esc(prettyPath(base))}</a></p></div>
-      <div class="dash-head-actions"><a href="${base}/admin/documents" class="btn btn-primary btn-sm">계약서 만들기</a></div></div>
+    <div class="dash-head"><div><p class="section-eyebrow">ADMIN · ${esc(assoc.name)}</p><h1 class="dash-title">${isEsign ? "전자계약 관리" : isFranchise ? "가맹 모집 관리" : "관리자 대시보드"}</h1>
+      <p class="dash-sub">${isEsign ? "계약 창구" : isFranchise ? "랜딩페이지" : "홈페이지"}: <a href="${base}" target="_blank">${esc(prettyPath(base))}</a></p></div>
+      <div class="dash-head-actions">${isFranchise ? `<a href="${base}/admin/leads" class="btn btn-primary btn-sm">상담 DB ${leads.total}건</a>
+        <a href="${base}/admin/landing" class="btn btn-ghost btn-sm">랜딩 편집</a>`
+        : `<a href="${base}/admin/documents" class="btn btn-primary btn-sm">계약서 만들기</a>`}</div></div>
     ${flashOf(query)}
     <div class="console-grid">
     <aside class="console-side"><nav>
       <a href="#p-stats">${SIDE_SVG.stats} 현황</a><a href="#p-notif">${SIDE_SVG.bell} 알림함${unread ? ` <span class="side-badge">${unread}</span>` : ""}</a>
+      ${isFranchise ? `<a href="${base}/admin/leads" class="side-ext">${SIDE_SVG.users} 상담 DB${leads.fresh ? ` <span class="side-badge">${leads.fresh}</span>` : ""}</a>
+      <a href="${base}/admin/landing" class="side-ext">${SIDE_SVG.home} 랜딩페이지</a>` : ""}
       <a href="#p-members">${SIDE_SVG.users} ${isEsign ? "담당자" : "회원"}</a>
-      ${isEsign ? "" : `<a href="#p-biz">${SIDE_SVG.store} 업체 승인${s.pending ? ` <span class="side-badge">${s.pending}</span>` : ""}</a>
-      <a href="#p-products">${SIDE_SVG.tag} 제품</a><a href="#p-dues">${SIDE_SVG.stats} 회비 장부</a><a href="#p-home">${SIDE_SVG.home} 홈 구성</a>`}
+      ${isEsign ? "" : `<a href="#p-biz">${SIDE_SVG.store} ${isFranchise ? "가맹점" : "업체 승인"}${s.pending ? ` <span class="side-badge">${s.pending}</span>` : ""}</a>
+      <a href="#p-products">${SIDE_SVG.tag} 제품</a>${isFranchise ? "" : `<a href="#p-dues">${SIDE_SVG.stats} 회비 장부</a><a href="#p-home">${SIDE_SVG.home} 홈 구성</a>`}`}
       <a href="#p-brand">${SIDE_SVG.palette} 브랜딩</a>${isEsign ? "" : `<a href="#p-content">${SIDE_SVG.mega} 공지·행사</a>`}
       <a href="#p-notify">${SIDE_SVG.bell} 알림톡</a>
-      ${isEsign ? "" : `<a href="${base}/polls" class="side-ext">${SIDE_SVG.bell} 안건 투표</a>`}
+      ${isEsign || isFranchise ? "" : `<a href="${base}/polls" class="side-ext">${SIDE_SVG.bell} 안건 투표</a>`}
       <a href="${base}/admin/documents" class="side-ext">${SIDE_SVG.sign} 계약서</a>
       <a href="${base}/admin/templates" class="side-ext">${SIDE_SVG.sign} 서식</a>
       <a href="${base}/admin/api" class="side-ext">${SIDE_SVG.ext} API 연동</a>
       <a href="${base}" target="_blank" class="side-ext">${SIDE_SVG.ext} 사이트 보기</a>
     </nav></aside>
     <div class="console-main">
-    ${onboardPanel(base, assoc, s, members.length, notices.length, { docCount, balance })}
+    ${onboardPanel(base, assoc, s, members.length, notices.length, { docCount, balance, leads })}
     <div class="stat-cards" id="p-stats">
       ${isEsign ? `<div class="stat-card"><span class="stat-num">${docCount}</span><span class="stat-label">계약서</span></div>
       <div class="stat-card"><span class="stat-num">${members.length}</span><span class="stat-label">담당자</span></div>`
@@ -1108,15 +1436,20 @@ export async function admin(ctx) {
           <div class="form-two"><label>사장님 성함<input type="text" name="name" required /></label><label>이메일<input type="email" name="email" required /></label></div>
           <div class="form-two"><label>업체명<input type="text" name="business_name" required /></label><label>업종<input type="text" name="category" placeholder="예: 음식점" /></label></div>
           <button class="btn btn-primary btn-sm">대행 등록 + 임시 비번 발급</button></form></div></details>`}</section>
-    ${isEsign ? "" : duesPanel}
+    ${isEsign || isFranchise ? "" : duesPanel}
     ${notifyPanel}
     ${auditPanel}
-${isEsign ? "" : `    <section class="panel" id="p-home"><h2 class="panel-title">홈페이지 구성 편집</h2>
+${isFranchise ? `    <section class="panel panel-accent" id="p-home"><h2 class="panel-title">랜딩페이지</h2>
+      <p class="panel-hint">가맹점 모집 화면의 문구·순서·표시 여부는 전용 편집기에서 바꿉니다. 들어온 상담 신청은 상담 DB 에 쌓입니다.</p>
+      <span class="pill-row"><a href="${base}/admin/landing" class="btn btn-primary btn-sm">랜딩페이지 편집</a>
+        <a href="${base}/admin/leads" class="btn btn-ghost btn-sm">상담 DB (신규 ${leads.fresh}건)</a>
+        <a href="${base}" target="_blank" class="btn btn-ghost btn-sm">공개 화면 보기</a></span></section>`
+  : isEsign ? "" : `    <section class="panel" id="p-home"><h2 class="panel-title">홈페이지 구성 편집</h2>
       <p class="panel-hint">섹션을 켜고 끄거나 순서(▲▼)를 바꾸고 문구를 직접 수정할 수 있습니다.</p>
       ${layoutEditor(base, lay)}</section>`}
-    <section class="panel" id="p-brand"><h2 class="panel-title">${isEsign ? "조직 정보 · 브랜딩" : "상인회 정보 · 브랜딩"}</h2>
+    <section class="panel" id="p-brand"><h2 class="panel-title">${isEsign ? "조직 정보 · 브랜딩" : isFranchise ? "브랜드 정보 · 브랜딩" : "상인회 정보 · 브랜딩"}</h2>
       <form method="post" action="${base}/admin/settings" enctype="multipart/form-data" class="stack-form">
-        <div class="form-two"><label>${isEsign ? "조직" : "상인회"} 이름<input type="text" name="name" value="${esc(assoc.name)}" required /></label><label>대표 색상<input type="color" name="brand_color" value="${esc(assoc.brand_color)}" /></label></div>
+        <div class="form-two"><label>${isEsign ? "조직" : isFranchise ? "브랜드" : "상인회"} 이름<input type="text" name="name" value="${esc(assoc.name)}" required /></label><label>대표 색상<input type="color" name="brand_color" value="${esc(assoc.brand_color)}" /></label></div>
         <label>한 줄 소개<input type="text" name="tagline" value="${esc(assoc.tagline)}" /></label>
         <div class="form-two"><label>대표 전화<input type="text" name="phone" value="${esc(assoc.phone)}" /></label><label>이메일<input type="email" name="email" value="${esc(assoc.email)}" /></label></div>
         <label>주소<input type="text" name="address" value="${esc(assoc.address)}" /></label>
@@ -1154,8 +1487,15 @@ ${isEsign ? "" : `    <section class="panel" id="p-home"><h2 class="panel-title"
 // 관리자 온보딩 체크리스트 (모두 완료되면 자동으로 사라짐)
 function onboardPanel(base, assoc, stats, memberCount, noticeCount, esign = {}) {
   const branded = (assoc.brand_color && assoc.brand_color !== "#0b6e4f") || !!assoc.logo;
+  const leads = esign.leads || { total: 0 };
   // 전자계약 조직에는 공지·업체 승인·점포 가입 링크가 없다. 그대로 두면 404 로 가는 체크리스트가 된다.
-  const steps = assoc.kind === "esign" ? [
+  const steps = assoc.kind === "franchise" ? [
+    { done: !!assoc.landing_layout, label: "랜딩페이지 문구 채우기 — 강점·절차·비용", href: base + "/admin/landing" },
+    { done: branded, label: "대표 색·로고 정하기 — 화면 전체 색이 함께 바뀝니다", href: "#p-brand" },
+    { done: !!(assoc.phone && assoc.phone.trim()), label: "대표 전화 등록 — 고정 하단 바에 전화 버튼이 생깁니다", href: "#p-brand" },
+    { done: !!assoc.hero_image, label: "첫 화면 배경 사진 올리기", href: "#p-brand" },
+    { done: leads.total > 0, label: "첫 상담 신청 받기 — 랜딩 주소를 광고·SNS에 알리세요", href: base + "/admin/leads" },
+  ] : assoc.kind === "esign" ? [
     { done: !!(esign.docCount > 0), label: "첫 계약서 만들기 — 표준 서식에서 시작", href: base + "/admin/documents" },
     { done: memberCount > 0, label: "담당자 계정 발급", href: "#p-members" },
     { done: (esign.balance || 0) > 0, label: "알림톡 크레딧 충전 — 카카오로 서명 요청 보내기", href: "#p-notify" },
@@ -1346,6 +1686,8 @@ export async function adminDocuments(ctx) {
 }
 export async function adminDocumentDetail(ctx) {
   const { db, env, assoc, base, user, params, csrf, query } = ctx;
+  // 상담 DB 에서 이어진 계약이면 신청자를 외부 서명자 폼에 미리 채운다 (이름·번호를 다시 옮겨 적지 않게)
+  const lead = Number(query.get("lead")) ? await D.getLead(db, Number(query.get("lead")), assoc.id) : null;
   const d = await D.getDocument(db, Number(params.id));
   if (!d || d.association_id !== assoc.id) return notFoundResponse(ctx);
   const sigs = await D.listSignatures(db, d.id);
@@ -1379,10 +1721,10 @@ export async function adminDocumentDetail(ctx) {
       <span class="pill-row"><button type="button" class="btn btn-sm btn-primary" data-share data-share-url="${esc(`${ORIGIN}/esign/${extToken}`)}" data-share-title="${esc(d.title)} 전자서명">카톡으로 보내기 / 복사</button></span>
       <p class="panel-hint">이 링크는 지금만 표시됩니다. 필요하면 복사해 두세요 (다시 보려면 서명자를 새로 추가해야 합니다).</p></div>` : ""}
     ${d.closed ? "" : `<form method="post" action="${base}/admin/documents/${d.id}/external" class="stack-form compact">
-      <div class="form-two"><label>이름<input type="text" name="name" required maxlength="60" placeholder="예: 홍길동" /></label>
+      <div class="form-two"><label>이름<input type="text" name="name" required maxlength="60" placeholder="예: 홍길동" value="${esc(lead ? lead.name : "")}" /></label>
         <label>소속·상호 (선택)<input type="text" name="org" maxlength="80" placeholder="예: ○○상사" /></label></div>
-      <div class="form-two"><label>이메일<input type="email" name="email" maxlength="120" placeholder="link@example.com" /></label>
-        <label>휴대폰<input type="tel" name="phone" maxlength="13" inputmode="numeric" placeholder="010-1234-5678" /></label></div>
+      <div class="form-two"><label>이메일<input type="email" name="email" maxlength="120" placeholder="link@example.com" value="${esc(lead ? lead.email : "")}" /></label>
+        <label>휴대폰<input type="tel" name="phone" maxlength="13" inputmode="numeric" placeholder="010-1234-5678" value="${esc(lead ? lead.phone : "")}" /></label></div>
       <p class="panel-hint">둘 중 하나는 필요합니다 — 그 연락처로 링크와 본인확인 번호가 갑니다.</p>
       <button class="btn btn-primary btn-sm">서명 링크 발급</button></form>`}</section>`;
   const reqPanel = rc.total ? `<section class="panel"><h2 class="panel-title">서명 현황 <span class="badge ${rc.signed === rc.total ? "badge-ok" : "badge-wait"}">${rc.signed}/${rc.total} (${pct}%)</span>${d.ordered ? ' <span class="badge badge-info">순차</span>' : ""}</h2>
@@ -1425,6 +1767,7 @@ export async function adminDocumentDetail(ctx) {
 // 서식에서 문서 만들기 — 빈칸({{변수}})과 당사자만 채우면 본문·배치가 완성된다.
 export async function adminDocumentNew(ctx) {
   const { db, assoc, base, user, query, csrf } = ctx;
+  const lead = Number(query.get("lead")) ? await D.getLead(db, Number(query.get("lead")), assoc.id) : null;
   const raw = query.get("tpl") || "";
   const src = isBuiltinId(raw) ? builtinById(raw) : await D.getTemplate(db, Number(raw) || 0);
   if (!src || (!isBuiltinId(raw) && src.association_id !== 0 && src.association_id !== assoc.id)) return notFoundResponse(ctx);
@@ -1445,6 +1788,8 @@ export async function adminDocumentNew(ctx) {
       <section class="panel">
         <form method="post" action="${base}/admin/documents" class="stack-form">
           <input type="hidden" name="template" value="${esc(String(t.id))}" />
+          ${lead ? `<input type="hidden" name="lead_id" value="${lead.id}" />
+          <p class="flash flash-ok">계약 상대방: <b>${esc(lead.name)}</b> (${esc(lead.phone)}) — 문서를 만들면 바로 서명 링크를 발급합니다.</p>` : ""}
           <label>문서 제목<input type="text" name="title" required maxlength="200" value="${esc(t.title)}" /></label>
           ${t.vars.length ? `<div class="form-divider">빈칸 채우기</div><div class="tpl-vars">${varInputs}</div>` : ""}
           <div class="form-divider">당사자 지정</div>
@@ -1464,19 +1809,23 @@ export async function adminDocumentNew(ctx) {
 // 우리 상인회 서식 관리 — 만든 문서를 서식으로 저장해 다음부터 재사용
 export async function adminTemplates(ctx) {
   const { db, assoc, base, user, query, csrf } = ctx;
+  // 상담 DB 에서 "계약서 만들기"로 넘어온 경우 — 그 신청자를 계약 상대방으로 끌고 간다
+  const lead = Number(query.get("lead")) ? await D.getLead(db, Number(query.get("lead")), assoc.id) : null;
+  const leadQ = lead ? `&lead=${lead.id}` : "";
   const mine = (await D.listTemplates(db, assoc.id)).filter((t) => t.association_id === assoc.id);
   const docs = await D.listDocuments(db, assoc.id);
   const rows = mine.length ? mine.map((t) => { const n = normalizeTemplate(t);
     return `<tr><td><b>${esc(n.title)}</b><br /><small>${esc(n.summary || "")}</small></td>
       <td>${n.vars.length ? n.vars.map((v) => `<code class="tpl-var">${esc(v)}</code>`).join(" ") : "<small>없음</small>"}</td>
       <td>${n.fields.length}개</td>
-      <td class="actions-cell"><a class="btn btn-xs btn-ghost" href="${base}/admin/documents/new?tpl=${n.id}">이 서식으로 만들기</a>
+      <td class="actions-cell"><a class="btn btn-xs btn-ghost" href="${base}/admin/documents/new?tpl=${n.id}${leadQ}">이 서식으로 만들기</a>
         <form method="post" action="${base}/admin/templates/${n.id}/delete" data-confirm="'${esc(n.title)}' 서식을 삭제할까요?"><button class="btn btn-xs btn-ghost">삭제</button></form></td></tr>`;
   }).join("") : `<tr><td colspan="4" class="empty">저장한 서식이 없습니다.</td></tr>`;
   const docOpts = docs.map((d) => `<option value="${d.id}">${esc(d.title)}</option>`).join("");
   const body = `<section class="dash"><div class="container">
     <div class="dash-head"><div><p class="section-eyebrow">E-SIGN · 서식</p><h1 class="dash-title">${assoc.kind === "esign" ? "우리 서식" : "우리 상인회 서식"}</h1>
       <p class="dash-sub"><a href="${base}/admin/documents">← 문서 목록</a></p></div></div>${flashOf(query)}
+    ${lead ? `<div class="flash flash-ok">상담 신청자 <b>${esc(lead.name)}</b>(${esc(lead.phone)})님에게 보낼 계약서입니다. 서식을 고르면 이어서 서명 링크를 발급합니다.</div>` : ""}
     <section class="panel panel-accent"><h2 class="panel-title">문서를 서식으로 저장</h2>
       <p class="panel-hint">이미 만든 문서를 서식으로 저장하면 <b>배치된 서명 자리까지</b> 함께 보관됩니다.
         본문에서 매번 달라지는 부분은 <code>{{보증금}}</code> 처럼 바꿔 두면 다음부터 그 칸만 채우면 됩니다.</p>
@@ -1489,7 +1838,7 @@ export async function adminTemplates(ctx) {
       <div class="table-scroll"><table class="admin-table">
         <thead><tr><th>서식</th><th>빈칸</th><th>자리</th><th>관리</th></tr></thead><tbody>${rows}</tbody></table></div></section>
     <section class="panel"><h2 class="panel-title">표준 서식 (플랫폼 제공)</h2>
-      <div class="tpl-grid">${builtinsFor(assoc.kind).map(normalizeTemplate).map((t) => `<a class="tpl-card" href="${base}/admin/documents/new?tpl=${t.id}">
+      <div class="tpl-grid">${builtinsFor(assoc.kind).map(normalizeTemplate).map((t) => `<a class="tpl-card" href="${base}/admin/documents/new?tpl=${t.id}${leadQ}">
         <span class="tpl-title">${esc(t.title)}</span><span class="tpl-sum">${esc(t.summary)}</span>
         <span class="tpl-meta">빈칸 ${t.vars.length} · 자리 ${t.fields.length}개</span></a>`).join("")}</div></section>
     </div></section>`;
@@ -1684,6 +2033,102 @@ export async function esignLanding(ctx) {
   </div></section>`;
   return html(layout({ title: "", base: "", user: ctx.user, body, csrf, product: { name: siteName, home: "/esign" },
     description: "가입 없이 링크로 서명하는 전자계약. 서명·도장 자리를 계약서 위에 놓고 보내면 그 자리에서 체결됩니다. 위변조 검증·증적 패키지·API 연동 지원." }));
+}
+
+// ================= 홈페이지 제작 서비스 (제품 소개) =================
+// 파는 것은 "예쁜 홈페이지"가 아니라 "상담 신청이 쌓이는 화면"이다. 그래서 화면 자랑이 아니라
+// DB 가 어떻게 들어오고 어떻게 관리되는지를 앞에 둔다.
+export const homepageProduct = async (db) => ({
+  name: (await D.getSetting(db, "homepage_brand")) || "가맹점 모집 홈페이지",
+  home: "/homepage",
+  mark: "storefront",
+  links: [["/homepage", "소개"], ["/homepage#included", "구성"], ["/homepage#db", "상담 DB"]],
+  cta: ["/apply?kind=franchise", "제작 문의"],
+});
+
+export async function homepageLanding(ctx) {
+  const { db, csrf, user } = ctx;
+  const product = await homepageProduct(db);
+  const step = (n, t, d) => `<div class="es-step"><span class="es-n">${n}</span><div><h3>${esc(t)}</h3><p>${esc(d)}</p></div></div>`;
+  const body = `
+  <section class="landing-hero es-hero"><div class="container">
+    <p class="hero-eyebrow">프랜차이즈 · 가맹점 모집을 위한</p>
+    <h1 class="landing-title">보고 나면<br /><span>연락처를 남기는</span> 홈페이지</h1>
+    <p class="landing-lead">브랜드 소개부터 창업 비용·가맹 절차·상담 신청까지 한 장으로 이어지는 <b>가맹점 모집 랜딩페이지</b>를 만들어 드립니다.
+      들어온 상담 신청은 그대로 <b>DB로 쌓이고</b>, 연락 상태까지 한 화면에서 관리합니다.</p>
+    <div class="hero-actions"><a href="/apply?kind=franchise" class="btn btn-primary btn-lg">제작 문의하기</a>
+      <a href="#included" class="btn btn-ghost btn-lg">구성 보기</a></div>
+    <p class="hero-note">이미 쓰고 계신가요? <a href="/login">로그인</a></p>
+  </div></section>
+
+  <section class="section" id="included"><div class="container">
+    <div class="section-head"><p class="section-eyebrow">INCLUDED</p><h2 class="section-title">한 장에 들어가는 것</h2>
+      <p class="section-lead">아래 섹션이 기본으로 들어갑니다. 필요 없는 섹션은 끄고, 순서는 직접 바꿉니다.</p></div>
+    <div class="feature-grid">
+      ${[["🏁", "히어로", "첫 화면에서 브랜드와 제안을 한 문장으로"],
+         ["🔁", "흐르는 띠", "핵심 숫자·강점을 반복 노출"],
+         ["📖", "브랜드 소개", "왜 이 브랜드인지 설명하는 본문과 사진"],
+         ["💪", "창업 강점", "점주가 궁금해하는 이유를 카드로"],
+         ["💬", "점주 후기", "실제 운영자의 말이 가장 강한 근거"],
+         ["🍽", "메뉴·상품", "대표 상품을 사진·가격과 함께"],
+         ["🧭", "가맹 절차", "상담부터 오픈까지의 단계"],
+         ["💰", "가맹 비용", "표로 정리 · 상담 전에는 가려 두기 가능"],
+         ["📝", "상담 신청 폼", "이 페이지의 목적 — 연락처 수집"],
+         ["📍", "매장 안내", "운영 중인 가맹점 목록과 지도"],
+         ["❓", "자주 묻는 질문", "망설임을 미리 걷어내기"],
+         ["📞", "고정 하단 바", "모든 페이지에서 전화·신청이 한 번에"],
+        ].map(([i, t, d]) => `<div class="feature-card"><span class="feature-ico">${i}</span><h3>${esc(t)}</h3><p>${esc(d)}</p></div>`).join("")}
+    </div>
+  </div></section>
+
+  <section class="section section-alt" id="db"><div class="container">
+    <div class="section-head"><p class="section-eyebrow">DB</p><h2 class="section-title">상담 신청이 쌓이는 방식</h2></div>
+    <div class="es-steps">
+      ${step(1, "방문자가 폼을 채웁니다", "성함·연락처·희망 지역·창업 예산·유입 경로. 필요 없는 칸은 뺄 수 있습니다.")}
+      ${step(2, "즉시 알림이 갑니다", "담당자에게 카카오 알림톡과 메일이 바로 갑니다. 신청자에게도 접수 확인 문자가 나갑니다.")}
+      ${step(3, "DB로 저장됩니다", "신청 순서대로 목록에 쌓입니다. 같은 번호로 연달아 눌린 중복 신청은 걸러집니다.")}
+      ${step(4, "연락 상태를 남깁니다", "신규 · 연락 완료 · 상담/방문 · 계약 · 보류 — 어디까지 진행됐는지 한눈에 보입니다.")}
+      ${step(5, "계약으로 잇습니다", "상담 건에서 바로 가맹계약서를 만들어 서명 링크를 보냅니다. 이름·번호를 다시 옮겨 적지 않습니다.")}
+      ${step(6, "엑셀로 내려받습니다", "CSV 한 번이면 영업팀 시트로 그대로 옮겨집니다.")}
+    </div>
+    <p class="panel-hint" style="text-align:center;margin-top:18px">방문 수 대비 <b>전환율</b>과 <b>광고 출처별</b> 집계가 함께 나옵니다 —
+      어느 광고가 실제로 신청을 만들었는지 보고 예산을 옮기세요.</p>
+  </div></section>
+
+  <section class="section"><div class="container">
+    <div class="section-head"><p class="section-eyebrow">WHY</p><h2 class="section-title">맡기고 끝이 아니라, 직접 고칩니다</h2></div>
+    <div class="feature-grid">
+      ${[["✏️", "관리자가 직접 수정", "문구·순서·사진을 관리자 화면에서 바꿉니다. 사진은 올리면 바로 붙고, 수정 요청을 기다릴 필요가 없습니다."],
+         ["👀", "초안으로 고치고 발행", "고치는 동안 손님에게는 옛 화면이 보입니다. 미리보기로 확인한 뒤 발행하세요."],
+         ["📱", "모바일 우선", "가맹 문의는 대부분 휴대폰에서 옵니다. 고정 하단 바로 전화·신청이 어느 페이지에서든 손끝에 있습니다."],
+         ["🎯", "캠페인별 랜딩", "인스타용·검색광고용 문구를 따로 두고 어느 쪽이 더 신청을 만드는지 전환율로 비교합니다."],
+         ["🔐", "개인정보 자동 파기", "상담에 필요한 항목만 받고, 처리 끝난 건은 정한 기간이 지나면 매일 자동으로 지웁니다."],
+         ["🛡", "스팸 차단", "봇 방지·허니팟·중복 제출 차단이 기본입니다. 쓰레기 DB가 쌓이지 않습니다."],
+         ["✍️", "전자계약 연계", "상담 건에서 바로 가맹계약서를 만들어 링크로 보내고 그 자리에서 체결합니다."],
+         ["🌐", "우리 도메인 연결", "브랜드 도메인을 그대로 붙일 수 있고, 검색 노출 설정도 함께 잡아 드립니다."],
+        ].map(([i, t, d]) => `<div class="feature-card"><span class="feature-ico">${i}</span><h3>${esc(t)}</h3><p>${esc(d)}</p></div>`).join("")}
+    </div>
+  </div></section>
+
+  <section class="section section-alt"><div class="container narrow">
+    <div class="section-head"><p class="section-eyebrow">HOW</p><h2 class="section-title">제작은 이렇게 진행됩니다</h2></div>
+    <div class="es-steps">
+      ${step(1, "문의 · 상담", "브랜드와 모집 목표를 듣습니다. 지금 쓰시는 자료가 있으면 그대로 받습니다.")}
+      ${step(2, "구성 확정", "어떤 섹션을 쓸지, 어떤 항목을 받을지 함께 정합니다.")}
+      ${step(3, "제작 · 콘텐츠 반영", "문구와 사진을 넣어 초안을 올립니다. 바로 눈으로 보며 고칩니다.")}
+      ${step(4, "오픈 · 인계", "도메인을 연결하고 관리자 계정을 드립니다. 이후 수정은 직접 하시면 됩니다.")}
+    </div>
+  </div></section>
+
+  <section class="section"><div class="container narrow" style="text-align:center">
+    <h2 class="section-title">가맹점 모집, 화면부터 바꿔 보세요</h2>
+    <p class="landing-lead">문의는 무료입니다. 브랜드 자료만 있으면 어떤 구성이 맞을지 먼저 잡아 드립니다.</p>
+    <div class="hero-actions" style="justify-content:center">
+      <a href="/apply?kind=franchise" class="btn btn-primary btn-lg">제작 문의하기</a>
+      <a href="/esign" class="btn btn-ghost btn-lg">전자계약도 보기</a></div>
+  </div></section>`;
+  return html(layout({ title: "", base: "", user, body, csrf, product,
+    description: "프랜차이즈 가맹점 모집 랜딩페이지 제작. 브랜드 소개·가맹 절차·창업 비용·상담 신청을 한 장에 담고, 들어온 상담 신청은 DB로 관리합니다." }));
 }
 
 // 전자계약 전용 조직의 홈 — 손님(계약 상대방)과 담당자 둘 다 여기로 들어온다.
@@ -2407,7 +2852,7 @@ export async function superConsole(ctx) {
         <label>메모<textarea name="message" rows="2" maxlength="2000" placeholder="어디서 알게 됐는지, 규모, 관심사 등"></textarea></label>
         <button class="btn btn-primary btn-sm">영업 목록에 추가</button></form></details></section>`;
   const rows = list.map((a) => `<tr><td><a href="/t/${esc(a.slug)}" target="_blank">${esc(a.name)}</a>
-      <span class="badge ${a.kind === "esign" ? "badge-info" : "badge-muted"}">${a.kind === "esign" ? "전자계약" : "상인회"}</span>
+      <span class="badge ${kindById(a.kind).badge}">${esc(kindById(a.kind).label)}</span>${kindById(a.kind).usesLanding ? `<span class="badge badge-muted">${esc((PRESETS[a.preset] || {}).label || "")}</span>` : ""}
       <form method="post" action="/super/association/${a.id}/slug" class="domain-form" title="주소를 바꿔도 옛 주소로 들어온 사람은 새 주소로 자동 이동합니다.">
         <span class="slug-pre">/t/</span><input type="text" name="slug" value="${esc(a.slug)}" pattern="[a-z0-9-]+" maxlength="40" />
         <button class="btn btn-xs btn-ghost">주소</button></form>
@@ -2423,7 +2868,8 @@ export async function superConsole(ctx) {
       <button class="btn btn-xs btn-ghost">저장</button></form></td>
     <td><form method="post" action="/super/association/${a.id}/plan" class="plan-form"><select name="plan">${planOpts(a.plan || "free")}</select><button class="btn btn-xs btn-ghost">변경</button></form>
       <form method="post" action="/super/association/${a.id}/kind" class="plan-form" style="margin-top:4px" title="보이는 메뉴와 관리자 화면이 바뀝니다. 데이터는 지워지지 않습니다.">
-        <select name="kind"><option value="merchant"${a.kind !== "esign" ? " selected" : ""}>상인회</option><option value="esign"${a.kind === "esign" ? " selected" : ""}>전자계약</option></select>
+        <select name="kind">${KIND_KEYS.map((k) => `<option value="${k}"${(a.kind || "merchant") === k ? " selected" : ""}>${esc(KINDS[k].label)}</option>`).join("")}</select>
+        <select name="preset" title="랜딩형 제품의 업종 문구">${PRESET_KEYS.map((k) => `<option value="${k}"${(a.preset || "franchise") === k ? " selected" : ""}>${esc(PRESETS[k].label)}</option>`).join("")}</select>
         <button class="btn btn-xs btn-ghost">유형</button></form></td>
     <td>${a.active ? '<span class="badge badge-ok">활성</span>' : '<span class="badge badge-no">비활성</span>'}
       ${(() => { const t = lastAct.get(a.id); if (!t) return `<small class="act-stamp is-cold">활동 없음</small>`;
@@ -2486,14 +2932,30 @@ export async function superConsole(ctx) {
       <form method="post" action="/super/association" class="stack-form">
         <div class="form-two"><label>조직 이름<input type="text" name="name" required /></label><label>대표 색상<input type="color" name="brand_color" value="#0b6e4f" /></label></div>
         <label>유형<select name="kind">
-          <option value="merchant">상인회 — 점포·지도·공지 홈페이지 + 전자계약</option>
-          <option value="esign">전자계약 전용 — 계약만 (법무·부동산·프랜차이즈 등)</option>
+          ${KIND_KEYS.map((k) => `<option value="${k}">${esc(KINDS[k].createLabel || KINDS[k].label)} — ${esc(KINDS[k].createHint)}</option>`).join("")}
         </select></label>
+        <label>업종 문구 <small>(랜딩형 제품에만 적용 — 기본 문구가 업종에 맞게 채워집니다)</small>
+          <select name="preset">${PRESET_KEYS.map((k) => `<option value="${k}">${esc(PRESETS[k].label)}</option>`).join("")}</select></label>
         <label>한 줄 소개<input type="text" name="tagline" /></label>
         <div class="form-divider">관리자 계정</div>
         <div class="form-two"><label>관리자 이름<input type="text" name="admin_name" /></label><label>관리자 이메일<input type="email" name="admin_email" required /></label></div>
         <label>관리자 비밀번호 (8자 이상)<input type="password" name="admin_password" required minlength="8" /></label>
         <button class="btn btn-primary">조직 만들기</button></form></section>
+    <section class="panel" id="clone-assoc"><h2 class="panel-title">📄 기존 사이트 복제해서 만들기</h2>
+      <p class="panel-hint">잘 만들어 둔 사이트를 본으로 새 고객사를 찍어 냅니다. 프랜차이즈든 상인회든 같습니다.
+        <b>복사되는 것</b>: 유형·업종 문구·대표색·홈/랜딩 화면 구성·캠페인 사본.
+        <b>복사되지 않는 것</b>: 회원·점포·상담 신청·계약 — 남의 실제 데이터는 절대 따라오지 않습니다.</p>
+      <form method="post" action="/super/association/clone" class="stack-form">
+        <label>본으로 삼을 사이트<select name="source_id" required><option value="">— 선택 —</option>
+          ${list.map((a) => `<option value="${a.id}">${esc(a.name)} (${esc(kindById(a.kind).label)}${kindById(a.kind).usesLanding ? " · " + esc((PRESETS[a.preset] || {}).label || "") : ""})</option>`).join("")}
+        </select></label>
+        <div class="form-two"><label>새 조직 이름<input type="text" name="name" required maxlength="100" /></label>
+          <label>대표 색상 <small>(비우면 원본과 동일)</small><input type="color" name="brand_color" value="#0b6e4f" /></label></div>
+        <label>한 줄 소개 <small>(비우면 원본과 동일)</small><input type="text" name="tagline" maxlength="200" /></label>
+        <div class="form-divider">관리자 계정</div>
+        <div class="form-two"><label>관리자 이름<input type="text" name="admin_name" /></label><label>관리자 이메일<input type="email" name="admin_email" required /></label></div>
+        <label>관리자 비밀번호 (8자 이상)<input type="password" name="admin_password" required minlength="8" /></label>
+        <button class="btn btn-primary">복제해서 만들기</button></form></section>
     <section class="panel"><h2 class="panel-title">조직 목록</h2>
       <p class="panel-hint">개별 도메인: 도메인을 입력·저장한 뒤 <b>Cloudflare 대시보드 → 이 워커 → Settings → Domains &amp; Routes → Add → Custom Domain</b> 으로 같은 도메인을 추가해야 실제 접속됩니다(그 도메인이 이 Cloudflare 계정에 등록되어 있어야 함).</p>
       <div class="table-scroll"><table class="admin-table">
@@ -2678,6 +3140,7 @@ export async function platformLanding(ctx) {
     <div class="hero-actions"><a href="/apply" class="btn btn-primary btn-lg">무료로 신청하기</a>
       <a href="#features" class="btn btn-ghost btn-lg">기능 둘러보기</a></div>
     <p class="hero-note">상인회가 아니신가요? <a href="/esign">전자계약만 따로 쓰실 수 있습니다 →</a></p>
+    <p class="hero-note">프랜차이즈 본사이신가요? <a href="/homepage">가맹점 모집 홈페이지를 만들어 드립니다 →</a></p>
   </div></section>
   <section class="section" id="features"><div class="container">
     <div class="section-head"><p class="section-eyebrow">FEATURES</p><h2 class="section-title">상인회에 필요한 모든 것</h2></div>
@@ -2741,7 +3204,7 @@ export async function terms(ctx) {
   const inner = `
     <h2>제1조 (목적)</h2><p>본 약관은 <b>${esc(info.siteName)}</b>(이하 "서비스")가 제공하는 <b>상인회·소상공인 홈페이지</b>와 <b>전자계약(전자서명)</b> 및 관련 기능의 이용 조건과 절차, 이용자와 운영자의 권리·의무를 규정함을 목적으로 합니다. 두 서비스는 각각 단독으로도 이용할 수 있습니다.</p>
     <h2>제2조 (정의)</h2><p>"이용자"란 서비스에 접속하여 이 약관에 따라 서비스를 이용하는 상인회·기업·회원·방문자를 말합니다. "회원"이란 계정을 등록한 이용자를 말합니다. "서명자"란 계정 없이 전달받은 링크로 전자서명하는 이용자를 말합니다.</p>
-    <h2>제3조 (서비스의 제공)</h2><p>서비스는 점포 안내·지도, 공지·소식, 회원 게시판, 전자 동의서(전자서명) 등을 제공합니다. 운영자는 서비스 내용을 변경하거나 중단할 수 있으며, 중대한 변경 시 사전에 공지합니다.</p>
+    <h2>제3조 (서비스의 제공)</h2><p>서비스는 점포 안내·지도, 공지·소식, 회원 게시판, 전자 동의서(전자서명), 가맹점 모집 홈페이지(상담 신청 접수·관리) 등을 제공합니다. 운영자는 서비스 내용을 변경하거나 중단할 수 있으며, 중대한 변경 시 사전에 공지합니다.</p>
     <h2>제4조 (회원의 의무)</h2><p>회원은 타인의 권리를 침해하거나 법령·공서양속에 반하는 게시물을 등록해서는 안 되며, 계정 정보를 안전하게 관리할 책임이 있습니다.</p>
     <h2>제5조 (게시물의 관리)</h2><p>운영자·상인회 관리자는 관련 법령을 위반하거나 부적절한 게시물을 사전 통지 없이 삭제·이동할 수 있습니다.</p>
     <h2>제6조 (전자서명)</h2><p>서비스가 제공하는 전자서명은 서명자 확인(로그인)·서명 의사(동의)·위변조 방지(해시·디지털 서명)·감사추적(시각·IP·기기)을 갖춘 일반 전자서명입니다. 고강도 인증이 필요한 용도는 별도 검토가 필요합니다.</p>
@@ -2753,9 +3216,9 @@ export async function privacy(ctx) {
   const info = await platformInfo(ctx.db);
   const inner = `
     <p><b>${esc(info.siteName)}</b>(이하 "서비스")는 이용자의 개인정보를 중요하게 생각하며, 「개인정보 보호법」 등 관련 법령을 준수합니다.</p>
-    <h2>1. 수집하는 개인정보 항목</h2><p>회원가입·입점신청 시 <b>이름, 이메일, 연락처, 점포 정보</b>를 수집합니다. 서비스 이용 과정에서 접속 IP·기기 정보·서비스 이용 기록이 자동 생성·수집될 수 있습니다. 전자서명 시 서명자·시각·IP·기기 정보가 기록됩니다.</p>
-    <h2>2. 수집·이용 목적</h2><p>회원 식별 및 관리, 서비스 제공(점포 안내·공지·게시판·전자서명), 문의 응대, 부정 이용 방지를 위해 이용합니다.</p>
-    <h2>3. 보유·이용 기간</h2><p>수집·이용 목적 달성 시 지체 없이 파기합니다. 다만 관련 법령에 따라 보존이 필요한 경우 해당 기간 동안 보관합니다. 회원 탈퇴 시 계정 정보는 삭제되며, 전자서명 기록은 법적 효력·분쟁 대비를 위해 별도 기간 보관될 수 있습니다.</p>
+    <h2>1. 수집하는 개인정보 항목</h2><p>회원가입·입점신청 시 <b>이름, 이메일, 연락처, 점포 정보</b>를 수집합니다. <b>가맹 상담 신청</b> 시에는 <b>성함, 연락처, 희망 지역, 창업 예산, 유입 경로, 문의 내용</b>을 수집하며, 마케팅 정보 수신은 선택 동의 항목입니다. 서비스 이용 과정에서 접속 IP·기기 정보·서비스 이용 기록이 자동 생성·수집될 수 있습니다. 전자서명 시 서명자·시각·IP·기기 정보가 기록됩니다.</p>
+    <h2>2. 수집·이용 목적</h2><p>회원 식별 및 관리, 서비스 제공(점포 안내·공지·게시판·전자서명), <b>가맹·창업 상담 응대</b>, 문의 응대, 부정 이용 방지를 위해 이용합니다. 가맹 상담 신청 정보는 해당 브랜드(가맹본부)의 상담 목적으로만 쓰이며, 별도 동의 없이 다른 목적으로 이용하지 않습니다.</p>
+    <h2>3. 보유·이용 기간</h2><p>수집·이용 목적 달성 시 지체 없이 파기합니다. 다만 관련 법령에 따라 보존이 필요한 경우 해당 기간 동안 보관합니다. 회원 탈퇴 시 계정 정보는 삭제되며, 전자서명 기록은 법적 효력·분쟁 대비를 위해 별도 기간 보관될 수 있습니다. <b>가맹 상담 신청 정보는 상담이 종료되면 지체 없이 삭제</b>하며, 신청자는 아래 연락처로 삭제를 요청할 수 있습니다.</p>
     <h2>4. 제3자 제공·처리위탁</h2><p>서비스는 원칙적으로 개인정보를 외부에 제공하지 않습니다. 지도(네이버) 및 영상(유튜브·인스타그램·네이버TV)은 이용자가 직접 링크·연동하는 외부 서비스이며, 해당 서비스의 정책이 적용됩니다. 서비스 인프라는 Cloudflare를 통해 운영됩니다.</p>
     <h2>5. 이용자의 권리</h2><p>이용자는 언제든지 본인의 개인정보 열람·정정·삭제·처리정지를 요청할 수 있으며, 계정 설정 또는 문의처를 통해 행사할 수 있습니다.</p>
     <h2>6. 안전성 확보 조치</h2><p>비밀번호는 복호화 불가능한 방식(PBKDF2)으로 저장하고, 통신은 HTTPS로 암호화합니다. 2단계 인증(2FA)을 제공합니다.</p>
@@ -2785,6 +3248,9 @@ export async function sitemap(ctx) {
     await emitAssoc(own, "");
   } else {
     add(o + "/");
+    // 제품 소개 페이지 — 검색으로 들어오는 입구다. 테넌트 개별 도메인에서는 넣지 않는다(남의 간판이 된다).
+    add(o + "/esign");
+    add(o + "/homepage");
     for (const a of await D.listActiveAssociations(db)) {
       if (a.custom_domain) continue; // 개별 도메인 사이트는 그 도메인의 /sitemap.xml 에서 수집 (중복 노출 방지)
       await emitAssoc(a, `${o}/t/${encodeURIComponent(a.slug)}`);
@@ -2799,6 +3265,9 @@ export function robots(ctx) {
   const disallow = [
     "/admin", "/super", "/dashboard", "/account", "/setup",
     "/*/admin", "/*/dashboard", "/*/board", "/*/polls", "/*/account", "/*/sign", "/*/invite",
+    // 캠페인 랜딩 사본은 광고를 타고 들어오는 자리다. 검색에까지 올리면 본 랜딩과 같은 내용으로
+    // 서로 순위를 갉아먹는다(중복 콘텐츠).
+    "/l/", "/*/l/",
     "/*.csv$", "/*.ics$",
   ].map((p) => `Disallow: ${p}`).join("\n");
   return text(`User-agent: *\nAllow: /\n${disallow}\nSitemap: ${o}/sitemap.xml\n`);

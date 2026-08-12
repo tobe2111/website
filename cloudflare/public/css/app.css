@@ -1510,3 +1510,178 @@ tr.is-loss td{background:var(--no-bg);color:var(--no-fg)}
 .es-step h3{font-size:1rem;font-weight:800;margin-bottom:4px}
 .es-step p{color:var(--ink-soft);line-height:1.65;font-size:.92rem}
 .field-note{display:block;margin-top:4px;color:var(--muted);font-size:.78rem;font-weight:400}
+
+/* =========================================================
+   프랜차이즈 가맹점 모집 랜딩 (kind=franchise)
+   상인회 홈보다 대비를 크게 준다 — 광고를 타고 들어온 사람은 3초 안에 판단한다.
+   색은 테넌트 --brand 에서 파생되므로 브랜드마다 다른 얼굴이 나온다.
+   ========================================================= */
+.fr-eyebrow{display:inline-block;font-size:.8rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--brand);background:var(--brand-50);padding:6px 14px;border-radius:var(--r-pill);margin-bottom:18px}
+.fr-eyebrow.center{display:block;width:max-content;margin-inline:auto}
+.fr-hl{color:var(--brand);white-space:nowrap}
+.fr-head{margin-bottom:34px}
+.fr-head.center{text-align:center}
+.fr-h2{font-size:clamp(1.6rem,4vw,2.5rem);font-weight:900;letter-spacing:-.03em;line-height:1.28}
+.fr-h2.center{text-align:center}
+.fr-lead{margin-top:12px;color:var(--ink-soft);font-size:1.02rem;line-height:1.75}
+
+/* 첫 화면 */
+.fr-hero{position:relative;isolation:isolate;padding:clamp(72px,13vw,140px) 0 clamp(56px,9vw,104px);
+  background:linear-gradient(160deg,var(--brand-900),var(--brand-700));color:#fff;overflow:hidden}
+.fr-hero-bg{position:absolute;inset:0;background-size:cover;background-position:center;z-index:-2}
+.fr-hero-veil{position:absolute;inset:0;z-index:-1;
+  background:linear-gradient(180deg,rgba(0,0,0,.62),rgba(0,0,0,.42) 45%,rgba(0,0,0,.78))}
+.fr-hero-inner{text-align:center}
+.fr-hero .fr-eyebrow{color:#fff;background:rgba(255,255,255,.16)}
+.fr-hero-title{font-size:clamp(2rem,6.4vw,4rem);font-weight:900;letter-spacing:-.04em;line-height:1.22}
+.fr-hero.has-photo .fr-hero-title{text-shadow:0 2px 18px rgba(0,0,0,.5)}
+.fr-hero .fr-hl{color:var(--accent)}
+.fr-hero-sub{margin:20px auto 0;max-width:640px;font-size:1.05rem;line-height:1.75;color:rgba(255,255,255,.9)}
+.fr-hero-actions{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin-top:30px}
+.fr-hero-actions .btn-ghost{background:transparent;color:#fff;border-color:rgba(255,255,255,.5)}
+.fr-hero-actions .btn-ghost:hover{background:rgba(255,255,255,.14)}
+.fr-hero-note{margin-top:16px;font-size:.87rem;color:rgba(255,255,255,.7)}
+
+/* 흐르는 띠 */
+.fr-ticker{overflow:hidden;background:var(--ink);color:#fff;padding:13px 0}
+.fr-ticker-track{display:flex;width:max-content;animation:fr-marquee 38s linear infinite}
+.fr-tick-item{display:inline-flex;align-items:center;gap:12px;padding:0 26px;font-weight:800;font-size:.9rem;
+  letter-spacing:-.01em;white-space:nowrap}
+.fr-tick-item::after{content:"";width:5px;height:5px;border-radius:50%;background:var(--accent)}
+@keyframes fr-marquee{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+@media (prefers-reduced-motion:reduce){.fr-ticker-track{animation:none;width:100%;justify-content:center;flex-wrap:wrap}}
+
+/* 브랜드 소개 */
+.fr-why{background:var(--bg-alt)}
+.fr-why-photo{margin:26px auto 0;max-width:820px;border-radius:var(--r-xl);overflow:hidden;box-shadow:var(--sh-2)}
+.fr-why-body{margin:26px auto 0;max-width:680px;text-align:center;font-size:1.02rem;line-height:1.95;color:var(--ink-soft)}
+
+/* 창업 강점 */
+.fr-strength-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px}
+.fr-strength{position:relative;padding:26px 22px 24px;background:var(--surface);border:1px solid var(--line-soft);
+  border-radius:var(--r-lg);box-shadow:var(--sh-1);transition:.16s var(--ease)}
+.fr-strength:hover{transform:translateY(-3px);box-shadow:var(--sh-2);border-color:var(--brand-300)}
+.fr-strength-no{display:inline-block;font-size:.74rem;font-weight:800;letter-spacing:.08em;color:var(--brand);
+  background:var(--brand-50);padding:4px 10px;border-radius:var(--r-pill);margin-bottom:12px}
+.fr-strength strong{display:block;font-size:1.08rem;font-weight:800;line-height:1.4}
+.fr-strength p{margin-top:8px;color:var(--ink-soft);font-size:.92rem;line-height:1.7}
+
+/* 점주 후기 — 노란 밴드로 화면 흐름을 한 번 끊는다 */
+.fr-reviews{background:var(--accent);background:color-mix(in oklab,var(--accent),white 26%)}
+.fr-reviews .fr-h2,.fr-reviews .fr-lead{color:var(--ink)}
+.fr-review-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+.fr-review{background:#fff;border-radius:var(--r-lg);padding:24px 22px;box-shadow:var(--sh-1)}
+.fr-review p{font-size:.98rem;line-height:1.8;color:var(--ink)}
+.fr-review p::before{content:"“";font-size:2.2rem;font-weight:900;color:var(--brand);line-height:0;
+  vertical-align:-.35em;margin-right:4px}
+.fr-review cite{display:block;margin-top:14px;font-style:normal;font-size:.84rem;font-weight:700;color:var(--muted)}
+
+/* 메뉴 라인업 */
+/* 모바일에서도 두 칸이 들어가게 — 한 칸짜리 메뉴판은 끝없이 스크롤만 하게 만든다 */
+.fr-menu-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:14px}
+.fr-menu-card{text-align:center}
+.fr-menu-thumb{display:block;aspect-ratio:1/1;border-radius:var(--r-md);overflow:hidden;background:var(--surface-2)}
+.fr-menu-thumb img{width:100%;height:100%;object-fit:cover}
+.fr-menu-noimg{display:block;width:100%;height:100%;
+  background:repeating-linear-gradient(45deg,var(--surface-2),var(--surface-2) 10px,var(--bg-alt) 10px,var(--bg-alt) 20px)}
+.fr-menu-card strong{display:block;margin-top:10px;font-size:.94rem;font-weight:700}
+.fr-menu-card em{display:block;margin-top:2px;font-style:normal;font-size:.86rem;color:var(--brand);font-weight:800}
+
+/* 가맹 절차 */
+.fr-process{background:var(--bg-alt)}
+.fr-step-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px;counter-reset:frstep}
+.fr-step{position:relative;padding:28px 22px 24px;background:var(--surface);border:1px solid var(--line-soft);
+  border-radius:var(--r-lg)}
+.fr-step-no{position:absolute;top:-14px;left:22px;display:grid;place-items:center;width:42px;height:42px;
+  border-radius:50%;background:var(--brand);color:var(--on-brand);font-weight:900;font-size:.95rem;
+  box-shadow:0 6px 16px var(--brand-ring)}
+.fr-step strong{display:block;margin-top:12px;font-size:1.04rem;font-weight:800}
+.fr-step p{margin-top:8px;color:var(--ink-soft);font-size:.91rem;line-height:1.7}
+
+/* 가맹 비용 */
+.fr-cost-wrap{position:relative;border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden;background:var(--surface)}
+.fr-cost-table{width:100%;border-collapse:collapse;font-size:.95rem}
+.fr-cost-table th,.fr-cost-table td{padding:14px 16px;border-bottom:1px solid var(--line-soft);text-align:left}
+.fr-cost-table thead th{background:var(--ink);color:#fff;font-size:.84rem;font-weight:800;letter-spacing:.02em}
+.fr-cost-table tbody th{font-weight:700;width:38%}
+.fr-cost-amt{font-weight:800;color:var(--brand);white-space:nowrap}
+.fr-cost-memo{color:var(--muted);font-size:.86rem}
+.fr-cost-hidden{letter-spacing:.2em;color:var(--muted)}
+.fr-cost-wrap.is-locked .fr-cost-table tbody{filter:blur(3px);user-select:none}
+.fr-cost-veil{position:absolute;inset:0;display:grid;place-content:center;gap:14px;justify-items:center;
+  text-align:center;padding:20px;background:linear-gradient(180deg,rgba(255,255,255,.55),rgba(255,255,255,.94))}
+.fr-cost-veil p{font-size:1rem;color:var(--ink)}
+.fr-cost-note{margin-top:14px;font-size:.85rem;color:var(--muted);text-align:center}
+
+/* 상담 신청 폼 — 이 화면의 목적 */
+.fr-apply{background:var(--brand-900);background:linear-gradient(170deg,var(--brand-900),var(--brand-800))}
+.fr-apply .fr-h2,.fr-apply .fr-lead{color:#fff}
+.fr-apply .fr-lead{color:rgba(255,255,255,.82)}
+.fr-form{background:var(--surface);border-radius:var(--r-xl);padding:clamp(22px,4vw,34px);box-shadow:var(--sh-3)}
+.fr-form .req{color:var(--no)}
+.fr-form .check{font-size:.88rem;line-height:1.6}
+.fr-form .check small{color:var(--muted)}
+/* 허니팟 — 사람에게는 보이지 않고 스크린리더도 읽지 않는다. display:none 은 일부 봇이 걸러내 쓰지 않는다. */
+.hp-field{position:absolute!important;left:-9999px!important;width:1px;height:1px;opacity:0;pointer-events:none}
+
+/* 매장 안내 · FAQ · 공지 */
+.fr-more{margin-top:20px;text-align:center;font-weight:700;color:var(--brand)}
+.fr-more a{margin:0 8px}
+.fr-faq{background:var(--bg-alt)}
+.fr-faq-list{display:grid;gap:10px}
+.fr-faq-item{background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--r-md);padding:16px 18px}
+.fr-faq-item summary{font-weight:800;cursor:pointer;font-size:.98rem}
+.fr-faq-item p{margin-top:10px;color:var(--ink-soft);line-height:1.75;font-size:.93rem}
+
+/* 마무리 배너 */
+.fr-cta{background:var(--ink);color:#fff;padding:clamp(52px,8vw,84px) 0;text-align:center}
+.fr-cta h2{font-size:clamp(1.5rem,3.6vw,2.2rem);font-weight:900;letter-spacing:-.03em}
+.fr-cta p{margin:14px auto 26px;max-width:560px;color:rgba(255,255,255,.78);line-height:1.75}
+
+/* 고정 하단 바 — 스크롤 어디에 있어도 전화·신청이 손끝에 있다 */
+.fr-sticky{position:fixed;left:0;right:0;bottom:0;z-index:60;display:flex;
+  border-top:1px solid rgba(0,0,0,.08);background:rgba(255,255,255,.96);backdrop-filter:saturate(180%) blur(12px);
+  padding-bottom:env(safe-area-inset-bottom)}
+.fr-sticky-tel{flex:1;display:flex;flex-direction:column;justify-content:center;padding:10px 18px;line-height:1.25}
+.fr-sticky-tel span{font-size:.72rem;color:var(--muted);font-weight:700}
+.fr-sticky-tel strong{font-size:1.12rem;font-weight:900;letter-spacing:-.02em;color:var(--ink)}
+.fr-sticky-cta{flex:1;display:grid;place-items:center;background:var(--brand);color:var(--on-brand);
+  font-weight:800;font-size:1rem;padding:16px 18px;white-space:nowrap}
+.fr-sticky-cta:hover{filter:brightness(1.06)}
+body:has(.fr-sticky){padding-bottom:68px}
+@media (min-width:781px){.fr-sticky{left:auto;right:24px;bottom:24px;border-radius:var(--r-pill);overflow:hidden;
+    box-shadow:var(--sh-3);border:1px solid var(--line-soft);width:auto}
+  .fr-sticky-tel{padding:10px 22px}.fr-sticky-cta{padding:16px 26px}
+  body:has(.fr-sticky){padding-bottom:0}}
+
+/* 상담 DB 콘솔 */
+.lead-table td{vertical-align:top}
+.lead-table input[type=text]{width:150px;font-size:.82rem;padding:5px 8px}
+.lead-table select{font-size:.8rem;padding:4px 6px}
+.lead-msg summary{font-size:.8rem;color:var(--brand);cursor:pointer;font-weight:700}
+.lead-msg p{margin-top:6px;font-size:.85rem;color:var(--ink-soft);max-width:260px;white-space:pre-wrap}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:var(--r-pill);
+  border:1px solid var(--line);background:var(--surface);font-size:.82rem;font-weight:700;color:var(--ink-soft)}
+.pill:hover{border-color:var(--brand-300)}
+.pill-on{background:var(--brand);border-color:var(--brand);color:var(--on-brand)}
+.funnel-list{display:grid;gap:8px;max-width:420px}
+.funnel-list li{display:flex;justify-content:space-between;padding:10px 14px;background:var(--surface-2);
+  border-radius:var(--r-md);font-size:.9rem}
+.funnel-list li b{color:var(--brand);font-weight:800}
+.lines-input{font-family:var(--mono);font-size:.82rem;line-height:1.7;white-space:pre}
+
+/* 랜딩 편집기 — 사진 보관함 · 이미지 칸 · 초안 미리보기 */
+.asset-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-top:14px}
+.asset-card{background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--r-md);padding:8px;
+  display:flex;flex-direction:column;gap:6px}
+.asset-card img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:var(--r-sm);background:var(--surface-2)}
+.asset-url{font-size:.72rem;font-family:var(--mono);padding:4px 6px;border:1px solid var(--line-soft);
+  border-radius:var(--r-sm);background:var(--surface-2);width:100%}
+.asset-grid li.empty{grid-column:1/-1}
+.img-field{display:grid;gap:6px;padding:10px;border:1px dashed var(--line);border-radius:var(--r-md);background:var(--surface-2)}
+.img-field-preview img{max-height:110px;width:auto;border-radius:var(--r-sm)}
+.draft-mark{color:var(--wait-fg);background:var(--wait-bg);padding:1px 8px;border-radius:var(--r-pill);font-size:.82rem}
+.preview-bar{position:sticky;top:var(--header-h);z-index:50;background:var(--wait-bg);color:var(--wait-fg);
+  border-bottom:1px solid var(--wait);padding:10px 20px;text-align:center;font-size:.9rem;font-weight:700}
+.preview-bar a{margin-left:10px;text-decoration:underline}

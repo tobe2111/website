@@ -420,21 +420,22 @@ test("개통 체크리스트: 아무것도 없으면 막고 있는 것 4건을 �
 
 test("개통 체크리스트: 템플릿이 일부만 등록되면 빠진 것을 이름으로 짚어준다", async () => {
   const html = await superHtml({}, 3);
-  assert.match(html, /알림톡 템플릿 코드 \(3\/5\)/);
+  // 총 개수는 템플릿을 늘릴 때마다 바뀐다 — 숫자를 박지 말고 정의에서 가져온다
+  assert.match(html, new RegExp(`알림톡 템플릿 코드 \\(3/${Object.keys(TEMPLATE_KEYS).length}\\)`));
   assert.match(html, /전자서명 본인확인/, "미등록 템플릿 이름이 보여야");
   assert.ok(!/미등록: <b>전자서명 요청/.test(html), "등록된 것은 미등록 목록에 없어야");
 });
 
 test("개통 체크리스트: 다 갖추면 준비 완료 + 할 일 없음", async () => {
   const kp = await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]);
-  const html = await superHtml({ ...ALL_ON, SIGN_PRIVATE_KEY: JSON.stringify(await crypto.subtle.exportKey("jwk", kp.privateKey)) }, 5);
+  const html = await superHtml({ ...ALL_ON, SIGN_PRIVATE_KEY: JSON.stringify(await crypto.subtle.exportKey("jwk", kp.privateKey)) }, Object.keys(TEMPLATE_KEYS).length);
   assert.match(html, /준비 완료/);
   assert.match(html, /처리할 일이 없습니다/);
   assert.ok(!/건 남음/.test(html));
 });
 
 test("개통 체크리스트: 시크릿 값 자체는 화면에 절대 찍지 않는다", async () => {
-  const html = await superHtml(ALL_ON, 5);
+  const html = await superHtml(ALL_ON, Object.keys(TEMPLATE_KEYS).length);
   for (const v of ["ZZAPIZZ", "ZZUSERZZ", "ZZSENDKEYZZ", "0299998888", "re_ZZSECRETZZ"])
     assert.ok(!html.includes(v), `시크릿 값 노출: ${v}`);
 });

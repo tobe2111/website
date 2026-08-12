@@ -1,5 +1,6 @@
 // SSR 레이아웃 + 공통 조각 (문자열 템플릿, 런타임 독립)
 import { esc } from "./util.js";
+import { kindById, termsOf } from "./kinds.js";
 
 // 디자인 시스템 v2 — 브랜드 매장 아이콘(스토어프론트)
 export const STOREFRONT_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9l1.2-4.2A1 1 0 0 1 6.2 4h11.6a1 1 0 0 1 1 .8L20 9"/><path d="M4 9v10a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9"/></svg>';
@@ -11,8 +12,8 @@ export const ESIGN_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentCo
 //   { name, nav } — 이걸 주면 브랜드 이름·아이콘·상단 메뉴가 전부 그 제품 것으로 바뀐다.
 // 주지 않으면 종전과 같다(상인회 테넌트 화면 또는 플랫폼 공용 화면).
 export function layout({ title, assoc, base = "", user = null, body, activeNav = "", description = "", scripts = "", csrf = "", ogImage = "", jsonLd = null, product = null }) {
-  const nav = assoc ? navHtml(base, user, activeNav, assoc.kind)
-    : product && product.nav !== false ? productNav(user, activeNav) : "";
+  const nav = assoc ? navHtml(base, user, activeNav, assoc.kind, assoc.preset)
+    : product && product.nav !== false ? productNav(user, activeNav, product) : "";
   // 상인회에 속하지 않은 화면의 이름: 제품이 지정되면 그 제품, 아니면 운영사.
   // 예전 기본값("상인회 플랫폼")은 전자계약 고객에게 남의 서비스 간판으로 보였다.
   const brand = assoc ? esc(assoc.name) : product ? esc(product.name) : "리스터코퍼레이션";
@@ -67,6 +68,7 @@ ${assoc ? `<link rel="alternate" type="application/rss+xml" title="${brand} 공�
   </div>
 </header>
 <main id="main">${injected}</main>
+${assoc && kindById(assoc.kind).usesLanding && !isConsole(body) ? stickyBar(assoc, base) : ""}
 <footer class="site-footer"><div class="container">
   <div class="foot-top">
     <nav class="foot-policy"><a href="/privacy" class="strong">개인정보처리방침</a><span class="sep"></span><a href="/terms">이용약관</a>${assoc ? `<span class="sep"></span><a href="${base}/contact">문의하기</a>` : ""}</nav>
@@ -84,9 +86,38 @@ ${assoc ? `<link rel="alternate" type="application/rss+xml" title="${brand} 공�
 </body></html>`;
 }
 
-// 독립 제품(전자계약) 상단 메뉴 — 상인회 메뉴(점포·지도·게시판)는 한 줄도 들어가지 않는다.
-function productNav(user, active) {
-  const link = (href, label) => `<a href="${href}"${active === href ? ' class="active" aria-current="page"' : ""}>${label}</a>`;
+// 관리자·점주가 일하는 화면인가. 이 프로젝트의 콘솔 화면은 예외 없이 <section class="dash"> 로 시작한다.
+// 손님용 고정 바를 업무 화면에 띄우면 표를 가리는 방해물일 뿐이라, 화면 종류로 갈라 준다.
+// (페이지마다 플래그를 넘기는 방식은 새 콘솔 화면을 만들 때 빠뜨리기 쉬워 쓰지 않는다.)
+const isConsole = (body) => /<section class="dash"/.test(String(body));
+
+// 프랜차이즈 고정 하단 바 — 스크롤 어디에 있든 전화·신청이 한 번에 닿는다.
+// 랜딩뿐 아니라 매장 안내·공지 같은 하위 페이지에도 붙인다: 거기서 마음먹은 사람이
+// 갈 곳이 없으면 그대로 나간다. 신청 폼은 랜딩에만 있으므로 늘 랜딩의 #apply 로 보낸다.
+function stickyBar(assoc, base) {
+  const tel = String(assoc.phone || "").replace(/[^0-9+\-]/g, "");
+  const T = termsOf(assoc.preset); // 업종에 따라 "가맹 상담" ↔ "입학 상담" ↔ "진료 상담"
+  return `<div class="fr-sticky">
+    ${tel ? `<a class="fr-sticky-tel" href="tel:${esc(tel)}"><span>${esc(T.consult)} 문의</span><strong>${esc(assoc.phone)}</strong></a>` : ""}
+    <a class="fr-sticky-cta" href="${base}/#apply">${esc(T.consult)} 신청</a>
+  </div>`;
+}
+
+// 독립 제품 상단 메뉴 — 상인회 메뉴(점포·지도·게시판)는 한 줄도 들어가지 않는다.
+// product.links / product.cta 를 주면 그 제품의 메뉴가 되고, 없으면 전자계약 메뉴(기본)를 쓴다.
+function productNav(user, active, product = null) {
+  const link = (href, label) => `<a href="${esc(href)}"${active === href ? ' class="active" aria-current="page"' : ""}>${esc(label)}</a>`;
+  if (product && Array.isArray(product.links) && product.links.length) {
+    const items = product.links.map(([href, label]) => link(href, label));
+    if (user) {
+      items.push(link("/account", "내 계정"));
+      items.push(`<form method="post" action="/logout" class="nav-logout"><button class="btn btn-ghost btn-sm">로그아웃</button></form>`);
+    } else {
+      items.push(link("/login", "로그인"));
+      if (product.cta) items.push(`<a href="${esc(product.cta[0])}" class="btn btn-primary btn-sm">${esc(product.cta[1])}</a>`);
+    }
+    return items.join("");
+  }
   const items = [link("/esign", "소개"), link("/verify", "문서 진위확인")];
   if (user) {
     items.push(link("/account", "내 계정"));
@@ -98,11 +129,18 @@ function productNav(user, active) {
   return items.join("");
 }
 
-function navHtml(base, user, active, kind = "merchant") {
+function navHtml(base, user, active, kind = "merchant", preset = "") {
   const link = (href, label) => `<a href="${href}"${active === href ? ' class="active" aria-current="page"' : ""}>${label}</a>`;
+  const K = kindById(kind);
+  const T = termsOf(preset);
   // 전자계약 전용 조직에는 점포·지도·게시판이 없다 — 쓰지 않을 메뉴를 띄우면 제품이 흐려진다.
-  const esign = kind === "esign";
-  let items = esign
+  const esign = K.nav === "esign";
+  // 랜딩형은 한 장짜리다. 메뉴를 여러 페이지로 흩뿌리면 신청 폼에서 멀어진다 —
+  // 같은 페이지 안의 앵커로 보내고, 마지막 칸은 늘 '상담 신청' 버튼으로 둔다.
+  const franchise = K.nav === "landing";
+  let items = franchise
+    ? [link(`${base}/`, "소개"), link(`${base}/#process`, T.process), link(`${base}/businesses`, `${T.store} 안내`), link(`${base}/notices`, "공지")]
+    : esign
     ? [link(`${base}/`, "소개"), link(`${base}/notices`, "공지")]
     : [
       link(`${base}/`, "소개"),
@@ -111,7 +149,7 @@ function navHtml(base, user, active, kind = "merchant") {
       link(`${base}/notices`, "공지·소식"),
     ];
   if (user) {
-    if (!esign) {
+    if (!esign && !franchise) {
       items.push(link(`${base}/board`, "회원 게시판"));
       items.push(link(`${base}/polls`, "투표"));
     }
@@ -123,6 +161,7 @@ function navHtml(base, user, active, kind = "merchant") {
     // 상인회 홈페이지 위에 플랫폼 운영 도구가 얹혀 있는 것처럼 보입니다. 계정 화면에서 들어갑니다.
     const ops = [];
     if (user.role === "MERCHANT" && !esign) ops.push(link(`${base}/dashboard`, "내 업체"));
+    if (franchise && (user.role === "ADMIN" || user.role === "SUPERADMIN")) ops.push(link(`${base}/admin/leads`, "상담 DB"));
     if (user.role === "ADMIN" || user.role === "SUPERADMIN") ops.push(link(`${base}/admin`, "관리자"));
     // 담당자는 /admin 이 403 이다 — 갈 수 있는 곳(계약서 목록)으로 보낸다
     else if (user.role === "STAFF") ops.push(link(`${base}/admin/documents`, "계약서"));
@@ -130,7 +169,8 @@ function navHtml(base, user, active, kind = "merchant") {
     items.push(`<form method="post" action="/logout" class="nav-logout"><button class="btn btn-ghost btn-sm">로그아웃</button></form>`);
   } else {
     items.push(link(`/login`, "로그인"));
-    if (!esign) items.push(`<a href="${base}/register" class="btn btn-primary btn-sm">가입</a>`);
+    if (franchise) items.push(`<a href="${base}/#apply" class="btn btn-primary btn-sm">${esc(T.consult)}</a>`);
+    else if (!esign) items.push(`<a href="${base}/register" class="btn btn-primary btn-sm">가입</a>`);
   }
   return items.join("");
 }

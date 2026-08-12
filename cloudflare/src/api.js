@@ -16,6 +16,7 @@ import { turnstileVerify } from "./turnstile.js";
 import { planOf } from "./plans.js";
 import { seedDemo } from "./demoContent.js";
 import { seedStarter } from "./starterContent.js";
+import { KINDS, kindById, PRESETS, assocTerms } from "./kinds.js";
 import { TEMPLATE_KEYS, sendMany, sendOne, notifyEnabled, wonToJeon, renderTemplate, templateButton, billingMode, chargeContract, BILLING_MODES, priceOf } from "./notify.js";
 
 // ctx.request 는 내부 호출 경로에서 없을 수 있다 — 감사 기록이 본 기능을 죽이면 안 된다
@@ -54,6 +55,22 @@ export async function postLoginPath(db, user) {
   // 전자계약 조직의 회원에게 '내 업체'는 없다. 빈 화면 대신 서명 목록으로.
   if (esign) return base + "/sign";
   return base + "/dashboard";
+}
+
+// 공개 상담 폼 제출 제한 (isolate 로컬, best-effort).
+// 로그인 실패 카운터와 목적이 다르다 — 저쪽은 '틀린 시도', 이쪽은 '성공한 제출'을 센다.
+// Turnstile 시크릿이 없는 배포에서는 이것이 유일한 방벽이라 실패가 아니라 제출을 기준으로 잡는다.
+// 국내 모바일은 CGNAT 라 수많은 사람이 IP 하나를 함께 쓴다 — 빡빡하게 잡으면 진짜 신청자가 막힌다.
+// 목적은 '스크립트 반복'을 끊는 것이지 할당량 관리가 아니므로, 실제 사람 몫보다 넉넉히 잡는다.
+// 비용의 실제 상한은 아래 LEAD_NOTIFY_DAILY_CAP(하루 발송 수)이 맡는다.
+const LEAD_IP_MAX = 20, LEAD_IP_WINDOW_MS = 15 * 60 * 1000;
+const leadHits = new Map();
+function leadRateLimited(ip) {
+  const now = Date.now(), r = leadHits.get(ip);
+  if (!r || now - r.first > LEAD_IP_WINDOW_MS) { leadHits.set(ip, { n: 1, first: now }); return false; }
+  r.n++;
+  if (leadHits.size > 5000) leadHits.clear(); // 메모리 상한 — best-effort 이므로 통째로 비워도 된다
+  return r.n > LEAD_IP_MAX;
 }
 
 // 최소 침입 레이트리밋 (isolate 로컬, best-effort)
@@ -97,7 +114,9 @@ export async function logout(ctx) {
 
 // ---------- 회원가입 ----------
 export async function register(ctx) {
-  if (ctx.assoc && ctx.assoc.kind === "esign") return back(ctx.base + "/", "이 조직은 점포 가입을 받지 않습니다.", true);
+  // 프랜차이즈 랜딩도 셀프 가입을 받지 않는다 — 매장 목록은 본사가 관리한다.
+  if (ctx.assoc && (ctx.assoc.kind === "esign" || ctx.assoc.kind === "franchise"))
+    return back(ctx.base + "/", "이 조직은 점포 가입을 받지 않습니다.", true);
   const { db, env, form, addCookie, isProd, base, assoc, ip } = ctx;
   if (!(await turnstileVerify(env, form.get("cf-turnstile-response"), ip))) return back(base + "/register", "봇 방지 확인에 실패했습니다. 다시 시도해 주세요.", true);
   const name = cap((form.get("name") || "").trim(), 60);
@@ -166,14 +185,46 @@ export async function superNotifyCost(ctx) {
 // 슈퍼: 과금 방식 (발송당 / 계약당)
 // 슈퍼: 조직 유형 전환 (상인회 ↔ 전자계약 전용)
 // 데이터는 지우지 않는다 — 보이는 메뉴와 관리자 화면만 달라진다. 되돌리면 그대로 돌아온다.
+// 사이트 복제 — 잘 만들어 둔 사이트를 본으로 삼아 새 고객사를 찍어 낸다.
+// "프랜차이즈 홈페이지도 상인회처럼 계속 복사해서 관리한다"가 이 기능의 목적이다.
+// 껍데기(유형·업종·브랜딩·화면 구성·캠페인 사본)만 복사하고, 남의 실제 데이터
+// (회원·점포·상담 신청·계약)는 절대 따라오지 않는다.
+export async function superCloneAssociation(ctx) {
+  const { db, form } = ctx;
+  const src = await D.getAssociationById(db, Number(form.get("source_id")) || 0);
+  if (!src) return back("/super", "복제할 원본 조직을 골라 주세요.", true);
+  const name = cap((form.get("name") || "").trim(), 100);
+  const adminEmail = cap((form.get("admin_email") || "").toLowerCase().trim(), 120);
+  const adminPassword = form.get("admin_password") || "";
+  if (!name || !EMAIL_RE.test(adminEmail) || adminPassword.length < 8 || adminPassword.length > 200)
+    return back("/super", "새 조직 이름과 관리자 계정을 확인하세요. (비밀번호 8~200자)", true);
+  if (await D.getUserByEmail(db, adminEmail)) return back("/super", "이미 사용 중인 관리자 이메일입니다.", true);
+  let slug = slugify(name), n = 1;
+  while (await D.getAssociationBySlug(db, slug)) slug = slugify(name) + "-" + (++n);
+  const made = await D.cloneAssociation(db, src.id, {
+    slug, name,
+    brandColor: /^#[0-9a-fA-F]{6}$/.test(form.get("brand_color") || "") ? form.get("brand_color") : "",
+    tagline: cap(form.get("tagline"), 200),
+  });
+  if (!made) return back("/super", "복제에 실패했습니다.", true);
+  const { hash, salt } = await hashPassword(adminPassword);
+  await D.createUser(db, { email: adminEmail, passwordHash: hash, salt, name: cap(form.get("admin_name"), 60) || "관리자", role: "ADMIN", associationId: made.id });
+  const st = await seedStarter(ctx.env, db, made, { createdBy: null });
+  await audit(ctx, "사이트복제", `${src.name} → ${name} (/t/${made.slug})`, null);
+  return back("/super", `'${src.name}' 을(를) 본으로 '${name}' 을(를) 만들었습니다. (주소: /t/${made.slug}, 관리자: ${adminEmail}) `
+    + `화면 구성은 그대로 복사됐고, 회원·상담 신청 등 원본의 데이터는 따라오지 않았습니다. 시작 공지 ${st.notices}건을 넣었습니다.`);
+}
+
 export async function superSetKind(ctx) {
   const { db, form, params } = ctx;
   const a = await D.getAssociationById(db, Number(params.id) || 0);
   if (!a) return back("/super", "조직을 찾을 수 없습니다.", true);
-  const kind = form.get("kind") === "esign" ? "esign" : "merchant";
+  const kind = D.normalizeKind(form.get("kind"));
   await D.setAssociationKind(db, a.id, kind);
-  await audit(ctx, "조직유형변경", `${a.name}: ${kind === "esign" ? "전자계약 전용" : "상인회"}`, null);
-  return back("/super", `'${a.name}' 을(를) ${kind === "esign" ? "전자계약 전용" : "상인회"} 으로 바꿨습니다. 기존 데이터는 그대로 있습니다.`);
+  // 업종 문구는 랜딩형에서만 의미가 있지만, 유형을 오갈 수 있으니 값이 오면 그대로 보관한다
+  if (form.get("preset")) await D.setAssociationPreset(db, a.id, D.normalizePreset(form.get("preset")));
+  await audit(ctx, "조직유형변경", `${a.name}: ${KIND_LABEL[kind]}`, null);
+  return back("/super", `'${a.name}' 을(를) ${KIND_LABEL[kind]} 으로 바꿨습니다. 기존 데이터는 그대로 있습니다.`);
 }
 
 export async function superBillingMode(ctx) {
@@ -491,6 +542,13 @@ export function tempPassword(len = 12) {
   for (let i = 0; i < len; i++) out += TEMP_ALPHABET[b[i] % TEMP_ALPHABET.length];
   return out;
 }
+
+// 유형별 표시 이름·기본 한 줄 소개는 레지스트리(kinds.js)에서 온다.
+// 상인회는 db.createAssociation 의 기본값을 그대로 쓰므로 undefined 를 넘긴다.
+const KIND_LABEL = Object.fromEntries(Object.entries(KINDS).map(([k, v]) => [k, v.createLabel || v.label]));
+const taglineFor = (kind, preset) =>
+  kind === "merchant" ? undefined
+  : (kindById(kind).usesLanding && (PRESETS[preset] || {}).tagline) || kindById(kind).tagline;
 
 const audit = (ctx, action, detail = "", assocId) =>
   D.logAudit(ctx.db, { associationId: assocId !== undefined ? assocId : (ctx.assoc ? ctx.assoc.id : null), userId: ctx.user.id, actorName: ctx.user.name, action, detail });
@@ -830,6 +888,9 @@ export async function adminCreateDocument(ctx) {
     await D.logDocEvent(db, { documentId: doc.id, userId: user.id, actorName: user.name, kind: "created", detail: `서식: ${tpl.title}`, ip: ctx.ip || "", userAgent: uaOf(ctx) });
     await notifyNewDocument(ctx, doc, title, dueDate, ordered, recips);
     await audit(ctx, "서명문서생성", `${title} (서식: ${tpl.title})`);
+    // 상담 건에서 시작한 계약이면 상세 화면으로 보내 상대방(신청자)을 바로 서명자로 넣게 한다
+    const leadId = Number(form.get("lead_id")) || 0;
+    if (leadId) return redirect(`${base}/admin/documents/${doc.id}?lead=${leadId}&msg=${encodeURIComponent("계약서를 만들었습니다. 아래에서 서명 링크를 발급해 보내세요.")}`);
     return redirect(`${base}/admin/documents/${doc.id}/fields?msg=${encodeURIComponent("서식으로 문서를 만들었습니다. 서명 자리를 확인하고 저장하세요.")}`);
   }
   const target = form.get("target");
@@ -1573,12 +1634,13 @@ export async function superCreateAssociation(ctx) {
   if (!name || !EMAIL_RE.test(adminEmail) || adminPassword.length < 8 || adminPassword.length > 200) return back("/super", "상인회 이름과 관리자 계정을 확인하세요. (비밀번호 8~200자)", true);
   if (await D.getUserByEmail(db, adminEmail)) return back("/super", "이미 사용 중인 관리자 이메일입니다.", true);
   const color = /^#[0-9a-fA-F]{6}$/.test(form.get("brand_color") || "") ? form.get("brand_color") : "#0b6e4f";
-  const kind = form.get("kind") === "esign" ? "esign" : "merchant";
+  const kind = D.normalizeKind(form.get("kind"));
+  const preset = D.normalizePreset(form.get("preset"));
   // 고유 slug
   let slug = slugify(name), n = 1;
   while (await D.getAssociationBySlug(db, slug)) slug = slugify(name) + "-" + (++n);
   const assoc = await D.createAssociation(db, { slug, name, brandColor: color, kind,
-    tagline: cap(form.get("tagline"), 200) || (kind === "esign" ? "종이 없이, 만나지 않고, 법적 효력 있는 계약" : undefined) });
+    preset, tagline: cap(form.get("tagline"), 200) || taglineFor(kind, preset) });
   const { hash, salt } = await hashPassword(adminPassword);
   await D.createUser(db, { email: adminEmail, passwordHash: hash, salt, name: cap(form.get("admin_name"), 60) || "관리자", role: "ADMIN", associationId: assoc.id });
   // 빈 화면으로 넘기지 않도록 시작 세트를 함께 넣습니다(공지·가입 동의서).
@@ -1768,6 +1830,254 @@ export async function adminSaveLayout(ctx) {
 export async function adminResetLayout(ctx) {
   await D.resetHomeLayout(ctx.db, ctx.assoc.id);
   return back(ctx.base + "/admin", "홈페이지 구성을 기본값으로 초기화했습니다.");
+}
+
+// ---------- 프랜차이즈 랜딩페이지 ----------
+// 섹션 저장 로직은 홈 구성과 같은 모양이지만 카탈로그와 저장 위치가 다르다.
+// 반복 항목(lines)은 여러 줄이 들어오므로 한 칸 상한을 홈 구성보다 넉넉히 잡는다.
+const LANDING_FIELD_MAX = 4000;
+// 올린 사진을 섹션에 넣을 때 쓰는 주소. 워커 상대 경로로 박아 둔다 —
+// R2 공개 도메인을 나중에 붙이거나 떼도 이미 저장된 랜딩이 깨지지 않는다.
+const mediaPath = (key) => `/media/${key}`;
+// 편집 대상이 기본 랜딩인지 캠페인 사본인지 — ?v=슬러그 하나로 갈린다.
+const variantOf = (ctx) => cap(ctx.url.searchParams.get("v") || "", 40);
+const landingBack = (base, v) => `${base}/admin/landing${v ? `?v=${encodeURIComponent(v)}` : ""}`;
+
+export async function adminSaveLanding(ctx) {
+  const { db, env, form, base, assoc } = ctx;
+  const { LANDING_CATALOG } = await import("./franchise.js");
+  const v = variantOf(ctx);
+  const to = landingBack(base, v);
+  if (v && !(await D.getLandingVariant(db, assoc.id, v))) return back(base + "/admin/landing", "사본을 찾을 수 없습니다.", true);
+  const order = (form.get("order") || "").split(",").map((s) => parseInt(s, 10)).filter((n) => !isNaN(n));
+  const built = [];
+  for (const i of order) {
+    const type = form.get(`ty_${i}`); const cat = LANDING_CATALOG[type];
+    if (!cat) continue;
+    const sec = { type, enabled: form.get(`en_${i}`) === "1" };
+    for (const f of cat.fields) {
+      const key = `f_${i}_${f.key}`;
+      if (f.type === "bool") { sec[f.key] = form.get(key) === "1"; continue; }
+      let value = cap(String(form.get(key) != null ? form.get(key) : "").replace(/\r\n/g, "\n"), LANDING_FIELD_MAX);
+      // 파일을 골랐으면 올린 주소가 직접 입력한 주소를 이깁니다 (방금 고른 쪽이 의도한 것)
+      if (f.type === "image") {
+        const up = await saveImages(env, form.getAll(`file_${i}_${f.key}`), 1);
+        if (up.error) return back(to, up.error, true);
+        if (up.images[0]) {
+          value = mediaPath(up.images[0].filename);
+          await D.addLandingAsset(db, { associationId: assoc.id, filename: up.images[0].filename, size: up.images[0].size });
+        }
+      }
+      sec[f.key] = value;
+    }
+    built.push(sec);
+  }
+  if (!built.length) return back(to, "구성을 해석할 수 없습니다.", true);
+  const json = JSON.stringify(built);
+  // 저장은 초안까지만. 발행을 따로 두어야 문구를 고치는 동안 손님이 공사판을 보지 않는다.
+  if (v) await D.saveLandingVariantDraft(db, assoc.id, v, json);
+  else await D.saveLandingDraft(db, assoc.id, json);
+  await audit(ctx, "랜딩초안저장", v || "기본");
+  return back(to, "초안이 저장되었습니다. 손님에게 보이려면 '발행하기'를 눌러 주세요.");
+}
+export async function adminPublishLanding(ctx) {
+  const { db, base, assoc } = ctx;
+  const v = variantOf(ctx);
+  if (v) await D.publishLandingVariant(db, assoc.id, v);
+  else await D.publishLandingDraft(db, assoc.id);
+  await audit(ctx, "랜딩발행", v || "기본");
+  return back(landingBack(base, v), "발행했습니다. 이제 손님에게 보입니다.");
+}
+export async function adminDiscardLandingDraft(ctx) {
+  const { db, base, assoc } = ctx;
+  const v = variantOf(ctx);
+  if (v) await D.discardLandingVariantDraft(db, assoc.id, v);
+  else await D.discardLandingDraft(db, assoc.id);
+  return back(landingBack(base, v), "초안을 버리고 발행본으로 되돌렸습니다.");
+}
+export async function adminResetLanding(ctx) {
+  const { db, base, assoc } = ctx;
+  const v = variantOf(ctx);
+  if (v) { await D.saveLandingVariantDraft(db, assoc.id, v, null); await D.publishLandingVariant(db, assoc.id, v); }
+  else await D.resetLandingLayout(db, assoc.id);
+  await audit(ctx, "랜딩구성초기화", v || "기본");
+  return back(landingBack(base, v), "랜딩페이지를 기본 구성으로 되돌렸습니다.");
+}
+
+// 캠페인 사본 — 지금 편집 중인 내용을 그대로 복사해 새 주소로 띄운다.
+export async function adminCreateLandingVariant(ctx) {
+  const { db, form, base, assoc } = ctx;
+  const name = cap((form.get("name") || "").trim(), 40);
+  const slug = cap((form.get("slug") || "").trim().toLowerCase(), 40).replace(/[^a-z0-9-]/g, "");
+  if (!name || !slug) return back(base + "/admin/landing", "사본 이름과 주소를 입력해 주세요. (주소는 영문 소문자·숫자·하이픈)", true);
+  if (await D.getLandingVariant(db, assoc.id, slug)) return back(base + "/admin/landing", "이미 쓰고 있는 주소입니다.", true);
+  const from = variantOf(ctx);
+  const src = from ? (await D.getLandingVariant(db, assoc.id, from)) : null;
+  const layout = src ? (src.draft || src.layout) : (assoc.landing_draft || assoc.landing_layout);
+  await D.createLandingVariant(db, { associationId: assoc.id, slug, name, layout });
+  await audit(ctx, "랜딩사본생성", `${name} (/l/${slug})`);
+  return back(`${base}/admin/landing?v=${encodeURIComponent(slug)}`, `'${name}' 사본을 만들었습니다. 주소: ${base}/l/${slug}`);
+}
+export async function adminDeleteLandingVariant(ctx) {
+  const { db, base, assoc, params } = ctx;
+  const slug = cap(params.slug || "", 40);
+  const v = await D.getLandingVariant(db, assoc.id, slug);
+  if (!v) return back(base + "/admin/landing", "사본을 찾을 수 없습니다.", true);
+  await D.deleteLandingVariant(db, assoc.id, slug);
+  await audit(ctx, "랜딩사본삭제", v.name || slug);
+  // 이 사본으로 들어온 상담 신청은 지우지 않는다 — 화면을 접었다고 받은 연락처가 사라지면 안 된다
+  return back(base + "/admin/landing", `'${v.name || slug}' 사본을 지웠습니다. 이 사본으로 들어온 상담 신청은 그대로 남아 있습니다.`);
+}
+
+// 사진 보관함 — 올려 두고 주소를 복사해 섹션에 붙여 넣는다.
+export async function adminUploadLandingAsset(ctx) {
+  const { db, env, form, base, assoc } = ctx;
+  const up = await saveImages(env, form.getAll("images"), 12);
+  if (up.error) return back(base + "/admin/landing", up.error, true);
+  if (!up.images.length) return back(base + "/admin/landing", "올릴 사진을 선택해 주세요.", true);
+  for (const im of up.images) await D.addLandingAsset(db, { associationId: assoc.id, filename: im.filename, size: im.size });
+  await audit(ctx, "랜딩사진업로드", `${up.images.length}장`);
+  return back(base + "/admin/landing", `사진 ${up.images.length}장을 올렸습니다. 주소를 복사해 섹션에 붙여 넣으세요.`);
+}
+export async function adminDeleteLandingAsset(ctx) {
+  const { db, env, base, assoc, params } = ctx;
+  const a = await D.getLandingAsset(db, Number(params.id) || 0, assoc.id);
+  if (!a) return back(base + "/admin/landing", "사진을 찾을 수 없습니다.", true);
+  await D.deleteLandingAsset(db, a.id, assoc.id);
+  await storage.remove(env, a.filename);
+  return back(base + "/admin/landing", "사진을 지웠습니다.");
+}
+
+// 상담 정보 보관 기간 — 매일 크론이 이 값을 보고 처리 끝난 건을 지운다.
+export async function adminSetLeadRetention(ctx) {
+  const { db, form, base, assoc } = ctx;
+  const days = Math.max(30, Math.min(3650, parseInt(form.get("days") || "0", 10) || 0));
+  await D.setSetting(db, `lead_retention:${assoc.id}`, String(days));
+  await audit(ctx, "상담보관기간변경", `${days}일`);
+  return back(base + "/admin/landing", `처리가 끝난 상담 건을 ${days}일 뒤 자동 삭제합니다.`);
+}
+
+// ---------- 가맹 상담 신청 (공개 · DB 수집) ----------
+// 이 폼 하나가 프랜차이즈 랜딩의 성과 전부다. 그래서 두 가지를 동시에 지킨다:
+//   ① 진짜 신청은 절대 잃지 않는다 (메일·알림이 실패해도 DB 저장은 끝난 뒤에 한다)
+//   ② 쓰레기는 들이지 않는다 (봇 방지 · 허니팟 · 중복 제출 차단)
+export async function leadSubmit(ctx) {
+  const { db, env, form, base, assoc, ip } = ctx;
+  // 사본(캠페인 랜딩)에서 왔으면 그 화면으로 돌려보낸다 — 기본 랜딩으로 튕기면 방금 읽던 문구가 사라진다
+  const variant = cap((form.get("variant") || "").trim(), 40).replace(/[^a-z0-9-]/g, "");
+  const home = variant ? `${base}/l/${encodeURIComponent(variant)}` : `${base}/`;
+  const at = (msg, err = false) => redirect(`${home}?${err ? "err=1&" : ""}msg=${encodeURIComponent(msg)}#apply`);
+  if (!kindById(assoc.kind).usesLanding) return at("이 조직은 상담 신청을 받지 않습니다.", true);
+  if (leadRateLimited(ip)) return at("잠시 후 다시 시도해 주세요.", true);
+  if (!(await turnstileVerify(env, form.get("cf-turnstile-response"), ip)))
+    return at("봇 방지 확인에 실패했습니다. 다시 시도해 주세요.", true);
+  // 허니팟: 사람 눈에 보이지 않는 칸이 채워졌다면 봇이다. 봇에게는 성공처럼 보이게 두고 저장하지 않는다.
+  if (form.get("website")) return at("상담 신청이 접수되었습니다. 곧 연락드리겠습니다.");
+  if (form.get("agree") !== "1") return at("개인정보 수집·이용에 동의해 주세요.", true);
+  const name = cap((form.get("name") || "").trim(), 60);
+  const phoneRaw = cap((form.get("phone") || "").trim(), 20);
+  const phone = phoneRaw.replace(/[^0-9+\-]/g, "");
+  if (!name || !phone) return at("성함과 연락처를 입력해 주세요.", true);
+  if (D.normalizePhone(phone).length < 9) return at("연락처를 다시 확인해 주세요.", true);
+  // 뒤로가기·더블클릭으로 같은 사람이 두 번 들어오면 영업팀이 같은 번호로 두 번 전화한다
+  if (await D.recentLeadByPhone(db, assoc.id, phone, 10))
+    return at("이미 접수되었습니다. 곧 연락드리겠습니다.");
+  // 사본 이름은 실제로 있는 것만 기록한다 — 공개 폼이 지어낸 이름이 성과표에 줄을 만들면 안 된다
+  const knownVariant = variant && (await D.getLandingVariant(db, assoc.id, variant)) ? variant : "";
+  const lead = await D.createLead(db, {
+    associationId: assoc.id, name, phone, variant: knownVariant,
+    email: cap((form.get("email") || "").trim(), 120),
+    region: cap((form.get("region") || "").trim(), 60),
+    budget: cap((form.get("budget") || "").trim(), 40),
+    funnel: cap((form.get("funnel") || "").trim(), 40),
+    message: cap((form.get("message") || "").trim(), 2000),
+    agreeMarketing: form.get("agree_marketing") === "1" ? 1 : 0,
+    utmSource: cap((form.get("utm_source") || "").trim(), 60),
+    utmMedium: cap((form.get("utm_medium") || "").trim(), 60),
+    utmCampaign: cap((form.get("utm_campaign") || "").trim(), 60),
+    referrer: cap((form.get("referrer") || "").trim(), 200),
+  });
+  // 알림함은 파기 대상(leads)이 아니다 — 여기에 이름·번호를 적으면 신청 건을 지워도 그대로 남는다.
+  // 누가 왔는지는 링크를 눌러 상담 DB 에서 본다.
+  await D.createNotification(db, { associationId: assoc.id, kind: "lead",
+    message: `새 ${assocTerms(assoc).consult} 신청이 들어왔습니다${lead.region ? ` (${lead.region})` : ""}`,
+    link: base + "/admin/leads" });
+  // 알림톡 — 담당자는 메일함을 늘 보고 있지 않다. 초기 응답 속도가 계약률을 가른다.
+  // 크레딧이 없거나 발송이 꺼져 있어도 접수는 이미 끝났다 — 실패해도 조용히 넘어간다.
+  await notifyLead(ctx, lead).catch(() => {});
+  if (emailEnabled(env) && assoc.email) {
+    // 메일이 죽어도 신청은 이미 DB 에 있다 — 알림 실패로 접수 자체가 실패한 것처럼 보이면 안 된다
+    await sendEmail(env, {
+      to: assoc.email,
+      subject: `[${assoc.name}] 새 가맹 상담 신청 — ${name}`,
+      html: mailShell(`${esc(assoc.name)} 가맹 상담`,
+        `<p><b>성함</b>: ${esc(name)}<br /><b>연락처</b>: ${esc(phone)}<br />
+          <b>희망 지역</b>: ${esc(lead.region || "-")}<br /><b>창업 예산</b>: ${esc(lead.budget || "-")}<br />
+          <b>유입 경로</b>: ${esc(lead.funnel || "-")}</p>
+        ${lead.message ? `<p style="white-space:pre-wrap">${esc(lead.message)}</p>` : ""}`),
+    }).catch(() => {});
+  }
+  return at("상담 신청이 접수되었습니다. 남겨주신 연락처로 곧 연락드리겠습니다.");
+}
+
+// 새 상담이 들어오면 담당자에게 알림톡, 신청자에게 접수 확인.
+// 알림톡 설정(키·템플릿 코드·크레딧)이 없으면 조용히 넘어간다 — 알림이 접수를 막으면 본말전도다.
+//
+// ⚠️ 이 발송은 '누구나 보낼 수 있는 공개 폼'이 방아쇠다. 신청자 확인 문자는 폼에 적힌 번호로
+//    나가고 요금은 조직이 문다 — 즉 남의 번호로 문자를 쏘고 남의 돈을 태우는 통로가 될 수 있다.
+//    그래서 하루 상한을 두고, 넘으면 발송만 멈춘다(접수는 계속 받는다).
+const LEAD_NOTIFY_DAILY_CAP = 200;
+async function notifyLead(ctx, lead) {
+  const { db, env, assoc, base } = ctx;
+  if (!notifyEnabled(env)) return;
+  const sentToday = await D.countMessagesSince(db, assoc.id, ["lead_new", "lead_ack"], 24);
+  if (sentToday >= LEAD_NOTIFY_DAILY_CAP) return;
+  const origin = await originFor(env, db, assoc);
+  const staff = [...(await D.listUsersByAssociation(db, assoc.id, "ADMIN")),
+    ...(await D.listUsersByAssociation(db, assoc.id, "STAFF"))].filter((u) => u.phone);
+  if (staff.length) {
+    await sendMany(env, db, {
+      assoc, kind: "lead_new", recipients: staff,
+      textFor: () => renderTemplate("lead_new", { 상호: assoc.name, 이름: lead.name, 연락처: lead.phone, 지역: lead.region }),
+      buttonName: templateButton("lead_new"), buttonUrl: origin ? `${origin}${base}/admin/leads` : "",
+    });
+  }
+  // 신청자 확인 문자 — "접수됐나?" 하는 불안을 없애는 것만으로 이탈이 줄어든다.
+  if (D.isValidPhone(lead.phone)) {
+    await sendOne(env, db, {
+      assoc, kind: "lead_ack", to: lead.phone,
+      text: renderTemplate("lead_ack", { 상호: assoc.name, 이름: lead.name }),
+    });
+  }
+}
+
+// ---------- 상담 DB 관리 (관리자) ----------
+export async function adminLeadStatus(ctx) {
+  const { db, form, base, assoc, params } = ctx;
+  const lead = await D.getLead(db, Number(params.id) || 0, assoc.id);
+  if (!lead) return back(base + "/admin/leads", "신청 건을 찾을 수 없습니다.", true);
+  const status = form.get("status");
+  if (!D.LEAD_STATUSES.includes(status)) return back(base + "/admin/leads", "잘못된 상태값입니다.", true);
+  await D.setLeadStatus(db, lead.id, assoc.id, status);
+  // 감사 로그·주소창에도 이름을 남기지 않는다 (감사 로그는 파기 대상이 아니고, 주소는 방문 기록에 남는다)
+  await audit(ctx, "상담상태변경", `#${lead.id}: ${D.LEAD_STATUS_LABEL[status]}`);
+  return back(base + "/admin/leads", `신청 건을 '${D.LEAD_STATUS_LABEL[status]}'(으)로 바꿨습니다.`);
+}
+export async function adminLeadMemo(ctx) {
+  const { db, form, base, assoc, params } = ctx;
+  const lead = await D.getLead(db, Number(params.id) || 0, assoc.id);
+  if (!lead) return back(base + "/admin/leads", "신청 건을 찾을 수 없습니다.", true);
+  await D.setLeadMemo(db, lead.id, assoc.id, cap(form.get("memo"), 500));
+  return back(base + "/admin/leads", "메모를 저장했습니다.");
+}
+export async function adminLeadDelete(ctx) {
+  const { db, base, assoc, params } = ctx;
+  const lead = await D.getLead(db, Number(params.id) || 0, assoc.id);
+  if (!lead) return back(base + "/admin/leads", "신청 건을 찾을 수 없습니다.", true);
+  await D.deleteLead(db, lead.id, assoc.id);
+  // 지운 내용(이름·번호)은 감사 로그에도 남기지 않는다 — 지웠는데 다른 표에 남으면 지운 게 아니다
+  await audit(ctx, "상담신청삭제", `#${lead.id}`);
+  return back(base + "/admin/leads", "신청 건을 삭제했습니다.");
 }
 
 // ---------- 2단계 인증 (TOTP) ----------

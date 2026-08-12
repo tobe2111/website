@@ -19,15 +19,22 @@ CREATE TABLE IF NOT EXISTS associations (
   map_zoom    INTEGER NOT NULL DEFAULT 14,
   active      INTEGER NOT NULL DEFAULT 1,
   home_layout TEXT,
+  landing_layout TEXT,                        -- 프랜차이즈 랜딩페이지 구성(JSON). home_layout 과 따로 둔다 —
+                                              -- 유형을 바꿔 가며 써도 서로의 편집 내용이 지워지지 않아야 한다.
+  landing_draft  TEXT,                        -- 편집 중인 초안. 발행 전까지 손님에게는 보이지 않는다
+                                              -- (저장이 곧 발행이면 문구를 고치는 동안 공사판을 보여주게 된다).
   custom_domain TEXT NOT NULL DEFAULT '',
   map_client_id TEXT NOT NULL DEFAULT '',     -- 상인회별 네이버 지도 키 (비우면 플랫폼 공용 키)
   naver_verification TEXT NOT NULL DEFAULT '',  -- 네이버 서치어드바이저 소유 확인 코드
   google_verification TEXT NOT NULL DEFAULT '', -- 구글 서치콘솔 소유 확인 코드
   plan        TEXT NOT NULL DEFAULT 'free',   -- 요금제(free|basic|pro)
-  -- 조직 유형. merchant = 상인회 홈페이지(점포·지도·공지 + 전자계약),
-  --            esign    = 전자계약만 쓰는 조직(법무·부동산·프랜차이즈 등).
+  -- 조직 유형. merchant  = 상인회 홈페이지(점포·지도·공지 + 전자계약),
+  --            esign     = 전자계약만 쓰는 조직(법무·부동산 등),
+  --            franchise = 프랜차이즈 가맹점 모집 랜딩페이지(상담 DB 수집).
   -- 같은 엔진을 쓰되 손님에게 보이는 메뉴와 관리자 화면이 달라진다.
   kind        TEXT NOT NULL DEFAULT 'merchant',
+  -- 랜딩형 제품의 업종 프리셋(kinds.js PRESETS). 화면 구조는 같고 기본 문구만 다르다.
+  preset      TEXT NOT NULL DEFAULT 'franchise',
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_assoc_domain ON associations(custom_domain) WHERE custom_domain != '';
@@ -547,11 +554,73 @@ CREATE TABLE IF NOT EXISTS slug_aliases (
   created_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_slug_alias_assoc ON slug_aliases(association_id);
+
+-- 가맹 상담 신청(랜딩페이지 DB). 프랜차이즈 랜딩의 존재 이유이자 유일한 성과 지표다.
+-- 개인정보라 보관 최소화 원칙으로 다룬다 — 수집 항목을 늘리지 말고, 처리가 끝나면 지운다.
+CREATE TABLE IF NOT EXISTS leads (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  association_id  INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
+  name            TEXT NOT NULL,
+  phone           TEXT NOT NULL DEFAULT '',
+  email           TEXT NOT NULL DEFAULT '',
+  region          TEXT NOT NULL DEFAULT '',    -- 희망 지역
+  budget          TEXT NOT NULL DEFAULT '',    -- 창업 예산
+  funnel          TEXT NOT NULL DEFAULT '',    -- 유입 경로 (광고비 배분 판단용)
+  message         TEXT NOT NULL DEFAULT '',
+  status          TEXT NOT NULL DEFAULT 'new', -- new|contacted|visit|contract|drop
+  memo            TEXT NOT NULL DEFAULT '',    -- 상담 기록 (관리자만)
+  agree_marketing INTEGER NOT NULL DEFAULT 0,
+  source          TEXT NOT NULL DEFAULT 'landing',
+  -- 광고 출처. 신청자 자기신고(funnel)만으로는 절반이 '기타'로 와서 예산을 감으로 쓰게 된다.
+  utm_source      TEXT NOT NULL DEFAULT '',
+  utm_medium      TEXT NOT NULL DEFAULT '',
+  utm_campaign    TEXT NOT NULL DEFAULT '',
+  referrer        TEXT NOT NULL DEFAULT '',
+  variant         TEXT NOT NULL DEFAULT '',    -- 어느 랜딩(캠페인 사본)에서 왔는지. '' = 기본 랜딩
+  created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at      TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_lead_assoc ON leads(association_id, created_at);
+
+-- 캠페인별 랜딩 사본. 인스타용·검색광고용 문구를 따로 두고 전환율을 비교한다.
+-- 기본 랜딩은 associations.landing_layout 에 있고, 여기에는 사본만 쌓인다.
+CREATE TABLE IF NOT EXISTS landing_variants (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
+  slug           TEXT NOT NULL,               -- /l/:slug
+  name           TEXT NOT NULL DEFAULT '',
+  layout         TEXT,                        -- 발행본
+  draft          TEXT,                        -- 편집 중 초안
+  created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (association_id, slug)
+);
+
+-- 랜딩 방문 수 (일자·사본별). 신청 수만 알면 '많이 왔는데 안 남긴 건지'를 구분할 수 없다.
+CREATE TABLE IF NOT EXISTS landing_views (
+  association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
+  variant        TEXT NOT NULL DEFAULT '',
+  day            TEXT NOT NULL,               -- KST 기준 YYYY-MM-DD
+  views          INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (association_id, variant, day)
+);
+
+-- 랜딩에 쓰는 사진. 관리자가 올린 뒤 주소를 골라 섹션에 넣는다
+-- (media 표는 점포에 묶여 있어 본사 브랜드 사진을 담을 자리가 없다).
+CREATE TABLE IF NOT EXISTS landing_assets (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
+  filename       TEXT NOT NULL,               -- R2 키
+  original_name  TEXT NOT NULL DEFAULT '',
+  size           INTEGER NOT NULL DEFAULT 0,
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_landing_asset_assoc ON landing_assets(association_id, created_at);
 `;
 
 // 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
 // 마이그레이션 세대 — migrateColumns 에 단계를 추가할 때마다 +1
-export const SCHEMA_VERSION = "33";
+// 36 = 두 갈래(트렁크 33 · 모집형 35)를 합친 세대. 양쪽 DB 모두 다시 한 번 마이그레이션을 타게 한다.
+export const SCHEMA_VERSION = "36";
 
 export async function ensureSchema(db) {
   const has = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='associations'").first();
@@ -823,9 +892,54 @@ async function migrateColumns(db) {
     association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
     created_at TEXT NOT NULL DEFAULT (datetime('now')))`).run();
   await db.prepare("CREATE INDEX IF NOT EXISTS idx_slug_alias_assoc ON slug_aliases(association_id)").run();
+
+  // v33[모집형]: 가맹점·회원 모집 랜딩페이지 — 랜딩 구성 + 상담 신청 DB
+  if (acol.length && !acol.some((c) => c.name === "landing_layout")) {
+    await db.prepare("ALTER TABLE associations ADD COLUMN landing_layout TEXT").run();
+  }
+  await db.prepare(`CREATE TABLE IF NOT EXISTS leads (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
+    name TEXT NOT NULL, phone TEXT NOT NULL DEFAULT '', email TEXT NOT NULL DEFAULT '',
+    region TEXT NOT NULL DEFAULT '', budget TEXT NOT NULL DEFAULT '', funnel TEXT NOT NULL DEFAULT '',
+    message TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'new', memo TEXT NOT NULL DEFAULT '',
+    agree_marketing INTEGER NOT NULL DEFAULT 0, source TEXT NOT NULL DEFAULT 'landing',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT '')`).run();
+  await db.prepare("CREATE INDEX IF NOT EXISTS idx_lead_assoc ON leads(association_id, created_at)").run();
+
+  // v34: 광고 성과 계측(UTM·방문수) · 캠페인 사본 · 초안 발행 · 랜딩 사진 보관함
+  if (acol.length && !acol.some((c) => c.name === "landing_draft")) {
+    await db.prepare("ALTER TABLE associations ADD COLUMN landing_draft TEXT").run();
+  }
+  const lcol = (await db.prepare("PRAGMA table_info(leads)").all()).results || [];
+  if (lcol.length && !lcol.some((c) => c.name === "utm_source")) {
+    for (const c of ["utm_source", "utm_medium", "utm_campaign", "referrer", "variant"])
+      await db.prepare(`ALTER TABLE leads ADD COLUMN ${c} TEXT NOT NULL DEFAULT ''`).run();
+  }
+  await db.prepare(`CREATE TABLE IF NOT EXISTS landing_variants (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
+    slug TEXT NOT NULL, name TEXT NOT NULL DEFAULT '', layout TEXT, draft TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE (association_id, slug))`).run();
+  await db.prepare(`CREATE TABLE IF NOT EXISTS landing_views (
+    association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
+    variant TEXT NOT NULL DEFAULT '', day TEXT NOT NULL, views INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (association_id, variant, day))`).run();
+  await db.prepare(`CREATE TABLE IF NOT EXISTS landing_assets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
+    filename TEXT NOT NULL, original_name TEXT NOT NULL DEFAULT '', size INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')))`).run();
+  await db.prepare("CREATE INDEX IF NOT EXISTS idx_landing_asset_assoc ON landing_assets(association_id, created_at)").run();
+
+  // v35: 랜딩형 제품의 업종 프리셋 (프랜차이즈·학원·헬스장·병원·분양…)
+  if (acol.length && !acol.some((c) => c.name === "preset")) {
+    await db.prepare("ALTER TABLE associations ADD COLUMN preset TEXT NOT NULL DEFAULT 'franchise'").run();
+  }
+
   await romanizeSlugs(db);
 
-  // v33: 기본 브랜드색을 접근성 기준에 맞춘다.
+  // v33[대비]: 기본 브랜드색을 접근성 기준에 맞춘다.
   // 옛 기본값 #0b8a46 은 흰 글자를 얹었을 때 4.43:1 로 WCAG AA(4.5:1)에 아슬하게 못 미쳤다.
   // 기본 버튼·배지가 전부 그 조합이라 저시력 사용자에게는 제품 전체가 걸린다.
   // v14 때와 같은 원칙 — 기본값을 그대로 둔 곳만 옮기고, 직접 색을 고른 곳은 건드리지 않는다.

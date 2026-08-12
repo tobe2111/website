@@ -49,7 +49,9 @@ wrangler d1 create seocho-db
 wrangler r2 bucket create seocho-media
 ```
 
-`wrangler.toml` 을 열어 `database_id = "..."` 에 방금 받은 값을 붙여넣으세요.
+저장소 최상단의 `wrangler.toml` 을 열어 `database_id = "..."` 에 방금 받은 값을 붙여넣으세요.
+(설정 파일은 최상단에 있습니다 — 깃허브 자동 배포가 빌드 루트 설정과 무관하게 동작하도록.
+ `wrangler` 명령은 최상단·`cloudflare/` 어디서 실행해도 이 파일을 찾습니다.)
 
 ---
 
