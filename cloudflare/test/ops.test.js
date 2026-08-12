@@ -99,3 +99,20 @@ test("서명 문서 생성: 이메일 미설정이어도 정상 동작(발송 �
   assert.equal(r.status, 303);
   assert.match(decodeURIComponent(r.headers.get("location")), /문서를 생성/);
 });
+
+// 새 표를 만들고 백업 목록에 넣는 걸 잊으면, 복원할 때가 되어서야 안다.
+// 스키마와 백업 목록이 어긋나는 순간 여기서 걸린다.
+test("백업 목록이 스키마의 모든 표를 덮는다", async () => {
+  const { TABLES, BACKUP_SKIP } = await import("../src/scheduled.js");
+  const env = makeEnv();
+  const all = env.DB._db.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+  ).all().map((r) => r.name);
+  const missing = all.filter((t) => !TABLES.includes(t) && !BACKUP_SKIP.includes(t));
+  assert.deepEqual(missing, [], `백업에서 빠진 표: ${missing.join(", ")} — TABLES 에 넣거나 BACKUP_SKIP 에 사유와 함께 적으세요`);
+  const ghost = TABLES.filter((t) => !all.includes(t));
+  assert.deepEqual(ghost, [], `스키마에 없는 표가 백업 목록에 있음: ${ghost.join(", ")}`);
+  // 돈·계약·주소는 반드시 백업된다
+  for (const t of ["signatures", "doc_fields", "doc_field_values", "credit_ledger", "credit_orders", "slug_aliases"])
+    assert.ok(TABLES.includes(t), `${t} 는 반드시 백업 대상이어야 함`);
+});
