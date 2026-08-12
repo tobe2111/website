@@ -575,6 +575,7 @@ CREATE TABLE IF NOT EXISTS leads (
   utm_campaign    TEXT NOT NULL DEFAULT '',
   referrer        TEXT NOT NULL DEFAULT '',
   variant         TEXT NOT NULL DEFAULT '',    -- 어느 랜딩(캠페인 사본)에서 왔는지. '' = 기본 랜딩
+  extra           TEXT NOT NULL DEFAULT '',    -- 업종별 추가 질문의 답 (JSON). 고정 칸에 없는 것만 담는다
   created_at      TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at      TEXT NOT NULL DEFAULT ''
 );
@@ -599,6 +600,7 @@ CREATE TABLE IF NOT EXISTS landing_views (
   variant        TEXT NOT NULL DEFAULT '',
   day            TEXT NOT NULL,               -- KST 기준 YYYY-MM-DD
   views          INTEGER NOT NULL DEFAULT 0,
+  calls          INTEGER NOT NULL DEFAULT 0,  -- 전화 버튼 클릭. 모바일에서는 이게 상담 폼만큼 큰 전환 경로다
   PRIMARY KEY (association_id, variant, day)
 );
 

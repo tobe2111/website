@@ -506,3 +506,207 @@ test("없는 캠페인 사본 이름을 지어내 보내도 성과표를 어지�
   await post(env, jar(), "/t/dapong/lead", { ...applyForm, variant: "지어낸사본" }, "/t/dapong");
   assert.equal((await D.listLeads(env.DB, a.id))[0].variant, "", "실제 있는 사본만 기록한다");
 });
+
+// ===== 주간 리포트 · 업종별 추가 질문 =====
+
+test("주간 리포트: 모집형에는 상인회 숫자가 아니라 모집 성과가 간다", async () => {
+  const env = makeEnv({ RESEND_API_KEY: "re_test", MAIL_FROM: "테스트 <no@ex.kr>" });
+  const a = await seed(env);
+  const sent = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {           // 메일 발송만 가로챈다
+    sent.push(JSON.parse(init.body));
+    return new Response(JSON.stringify({ id: "x" }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  try {
+    await D.createLead(env.DB, { associationId: a.id, name: "김창업", phone: "010-1111-2222", utmSource: "naver" });
+    await D.bumpLandingView(env.DB, a.id, "");
+    const { runWeeklyReports } = await import("../src/scheduled.js");
+    const r = await runWeeklyReports(env);
+    assert.equal(r.sent, 1);
+    const mail = sent[0];
+    assert.match(mail.subject, /가맹 상담 1건/);
+    assert.match(mail.html, /전환율/);
+    assert.match(mail.html, /미처리\(신규\)/);
+    assert.match(mail.html, /naver/, "어느 광고에서 왔는지도 함께");
+    assert.doesNotMatch(mail.html, /승인 대기|회비/, "상인회 숫자가 섞이면 안 된다");
+    // 조용한 주(신청·방문·미처리 모두 0)는 메일도 조용히
+    sent.length = 0;
+    const env2 = makeEnv({ RESEND_API_KEY: "re_test", MAIL_FROM: "테스트 <no@ex.kr>" });
+    await seed(env2);
+    assert.equal((await runWeeklyReports(env2)).sent, 0);
+  } finally { globalThis.fetch = realFetch; }
+});
+
+test("업종별 추가 질문: 정의한 것만 받고, 선택형은 보기 밖 값을 버린다", async () => {
+  const env = makeEnv();
+  const a = await seed(env);
+  const j = await login(env);
+  await post(env, j, "/t/dapong/admin/landing", {
+    order: "0", ty_0: "lead", en_0: "1", f_0_title: "상담 신청",
+    f_0_extras: "희망 오픈 시기 | 선택 | 3개월 내;6개월 내\n보유 점포 | 글 |",
+  }, "/t/dapong/admin/landing");
+  await post(env, j, "/t/dapong/admin/landing/publish", {}, "/t/dapong/admin/landing");
+  const html = await (await get(env, jar(), "/t/dapong")).text();
+  assert.match(html, /희망 오픈 시기/);
+  assert.match(html, /name="q1"/);
+  assert.match(html, /보유 점포/);
+
+  await post(env, jar(), "/t/dapong/lead",
+    { ...applyForm, q1: "3개월 내", q2: "1곳 운영 중", q3: "정의에 없는 질문" }, "/t/dapong");
+  const lead = (await D.listLeads(env.DB, a.id))[0];
+  const extra = JSON.parse(lead.extra);
+  assert.equal(extra["희망 오픈 시기"], "3개월 내");
+  assert.equal(extra["보유 점포"], "1곳 운영 중");
+  assert.equal(Object.keys(extra).length, 2, "정의에 없는 값은 저장하지 않는다");
+
+  // 선택형에 보기 밖 값을 넣으면 버린다 (관리자 화면의 열 이름·값을 공개 폼이 정하면 안 된다)
+  await post(env, jar(), "/t/dapong/lead",
+    { ...applyForm, name: "이점주", phone: "010-9999-1111", q1: "아무거나" }, "/t/dapong");
+  const l2 = (await D.listLeads(env.DB, a.id)).find((x) => x.name === "이점주");
+  assert.doesNotMatch(l2.extra || "", /아무거나/);
+
+  // 관리자 화면·CSV 에 답이 보인다
+  const adminHtml = await (await get(env, j, "/t/dapong/admin/leads")).text();
+  assert.match(adminHtml, /희망 오픈 시기/);
+  const csv = await (await get(env, j, "/t/dapong/admin/leads.csv")).text();
+  assert.match(csv, /희망 오픈 시기/);
+  assert.match(csv, /3개월 내/);
+});
+
+test("전화 클릭도 전환이다 — 집계되고 전환율에 들어간다", async () => {
+  const env = makeEnv();
+  const a = await seed(env);
+  const j = jar();
+  await get(env, j, "/t/dapong");                    // 방문 1 + CSRF 씨앗
+  // 랜딩에 전화 버튼과 스크립트가 읽을 자리가 있어야 한다
+  const html = await (await get(env, j, "/t/dapong")).text();
+  assert.match(html, /data-track-tel/);
+  assert.match(html, /data-base="\/t\/dapong"/);
+
+  await post(env, j, "/t/dapong/track/call", {}, "/t/dapong");
+  const row = await env.DB.prepare("SELECT views, calls FROM landing_views WHERE association_id=?").bind(a.id).first();
+  assert.equal(row.calls, 1);
+
+  // 같은 사람이 연타해도 1분 안에는 한 번 (전화 클릭 수를 부풀리면 광고 판단이 틀어진다)
+  const ip = "203.0.113.77";
+  await post(env, j, "/t/dapong/track/call", {}, "/t/dapong", { "cf-connecting-ip": ip });
+  await post(env, j, "/t/dapong/track/call", {}, "/t/dapong", { "cf-connecting-ip": ip });
+  const after = await env.DB.prepare("SELECT calls FROM landing_views WHERE association_id=?").bind(a.id).first();
+  assert.equal(after.calls, 2, "연타는 한 번으로 센다");
+
+  // 관리자 화면: 전화가 전환율에 포함되고, 표본이 얇으면 그렇다고 말해 준다
+  const admin = await login(env);
+  const dash = await (await get(env, admin, "/t/dapong/admin/leads")).text();
+  assert.match(dash, /전화 2/);
+  assert.match(dash, /표본 부족/);
+
+  // 상인회에서는 집계하지 않는다 (랜딩이 없는 제품이다)
+  const env2 = makeEnv();
+  const b = await seed(env2, "merchant");
+  await post(env2, jar(), "/t/dapong/track/call", {}, "/login");
+  const none = await env2.DB.prepare("SELECT COUNT(*) AS n FROM landing_views WHERE association_id=?").bind(b.id).first();
+  assert.equal(none.n, 0);
+});
+
+test("히어로 사진은 미리 받는다 — 광고 유입은 첫 화면이 곧 이탈률이다", async () => {
+  const env = makeEnv();
+  const a = await seed(env);
+  // 사진이 없으면 미리 받을 것도 없다
+  let html = await (await get(env, jar(), "/t/dapong")).text();
+  assert.doesNotMatch(html, /rel="preload"/);
+
+  const setHero = (v) => env.DB.prepare("UPDATE associations SET hero_image=? WHERE id=?").bind(v, a.id).run();
+  await setHero("https://cdn.example.com/hero.jpg");
+  html = await (await get(env, jar(), "/t/dapong")).text();
+  assert.match(html, /<link rel="preload" as="image" fetchpriority="high" href="https:\/\/cdn\.example\.com\/hero\.jpg"/);
+  // 실제로 그 사진이 첫 화면 배경으로 쓰여야 의미가 있다 (미리 받아 놓고 안 쓰면 낭비다)
+  assert.match(html, /fr-hero-bg" style="background-image:url\('https:\/\/cdn\.example\.com\/hero\.jpg'\)/);
+
+  // 위험한 주소가 preload 로 새어 나가지 않는다.
+  // 브랜딩의 히어로 값은 mediaUrl 을 지나며 /media/… 상대경로가 되므로 스킴이 살아남지 못한다.
+  await setHero("javascript:alert(1)");
+  html = await (await get(env, jar(), "/t/dapong")).text();
+  assert.match(html, /rel="preload"[^>]*href="\/media\/javascript/);
+  assert.doesNotMatch(html, /href="javascript:/);
+});
+
+test("사본을 지웠다가 같은 이름으로 다시 만들어도 옛 성과가 붙지 않는다", async () => {
+  const env = makeEnv();
+  const a = await seed(env);
+  const j = await login(env);
+  await post(env, j, "/t/dapong/admin/landing/variant", { name: "봄 모집", slug: "spring" }, "/t/dapong/admin/landing");
+
+  // 작년 봄: 방문 3 · 전화 1 · 신청 1
+  for (let i = 0; i < 3; i++) await D.bumpLandingView(env.DB, a.id, "spring");
+  await D.bumpLandingCall(env.DB, a.id, "spring");
+  await D.createLead(env.DB, { associationId: a.id, name: "김작년", phone: "010-1111-0000", variant: "spring" });
+  const before = await D.landingViewsSince(env.DB, a.id, 30);
+  assert.equal(before, 3);
+
+  await post(env, j, "/t/dapong/admin/landing/variant/spring/delete", {}, "/t/dapong/admin/landing");
+
+  // 조직 전체 방문은 그대로 — 실제로 있었던 트래픽이고, 그때 들어온 상담도 남아 있다.
+  // 방문만 지우면 분모가 줄어 전환율이 실제보다 좋아 보인다.
+  assert.equal(await D.landingViewsSince(env.DB, a.id, 30), 3, "지난 트래픽을 소급해 지우지 않는다");
+  assert.equal((await D.listLeads(env.DB, a.id)).length, 1, "그때 들어온 상담은 그대로 남는다");
+
+  // 올해 봄: 같은 이름으로 다시 만든다
+  await post(env, j, "/t/dapong/admin/landing/variant", { name: "봄 모집", slug: "spring" }, "/t/dapong/admin/landing");
+  const byV = await D.landingViewsByVariant(env.DB, a.id, 30);
+  const fresh = byV.find((r) => r.variant === "spring");
+  assert.equal(fresh, undefined, "새 사본은 0에서 시작한다 (작년 숫자가 올해 성과로 보이면 안 된다)");
+
+  await D.bumpLandingView(env.DB, a.id, "spring");
+  const now = (await D.landingViewsByVariant(env.DB, a.id, 30)).find((r) => r.variant === "spring");
+  assert.equal(now.n, 1);
+  assert.equal(now.calls, 0, "전화 기록도 따라오지 않는다");
+
+  // 묘비는 손님이 만들 수 없는 이름이라 실제 사본과 절대 부딪히지 않는다
+  const tomb = (await D.landingViewsByVariant(env.DB, a.id, 30)).find((r) => r.variant === "deleted:spring");
+  assert.equal(tomb.n, 3);
+  assert.equal(tomb.calls, 1);
+
+  // 관리자 화면의 랜딩별 성과표에는 묘비가 줄로 나타나지 않는다
+  const html = await (await get(env, j, "/t/dapong/admin/leads")).text();
+  assert.doesNotMatch(html, /deleted:spring/);
+});
+
+test("브랜드 색이 밝아도 글씨는 읽힌다 (WCAG AA)", async () => {
+  const { onBrandInk, brandTextInk } = await import("../src/render.js");
+  // 대비 계산 — 검사에 쓰는 식과 같은 것을 여기서도 쓴다
+  const lum = (hex) => {
+    const h = hex.replace("#", "");
+    const f = (i) => { const v = parseInt(h.slice(i, i + 2), 16) / 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+    return 0.2126 * f(0) + 0.7152 * f(2) + 0.0722 * f(4);
+  };
+  const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+
+  const BRANDS = ["#0a7d40", "#e8b400", "#1f6feb", "#7c3aed", "#0e7490", "#ffe680", "#ff69b4", "#111827"];
+  for (const b of BRANDS) {
+    // ① 브랜드 배경 위의 글자 — 흰색이든 먹색이든 4.5:1 을 넘겨야 한다
+    const ink = onBrandInk(b);
+    assert.ok(ratio(ink === "#fff" ? "#ffffff" : ink, b) >= 4.5,
+      `${b} 배경 위 글자색 ${ink} 대비 ${ratio(ink === "#fff" ? "#ffffff" : ink, b).toFixed(2)}`);
+    // ② 브랜드 색을 글자로 쓸 때 — 흰 바탕에서 넉넉히 넘겨야 옅은 배경 위에서도 버틴다
+    const t = brandTextInk(b);
+    assert.ok(ratio(t, "#ffffff") >= 5.2, `${b} 글자용 ${t} 대비 ${ratio(t, "#ffffff").toFixed(2)}`);
+  }
+  // 이미 어두운 브랜드는 한 톨도 바뀌지 않는다 — 멀쩡한 색을 건드리면 그게 회귀다
+  assert.equal(brandTextInk("#0a7d40"), "#0a7d40");
+  assert.equal(brandTextInk("#7c3aed"), "#7c3aed");
+  assert.equal(onBrandInk("#0a7d40"), "#fff");
+  // 밝은 브랜드는 글자가 먹색으로 뒤집힌다
+  assert.equal(onBrandInk("#e8b400"), "#121417");
+  // 이상한 값이 와도 화면이 깨지지 않는다
+  assert.equal(onBrandInk("보라색"), "#fff");
+  assert.equal(brandTextInk(""), "var(--brand-700)");
+
+  // 실제 화면에도 실려 나가는지
+  const env = makeEnv();
+  const a = await seed(env);
+  await env.DB.prepare("UPDATE associations SET brand_color=? WHERE id=?").bind("#e8b400", a.id).run();
+  const html = await (await get(env, jar(), "/t/dapong")).text();
+  assert.match(html, /--on-brand:#121417/);
+  assert.match(html, /--brand-text:#[0-9a-f]{6}/);
+});

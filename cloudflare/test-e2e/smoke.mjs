@@ -63,6 +63,12 @@ async function grab(p, file, useCookie) {
   writeFileSync(path.join(DIR, file), h);
 }
 await grab("/t/seocho", "home.html");
+// 모집형 랜딩 — 상담 폼의 임시 보관 동작을 실제 브라우저에서 본다
+{
+  await D.createAssociation(env.DB, { slug: "dapong", name: "다뽕고", kind: "franchise" });
+  await grab("/t/dapong", "landing.html");   // 발행 전에도 기본 구성이 그대로 나온다
+  await grab("/t/dapong?err=1&msg=" + encodeURIComponent("개인정보 수집·이용에 동의해 주세요."), "landing-err.html");
+}
 await grab("/t/seocho/map", "map.html");
 await grab("/login", "login.html");
 await grab("/t/seocho/dashboard", "dashboard.html", true);
@@ -255,6 +261,88 @@ const ok = (cond, name) => { if (cond) { pass++; console.log("  ✓", name); } e
   const vals = JSON.parse(payload.fields);
   ok(Object.keys(vals).length === 3, "채운 값 3개가 전송 데이터에 담김");
   ok(payload.sig.startsWith("data:image/png"), "서명 필드 그림이 대표 서명으로 전달됨");
+  await p.close();
+}
+
+// N) 상담 폼 임시 보관 — 검증에 걸려 되돌아와도 쓰던 값이 살아 있어야 한다.
+//    긴 문의 내용을 다시 치게 만들면 가장 진지한 신청자부터 나간다.
+{
+  const p = await browser.newPage();
+  await p.goto(`http://localhost:${PORT}/landing.html`);
+  await p.fill('[name="name"]', "김창업");
+  await p.fill('[name="phone"]', "010-1234-5678");
+  await p.fill('[name="region"]', "수원 영통");
+  await p.fill('[name="message"]', "상권 분석을 먼저 받아보고 싶습니다. 평일 오후에 통화 가능합니다.");
+  await p.check('[name="agree_marketing"]');
+  // 서버로 실제 전송하지는 않고, 제출 이벤트만 일으켜 보관 동작을 확인한다
+  await p.evaluate(() => document.getElementById("leadForm").dispatchEvent(new Event("submit", { cancelable: true })));
+  const stashed = await p.evaluate(() => {
+    const k = Object.keys(sessionStorage).find((x) => x.startsWith("draft:"));
+    return k ? JSON.parse(sessionStorage.getItem(k)) : null;
+  });
+  ok(stashed && stashed.name === "김창업" && stashed.message.includes("상권 분석"), "상담 폼: 제출 시 입력값 임시 보관");
+  ok(stashed && !("agree_marketing" in stashed), "동의 체크는 보관하지 않음 (본인이 다시 체크해야 동의다)");
+  ok(stashed && !("_csrf" in stashed), "CSRF 토큰은 보관하지 않음");
+
+  // 검증 실패로 되돌아온 화면(err=1) — 값이 복원되어야 한다
+  await p.goto(`http://localhost:${PORT}/landing-err.html?err=1&msg=x`);
+  const restored = await p.evaluate(() => ({
+    name: document.querySelector('[name="name"]').value,
+    message: document.querySelector('[name="message"]').value,
+    agree: document.querySelector('[name="agree"]').checked,
+  }));
+  ok(restored.name === "김창업", "되돌아온 화면에서 성함 복원");
+  ok(restored.message.includes("상권 분석"), "긴 문의 내용도 복원");
+  ok(restored.agree === false, "개인정보 동의는 자동으로 체크되지 않음");
+
+  // 접수 성공(err 없음)이면 보관분을 지운다 — 남겨 둘 이유가 없다
+  await p.goto(`http://localhost:${PORT}/landing.html?msg=${encodeURIComponent("접수되었습니다")}`);
+  const cleared = await p.evaluate(() => Object.keys(sessionStorage).filter((x) => x.startsWith("draft:")).length === 0);
+  ok(cleared, "접수되면 보관분 삭제 (개인정보를 남겨 두지 않는다)");
+  await p.close();
+}
+
+// N) 사진 줄여 올리기 — 폰 사진 한 장이 모든 방문자의 첫 화면을 망치지 않게.
+{
+  const p = await browser.newPage();
+  await p.goto(`http://localhost:${PORT}/landing.html`);
+  // 실제 폰 사진에 가까운 큰 JPEG 을 만들어 파일 입력에 넣는다
+  const big = await p.evaluate(async () => {
+    const c = document.createElement("canvas");
+    c.width = 4032; c.height = 3024;                      // 요즘 폰 기본 해상도
+    const g = c.getContext("2d");
+    const grad = g.createLinearGradient(0, 0, 4032, 3024);
+    grad.addColorStop(0, "#204060"); grad.addColorStop(1, "#c08a20");
+    g.fillStyle = grad; g.fillRect(0, 0, 4032, 3024);
+    for (let i = 0; i < 20000; i++) {                     // 압축이 잘 안 되게 잡티
+      g.fillStyle = `rgba(${(i * 37) % 255},${(i * 91) % 255},${(i * 53) % 255},.6)`;
+      g.fillRect((i * 173) % 4032, (i * 71) % 3024, 12, 12);
+    }
+    const blob = await new Promise((r) => c.toBlob(r, "image/jpeg", 0.92));
+    const buf = new Uint8Array(await blob.arrayBuffer());
+    window.__big = { bytes: [...buf], size: blob.size };
+    return blob.size;
+  });
+  // 파일 입력 하나를 만들어 붙이고(랜딩에는 업로드 칸이 없다) 실제 핸들러를 태운다
+  const res = await p.evaluate(async () => {
+    const input = document.createElement("input");
+    input.type = "file"; input.accept = "image/*";
+    const label = document.createElement("label");
+    label.appendChild(input); document.body.appendChild(label);
+    const dt = new DataTransfer();
+    dt.items.add(new File([new Uint8Array(window.__big.bytes)], "IMG_4821.jpg", { type: "image/jpeg" }));
+    input.files = dt.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    for (let i = 0; i < 100 && input.files[0].name !== "IMG_4821.jpg" === false; i++) await new Promise((r) => setTimeout(r, 100));
+    await new Promise((r) => setTimeout(r, 1500));
+    const f = input.files[0];
+    const bmp = await createImageBitmap(f);
+    return { name: f.name, size: f.size, w: bmp.width, h: bmp.height,
+             tip: (label.querySelector(".shrink-tip") || {}).textContent || "" };
+  });
+  ok(res.size < big / 3, `큰 사진을 줄여서 올린다 (${(big / 1024 / 1024).toFixed(1)}MB → ${(res.size / 1024).toFixed(0)}KB)`);
+  ok(Math.max(res.w, res.h) === 1600, `긴 변을 1600px 로 맞춘다 (${res.w}×${res.h})`);
+  ok(/줄여서 올립니다/.test(res.tip), "무엇을 했는지 관리자에게 알려준다");
   await p.close();
 }
 

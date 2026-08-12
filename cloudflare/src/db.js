@@ -136,20 +136,45 @@ export const publishLandingVariant = (db, aid, slug) =>
   run(db, "UPDATE landing_variants SET layout=COALESCE(draft, layout), draft=NULL WHERE association_id=? AND slug=?", aid, slug);
 export const discardLandingVariantDraft = (db, aid, slug) =>
   run(db, "UPDATE landing_variants SET draft=NULL WHERE association_id=? AND slug=?", aid, slug);
-export const deleteLandingVariant = (db, aid, slug) =>
-  run(db, "DELETE FROM landing_variants WHERE association_id=? AND slug=?", aid, slug);
+// 사본을 지우면 그 방문·전화 기록은 '지워진 것' 칸으로 옮긴다.
+//
+// 그냥 두면: 같은 이름으로 사본을 다시 만들었을 때 옛 기록이 새 사본에 붙는다.
+//   "봄모집" 을 접었다가 다음 해 같은 이름으로 다시 열면 작년 숫자가 올해 성과로 보인다.
+// 지워 버리면: 조직 전체 전환율의 분모만 줄어든다. 그 사본으로 들어온 상담(leads)은
+//   기록으로 남아 있어서, 방문만 지우면 전환율이 실제보다 좋아 보인다.
+//
+// 그래서 지우지 않고 옮긴다. 사본 이름은 [a-z0-9-] 만 허용하므로 ':' 가 들어간 이름은
+// 손님이 만든 사본과 절대 부딪히지 않는다. 같은 이름을 여러 번 지우면 묘비 칸에서 합쳐진다.
+export const deleteLandingVariant = async (db, aid, slug) => {
+  await run(db, `INSERT INTO landing_views (association_id, variant, day, views, calls)
+      SELECT association_id, 'deleted:' || variant, day, views, calls
+      FROM landing_views WHERE association_id=? AND variant=?
+    ON CONFLICT(association_id, variant, day)
+      DO UPDATE SET views = views + excluded.views, calls = calls + excluded.calls`, aid, slug);
+  await run(db, "DELETE FROM landing_views WHERE association_id=? AND variant=?", aid, slug);
+  await run(db, "DELETE FROM landing_variants WHERE association_id=? AND slug=?", aid, slug);
+};
 
 // ----- 랜딩 방문 수 (일자·사본별) -----
 // 신청 수만으로는 "많이 왔는데 안 남긴 건지, 애초에 안 온 건지"를 구분할 수 없다.
 export const bumpLandingView = (db, aid, variant = "") =>
   run(db, `INSERT INTO landing_views (association_id, variant, day, views) VALUES (?,?,?,1)
     ON CONFLICT(association_id, variant, day) DO UPDATE SET views = views + 1`, aid, variant, kstToday());
+// 전화 클릭. 손님이 통화 버튼을 누른 순간을 센다 — 실제 통화 여부는 우리가 알 수 없고,
+// 알 필요도 없다. "이 랜딩이 전화를 걸게 만들었는가"만 보면 광고 판단에는 충분하다.
+export const bumpLandingCall = (db, aid, variant = "") =>
+  run(db, `INSERT INTO landing_views (association_id, variant, day, views, calls) VALUES (?,?,?,0,1)
+    ON CONFLICT(association_id, variant, day) DO UPDATE SET calls = calls + 1`, aid, variant, kstToday());
+export const landingCallsSince = async (db, aid, days = 30) =>
+  (await first(db, `SELECT COALESCE(SUM(calls),0) AS n FROM landing_views WHERE association_id=? AND day >= ?`,
+    aid, kstDaysAgo(days))).n;
+
 export const landingViewsSince = async (db, aid, days = 30) =>
   (await first(db, `SELECT COALESCE(SUM(views),0) AS n FROM landing_views WHERE association_id=? AND day >= ?`,
     aid, kstDaysAgo(days))).n;
 export const landingViewsByVariant = (db, aid, days = 30) =>
-  all(db, `SELECT variant, COALESCE(SUM(views),0) AS n FROM landing_views WHERE association_id=? AND day >= ?
-    GROUP BY variant`, aid, kstDaysAgo(days));
+  all(db, `SELECT variant, COALESCE(SUM(views),0) AS n, COALESCE(SUM(calls),0) AS calls
+    FROM landing_views WHERE association_id=? AND day >= ? GROUP BY variant`, aid, kstDaysAgo(days));
 
 // ----- 랜딩 사진 보관함 -----
 export async function addLandingAsset(db, { associationId, filename, originalName = "", size = 0 }) {
@@ -167,11 +192,11 @@ export const deleteLandingAsset = (db, id, aid) =>
 // ----- 가맹 상담 신청 (프랜차이즈 랜딩 DB) -----
 export const LEAD_STATUSES = ["new", "contacted", "visit", "contract", "drop"];
 export const LEAD_STATUS_LABEL = { new: "신규", contacted: "연락 완료", visit: "상담·방문", contract: "계약", drop: "보류·종료" };
-export async function createLead(db, { associationId, name, phone = "", email = "", region = "", budget = "", funnel = "", message = "", agreeMarketing = 0, source = "landing", utmSource = "", utmMedium = "", utmCampaign = "", referrer = "", variant = "" }) {
+export async function createLead(db, { associationId, name, phone = "", email = "", region = "", budget = "", funnel = "", message = "", agreeMarketing = 0, source = "landing", utmSource = "", utmMedium = "", utmCampaign = "", referrer = "", variant = "", extra = "" }) {
   await run(db, `INSERT INTO leads (association_id, name, phone, email, region, budget, funnel, message, agree_marketing, source,
-    utm_source, utm_medium, utm_campaign, referrer, variant) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    utm_source, utm_medium, utm_campaign, referrer, variant, extra) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     associationId, name, phone, email, region, budget, funnel, message, agreeMarketing ? 1 : 0, source,
-    utmSource, utmMedium, utmCampaign, referrer, variant);
+    utmSource, utmMedium, utmCampaign, referrer, variant, extra);
   return first(db, "SELECT * FROM leads WHERE id=?", await lastId(db));
 }
 export const getLead = (db, id, aid) => first(db, "SELECT * FROM leads WHERE id=? AND association_id=?", id, aid);
