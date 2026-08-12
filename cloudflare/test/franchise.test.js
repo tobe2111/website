@@ -671,3 +671,42 @@ test("사본을 지웠다가 같은 이름으로 다시 만들어도 옛 성과�
   const html = await (await get(env, j, "/t/dapong/admin/leads")).text();
   assert.doesNotMatch(html, /deleted:spring/);
 });
+
+test("브랜드 색이 밝아도 글씨는 읽힌다 (WCAG AA)", async () => {
+  const { onBrandInk, brandTextInk } = await import("../src/render.js");
+  // 대비 계산 — 검사에 쓰는 식과 같은 것을 여기서도 쓴다
+  const lum = (hex) => {
+    const h = hex.replace("#", "");
+    const f = (i) => { const v = parseInt(h.slice(i, i + 2), 16) / 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+    return 0.2126 * f(0) + 0.7152 * f(2) + 0.0722 * f(4);
+  };
+  const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+
+  const BRANDS = ["#0a7d40", "#e8b400", "#1f6feb", "#7c3aed", "#0e7490", "#ffe680", "#ff69b4", "#111827"];
+  for (const b of BRANDS) {
+    // ① 브랜드 배경 위의 글자 — 흰색이든 먹색이든 4.5:1 을 넘겨야 한다
+    const ink = onBrandInk(b);
+    assert.ok(ratio(ink === "#fff" ? "#ffffff" : ink, b) >= 4.5,
+      `${b} 배경 위 글자색 ${ink} 대비 ${ratio(ink === "#fff" ? "#ffffff" : ink, b).toFixed(2)}`);
+    // ② 브랜드 색을 글자로 쓸 때 — 흰 바탕에서 넉넉히 넘겨야 옅은 배경 위에서도 버틴다
+    const t = brandTextInk(b);
+    assert.ok(ratio(t, "#ffffff") >= 5.2, `${b} 글자용 ${t} 대비 ${ratio(t, "#ffffff").toFixed(2)}`);
+  }
+  // 이미 어두운 브랜드는 한 톨도 바뀌지 않는다 — 멀쩡한 색을 건드리면 그게 회귀다
+  assert.equal(brandTextInk("#0a7d40"), "#0a7d40");
+  assert.equal(brandTextInk("#7c3aed"), "#7c3aed");
+  assert.equal(onBrandInk("#0a7d40"), "#fff");
+  // 밝은 브랜드는 글자가 먹색으로 뒤집힌다
+  assert.equal(onBrandInk("#e8b400"), "#121417");
+  // 이상한 값이 와도 화면이 깨지지 않는다
+  assert.equal(onBrandInk("보라색"), "#fff");
+  assert.equal(brandTextInk(""), "var(--brand-700)");
+
+  // 실제 화면에도 실려 나가는지
+  const env = makeEnv();
+  const a = await seed(env);
+  await env.DB.prepare("UPDATE associations SET brand_color=? WHERE id=?").bind("#e8b400", a.id).run();
+  const html = await (await get(env, jar(), "/t/dapong")).text();
+  assert.match(html, /--on-brand:#121417/);
+  assert.match(html, /--brand-text:#[0-9a-f]{6}/);
+});

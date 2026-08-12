@@ -465,10 +465,10 @@ export async function adminLeads(ctx) {
     <td>${srcLabel(l)}${l.funnel ? `<br /><small>신고: ${esc(l.funnel)}</small>` : ""}</td>
     <td><span class="badge ${LEAD_BADGE[l.status] || "badge-muted"}">${esc(D.LEAD_STATUS_LABEL[l.status] || l.status)}</span>
       <form method="post" action="${base}/admin/leads/${l.id}/status" class="inline-form">
-        <select name="status" data-autosubmit>${D.LEAD_STATUSES.map((s) => `<option value="${s}"${s === l.status ? " selected" : ""}>${esc(D.LEAD_STATUS_LABEL[s])}</option>`).join("")}</select>
+        <select name="status" data-autosubmit aria-label="${esc(l.name)} 상담 상태">${D.LEAD_STATUSES.map((s) => `<option value="${s}"${s === l.status ? " selected" : ""}>${esc(D.LEAD_STATUS_LABEL[s])}</option>`).join("")}</select>
         <button class="btn btn-xs btn-ghost">변경</button></form></td>
     <td><form method="post" action="${base}/admin/leads/${l.id}/memo" class="inline-form">
-        <input type="text" name="memo" value="${esc(l.memo || "")}" maxlength="500" placeholder="상담 메모" />
+        <input type="text" name="memo" value="${esc(l.memo || "")}" maxlength="500" placeholder="상담 메모" aria-label="${esc(l.name)} 상담 메모" />
         <button class="btn btn-xs btn-ghost">저장</button></form>
       <span class="pill-row">
         <a class="btn btn-xs btn-ghost" href="${base}/admin/templates?lead=${l.id}">계약서 만들기</a>

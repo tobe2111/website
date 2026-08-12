@@ -11,6 +11,51 @@ export const ESIGN_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentCo
 // product: 상인회에 속하지 않은 '독립 제품' 화면(전자계약 랜딩·가입·검증)에서 쓰는 껍데기.
 //   { name, nav } — 이걸 주면 브랜드 이름·아이콘·상단 메뉴가 전부 그 제품 것으로 바뀐다.
 // 주지 않으면 종전과 같다(상인회 테넌트 화면 또는 플랫폼 공용 화면).
+// 브랜드 색 위에 얹을 글자색을 고른다.
+//
+// 관리자는 자기 브랜드 색을 고른다 — 노랑·하늘색·연두일 수 있다. 그 위에 흰 글자를
+// 고정으로 얹으면 대비가 2:1 아래로 떨어져 버튼 글씨가 사실상 안 보인다(실측 1.92:1).
+// 이 화면의 이용자는 40~60대 예비 창업자다. 안 읽히는 버튼은 안 눌린다.
+//
+// 색을 바꾸지는 않는다 — 브랜드가 노랑이면 버튼도 노랑이어야 한다. 글자만 바꾼다.
+// 흰색과 먹색 중 그 배경에서 대비가 더 나오는 쪽을 쓴다.
+const BRAND_INK = "#121417";
+export function onBrandInk(hex) {
+  const h = String(hex || "").replace("#", "");
+  const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h.slice(0, 6);
+  if (!/^[0-9a-fA-F]{6}$/.test(full)) return "#fff";
+  const ch = (i) => {
+    const v = parseInt(full.slice(i, i + 2), 16) / 255;
+    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  };
+  const L = 0.2126 * ch(0) + 0.7152 * ch(2) + 0.0722 * ch(4);
+  const onWhite = 1.05 / (L + 0.05);                       // 흰 글자를 얹었을 때
+  const onInk = (L + 0.05) / (0.0136 + 0.05);              // 먹 글자(#121417)를 얹었을 때
+  return onInk > onWhite ? BRAND_INK : "#fff";
+}
+
+// 브랜드 색을 '글자색'으로 쓸 때 쓸 값.
+//
+// 배경으로 쓸 때와 글자로 쓸 때는 요구 조건이 다르다. 노란 배경은 예쁘지만
+// 흰 바탕 위의 노란 글자는 1.9:1 이라 사실상 안 보인다 — 강조하려고 준 색이
+// 오히려 안 읽히는 색이 된다.
+//
+// 색상(hue)은 지키고 밝기만 낮춰 4.5:1 을 넘길 때까지 어둡게 한다.
+// 이미 충분히 어두운 브랜드(기본 초록 등)는 한 톨도 바뀌지 않는다.
+export function brandTextInk(hex) {
+  const h = String(hex || "").replace("#", "");
+  const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h.slice(0, 6);
+  if (!/^[0-9a-fA-F]{6}$/.test(full)) return "var(--brand-700)";
+  let rgb = [0, 2, 4].map((i) => parseInt(full.slice(i, i + 2), 16));
+  const lin = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+  const ratioOnWhite = (c) => 1.05 / (0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]) + 0.05);
+  // 흰 바탕 기준 5.2 를 노린다. 이 색은 흰 바탕뿐 아니라 '브랜드 옅은 배경(tint)' 위에도
+  // 자주 얹히는데, 흰 바탕으로 딱 4.5 를 맞추면 tint 위에서 4.3 으로 미끄러진다(실측).
+  // 기본 초록(#0a7d40)은 이미 5.29 라 한 톨도 바뀌지 않는다 — 바뀌는 건 밝은 색을 고른 곳뿐이다.
+  for (let i = 0; i < 40 && ratioOnWhite(rgb) < 5.2; i++) rgb = rgb.map((v) => Math.max(0, Math.round(v * 0.94)));
+  return "#" + rgb.map((v) => v.toString(16).padStart(2, "0")).join("");
+}
+
 export function layout({ title, assoc, base = "", user = null, body, activeNav = "", description = "", scripts = "", csrf = "", ogImage = "", preloadImage = "", jsonLd = null, product = null }) {
   const nav = assoc ? navHtml(base, user, activeNav, assoc.kind, assoc.preset)
     : product && product.nav !== false ? productNav(user, activeNav, product) : "";
@@ -36,6 +81,8 @@ ${ogImgAbs ? `<meta property="og:image" content="${esc(ogImgAbs)}" />` : ""}
   const ldScript = jsonLd ? `<script type="application/ld+json">${JSON.stringify(jsonLd).replace(/</g, "\\u003c")}</script>` : "";
   // 테넌트 대표색 하나로 사이트 전체 테마 전환 (900~50 스케일 자동 파생). CSS 주입 방지를 위해 HEX 만 허용.
   const brandColor = /^#[0-9a-fA-F]{3,8}$/.test((assoc && assoc.brand_color) || "") ? assoc.brand_color : "#0a7d40";
+  const onBrand = onBrandInk(brandColor);
+  const brandText = brandTextInk(brandColor);
   // 모든 POST 폼에 CSRF 히든 필드 주입
   const injected = csrf
     ? String(body).replace(/(<form\b[^>]*\bmethod\s*=\s*["']post["'][^>]*>)/gi, `$1<input type="hidden" name="_csrf" value="${csrf}">`)
@@ -48,7 +95,7 @@ ${ogImgAbs ? `<meta property="og:image" content="${esc(ogImgAbs)}" />` : ""}
 <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css" /></noscript>
 <link rel="stylesheet" href="${assetUrl("/css/app.css")}" />
 ${preloadImage ? `<link rel="preload" as="image" fetchpriority="high" href="${esc(preloadImage)}" />` : ""}
-<style>:root{--brand:${brandColor}}</style>
+<style>:root{--brand:${brandColor};--on-brand:${onBrand};--brand-text:${brandText}}</style>
 ${assoc && assoc.naver_verification ? `<meta name="naver-site-verification" content="${esc(assoc.naver_verification)}" />` : ""}
 ${assoc && assoc.google_verification ? `<meta name="google-site-verification" content="${esc(assoc.google_verification)}" />` : ""}
 ${assoc ? `<link rel="alternate" type="application/rss+xml" title="${brand} 공지·소식" href="${base}/feed.xml" />` : ""}
