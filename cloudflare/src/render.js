@@ -11,7 +11,7 @@ export const ESIGN_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentCo
 // product: 상인회에 속하지 않은 '독립 제품' 화면(전자계약 랜딩·가입·검증)에서 쓰는 껍데기.
 //   { name, nav } — 이걸 주면 브랜드 이름·아이콘·상단 메뉴가 전부 그 제품 것으로 바뀐다.
 // 주지 않으면 종전과 같다(상인회 테넌트 화면 또는 플랫폼 공용 화면).
-export function layout({ title, assoc, base = "", user = null, body, activeNav = "", description = "", scripts = "", csrf = "", ogImage = "", jsonLd = null, product = null }) {
+export function layout({ title, assoc, base = "", user = null, body, activeNav = "", description = "", scripts = "", csrf = "", ogImage = "", preloadImage = "", jsonLd = null, product = null }) {
   const nav = assoc ? navHtml(base, user, activeNav, assoc.kind, assoc.preset)
     : product && product.nav !== false ? productNav(user, activeNav, product) : "";
   // 상인회에 속하지 않은 화면의 이름: 제품이 지정되면 그 제품, 아니면 운영사.
@@ -47,6 +47,7 @@ ${ogImgAbs ? `<meta property="og:image" content="${esc(ogImgAbs)}" />` : ""}
 <link rel="stylesheet" id="fontCss" media="print" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css" />
 <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css" /></noscript>
 <link rel="stylesheet" href="${assetUrl("/css/app.css")}" />
+${preloadImage ? `<link rel="preload" as="image" fetchpriority="high" href="${esc(preloadImage)}" />` : ""}
 <style>:root{--brand:${brandColor}}</style>
 ${assoc && assoc.naver_verification ? `<meta name="naver-site-verification" content="${esc(assoc.naver_verification)}" />` : ""}
 ${assoc && assoc.google_verification ? `<meta name="google-site-verification" content="${esc(assoc.google_verification)}" />` : ""}

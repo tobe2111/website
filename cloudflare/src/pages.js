@@ -297,7 +297,10 @@ async function renderFranchisePage(ctx, { layoutJson, variant = "", preview = fa
     ? `<div class="preview-bar">미리보기 — 아직 발행되지 않은 초안입니다. 손님에게는 보이지 않습니다.
         <a href="${base}/admin/landing${variant ? `?v=${encodeURIComponent(variant)}` : ""}">편집으로 돌아가기</a></div>`
     : "";
-  return html(layout({ title: "", assoc, base, user, body: banner + body, activeNav: `${base}/`, csrf, jsonLd: orgLd, ogImage,
+  // 히어로 사진은 CSS background-image 라 브라우저의 preload 스캐너가 발견하지 못한다.
+  // CSS 파싱과 레이아웃을 기다린 뒤에야 받기 시작하는데, 광고로 들어온 사람에게는 그 지연이
+  // 곧 이탈이다. 이 사진이 첫 화면의 가장 큰 그림(LCP)이라 HTML 과 동시에 받게 한다.
+  return html(layout({ title: "", assoc, base, user, body: banner + body, activeNav: `${base}/`, csrf, jsonLd: orgLd, ogImage, preloadImage: ogImage,
     description: assoc.tagline || `${assoc.name} 가맹점 모집 — 창업 비용·가맹 절차 안내와 상담 신청.`,
     scripts: `${turnstileScript(env)}<script src="${assetUrl("/js/lead-track.js")}" defer></script>` }));
 }

@@ -608,3 +608,25 @@ test("전화 클릭도 전환이다 — 집계되고 전환율에 들어간다",
   const none = await env2.DB.prepare("SELECT COUNT(*) AS n FROM landing_views WHERE association_id=?").bind(b.id).first();
   assert.equal(none.n, 0);
 });
+
+test("히어로 사진은 미리 받는다 — 광고 유입은 첫 화면이 곧 이탈률이다", async () => {
+  const env = makeEnv();
+  const a = await seed(env);
+  // 사진이 없으면 미리 받을 것도 없다
+  let html = await (await get(env, jar(), "/t/dapong")).text();
+  assert.doesNotMatch(html, /rel="preload"/);
+
+  const setHero = (v) => env.DB.prepare("UPDATE associations SET hero_image=? WHERE id=?").bind(v, a.id).run();
+  await setHero("https://cdn.example.com/hero.jpg");
+  html = await (await get(env, jar(), "/t/dapong")).text();
+  assert.match(html, /<link rel="preload" as="image" fetchpriority="high" href="https:\/\/cdn\.example\.com\/hero\.jpg"/);
+  // 실제로 그 사진이 첫 화면 배경으로 쓰여야 의미가 있다 (미리 받아 놓고 안 쓰면 낭비다)
+  assert.match(html, /fr-hero-bg" style="background-image:url\('https:\/\/cdn\.example\.com\/hero\.jpg'\)/);
+
+  // 위험한 주소가 preload 로 새어 나가지 않는다.
+  // 브랜딩의 히어로 값은 mediaUrl 을 지나며 /media/… 상대경로가 되므로 스킴이 살아남지 못한다.
+  await setHero("javascript:alert(1)");
+  html = await (await get(env, jar(), "/t/dapong")).text();
+  assert.match(html, /rel="preload"[^>]*href="\/media\/javascript/);
+  assert.doesNotMatch(html, /href="javascript:/);
+});
