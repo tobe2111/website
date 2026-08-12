@@ -40,9 +40,10 @@ export const ASSOC_KINDS = KIND_KEYS;
 export const ASSOC_PRESETS = PRESET_KEYS;
 export const normalizeKind = (k) => (KIND_KEYS.includes(k) ? k : DEFAULT_KIND);
 export const normalizePreset = (p) => (PRESET_KEYS.includes(p) ? p : DEFAULT_PRESET);
-export async function createAssociation(db, { slug, name, brandColor = "#0b8a46", tagline = "함께 성장하는 우리 동네 상권", kind = "merchant", preset = DEFAULT_PRESET }) {
+export async function createAssociation(db, { slug, name, brandColor = "#0a7d40", tagline = "함께 성장하는 우리 동네 상권", kind = "merchant", preset = DEFAULT_PRESET }) {
   await run(db, "INSERT INTO associations (slug, name, brand_color, tagline, kind, preset) VALUES (?, ?, ?, ?, ?, ?)",
     slug, name, brandColor, tagline, normalizeKind(kind), normalizePreset(preset));
+
   return getAssociationById(db, await lastId(db));
 }
 export const setAssociationKind = (db, id, kind) =>

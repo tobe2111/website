@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS associations (
   slug        TEXT NOT NULL UNIQUE,
   name        TEXT NOT NULL,
   tagline     TEXT NOT NULL DEFAULT '함께 성장하는 우리 동네 상권',
-  brand_color TEXT NOT NULL DEFAULT '#0b8a46',
+  brand_color TEXT NOT NULL DEFAULT '#0a7d40',
   phone       TEXT NOT NULL DEFAULT '',
   address     TEXT NOT NULL DEFAULT '',
   email       TEXT NOT NULL DEFAULT '',
@@ -619,7 +619,8 @@ CREATE INDEX IF NOT EXISTS idx_landing_asset_assoc ON landing_assets(association
 
 // 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
 // 마이그레이션 세대 — migrateColumns 에 단계를 추가할 때마다 +1
-export const SCHEMA_VERSION = "35";
+// 36 = 두 갈래(트렁크 33 · 모집형 35)를 합친 세대. 양쪽 DB 모두 다시 한 번 마이그레이션을 타게 한다.
+export const SCHEMA_VERSION = "36";
 
 export async function ensureSchema(db) {
   const has = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='associations'").first();
@@ -892,7 +893,7 @@ async function migrateColumns(db) {
     created_at TEXT NOT NULL DEFAULT (datetime('now')))`).run();
   await db.prepare("CREATE INDEX IF NOT EXISTS idx_slug_alias_assoc ON slug_aliases(association_id)").run();
 
-  // v33: 프랜차이즈 가맹점 모집 랜딩페이지 — 랜딩 구성 + 상담 신청 DB
+  // v33[모집형]: 가맹점·회원 모집 랜딩페이지 — 랜딩 구성 + 상담 신청 DB
   if (acol.length && !acol.some((c) => c.name === "landing_layout")) {
     await db.prepare("ALTER TABLE associations ADD COLUMN landing_layout TEXT").run();
   }
@@ -937,6 +938,14 @@ async function migrateColumns(db) {
   }
 
   await romanizeSlugs(db);
+
+  // v33[대비]: 기본 브랜드색을 접근성 기준에 맞춘다.
+  // 옛 기본값 #0b8a46 은 흰 글자를 얹었을 때 4.43:1 로 WCAG AA(4.5:1)에 아슬하게 못 미쳤다.
+  // 기본 버튼·배지가 전부 그 조합이라 저시력 사용자에게는 제품 전체가 걸린다.
+  // v14 때와 같은 원칙 — 기본값을 그대로 둔 곳만 옮기고, 직접 색을 고른 곳은 건드리지 않는다.
+  if (cols.some((c) => c.name === "brand_color")) {
+    await db.prepare("UPDATE associations SET brand_color='#0a7d40' WHERE brand_color='#0b8a46'").run();
+  }
 }
 
 // 비ASCII slug 를 로마자 slug 로 옮긴다. 옛 주소는 alias 로 보존.

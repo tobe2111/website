@@ -6,7 +6,9 @@
   /* 브랜드 — 테넌트별 --brand 를 render.js 가 주입, 스케일은 자동 파생.
      각 토큰은 정적 폴백(기본 딥그린) → color-mix 순으로 선언:
      color-mix 미지원 구형 브라우저는 폴백을 유지(사이트 정상), 지원 브라우저는 테넌트 색으로 파생. */
-  --brand:#0b8a46;
+  /* 기본 브랜드색 — 흰 글자를 얹었을 때 WCAG AA(4.5:1)를 넘겨야 한다.
+     옛 값 #0b8a46 은 4.43:1 로 아슬하게 미달이라, 눈에 띄지 않을 만큼만 어둡게 했다(5.22:1). */
+  --brand:#0a7d40;
   --brand-900:#063320; --brand-900:color-mix(in oklab, var(--brand), #04100a 50%);
   --brand-800:#083f2b; --brand-800:color-mix(in oklab, var(--brand), #04100a 28%);
   --brand-700:#0b6e4f; --brand-700:var(--brand);
@@ -20,7 +22,10 @@
   --brand-ring:rgba(11,110,79,.42); --brand-ring:color-mix(in oklab, var(--brand), transparent 58%);
   --accent:#f6a623;
   /* 잉크·라인·표면 */
-  --ink:#1d1d1f; --ink-soft:#515154; --muted:#86868b;
+  --ink:#1d1d1f; --ink-soft:#515154;
+  /* --muted 는 안내문·보조설명 전반에 쓰인다. 옛 값 #86868b 은 흰 배경에서 3.62:1 로
+     본문 기준(4.5:1)에 못 미쳐 저시력 사용자가 읽기 어려웠다. 5.07:1 로 올렸다. */
+  --muted:#6e6e73;
   --line:#d2d2d7; --line-soft:#e8e8ed;
   --bg:#ffffff; --bg-alt:#f5f5f7; --surface:#ffffff; --surface-2:#f5f5f7; --white:#fff;
   /* 상태색 */
@@ -1384,6 +1389,14 @@ a.cc-val:hover{color:var(--brand-700)}
 .pf-mine.pf-empty{border:2px solid var(--brand);background:rgba(11,138,70,.10);color:var(--brand);cursor:pointer;
   box-shadow:0 0 0 3px rgba(11,138,70,.12)}
 .pf-mine.pf-empty:hover{background:rgba(11,138,70,.18)}
+/* 손가락 조준 여유 — 휴대폰에서는 A4 지면이 40% 남짓으로 줄어 서명칸이 13px 안팎이 된다.
+   보이는 칸 크기는 그대로 두고 '눌리는 범위'만 사방으로 넓힌다. 옆 칸과의 간격이 지면 기준
+   32px 이므로 그 절반인 12px 을 넘기지 않는다 — 더 넓히면 옆 칸이 눌린다.
+   (빈 칸만 대상. 채워진 칸은 그림을 잘라야 해서 overflow 를 열 수 없다) */
+@media (hover:none){
+  .pf-mine.pf-empty{overflow:visible}
+  .pf-mine.pf-empty::after{content:"";position:absolute;inset:-12px;border-radius:8px}
+}
 .pf-mine.pf-filled{cursor:pointer;border:1px dashed rgba(11,138,70,.4)}
 .pf-other{color:#94a3b8;font-weight:600}
 .pf-blink{animation:pfblink .4s ease-in-out 3}
@@ -1411,6 +1424,12 @@ a.cc-val:hover{color:var(--brand-700)}
   padding:10px 14px;background:var(--wait-bg);color:var(--wait-fg);border-radius:var(--r-md);font-weight:700;font-size:.9rem;margin-bottom:12px}
 .field-progress.done{background:var(--ok-bg);color:var(--ok-fg)}
 .field-jump{margin-left:auto}
+/* 휴대폰에서는 이 버튼이 주된 입력 경로다 — 지면이 축소돼 작아진 칸을 직접 누르는 대신
+   이 버튼을 반복해 누르면 순서대로 채워진다. 그래서 손가락 크기(44px)를 확보한다. */
+@media (max-width:560px){
+  .field-progress{flex-wrap:wrap}
+  .field-jump{margin-left:0;width:100%;min-height:44px;font-size:1rem}
+}
 
 /* 입력 다이얼로그 */
 .fd-back{position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:200;display:grid;place-items:center;padding:16px}

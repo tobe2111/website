@@ -13,7 +13,7 @@ const MANIFEST_KEY = "backups/index.json"; // R2 list() 없이도 보존 개수�
 const KEEP = 8; // 주 1회 × 8주 보존
 
 // 복원 가치가 있는 원본 테이블 전체 (스키마 변화에 안전하도록 SELECT * 덤프)
-const TABLES = [
+export const TABLES = [
   "associations", "users", "businesses", "media", "products", "coupons",
   "updates", "polls", "poll_votes", "event_rsvps", "dues",
   "notices", "events", "posts", "comments", "post_images",
@@ -21,12 +21,18 @@ const TABLES = [
   // 전자계약 — 필드 배치·채운 값·서식·감사 추적·외부 서명자까지 있어야 계약이 복원된다.
   // (서명 봉인만 남고 '무엇을 어디에 채웠는지'가 없으면 계약서를 다시 그릴 수 없다)
   "doc_fields", "doc_field_values", "doc_templates", "doc_events", "external_signers",
-  "notify_wallet", "credit_ledger", "message_log", "chain_anchor", "api_keys",
-  "notifications", "applications", "audit_log", "settings",
-  // 프랜차이즈 — 상담 신청(leads)은 이 제품에서 가장 잃으면 안 되는 자산이다.
+  "notify_wallet", "credit_ledger", "credit_orders", "message_log", "chain_anchor", "api_keys",
+  "notifications", "applications", "application_notes", "audit_log", "settings",
+  // 옛 주소 — 빠뜨리면 복원 후 이미 나간 링크(알림톡 버튼·명함·검색결과)가 전부 죽는다
+  "slug_aliases",
+  // 모집형 — 상담 신청(leads)은 이 제품에서 가장 잃으면 안 되는 자산이다.
   // 랜딩 구성·사본·사진 목록·방문 통계까지 있어야 사고 후에 화면과 성과를 함께 되살릴 수 있다.
   "leads", "landing_variants", "landing_views", "landing_assets",
 ];
+
+// 일부러 백업하지 않는 표 — 몇 분이면 사라지는 값이라 복원 대상이 아니다.
+// (인증번호는 되살리면 오히려 위험하고, 웹훅 대기열은 되살리면 지난 이벤트를 다시 쏜다)
+export const BACKUP_SKIP = ["sign_otp", "ext_otp", "webhook_queue"];
 
 async function aesKey(secret) {
   const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("backup|" + secret));
