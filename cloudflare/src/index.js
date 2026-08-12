@@ -29,6 +29,8 @@ const GLOBAL = [
   ["POST", "/esign/:token/otp", api.extOtpSend],
   ["POST", "/esign/:token/otp/verify", api.extOtpVerify],
   ["GET", "/esign", pages.esignLanding],
+  // 홈페이지 제작(프랜차이즈 가맹점 모집 랜딩) 제품 소개
+  ["GET", "/homepage", pages.homepageLanding],
   ["GET", "/login", pages.loginForm],
   ["POST", "/login", api.login],
   ["POST", "/logout", api.logout, "USER"],
@@ -102,6 +104,8 @@ const TENANT = [
   ["GET", "/invite", pages.invitePage],
   ["POST", "/invite", api.acceptInvite],
   ["GET", "/contact", pages.contactForm],
+  // 가맹 상담 신청 — 프랜차이즈 랜딩의 목적. 로그인 없이 누구나 보내는 공개 경로다.
+  ["POST", "/lead", api.leadSubmit],
   ["GET", "/urdeal", pages.urdealPage],
   ["POST", "/contact", api.contactSubmit],
   ["GET", "/board", pages.board, "MEMBER"],
@@ -155,6 +159,15 @@ const TENANT = [
   ["POST", "/admin/product/:id/hide", api.adminProductHide, "ADMIN"],
   ["GET", "/admin/members.csv", pages.adminExportMembers, "ADMIN"],
   ["GET", "/admin/export.json", pages.adminExportAll, "ADMIN"],
+  // 프랜차이즈: 랜딩 편집 + 상담 DB. .csv 는 경로 조각 수가 같은 :id 패턴이 없어 순서에 자유롭다.
+  ["GET", "/admin/landing", pages.adminLanding, "ADMIN"],
+  ["POST", "/admin/landing", api.adminSaveLanding, "ADMIN"],
+  ["POST", "/admin/landing/reset", api.adminResetLanding, "ADMIN"],
+  ["GET", "/admin/leads", pages.adminLeads, "ADMIN"],
+  ["GET", "/admin/leads.csv", pages.adminLeadsCsv, "ADMIN"],
+  ["POST", "/admin/leads/:id/status", api.adminLeadStatus, "ADMIN"],
+  ["POST", "/admin/leads/:id/memo", api.adminLeadMemo, "ADMIN"],
+  ["POST", "/admin/leads/:id/delete", api.adminLeadDelete, "ADMIN"],
   ["GET", "/admin/documents", pages.adminDocuments, "STAFF"],
   ["POST", "/admin/credit/order", api.adminCreditOrder, "ADMIN"],
   ["POST", "/admin/documents", api.adminCreateDocument, "STAFF"],

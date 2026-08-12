@@ -17,11 +17,18 @@ CREATE TABLE IF NOT EXISTS associations (
   map_zoom    INTEGER NOT NULL DEFAULT 14,
   active      INTEGER NOT NULL DEFAULT 1,
   home_layout TEXT,
+  landing_layout TEXT,                        -- 프랜차이즈 랜딩페이지 구성(JSON). home_layout 과 따로 둔다 —
+                                              -- 유형을 바꿔 가며 써도 서로의 편집 내용이 지워지지 않아야 한다.
   custom_domain TEXT NOT NULL DEFAULT '',
   map_client_id TEXT NOT NULL DEFAULT '',     -- 상인회별 네이버 지도 키 (비우면 플랫폼 공용 키)
   naver_verification TEXT NOT NULL DEFAULT '',  -- 네이버 서치어드바이저 소유 확인 코드
   google_verification TEXT NOT NULL DEFAULT '', -- 구글 서치콘솔 소유 확인 코드
   plan        TEXT NOT NULL DEFAULT 'free',   -- 요금제(free|basic|pro)
+  -- 조직 유형. merchant  = 상인회 홈페이지(점포·지도·공지 + 전자계약),
+  --            esign     = 전자계약만 쓰는 조직(법무·부동산 등),
+  --            franchise = 프랜차이즈 가맹점 모집 랜딩페이지(상담 DB 수집).
+  -- 같은 엔진을 쓰되 손님에게 보이는 메뉴와 관리자 화면이 달라진다.
+  kind        TEXT NOT NULL DEFAULT 'merchant',
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_assoc_domain ON associations(custom_domain) WHERE custom_domain != '';
@@ -60,6 +67,7 @@ CREATE TABLE IF NOT EXISTS users (
   salt            TEXT NOT NULL,
   name            TEXT NOT NULL,
   role            TEXT NOT NULL DEFAULT 'MERCHANT',
+  phone           TEXT NOT NULL DEFAULT '',    -- 휴대폰(알림톡 수신 · 숫자만 저장)
   session_version INTEGER NOT NULL DEFAULT 0,
   totp_secret     TEXT NOT NULL DEFAULT '',    -- 2FA base32 시크릿(빈 값=미설정)
   totp_enabled    INTEGER NOT NULL DEFAULT 0,  -- 2FA 활성화 여부
@@ -269,13 +277,22 @@ CREATE TABLE IF NOT EXISTS documents (
   ordered        INTEGER NOT NULL DEFAULT 0,
   due_date       TEXT NOT NULL DEFAULT '',
   closed         INTEGER NOT NULL DEFAULT 0,
+  attachment      TEXT NOT NULL DEFAULT '',  -- 계약서 PDF(R2 키). 있으면 본문 대신 이 파일이 계약 원문
+  attachment_name TEXT NOT NULL DEFAULT '',  -- 원본 파일명(표시용)
+  attachment_hash TEXT NOT NULL DEFAULT '',  -- 첨부 파일 SHA-256 (검증 시 실제 파일과 대조)
+  last_remind_at  TEXT NOT NULL DEFAULT '',  -- 마지막 리마인더 발송 — 연타 방지
   created_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- 서명 기록.
+-- user_id 와 external_id 중 하나만 채워진다(회원 서명 / 외부 서명자 서명).
+-- users 로의 외래키를 두지 않는 이유: 계정을 지웠다고 이미 체결된 계약의 서명이
+-- 사라지면 안 된다. 문서·상인회가 사라질 때만 함께 사라진다(document_id 의 CASCADE).
 CREATE TABLE IF NOT EXISTS signatures (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
   document_id     INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
-  user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id         INTEGER,
+  external_id     INTEGER,
   signer_name     TEXT NOT NULL,
   signature_image TEXT NOT NULL DEFAULT '',
   content_hash    TEXT NOT NULL,
@@ -283,15 +300,22 @@ CREATE TABLE IF NOT EXISTS signatures (
   user_agent      TEXT NOT NULL DEFAULT '',
   verify_code     TEXT NOT NULL UNIQUE,
   record_hash     TEXT NOT NULL,
-  signed_at       TEXT NOT NULL DEFAULT (datetime('now')),
-  UNIQUE (document_id, user_id)
+  verify_level    TEXT NOT NULL DEFAULT 'password', -- 본인확인 수준: password|otp|identity
+  prev_hash       TEXT NOT NULL DEFAULT '',  -- 직전 서명의 봉인값 — 서명 사슬(체인)
+  seal_ver        INTEGER NOT NULL DEFAULT 3,-- 봉인 문자열 버전 (1=구버전, 2=체인, 3=필드값 포함)
+  fields_hash     TEXT NOT NULL DEFAULT '',   -- 이 서명자가 채운 필드값·좌표의 해시 (v3 봉인 대상)
+  signed_at       TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sig_doc_user ON signatures(document_id, user_id) WHERE user_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sig_doc_ext  ON signatures(document_id, external_id) WHERE external_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS signature_requests (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
   user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   sign_order  INTEGER NOT NULL DEFAULT 0,
+  declined_at   TEXT NOT NULL DEFAULT '',   -- 거절(반려) 시각 — 비어 있으면 미거절
+  decline_reason TEXT NOT NULL DEFAULT '',  -- 거절 사유
   created_at  TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE (document_id, user_id)
 );
@@ -302,6 +326,133 @@ CREATE INDEX IF NOT EXISTS idx_postimg_post ON post_images(post_id);
 CREATE INDEX IF NOT EXISTS idx_doc_assoc ON documents(association_id);
 CREATE INDEX IF NOT EXISTS idx_sig_doc ON signatures(document_id);
 CREATE INDEX IF NOT EXISTS idx_sigreq_doc ON signature_requests(document_id);
+
+-- 계약서 필드 배치 — "여기에 서명, 여기에 도장, 여기에 날짜" 를 지면 좌표로 저장한다.
+-- 좌표는 페이지 대비 0~1 비율이라 화면 크기·인쇄 배율과 무관하게 같은 자리를 가리킨다.
+CREATE TABLE IF NOT EXISTS doc_fields (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+  kind        TEXT NOT NULL,                  -- sign|stamp|text|date|name|check
+  label       TEXT NOT NULL DEFAULT '',
+  page        INTEGER NOT NULL DEFAULT 0,
+  x           REAL NOT NULL DEFAULT 0,
+  y           REAL NOT NULL DEFAULT 0,
+  w           REAL NOT NULL DEFAULT 0.2,
+  h           REAL NOT NULL DEFAULT 0.04,
+  assignee    INTEGER NOT NULL DEFAULT 0,     -- 서명자 user_id (0 = 서명하는 사람 누구나)
+  required    INTEGER NOT NULL DEFAULT 1,
+  sort        INTEGER NOT NULL DEFAULT 0,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_docfield_doc ON doc_fields(document_id, page, sort);
+
+-- 채워진 값. 이미지(서명 그림·도장)는 R2 키와 함께 바이트 해시를 남겨 사후 교체를 탐지한다.
+CREATE TABLE IF NOT EXISTS doc_field_values (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  field_id    INTEGER NOT NULL REFERENCES doc_fields(id) ON DELETE CASCADE,
+  document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+  user_id     INTEGER NOT NULL DEFAULT 0,
+  value       TEXT NOT NULL DEFAULT '',
+  image       TEXT NOT NULL DEFAULT '',
+  image_hash  TEXT NOT NULL DEFAULT '',
+  filled_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (field_id)
+);
+CREATE INDEX IF NOT EXISTS idx_docfieldval_doc ON doc_field_values(document_id);
+
+-- 계약서 서식 — 본문 + 필드 배치를 한 벌로 저장해 재사용한다.
+-- 본문의 {{변수}} 는 문서를 만들 때 값만 채운다. association_id=0 이면 플랫폼 공용.
+CREATE TABLE IF NOT EXISTS doc_templates (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  association_id INTEGER NOT NULL DEFAULT 0,
+  title          TEXT NOT NULL,
+  summary        TEXT NOT NULL DEFAULT '',
+  body           TEXT NOT NULL,
+  fields         TEXT NOT NULL DEFAULT '[]',   -- 배치 JSON (page -1 = 마지막 쪽)
+  parties        TEXT NOT NULL DEFAULT '[]',   -- 당사자 이름표 JSON (["갑","을"])
+  ordered        INTEGER NOT NULL DEFAULT 0,
+  created_by     INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_doctpl_assoc ON doc_templates(association_id, title);
+
+-- 문서 감사 추적 — 누가 언제 열람했고, 인증했고, 서명했는지. "받은 적 없다·읽은 적 없다"는
+-- 항변을 막는 증거이며 증적 패키지의 핵심 구성물이다.
+CREATE TABLE IF NOT EXISTS doc_events (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+  user_id     INTEGER NOT NULL DEFAULT 0,
+  actor_name  TEXT NOT NULL DEFAULT '',
+  kind        TEXT NOT NULL,              -- created|viewed|otp_sent|otp_ok|signed|declined|reminded|notified
+  detail      TEXT NOT NULL DEFAULT '',
+  ip          TEXT NOT NULL DEFAULT '',
+  user_agent  TEXT NOT NULL DEFAULT '',
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_docev_doc ON doc_events(document_id, created_at);
+
+-- 외부(비회원) 서명자 — 우리 서비스에 가입하지 않은 계약 상대방.
+-- 가입·로그인 없이 링크 하나로 서명한다. 링크는 HMAC 토큰이라 위조·추측이 불가능하고,
+-- 본인확인(OTP)은 여기 적힌 연락처로만 보내진다.
+CREATE TABLE IF NOT EXISTS external_signers (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  document_id    INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+  name           TEXT NOT NULL,
+  email          TEXT NOT NULL DEFAULT '',
+  phone          TEXT NOT NULL DEFAULT '',
+  org            TEXT NOT NULL DEFAULT '',   -- 소속·상호(표시용)
+  sign_order     INTEGER NOT NULL DEFAULT 0,
+  declined_at    TEXT NOT NULL DEFAULT '',
+  decline_reason TEXT NOT NULL DEFAULT '',
+  opened_at      TEXT NOT NULL DEFAULT '',   -- 링크를 처음 연 시각
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_extsigner_doc ON external_signers(document_id, sign_order);
+
+-- 공개 API 키 — 고객사 시스템이 계약을 자동으로 만들고 발송한다.
+-- 평문 키는 발급 순간에만 보여주고 저장하지 않는다(해시만 보관).
+CREATE TABLE IF NOT EXISTS api_keys (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
+  name           TEXT NOT NULL DEFAULT '',
+  prefix         TEXT NOT NULL,               -- 키 앞자리(목록에서 구분용)
+  key_hash       TEXT NOT NULL UNIQUE,
+  webhook_url    TEXT NOT NULL DEFAULT '',
+  webhook_secret TEXT NOT NULL DEFAULT '',    -- 웹훅 HMAC 서명키
+  scopes         TEXT NOT NULL DEFAULT 'read,write',
+  last_used_at   TEXT NOT NULL DEFAULT '',
+  calls          INTEGER NOT NULL DEFAULT 0,
+  revoked_at     TEXT NOT NULL DEFAULT '',
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_apikey_assoc ON api_keys(association_id);
+
+-- 웹훅 발송 대기·이력. 실패하면 다음 주기에 다시 시도한다(최대 6회, 점점 늦게).
+CREATE TABLE IF NOT EXISTS webhook_queue (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  key_id      INTEGER NOT NULL REFERENCES api_keys(id) ON DELETE CASCADE,
+  event       TEXT NOT NULL,
+  payload     TEXT NOT NULL,
+  attempts    INTEGER NOT NULL DEFAULT 0,
+  next_try_at TEXT NOT NULL DEFAULT (datetime('now')),
+  delivered_at TEXT NOT NULL DEFAULT '',
+  last_error  TEXT NOT NULL DEFAULT '',
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_wh_pending ON webhook_queue(delivered_at, next_try_at);
+
+-- 외부 서명자용 본인확인 코드 (회원용 sign_otp 와 같은 규칙, 대상만 다름)
+CREATE TABLE IF NOT EXISTS ext_otp (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  external_id INTEGER NOT NULL REFERENCES external_signers(id) ON DELETE CASCADE,
+  code_hash   TEXT NOT NULL,
+  phone       TEXT NOT NULL DEFAULT '',
+  attempts    INTEGER NOT NULL DEFAULT 0,
+  verified_at TEXT NOT NULL DEFAULT '',
+  expires_at  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (external_id)
+);
 CREATE INDEX IF NOT EXISTS idx_notif_assoc ON notifications(association_id, is_read);
 CREATE INDEX IF NOT EXISTS idx_media_business ON media(business_id);
 CREATE INDEX IF NOT EXISTS idx_business_assoc ON businesses(association_id, status);
@@ -310,7 +461,111 @@ CREATE INDEX IF NOT EXISTS idx_notices_assoc ON notices(association_id);
 CREATE INDEX IF NOT EXISTS idx_events_assoc ON events(association_id);
 CREATE INDEX IF NOT EXISTS idx_users_assoc ON users(association_id);
 
+-- 서명 본인확인 OTP (휴대폰 인증번호). 코드는 해시로만 저장하고 짧게 만료된다.
+CREATE TABLE IF NOT EXISTS sign_otp (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  code_hash   TEXT NOT NULL,
+  phone       TEXT NOT NULL DEFAULT '',   -- 발송된 번호(마스킹 표시용)
+  attempts    INTEGER NOT NULL DEFAULT 0,
+  verified_at TEXT NOT NULL DEFAULT '',
+  expires_at  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (document_id, user_id)
+);
+
+-- 서명 사슬 앵커(시점 증거). 매일 사슬 머리(마지막 봉인값)를 봉인해 남긴다.
+-- "이 시점에 이미 이 서명들이 존재했다"를 사후에 증명하는 용도.
+CREATE TABLE IF NOT EXISTS chain_anchor (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  head_hash   TEXT NOT NULL,          -- 앵커 시점의 마지막 서명 봉인값
+  sig_count   INTEGER NOT NULL DEFAULT 0,
+  anchored_at TEXT NOT NULL,
+  seal        TEXT NOT NULL DEFAULT '', -- 위 내용을 Ed25519 로 봉인
+  external    TEXT NOT NULL DEFAULT '', -- 외부 TSA 응답(연동 시) — 없으면 자체 앵커
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS settings (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL DEFAULT ''
 );
+
+-- ===== 알림톡 선불 크레딧 (상인회가 충전 → 발송 시 차감) =====
+-- 금액은 모두 '원' 정수. 판매단가는 플랫폼 설정(price_alimtalk/price_sms)에서 읽는다.
+CREATE TABLE IF NOT EXISTS notify_wallet (
+  association_id INTEGER PRIMARY KEY REFERENCES associations(id) ON DELETE CASCADE,
+  balance        INTEGER NOT NULL DEFAULT 0,
+  unit_price     INTEGER NOT NULL DEFAULT 0,  -- 이 상인회 전용 단가(원/건). 0 이면 플랫폼 기본가 적용
+  updated_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- 크레딧 원장(감사 추적) — 충전·차감·환불·수동조정이 모두 남는다
+CREATE TABLE IF NOT EXISTS credit_ledger (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
+  kind           TEXT NOT NULL,               -- charge|spend|refund|adjust
+  amount         INTEGER NOT NULL,            -- 양수=증가, 음수=감소
+  balance_after  INTEGER NOT NULL,
+  memo           TEXT NOT NULL DEFAULT '',
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_ledger_assoc ON credit_ledger(association_id, created_at);
+
+-- 충전 신청 (무통장 입금 → 슈퍼관리자 확인 후 승인 시 잔액 반영)
+CREATE TABLE IF NOT EXISTS credit_orders (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
+  amount         INTEGER NOT NULL,
+  depositor      TEXT NOT NULL DEFAULT '',
+  status         TEXT NOT NULL DEFAULT 'pending',  -- pending|approved|rejected
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_corder_status ON credit_orders(status, created_at);
+
+-- 발송 로그 (수신번호는 마스킹 저장 — 개인정보 최소화)
+CREATE TABLE IF NOT EXISTS message_log (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
+  channel        TEXT NOT NULL DEFAULT 'alimtalk',  -- alimtalk|sms
+  kind           TEXT NOT NULL DEFAULT '',          -- sign_request|sign_remind|notice|dues|poll
+  recipient      TEXT NOT NULL DEFAULT '',
+  status         TEXT NOT NULL DEFAULT 'sent',      -- sent|failed
+  cost           INTEGER NOT NULL DEFAULT 0,        -- 상인회에게 받은 판매가(원)
+  cost_base      INTEGER NOT NULL DEFAULT 0,        -- 원가 스냅샷 (전 단위 = 0.01원. 알림톡 6.5원 → 650)
+  ref            TEXT NOT NULL DEFAULT '',          -- 대사(對査)용 참조 — 이 플랫폼 발송임을 식별
+  detail         TEXT NOT NULL DEFAULT '',
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_msglog_assoc ON message_log(association_id, created_at);
+
+-- 옛 주소(slug) → 조직. 주소를 짧은 영문으로 바꿔도 이미 나간 링크·알림톡·명함이 살아 있어야 한다.
+-- 새 주소로 301 이동시킨다. 지우지 않는 한 영구히 유지된다.
+CREATE TABLE IF NOT EXISTS slug_aliases (
+  slug           TEXT PRIMARY KEY,
+  association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_slug_alias_assoc ON slug_aliases(association_id);
+
+-- 가맹 상담 신청(랜딩페이지 DB). 프랜차이즈 랜딩의 존재 이유이자 유일한 성과 지표다.
+-- 개인정보라 보관 최소화 원칙으로 다룬다 — 수집 항목을 늘리지 말고, 처리가 끝나면 지운다.
+CREATE TABLE IF NOT EXISTS leads (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  association_id  INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
+  name            TEXT NOT NULL,
+  phone           TEXT NOT NULL DEFAULT '',
+  email           TEXT NOT NULL DEFAULT '',
+  region          TEXT NOT NULL DEFAULT '',    -- 희망 지역
+  budget          TEXT NOT NULL DEFAULT '',    -- 창업 예산
+  funnel          TEXT NOT NULL DEFAULT '',    -- 유입 경로 (광고비 배분 판단용)
+  message         TEXT NOT NULL DEFAULT '',
+  status          TEXT NOT NULL DEFAULT 'new', -- new|contacted|visit|contract|drop
+  memo            TEXT NOT NULL DEFAULT '',    -- 상담 기록 (관리자만)
+  agree_marketing INTEGER NOT NULL DEFAULT 0,
+  source          TEXT NOT NULL DEFAULT 'landing',
+  created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at      TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_lead_assoc ON leads(association_id, created_at);

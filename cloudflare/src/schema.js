@@ -19,13 +19,16 @@ CREATE TABLE IF NOT EXISTS associations (
   map_zoom    INTEGER NOT NULL DEFAULT 14,
   active      INTEGER NOT NULL DEFAULT 1,
   home_layout TEXT,
+  landing_layout TEXT,                        -- 프랜차이즈 랜딩페이지 구성(JSON). home_layout 과 따로 둔다 —
+                                              -- 유형을 바꿔 가며 써도 서로의 편집 내용이 지워지지 않아야 한다.
   custom_domain TEXT NOT NULL DEFAULT '',
   map_client_id TEXT NOT NULL DEFAULT '',     -- 상인회별 네이버 지도 키 (비우면 플랫폼 공용 키)
   naver_verification TEXT NOT NULL DEFAULT '',  -- 네이버 서치어드바이저 소유 확인 코드
   google_verification TEXT NOT NULL DEFAULT '', -- 구글 서치콘솔 소유 확인 코드
   plan        TEXT NOT NULL DEFAULT 'free',   -- 요금제(free|basic|pro)
-  -- 조직 유형. merchant = 상인회 홈페이지(점포·지도·공지 + 전자계약),
-  --            esign    = 전자계약만 쓰는 조직(법무·부동산·프랜차이즈 등).
+  -- 조직 유형. merchant  = 상인회 홈페이지(점포·지도·공지 + 전자계약),
+  --            esign     = 전자계약만 쓰는 조직(법무·부동산 등),
+  --            franchise = 프랜차이즈 가맹점 모집 랜딩페이지(상담 DB 수집).
   -- 같은 엔진을 쓰되 손님에게 보이는 메뉴와 관리자 화면이 달라진다.
   kind        TEXT NOT NULL DEFAULT 'merchant',
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
@@ -547,11 +550,32 @@ CREATE TABLE IF NOT EXISTS slug_aliases (
   created_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_slug_alias_assoc ON slug_aliases(association_id);
+
+-- 가맹 상담 신청(랜딩페이지 DB). 프랜차이즈 랜딩의 존재 이유이자 유일한 성과 지표다.
+-- 개인정보라 보관 최소화 원칙으로 다룬다 — 수집 항목을 늘리지 말고, 처리가 끝나면 지운다.
+CREATE TABLE IF NOT EXISTS leads (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  association_id  INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
+  name            TEXT NOT NULL,
+  phone           TEXT NOT NULL DEFAULT '',
+  email           TEXT NOT NULL DEFAULT '',
+  region          TEXT NOT NULL DEFAULT '',    -- 희망 지역
+  budget          TEXT NOT NULL DEFAULT '',    -- 창업 예산
+  funnel          TEXT NOT NULL DEFAULT '',    -- 유입 경로 (광고비 배분 판단용)
+  message         TEXT NOT NULL DEFAULT '',
+  status          TEXT NOT NULL DEFAULT 'new', -- new|contacted|visit|contract|drop
+  memo            TEXT NOT NULL DEFAULT '',    -- 상담 기록 (관리자만)
+  agree_marketing INTEGER NOT NULL DEFAULT 0,
+  source          TEXT NOT NULL DEFAULT 'landing',
+  created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at      TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_lead_assoc ON leads(association_id, created_at);
 `;
 
 // 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
 // 마이그레이션 세대 — migrateColumns 에 단계를 추가할 때마다 +1
-export const SCHEMA_VERSION = "32";
+export const SCHEMA_VERSION = "33";
 
 export async function ensureSchema(db) {
   const has = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='associations'").first();
@@ -823,6 +847,21 @@ async function migrateColumns(db) {
     association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
     created_at TEXT NOT NULL DEFAULT (datetime('now')))`).run();
   await db.prepare("CREATE INDEX IF NOT EXISTS idx_slug_alias_assoc ON slug_aliases(association_id)").run();
+
+  // v33: 프랜차이즈 가맹점 모집 랜딩페이지 — 랜딩 구성 + 상담 신청 DB
+  if (acol.length && !acol.some((c) => c.name === "landing_layout")) {
+    await db.prepare("ALTER TABLE associations ADD COLUMN landing_layout TEXT").run();
+  }
+  await db.prepare(`CREATE TABLE IF NOT EXISTS leads (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
+    name TEXT NOT NULL, phone TEXT NOT NULL DEFAULT '', email TEXT NOT NULL DEFAULT '',
+    region TEXT NOT NULL DEFAULT '', budget TEXT NOT NULL DEFAULT '', funnel TEXT NOT NULL DEFAULT '',
+    message TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'new', memo TEXT NOT NULL DEFAULT '',
+    agree_marketing INTEGER NOT NULL DEFAULT 0, source TEXT NOT NULL DEFAULT 'landing',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT '')`).run();
+  await db.prepare("CREATE INDEX IF NOT EXISTS idx_lead_assoc ON leads(association_id, created_at)").run();
+
   await romanizeSlugs(db);
 }
 

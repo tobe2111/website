@@ -33,13 +33,16 @@ export const listAllAssociations = (db) => all(db, "SELECT * FROM associations O
 // 최근 생성된 조직 수 — 셀프 가입 폭주를 막기 위한 상한 판정
 export const countAssociationsSince = async (db, ago = "-1 day") =>
   (await first(db, `SELECT COUNT(*) AS n FROM associations WHERE created_at > datetime('now', ?)`, ago)).n;
+// 조직 유형은 화면 구성 전체를 가르는 값이라 아무 문자열이나 들어오면 안 된다 — 아는 값만 통과시킨다.
+export const ASSOC_KINDS = ["merchant", "esign", "franchise"];
+export const normalizeKind = (k) => (ASSOC_KINDS.includes(k) ? k : "merchant");
 export async function createAssociation(db, { slug, name, brandColor = "#0b8a46", tagline = "함께 성장하는 우리 동네 상권", kind = "merchant" }) {
   await run(db, "INSERT INTO associations (slug, name, brand_color, tagline, kind) VALUES (?, ?, ?, ?, ?)",
-    slug, name, brandColor, tagline, kind === "esign" ? "esign" : "merchant");
+    slug, name, brandColor, tagline, normalizeKind(kind));
   return getAssociationById(db, await lastId(db));
 }
 export const setAssociationKind = (db, id, kind) =>
-  run(db, "UPDATE associations SET kind=? WHERE id=?", kind === "esign" ? "esign" : "merchant", id);
+  run(db, "UPDATE associations SET kind=? WHERE id=?", normalizeKind(kind), id);
 export function updateAssociation(db, id, f) {
   return run(db, `UPDATE associations SET name=?, tagline=?, brand_color=?, phone=?, email=?, address=?, logo=?, hero_image=?, naver_verification=?, google_verification=? WHERE id=?`,
     f.name, f.tagline, f.brand_color, f.phone, f.email, f.address, f.logo, f.hero_image || "", f.naver_verification || "", f.google_verification || "", id);
@@ -79,6 +82,50 @@ export const listApplicationNotes = (db) =>
   all(db, `SELECT n.* FROM application_notes n JOIN applications a ON a.id=n.application_id
     WHERE a.status='pending' ORDER BY n.created_at DESC, n.id DESC`);
 export const saveHomeLayout = (db, id, json) => run(db, "UPDATE associations SET home_layout=? WHERE id=?", json, id);
+export const saveLandingLayout = (db, id, json) => run(db, "UPDATE associations SET landing_layout=? WHERE id=?", json, id);
+export const resetLandingLayout = (db, id) => run(db, "UPDATE associations SET landing_layout=NULL WHERE id=?", id);
+
+// ----- 가맹 상담 신청 (프랜차이즈 랜딩 DB) -----
+export const LEAD_STATUSES = ["new", "contacted", "visit", "contract", "drop"];
+export const LEAD_STATUS_LABEL = { new: "신규", contacted: "연락 완료", visit: "상담·방문", contract: "계약", drop: "보류·종료" };
+export async function createLead(db, { associationId, name, phone = "", email = "", region = "", budget = "", funnel = "", message = "", agreeMarketing = 0, source = "landing" }) {
+  await run(db, `INSERT INTO leads (association_id, name, phone, email, region, budget, funnel, message, agree_marketing, source)
+    VALUES (?,?,?,?,?,?,?,?,?,?)`, associationId, name, phone, email, region, budget, funnel, message, agreeMarketing ? 1 : 0, source);
+  return first(db, "SELECT * FROM leads WHERE id=?", await lastId(db));
+}
+export const getLead = (db, id, aid) => first(db, "SELECT * FROM leads WHERE id=? AND association_id=?", id, aid);
+export const listLeads = (db, aid, { status = "", limit = 200, offset = 0 } = {}) =>
+  status
+    ? all(db, "SELECT * FROM leads WHERE association_id=? AND status=? ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?", aid, status, limit, offset)
+    : all(db, "SELECT * FROM leads WHERE association_id=? ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?", aid, limit, offset);
+export const setLeadStatus = (db, id, aid, status) =>
+  run(db, "UPDATE leads SET status=?, updated_at=datetime('now') WHERE id=? AND association_id=?",
+    LEAD_STATUSES.includes(status) ? status : "new", id, aid);
+export const setLeadMemo = (db, id, aid, memo) =>
+  run(db, "UPDATE leads SET memo=?, updated_at=datetime('now') WHERE id=? AND association_id=?", memo || "", id, aid);
+export const deleteLead = (db, id, aid) => run(db, "DELETE FROM leads WHERE id=? AND association_id=?", id, aid);
+// 같은 번호로 몇 분 안에 다시 눌린 신청은 새 건이 아니다 (더블클릭·뒤로가기 재전송).
+// 하이픈 유무는 같은 번호다 — 표기만 바꿔 다시 넣어도 영업팀이 두 번 전화하면 안 된다.
+const bareDigits = (p) => String(p || "").replace(/\D/g, "");
+export const recentLeadByPhone = (db, aid, phone, minutes = 10) =>
+  first(db, `SELECT id FROM leads WHERE association_id=? AND phone!=''
+    AND replace(replace(replace(phone,'-',''),' ',''),'+','') = ?
+    AND created_at > datetime('now', ?) LIMIT 1`,
+    aid, bareDigits(phone), `-${Math.max(1, minutes | 0)} minutes`);
+export async function leadStats(db, aid) {
+  const r = await first(db, `SELECT
+    COUNT(*) AS total,
+    SUM(CASE WHEN status='new' THEN 1 ELSE 0 END) AS fresh,
+    SUM(CASE WHEN status='contract' THEN 1 ELSE 0 END) AS contract,
+    SUM(CASE WHEN date(created_at,'+9 hours') = date('now','+9 hours') THEN 1 ELSE 0 END) AS today,
+    SUM(CASE WHEN created_at > datetime('now','-7 days') THEN 1 ELSE 0 END) AS week
+    FROM leads WHERE association_id=?`, aid);
+  return { total: r.total || 0, fresh: r.fresh || 0, contract: r.contract || 0, today: r.today || 0, week: r.week || 0 };
+}
+// 유입 경로별 집계 — 어느 광고가 실제로 DB 를 만들어 냈는지 (빈 값은 '미기재'로 묶는다)
+export const leadFunnelStats = (db, aid) =>
+  all(db, `SELECT CASE WHEN funnel='' THEN '미기재' ELSE funnel END AS funnel, COUNT(*) AS n
+    FROM leads WHERE association_id=? GROUP BY 1 ORDER BY n DESC`, aid);
 
 // ----- Settings (자동 생성 키·설정 저장) -----
 export const getSetting = async (db, key) => { const r = await first(db, "SELECT value FROM settings WHERE key=?", key); return r ? r.value : null; };

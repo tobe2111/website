@@ -97,7 +97,9 @@ export async function logout(ctx) {
 
 // ---------- 회원가입 ----------
 export async function register(ctx) {
-  if (ctx.assoc && ctx.assoc.kind === "esign") return back(ctx.base + "/", "이 조직은 점포 가입을 받지 않습니다.", true);
+  // 프랜차이즈 랜딩도 셀프 가입을 받지 않는다 — 매장 목록은 본사가 관리한다.
+  if (ctx.assoc && (ctx.assoc.kind === "esign" || ctx.assoc.kind === "franchise"))
+    return back(ctx.base + "/", "이 조직은 점포 가입을 받지 않습니다.", true);
   const { db, env, form, addCookie, isProd, base, assoc, ip } = ctx;
   if (!(await turnstileVerify(env, form.get("cf-turnstile-response"), ip))) return back(base + "/register", "봇 방지 확인에 실패했습니다. 다시 시도해 주세요.", true);
   const name = cap((form.get("name") || "").trim(), 60);
@@ -170,10 +172,10 @@ export async function superSetKind(ctx) {
   const { db, form, params } = ctx;
   const a = await D.getAssociationById(db, Number(params.id) || 0);
   if (!a) return back("/super", "조직을 찾을 수 없습니다.", true);
-  const kind = form.get("kind") === "esign" ? "esign" : "merchant";
+  const kind = D.normalizeKind(form.get("kind"));
   await D.setAssociationKind(db, a.id, kind);
-  await audit(ctx, "조직유형변경", `${a.name}: ${kind === "esign" ? "전자계약 전용" : "상인회"}`, null);
-  return back("/super", `'${a.name}' 을(를) ${kind === "esign" ? "전자계약 전용" : "상인회"} 으로 바꿨습니다. 기존 데이터는 그대로 있습니다.`);
+  await audit(ctx, "조직유형변경", `${a.name}: ${KIND_LABEL[kind]}`, null);
+  return back("/super", `'${a.name}' 을(를) ${KIND_LABEL[kind]} 으로 바꿨습니다. 기존 데이터는 그대로 있습니다.`);
 }
 
 export async function superBillingMode(ctx) {
@@ -491,6 +493,14 @@ export function tempPassword(len = 12) {
   for (let i = 0; i < len; i++) out += TEMP_ALPHABET[b[i] % TEMP_ALPHABET.length];
   return out;
 }
+
+// 조직 유형 표시 이름·기본 한 줄 소개 (undefined 면 db.createAssociation 의 상인회 기본값이 쓰인다)
+const KIND_LABEL = { merchant: "상인회", esign: "전자계약 전용", franchise: "프랜차이즈 랜딩" };
+const KIND_TAGLINE = {
+  merchant: undefined,
+  esign: "종이 없이, 만나지 않고, 법적 효력 있는 계약",
+  franchise: "함께 성장할 가맹점주를 찾습니다",
+};
 
 const audit = (ctx, action, detail = "", assocId) =>
   D.logAudit(ctx.db, { associationId: assocId !== undefined ? assocId : (ctx.assoc ? ctx.assoc.id : null), userId: ctx.user.id, actorName: ctx.user.name, action, detail });
@@ -1573,12 +1583,12 @@ export async function superCreateAssociation(ctx) {
   if (!name || !EMAIL_RE.test(adminEmail) || adminPassword.length < 8 || adminPassword.length > 200) return back("/super", "상인회 이름과 관리자 계정을 확인하세요. (비밀번호 8~200자)", true);
   if (await D.getUserByEmail(db, adminEmail)) return back("/super", "이미 사용 중인 관리자 이메일입니다.", true);
   const color = /^#[0-9a-fA-F]{6}$/.test(form.get("brand_color") || "") ? form.get("brand_color") : "#0b6e4f";
-  const kind = form.get("kind") === "esign" ? "esign" : "merchant";
+  const kind = D.normalizeKind(form.get("kind"));
   // 고유 slug
   let slug = slugify(name), n = 1;
   while (await D.getAssociationBySlug(db, slug)) slug = slugify(name) + "-" + (++n);
   const assoc = await D.createAssociation(db, { slug, name, brandColor: color, kind,
-    tagline: cap(form.get("tagline"), 200) || (kind === "esign" ? "종이 없이, 만나지 않고, 법적 효력 있는 계약" : undefined) });
+    tagline: cap(form.get("tagline"), 200) || KIND_TAGLINE[kind] });
   const { hash, salt } = await hashPassword(adminPassword);
   await D.createUser(db, { email: adminEmail, passwordHash: hash, salt, name: cap(form.get("admin_name"), 60) || "관리자", role: "ADMIN", associationId: assoc.id });
   // 빈 화면으로 넘기지 않도록 시작 세트를 함께 넣습니다(공지·가입 동의서).
@@ -1768,6 +1778,112 @@ export async function adminSaveLayout(ctx) {
 export async function adminResetLayout(ctx) {
   await D.resetHomeLayout(ctx.db, ctx.assoc.id);
   return back(ctx.base + "/admin", "홈페이지 구성을 기본값으로 초기화했습니다.");
+}
+
+// ---------- 프랜차이즈 랜딩페이지 ----------
+// 섹션 저장 로직은 홈 구성과 같은 모양이지만 카탈로그와 저장 위치가 다르다.
+// 반복 항목(lines)은 여러 줄이 들어오므로 한 칸 상한을 홈 구성보다 넉넉히 잡는다.
+const LANDING_FIELD_MAX = 4000;
+export async function adminSaveLanding(ctx) {
+  const { db, form, base, assoc } = ctx;
+  const { LANDING_CATALOG } = await import("./franchise.js");
+  const order = (form.get("order") || "").split(",").map((s) => parseInt(s, 10)).filter((n) => !isNaN(n));
+  const built = [];
+  for (const i of order) {
+    const type = form.get(`ty_${i}`); const cat = LANDING_CATALOG[type];
+    if (!cat) continue;
+    const sec = { type, enabled: form.get(`en_${i}`) === "1" };
+    for (const f of cat.fields) {
+      const key = `f_${i}_${f.key}`;
+      sec[f.key] = f.type === "bool" ? form.get(key) === "1"
+        : cap(String(form.get(key) != null ? form.get(key) : "").replace(/\r\n/g, "\n"), LANDING_FIELD_MAX);
+    }
+    built.push(sec);
+  }
+  if (!built.length) return back(base + "/admin/landing", "구성을 해석할 수 없습니다.", true);
+  await D.saveLandingLayout(db, assoc.id, JSON.stringify(built));
+  await audit(ctx, "랜딩구성저장", "");
+  return back(base + "/admin/landing", "랜딩페이지가 저장되었습니다.");
+}
+export async function adminResetLanding(ctx) {
+  await D.resetLandingLayout(ctx.db, ctx.assoc.id);
+  await audit(ctx, "랜딩구성초기화", "");
+  return back(ctx.base + "/admin/landing", "랜딩페이지를 기본 구성으로 되돌렸습니다.");
+}
+
+// ---------- 가맹 상담 신청 (공개 · DB 수집) ----------
+// 이 폼 하나가 프랜차이즈 랜딩의 성과 전부다. 그래서 두 가지를 동시에 지킨다:
+//   ① 진짜 신청은 절대 잃지 않는다 (메일·알림이 실패해도 DB 저장은 끝난 뒤에 한다)
+//   ② 쓰레기는 들이지 않는다 (봇 방지 · 허니팟 · 중복 제출 차단)
+export async function leadSubmit(ctx) {
+  const { db, env, form, base, assoc, ip } = ctx;
+  const at = (msg, err = false) => redirect(`${base}/?${err ? "err=1&" : ""}msg=${encodeURIComponent(msg)}#apply`);
+  if (assoc.kind !== "franchise") return at("이 조직은 상담 신청을 받지 않습니다.", true);
+  if (!(await turnstileVerify(env, form.get("cf-turnstile-response"), ip)))
+    return at("봇 방지 확인에 실패했습니다. 다시 시도해 주세요.", true);
+  // 허니팟: 사람 눈에 보이지 않는 칸이 채워졌다면 봇이다. 봇에게는 성공처럼 보이게 두고 저장하지 않는다.
+  if (form.get("website")) return at("상담 신청이 접수되었습니다. 곧 연락드리겠습니다.");
+  if (form.get("agree") !== "1") return at("개인정보 수집·이용에 동의해 주세요.", true);
+  const name = cap((form.get("name") || "").trim(), 60);
+  const phoneRaw = cap((form.get("phone") || "").trim(), 20);
+  const phone = phoneRaw.replace(/[^0-9+\-]/g, "");
+  if (!name || !phone) return at("성함과 연락처를 입력해 주세요.", true);
+  if (D.normalizePhone(phone).length < 9) return at("연락처를 다시 확인해 주세요.", true);
+  // 뒤로가기·더블클릭으로 같은 사람이 두 번 들어오면 영업팀이 같은 번호로 두 번 전화한다
+  if (await D.recentLeadByPhone(db, assoc.id, phone, 10))
+    return at("이미 접수되었습니다. 곧 연락드리겠습니다.");
+  const lead = await D.createLead(db, {
+    associationId: assoc.id, name, phone,
+    email: cap((form.get("email") || "").trim(), 120),
+    region: cap((form.get("region") || "").trim(), 60),
+    budget: cap((form.get("budget") || "").trim(), 40),
+    funnel: cap((form.get("funnel") || "").trim(), 40),
+    message: cap((form.get("message") || "").trim(), 2000),
+    agreeMarketing: form.get("agree_marketing") === "1" ? 1 : 0,
+  });
+  await D.createNotification(db, { associationId: assoc.id, kind: "lead",
+    message: `[가맹 상담] ${name} (${phone})${lead.region ? ` · ${lead.region}` : ""}`, link: base + "/admin/leads" });
+  if (emailEnabled(env) && assoc.email) {
+    // 메일이 죽어도 신청은 이미 DB 에 있다 — 알림 실패로 접수 자체가 실패한 것처럼 보이면 안 된다
+    await sendEmail(env, {
+      to: assoc.email,
+      subject: `[${assoc.name}] 새 가맹 상담 신청 — ${name}`,
+      html: mailShell(`${esc(assoc.name)} 가맹 상담`,
+        `<p><b>성함</b>: ${esc(name)}<br /><b>연락처</b>: ${esc(phone)}<br />
+          <b>희망 지역</b>: ${esc(lead.region || "-")}<br /><b>창업 예산</b>: ${esc(lead.budget || "-")}<br />
+          <b>유입 경로</b>: ${esc(lead.funnel || "-")}</p>
+        ${lead.message ? `<p style="white-space:pre-wrap">${esc(lead.message)}</p>` : ""}`),
+    }).catch(() => {});
+  }
+  return at("상담 신청이 접수되었습니다. 남겨주신 연락처로 곧 연락드리겠습니다.");
+}
+
+// ---------- 상담 DB 관리 (관리자) ----------
+export async function adminLeadStatus(ctx) {
+  const { db, form, base, assoc, params } = ctx;
+  const lead = await D.getLead(db, Number(params.id) || 0, assoc.id);
+  if (!lead) return back(base + "/admin/leads", "신청 건을 찾을 수 없습니다.", true);
+  const status = form.get("status");
+  if (!D.LEAD_STATUSES.includes(status)) return back(base + "/admin/leads", "잘못된 상태값입니다.", true);
+  await D.setLeadStatus(db, lead.id, assoc.id, status);
+  await audit(ctx, "상담상태변경", `${lead.name}: ${D.LEAD_STATUS_LABEL[status]}`);
+  return back(base + "/admin/leads", `'${lead.name}' 건을 '${D.LEAD_STATUS_LABEL[status]}'(으)로 바꿨습니다.`);
+}
+export async function adminLeadMemo(ctx) {
+  const { db, form, base, assoc, params } = ctx;
+  const lead = await D.getLead(db, Number(params.id) || 0, assoc.id);
+  if (!lead) return back(base + "/admin/leads", "신청 건을 찾을 수 없습니다.", true);
+  await D.setLeadMemo(db, lead.id, assoc.id, cap(form.get("memo"), 500));
+  return back(base + "/admin/leads", "메모를 저장했습니다.");
+}
+export async function adminLeadDelete(ctx) {
+  const { db, base, assoc, params } = ctx;
+  const lead = await D.getLead(db, Number(params.id) || 0, assoc.id);
+  if (!lead) return back(base + "/admin/leads", "신청 건을 찾을 수 없습니다.", true);
+  await D.deleteLead(db, lead.id, assoc.id);
+  // 지운 내용(이름·번호)은 감사 로그에도 남기지 않는다 — 지웠는데 다른 표에 남으면 지운 게 아니다
+  await audit(ctx, "상담신청삭제", `#${lead.id}`);
+  return back(base + "/admin/leads", "신청 건을 삭제했습니다.");
 }
 
 // ---------- 2단계 인증 (TOTP) ----------

@@ -1,0 +1,416 @@
+// 프랜차이즈 가맹점 모집 랜딩페이지 — 섹션 카탈로그 · 기본값 · 렌더러
+//
+// 상인회 홈(homeLayout.js)과 목적이 다르다. 상인회 홈은 "이미 온 사람에게 정보를 준다",
+// 이 화면은 "처음 온 사람의 연락처를 받는다"(DB 수집)가 유일한 목표다.
+// 그래서 한 장짜리 세로 스크롤로 짜고, 어느 지점에서 마음이 움직여도 바로 신청할 수 있게
+// 상담 폼으로 가는 길(고정 하단 바 · 중간 CTA)을 계속 열어 둔다.
+import { esc } from "./util.js";
+
+// 한 줄에 한 항목, 칸은 | 로 나눈다. 관리자가 표 편집기 없이 반복 항목을 넣는 가장 싼 방법.
+export function splitLines(v, cols = 3) {
+  return String(v || "")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((l) => {
+      const parts = l.split("|").map((p) => p.trim());
+      while (parts.length < cols) parts.push("");
+      return parts.slice(0, cols);
+    });
+}
+
+// 이미지 주소는 관리자가 직접 붙여 넣는다 — https 외부 주소와 우리 경로만 허용.
+// javascript: · data: 를 그대로 background-image 에 넣으면 그게 곧 주입 통로가 된다.
+export function safeSrc(v) {
+  const s = String(v || "").trim();
+  if (!s) return "";
+  if (/^https:\/\/[^\s'"()]+$/i.test(s)) return s;
+  if (/^\/(media|img)\/[^\s'"()]+$/.test(s)) return s;
+  return "";
+}
+
+const nl2br = (v) => esc(v).replace(/\n/g, "<br />");
+
+// 섹션 카탈로그 — 관리자 편집 화면이 이 정의만 보고 자동으로 만들어진다.
+// type: text | textarea | lines | bool
+export const LANDING_CATALOG = {
+  hero: {
+    label: "히어로 (첫 화면)",
+    fields: [
+      { key: "eyebrow", label: "상단 한 줄", type: "text" },
+      { key: "title", label: "큰 제목 (줄바꿈 가능)", type: "textarea" },
+      { key: "highlight", label: "강조할 단어 (제목 안에서 색이 바뀝니다)", type: "text" },
+      { key: "subtitle", label: "설명", type: "textarea" },
+      { key: "ctaLabel", label: "버튼 문구", type: "text" },
+      { key: "note", label: "버튼 아래 작은 글씨", type: "text" },
+      { key: "image", label: "배경 사진 주소 (비우면 브랜딩의 히어로 사진)", type: "text" },
+    ],
+  },
+  ticker: {
+    label: "흐르는 띠 (핵심 숫자)",
+    fields: [{ key: "items", label: "문구 — 한 줄에 하나", type: "lines", cols: 1, placeholder: "가맹점 240호점 돌파\n창업비용 4,900만원부터\n본사 직영 물류" }],
+  },
+  why: {
+    label: "브랜드 소개 (왜 우리인가)",
+    fields: [
+      { key: "eyebrow", label: "상단 한 줄", type: "text" },
+      { key: "title", label: "제목", type: "text" },
+      { key: "body", label: "본문", type: "textarea" },
+      { key: "image", label: "사진 주소", type: "text" },
+    ],
+  },
+  strengths: {
+    label: "창업 강점 카드",
+    fields: [
+      { key: "title", label: "제목", type: "text" },
+      { key: "lead", label: "설명", type: "textarea" },
+      { key: "items", label: "강점 — 한 줄에 하나 · 제목 | 설명", type: "lines", cols: 2, placeholder: "검증된 레시피 | 3일 교육으로 누구나 동일한 맛을 냅니다\n본사 직배송 | 원가를 고정해 마진이 흔들리지 않습니다" },
+    ],
+  },
+  reviews: {
+    label: "점주 후기",
+    fields: [
+      { key: "title", label: "제목", type: "text" },
+      { key: "lead", label: "설명", type: "textarea" },
+      { key: "items", label: "후기 — 한 줄에 하나 · 내용 | 작성자", type: "lines", cols: 2, placeholder: "혼자서도 돌아가는 매장이라 처음 창업인데도 버틸 수 있었습니다 | 수원 영통점 김○○ 점주" },
+    ],
+  },
+  menu: {
+    label: "메뉴·상품 라인업",
+    fields: [
+      { key: "title", label: "제목", type: "text" },
+      { key: "lead", label: "설명", type: "textarea" },
+      { key: "items", label: "메뉴 — 한 줄에 하나 · 이름 | 가격 | 사진주소", type: "lines", cols: 3, placeholder: "대표 삼겹살 | 12,000원 | https://…/photo.jpg" },
+    ],
+  },
+  process: {
+    label: "가맹 절차",
+    fields: [
+      { key: "title", label: "제목", type: "text" },
+      { key: "lead", label: "설명", type: "textarea" },
+      { key: "items", label: "단계 — 한 줄에 하나 · 제목 | 설명", type: "lines", cols: 2, placeholder: "가맹 상담 | 전화·방문 상담으로 조건을 확인합니다\n상권 분석 | 후보 자리의 유동인구·경쟁 현황을 봅니다" },
+    ],
+  },
+  cost: {
+    label: "가맹 비용 표",
+    fields: [
+      { key: "title", label: "제목", type: "text" },
+      { key: "items", label: "항목 — 한 줄에 하나 · 항목 | 금액 | 비고", type: "lines", cols: 3, placeholder: "가맹비 | 1,000만원 | 부가세 별도\n교육비 | 300만원 | 2인 기준" },
+      { key: "note", label: "표 아래 안내", type: "text" },
+      { key: "locked", label: "상담 신청 전에는 흐리게 가리기", type: "bool" },
+    ],
+  },
+  lead: {
+    label: "가맹 상담 신청 폼 ★ (DB 수집)",
+    fields: [
+      { key: "title", label: "제목", type: "text" },
+      { key: "lead", label: "설명", type: "textarea" },
+      { key: "buttonLabel", label: "버튼 문구", type: "text" },
+      { key: "budgets", label: "창업 예산 선택지 — 한 줄에 하나", type: "lines", cols: 1, placeholder: "5천만원 이하\n5천~1억\n1억 이상" },
+      { key: "funnels", label: "유입 경로 선택지 — 한 줄에 하나", type: "lines", cols: 1, placeholder: "네이버 검색\n인스타그램\n지인 소개" },
+    ],
+  },
+  stores: {
+    label: "매장 안내 (등록된 가맹점)",
+    fields: [
+      { key: "title", label: "제목", type: "text" },
+      { key: "lead", label: "설명", type: "textarea" },
+    ],
+  },
+  faq: {
+    label: "자주 묻는 질문",
+    fields: [
+      { key: "title", label: "제목", type: "text" },
+      { key: "items", label: "문답 — 한 줄에 하나 · 질문 | 답변", type: "lines", cols: 2, placeholder: "외식업 경험이 없어도 되나요? | 점주의 70%가 첫 창업입니다. 3일 교육과 오픈 동행으로 시작합니다." },
+    ],
+  },
+  notices: {
+    label: "본사 공지",
+    fields: [{ key: "title", label: "제목", type: "text" }],
+  },
+  cta: {
+    label: "하단 마무리 배너",
+    fields: [
+      { key: "title", label: "제목", type: "text" },
+      { key: "body", label: "설명", type: "textarea" },
+      { key: "buttonLabel", label: "버튼 문구", type: "text" },
+    ],
+  },
+};
+
+export const LANDING_TYPES = Object.keys(LANDING_CATALOG);
+
+// 기본 구성 — 관리자가 아무것도 손대지 않아도 팔리는 한 장이 나와야 한다.
+// 문구는 업종 무관하게 쓸 수 있는 수준으로 두고, 숫자는 넣지 않는다(거짓 숫자가 박제되면 안 된다).
+export function defaultLandingLayout(brandName = "우리 브랜드") {
+  const n = brandName || "우리 브랜드";
+  return [
+    { type: "hero", enabled: true, eyebrow: "가맹점 모집", title: `창업, 결국\n쉬워야 합니다`, highlight: "쉬워야",
+      subtitle: `${n}는 어려운 과정을 본사가 대신합니다. 점주는 매장에만 집중하세요.`, ctaLabel: "가맹 상담 신청하기", note: "상담은 무료이며, 남겨주신 연락처로만 연락드립니다.", image: "" },
+    { type: "ticker", enabled: true, items: "본사 직영 물류\n오픈 전 교육 지원\n상권 분석 무료\n1:1 전담 슈퍼바이저" },
+    { type: "why", enabled: true, eyebrow: "WHY", title: `왜 ${n}일까요?`, image: "",
+      body: `유행을 따라가는 브랜드는 유행과 함께 사라집니다.\n${n}는 오래 버티는 매장을 만드는 데 필요한 것만 남겼습니다.\n\n적은 인원으로 돌아가는 주방 동선, 흔들리지 않는 원가, 그리고 문을 연 뒤에도 계속되는 본사의 관리 — 창업의 성패를 가르는 건 결국 이 세 가지입니다.` },
+    { type: "strengths", enabled: true, title: "창업의 벽을 낮추는 네 가지", lead: "",
+      items: "1인 운영 설계 | 주방 동선과 조리 공정을 줄여 최소 인원으로 돌아갑니다\n검증된 레시피 | 짧은 교육으로 어느 매장에서나 같은 맛이 나옵니다\n본사 직배송 | 원가가 고정되어 마진이 계절을 타지 않습니다\n오픈 후 관리 | 슈퍼바이저가 매출·재고·인력까지 함께 봅니다" },
+    { type: "reviews", enabled: true, title: "점주님들이 직접 말씀해 주셨습니다", lead: "실제 운영 중인 가맹점의 이야기입니다.", items: "" },
+    { type: "menu", enabled: true, title: "메뉴 라인업", lead: "", items: "" },
+    { type: "process", enabled: true, title: "가맹 절차", lead: "상담부터 오픈까지 평균 6~8주가 걸립니다.",
+      items: "가맹 상담 | 전화·방문 상담으로 조건과 예산을 확인합니다\n상권 분석 | 후보 자리의 유동인구·경쟁 현황을 함께 봅니다\n가맹 계약 | 조건을 확정하고 계약서를 씁니다\n매장 공사 | 설계·시공·간판까지 본사가 붙습니다\n교육 · 오픈 준비 | 조리와 운영을 교육하고 시뮬레이션합니다\n오픈 · 사후 관리 | 오픈 동행 후 슈퍼바이저가 정기 방문합니다" },
+    { type: "cost", enabled: true, title: "가맹 비용", locked: true, items: "",
+      note: "위 금액은 표준 기준이며 매장 면적·지역·현장 여건에 따라 달라질 수 있습니다." },
+    { type: "lead", enabled: true, title: "가맹 상담 신청", lead: "연락처를 남겨주시면 담당자가 순차적으로 연락드립니다.", buttonLabel: "상담 신청하기",
+      budgets: "5천만원 이하\n5천만원 ~ 1억원\n1억원 ~ 2억원\n2억원 이상\n아직 미정",
+      funnels: "네이버 검색\n인스타그램·유튜브\n지인 소개\n매장 방문\n기타" },
+    { type: "stores", enabled: true, title: "매장 안내", lead: "" },
+    { type: "faq", enabled: true, title: "자주 묻는 질문",
+      items: "외식업 경험이 없어도 되나요? | 대부분의 점주님이 첫 창업입니다. 교육과 오픈 동행으로 시작하니 경험이 없어도 괜찮습니다.\n창업 비용은 얼마나 드나요? | 매장 면적과 지역에 따라 달라집니다. 상담을 신청하시면 조건에 맞춘 견적을 보내드립니다.\n상담을 신청하면 바로 계약해야 하나요? | 아닙니다. 상담은 정보를 확인하는 자리이며 계약과는 무관합니다." },
+    { type: "notices", enabled: true, title: "본사 공지" },
+    { type: "cta", enabled: true, title: "지금이 가장 빠른 때입니다", body: "고민하는 사이에도 좋은 자리는 나갑니다. 상담은 무료입니다.", buttonLabel: "가맹 상담 신청하기" },
+  ];
+}
+
+export function parseLandingLayout(json, brandName) {
+  if (!json) return defaultLandingLayout(brandName);
+  try {
+    const arr = JSON.parse(json);
+    if (!Array.isArray(arr) || arr.length === 0) return defaultLandingLayout(brandName);
+    const out = arr.filter((s) => s && LANDING_CATALOG[s.type]);
+    if (!out.length) return defaultLandingLayout(brandName);
+    // 나중에 추가된 섹션은 기본값에서 가져와 뒤에 붙인다 — 저장해 둔 구성이 옛 버전이라고 화면이 비면 안 된다
+    const have = new Set(out.map((s) => s.type));
+    for (const sec of defaultLandingLayout(brandName)) if (!have.has(sec.type)) out.push(sec);
+    return out;
+  } catch {
+    return defaultLandingLayout(brandName);
+  }
+}
+
+export const serializeLandingLayout = (arr) => JSON.stringify(arr);
+
+// ----- 렌더링 -----
+// deps: { assoc, base, storesHtml, storeCount, noticesHtml, query, turnstile }
+export function renderLanding(layout, deps) {
+  const on = layout.filter((s) => s.enabled);
+  const hasLead = on.some((s) => s.type === "lead");
+  const body = on.map((s) => renderSection(s, { ...deps, hasLead })).join("\n");
+  return body + stickyBar(deps, hasLead);
+}
+
+// 고정 하단 바 — 모바일에서 스크롤 어디에 있든 전화·신청이 한 번에 닿는다.
+// DB 수집 랜딩에서 이탈을 가장 크게 줄이는 한 조각이라 섹션 구성과 무관하게 항상 붙인다.
+function stickyBar(deps, hasLead) {
+  const a = deps.assoc || {};
+  const tel = String(a.phone || "").replace(/[^0-9+\-]/g, "");
+  if (!tel && !hasLead) return "";
+  return `<div class="fr-sticky">
+    ${tel ? `<a class="fr-sticky-tel" href="tel:${esc(tel)}"><span>가맹 문의</span><strong>${esc(a.phone)}</strong></a>` : ""}
+    ${hasLead ? `<a class="fr-sticky-cta" href="#apply">가맹 상담 신청</a>` : ""}
+  </div>`;
+}
+
+function renderSection(s, deps) {
+  switch (s.type) {
+    case "hero": return heroSection(s, deps);
+    case "ticker": return tickerSection(s);
+    case "why": return whySection(s);
+    case "strengths": return strengthsSection(s);
+    case "reviews": return reviewsSection(s);
+    case "menu": return menuSection(s);
+    case "process": return processSection(s);
+    case "cost": return costSection(s, deps);
+    case "lead": return leadSection(s, deps);
+    case "stores": return storesSection(s, deps);
+    case "faq": return faqSection(s);
+    case "notices": return noticesSection(s, deps);
+    case "cta": return ctaSection(s, deps);
+    default: return "";
+  }
+}
+
+// 제목 안의 한 단어만 색을 바꾼다. esc 한 뒤에 감싸므로 사용자 입력이 태그가 되지 않는다.
+function titleWithHighlight(title, highlight) {
+  const t = esc(title || "").replace(/\n/g, "<br />");
+  const h = String(highlight || "").trim();
+  if (!h) return t;
+  const e = esc(h);
+  return t.split(e).join(`<span class="fr-hl">${e}</span>`);
+}
+
+function sectionHead(title, lead, tone = "") {
+  if (!title && !lead) return "";
+  return `<div class="fr-head${tone ? " " + tone : ""}">
+    ${title ? `<h2 class="fr-h2">${esc(title).replace(/\n/g, "<br />")}</h2>` : ""}
+    ${lead ? `<p class="fr-lead">${nl2br(lead)}</p>` : ""}</div>`;
+}
+
+function heroSection(s, deps) {
+  const a = deps.assoc || {};
+  const img = safeSrc(s.image) || deps.heroImage || "";
+  const title = titleWithHighlight(s.title || a.name || "", s.highlight);
+  const tel = String(a.phone || "").replace(/[^0-9+\-]/g, "");
+  return `<section class="fr-hero${img ? " has-photo" : ""}">
+    ${img ? `<div class="fr-hero-bg" style="background-image:url('${esc(img)}')" aria-hidden="true"></div><div class="fr-hero-veil" aria-hidden="true"></div>` : ""}
+    <div class="container fr-hero-inner">
+      ${s.eyebrow ? `<p class="fr-eyebrow">${esc(s.eyebrow)}</p>` : ""}
+      <h1 class="fr-hero-title">${title}</h1>
+      ${s.subtitle ? `<p class="fr-hero-sub">${nl2br(s.subtitle)}</p>` : ""}
+      <div class="fr-hero-actions">
+        ${deps.hasLead ? `<a href="#apply" class="btn btn-primary btn-lg">${esc(s.ctaLabel || "가맹 상담 신청하기")}</a>` : ""}
+        ${tel ? `<a href="tel:${esc(tel)}" class="btn btn-ghost btn-lg">전화 상담 ${esc(a.phone)}</a>` : ""}
+      </div>
+      ${s.note ? `<p class="fr-hero-note">${esc(s.note)}</p>` : ""}
+    </div></section>`;
+}
+
+function tickerSection(s) {
+  const items = splitLines(s.items, 1).map(([t]) => t);
+  if (!items.length) return "";
+  // 끊김 없이 흐르게 하려면 같은 줄이 두 벌 있어야 한다(하나가 빠져나가는 동안 뒤가 이어 붙는다)
+  const run = items.map((t) => `<span class="fr-tick-item">${esc(t)}</span>`).join("");
+  return `<div class="fr-ticker" aria-label="${esc(items.join(", "))}">
+    <div class="fr-ticker-track" aria-hidden="true">${run}${run}</div></div>`;
+}
+
+function whySection(s) {
+  const img = safeSrc(s.image);
+  if (!s.title && !s.body && !img) return "";
+  return `<section class="section fr-why" id="brand"><div class="container">
+    ${s.eyebrow ? `<p class="fr-eyebrow center">${esc(s.eyebrow)}</p>` : ""}
+    ${s.title ? `<h2 class="fr-h2 center">${esc(s.title)}</h2>` : ""}
+    ${img ? `<div class="fr-why-photo"><img src="${esc(img)}" alt="" loading="lazy" /></div>` : ""}
+    ${s.body ? `<div class="fr-why-body">${nl2br(s.body)}</div>` : ""}
+  </div></section>`;
+}
+
+function strengthsSection(s) {
+  const items = splitLines(s.items, 2);
+  if (!items.length) return "";
+  const cards = items.map(([t, d], i) => `<li class="fr-strength">
+    <span class="fr-strength-no">강점 ${i + 1}</span>
+    <strong>${esc(t)}</strong>${d ? `<p>${esc(d)}</p>` : ""}</li>`).join("");
+  return `<section class="section fr-strengths"><div class="container">
+    ${sectionHead(s.title, s.lead, "center")}
+    <ul class="fr-strength-grid">${cards}</ul></div></section>`;
+}
+
+function reviewsSection(s) {
+  const items = splitLines(s.items, 2);
+  if (!items.length) return "";
+  const cards = items.map(([body, who]) => `<li class="fr-review">
+    <p>${esc(body)}</p>${who ? `<cite>${esc(who)}</cite>` : ""}</li>`).join("");
+  return `<section class="section fr-reviews"><div class="container">
+    ${sectionHead(s.title, s.lead, "center")}
+    <ul class="fr-review-grid">${cards}</ul></div></section>`;
+}
+
+function menuSection(s) {
+  const items = splitLines(s.items, 3);
+  if (!items.length) return "";
+  const cards = items.map(([name, price, img]) => {
+    const src = safeSrc(img);
+    return `<li class="fr-menu-card">
+      <span class="fr-menu-thumb">${src ? `<img src="${esc(src)}" alt="" loading="lazy" />` : `<span class="fr-menu-noimg" aria-hidden="true"></span>`}</span>
+      <strong>${esc(name)}</strong>${price ? `<em>${esc(price)}</em>` : ""}</li>`;
+  }).join("");
+  return `<section class="section fr-menu" id="menu"><div class="container">
+    ${sectionHead(s.title, s.lead, "center")}
+    <ul class="fr-menu-grid">${cards}</ul></div></section>`;
+}
+
+function processSection(s) {
+  const items = splitLines(s.items, 2);
+  if (!items.length) return "";
+  const steps = items.map(([t, d], i) => `<li class="fr-step">
+    <span class="fr-step-no">${String(i + 1).padStart(2, "0")}</span>
+    <strong>${esc(t)}</strong>${d ? `<p>${esc(d)}</p>` : ""}</li>`).join("");
+  return `<section class="section fr-process" id="process"><div class="container">
+    ${sectionHead(s.title, s.lead, "center")}
+    <ol class="fr-step-grid">${steps}</ol></div></section>`;
+}
+
+function costSection(s, deps) {
+  const items = splitLines(s.items, 3);
+  if (!items.length) return "";
+  // 가린 표에도 진짜 금액을 심어 두면 소스만 열어도 다 보인다 — 가릴 때는 값 자체를 보내지 않는다.
+  const locked = !!s.locked;
+  const rows = items.map(([label, amount, memo]) => `<tr>
+    <th scope="row">${esc(label)}</th>
+    <td class="fr-cost-amt">${locked ? `<span class="fr-cost-hidden" aria-label="상담 시 안내">●●●●</span>` : esc(amount)}</td>
+    <td class="fr-cost-memo">${locked ? "" : esc(memo)}</td></tr>`).join("");
+  return `<section class="section fr-cost" id="cost"><div class="container narrow">
+    ${sectionHead(s.title, "", "center")}
+    <div class="fr-cost-wrap${locked ? " is-locked" : ""}">
+      <table class="fr-cost-table"><thead><tr><th>항목</th><th>금액</th><th>비고</th></tr></thead><tbody>${rows}</tbody></table>
+      ${locked ? `<div class="fr-cost-veil">
+        <p><strong>상담을 신청하시면</strong> 매장 조건에 맞춘 정확한 견적을 보내드립니다.</p>
+        ${deps.hasLead ? `<a href="#apply" class="btn btn-primary">비용 안내받기</a>` : ""}</div>` : ""}
+    </div>
+    ${s.note ? `<p class="fr-cost-note">${esc(s.note)}</p>` : ""}
+  </div></section>`;
+}
+
+// ★ 이 서비스의 목적. 위 섹션들은 전부 이 폼을 채우게 하려고 존재한다.
+function leadSection(s, deps) {
+  const base = deps.base || "";
+  const budgets = splitLines(s.budgets, 1).map(([t]) => t);
+  const funnels = splitLines(s.funnels, 1).map(([t]) => t);
+  const opt = (list) => list.map((t) => `<option value="${esc(t)}">${esc(t)}</option>`).join("");
+  return `<section class="section fr-apply" id="apply"><div class="container narrow">
+    ${sectionHead(s.title || "가맹 상담 신청", s.lead, "center")}
+    ${deps.flash || ""}
+    <form method="post" action="${base}/lead" class="fr-form stack-form">
+      <div class="form-two">
+        <label>성함 <span class="req">*</span><input type="text" name="name" required maxlength="60" autocomplete="name" /></label>
+        <label>연락처 <span class="req">*</span><input type="tel" name="phone" required maxlength="20" inputmode="numeric" placeholder="010-0000-0000" autocomplete="tel" /></label>
+      </div>
+      <div class="form-two">
+        <label>희망 지역<input type="text" name="region" maxlength="60" placeholder="예: 서울 서초구" /></label>
+        ${budgets.length ? `<label>창업 예산<select name="budget"><option value="">선택해 주세요</option>${opt(budgets)}</select></label>`
+          : `<label>창업 예산<input type="text" name="budget" maxlength="40" /></label>`}
+      </div>
+      ${funnels.length ? `<label>어떻게 알고 오셨나요?<select name="funnel"><option value="">선택해 주세요</option>${opt(funnels)}</select></label>` : ""}
+      <label>문의 내용<textarea name="message" rows="4" maxlength="2000" placeholder="궁금한 점을 자유롭게 적어주세요."></textarea></label>
+      <label class="check"><input type="checkbox" name="agree" value="1" required />
+        <a href="/privacy" target="_blank">개인정보 수집·이용</a>에 동의합니다. <small>(상담 목적으로만 사용하며 보관 기간 경과 후 파기합니다)</small></label>
+      <label class="check"><input type="checkbox" name="agree_marketing" value="1" /> 신메뉴·설명회 등 마케팅 정보 수신에 동의합니다. <small>(선택)</small></label>
+      <input type="text" name="website" class="hp-field" tabindex="-1" autocomplete="off" aria-hidden="true" />
+      ${deps.turnstile || ""}
+      <button class="btn btn-primary btn-block btn-lg">${esc(s.buttonLabel || "상담 신청하기")}</button>
+    </form>
+  </div></section>`;
+}
+
+function storesSection(s, deps) {
+  if (!deps.storesHtml) return "";
+  return `<section class="section fr-stores" id="stores"><div class="container">
+    ${sectionHead(s.title || "매장 안내", s.lead || `현재 ${deps.storeCount || 0}개 매장이 운영 중입니다.`, "center")}
+    <div class="market-grid">${deps.storesHtml}</div>
+    <p class="fr-more"><a href="${deps.base}/businesses">전체 매장 보기 ›</a>${deps.storeCount ? ` <a href="${deps.base}/map">매장 지도 ›</a>` : ""}</p>
+  </div></section>`;
+}
+
+function faqSection(s) {
+  const items = splitLines(s.items, 2);
+  if (!items.length) return "";
+  const rows = items.map(([q, a]) => `<details class="fr-faq-item"><summary>${esc(q)}</summary><p>${esc(a)}</p></details>`).join("");
+  return `<section class="section fr-faq"><div class="container narrow">
+    ${sectionHead(s.title || "자주 묻는 질문", "", "center")}
+    <div class="fr-faq-list">${rows}</div></div></section>`;
+}
+
+function noticesSection(s, deps) {
+  if (!deps.noticesHtml) return "";
+  return `<section class="section fr-notices"><div class="container narrow">
+    ${sectionHead(s.title || "본사 공지", "", "center")}
+    <ul class="notice-list">${deps.noticesHtml}</ul>
+    <p class="fr-more"><a href="${deps.base}/notices">전체 공지 ›</a></p></div></section>`;
+}
+
+function ctaSection(s, deps) {
+  if (!s.title && !s.body) return "";
+  return `<section class="fr-cta"><div class="container">
+    <h2>${esc(s.title || "")}</h2>
+    ${s.body ? `<p>${nl2br(s.body)}</p>` : ""}
+    ${deps.hasLead ? `<a href="#apply" class="btn btn-primary btn-lg">${esc(s.buttonLabel || "가맹 상담 신청하기")}</a>` : ""}
+  </div></section>`;
+}
