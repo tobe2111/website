@@ -2629,12 +2629,21 @@ export async function superConsole(ctx) {
   // 여기 걸린 항목은 '있으면 좋은 것'이 아니라 '없으면 기능이 죽는 것'이다.
   // 예: 템플릿 코드가 비면 그 종류의 알림톡이 통째로 실패한다(잔액은 차감되지 않지만 아무것도 안 나간다).
   // 이 목록이 없으면 "지금 뭘 해야 하지"를 사람에게 물어야만 알 수 있었다.
+  const secretInDb = !!(await D.getSetting(db, "session_secret"));
   const tplMissing = [];
   for (const [kind, key] of Object.entries(TEMPLATE_KEYS)) {
     if (!((await D.getSetting(db, key)) || "").trim()) tplMissing.push(TEMPLATES[kind] ? TEMPLATES[kind].label : kind);
   }
   const tplTotal = Object.keys(TEMPLATE_KEYS).length;
   const blockers = [
+    // 백업 암호화 키가 D1 안에만 있으면, D1 을 잃는 순간 R2 의 백업도 함께 못 쓰게 된다
+    // (키가 백업 안에 들어 있어 백업을 열어야만 키가 나온다). 백업의 존재 이유가 사라지는 지점이다.
+    // env 로 들어왔는지 D1 에서 자동 생성됐는지는 핸들러 안에서 구분되지 않는다
+    // (요청마다 resolveSessionSecret 이 env 를 채운다). D1 에 사본이 남아 있는지로 본다.
+    { on: !secretInDb, label: "SESSION_SECRET 을 Secret 으로",
+      why: "이 값이 D1 안에 있습니다. 주간 백업은 이 값으로 암호화되는데, 값 자체가 백업 안에 들어 있습니다 — <b>D1 을 잃으면 R2 의 백업을 영원히 열 수 없습니다.</b> 세션·서명 링크 서명에도 같은 값이 쓰입니다.",
+      how: "D1 콘솔에서 <code>SELECT value FROM settings WHERE key='session_secret'</code> 로 <b>현행 값을 그대로</b> 복사해 워커 변수에 <b>Secret</b> 으로 등록하고, 배포 후 <code>DELETE FROM settings WHERE key='session_secret'</code> 로 사본을 지웁니다. 새 값을 만들면 로그인 세션과 이미 보낸 서명 링크가 전부 무효가 됩니다.",
+      code: "SESSION_SECRET" },
     { on: keyMode === "secret", label: "전자서명 개인키를 Secret 으로",
       why: "지금은 키가 D1 에 있습니다. DB 를 읽을 수 있으면 과거 서명을 위조할 수 있습니다.",
       how: "아래 <b>설정·보안</b> 에 옮기는 순서가 있습니다. 이미 받은 서명이 있으면 <b>현행 키를 그대로</b> 옮기세요 — 새로 만들면 전부 검증 실패합니다.",

@@ -388,6 +388,8 @@ import { TEMPLATE_KEYS } from "../src/notify.js";
 
 async function superHtml(extra = {}, tplCount = 0) {
   const e2 = makeEnv(extra);
+  // '아무것도 설정 안 된' 상태 = 시크릿이 D1 에 자동 생성돼 있는 상태
+  if (!("SESSION_SECRET" in extra)) await D.setSetting(e2.DB, "session_secret", "auto-generated");
   const pw = await hashPassword("super1234");
   await D.createUser(e2.DB, { email: "chk@platform.kr", passwordHash: pw.hash, salt: pw.salt, name: "운영자", role: "SUPERADMIN", associationId: null });
   await D.createAssociation(e2.DB, { slug: "hanbit", name: "한빛법무법인", kind: "esign" });
@@ -404,15 +406,16 @@ async function superHtml(extra = {}, tplCount = 0) {
 }
 
 const ALL_ON = {
+  SESSION_SECRET: "ZZSESSIONZZ",
   ALIGO_API_KEY: "ZZAPIZZ", ALIGO_USER_ID: "ZZUSERZZ", ALIGO_SENDER_KEY: "ZZSENDKEYZZ", ALIGO_SENDER: "0299998888",
   RESEND_API_KEY: "re_ZZSECRETZZ", MAIL_FROM: "no-reply@lister.kr",
 };
 
-test("개통 체크리스트: 아무것도 없으면 막고 있는 것 4건을 이름으로 알려준다", async () => {
+test("개통 체크리스트: 아무것도 없으면 막고 있는 것 5건을 이름으로 알려준다", async () => {
   const html = await superHtml();
   assert.match(html, /개통 체크리스트/);
-  assert.match(html, /4건 남음/);
-  for (const label of ["전자서명 개인키", "알림톡 발송 키", "알림톡 템플릿 코드", "이메일 발송"])
+  assert.match(html, /5건 남음/);
+  for (const label of ["SESSION_SECRET", "전자서명 개인키", "알림톡 발송 키", "알림톡 템플릿 코드", "이메일 발송"])
     assert.match(html, new RegExp(label), `${label} 항목이 있어야`);
   assert.match(html, /ALIGO_API_KEY/, "어떤 변수를 넣어야 하는지까지");
   assert.match(html, /RESEND_API_KEY/);
