@@ -247,6 +247,26 @@ function layoutEditor(base, layoutArr, opts = {}) {
 // ================= 프랜차이즈 가맹점 모집 랜딩 =================
 // 방문자가 이 화면에서 할 일은 하나다 — 연락처를 남기는 것. 나머지 섹션은 그 결심을 돕는 근거다.
 
+// 방문으로 셀 조회인가.
+// ① 검색·SNS 크롤러는 손님이 아니다 — 세면 전환율의 분모만 부풀어 광고 판단이 틀어진다.
+// ② 새로고침 연타·스크립트 반복은 한 번으로 본다. 창을 짧게(1분) 잡은 이유가 있다 —
+//    국내 모바일은 CGNAT 라 IP 하나를 여러 사람이 쓴다. 길게 잡으면 서로 다른 방문자가
+//    한 명으로 합쳐져 분모가 줄고, 전환율이 실제보다 좋아 보인다(광고 판단이 틀어진다).
+const BOT_UA = /bot|crawler|spider|crawling|facebookexternalhit|slurp|bingpreview|headlesschrome|curl|wget|python-requests/i;
+const VIEW_DEDUPE_MS = 60 * 1000;
+const viewSeen = new Map();
+function countableVisit(ctx, variant) {
+  let ua = "";
+  try { ua = ctx.request.headers.get("user-agent") || ""; } catch {}
+  if (!ua || BOT_UA.test(ua)) return false;
+  const key = `${ctx.assoc.id}|${variant}|${ctx.ip}`;
+  const now = Date.now(), last = viewSeen.get(key);
+  if (last && now - last < VIEW_DEDUPE_MS) return false;
+  if (viewSeen.size > 10000) viewSeen.clear(); // 메모리 상한 — 정확도보다 안전이 먼저다
+  viewSeen.set(key, now);
+  return true;
+}
+
 // 광고 주소에 붙어 오는 값. 신청자 자기신고(유입 경로)와 달리 거짓말을 하지 않는다.
 const utmOf = (query) => ({
   source: cap(query.get("utm_source") || "", 60),
@@ -267,7 +287,7 @@ async function renderFranchisePage(ctx, { layoutJson, variant = "", preview = fa
   const covers = await D.coverImagesFor(db, items.map((b) => b.id));
   // 방문 수 — 신청 수만 알면 "많이 왔는데 안 남긴 건지"를 영원히 구분할 수 없다.
   // 미리보기는 관리자 자신의 조회라 세지 않는다.
-  if (countView) await D.bumpLandingView(db, assoc.id, variant).catch(() => {});
+  if (countView && countableVisit(ctx, variant)) await D.bumpLandingView(db, assoc.id, variant).catch(() => {});
   const heroImage = assoc.hero_image ? mediaUrl(assoc.hero_image) : "";
   const body = renderLanding(lay, {
     assoc, base, variant,

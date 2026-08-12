@@ -10,10 +10,16 @@ const B = "http://localhost";
 const jar = () => ({ c: {} });
 const ch = (j) => Object.entries(j.c).map(([k, v]) => `${k}=${v}`).join("; ");
 const absorb = (j, r) => { for (const s of r.headers.getSetCookie?.() || []) { const kv = s.split(";")[0]; const i = kv.indexOf("="); j.c[kv.slice(0, i)] = kv.slice(i + 1); } };
-async function get(env, j, p) { const r = await worker.fetch(new Request(B + p, { headers: { cookie: ch(j) } }), env); absorb(j, r); return r; }
-async function post(env, j, p, f, from) {
-  const t = (/name="_csrf" value="([^"]+)"/.exec(await (await get(env, j, from || p)).text()) || [])[1];
-  const r = await worker.fetch(new Request(B + p, { method: "POST", headers: { cookie: ch(j), "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ _csrf: t, ...f }).toString() }), env);
+const UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Safari/604.1";
+async function get(env, j, p, extra = {}) { const r = await worker.fetch(new Request(B + p, { headers: { cookie: ch(j), "user-agent": UA, ...extra } }), env); absorb(j, r); return r; }
+// 실제 트래픽은 사람마다 IP 가 다르다. 기본은 요청마다 다른 IP 로 두고,
+// 같은 사람의 반복(레이트리밋 검증)을 볼 때만 테스트가 IP 를 고정한다.
+let ipSeq = 0;
+const nextIp = () => `203.0.113.${(ipSeq++ % 250) + 1}`;
+async function post(env, j, p, f, from, extra = {}) {
+  const ip = extra["cf-connecting-ip"] || nextIp();
+  const t = (/name="_csrf" value="([^"]+)"/.exec(await (await get(env, j, from || p, { "cf-connecting-ip": ip })).text()) || [])[1];
+  const r = await worker.fetch(new Request(B + p, { method: "POST", headers: { cookie: ch(j), "content-type": "application/x-www-form-urlencoded", "user-agent": UA, "cf-connecting-ip": ip, ...extra }, body: new URLSearchParams({ _csrf: t, ...f }).toString() }), env);
   absorb(j, r); return r;
 }
 const msgOf = (r) => decodeURIComponent((/[?&]msg=([^&#]*)/.exec(r.headers.get("location") || "") || [])[1] || "");
@@ -285,12 +291,19 @@ test("광고 출처: 주소의 utm 이 폼에 심기고 신청에 그대로 저�
   assert.match(await (await get(env, j, "/t/dapong/admin/leads.csv")).text(), /광고출처/);
 });
 
-test("전환율: 방문 수를 세고 신청 수와 함께 보여준다", async () => {
+test("전환율: 사람의 방문만 세고, 봇·연타·미리보기는 세지 않는다", async () => {
   const env = makeEnv();
   const a = await seed(env);
-  for (let i = 0; i < 4; i++) await get(env, jar(), "/t/dapong");
+  // 서로 다른 방문자 4명 (같은 IP 연타는 아래에서 따로 확인)
+  for (let i = 0; i < 4; i++) await get(env, jar(), "/t/dapong", { "cf-connecting-ip": `1.2.3.${i}` });
   assert.equal(await D.landingViewsSince(env.DB, a.id, 30), 4);
-  await post(env, jar(), "/t/dapong/lead", applyForm, "/t/dapong"); // 폼 토큰 조회로 1회 더 셈
+  // 같은 사람이 새로고침을 연타해도 한 번 (D1 쓰기 폭주·전환율 부풀리기 차단)
+  for (let i = 0; i < 5; i++) await get(env, jar(), "/t/dapong", { "cf-connecting-ip": "9.9.9.9" });
+  assert.equal(await D.landingViewsSince(env.DB, a.id, 30), 5);
+  // 크롤러는 손님이 아니다 — 세면 분모만 부풀어 광고 판단이 틀어진다
+  await get(env, jar(), "/t/dapong", { "cf-connecting-ip": "8.8.8.8", "user-agent": "Googlebot/2.1 (+http://www.google.com/bot.html)" });
+  assert.equal(await D.landingViewsSince(env.DB, a.id, 30), 5);
+  await post(env, jar(), "/t/dapong/lead", applyForm, "/t/dapong");
   const j = await login(env);
   const html = await (await get(env, j, "/t/dapong/admin/leads")).text();
   assert.match(html, /30일 전환율/);
@@ -448,4 +461,48 @@ test("주간 백업에 상담 DB 가 포함된다 (이 제품에서 가장 잃�
   assert.equal(dump.tables.leads[0].name, "백업될 사람");
   for (const t of ["landing_variants", "landing_views", "landing_assets"])
     assert.ok(Array.isArray(dump.tables[t]), `${t} 도 백업에 있어야`);
+});
+
+// ===== 보안 검토에서 나온 결함들 (재발 방지) =====
+
+test("공개 폼으로 남의 번호에 알림톡을 무한히 쏠 수 없다", async () => {
+  const env = makeEnv();
+  const a = await seed(env);
+  // 같은 IP 에서 반복 제출하면 막힌다 (봇 방지 시크릿이 없는 배포에서도 유일한 방벽이 남아야)
+  let blocked = 0;
+  for (let i = 0; i < 26; i++) {
+    const r = await post(env, jar(), "/t/dapong/lead",
+      { ...applyForm, phone: `010-5555-${String(1000 + i)}` }, "/t/dapong", { "cf-connecting-ip": "6.6.6.6" });
+    if (/잠시 후/.test(msgOf(r))) blocked++;
+  }
+  assert.ok(blocked > 0, "반복 제출은 어느 시점에 막혀야");
+  // 실제 사람 몫(모바일 CGNAT)은 넉넉히 통과해야 한다
+  assert.ok((await D.listLeads(env.DB, a.id)).length >= 15, "정상 신청까지 막으면 안 된다");
+});
+
+test("상담 신청을 지우면 알림함·감사기록에도 이름·번호가 남지 않는다", async () => {
+  const env = makeEnv();
+  const a = await seed(env);
+  await post(env, jar(), "/t/dapong/lead", applyForm, "/t/dapong");
+  // 알림함은 파기 대상이 아니다 — 여기에 개인정보를 적으면 '지웠다'는 약속이 깨진다
+  const notifs = await D.listNotifications(env.DB, a.id, 5);
+  const notifText = notifs.map((n) => n.message).join(" ");
+  assert.doesNotMatch(notifText, /김창업/);
+  assert.doesNotMatch(notifText, /010-1234-5678/);
+  assert.match(notifText, /가맹 상담/); // 무슨 일이 있었는지는 알 수 있어야
+  const j = await login(env);
+  const id = (await D.listLeads(env.DB, a.id))[0].id;
+  await post(env, j, `/t/dapong/admin/leads/${id}/status`, { status: "contract" }, "/t/dapong/admin/leads");
+  await post(env, j, `/t/dapong/admin/leads/${id}/delete`, {}, "/t/dapong/admin/leads");
+  const audit = (await D.listAudit(env.DB, a.id, 20)).map((x) => `${x.action} ${x.detail}`).join(" ");
+  assert.doesNotMatch(audit, /김창업/, "감사 로그에 이름이 남으면 안 된다");
+  assert.doesNotMatch(audit, /010-1234-5678/);
+  assert.match(audit, /상담상태변경|상담신청삭제/, "무엇을 했는지는 남아야");
+});
+
+test("없는 캠페인 사본 이름을 지어내 보내도 성과표를 어지럽히지 못한다", async () => {
+  const env = makeEnv();
+  const a = await seed(env);
+  await post(env, jar(), "/t/dapong/lead", { ...applyForm, variant: "지어낸사본" }, "/t/dapong");
+  assert.equal((await D.listLeads(env.DB, a.id))[0].variant, "", "실제 있는 사본만 기록한다");
 });

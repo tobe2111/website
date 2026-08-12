@@ -14,10 +14,16 @@ const B = "http://localhost";
 const jar = () => ({ c: {} });
 const ch = (j) => Object.entries(j.c).map(([k, v]) => `${k}=${v}`).join("; ");
 const absorb = (j, r) => { for (const s of r.headers.getSetCookie?.() || []) { const kv = s.split(";")[0]; const i = kv.indexOf("="); j.c[kv.slice(0, i)] = kv.slice(i + 1); } };
-async function get(env, j, p) { const r = await worker.fetch(new Request(B + p, { headers: { cookie: ch(j) } }), env); absorb(j, r); return r; }
-async function post(env, j, p, f, from) {
-  const t = (/name="_csrf" value="([^"]+)"/.exec(await (await get(env, j, from || p)).text()) || [])[1];
-  const r = await worker.fetch(new Request(B + p, { method: "POST", headers: { cookie: ch(j), "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ _csrf: t, ...f }).toString() }), env);
+const UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Safari/604.1";
+async function get(env, j, p, extra = {}) { const r = await worker.fetch(new Request(B + p, { headers: { cookie: ch(j), "user-agent": UA, ...extra } }), env); absorb(j, r); return r; }
+// 실제 트래픽은 사람마다 IP 가 다르다. 기본은 요청마다 다른 IP 로 두고,
+// 같은 사람의 반복(레이트리밋 검증)을 볼 때만 테스트가 IP 를 고정한다.
+let ipSeq = 0;
+const nextIp = () => `203.0.113.${(ipSeq++ % 250) + 1}`;
+async function post(env, j, p, f, from, extra = {}) {
+  const ip = extra["cf-connecting-ip"] || nextIp();
+  const t = (/name="_csrf" value="([^"]+)"/.exec(await (await get(env, j, from || p, { "cf-connecting-ip": ip })).text()) || [])[1];
+  const r = await worker.fetch(new Request(B + p, { method: "POST", headers: { cookie: ch(j), "content-type": "application/x-www-form-urlencoded", "user-agent": UA, "cf-connecting-ip": ip, ...extra }, body: new URLSearchParams({ _csrf: t, ...f }).toString() }), env);
   absorb(j, r); return r;
 }
 const msgOf = (r) => decodeURIComponent((/[?&]msg=([^&#]*)/.exec(r.headers.get("location") || "") || [])[1] || "");

@@ -205,13 +205,13 @@ export async function leadStats(db, aid) {
 // 유입 경로별 집계 — 어느 광고가 실제로 DB 를 만들어 냈는지 (빈 값은 '미기재'로 묶는다)
 export const leadFunnelStats = (db, aid) =>
   all(db, `SELECT CASE WHEN funnel='' THEN '미기재' ELSE funnel END AS funnel, COUNT(*) AS n
-    FROM leads WHERE association_id=? GROUP BY 1 ORDER BY n DESC`, aid);
+    FROM leads WHERE association_id=? GROUP BY 1 ORDER BY n DESC LIMIT 30`, aid);
 // 광고 출처별 집계 — 신청자 자기신고(funnel)와 달리 링크에 붙여 온 값이라 거짓말을 하지 않는다
 export const leadUtmStats = (db, aid, days = 30) =>
   all(db, `SELECT CASE WHEN utm_source='' THEN '직접·기타' ELSE utm_source END AS source,
       CASE WHEN utm_campaign='' THEN '' ELSE utm_campaign END AS campaign, COUNT(*) AS n
     FROM leads WHERE association_id=? AND created_at > datetime('now', ?)
-    GROUP BY 1,2 ORDER BY n DESC`, aid, `-${Math.max(1, days | 0)} days`);
+    GROUP BY 1,2 ORDER BY n DESC LIMIT 30`, aid, `-${Math.max(1, days | 0)} days`);
 // 사본(캠페인)별 신청 수 — 방문 수와 짝지어 전환율을 낸다
 export const leadCountsByVariant = (db, aid, days = 30) =>
   all(db, `SELECT variant, COUNT(*) AS n FROM leads WHERE association_id=? AND created_at > datetime('now', ?)
@@ -1003,6 +1003,15 @@ export const countMessagesToday = async (db, aid, channel) =>
     AND created_at > datetime('now','-1 day')`, aid, channel)).n;
 export const listMessages = (db, aid, limit = 50) =>
   all(db, "SELECT * FROM message_log WHERE association_id=? ORDER BY id DESC LIMIT ?", aid, limit);
+// 최근 N시간 동안 특정 종류로 나간 발송 건수 — 공개 폼발(發) 알림톡의 남용 상한 판정에 쓴다
+export const countMessagesSince = async (db, aid, kinds, hours = 24) => {
+  const list = (kinds || []).filter(Boolean);
+  if (!list.length) return 0;
+  const ph = list.map(() => "?").join(",");
+  return (await first(db, `SELECT COUNT(*) AS n FROM message_log
+    WHERE association_id=? AND kind IN (${ph}) AND created_at > datetime('now', ?)`,
+    aid, ...list, `-${Math.max(1, hours | 0)} hours`)).n;
+};
 export const messageStats = (db, aid) =>
   first(db, `SELECT COUNT(*) AS n, COALESCE(SUM(cost),0) AS spent,
     COALESCE(SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END),0) AS failed

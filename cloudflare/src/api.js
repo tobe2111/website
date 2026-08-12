@@ -16,7 +16,7 @@ import { turnstileVerify } from "./turnstile.js";
 import { planOf } from "./plans.js";
 import { seedDemo } from "./demoContent.js";
 import { seedStarter } from "./starterContent.js";
-import { KINDS, kindById, PRESETS } from "./kinds.js";
+import { KINDS, kindById, PRESETS, assocTerms } from "./kinds.js";
 import { TEMPLATE_KEYS, sendMany, sendOne, notifyEnabled, wonToJeon, renderTemplate, templateButton, billingMode, chargeContract, BILLING_MODES, priceOf } from "./notify.js";
 
 // ctx.request 는 내부 호출 경로에서 없을 수 있다 — 감사 기록이 본 기능을 죽이면 안 된다
@@ -55,6 +55,22 @@ export async function postLoginPath(db, user) {
   // 전자계약 조직의 회원에게 '내 업체'는 없다. 빈 화면 대신 서명 목록으로.
   if (esign) return base + "/sign";
   return base + "/dashboard";
+}
+
+// 공개 상담 폼 제출 제한 (isolate 로컬, best-effort).
+// 로그인 실패 카운터와 목적이 다르다 — 저쪽은 '틀린 시도', 이쪽은 '성공한 제출'을 센다.
+// Turnstile 시크릿이 없는 배포에서는 이것이 유일한 방벽이라 실패가 아니라 제출을 기준으로 잡는다.
+// 국내 모바일은 CGNAT 라 수많은 사람이 IP 하나를 함께 쓴다 — 빡빡하게 잡으면 진짜 신청자가 막힌다.
+// 목적은 '스크립트 반복'을 끊는 것이지 할당량 관리가 아니므로, 실제 사람 몫보다 넉넉히 잡는다.
+// 비용의 실제 상한은 아래 LEAD_NOTIFY_DAILY_CAP(하루 발송 수)이 맡는다.
+const LEAD_IP_MAX = 20, LEAD_IP_WINDOW_MS = 15 * 60 * 1000;
+const leadHits = new Map();
+function leadRateLimited(ip) {
+  const now = Date.now(), r = leadHits.get(ip);
+  if (!r || now - r.first > LEAD_IP_WINDOW_MS) { leadHits.set(ip, { n: 1, first: now }); return false; }
+  r.n++;
+  if (leadHits.size > 5000) leadHits.clear(); // 메모리 상한 — best-effort 이므로 통째로 비워도 된다
+  return r.n > LEAD_IP_MAX;
 }
 
 // 최소 침입 레이트리밋 (isolate 로컬, best-effort)
@@ -1951,7 +1967,8 @@ export async function leadSubmit(ctx) {
   const variant = cap((form.get("variant") || "").trim(), 40).replace(/[^a-z0-9-]/g, "");
   const home = variant ? `${base}/l/${encodeURIComponent(variant)}` : `${base}/`;
   const at = (msg, err = false) => redirect(`${home}?${err ? "err=1&" : ""}msg=${encodeURIComponent(msg)}#apply`);
-  if (assoc.kind !== "franchise") return at("이 조직은 상담 신청을 받지 않습니다.", true);
+  if (!kindById(assoc.kind).usesLanding) return at("이 조직은 상담 신청을 받지 않습니다.", true);
+  if (leadRateLimited(ip)) return at("잠시 후 다시 시도해 주세요.", true);
   if (!(await turnstileVerify(env, form.get("cf-turnstile-response"), ip)))
     return at("봇 방지 확인에 실패했습니다. 다시 시도해 주세요.", true);
   // 허니팟: 사람 눈에 보이지 않는 칸이 채워졌다면 봇이다. 봇에게는 성공처럼 보이게 두고 저장하지 않는다.
@@ -1965,8 +1982,10 @@ export async function leadSubmit(ctx) {
   // 뒤로가기·더블클릭으로 같은 사람이 두 번 들어오면 영업팀이 같은 번호로 두 번 전화한다
   if (await D.recentLeadByPhone(db, assoc.id, phone, 10))
     return at("이미 접수되었습니다. 곧 연락드리겠습니다.");
+  // 사본 이름은 실제로 있는 것만 기록한다 — 공개 폼이 지어낸 이름이 성과표에 줄을 만들면 안 된다
+  const knownVariant = variant && (await D.getLandingVariant(db, assoc.id, variant)) ? variant : "";
   const lead = await D.createLead(db, {
-    associationId: assoc.id, name, phone, variant,
+    associationId: assoc.id, name, phone, variant: knownVariant,
     email: cap((form.get("email") || "").trim(), 120),
     region: cap((form.get("region") || "").trim(), 60),
     budget: cap((form.get("budget") || "").trim(), 40),
@@ -1978,8 +1997,11 @@ export async function leadSubmit(ctx) {
     utmCampaign: cap((form.get("utm_campaign") || "").trim(), 60),
     referrer: cap((form.get("referrer") || "").trim(), 200),
   });
+  // 알림함은 파기 대상(leads)이 아니다 — 여기에 이름·번호를 적으면 신청 건을 지워도 그대로 남는다.
+  // 누가 왔는지는 링크를 눌러 상담 DB 에서 본다.
   await D.createNotification(db, { associationId: assoc.id, kind: "lead",
-    message: `[가맹 상담] ${name} (${phone})${lead.region ? ` · ${lead.region}` : ""}`, link: base + "/admin/leads" });
+    message: `새 ${assocTerms(assoc).consult} 신청이 들어왔습니다${lead.region ? ` (${lead.region})` : ""}`,
+    link: base + "/admin/leads" });
   // 알림톡 — 담당자는 메일함을 늘 보고 있지 않다. 초기 응답 속도가 계약률을 가른다.
   // 크레딧이 없거나 발송이 꺼져 있어도 접수는 이미 끝났다 — 실패해도 조용히 넘어간다.
   await notifyLead(ctx, lead).catch(() => {});
@@ -2000,9 +2022,16 @@ export async function leadSubmit(ctx) {
 
 // 새 상담이 들어오면 담당자에게 알림톡, 신청자에게 접수 확인.
 // 알림톡 설정(키·템플릿 코드·크레딧)이 없으면 조용히 넘어간다 — 알림이 접수를 막으면 본말전도다.
+//
+// ⚠️ 이 발송은 '누구나 보낼 수 있는 공개 폼'이 방아쇠다. 신청자 확인 문자는 폼에 적힌 번호로
+//    나가고 요금은 조직이 문다 — 즉 남의 번호로 문자를 쏘고 남의 돈을 태우는 통로가 될 수 있다.
+//    그래서 하루 상한을 두고, 넘으면 발송만 멈춘다(접수는 계속 받는다).
+const LEAD_NOTIFY_DAILY_CAP = 200;
 async function notifyLead(ctx, lead) {
   const { db, env, assoc, base } = ctx;
   if (!notifyEnabled(env)) return;
+  const sentToday = await D.countMessagesSince(db, assoc.id, ["lead_new", "lead_ack"], 24);
+  if (sentToday >= LEAD_NOTIFY_DAILY_CAP) return;
   const origin = await originFor(env, db, assoc);
   const staff = [...(await D.listUsersByAssociation(db, assoc.id, "ADMIN")),
     ...(await D.listUsersByAssociation(db, assoc.id, "STAFF"))].filter((u) => u.phone);
@@ -2030,8 +2059,9 @@ export async function adminLeadStatus(ctx) {
   const status = form.get("status");
   if (!D.LEAD_STATUSES.includes(status)) return back(base + "/admin/leads", "잘못된 상태값입니다.", true);
   await D.setLeadStatus(db, lead.id, assoc.id, status);
-  await audit(ctx, "상담상태변경", `${lead.name}: ${D.LEAD_STATUS_LABEL[status]}`);
-  return back(base + "/admin/leads", `'${lead.name}' 건을 '${D.LEAD_STATUS_LABEL[status]}'(으)로 바꿨습니다.`);
+  // 감사 로그·주소창에도 이름을 남기지 않는다 (감사 로그는 파기 대상이 아니고, 주소는 방문 기록에 남는다)
+  await audit(ctx, "상담상태변경", `#${lead.id}: ${D.LEAD_STATUS_LABEL[status]}`);
+  return back(base + "/admin/leads", `신청 건을 '${D.LEAD_STATUS_LABEL[status]}'(으)로 바꿨습니다.`);
 }
 export async function adminLeadMemo(ctx) {
   const { db, form, base, assoc, params } = ctx;
