@@ -127,3 +127,32 @@ test("sitemap: 개별 도메인에선 그 상인회만 루트 경로로, 공용 
   assert.match(xml, /gangnam-market\.kr\/businesses/);
   assert.doesNotMatch(xml, /\/t\/seocho/);
 });
+
+// 색 토큰이 WCAG AA 를 넘는지 — 값이 다시 흐려지면 여기서 걸린다.
+// (브라우저 없이 계산으로 검사하므로 유닛 테스트에 둔다)
+test("기본 색 토큰이 WCAG AA 대비를 만족한다", async () => {
+  const fs = await import("node:fs");
+  const css = fs.readFileSync(new URL("../public/css/app.css", import.meta.url), "utf8");
+  const tok = (name) => (new RegExp(`--${name}\\s*:\\s*(#[0-9a-fA-F]{6})`).exec(css) || [])[1];
+  const lum = (hex) => {
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255]
+      .map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; });
+    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+  };
+  const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)]; return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+  const WHITE = "#ffffff";
+  const brand = tok("brand"), muted = tok("muted"), inkSoft = tok("ink-soft"), ink = tok("ink");
+  assert.ok(brand && muted && inkSoft && ink, "색 토큰을 읽지 못함");
+  // 본문 글자 기준 4.5:1
+  for (const [name, c] of [["--muted", muted], ["--ink-soft", inkSoft], ["--ink", ink]])
+    assert.ok(ratio(c, WHITE) >= 4.5, `${name}(${c}) 가 흰 배경에서 ${ratio(c, WHITE).toFixed(2)}:1 — 4.5 이상이어야`);
+  // 기본 버튼: 브랜드색 위 흰 글자
+  assert.ok(ratio(WHITE, brand) >= 4.5,
+    `--brand(${brand}) 위 흰 글자가 ${ratio(WHITE, brand).toFixed(2)}:1 — 기본 버튼이 전부 이 조합이다`);
+  // 앱이 쓰는 기본값과 CSS 기본값이 어긋나면 배포 후에야 안다
+  const render = fs.readFileSync(new URL("../src/render.js", import.meta.url), "utf8");
+  const schema = fs.readFileSync(new URL("../src/schema.js", import.meta.url), "utf8");
+  assert.ok(render.includes(brand), `render.js 폴백 색이 CSS 기본값(${brand})과 다름`);
+  assert.ok(schema.includes(`DEFAULT '${brand}'`), `스키마 기본 brand_color 가 ${brand} 와 다름`);
+});

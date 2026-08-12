@@ -10,7 +10,10 @@
     "test": "node --experimental-sqlite --test cloudflare/test/*.test.js",
     "test:e2e": "node cloudflare/test-e2e/smoke.mjs",
     "test:mobile": "node --experimental-sqlite cloudflare/test-e2e/mobile-sign.mjs",
-    "test:restore": "node --experimental-sqlite cloudflare/test-e2e/restore-drill.mjs"
+    "test:restore": "node --experimental-sqlite cloudflare/test-e2e/restore-drill.mjs",
+    "test:perf": "node --experimental-sqlite cloudflare/test-e2e/perf-drill.mjs",
+    "test:a11y": "node --experimental-sqlite cloudflare/test-e2e/a11y-print-drill.mjs",
+    "test:all": "npm test && npm run test:e2e && npm run test:mobile && npm run test:restore && npm run test:perf && npm run test:a11y"
   },
   "license": "MIT"
 }

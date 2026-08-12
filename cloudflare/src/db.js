@@ -33,7 +33,7 @@ export const listAllAssociations = (db) => all(db, "SELECT * FROM associations O
 // 최근 생성된 조직 수 — 셀프 가입 폭주를 막기 위한 상한 판정
 export const countAssociationsSince = async (db, ago = "-1 day") =>
   (await first(db, `SELECT COUNT(*) AS n FROM associations WHERE created_at > datetime('now', ?)`, ago)).n;
-export async function createAssociation(db, { slug, name, brandColor = "#0b8a46", tagline = "함께 성장하는 우리 동네 상권", kind = "merchant" }) {
+export async function createAssociation(db, { slug, name, brandColor = "#0a7d40", tagline = "함께 성장하는 우리 동네 상권", kind = "merchant" }) {
   await run(db, "INSERT INTO associations (slug, name, brand_color, tagline, kind) VALUES (?, ?, ?, ?, ?)",
     slug, name, brandColor, tagline, kind === "esign" ? "esign" : "merchant");
   return getAssociationById(db, await lastId(db));
