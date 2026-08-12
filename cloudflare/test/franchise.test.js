@@ -506,3 +506,70 @@ test("없는 캠페인 사본 이름을 지어내 보내도 성과표를 어지�
   await post(env, jar(), "/t/dapong/lead", { ...applyForm, variant: "지어낸사본" }, "/t/dapong");
   assert.equal((await D.listLeads(env.DB, a.id))[0].variant, "", "실제 있는 사본만 기록한다");
 });
+
+// ===== 주간 리포트 · 업종별 추가 질문 =====
+
+test("주간 리포트: 모집형에는 상인회 숫자가 아니라 모집 성과가 간다", async () => {
+  const env = makeEnv({ RESEND_API_KEY: "re_test", MAIL_FROM: "테스트 <no@ex.kr>" });
+  const a = await seed(env);
+  const sent = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {           // 메일 발송만 가로챈다
+    sent.push(JSON.parse(init.body));
+    return new Response(JSON.stringify({ id: "x" }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  try {
+    await D.createLead(env.DB, { associationId: a.id, name: "김창업", phone: "010-1111-2222", utmSource: "naver" });
+    await D.bumpLandingView(env.DB, a.id, "");
+    const { runWeeklyReports } = await import("../src/scheduled.js");
+    const r = await runWeeklyReports(env);
+    assert.equal(r.sent, 1);
+    const mail = sent[0];
+    assert.match(mail.subject, /가맹 상담 1건/);
+    assert.match(mail.html, /전환율/);
+    assert.match(mail.html, /미처리\(신규\)/);
+    assert.match(mail.html, /naver/, "어느 광고에서 왔는지도 함께");
+    assert.doesNotMatch(mail.html, /승인 대기|회비/, "상인회 숫자가 섞이면 안 된다");
+    // 조용한 주(신청·방문·미처리 모두 0)는 메일도 조용히
+    sent.length = 0;
+    const env2 = makeEnv({ RESEND_API_KEY: "re_test", MAIL_FROM: "테스트 <no@ex.kr>" });
+    await seed(env2);
+    assert.equal((await runWeeklyReports(env2)).sent, 0);
+  } finally { globalThis.fetch = realFetch; }
+});
+
+test("업종별 추가 질문: 정의한 것만 받고, 선택형은 보기 밖 값을 버린다", async () => {
+  const env = makeEnv();
+  const a = await seed(env);
+  const j = await login(env);
+  await post(env, j, "/t/dapong/admin/landing", {
+    order: "0", ty_0: "lead", en_0: "1", f_0_title: "상담 신청",
+    f_0_extras: "희망 오픈 시기 | 선택 | 3개월 내;6개월 내\n보유 점포 | 글 |",
+  }, "/t/dapong/admin/landing");
+  await post(env, j, "/t/dapong/admin/landing/publish", {}, "/t/dapong/admin/landing");
+  const html = await (await get(env, jar(), "/t/dapong")).text();
+  assert.match(html, /희망 오픈 시기/);
+  assert.match(html, /name="q1"/);
+  assert.match(html, /보유 점포/);
+
+  await post(env, jar(), "/t/dapong/lead",
+    { ...applyForm, q1: "3개월 내", q2: "1곳 운영 중", q3: "정의에 없는 질문" }, "/t/dapong");
+  const lead = (await D.listLeads(env.DB, a.id))[0];
+  const extra = JSON.parse(lead.extra);
+  assert.equal(extra["희망 오픈 시기"], "3개월 내");
+  assert.equal(extra["보유 점포"], "1곳 운영 중");
+  assert.equal(Object.keys(extra).length, 2, "정의에 없는 값은 저장하지 않는다");
+
+  // 선택형에 보기 밖 값을 넣으면 버린다 (관리자 화면의 열 이름·값을 공개 폼이 정하면 안 된다)
+  await post(env, jar(), "/t/dapong/lead",
+    { ...applyForm, name: "이점주", phone: "010-9999-1111", q1: "아무거나" }, "/t/dapong");
+  const l2 = (await D.listLeads(env.DB, a.id)).find((x) => x.name === "이점주");
+  assert.doesNotMatch(l2.extra || "", /아무거나/);
+
+  // 관리자 화면·CSV 에 답이 보인다
+  const adminHtml = await (await get(env, j, "/t/dapong/admin/leads")).text();
+  assert.match(adminHtml, /희망 오픈 시기/);
+  const csv = await (await get(env, j, "/t/dapong/admin/leads.csv")).text();
+  assert.match(csv, /희망 오픈 시기/);
+  assert.match(csv, /3개월 내/);
+});

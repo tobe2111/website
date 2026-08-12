@@ -1984,6 +1984,9 @@ export async function leadSubmit(ctx) {
     return at("이미 접수되었습니다. 곧 연락드리겠습니다.");
   // 사본 이름은 실제로 있는 것만 기록한다 — 공개 폼이 지어낸 이름이 성과표에 줄을 만들면 안 된다
   const knownVariant = variant && (await D.getLandingVariant(db, assoc.id, variant)) ? variant : "";
+  // 업종별 추가 질문 — 무엇을 물었는지는 발행된 랜딩 구성이 결정한다.
+  // 폼이 보낸 라벨을 그대로 쓰면 아무나 상담 DB 의 열 이름을 만들 수 있다.
+  const extra = await collectExtraAnswers(ctx, knownVariant);
   const lead = await D.createLead(db, {
     associationId: assoc.id, name, phone, variant: knownVariant,
     email: cap((form.get("email") || "").trim(), 120),
@@ -1991,7 +1994,7 @@ export async function leadSubmit(ctx) {
     budget: cap((form.get("budget") || "").trim(), 40),
     funnel: cap((form.get("funnel") || "").trim(), 40),
     message: cap((form.get("message") || "").trim(), 2000),
-    agreeMarketing: form.get("agree_marketing") === "1" ? 1 : 0,
+    agreeMarketing: form.get("agree_marketing") === "1" ? 1 : 0, extra,
     utmSource: cap((form.get("utm_source") || "").trim(), 60),
     utmMedium: cap((form.get("utm_medium") || "").trim(), 60),
     utmCampaign: cap((form.get("utm_campaign") || "").trim(), 60),
@@ -2018,6 +2021,28 @@ export async function leadSubmit(ctx) {
     }).catch(() => {});
   }
   return at("상담 신청이 접수되었습니다. 남겨주신 연락처로 곧 연락드리겠습니다.");
+}
+
+// 발행된 랜딩의 상담 폼 정의를 읽어, 거기 있는 질문의 답만 추려 담는다.
+async function collectExtraAnswers(ctx, variant) {
+  const { db, form, assoc } = ctx;
+  const { parseLandingLayout, extraDefs } = await import("./franchise.js");
+  let json = assoc.landing_layout;
+  if (variant) {
+    const v = await D.getLandingVariant(db, assoc.id, variant);
+    if (v && v.layout) json = v.layout;
+  }
+  const sec = parseLandingLayout(json, assoc.name, assoc.preset).find((x) => x.type === "lead" && x.enabled);
+  if (!sec) return "";
+  const out = {};
+  for (const f of extraDefs(sec)) {
+    const v = cap((form.get(f.name) || "").trim(), 200);
+    if (!v) continue;
+    // 선택형은 제시한 보기 중 하나여야 한다 — 아니면 저장하지 않는다
+    if (f.type === "select" && f.options.length && !f.options.includes(v)) continue;
+    out[f.label] = v;
+  }
+  return Object.keys(out).length ? JSON.stringify(out) : "";
 }
 
 // 새 상담이 들어오면 담당자에게 알림톡, 신청자에게 접수 확인.

@@ -577,6 +577,7 @@ CREATE TABLE IF NOT EXISTS leads (
   utm_campaign    TEXT NOT NULL DEFAULT '',
   referrer        TEXT NOT NULL DEFAULT '',
   variant         TEXT NOT NULL DEFAULT '',    -- 어느 랜딩(캠페인 사본)에서 왔는지. '' = 기본 랜딩
+  extra           TEXT NOT NULL DEFAULT '',    -- 업종별 추가 질문의 답 (JSON). 고정 칸에 없는 것만 담는다
   created_at      TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at      TEXT NOT NULL DEFAULT ''
 );
@@ -620,7 +621,7 @@ CREATE INDEX IF NOT EXISTS idx_landing_asset_assoc ON landing_assets(association
 // 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
 // 마이그레이션 세대 — migrateColumns 에 단계를 추가할 때마다 +1
 // 36 = 두 갈래(트렁크 33 · 모집형 35)를 합친 세대. 양쪽 DB 모두 다시 한 번 마이그레이션을 타게 한다.
-export const SCHEMA_VERSION = "36";
+export const SCHEMA_VERSION = "37";
 
 export async function ensureSchema(db) {
   const has = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='associations'").first();
@@ -932,6 +933,10 @@ async function migrateColumns(db) {
     created_at TEXT NOT NULL DEFAULT (datetime('now')))`).run();
   await db.prepare("CREATE INDEX IF NOT EXISTS idx_landing_asset_assoc ON landing_assets(association_id, created_at)").run();
 
+  // v37: 상담 폼의 업종별 추가 질문 답변
+  if (lcol.length && !lcol.some((c) => c.name === "extra")) {
+    await db.prepare("ALTER TABLE leads ADD COLUMN extra TEXT NOT NULL DEFAULT ''").run();
+  }
   // v35: 랜딩형 제품의 업종 프리셋 (프랜차이즈·학원·헬스장·병원·분양…)
   if (acol.length && !acol.some((c) => c.name === "preset")) {
     await db.prepare("ALTER TABLE associations ADD COLUMN preset TEXT NOT NULL DEFAULT 'franchise'").run();

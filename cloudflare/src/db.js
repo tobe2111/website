@@ -167,11 +167,11 @@ export const deleteLandingAsset = (db, id, aid) =>
 // ----- 가맹 상담 신청 (프랜차이즈 랜딩 DB) -----
 export const LEAD_STATUSES = ["new", "contacted", "visit", "contract", "drop"];
 export const LEAD_STATUS_LABEL = { new: "신규", contacted: "연락 완료", visit: "상담·방문", contract: "계약", drop: "보류·종료" };
-export async function createLead(db, { associationId, name, phone = "", email = "", region = "", budget = "", funnel = "", message = "", agreeMarketing = 0, source = "landing", utmSource = "", utmMedium = "", utmCampaign = "", referrer = "", variant = "" }) {
+export async function createLead(db, { associationId, name, phone = "", email = "", region = "", budget = "", funnel = "", message = "", agreeMarketing = 0, source = "landing", utmSource = "", utmMedium = "", utmCampaign = "", referrer = "", variant = "", extra = "" }) {
   await run(db, `INSERT INTO leads (association_id, name, phone, email, region, budget, funnel, message, agree_marketing, source,
-    utm_source, utm_medium, utm_campaign, referrer, variant) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    utm_source, utm_medium, utm_campaign, referrer, variant, extra) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     associationId, name, phone, email, region, budget, funnel, message, agreeMarketing ? 1 : 0, source,
-    utmSource, utmMedium, utmCampaign, referrer, variant);
+    utmSource, utmMedium, utmCampaign, referrer, variant, extra);
   return first(db, "SELECT * FROM leads WHERE id=?", await lastId(db));
 }
 export const getLead = (db, id, aid) => first(db, "SELECT * FROM leads WHERE id=? AND association_id=?", id, aid);

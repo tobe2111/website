@@ -430,6 +430,16 @@ export async function adminLanding(ctx) {
     scripts: `<script src="${assetUrl("/js/layout-editor.js")}" defer></script><script src="${assetUrl("/js/upload-resize.js")}" defer></script>` }));
 }
 
+// 업종별 추가 질문의 답 — 조직마다 항목이 달라 고정 열로 둘 수 없다. 이름 칸 아래에 함께 보여준다.
+function parseExtra(l) {
+  try { const o = JSON.parse(l.extra || ""); return o && typeof o === "object" ? o : {}; } catch { return {}; }
+}
+function extraSummary(l) {
+  const e = Object.entries(parseExtra(l));
+  if (!e.length) return "";
+  return `<ul class="lead-extra">${e.map(([k, v]) => `<li><span>${esc(k)}</span> ${esc(v)}</li>`).join("")}</ul>`;
+}
+
 const LEAD_BADGE = { new: "badge-wait", contacted: "badge-info", visit: "badge-brand", contract: "badge-ok", drop: "badge-neutral" };
 const LEAD_PER_PAGE = 50;
 
@@ -463,6 +473,7 @@ export async function adminLeads(ctx) {
   const rows = leads.length ? leads.map((l) => `<tr>
     <td><time>${esc(kstStamp(l.created_at, { year: false }))}</time>${l.variant ? `<br /><small class="badge badge-muted">${esc(l.variant)}</small>` : ""}</td>
     <td><strong>${esc(l.name)}</strong>${l.agree_marketing ? ` <span class="badge badge-muted">수신동의</span>` : ""}
+      ${extraSummary(l)}
       ${l.message ? `<details class="lead-msg"><summary>문의 내용</summary><p>${esc(l.message)}</p></details>` : ""}</td>
     <td>${l.phone ? `<a href="tel:${esc(l.phone)}">${esc(l.phone)}</a>` : "-"}</td>
     <td>${esc(l.region || "-")}<br /><small>${esc(l.budget || "")}</small></td>
@@ -535,10 +546,13 @@ export async function adminLeads(ctx) {
 export async function adminLeadsCsv(ctx) {
   const { db, assoc } = ctx;
   const leads = await D.listLeads(db, assoc.id, { limit: 5000 });
-  const rows = [["신청시각", "성함", "연락처", "이메일", "희망지역", "창업예산", "유입경로", "광고출처", "매체", "캠페인", "유입페이지", "랜딩", "문의내용", "상태", "메모", "마케팅수신"],
-    ...leads.map((l) => [kstStamp(l.created_at), l.name, l.phone, l.email, l.region, l.budget, l.funnel,
-      l.utm_source, l.utm_medium, l.utm_campaign, l.referrer, l.variant || "기본", l.message,
-      D.LEAD_STATUS_LABEL[l.status] || l.status, l.memo, l.agree_marketing ? "동의" : ""])];
+  // 추가 질문은 조직마다 다르다 — 실제로 답이 들어온 질문만 열로 편다
+  const extraKeys = [...new Set(leads.flatMap((l) => Object.keys(parseExtra(l))))].slice(0, 12);
+  const rows = [["신청시각", "성함", "연락처", "이메일", "희망지역", "창업예산", ...extraKeys, "유입경로", "광고출처", "매체", "캠페인", "유입페이지", "랜딩", "문의내용", "상태", "메모", "마케팅수신"],
+    ...leads.map((l) => { const ex = parseExtra(l);
+      return [kstStamp(l.created_at), l.name, l.phone, l.email, l.region, l.budget, ...extraKeys.map((k) => ex[k] || ""), l.funnel,
+        l.utm_source, l.utm_medium, l.utm_campaign, l.referrer, l.variant || "기본", l.message,
+        D.LEAD_STATUS_LABEL[l.status] || l.status, l.memo, l.agree_marketing ? "동의" : ""]; })];
   const csv = "﻿" + rows.map((r) => r.map(csvCell).join(",")).join("\r\n");
   return text(csv, 200, { "content-type": "text/csv; charset=utf-8", "content-disposition": `attachment; filename="leads_${assoc.slug}.csv"`, "cache-control": "no-store" });
 }

@@ -110,6 +110,8 @@ export const LANDING_CATALOG = {
       { key: "regionLabel", label: "지역 칸 이름", type: "text" },
       { key: "budgetLabel", label: "예산·구분 칸 이름", type: "text" },
       { key: "budgets", label: "예산·구분 선택지 — 한 줄에 하나", type: "lines", cols: 1, placeholder: "5천만원 이하\n5천~1억\n1억 이상" },
+      { key: "extras", label: "추가 질문 — 한 줄에 하나 · 질문 | 종류(글·선택·연락처) | 선택지(;로 구분)", type: "lines", cols: 3,
+        placeholder: "희망 오픈 시기 | 선택 | 3개월 내;6개월 내;미정\n보유 점포 유무 | 글 |" },
       { key: "funnels", label: "유입 경로 선택지 — 한 줄에 하나", type: "lines", cols: 1, placeholder: "네이버 검색\n인스타그램\n지인 소개" },
     ],
   },
@@ -344,6 +346,28 @@ function costSection(s, deps) {
   </div></section>`;
 }
 
+// 업종별 추가 질문. 고정 칸(성함·연락처·지역·예산)에 없는 것을 관리자가 직접 정의한다.
+// 이름은 q1·q2… 로 보내고 라벨은 서버가 정의에서 다시 읽는다 — 폼에서 온 라벨을 그대로 믿으면
+// 아무 문자열이나 상담 DB 의 열 이름이 된다.
+export function extraDefs(sec) {
+  return splitLines(sec && sec.extras, 3)
+    .filter(([label]) => label)
+    .slice(0, 8) // 상한 — 폼이 길어질수록 신청률은 떨어진다
+    .map(([label, type, opts], i) => ({
+      name: `q${i + 1}`, label,
+      type: /선택/.test(type) ? "select" : /연락|전화|번호/.test(type) ? "tel" : "text",
+      options: String(opts || "").split(";").map((o) => o.trim()).filter(Boolean),
+    }));
+}
+function extraFields(sec) {
+  return extraDefs(sec).map((f) => {
+    if (f.type === "select" && f.options.length)
+      return `<label>${esc(f.label)}<select name="${f.name}"><option value="">선택해 주세요</option>
+        ${f.options.map((o) => `<option value="${esc(o)}">${esc(o)}</option>`).join("")}</select></label>`;
+    return `<label>${esc(f.label)}<input type="${f.type === "tel" ? "tel" : "text"}" name="${f.name}" maxlength="100" /></label>`;
+  }).join("");
+}
+
 // ★ 이 서비스의 목적. 위 섹션들은 전부 이 폼을 채우게 하려고 존재한다.
 function leadSection(s, deps) {
   const base = deps.base || "";
@@ -369,6 +393,7 @@ function leadSection(s, deps) {
         ${budgets.length ? `<label>${esc(s.budgetLabel || "창업 예산")}<select name="budget"><option value="">선택해 주세요</option>${opt(budgets)}</select></label>`
           : `<label>${esc(s.budgetLabel || "창업 예산")}<input type="text" name="budget" maxlength="40" /></label>`}
       </div>
+      ${extraFields(s)}
       ${funnels.length ? `<label>어떻게 알고 오셨나요?<select name="funnel"><option value="">선택해 주세요</option>${opt(funnels)}</select></label>` : ""}
       <label>문의 내용<textarea name="message" rows="4" maxlength="2000" placeholder="궁금한 점을 자유롭게 적어주세요."></textarea></label>
       <label class="check"><input type="checkbox" name="agree" value="1" required />

@@ -1685,3 +1685,6 @@ body:has(.fr-sticky){padding-bottom:68px}
 .preview-bar{position:sticky;top:var(--header-h);z-index:50;background:var(--wait-bg);color:var(--wait-fg);
   border-bottom:1px solid var(--wait);padding:10px 20px;text-align:center;font-size:.9rem;font-weight:700}
 .preview-bar a{margin-left:10px;text-decoration:underline}
+.lead-extra{margin:6px 0 0;display:grid;gap:2px}
+.lead-extra li{font-size:.8rem;color:var(--ink-soft)}
+.lead-extra li span{color:var(--muted);margin-right:4px}

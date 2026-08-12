@@ -575,6 +575,7 @@ CREATE TABLE IF NOT EXISTS leads (
   utm_campaign    TEXT NOT NULL DEFAULT '',
   referrer        TEXT NOT NULL DEFAULT '',
   variant         TEXT NOT NULL DEFAULT '',    -- 어느 랜딩(캠페인 사본)에서 왔는지. '' = 기본 랜딩
+  extra           TEXT NOT NULL DEFAULT '',    -- 업종별 추가 질문의 답 (JSON). 고정 칸에 없는 것만 담는다
   created_at      TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at      TEXT NOT NULL DEFAULT ''
 );

@@ -7,6 +7,7 @@ import * as D from "./db.js";
 import { sendMany, priceOf } from "./notify.js";
 import { sealAnchor } from "./esign.js";
 import { remindExternals, originFor } from "./extsign.js";
+import { kindOf, assocTerms } from "./kinds.js";
 
 const BACKUP_PREFIX = "backups/";
 const MANIFEST_KEY = "backups/index.json"; // R2 list() 없이도 보존 개수를 관리하기 위한 목록
@@ -96,7 +97,53 @@ export async function runBackup(env) {
   return { key, bytes: enc.byteLength, kept: keys.length };
 }
 
-// 상인회별 주간 리포트 — 이메일 설정(RESEND) + 상인회 이메일이 있을 때만
+// 모집형(랜딩) 조직의 주간 리포트.
+// 상인회 리포트(가입·승인 대기)는 본사에게 남의 숫자다. 여기서 볼 것은 하나뿐이다 —
+// "지난주에 몇 명이 연락처를 남겼고, 그게 어디서 왔는가".
+// 이 메일이 매주 가야 담당자가 화면을 다시 연다. 안 열면 상담 DB 는 그냥 쌓이기만 한다.
+async function landingWeeklyReport(env, db, a, since) {
+  const T = assocTerms(a);
+  const one = async (sql, ...args) => (await db.prepare(sql).bind(...args).first())?.n ?? 0;
+  const [leads7, fresh, contracts, views7] = await Promise.all([
+    one("SELECT COUNT(*) AS n FROM leads WHERE association_id=?1 AND created_at >= ?2", a.id, since),
+    one("SELECT COUNT(*) AS n FROM leads WHERE association_id=?1 AND status='new'", a.id),
+    one("SELECT COUNT(*) AS n FROM leads WHERE association_id=?1 AND status='contract' AND created_at >= ?2", a.id, since),
+    one("SELECT COALESCE(SUM(views),0) AS n FROM landing_views WHERE association_id=?1 AND day >= date(?2)", a.id, since),
+  ]);
+  // 조용한 주는 메일도 조용히. 다만 '미처리가 쌓여 있으면' 신청이 없어도 알린다 — 그게 진짜 위험 신호다.
+  if (!leads7 && !views7 && !fresh) return false;
+  const srcRows = (await db.prepare(`SELECT CASE WHEN utm_source='' THEN '직접·기타' ELSE utm_source END AS s,
+      COUNT(*) AS n FROM leads WHERE association_id=?1 AND created_at >= ?2 GROUP BY 1 ORDER BY n DESC LIMIT 5`)
+    .bind(a.id, since).all()).results || [];
+  const rate = views7 > 0 ? `${((leads7 / views7) * 100).toFixed(1)}%` : "-";
+  const row = (k, v, strong) => `<tr><td style="padding:6px 14px 6px 0;color:#666">${k}</td>
+    <td style="padding:6px 0;font-weight:${strong ? 800 : 700}${strong ? ";color:#b7791f" : ""}">${v}</td></tr>`;
+  const table = [
+    row(`${T.consult} 신청`, `${leads7}건`),
+    row("랜딩 방문", `${views7.toLocaleString()}회`),
+    row("전환율", rate),
+    row("계약 성사", `${contracts}건`),
+    row("미처리(신규)", `${fresh}건`, fresh > 0),
+  ].join("");
+  const srcList = srcRows.length
+    ? `<p style="margin-top:16px;color:#666">어디서 왔나</p><table>${srcRows.map((r) => row(r.s, `${r.n}건`)).join("")}</table>`
+    : "";
+  const tip = fresh > 0
+    ? `<p style="color:#b7791f;font-weight:700">아직 연락하지 않은 신청이 ${fresh}건 있습니다. 오래 둘수록 연결될 확률이 떨어집니다.</p>`
+    : leads7 === 0 && views7 > 0
+      ? `<p style="color:#888;font-size:13px">방문은 있었는데 신청이 없었습니다. 첫 화면 문구나 비용 안내를 손볼 때입니다.</p>`
+      : "";
+  await sendEmail(env, {
+    to: a.email,
+    subject: `[${a.name}] 지난주 ${T.consult} ${leads7}건`,
+    html: mailShell(`${a.name} 주간 리포트`,
+      `<p>지난 7일 요약입니다.</p><table>${table}</table>${srcList}${tip}
+       <p style="color:#888;font-size:13px">상담 DB 에서 상태를 남기면 다음 주 리포트가 더 정확해집니다.</p>`),
+  }).catch(() => {});
+  return true;
+}
+
+// 조직별 주간 리포트 — 이메일 설정(RESEND) + 조직 이메일이 있을 때만
 export async function runWeeklyReports(env) {
   if (!emailEnabled(env)) return { skipped: "이메일 미설정" };
   const db = env.DB;
@@ -104,6 +151,11 @@ export async function runWeeklyReports(env) {
   const since = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString().slice(0, 19).replace("T", " ");
   let sent = 0;
   for (const a of assocs) {
+    // 제품마다 볼 숫자가 다르다 — 모집형에는 모집형 리포트를 보낸다
+    if (kindOf(a).usesLanding) {
+      if (await landingWeeklyReport(env, db, a, since).catch(() => false)) sent++;
+      continue;
+    }
     const one = async (sql, ...args) => (await db.prepare(sql).bind(...args).first())?.n ?? 0;
     const [newMembers, pending, contacts, newNotices] = await Promise.all([
       one("SELECT COUNT(*) AS n FROM users WHERE association_id=?1 AND role='MERCHANT' AND created_at >= ?2", a.id, since),
