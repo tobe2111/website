@@ -302,6 +302,50 @@ const ok = (cond, name) => { if (cond) { pass++; console.log("  ✓", name); } e
   await p.close();
 }
 
+// N) 사진 줄여 올리기 — 폰 사진 한 장이 모든 방문자의 첫 화면을 망치지 않게.
+{
+  const p = await browser.newPage();
+  await p.goto(`http://localhost:${PORT}/landing.html`);
+  // 실제 폰 사진에 가까운 큰 JPEG 을 만들어 파일 입력에 넣는다
+  const big = await p.evaluate(async () => {
+    const c = document.createElement("canvas");
+    c.width = 4032; c.height = 3024;                      // 요즘 폰 기본 해상도
+    const g = c.getContext("2d");
+    const grad = g.createLinearGradient(0, 0, 4032, 3024);
+    grad.addColorStop(0, "#204060"); grad.addColorStop(1, "#c08a20");
+    g.fillStyle = grad; g.fillRect(0, 0, 4032, 3024);
+    for (let i = 0; i < 20000; i++) {                     // 압축이 잘 안 되게 잡티
+      g.fillStyle = `rgba(${(i * 37) % 255},${(i * 91) % 255},${(i * 53) % 255},.6)`;
+      g.fillRect((i * 173) % 4032, (i * 71) % 3024, 12, 12);
+    }
+    const blob = await new Promise((r) => c.toBlob(r, "image/jpeg", 0.92));
+    const buf = new Uint8Array(await blob.arrayBuffer());
+    window.__big = { bytes: [...buf], size: blob.size };
+    return blob.size;
+  });
+  // 파일 입력 하나를 만들어 붙이고(랜딩에는 업로드 칸이 없다) 실제 핸들러를 태운다
+  const res = await p.evaluate(async () => {
+    const input = document.createElement("input");
+    input.type = "file"; input.accept = "image/*";
+    const label = document.createElement("label");
+    label.appendChild(input); document.body.appendChild(label);
+    const dt = new DataTransfer();
+    dt.items.add(new File([new Uint8Array(window.__big.bytes)], "IMG_4821.jpg", { type: "image/jpeg" }));
+    input.files = dt.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    for (let i = 0; i < 100 && input.files[0].name !== "IMG_4821.jpg" === false; i++) await new Promise((r) => setTimeout(r, 100));
+    await new Promise((r) => setTimeout(r, 1500));
+    const f = input.files[0];
+    const bmp = await createImageBitmap(f);
+    return { name: f.name, size: f.size, w: bmp.width, h: bmp.height,
+             tip: (label.querySelector(".shrink-tip") || {}).textContent || "" };
+  });
+  ok(res.size < big / 3, `큰 사진을 줄여서 올린다 (${(big / 1024 / 1024).toFixed(1)}MB → ${(res.size / 1024).toFixed(0)}KB)`);
+  ok(Math.max(res.w, res.h) === 1600, `긴 변을 1600px 로 맞춘다 (${res.w}×${res.h})`);
+  ok(/줄여서 올립니다/.test(res.tip), "무엇을 했는지 관리자에게 알려준다");
+  await p.close();
+}
+
 await browser.close();
 srv.close();
 console.log(`\nE2E 스모크: ${pass} 통과 / ${fail} 실패`);

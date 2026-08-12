@@ -1689,3 +1689,4 @@ body:has(.fr-sticky){padding-bottom:68px}
 .lead-extra li{font-size:.8rem;color:var(--ink-soft)}
 .lead-extra li span{color:var(--muted);margin-right:4px}
 .thin-warn{color:var(--muted);font-weight:600;font-size:.72rem;white-space:nowrap}
+.shrink-tip{display:block;margin-top:6px;color:var(--ok,#15803d);font-size:.78rem;font-weight:600}

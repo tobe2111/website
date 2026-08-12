@@ -188,3 +188,66 @@ document.addEventListener("click", (e) => {
     } catch { /* 저장 실패는 조용히 넘긴다 */ }
   });
 })();
+
+// 올리기 전에 사진을 줄인다.
+//
+// 관리자는 폰으로 찍은 사진을 그대로 고른다 — 4000px, 3~5MB. 그게 히어로 배경이 되면
+// 광고로 들어온 사람 전부가 그 무게를 지고 첫 화면을 기다린다(실측: 411KB 사진 하나로
+// LCP 1.12초 → 2.57초). 서버에는 이미지 라이브러리가 없고 Workers 무료 티어에 넣을 수도 없다.
+// 브라우저는 이미 캔버스를 갖고 있으니 여기서 줄여 보낸다.
+//
+// 줄이기가 실패하면 원본을 그대로 보낸다 — 사진을 못 올리는 것보다 무거운 사진이 낫다.
+(function () {
+  var MAX_EDGE = 1600, QUALITY = 0.82, SKIP_UNDER = 300 * 1024;
+  if (!window.DataTransfer || !window.createImageBitmap) return;
+
+  async function shrink(file) {
+    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) return null;   // GIF 는 움직임이 죽는다
+    var bmp;
+    // 폰 사진은 EXIF 로 회전 정보를 담는다. 그대로 그리면 옆으로 누운 사진이 된다.
+    try { bmp = await createImageBitmap(file, { imageOrientation: "from-image" }); } catch { return null; }
+    var edge = Math.max(bmp.width, bmp.height);
+    if (file.size < SKIP_UNDER && edge <= MAX_EDGE) { bmp.close && bmp.close(); return null; }
+    var scale = Math.min(1, MAX_EDGE / edge);
+    var c = document.createElement("canvas");
+    c.width = Math.round(bmp.width * scale);
+    c.height = Math.round(bmp.height * scale);
+    var g = c.getContext("2d");
+    g.imageSmoothingQuality = "high";
+    g.drawImage(bmp, 0, 0, c.width, c.height);
+    bmp.close && bmp.close();
+    var blob = await new Promise(function (r) { c.toBlob(r, "image/jpeg", QUALITY); });
+    if (!blob || blob.size >= file.size) return null;               // 되레 커지면 의미 없다
+    var name = file.name.replace(/\.[^.]+$/, "") + ".jpg";
+    return new File([blob], name, { type: "image/jpeg", lastModified: Date.now() });
+  }
+
+  document.addEventListener("change", async function (e) {
+    var input = e.target;
+    if (!input.matches || !input.matches('input[type="file"][accept*="image"]')) return;
+    if (input.dataset.noShrink != null || input.dataset.shrinking != null || !input.files || !input.files.length) return;
+    input.dataset.shrinking = "1";
+    var before = 0, after = 0, list = new DataTransfer(), changed = false;
+    for (var i = 0; i < input.files.length; i++) {
+      var f = input.files[i];
+      before += f.size;
+      var small = null;
+      try { small = await shrink(f); } catch { small = null; }
+      if (small) changed = true;
+      list.items.add(small || f);
+      after += (small || f).size;
+    }
+    if (changed) {
+      input.files = list.files;
+      var kb = function (n) { return n < 1024 * 1024 ? Math.round(n / 1024) + "KB" : (n / 1024 / 1024).toFixed(1) + "MB"; };
+      var tip = input.parentNode && input.parentNode.querySelector(".shrink-tip");
+      if (!tip && input.parentNode) {
+        tip = document.createElement("small");
+        tip.className = "shrink-tip";
+        input.parentNode.appendChild(tip);
+      }
+      if (tip) tip.textContent = "사진을 " + kb(before) + " → " + kb(after) + " 로 줄여서 올립니다 (화면에서는 차이가 보이지 않습니다)";
+    }
+    delete input.dataset.shrinking;
+  }, false);
+})();
