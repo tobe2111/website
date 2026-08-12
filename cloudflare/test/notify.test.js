@@ -248,3 +248,58 @@ test("소수점 원가(6.5원)를 반올림 없이 정확히 집계한다", asyn
   assert.equal(N.jeonToWon(row.cost_base), 650, "원가 6.5원 × 100건 = 650원 (반올림 손실 없음)");
   assert.equal(row.revenue - N.jeonToWon(row.cost_base), 1550, "마진 1,550원");
 });
+
+// ── 알림톡을 못 쓰는 동안에도 안내는 나가야 한다 (개통 직후 · 잔액 0 상황)
+test("리마인더: 알리고가 없어도 이메일로 나간다", async () => {
+  const env = makeEnv({ PUBLIC_ORIGIN: "https://x.kr", RESEND_API_KEY: "re_t", MAIL_FROM: "a@b.kr" });
+  const mails = [];
+  const real = globalThis.fetch;
+  globalThis.fetch = async (u, i = {}) => {
+    if (/resend/.test(String(u))) { mails.push(JSON.parse(String(i.body))); return new Response("{}", { status: 200 }); }
+    if (/aligo/.test(String(u))) throw new Error("알림톡이 호출되면 안 된다");
+    return new Response("ok");
+  };
+  try {
+    const a = await D.createAssociation(env.DB, { slug: "eo", name: "조직", kind: "esign" });
+    const due = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+    const { contentHash } = await import("../src/esign.js");
+    const d = await D.createDocument(env.DB, { associationId: a.id, title: "계약", body: "본문",
+      contentHash: await contentHash("본문"), createdBy: null, ordered: 0, dueDate: due });
+    await D.addExternalSigner(env.DB, { documentId: d.id, name: "상대", email: "ext@x.kr", signOrder: 1 });
+    const { runSignReminders } = await import("../src/scheduled.js");
+    const r = await runSignReminders(env);
+    assert.equal(r.skipped, 0, "잔액 0이라고 통째로 건너뛰면 안 된다");
+    assert.equal(r.sent, 1, "이메일 한 통은 나가야 한다");
+    assert.equal(mails[0].to[0], "ext@x.kr");
+  } finally { globalThis.fetch = real; }
+});
+
+test("잔액이 없어도 계약 상대방에게는 이메일이 간다", async () => {
+  const env = makeEnv({ ALIGO_API_KEY: "k", ALIGO_USER_ID: "u", ALIGO_SENDER_KEY: "s", ALIGO_SENDER: "0212345678",
+    RESEND_API_KEY: "re_t", MAIL_FROM: "a@b.kr" });
+  const mails = [];
+  const real = globalThis.fetch;
+  globalThis.fetch = async (u, i = {}) => {
+    const s = String(u);
+    if (/resend/.test(s)) { mails.push(JSON.parse(String(i.body))); return new Response("{}", { status: 200 }); }
+    if (/token\/create/.test(s)) return new Response(JSON.stringify({ code: 0, token: "t" }), { headers: { "content-type": "application/json" } });
+    if (/alimtalk\/send/.test(s)) return new Response(JSON.stringify({ code: 0 }), { headers: { "content-type": "application/json" } });
+    return new Response("ok");
+  };
+  try {
+    const a = await D.createAssociation(env.DB, { slug: "eo2", name: "조직2", kind: "esign" });
+    await D.setSetting(env.DB, "tpl_sign_request", "TPL_A"); // 템플릿은 있고 잔액만 0
+    const { contentHash } = await import("../src/esign.js");
+    const d = await D.createDocument(env.DB, { associationId: a.id, title: "계약", body: "본문",
+      contentHash: await contentHash("본문"), createdBy: null, ordered: 0, dueDate: "" });
+    const s = await D.addExternalSigner(env.DB, { documentId: d.id, name: "상대",
+      email: "both@x.kr", phone: "010-1111-2222", signOrder: 1 });
+    const { sendSignLink } = await import("../src/extsign.js");
+    const via = await sendSignLink(env, env.DB, { assoc: a, doc: d, signer: s, origin: "https://x.kr" });
+    assert.equal(via, "email", "알림톡이 잔액으로 막히면 이메일로라도 가야 한다");
+    assert.equal(mails.length, 1);
+    // 관리자는 여전히 '잔액 부족'을 발송 이력에서 본다
+    const logs = await D.listMessages(env.DB, a.id, 5);
+    assert.ok(logs.some((l) => l.status === "failed" && /잔액/.test(l.detail || "")), "잔액 부족이 이력에 남아야");
+  } finally { globalThis.fetch = real; }
+});

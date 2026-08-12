@@ -67,7 +67,9 @@ export async function sendSignLink(env, db, { assoc, doc, signer, origin, remind
     const r = await sendOne(env, db, { assoc, kind, to: signer.phone, text,
       buttonName: templateButton(kind), buttonUrl: link });
     if (r.ok) return "alimtalk";
-    if (r.insufficient) return null; // 잔액 부족 — 이메일로 우회하지 않고 그대로 알린다
+    // 잔액이 없어도 이메일로는 보낸다. 실패한 알림톡은 이미 '잔액 부족'으로 발송 이력에 남으므로
+    // 관리자는 충전이 필요한 걸 그대로 볼 수 있다 — 그 사이 계약 상대방까지 아무것도 못 받게
+    // 두면, 잔액이라는 우리 사정 때문에 남의 계약이 멈춘다.
   }
   if (signer.email && emailEnabled(env)) {
     const sent = await sendEmailFor(env, db, assoc, { kind, to: signer.email,

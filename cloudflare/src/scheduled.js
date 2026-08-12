@@ -117,22 +117,31 @@ export async function runWeeklyReports(env) {
   return { sent };
 }
 
-// 매일: 서명 기한이 임박(D-2 이내)한 문서의 미서명자에게 알림톡 자동 리마인더.
-// 크레딧이 없는 상인회는 건너뛴다(과금 실패로 로그만 쌓이지 않도록).
+// 매일: 서명 기한이 임박(D-2 이내)한 문서의 미서명자에게 자동 리마인더.
+// 알림톡이 되면 알림톡으로, 안 되면(키 미설정·잔액 부족) 이메일로 보낸다.
+// ⚠️ 예전에는 잔액이 단가보다 적으면 문서를 통째로 건너뛰었다. 그래서 알리고를 아직 붙이지
+//    않았거나 크레딧이 0인 조직은 — 돈이 안 드는 이메일 리마인더까지 함께 죽어 있었다.
+//    개통 직후가 정확히 그 상태다.
 export async function runSignReminders(env) {
   const db = env.DB;
   const docs = await D.listDocsNeedingRemind(db);
+  const { emailEnabled, sendEmailFor, mailShell, mailButton } = await import("./email.js");
+  const { notifyEnabled } = await import("./notify.js");
+  const { esc } = await import("./util.js");
   let sent = 0, docsDone = 0, skipped = 0;
   for (const d of docs) {
     const assoc = await D.getAssociationById(db, d.association_id);
     if (!assoc) continue;
     const price = await priceOf(db, "alimtalk");
-    if ((await D.getBalance(db, assoc.id)) < price) { skipped++; continue; } // 잔액 없으면 다음날 다시 시도
+    const canAlimtalk = notifyEnabled(env) && (await D.getBalance(db, assoc.id)) >= price;
+    const canEmail = emailEnabled(env);
+    if (!canAlimtalk && !canEmail) { skipped++; continue; } // 보낼 수단이 아예 없다 — 다음날 다시
     // 크론에는 요청이 없다 — 개별 도메인 → PUBLIC_ORIGIN → 학습해 둔 주소 순으로 찾는다
     const origin = await originFor(env, db, assoc);
     if (!origin) { skipped++; continue; } // 주소를 모르면 깨진 링크를 보내느니 다음날로 미룬다
     // 회원 — 공용 서명 목록 주소로
-    const targets = (await D.listUnsigned(db, d.id)).filter((t) => t.phone);
+    const unsigned = await D.listUnsigned(db, d.id);
+    const targets = canAlimtalk ? unsigned.filter((t) => t.phone) : [];
     if (targets.length) {
       const r = await sendMany(env, db, {
         assoc, kind: "sign_remind", recipients: targets,
@@ -140,6 +149,17 @@ export async function runSignReminders(env) {
         buttonName: "서명하러 가기", buttonUrl: `${origin}/t/${d.assoc_slug}/sign`,
       });
       sent += r.sent;
+    } else if (canEmail) {
+      // 알림톡을 못 쓰는 동안에도 회원은 안내를 받아야 한다
+      for (const m of unsigned.filter((t) => t.email)) {
+        const r = await sendEmailFor(env, db, assoc, { kind: "sign_remind", to: m.email,
+          subject: `[${assoc.name}] 전자서명 미완료 안내 — ${d.title}`,
+          html: mailShell(`${esc(assoc.name)} 전자서명`,
+            `<p>${esc(m.name)}님, 아직 서명하지 않은 계약서가 있습니다.</p>
+             <p><b>${esc(d.title)}</b>${d.due_date ? ` (기한: ${esc(d.due_date)})` : ""}</p>
+             ${mailButton(`${origin}/t/${d.assoc_slug}/sign`, "서명하러 가기")}`) }).catch(() => ({}));
+        if (r && r.sent) sent++;
+      }
     }
     // 외부 서명자 — 각자 자기 토큰 링크로 (공용 주소로는 들어올 수 없다)
     const ext = await remindExternals(env, db, { assoc, doc: d, origin });
