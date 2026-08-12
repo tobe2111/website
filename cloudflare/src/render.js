@@ -1,5 +1,6 @@
 // SSR 레이아웃 + 공통 조각 (문자열 템플릿, 런타임 독립)
 import { esc } from "./util.js";
+import { kindById, termsOf } from "./kinds.js";
 
 // 디자인 시스템 v2 — 브랜드 매장 아이콘(스토어프론트)
 export const STOREFRONT_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9l1.2-4.2A1 1 0 0 1 6.2 4h11.6a1 1 0 0 1 1 .8L20 9"/><path d="M4 9v10a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9"/></svg>';
@@ -11,7 +12,7 @@ export const ESIGN_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentCo
 //   { name, nav } — 이걸 주면 브랜드 이름·아이콘·상단 메뉴가 전부 그 제품 것으로 바뀐다.
 // 주지 않으면 종전과 같다(상인회 테넌트 화면 또는 플랫폼 공용 화면).
 export function layout({ title, assoc, base = "", user = null, body, activeNav = "", description = "", scripts = "", csrf = "", ogImage = "", jsonLd = null, product = null }) {
-  const nav = assoc ? navHtml(base, user, activeNav, assoc.kind)
+  const nav = assoc ? navHtml(base, user, activeNav, assoc.kind, assoc.preset)
     : product && product.nav !== false ? productNav(user, activeNav, product) : "";
   // 상인회에 속하지 않은 화면의 이름: 제품이 지정되면 그 제품, 아니면 운영사.
   // 예전 기본값("상인회 플랫폼")은 전자계약 고객에게 남의 서비스 간판으로 보였다.
@@ -67,7 +68,7 @@ ${assoc ? `<link rel="alternate" type="application/rss+xml" title="${brand} 공�
   </div>
 </header>
 <main id="main">${injected}</main>
-${assoc && assoc.kind === "franchise" && !isConsole(body) ? stickyBar(assoc, base) : ""}
+${assoc && kindById(assoc.kind).usesLanding && !isConsole(body) ? stickyBar(assoc, base) : ""}
 <footer class="site-footer"><div class="container">
   <div class="foot-top">
     <nav class="foot-policy"><a href="/privacy" class="strong">개인정보처리방침</a><span class="sep"></span><a href="/terms">이용약관</a>${assoc ? `<span class="sep"></span><a href="${base}/contact">문의하기</a>` : ""}</nav>
@@ -95,9 +96,10 @@ const isConsole = (body) => /<section class="dash"/.test(String(body));
 // 갈 곳이 없으면 그대로 나간다. 신청 폼은 랜딩에만 있으므로 늘 랜딩의 #apply 로 보낸다.
 function stickyBar(assoc, base) {
   const tel = String(assoc.phone || "").replace(/[^0-9+\-]/g, "");
+  const T = termsOf(assoc.preset); // 업종에 따라 "가맹 상담" ↔ "입학 상담" ↔ "진료 상담"
   return `<div class="fr-sticky">
-    ${tel ? `<a class="fr-sticky-tel" href="tel:${esc(tel)}"><span>가맹 문의</span><strong>${esc(assoc.phone)}</strong></a>` : ""}
-    <a class="fr-sticky-cta" href="${base}/#apply">가맹 상담 신청</a>
+    ${tel ? `<a class="fr-sticky-tel" href="tel:${esc(tel)}"><span>${esc(T.consult)} 문의</span><strong>${esc(assoc.phone)}</strong></a>` : ""}
+    <a class="fr-sticky-cta" href="${base}/#apply">${esc(T.consult)} 신청</a>
   </div>`;
 }
 
@@ -127,15 +129,17 @@ function productNav(user, active, product = null) {
   return items.join("");
 }
 
-function navHtml(base, user, active, kind = "merchant") {
+function navHtml(base, user, active, kind = "merchant", preset = "") {
   const link = (href, label) => `<a href="${href}"${active === href ? ' class="active" aria-current="page"' : ""}>${label}</a>`;
+  const K = kindById(kind);
+  const T = termsOf(preset);
   // 전자계약 전용 조직에는 점포·지도·게시판이 없다 — 쓰지 않을 메뉴를 띄우면 제품이 흐려진다.
-  const esign = kind === "esign";
-  // 프랜차이즈 랜딩은 한 장짜리다. 메뉴를 여러 페이지로 흩뿌리면 신청 폼에서 멀어진다 —
+  const esign = K.nav === "esign";
+  // 랜딩형은 한 장짜리다. 메뉴를 여러 페이지로 흩뿌리면 신청 폼에서 멀어진다 —
   // 같은 페이지 안의 앵커로 보내고, 마지막 칸은 늘 '상담 신청' 버튼으로 둔다.
-  const franchise = kind === "franchise";
+  const franchise = K.nav === "landing";
   let items = franchise
-    ? [link(`${base}/`, "브랜드 소개"), link(`${base}/#process`, "가맹 절차"), link(`${base}/businesses`, "매장 안내"), link(`${base}/notices`, "공지")]
+    ? [link(`${base}/`, "소개"), link(`${base}/#process`, T.process), link(`${base}/businesses`, `${T.store} 안내`), link(`${base}/notices`, "공지")]
     : esign
     ? [link(`${base}/`, "소개"), link(`${base}/notices`, "공지")]
     : [
@@ -165,7 +169,7 @@ function navHtml(base, user, active, kind = "merchant") {
     items.push(`<form method="post" action="/logout" class="nav-logout"><button class="btn btn-ghost btn-sm">로그아웃</button></form>`);
   } else {
     items.push(link(`/login`, "로그인"));
-    if (franchise) items.push(`<a href="${base}/#apply" class="btn btn-primary btn-sm">가맹 상담</a>`);
+    if (franchise) items.push(`<a href="${base}/#apply" class="btn btn-primary btn-sm">${esc(T.consult)}</a>`);
     else if (!esign) items.push(`<a href="${base}/register" class="btn btn-primary btn-sm">가입</a>`);
   }
   return items.join("");

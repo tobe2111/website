@@ -1,5 +1,6 @@
 // D1(비동기) 데이터 접근 계층. 모든 함수는 D1 바인딩(db)을 첫 인자로 받습니다.
 import { slugify, likeParam } from "./util.js";
+import { KIND_KEYS, DEFAULT_KIND, PRESET_KEYS, DEFAULT_PRESET } from "./kinds.js";
 
 // ----- D1 헬퍼 -----
 export function first(db, sql, ...a) { return db.prepare(sql).bind(...a).first(); }
@@ -33,16 +34,44 @@ export const listAllAssociations = (db) => all(db, "SELECT * FROM associations O
 // 최근 생성된 조직 수 — 셀프 가입 폭주를 막기 위한 상한 판정
 export const countAssociationsSince = async (db, ago = "-1 day") =>
   (await first(db, `SELECT COUNT(*) AS n FROM associations WHERE created_at > datetime('now', ?)`, ago)).n;
-// 조직 유형은 화면 구성 전체를 가르는 값이라 아무 문자열이나 들어오면 안 된다 — 아는 값만 통과시킨다.
-export const ASSOC_KINDS = ["merchant", "esign", "franchise"];
-export const normalizeKind = (k) => (ASSOC_KINDS.includes(k) ? k : "merchant");
-export async function createAssociation(db, { slug, name, brandColor = "#0b8a46", tagline = "함께 성장하는 우리 동네 상권", kind = "merchant" }) {
-  await run(db, "INSERT INTO associations (slug, name, brand_color, tagline, kind) VALUES (?, ?, ?, ?, ?)",
-    slug, name, brandColor, tagline, normalizeKind(kind));
+// 조직 유형·업종은 화면 구성 전체를 가르는 값이라 아무 문자열이나 들어오면 안 된다 —
+// 레지스트리(kinds.js)에 있는 값만 통과시킨다.
+export const ASSOC_KINDS = KIND_KEYS;
+export const ASSOC_PRESETS = PRESET_KEYS;
+export const normalizeKind = (k) => (KIND_KEYS.includes(k) ? k : DEFAULT_KIND);
+export const normalizePreset = (p) => (PRESET_KEYS.includes(p) ? p : DEFAULT_PRESET);
+export async function createAssociation(db, { slug, name, brandColor = "#0b8a46", tagline = "함께 성장하는 우리 동네 상권", kind = "merchant", preset = DEFAULT_PRESET }) {
+  await run(db, "INSERT INTO associations (slug, name, brand_color, tagline, kind, preset) VALUES (?, ?, ?, ?, ?, ?)",
+    slug, name, brandColor, tagline, normalizeKind(kind), normalizePreset(preset));
   return getAssociationById(db, await lastId(db));
 }
 export const setAssociationKind = (db, id, kind) =>
   run(db, "UPDATE associations SET kind=? WHERE id=?", normalizeKind(kind), id);
+export const setAssociationPreset = (db, id, preset) =>
+  run(db, "UPDATE associations SET preset=? WHERE id=?", normalizePreset(preset), id);
+
+// 사이트 복제 — 잘 만들어 둔 사이트를 본으로 삼아 새 조직을 찍어 낸다.
+// 복사하는 것: 유형·업종·브랜딩·화면 구성(홈/랜딩) — 즉 "껍데기".
+// 복사하지 않는 것: 회원·점포·상담 신청·계약·알림톡 잔액 — 즉 "남의 실제 데이터".
+//   (이걸 같이 복사하면 새 고객사 화면에 남의 개인정보가 뜬다. 절대 옮기지 않는다.)
+export async function cloneAssociation(db, sourceId, { slug, name, brandColor, tagline }) {
+  const src = await getAssociationById(db, sourceId);
+  if (!src) return null;
+  const made = await createAssociation(db, {
+    slug, name,
+    brandColor: brandColor || src.brand_color,
+    tagline: tagline || src.tagline,
+    kind: src.kind, preset: src.preset,
+  });
+  await run(db, `UPDATE associations SET home_layout=?, landing_layout=?, map_lat=?, map_lng=?, map_zoom=? WHERE id=?`,
+    src.home_layout, src.landing_layout, src.map_lat, src.map_lng, src.map_zoom, made.id);
+  // 캠페인 사본도 함께 (발행본만 — 남의 초안까지 끌고 오면 무엇이 발행된 건지 알 수 없다)
+  for (const v of await listLandingVariants(db, sourceId)) {
+    await run(db, "INSERT INTO landing_variants (association_id, slug, name, layout) VALUES (?,?,?,?)",
+      made.id, v.slug, v.name, v.layout);
+  }
+  return getAssociationById(db, made.id);
+}
 export function updateAssociation(db, id, f) {
   return run(db, `UPDATE associations SET name=?, tagline=?, brand_color=?, phone=?, email=?, address=?, logo=?, hero_image=?, naver_verification=?, google_verification=? WHERE id=?`,
     f.name, f.tagline, f.brand_color, f.phone, f.email, f.address, f.logo, f.hero_image || "", f.naver_verification || "", f.google_verification || "", id);

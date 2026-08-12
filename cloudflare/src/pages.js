@@ -16,14 +16,12 @@ import { KEY_PREFIX } from "./apiv1.js";
 import { text } from "./http.js";
 import { parseLayout, renderHome, SECTION_CATALOG } from "./homeLayout.js";
 import { parseLandingLayout, renderLanding, LANDING_CATALOG, safeSrc } from "./franchise.js";
+import { KINDS, KIND_KEYS, PRESETS, PRESET_KEYS, kindOf, kindById, assocTerms } from "./kinds.js";
 import { turnstileWidget, turnstileScript } from "./turnstile.js";
 import { otpauthUri } from "./totp.js";
 import { PLANS, PLAN_KEYS } from "./plans.js";
 import { emailEnabled as emailOn } from "./email.js";
 
-// 조직 유형 표시 이름 — 슈퍼 콘솔 배지·선택지에서 함께 쓴다
-const KIND_LABEL = { merchant: "상인회", esign: "전자계약", franchise: "프랜차이즈" };
-const KIND_BADGE = { merchant: "badge-muted", esign: "badge-info", franchise: "badge-brand" };
 const DOC_EVENT_LABEL = { created: "문서 생성", viewed: "계약서 열람", otp_sent: "인증번호 발송", otp_ok: "휴대폰 본인확인", signed: "전자서명 완료", declined: "서명 거절", reminded: "재알림 발송", notified: "알림 발송", edited: "문서 수정" };
 const CATEGORIES = ["음식점", "카페·디저트", "생활·서비스", "패션·잡화", "농수축산", "교육·문화", "기타"];
 const NOTICE_CATEGORIES = ["안내", "공지", "소식", "행사", "혜택", "긴급"];
@@ -151,10 +149,11 @@ export async function eventIcs(ctx) {
 
 export async function home(ctx) {
   const { db, assoc, base, user, csrf } = ctx;
-  // 전자계약 전용 조직은 상권 홈페이지가 아니라 '계약 창구'다 — 점포·지도 대신 서명 입구를 낸다.
-  if (assoc.kind === "esign") return esignHome(ctx);
-  // 프랜차이즈는 '가맹점을 모으는 한 장'이다 — 정보 나열이 아니라 상담 신청 하나로 수렴시킨다.
-  if (assoc.kind === "franchise") return franchiseHome(ctx);
+  // 어떤 홈을 그릴지는 제품 유형 레지스트리가 정한다 (kinds.js). 새 제품을 더해도 이 분기는 그대로다.
+  //   esign   = 계약 창구(점포·지도 대신 서명 입구), landing = 한 장짜리 모집 화면
+  const home = kindOf(assoc).home;
+  if (home === "esign") return esignHome(ctx);
+  if (home === "landing") return franchiseHome(ctx);
   const lay = parseLayout(assoc.home_layout, assoc.name);
   // 독립 쿼리는 병렬로 — D1 은 쿼리마다 네트워크 왕복이라 직렬 대기가 TTFB 로 직결됨
   const [{ items }, notices, events, stats, cats, names, recentUpdates] = await Promise.all([
@@ -259,7 +258,7 @@ const utmOf = (query) => ({
 // layoutJson 이 지정되면 그것을, 아니면 조직의 발행본을 쓴다.
 async function renderFranchisePage(ctx, { layoutJson, variant = "", preview = false, countView = true }) {
   const { db, env, assoc, base, user, csrf, query } = ctx;
-  const lay = parseLandingLayout(layoutJson, assoc.name);
+  const lay = parseLandingLayout(layoutJson, assoc.name, assoc.preset);
   const [{ items }, notices, stats] = await Promise.all([
     D.listBusinessesPaged(db, assoc.id, { perPage: 8 }),
     D.listNotices(db, assoc.id, 4),
@@ -342,7 +341,7 @@ export async function adminLanding(ctx) {
   // 편집기는 항상 초안을 연다. 초안이 없으면 발행본을 복사해 온 것처럼 보여 준다.
   const source = cur ? (cur.draft || cur.layout) : (assoc.landing_draft || assoc.landing_layout);
   const hasDraft = cur ? !!cur.draft : !!assoc.landing_draft;
-  const lay = parseLandingLayout(source, assoc.name);
+  const lay = parseLandingLayout(source, assoc.name, assoc.preset);
   const qv = cur ? `?v=${encodeURIComponent(cur.slug)}` : "";
   const publicUrl = cur ? `${base}/l/${encodeURIComponent(cur.slug)}` : `${base}/`;
   const retention = parseInt((await D.getSetting(db, `lead_retention:${assoc.id}`)) || String(D.LEAD_RETENTION_DEFAULT), 10);
@@ -964,10 +963,9 @@ export async function editPost(ctx) {
 
 // ================= 회원가입 =================
 export function registerForm(ctx) {
-  // 전자계약 조직에 '점포 가입'은 없다. 메뉴에서 감췄어도 URL 이 열려 있으면
-  // 업체 레코드가 생겨 쓰지도 않을 대시보드가 딸려 온다.
-  // 프랜차이즈도 마찬가지 — 매장은 본사가 등록한다. 아무나 '가맹점'을 자칭하고 목록에 오르면 안 된다.
-  if (ctx.assoc && (ctx.assoc.kind === "esign" || ctx.assoc.kind === "franchise")) return notFoundResponse(ctx);
+  // 셀프 가입을 받지 않는 제품에서는 URL 도 닫는다. 메뉴에서만 감추면 업체 레코드가 생겨
+  // 쓰지도 않을 대시보드가 딸려 오고, 모집형에서는 아무나 '가맹점'을 자칭해 목록에 오른다.
+  if (ctx.assoc && !kindOf(ctx.assoc).selfRegister) return notFoundResponse(ctx);
   const { env, assoc, base, query, csrf } = ctx;
   const opts = CATEGORIES.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
   const body = `<section class="section page-top"><div class="container auth-wrap"><div class="auth-card">
@@ -1329,10 +1327,13 @@ export async function admin(ctx) {
 
   const notifRows = notifs.length ? notifs.map((n) => `<li class="${n.is_read ? "" : "unread"}"><span class="notif-dot"></span><a href="${esc(n.link || base + "/admin")}" class="notif-msg">${esc(n.message)}</a><time>${esc(kstStamp(n.created_at, { year: false }))}</time></li>`).join("") : `<li class="empty">알림이 없습니다.</li>`;
   const noticeCats = NOTICE_CATEGORIES.map((c) => `<option value="${esc(c)}"${c === "안내" ? " selected" : ""}>${esc(c)}</option>`).join("");
-  // 전자계약 전용 조직은 점포·회비·홈구성이 없다 — 안 쓰는 화면을 띄우면 콘솔이 어지러워진다
-  const isEsign = assoc.kind === "esign";
-  // 프랜차이즈 본사에는 회비·투표·상인회 홈 구성이 없다. 대신 랜딩 편집과 상담 DB 가 주 업무다.
-  const isFranchise = assoc.kind === "franchise";
+  // 어떤 패널을 띄울지는 제품 유형 레지스트리가 정한다 (kinds.js console 스위치).
+  // 안 쓰는 화면을 띄우면 콘솔이 어지럽고, 새 제품마다 여기에 if 를 더하면 금세 손을 못 댄다.
+  const K = kindOf(assoc);
+  const C = K.console;
+  const T = assocTerms(assoc);
+  const isEsign = K.id === "esign";
+  const isFranchise = C.landing;
   const docCount = (await D.listDocuments(db, assoc.id)).length;
   const leads = isFranchise ? await D.leadStats(db, assoc.id) : null;
 
@@ -2831,7 +2832,7 @@ export async function superConsole(ctx) {
         <label>메모<textarea name="message" rows="2" maxlength="2000" placeholder="어디서 알게 됐는지, 규모, 관심사 등"></textarea></label>
         <button class="btn btn-primary btn-sm">영업 목록에 추가</button></form></details></section>`;
   const rows = list.map((a) => `<tr><td><a href="/t/${esc(a.slug)}" target="_blank">${esc(a.name)}</a>
-      <span class="badge ${KIND_BADGE[a.kind] || "badge-muted"}">${esc(KIND_LABEL[a.kind] || KIND_LABEL.merchant)}</span>
+      <span class="badge ${kindById(a.kind).badge}">${esc(kindById(a.kind).label)}</span>${kindById(a.kind).usesLanding ? `<span class="badge badge-muted">${esc((PRESETS[a.preset] || {}).label || "")}</span>` : ""}
       <form method="post" action="/super/association/${a.id}/slug" class="domain-form" title="주소를 바꿔도 옛 주소로 들어온 사람은 새 주소로 자동 이동합니다.">
         <span class="slug-pre">/t/</span><input type="text" name="slug" value="${esc(a.slug)}" pattern="[a-z0-9-]+" maxlength="40" />
         <button class="btn btn-xs btn-ghost">주소</button></form>
@@ -2847,7 +2848,8 @@ export async function superConsole(ctx) {
       <button class="btn btn-xs btn-ghost">저장</button></form></td>
     <td><form method="post" action="/super/association/${a.id}/plan" class="plan-form"><select name="plan">${planOpts(a.plan || "free")}</select><button class="btn btn-xs btn-ghost">변경</button></form>
       <form method="post" action="/super/association/${a.id}/kind" class="plan-form" style="margin-top:4px" title="보이는 메뉴와 관리자 화면이 바뀝니다. 데이터는 지워지지 않습니다.">
-        <select name="kind">${D.ASSOC_KINDS.map((k) => `<option value="${k}"${(a.kind || "merchant") === k ? " selected" : ""}>${esc(KIND_LABEL[k])}</option>`).join("")}</select>
+        <select name="kind">${KIND_KEYS.map((k) => `<option value="${k}"${(a.kind || "merchant") === k ? " selected" : ""}>${esc(KINDS[k].label)}</option>`).join("")}</select>
+        <select name="preset" title="랜딩형 제품의 업종 문구">${PRESET_KEYS.map((k) => `<option value="${k}"${(a.preset || "franchise") === k ? " selected" : ""}>${esc(PRESETS[k].label)}</option>`).join("")}</select>
         <button class="btn btn-xs btn-ghost">유형</button></form></td>
     <td>${a.active ? '<span class="badge badge-ok">활성</span>' : '<span class="badge badge-no">비활성</span>'}
       ${(() => { const t = lastAct.get(a.id); if (!t) return `<small class="act-stamp is-cold">활동 없음</small>`;
@@ -2910,15 +2912,30 @@ export async function superConsole(ctx) {
       <form method="post" action="/super/association" class="stack-form">
         <div class="form-two"><label>조직 이름<input type="text" name="name" required /></label><label>대표 색상<input type="color" name="brand_color" value="#0b6e4f" /></label></div>
         <label>유형<select name="kind">
-          <option value="merchant">상인회 — 점포·지도·공지 홈페이지 + 전자계약</option>
-          <option value="esign">전자계약 전용 — 계약만 (법무·부동산 등)</option>
-          <option value="franchise">프랜차이즈 — 가맹점 모집 랜딩페이지 + 상담 DB</option>
+          ${KIND_KEYS.map((k) => `<option value="${k}">${esc(KINDS[k].createLabel || KINDS[k].label)} — ${esc(KINDS[k].createHint)}</option>`).join("")}
         </select></label>
+        <label>업종 문구 <small>(랜딩형 제품에만 적용 — 기본 문구가 업종에 맞게 채워집니다)</small>
+          <select name="preset">${PRESET_KEYS.map((k) => `<option value="${k}">${esc(PRESETS[k].label)}</option>`).join("")}</select></label>
         <label>한 줄 소개<input type="text" name="tagline" /></label>
         <div class="form-divider">관리자 계정</div>
         <div class="form-two"><label>관리자 이름<input type="text" name="admin_name" /></label><label>관리자 이메일<input type="email" name="admin_email" required /></label></div>
         <label>관리자 비밀번호 (8자 이상)<input type="password" name="admin_password" required minlength="8" /></label>
         <button class="btn btn-primary">조직 만들기</button></form></section>
+    <section class="panel" id="clone-assoc"><h2 class="panel-title">📄 기존 사이트 복제해서 만들기</h2>
+      <p class="panel-hint">잘 만들어 둔 사이트를 본으로 새 고객사를 찍어 냅니다. 프랜차이즈든 상인회든 같습니다.
+        <b>복사되는 것</b>: 유형·업종 문구·대표색·홈/랜딩 화면 구성·캠페인 사본.
+        <b>복사되지 않는 것</b>: 회원·점포·상담 신청·계약 — 남의 실제 데이터는 절대 따라오지 않습니다.</p>
+      <form method="post" action="/super/association/clone" class="stack-form">
+        <label>본으로 삼을 사이트<select name="source_id" required><option value="">— 선택 —</option>
+          ${list.map((a) => `<option value="${a.id}">${esc(a.name)} (${esc(kindById(a.kind).label)}${kindById(a.kind).usesLanding ? " · " + esc((PRESETS[a.preset] || {}).label || "") : ""})</option>`).join("")}
+        </select></label>
+        <div class="form-two"><label>새 조직 이름<input type="text" name="name" required maxlength="100" /></label>
+          <label>대표 색상 <small>(비우면 원본과 동일)</small><input type="color" name="brand_color" value="#0b6e4f" /></label></div>
+        <label>한 줄 소개 <small>(비우면 원본과 동일)</small><input type="text" name="tagline" maxlength="200" /></label>
+        <div class="form-divider">관리자 계정</div>
+        <div class="form-two"><label>관리자 이름<input type="text" name="admin_name" /></label><label>관리자 이메일<input type="email" name="admin_email" required /></label></div>
+        <label>관리자 비밀번호 (8자 이상)<input type="password" name="admin_password" required minlength="8" /></label>
+        <button class="btn btn-primary">복제해서 만들기</button></form></section>
     <section class="panel"><h2 class="panel-title">조직 목록</h2>
       <p class="panel-hint">개별 도메인: 도메인을 입력·저장한 뒤 <b>Cloudflare 대시보드 → 이 워커 → Settings → Domains &amp; Routes → Add → Custom Domain</b> 으로 같은 도메인을 추가해야 실제 접속됩니다(그 도메인이 이 Cloudflare 계정에 등록되어 있어야 함).</p>
       <div class="table-scroll"><table class="admin-table">

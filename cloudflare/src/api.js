@@ -16,6 +16,7 @@ import { turnstileVerify } from "./turnstile.js";
 import { planOf } from "./plans.js";
 import { seedDemo } from "./demoContent.js";
 import { seedStarter } from "./starterContent.js";
+import { KINDS, kindById, PRESETS } from "./kinds.js";
 import { TEMPLATE_KEYS, sendMany, sendOne, notifyEnabled, wonToJeon, renderTemplate, templateButton, billingMode, chargeContract, BILLING_MODES, priceOf } from "./notify.js";
 
 // ctx.request 는 내부 호출 경로에서 없을 수 있다 — 감사 기록이 본 기능을 죽이면 안 된다
@@ -168,12 +169,44 @@ export async function superNotifyCost(ctx) {
 // 슈퍼: 과금 방식 (발송당 / 계약당)
 // 슈퍼: 조직 유형 전환 (상인회 ↔ 전자계약 전용)
 // 데이터는 지우지 않는다 — 보이는 메뉴와 관리자 화면만 달라진다. 되돌리면 그대로 돌아온다.
+// 사이트 복제 — 잘 만들어 둔 사이트를 본으로 삼아 새 고객사를 찍어 낸다.
+// "프랜차이즈 홈페이지도 상인회처럼 계속 복사해서 관리한다"가 이 기능의 목적이다.
+// 껍데기(유형·업종·브랜딩·화면 구성·캠페인 사본)만 복사하고, 남의 실제 데이터
+// (회원·점포·상담 신청·계약)는 절대 따라오지 않는다.
+export async function superCloneAssociation(ctx) {
+  const { db, form } = ctx;
+  const src = await D.getAssociationById(db, Number(form.get("source_id")) || 0);
+  if (!src) return back("/super", "복제할 원본 조직을 골라 주세요.", true);
+  const name = cap((form.get("name") || "").trim(), 100);
+  const adminEmail = cap((form.get("admin_email") || "").toLowerCase().trim(), 120);
+  const adminPassword = form.get("admin_password") || "";
+  if (!name || !EMAIL_RE.test(adminEmail) || adminPassword.length < 8 || adminPassword.length > 200)
+    return back("/super", "새 조직 이름과 관리자 계정을 확인하세요. (비밀번호 8~200자)", true);
+  if (await D.getUserByEmail(db, adminEmail)) return back("/super", "이미 사용 중인 관리자 이메일입니다.", true);
+  let slug = slugify(name), n = 1;
+  while (await D.getAssociationBySlug(db, slug)) slug = slugify(name) + "-" + (++n);
+  const made = await D.cloneAssociation(db, src.id, {
+    slug, name,
+    brandColor: /^#[0-9a-fA-F]{6}$/.test(form.get("brand_color") || "") ? form.get("brand_color") : "",
+    tagline: cap(form.get("tagline"), 200),
+  });
+  if (!made) return back("/super", "복제에 실패했습니다.", true);
+  const { hash, salt } = await hashPassword(adminPassword);
+  await D.createUser(db, { email: adminEmail, passwordHash: hash, salt, name: cap(form.get("admin_name"), 60) || "관리자", role: "ADMIN", associationId: made.id });
+  const st = await seedStarter(ctx.env, db, made, { createdBy: null });
+  await audit(ctx, "사이트복제", `${src.name} → ${name} (/t/${made.slug})`, null);
+  return back("/super", `'${src.name}' 을(를) 본으로 '${name}' 을(를) 만들었습니다. (주소: /t/${made.slug}, 관리자: ${adminEmail}) `
+    + `화면 구성은 그대로 복사됐고, 회원·상담 신청 등 원본의 데이터는 따라오지 않았습니다. 시작 공지 ${st.notices}건을 넣었습니다.`);
+}
+
 export async function superSetKind(ctx) {
   const { db, form, params } = ctx;
   const a = await D.getAssociationById(db, Number(params.id) || 0);
   if (!a) return back("/super", "조직을 찾을 수 없습니다.", true);
   const kind = D.normalizeKind(form.get("kind"));
   await D.setAssociationKind(db, a.id, kind);
+  // 업종 문구는 랜딩형에서만 의미가 있지만, 유형을 오갈 수 있으니 값이 오면 그대로 보관한다
+  if (form.get("preset")) await D.setAssociationPreset(db, a.id, D.normalizePreset(form.get("preset")));
   await audit(ctx, "조직유형변경", `${a.name}: ${KIND_LABEL[kind]}`, null);
   return back("/super", `'${a.name}' 을(를) ${KIND_LABEL[kind]} 으로 바꿨습니다. 기존 데이터는 그대로 있습니다.`);
 }
@@ -494,13 +527,12 @@ export function tempPassword(len = 12) {
   return out;
 }
 
-// 조직 유형 표시 이름·기본 한 줄 소개 (undefined 면 db.createAssociation 의 상인회 기본값이 쓰인다)
-const KIND_LABEL = { merchant: "상인회", esign: "전자계약 전용", franchise: "프랜차이즈 랜딩" };
-const KIND_TAGLINE = {
-  merchant: undefined,
-  esign: "종이 없이, 만나지 않고, 법적 효력 있는 계약",
-  franchise: "함께 성장할 가맹점주를 찾습니다",
-};
+// 유형별 표시 이름·기본 한 줄 소개는 레지스트리(kinds.js)에서 온다.
+// 상인회는 db.createAssociation 의 기본값을 그대로 쓰므로 undefined 를 넘긴다.
+const KIND_LABEL = Object.fromEntries(Object.entries(KINDS).map(([k, v]) => [k, v.createLabel || v.label]));
+const taglineFor = (kind, preset) =>
+  kind === "merchant" ? undefined
+  : (kindById(kind).usesLanding && (PRESETS[preset] || {}).tagline) || kindById(kind).tagline;
 
 const audit = (ctx, action, detail = "", assocId) =>
   D.logAudit(ctx.db, { associationId: assocId !== undefined ? assocId : (ctx.assoc ? ctx.assoc.id : null), userId: ctx.user.id, actorName: ctx.user.name, action, detail });
@@ -1587,11 +1619,12 @@ export async function superCreateAssociation(ctx) {
   if (await D.getUserByEmail(db, adminEmail)) return back("/super", "이미 사용 중인 관리자 이메일입니다.", true);
   const color = /^#[0-9a-fA-F]{6}$/.test(form.get("brand_color") || "") ? form.get("brand_color") : "#0b6e4f";
   const kind = D.normalizeKind(form.get("kind"));
+  const preset = D.normalizePreset(form.get("preset"));
   // 고유 slug
   let slug = slugify(name), n = 1;
   while (await D.getAssociationBySlug(db, slug)) slug = slugify(name) + "-" + (++n);
   const assoc = await D.createAssociation(db, { slug, name, brandColor: color, kind,
-    tagline: cap(form.get("tagline"), 200) || KIND_TAGLINE[kind] });
+    preset, tagline: cap(form.get("tagline"), 200) || taglineFor(kind, preset) });
   const { hash, salt } = await hashPassword(adminPassword);
   await D.createUser(db, { email: adminEmail, passwordHash: hash, salt, name: cap(form.get("admin_name"), 60) || "관리자", role: "ADMIN", associationId: assoc.id });
   // 빈 화면으로 넘기지 않도록 시작 세트를 함께 넣습니다(공지·가입 동의서).

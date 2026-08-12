@@ -60,6 +60,7 @@ const GLOBAL = [
   ["GET", "/.well-known/esign-anchors", pages.esignAnchors],
   ["GET", "/super", pages.superConsole, "SUPERADMIN"],
   ["POST", "/super/association", api.superCreateAssociation, "SUPERADMIN"],
+  ["POST", "/super/association/clone", api.superCloneAssociation, "SUPERADMIN"],
   ["POST", "/super/association/:id/toggle", api.superToggleAssociation, "SUPERADMIN"],
   ["POST", "/super/association/:id/demo", api.superSeedDemo, "SUPERADMIN"],
   ["POST", "/super/association/:id/slug", api.superSetSlug, "SUPERADMIN"],

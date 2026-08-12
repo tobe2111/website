@@ -31,6 +31,8 @@ CREATE TABLE IF NOT EXISTS associations (
   --            franchise = 프랜차이즈 가맹점 모집 랜딩페이지(상담 DB 수집).
   -- 같은 엔진을 쓰되 손님에게 보이는 메뉴와 관리자 화면이 달라진다.
   kind        TEXT NOT NULL DEFAULT 'merchant',
+  -- 랜딩형 제품의 업종 프리셋(kinds.js PRESETS). 화면 구조는 같고 기본 문구만 다르다.
+  preset      TEXT NOT NULL DEFAULT 'franchise',
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_assoc_domain ON associations(custom_domain) WHERE custom_domain != '';

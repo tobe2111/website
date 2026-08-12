@@ -51,8 +51,9 @@ test("프랜차이즈 홈: 상인회 홈이 아니라 가맹 모집 랜딩이 �
   // 상인회 홈 조각은 한 줄도 섞이지 않는다
   assert.doesNotMatch(html, /동네 새소식/);
   assert.doesNotMatch(html, /입점 신청/);
-  // 상단 메뉴도 프랜차이즈용
-  assert.match(html, /브랜드 소개/);
+  // 상단 메뉴도 모집형 (업종 중립적인 라벨 + 업종 문구가 섞인 항목)
+  assert.match(html, /가맹 절차/);
+  assert.match(html, /매장 안내/);
   assert.doesNotMatch(html, /회원 게시판/);
 });
 
@@ -157,7 +158,7 @@ test("랜딩 편집: 문구 저장 → 공개 화면 반영, 초기화하면 되
   const j = await login(env);
   const editor = await (await get(env, j, "/t/dapong/admin/landing")).text();
   assert.match(editor, /랜딩페이지 편집/);
-  assert.match(editor, /가맹 상담 신청 폼/);
+  assert.match(editor, /상담 신청 폼/); // 업종 중립 라벨 (학원·병원도 같은 편집기를 쓴다)
   // 문구를 바꾸고, 가맹 절차 섹션은 스위치를 끈다 (en_2 를 보내지 않으면 꺼진 것)
   await post(env, j, "/t/dapong/admin/landing", {
     order: "0,1,2",

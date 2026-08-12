@@ -5,6 +5,7 @@
 // 그래서 한 장짜리 세로 스크롤로 짜고, 어느 지점에서 마음이 움직여도 바로 신청할 수 있게
 // 상담 폼으로 가는 길(고정 하단 바 · 중간 CTA)을 계속 열어 둔다.
 import { esc } from "./util.js";
+import { presetText, termsOf, DEFAULT_PRESET, PRESETS } from "./kinds.js";
 
 // 한 줄에 한 항목, 칸은 | 로 나눈다. 관리자가 표 편집기 없이 반복 항목을 넣는 가장 싼 방법.
 export function splitLines(v, cols = 3) {
@@ -60,7 +61,7 @@ export const LANDING_CATALOG = {
     ],
   },
   strengths: {
-    label: "창업 강점 카드",
+    label: "강점 카드",
     fields: [
       { key: "title", label: "제목", type: "text" },
       { key: "lead", label: "설명", type: "textarea" },
@@ -68,7 +69,7 @@ export const LANDING_CATALOG = {
     ],
   },
   reviews: {
-    label: "점주 후기",
+    label: "후기",
     fields: [
       { key: "title", label: "제목", type: "text" },
       { key: "lead", label: "설명", type: "textarea" },
@@ -84,7 +85,7 @@ export const LANDING_CATALOG = {
     ],
   },
   process: {
-    label: "가맹 절차",
+    label: "진행 절차",
     fields: [
       { key: "title", label: "제목", type: "text" },
       { key: "lead", label: "설명", type: "textarea" },
@@ -92,7 +93,7 @@ export const LANDING_CATALOG = {
     ],
   },
   cost: {
-    label: "가맹 비용 표",
+    label: "비용 표",
     fields: [
       { key: "title", label: "제목", type: "text" },
       { key: "items", label: "항목 — 한 줄에 하나 · 항목 | 금액 | 비고", type: "lines", cols: 3, placeholder: "가맹비 | 1,000만원 | 부가세 별도\n교육비 | 300만원 | 2인 기준" },
@@ -101,17 +102,19 @@ export const LANDING_CATALOG = {
     ],
   },
   lead: {
-    label: "가맹 상담 신청 폼 ★ (DB 수집)",
+    label: "상담 신청 폼 ★ (DB 수집)",
     fields: [
       { key: "title", label: "제목", type: "text" },
       { key: "lead", label: "설명", type: "textarea" },
       { key: "buttonLabel", label: "버튼 문구", type: "text" },
-      { key: "budgets", label: "창업 예산 선택지 — 한 줄에 하나", type: "lines", cols: 1, placeholder: "5천만원 이하\n5천~1억\n1억 이상" },
+      { key: "regionLabel", label: "지역 칸 이름", type: "text" },
+      { key: "budgetLabel", label: "예산·구분 칸 이름", type: "text" },
+      { key: "budgets", label: "예산·구분 선택지 — 한 줄에 하나", type: "lines", cols: 1, placeholder: "5천만원 이하\n5천~1억\n1억 이상" },
       { key: "funnels", label: "유입 경로 선택지 — 한 줄에 하나", type: "lines", cols: 1, placeholder: "네이버 검색\n인스타그램\n지인 소개" },
     ],
   },
   stores: {
-    label: "매장 안내 (등록된 가맹점)",
+    label: "매장·지점 안내 (등록된 곳)",
     fields: [
       { key: "title", label: "제목", type: "text" },
       { key: "lead", label: "설명", type: "textarea" },
@@ -125,7 +128,7 @@ export const LANDING_CATALOG = {
     ],
   },
   notices: {
-    label: "본사 공지",
+    label: "공지",
     fields: [{ key: "title", label: "제목", type: "text" }],
   },
   cta: {
@@ -141,47 +144,50 @@ export const LANDING_CATALOG = {
 export const LANDING_TYPES = Object.keys(LANDING_CATALOG);
 
 // 기본 구성 — 관리자가 아무것도 손대지 않아도 팔리는 한 장이 나와야 한다.
-// 문구는 업종 무관하게 쓸 수 있는 수준으로 두고, 숫자는 넣지 않는다(거짓 숫자가 박제되면 안 된다).
-export function defaultLandingLayout(brandName = "우리 브랜드") {
+// 문구는 업종 프리셋(kinds.js PRESETS)에서 가져온다. 업종을 늘릴 때 이 함수는 손대지 않는다.
+// 숫자는 넣지 않는다 — 확인하지 않은 숫자가 기본값으로 박제되면 거짓말이 된다.
+// 흐르는 띠만 문자열 한 덩어리라 presetText 의 "구역.키" 경로에 맞지 않는다
+const tickerOf = (preset, n) => {
+  const raw = (PRESETS[preset] && PRESETS[preset].ticker) || PRESETS[DEFAULT_PRESET].ticker || "";
+  return String(raw).replace(/\{name\}/g, n);
+};
+export function defaultLandingLayout(brandName = "우리 브랜드", preset = DEFAULT_PRESET) {
   const n = brandName || "우리 브랜드";
+  const t = (path, fb = "") => String(presetText(preset, path, fb)).replace(/\{name\}/g, n);
+  const T = termsOf(preset);
   return [
-    { type: "hero", enabled: true, eyebrow: "가맹점 모집", title: `창업, 결국\n쉬워야 합니다`, highlight: "쉬워야",
-      subtitle: `${n}는 어려운 과정을 본사가 대신합니다. 점주는 매장에만 집중하세요.`, ctaLabel: "가맹 상담 신청하기", note: "상담은 무료이며, 남겨주신 연락처로만 연락드립니다.", image: "" },
-    { type: "ticker", enabled: true, items: "본사 직영 물류\n오픈 전 교육 지원\n상권 분석 무료\n1:1 전담 슈퍼바이저" },
-    { type: "why", enabled: true, eyebrow: "WHY", title: `왜 ${n}일까요?`, image: "",
-      body: `유행을 따라가는 브랜드는 유행과 함께 사라집니다.\n${n}는 오래 버티는 매장을 만드는 데 필요한 것만 남겼습니다.\n\n적은 인원으로 돌아가는 주방 동선, 흔들리지 않는 원가, 그리고 문을 연 뒤에도 계속되는 본사의 관리 — 창업의 성패를 가르는 건 결국 이 세 가지입니다.` },
-    { type: "strengths", enabled: true, title: "창업의 벽을 낮추는 네 가지", lead: "",
-      items: "1인 운영 설계 | 주방 동선과 조리 공정을 줄여 최소 인원으로 돌아갑니다\n검증된 레시피 | 짧은 교육으로 어느 매장에서나 같은 맛이 나옵니다\n본사 직배송 | 원가가 고정되어 마진이 계절을 타지 않습니다\n오픈 후 관리 | 슈퍼바이저가 매출·재고·인력까지 함께 봅니다" },
-    { type: "reviews", enabled: true, title: "점주님들이 직접 말씀해 주셨습니다", lead: "실제 운영 중인 가맹점의 이야기입니다.", items: "" },
-    { type: "menu", enabled: true, title: "메뉴 라인업", lead: "", items: "" },
-    { type: "process", enabled: true, title: "가맹 절차", lead: "상담부터 오픈까지 평균 6~8주가 걸립니다.",
-      items: "가맹 상담 | 전화·방문 상담으로 조건과 예산을 확인합니다\n상권 분석 | 후보 자리의 유동인구·경쟁 현황을 함께 봅니다\n가맹 계약 | 조건을 확정하고 계약서를 씁니다\n매장 공사 | 설계·시공·간판까지 본사가 붙습니다\n교육 · 오픈 준비 | 조리와 운영을 교육하고 시뮬레이션합니다\n오픈 · 사후 관리 | 오픈 동행 후 슈퍼바이저가 정기 방문합니다" },
-    { type: "cost", enabled: true, title: "가맹 비용", locked: true, items: "",
-      note: "위 금액은 표준 기준이며 매장 면적·지역·현장 여건에 따라 달라질 수 있습니다." },
-    { type: "lead", enabled: true, title: "가맹 상담 신청", lead: "연락처를 남겨주시면 담당자가 순차적으로 연락드립니다.", buttonLabel: "상담 신청하기",
-      budgets: "5천만원 이하\n5천만원 ~ 1억원\n1억원 ~ 2억원\n2억원 이상\n아직 미정",
-      funnels: "네이버 검색\n인스타그램·유튜브\n지인 소개\n매장 방문\n기타" },
-    { type: "stores", enabled: true, title: "매장 안내", lead: "" },
-    { type: "faq", enabled: true, title: "자주 묻는 질문",
-      items: "외식업 경험이 없어도 되나요? | 대부분의 점주님이 첫 창업입니다. 교육과 오픈 동행으로 시작하니 경험이 없어도 괜찮습니다.\n창업 비용은 얼마나 드나요? | 매장 면적과 지역에 따라 달라집니다. 상담을 신청하시면 조건에 맞춘 견적을 보내드립니다.\n상담을 신청하면 바로 계약해야 하나요? | 아닙니다. 상담은 정보를 확인하는 자리이며 계약과는 무관합니다." },
-    { type: "notices", enabled: true, title: "본사 공지" },
-    { type: "cta", enabled: true, title: "지금이 가장 빠른 때입니다", body: "고민하는 사이에도 좋은 자리는 나갑니다. 상담은 무료입니다.", buttonLabel: "가맹 상담 신청하기" },
+    { type: "hero", enabled: true, eyebrow: t("hero.eyebrow"), title: t("hero.title"), highlight: t("hero.highlight"),
+      subtitle: t("hero.subtitle"), ctaLabel: t("hero.ctaLabel"), note: t("hero.note"), image: "" },
+    { type: "ticker", enabled: true, items: tickerOf(preset, n) },
+    { type: "why", enabled: true, eyebrow: "WHY", title: t("why.title"), body: t("why.body"), image: "" },
+    { type: "strengths", enabled: true, title: t("strengths.title"), lead: "", items: t("strengths.items") },
+    { type: "reviews", enabled: true, title: t("reviews.title"), lead: t("reviews.lead"), items: "" },
+    { type: "menu", enabled: true, title: t("menu.title"), lead: "", items: "" },
+    { type: "process", enabled: true, title: t("process.title"), lead: t("process.lead"), items: t("process.items") },
+    { type: "cost", enabled: true, title: t("cost.title"), locked: true, items: "", note: t("cost.note") },
+    { type: "lead", enabled: true, title: t("lead.title"), lead: t("lead.lead"), buttonLabel: "상담 신청하기",
+      budgets: t("lead.budgets"), regionLabel: t("lead.regionLabel"), budgetLabel: t("lead.budgetLabel"),
+      funnels: "네이버 검색\n인스타그램·유튜브\n지인 소개\n방문·전단\n기타" },
+    { type: "stores", enabled: true, title: t("stores.title"), lead: "" },
+    { type: "faq", enabled: true, title: "자주 묻는 질문", items: t("faq.items") },
+    { type: "notices", enabled: true, title: "공지" },
+    { type: "cta", enabled: true, title: t("cta.title"), body: t("cta.body"), buttonLabel: `${T.consult} 신청하기` },
   ];
 }
 
-export function parseLandingLayout(json, brandName) {
-  if (!json) return defaultLandingLayout(brandName);
+export function parseLandingLayout(json, brandName, preset = DEFAULT_PRESET) {
+  if (!json) return defaultLandingLayout(brandName, preset);
   try {
     const arr = JSON.parse(json);
-    if (!Array.isArray(arr) || arr.length === 0) return defaultLandingLayout(brandName);
+    if (!Array.isArray(arr) || arr.length === 0) return defaultLandingLayout(brandName, preset);
     const out = arr.filter((s) => s && LANDING_CATALOG[s.type]);
-    if (!out.length) return defaultLandingLayout(brandName);
+    if (!out.length) return defaultLandingLayout(brandName, preset);
     // 나중에 추가된 섹션은 기본값에서 가져와 뒤에 붙인다 — 저장해 둔 구성이 옛 버전이라고 화면이 비면 안 된다
     const have = new Set(out.map((s) => s.type));
-    for (const sec of defaultLandingLayout(brandName)) if (!have.has(sec.type)) out.push(sec);
+    for (const sec of defaultLandingLayout(brandName, preset)) if (!have.has(sec.type)) out.push(sec);
     return out;
   } catch {
-    return defaultLandingLayout(brandName);
+    return defaultLandingLayout(brandName, preset);
   }
 }
 
@@ -359,15 +365,15 @@ function leadSection(s, deps) {
         <label>연락처 <span class="req">*</span><input type="tel" name="phone" required maxlength="20" inputmode="numeric" placeholder="010-0000-0000" autocomplete="tel" /></label>
       </div>
       <div class="form-two">
-        <label>희망 지역<input type="text" name="region" maxlength="60" placeholder="예: 서울 서초구" /></label>
-        ${budgets.length ? `<label>창업 예산<select name="budget"><option value="">선택해 주세요</option>${opt(budgets)}</select></label>`
-          : `<label>창업 예산<input type="text" name="budget" maxlength="40" /></label>`}
+        <label>${esc(s.regionLabel || "희망 지역")}<input type="text" name="region" maxlength="60" placeholder="예: 서울 서초구" /></label>
+        ${budgets.length ? `<label>${esc(s.budgetLabel || "창업 예산")}<select name="budget"><option value="">선택해 주세요</option>${opt(budgets)}</select></label>`
+          : `<label>${esc(s.budgetLabel || "창업 예산")}<input type="text" name="budget" maxlength="40" /></label>`}
       </div>
       ${funnels.length ? `<label>어떻게 알고 오셨나요?<select name="funnel"><option value="">선택해 주세요</option>${opt(funnels)}</select></label>` : ""}
       <label>문의 내용<textarea name="message" rows="4" maxlength="2000" placeholder="궁금한 점을 자유롭게 적어주세요."></textarea></label>
       <label class="check"><input type="checkbox" name="agree" value="1" required />
         <a href="/privacy" target="_blank">개인정보 수집·이용</a>에 동의합니다. <small>(상담 목적으로만 사용하며 보관 기간 경과 후 파기합니다)</small></label>
-      <label class="check"><input type="checkbox" name="agree_marketing" value="1" /> 신메뉴·설명회 등 마케팅 정보 수신에 동의합니다. <small>(선택)</small></label>
+      <label class="check"><input type="checkbox" name="agree_marketing" value="1" /> 설명회·이벤트 등 마케팅 정보 수신에 동의합니다. <small>(선택)</small></label>
       <input type="text" name="website" class="hp-field" tabindex="-1" autocomplete="off" aria-hidden="true" />
       ${deps.turnstile || ""}
       <button class="btn btn-primary btn-block btn-lg">${esc(s.buttonLabel || "상담 신청하기")}</button>

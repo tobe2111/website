@@ -33,6 +33,8 @@ CREATE TABLE IF NOT EXISTS associations (
   --            franchise = 프랜차이즈 가맹점 모집 랜딩페이지(상담 DB 수집).
   -- 같은 엔진을 쓰되 손님에게 보이는 메뉴와 관리자 화면이 달라진다.
   kind        TEXT NOT NULL DEFAULT 'merchant',
+  -- 랜딩형 제품의 업종 프리셋(kinds.js PRESETS). 화면 구조는 같고 기본 문구만 다르다.
+  preset      TEXT NOT NULL DEFAULT 'franchise',
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_assoc_domain ON associations(custom_domain) WHERE custom_domain != '';
@@ -617,7 +619,7 @@ CREATE INDEX IF NOT EXISTS idx_landing_asset_assoc ON landing_assets(association
 
 // 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
 // 마이그레이션 세대 — migrateColumns 에 단계를 추가할 때마다 +1
-export const SCHEMA_VERSION = "34";
+export const SCHEMA_VERSION = "35";
 
 export async function ensureSchema(db) {
   const has = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='associations'").first();
@@ -928,6 +930,11 @@ async function migrateColumns(db) {
     filename TEXT NOT NULL, original_name TEXT NOT NULL DEFAULT '', size INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now')))`).run();
   await db.prepare("CREATE INDEX IF NOT EXISTS idx_landing_asset_assoc ON landing_assets(association_id, created_at)").run();
+
+  // v35: 랜딩형 제품의 업종 프리셋 (프랜차이즈·학원·헬스장·병원·분양…)
+  if (acol.length && !acol.some((c) => c.name === "preset")) {
+    await db.prepare("ALTER TABLE associations ADD COLUMN preset TEXT NOT NULL DEFAULT 'franchise'").run();
+  }
 
   await romanizeSlugs(db);
 }

@@ -8,6 +8,27 @@
 // 문구는 어느 상인회에서나 그대로 게시할 수 있게 쓰되, 상인회 이름·연락처는 실제 값을 넣습니다.
 import * as D from "./db.js";
 import { contentHash } from "./esign.js";
+import { kindOf, assocTerms } from "./kinds.js";
+import { defaultLandingLayout, serializeLandingLayout } from "./franchise.js";
+
+// 모집형(랜딩) 조직의 시작 공지 — 상인회 공지(입점·회비)는 여기서 남의 이야기다.
+const landingNotices = (assoc) => {
+  const T = assocTerms(assoc);
+  const call = assoc.phone ? `${assoc.phone} 로 연락 주세요.` : "본사로 연락 주세요.";
+  return [
+    { tag: "소식", pinned: 1, title: `${assoc.name} ${T.consult} 안내를 시작합니다`,
+      body: `${assoc.name} 홈페이지를 열었습니다.
+
+${T.consult}은 홈페이지의 신청 폼으로 받습니다. 연락처를 남겨 주시면 담당자가 순차적으로 연락드립니다.
+전화로 먼저 확인하고 싶으신 분은 ${call}` },
+    { tag: "안내", pinned: 0, title: `${T.consult} 절차 안내`,
+      body: `1. 홈페이지에서 ${T.consult}을 신청합니다.
+2. 담당자가 연락드려 조건과 일정을 확인합니다.
+3. 방문 상담으로 자세한 내용을 안내드립니다.
+
+신청은 무료이며, 남겨주신 연락처는 상담 목적으로만 사용하고 상담이 끝나면 파기합니다.` },
+  ];
+};
 
 const notices = (assoc) => {
   const call = assoc.phone ? `사무실(${assoc.phone})로 연락 주세요.` : "상인회 사무실로 연락 주세요.";
@@ -74,13 +95,23 @@ const CONSENT_DOC = (assoc) => ({
  */
 export async function seedStarter(env, db, assoc, { createdBy = null } = {}) {
   const aid = assoc.id;
-  const added = { notices: 0, documents: 0 };
+  const added = { notices: 0, documents: 0, landing: 0 };
   const skipped = [];
+
+  // 랜딩형 제품은 '발행된 한 장'이 있어야 문을 연 것이다.
+  // 발행본을 명시적으로 넣어 두면 관리자가 첫 편집에서 '초안 버리기'를 눌러도 돌아갈 자리가 있다.
+  if (kindOf(assoc).usesLanding) {
+    if (assoc.landing_layout) skipped.push("랜딩페이지");
+    else {
+      await D.saveLandingLayout(db, aid, serializeLandingLayout(defaultLandingLayout(assoc.name, assoc.preset)));
+      added.landing = 1;
+    }
+  }
 
   const noticeCount = (await db.prepare("SELECT COUNT(*) AS n FROM notices WHERE association_id=?").bind(aid).first()).n;
   if (noticeCount > 0) skipped.push("공지");
   else {
-    for (const n of notices(assoc)) {
+    for (const n of (kindOf(assoc).usesLanding ? landingNotices(assoc) : notices(assoc))) {
       await db.prepare("INSERT INTO notices (association_id, title, body, tag, pinned) VALUES (?,?,?,?,?)")
         .bind(aid, n.title, n.body, n.tag, n.pinned).run();
       added.notices++;
