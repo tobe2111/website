@@ -230,9 +230,17 @@
     var submit = document.getElementById("signSubmit");
     if (submit) submit.disabled = left > 0;
   }
+  // 휴대폰에서는 A4 지면이 40% 남짓으로 줄어 서명칸이 13px 안팎이 된다 — 손가락으로 정확히
+  // 누르기 어렵다. 그래서 이 버튼이 '이동'에서 끝나지 않고 그 자리를 바로 열어 준다.
+  // 폭 전체를 쓰는 버튼만 반복해서 누르면 순서대로 다 채워진다(작은 칸을 건드릴 필요가 없다).
   if (jump) jump.addEventListener("click", function () {
     var p = pending()[0];
-    if (p) { p.scrollIntoView({ block: "center", behavior: "smooth" }); p.classList.add("pf-blink"); setTimeout(function () { p.classList.remove("pf-blink"); }, 1200); }
+    if (!p) return;
+    p.scrollIntoView({ block: "center", behavior: "smooth" });
+    p.classList.add("pf-blink");
+    setTimeout(function () { p.classList.remove("pf-blink"); }, 1200);
+    // 스크롤이 끝난 뒤 열어야 대화상자 위치가 튀지 않는다
+    setTimeout(function () { openDialog(p); }, 260);
   });
   progress();
 

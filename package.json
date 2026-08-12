@@ -8,7 +8,8 @@
   },
   "scripts": {
     "test": "node --experimental-sqlite --test cloudflare/test/*.test.js",
-    "test:e2e": "node cloudflare/test-e2e/smoke.mjs"
+    "test:e2e": "node cloudflare/test-e2e/smoke.mjs",
+    "test:mobile": "node --experimental-sqlite cloudflare/test-e2e/mobile-sign.mjs"
   },
   "license": "MIT"
 }
