@@ -303,3 +303,53 @@ test("잔액이 없어도 계약 상대방에게는 이메일이 간다", async 
     assert.ok(logs.some((l) => l.status === "failed" && /잔액/.test(l.detail || "")), "잔액 부족이 이력에 남아야");
   } finally { globalThis.fetch = real; }
 });
+
+// 템플릿 코드가 틀렸는지는 보내 봐야 안다. 실계약 중에 알게 되면 상대방이 기다리는 상태가 된다.
+test("시험 발송: 크레딧을 차감하지 않고 정산에도 잡히지 않는다", async () => {
+  const a = await D.createAssociation(db, { slug: "t1", name: "시험" });
+  await D.setSetting(db, "tpl_sign_request", "TPL_OK");
+  await D.addCredit(db, a.id, 10000);
+  const envOk = { ...env, ALIGO_API_KEY: "k", ALIGO_USER_ID: "u", ALIGO_SENDER_KEY: "s", ALIGO_SENDER: "0212345678" };
+  const of = globalThis.fetch;
+  let sentBody = null;
+  globalThis.fetch = async (u, init) => {
+    if (!String(u).includes("token/create")) sentBody = init.body;
+    return { ok: true, status: 200, json: async () => String(u).includes("token/create") ? { code: 0, token: "T" } : { code: 0, info: { mid: 9 } } };
+  };
+  let r;
+  try { r = await N.sendTest(envOk, db, { kind: "sign_request", to: "010-1111-2222" }); }
+  finally { globalThis.fetch = of; }
+  assert.equal(r.ok, true);
+  assert.equal(await D.getBalance(db, a.id), 10000, "잔액이 그대로여야");
+  const month = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 7);
+  assert.equal(((await D.monthlySettlement(db, month)).find((x) => x.id === a.id) || { sent: 0 }).sent, 0, "정산에 안 잡혀야");
+  assert.equal(sentBody.get("failover"), "N", "문자 대체발송은 꺼서 알림톡 자체를 시험한다");
+  assert.equal(sentBody.get("tpl_code"), "TPL_OK");
+});
+
+test("시험 발송: 실패하면 제공사 오류 문구를 그대로 돌려준다", async () => {
+  await D.setSetting(db, "tpl_sign_done", "TPL_BAD");
+  const envOk = { ...env, ALIGO_API_KEY: "k", ALIGO_USER_ID: "u", ALIGO_SENDER_KEY: "s", ALIGO_SENDER: "0212345678" };
+  const of = globalThis.fetch;
+  globalThis.fetch = async (u) => ({ ok: true, status: 200,
+    json: async () => String(u).includes("token/create") ? { code: 0, token: "T" } : { code: -101, message: "템플릿을 찾을 수 없습니다" } });
+  let r;
+  try { r = await N.sendTest(envOk, db, { kind: "sign_done", to: "01011112222" }); }
+  finally { globalThis.fetch = of; }
+  assert.equal(r.ok, false);
+  assert.match(r.error, /템플릿을 찾을 수 없습니다/, "'발송 실패' 다섯 글자로는 고칠 수 없다");
+});
+
+test("시험 발송: 코드가 비어 있으면 보내기 전에 알려준다", async () => {
+  const envOk = { ...env, ALIGO_API_KEY: "k", ALIGO_USER_ID: "u", ALIGO_SENDER_KEY: "s", ALIGO_SENDER: "0212345678" };
+  const r = await N.sendTest(envOk, db, { kind: "notice", to: "01011112222" });
+  assert.equal(r.ok, false);
+  assert.match(r.error, /템플릿 코드가 비어/);
+});
+
+test("시험 발송: 워커에 없는 값을 이름으로 짚어준다", async () => {
+  const r = await N.sendTest({ ...env, ALIGO_API_KEY: "k", ALIGO_USER_ID: "u" }, db, { kind: "sign_request", to: "01011112222" });
+  assert.equal(r.ok, false);
+  assert.match(r.error, /ALIGO_SENDER_KEY/);
+  assert.match(r.error, /ALIGO_SENDER/);
+});

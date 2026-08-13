@@ -41,3 +41,31 @@
     if (t) show(t, false);
   });
 })();
+
+// 시크릿 값 복사 — 값을 화면에 그리지 않는다.
+// 운영자가 /super 화면을 캡처해 남에게 보내는 일이 실제로 있다. 눈에 보이면 새어 나간다.
+// 그래서 값은 data-copy 속성에만 두고, 버튼은 클립보드로만 넘긴다.
+(function () {
+  function copy(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(text);
+    var ta = document.createElement("textarea");
+    ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand("copy"); } catch (e) {}
+    ta.remove();
+    return Promise.resolve();
+  }
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest("[data-copy]");
+    if (!b) return;
+    e.preventDefault();
+    var v = b.getAttribute("data-copy");
+    if (!v) return;
+    copy(v).then(function () {
+      var old = b.textContent;
+      b.textContent = "복사됨 ✓";
+      b.disabled = true;
+      setTimeout(function () { b.textContent = old; b.disabled = false; }, 2000);
+    });
+  });
+})();

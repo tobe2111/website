@@ -261,6 +261,7 @@ export const purgeOldLeads = async (db, aid, days) => {
 // ----- Settings (자동 생성 키·설정 저장) -----
 export const getSetting = async (db, key) => { const r = await first(db, "SELECT value FROM settings WHERE key=?", key); return r ? r.value : null; };
 export const setSetting = (db, key, value) => run(db, "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", key, value);
+export const delSetting = (db, key) => run(db, "DELETE FROM settings WHERE key=?", key);
 
 // ----- Users -----
 export const countUsers = async (db) => (await first(db, "SELECT COUNT(*) AS n FROM users")).n;

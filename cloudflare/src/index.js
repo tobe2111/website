@@ -8,7 +8,7 @@ import * as api from "./api.js";
 import { setMediaBase, setOrigin, setAssetVer, layout } from "./render.js";
 import { html, text, redirect, notFoundResponse, forbidden } from "./http.js";
 import { ensureSchema } from "./schema.js";
-import { runWeekly, runDaily, runWebhooks, CRON } from "./scheduled.js";
+import { runCron } from "./scheduled.js";
 import { resolveSessionSecret } from "./secrets.js";
 
 const _schemaReady = new WeakSet(); // DB 별 스키마 준비 캐시
@@ -72,6 +72,8 @@ const GLOBAL = [
   ["POST", "/super/association/:id/delete", api.superDeleteAssociation, "SUPERADMIN"],
   ["POST", "/super/admin/:id/reset-password", api.superResetAdminPassword, "SUPERADMIN"],
   ["POST", "/super/credit/:id", api.superCreditApprove, "SUPERADMIN"],
+  ["POST", "/super/secret-drop", api.superSecretDrop, "SUPERADMIN"],
+  ["POST", "/super/notify-test", api.superNotifyTest, "SUPERADMIN"],
   ["POST", "/super/notify-settings", api.superNotifySettings, "SUPERADMIN"],
   ["POST", "/super/billing-mode", api.superBillingMode, "SUPERADMIN"],
   ["POST", "/super/signup-settings", api.superSignupSettings, "SUPERADMIN"],
@@ -311,9 +313,9 @@ export default {
   async scheduled(event, env, ctx) {
     await ensureSchema(env.DB);
     const full = { ...env, SESSION_SECRET: await resolveSessionSecret(env) };
-    // 크론 표현식으로 분기 — 주간(백업·리포트) / 5분(웹훅 큐) / 그 외는 매일(서명 기한 리마인더).
-    // 문자열은 scheduled.js 의 CRON 한 곳에서만 정의한다 (wrangler.toml 과 대조하는 테스트가 있다).
-    ctx.waitUntil(event.cron === CRON.weekly ? runWeekly(full) : event.cron === CRON.webhooks ? runWebhooks(full) : runDaily(full));
+    // 분기와 실행 기록은 runCron 안에 있다 — 크론이 돌았다는 사실 자체를 남겨야
+    // 등록이 안 됐을 때 화면에서 알아챌 수 있다(예전엔 몇 달을 몰랐다).
+    ctx.waitUntil(runCron(event.cron, full));
   },
 };
 
@@ -355,7 +357,10 @@ async function handle(request, env) {
 
   // 최초 실행: 표 자동 생성 + 세션 시크릿 자동 확보 (시크릿·스키마 명령 불필요)
   if (!_schemaReady.has(rawDb)) { await ensureSchema(db); _schemaReady.add(rawDb); }
-  env = { ...env, SESSION_SECRET: await resolveSessionSecret(env) };
+  // 워커 Secret 으로 들어온 값인지 D1 에서 자동 생성된 값인지는 여기서만 구분할 수 있다.
+  // (아래부터는 항상 채워진 상태라 핸들러에서는 출처를 알 수 없다.) 값이 아니라 사실만 넘긴다.
+  const secretFromWorker = !!(env.SESSION_SECRET && env.SESSION_SECRET !== "");
+  env = { ...env, SESSION_SECRET: await resolveSessionSecret(env), SESSION_SECRET_IS_WORKER: secretFromWorker };
 
   // 설치 마법사 게이트: 계정이 하나도 없으면 /setup 으로 유도
   if (!_usersConfirmed.has(rawDb)) {

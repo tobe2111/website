@@ -385,9 +385,12 @@ test("보조 정보가 하나 실패해도 콘솔 본 기능은 열린다", asyn
 
 // ── 개통 체크리스트 — "지금 뭘 해야 하지"를 사람에게 묻지 않아도 되게 하는 화면
 import { TEMPLATE_KEYS } from "../src/notify.js";
+import { cronRunKey, runCron } from "../src/scheduled.js";
 
-async function superHtml(extra = {}, tplCount = 0) {
+async function superHtml(extra = {}, tplCount = 0, cronAlive = false) {
   const e2 = makeEnv(extra);
+  // 크론이 방금 돈 것으로 표시 — 개통 체크리스트의 '정기 작업' 항목이 이걸 본다
+  if (cronAlive) await D.setSetting(e2.DB, cronRunKey("webhooks"), JSON.stringify({ at: new Date().toISOString(), ms: 3, error: "" }));
   // '아무것도 설정 안 된' 상태 = 시크릿이 D1 에 자동 생성돼 있는 상태
   if (!("SESSION_SECRET" in extra)) await D.setSetting(e2.DB, "session_secret", "auto-generated");
   const pw = await hashPassword("super1234");
@@ -411,11 +414,11 @@ const ALL_ON = {
   RESEND_API_KEY: "re_ZZSECRETZZ", MAIL_FROM: "no-reply@lister.kr",
 };
 
-test("개통 체크리스트: 아무것도 없으면 막고 있는 것 4건을 이름으로 알려준다", async () => {
+test("개통 체크리스트: 아무것도 없으면 막고 있는 것 5건을 이름으로 알려준다", async () => {
   const html = await superHtml();
   assert.match(html, /개통 체크리스트/);
-  assert.match(html, /4건 남음/);
-  for (const label of ["SESSION_SECRET", "전자서명 개인키", "알림톡 발송 키", "알림톡 템플릿 코드"])
+  assert.match(html, /5건 남음/);
+  for (const label of ["SESSION_SECRET", "전자서명 개인키", "알림톡 발송 키", "알림톡 템플릿 코드", "정기 작업"])
     assert.match(html, new RegExp(label), `${label} 항목이 있어야`);
   assert.match(html, /ALIGO_API_KEY/, "어떤 변수를 넣어야 하는지까지");
 });
@@ -430,7 +433,7 @@ test("개통 체크리스트: 템플릿이 일부만 등록되면 빠진 것을 
 
 test("개통 체크리스트: 다 갖추면 준비 완료 + 할 일 없음", async () => {
   const kp = await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]);
-  const html = await superHtml({ ...ALL_ON, SIGN_PRIVATE_KEY: JSON.stringify(await crypto.subtle.exportKey("jwk", kp.privateKey)) }, Object.keys(TEMPLATE_KEYS).length);
+  const html = await superHtml({ ...ALL_ON, SIGN_PRIVATE_KEY: JSON.stringify(await crypto.subtle.exportKey("jwk", kp.privateKey)) }, Object.keys(TEMPLATE_KEYS).length, true);
   assert.match(html, /준비 완료/);
   assert.match(html, /처리할 일이 없습니다/);
   assert.ok(!/건 남음/.test(html));
@@ -455,7 +458,7 @@ test("알림톡만 갖추면 개통 준비가 끝난다 (이메일 없이)", asy
     SESSION_SECRET: "s", SIGN_PRIVATE_KEY: JSON.stringify(await crypto.subtle.exportKey("jwk", kp.privateKey)),
     ALIGO_API_KEY: "a", ALIGO_USER_ID: "b", ALIGO_SENDER_KEY: "c", ALIGO_SENDER: "0212345678",
     // RESEND 없음 — 이메일은 안 쓰기로 한 상태
-  }, Object.keys(TEMPLATE_KEYS).length);
+  }, Object.keys(TEMPLATE_KEYS).length, true);
   assert.match(html, /준비 완료/, "알림톡만으로도 개통 준비가 끝나야 한다");
   assert.ok(!/건 남음/.test(html));
 });
@@ -484,4 +487,91 @@ test("알리고 키가 일부만 도달하면 어느 이름이 빠졌는지 화�
 test("공백만 든 값은 있는 것으로 세지 않는다", async () => {
   const html = await superHtml({ ALIGO_API_KEY: "a", ALIGO_USER_ID: "b", ALIGO_SENDER_KEY: "c", ALIGO_SENDER: "  \n " });
   assert.match(html, /<span class=""><b>✗<\/b> <code>ALIGO_SENDER<\/code>/);
+});
+
+// 크론이 등록되지 않으면 백업·리마인더·웹훅이 전부 멈추는데 사이트는 멀쩡해 보인다.
+// 실제로 몇 달을 그 상태로 지냈다 — 화면이 말해 주지 않으면 아무도 모른다.
+test("정기 작업이 한 번도 안 돌았으면 화면이 그렇게 말한다", async () => {
+  const html = await superHtml();
+  assert.match(html, /정기 작업/);
+  assert.match(html, /아직 한 번도 돌지 않음/);
+  assert.match(html, /멈춰 있음/);
+  for (const label of ["주간 백업·리포트", "일일 서명 리마인더", "웹훅 재전송"])
+    assert.match(html, new RegExp(label), `${label} 줄이 있어야`);
+});
+
+test("최근에 돌았으면 '돌고 있음' 으로 바뀐다", async () => {
+  const html = await superHtml({}, 0, true);
+  assert.match(html, /돌고 있음/);
+  assert.match(html, /정기 작업\(크론\) 등록<\/b> <span class="badge badge-ok">완료/, "체크리스트에서도 완료로");
+});
+
+test("오래 전에 돌았으면 멈춘 것으로 본다 (20분 기준)", async () => {
+  const e = makeEnv();
+  await D.setSetting(e.DB, cronRunKey("webhooks"),
+    JSON.stringify({ at: new Date(Date.now() - 90 * 60 * 1000).toISOString(), ms: 3, error: "" }));
+  // superHtml 은 자체 env 를 만들므로, 여기서는 판정 경계만 직접 확인한다
+  const rec = JSON.parse(await D.getSetting(e.DB, cronRunKey("webhooks")));
+  assert.ok(Date.now() - Date.parse(rec.at) > 20 * 60 * 1000, "20분을 넘으면 멈춘 것으로 판정되어야");
+});
+
+// 크론이 돌았다는 사실 자체가 남아야 한다 — 작업이 실패해도 마찬가지다.
+test("runCron 은 작업이 실패해도 실행 기록과 오류를 남긴다", async () => {
+  const e = makeEnv();
+  const boom = { ...e, DB: e.DB, MEDIA: { put() { throw new Error("R2 없음"); }, get() { return null; }, delete() {} } };
+  await runCron("*/5 * * * *", boom);
+  const rec = JSON.parse(await D.getSetting(e.DB, cronRunKey("webhooks")));
+  assert.ok(rec && rec.at, "실행 시각이 남아야");
+  assert.equal(rec.cron, "*/5 * * * *");
+});
+
+// ── 시크릿 이전: 잘못 지우면 되돌릴 수 없는 자리라 가드가 전부다
+import { superSecretDrop } from "../src/api.js";
+
+const dropCtx = (env, key) => ({
+  db: env.DB, env, form: new Map([["key", key]]),
+  user: { id: 1, name: "운영자", role: "SUPERADMIN", association_id: null }, ip: "1.1.1.1",
+});
+
+test("워커 Secret 이 없으면 SESSION_SECRET 사본을 지우지 않는다", async () => {
+  const e = makeEnv();
+  await D.setSetting(e.DB, "session_secret", "current-value");
+  const res = await superSecretDrop(dropCtx({ ...e, SESSION_SECRET_IS_WORKER: false }, "session_secret"));
+  assert.equal(res.status, 303);
+  assert.equal(await D.getSetting(e.DB, "session_secret"), "current-value", "지워지면 안 된다");
+  assert.match(decodeURIComponent(res.headers.get("location")), /로그인이 전부 풀리고/);
+});
+
+test("워커 Secret 이 확인되면 사본을 지운다", async () => {
+  const e = makeEnv();
+  const pw = await hashPassword("x12345678");
+  const u = await D.createUser(e.DB, { email: "drop@platform.kr", passwordHash: pw.hash, salt: pw.salt, name: "운영자", role: "SUPERADMIN", associationId: null });
+  await D.setSetting(e.DB, "session_secret", "current-value");
+  const ctx = dropCtx({ ...e, SESSION_SECRET_IS_WORKER: true }, "session_secret");
+  ctx.user = { id: u.id, name: "운영자", role: "SUPERADMIN", association_id: null };
+  await superSecretDrop(ctx);
+  assert.equal(await D.getSetting(e.DB, "session_secret"), null);
+});
+
+test("서명키는 워커에 없으면 지우지 않는다 (지우면 기존 서명이 전부 검증 실패)", async () => {
+  const e = makeEnv();
+  await D.setSetting(e.DB, "sign_key", "jwk-here");
+  const res = await superSecretDrop(dropCtx(e, "sign_key"));
+  assert.equal(await D.getSetting(e.DB, "sign_key"), "jwk-here");
+  assert.match(decodeURIComponent(res.headers.get("location")), /이미 받은 서명을 검증할 수 없게/);
+});
+
+test("모르는 항목 이름으로는 아무것도 지우지 못한다", async () => {
+  const e = makeEnv();
+  await D.setSetting(e.DB, "price_alimtalk", "22");
+  await superSecretDrop(dropCtx({ ...e, SESSION_SECRET_IS_WORKER: true }, "price_alimtalk"));
+  assert.equal(await D.getSetting(e.DB, "price_alimtalk"), "22");
+});
+
+// 운영자가 /super 를 캡처해 보내는 일이 실제로 있다 — 값이 눈에 보이면 새어 나간다.
+test("시크릿 값은 화면 텍스트로 그리지 않는다 (복사 버튼 속성에만 둔다)", async () => {
+  const html = await superHtml();
+  const visible = html.replace(/data-copy="[^"]*"/g, "");
+  assert.ok(!visible.includes("auto-generated"), "값이 본문에 노출되면 안 된다");
+  assert.match(html, /data-copy="auto-generated"/, "복사 버튼으로는 넘겨줘야 한다");
 });

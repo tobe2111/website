@@ -22,6 +22,7 @@ import { turnstileWidget, turnstileScript } from "./turnstile.js";
 import { otpauthUri } from "./totp.js";
 import { PLANS, PLAN_KEYS } from "./plans.js";
 import { emailEnabled as emailOn } from "./email.js";
+import { CRON, CRON_JOBS, cronRunKey } from "./scheduled.js";
 
 const DOC_EVENT_LABEL = { created: "문서 생성", viewed: "계약서 열람", otp_sent: "인증번호 발송", otp_ok: "휴대폰 본인확인", signed: "전자서명 완료", declined: "서명 거절", reminded: "재알림 발송", notified: "알림 발송", edited: "문서 수정" };
 const CATEGORIES = ["음식점", "카페·디저트", "생활·서비스", "패션·잡화", "농수축산", "교육·문화", "기타"];
@@ -2634,6 +2635,15 @@ export async function superConsole(ctx) {
   // 예: 템플릿 코드가 비면 그 종류의 알림톡이 통째로 실패한다(잔액은 차감되지 않지만 아무것도 안 나간다).
   // 이 목록이 없으면 "지금 뭘 해야 하지"를 사람에게 물어야만 알 수 있었다.
   const secretInDb = !!(await D.getSetting(db, "session_secret"));
+  // 크론이 실제로 돌고 있는가 — 등록이 안 되면 아무 일도 안 일어나는데 화면엔 표시가 없었다.
+  // 5분짜리 웹훅 작업이 가장 빠른 신호다. 20분 넘게 소식이 없으면 등록이 안 된 것으로 본다.
+  const cronRuns = {};
+  for (const job of Object.keys(CRON_JOBS)) {
+    try { cronRuns[job] = JSON.parse((await D.getSetting(db, cronRunKey(job))) || "null"); } catch { cronRuns[job] = null; }
+  }
+  const CRON_STALE_MS = 20 * 60 * 1000;
+  const lastTick = cronRuns.webhooks && Date.parse(cronRuns.webhooks.at);
+  const cronAlive = !!(lastTick && Date.now() - lastTick < CRON_STALE_MS);
   const tplMissing = [];
   for (const [kind, key] of Object.entries(TEMPLATE_KEYS)) {
     if (!((await D.getSetting(db, key)) || "").trim()) tplMissing.push(TEMPLATES[kind] ? TEMPLATES[kind].label : kind);
@@ -2661,6 +2671,10 @@ export async function superConsole(ctx) {
         <p class="muted">✗ 는 이 워커가 그 이름을 <b>못 받고 있다</b>는 뜻입니다. 대시보드에 보이는데 여기가 ✗ 라면 ① 이름 철자·앞뒤 공백, ② <b>Deploy</b> 를 안 누름, ③ Preview 환경에 넣음, ④ <b>Text 로 넣어서 배포 때 지워짐</b>(<code>wrangler.toml</code> 의 <code>[vars]</code> 가 평문 변수를 덮어씁니다 — 반드시 <b>Secret</b>) 중 하나입니다.</p>`,
       how: "알리고(smartsms.aligo.in) 가입 → 카카오 발신프로필 등록 → 워커 <b>Settings → Variables and Secrets</b> 에 <b>Secret</b> 4개 등록 후 <b>Deploy</b>",
       code: "ALIGO_API_KEY · ALIGO_USER_ID · ALIGO_SENDER_KEY · ALIGO_SENDER" },
+    { on: cronAlive, label: "정기 작업(크론) 등록",
+      why: `5분마다 도는 작업이 ${cronRuns.webhooks ? "20분 넘게 소식이 없습니다" : "<b>한 번도 돌지 않았습니다</b>"}. 크론이 등록되지 않으면 <b>주간 백업·서명 리마인더·웹훅 재전송이 전부 멈춥니다</b> — 사이트는 멀쩡해 보이므로 알아채기 어렵습니다.`,
+      how: "워커 <b>Settings → Trigger Events → Cron Triggers</b> 에 3개가 있는지 확인하세요. 비어 있으면 최근 배포가 크론 등록 단계에서 실패한 것입니다 — Deployments 의 빌드 로그 맨 끝을 보세요. 등록 직후라면 최대 5분 뒤 이 항목이 자동으로 사라집니다.",
+      code: Object.values(CRON).join(" · ") },
     { on: tplMissing.length === 0, label: `알림톡 템플릿 코드 (${tplTotal - tplMissing.length}/${tplTotal})`,
       why: tplMissing.length ? `미등록: <b>${tplMissing.map(esc).join(" · ")}</b> — 이 종류는 발송이 실패합니다.` : "",
       how: "아래 <b>알림톡·정산</b> 에 카카오에 등록할 문구 원문이 있습니다. 그대로 심사 신청하고, 받은 코드를 같은 화면에 적으세요.",
@@ -2681,6 +2695,86 @@ export async function superConsole(ctx) {
     <p class="panel-hint">이 화면이 지금 돌고 있는 배포:
       <code>${esc((env.CF_VERSION_METADATA && env.CF_VERSION_METADATA.id ? String(env.CF_VERSION_METADATA.id) : "").slice(0, 8) || "확인 불가")}</code>
       — 대시보드 <b>Deployments</b> 맨 위 버전과 같으면 최신입니다. 다르면 아직 반영 전이니 잠시 뒤 새로고침하세요.</p>
+  </section>`;
+
+  // 정기 작업 상태 — 개통이 끝난 뒤에도 크론이 조용히 죽는 일은 계속 생길 수 있다.
+  // "언제 마지막으로 돌았나"를 늘 보이게 두는 것이 유일한 방어다.
+  const agoText = (iso) => {
+    const ms = Date.now() - Date.parse(iso);
+    if (!(ms >= 0)) return esc(iso);
+    const m = Math.floor(ms / 60000);
+    if (m < 1) return "방금";
+    if (m < 60) return `${m}분 전`;
+    const h = Math.floor(m / 60);
+    return h < 48 ? `${h}시간 전` : `${Math.floor(h / 24)}일 전`;
+  };
+  const cronPanel = `<section class="panel ${cronAlive ? "" : "panel-warn"}"><h2 class="panel-title">정기 작업
+      <span class="badge ${cronAlive ? "badge-ok" : "badge-no"}">${cronAlive ? "돌고 있음" : "멈춰 있음"}</span></h2>
+    <p class="panel-hint">사람이 누르지 않아도 저절로 돌아야 하는 일들입니다. ${cronAlive
+      ? "마지막으로 돈 시각이 계속 갱신되면 정상입니다."
+      : "<b>크론이 등록되지 않으면 아무 일도 일어나지 않는데 사이트는 멀쩡해 보입니다.</b> 그래서 여기에 시각을 남깁니다."}</p>
+    <table class="verify-table">${Object.entries(CRON_JOBS).map(([job, label]) => {
+      const r = cronRuns[job];
+      return `<tr><th>${esc(label)}</th><td>${r
+        ? `${agoText(r.at)} <small class="muted">(${esc(String(r.at).replace("T", " ").slice(0, 16))} UTC)</small>${
+            r.error ? ` <span class="badge badge-no">오류</span> <code>${esc(r.error)}</code>` : ""}`
+        : '<span class="badge badge-no">아직 한 번도 돌지 않음</span>'}</td></tr>`;
+    }).join("")}</table>
+    <p class="panel-hint">주간 작업은 월요일 새벽 3시(KST)에 백업을 만듭니다. 일일 작업은 매일 아침 9시에
+      기한이 다가온 계약의 미서명자에게 재알림을 보냅니다. 웹훅은 5분마다 밀린 전송을 재시도합니다.</p>
+  </section>`;
+
+  // ----- 시크릿 이전 (D1 → 워커 Secret) -----
+  // 가장 위험한 수작업이다. 새 값을 만들면 로그인이 전부 풀리고 이미 받은 서명이 검증에 실패한다.
+  // 그래서 "현행 값을 그대로 옮기는" 길만 열어 두고, 값은 화면에 그리지 않고 복사만 시킨다
+  // (운영자가 이 화면을 캡처해 보내는 일이 실제로 있다).
+  // 사본 삭제 버튼은 워커 Secret 이 실제로 들어온 것이 확인된 뒤에만 나타난다 — 그 시점엔
+  // 워커 값이 이미 우선하므로 D1 사본은 아무도 쓰지 않는 상태라 지워도 안전하다.
+  const signKeyInDb = await D.getSetting(db, "sign_key");
+  const sessionValue = await D.getSetting(db, "session_secret");
+  const migrate = [
+    { key: "session_secret", name: "SESSION_SECRET", label: "세션·백업 암호화 키",
+      onWorker: !!env.SESSION_SECRET_IS_WORKER, inDb: !!sessionValue, value: sessionValue || "",
+      risk: "새로 만들면 <b>로그인이 전부 풀리고</b> 이미 보낸 서명 링크가 무효가 됩니다. 주간 백업도 이 값으로 암호화되므로, 값이 바뀌면 <b>예전 백업을 열 수 없습니다.</b>",
+      why: "이 값이 D1 안에 있는 동안은, 백업을 여는 열쇠가 백업 안에 함께 들어 있는 셈입니다 — D1 을 잃으면 R2 의 백업도 못 엽니다." },
+    { key: "sign_key", name: "SIGN_PRIVATE_KEY", label: "전자서명 개인키",
+      onWorker: keyMode === "secret", inDb: !!signKeyInDb, value: signKeyInDb || "",
+      risk: "새로 만들면 <b>이미 받은 서명이 전부 검증에 실패합니다.</b> 반드시 현행 키를 그대로 옮기세요.",
+      why: "D1 을 읽을 수 있는 사람이 과거 서명을 위조할 수 있습니다.",
+      blockDrop: !chain.ok, blockWhy: "서명 사슬 검증이 통과해야 사본을 지울 수 있습니다 — 지금 워커 키로 기존 서명이 확인되지 않습니다." },
+  ];
+  const migrateDone = migrate.every((m) => m.onWorker && !m.inDb);
+  const migratePanel = `<section class="panel ${migrateDone ? "" : "panel-warn"}"><h2 class="panel-title">시크릿 옮기기
+      <span class="badge ${migrateDone ? "badge-ok" : "badge-no"}">${migrateDone ? "완료" : `${migrate.filter((m) => !(m.onWorker && !m.inDb)).length}건 남음`}</span></h2>
+    <p class="panel-hint">두 값을 데이터베이스에서 <b>워커 Secret</b> 으로 옮깁니다.
+      <b>새로 만들지 말고 지금 값을 그대로 옮기세요</b> — 아래 복사 버튼이 현행 값을 클립보드에 넣어 줍니다.
+      값은 화면에 그리지 않습니다(캡처해도 찍히지 않습니다).</p>
+    ${migrate.map((m) => {
+      const done = m.onWorker && !m.inDb;
+      const state = done ? "완료" : m.onWorker ? "사본만 남음" : "아직 DB 에 있음";
+      return `<div class="mig-item ${done ? "is-on" : ""}">
+        <div class="mig-head"><b><code>${esc(m.name)}</code></b> <span class="muted">${esc(m.label)}</span>
+          <span class="badge ${done ? "badge-ok" : m.onWorker ? "badge-wait" : "badge-no"}">${state}</span></div>
+        ${done ? "" : `<p>${m.why}</p>
+        <div class="flash flash-warn">${m.risk}</div>
+        <ol class="hint-steps">
+          <li>${m.value
+            ? `<button type="button" class="btn btn-ghost btn-sm" data-copy="${esc(m.value)}">현행 값 복사</button>`
+            : "<span class=\"muted\">DB 에 값이 없습니다 (이미 워커에만 있는 상태)</span>"}</li>
+          <li>Workers &amp; Pages → <b>website</b> → Settings → Variables and Secrets → ＋ Add →
+            이름 <code>${esc(m.name)}</code>, Type <b>Secret</b>, 값은 붙여넣기 → <b>Deploy</b></li>
+          <li>배포 후 이 화면을 새로고침하면 <b>사본만 남음</b> 으로 바뀝니다. 그때 아래 버튼으로 DB 사본을 지웁니다.</li>
+        </ol>
+        ${m.onWorker && m.inDb
+          ? (m.blockDrop
+            ? `<div class="flash flash-warn">${m.blockWhy}</div>`
+            : `<form method="post" action="/super/secret-drop" class="inline-form"
+                 data-confirm="워커 Secret 이 확인되었습니다. DB 사본을 지울까요? (워커 값이 이미 쓰이고 있어 동작은 바뀌지 않습니다)">
+                 <input type="hidden" name="_csrf" value="${esc(csrf)}" /><input type="hidden" name="key" value="${esc(m.key)}" />
+                 <button class="btn btn-primary btn-sm">DB 사본 지우기</button></form>`)
+          : m.inDb ? '<p class="muted">워커에 Secret 이 확인되면 여기에 <b>DB 사본 지우기</b> 버튼이 나타납니다.</p>' : ""}`}
+      </div>`;
+    }).join("")}
   </section>`;
 
   const securityPanel = `<section class="panel ${keyMode === "secret" ? "" : "panel-warn"}"><h2 class="panel-title">전자서명 보안
@@ -2771,6 +2865,18 @@ export async function superConsole(ctx) {
       <div class="form-two">${tplInputs}</div>
       <p class="panel-hint">템플릿 코드는 플랫폼 카카오 채널에 등록·심사 통과된 값이어야 합니다. 비어 있으면 <b>그 종류만</b> 발송되지 않습니다(다른 종류는 정상).</p>
       <button class="btn btn-primary btn-sm">알림톡 설정 저장</button></form>
+    <div class="form-divider">시험 발송 <span class="badge badge-muted">크레딧 차감 없음</span></div>
+    <p class="panel-hint">코드가 틀렸는지는 <b>보내 봐야</b> 알 수 있습니다. 실제 계약 중에 알게 되면 상대방이 기다리는 상태가 됩니다.
+      본인 번호로 한 종류씩 보내 보세요 — 실패하면 <b>카카오·알리고가 준 오류 문구를 그대로</b> 보여 줍니다.</p>
+    <form method="post" action="/super/notify-test" class="stack-form compact">
+      <div class="form-two">
+        <label class="mini-label">보낼 종류<select name="kind">${tplEntries.map(([kind, t]) =>
+          `<option value="${esc(kind)}">${esc(t.label)}</option>`).join("")}</select></label>
+        <label class="mini-label">받을 휴대폰<input type="tel" name="phone" placeholder="010-1234-5678" maxlength="13" inputmode="numeric" required /></label>
+      </div>
+      <button class="btn btn-ghost btn-sm">테스트 발송</button></form>
+    <p class="panel-hint">시험 발송은 정산에 잡히지 않습니다. 다만 제공사 원가는 실제로 발생합니다(1건 기준 ${(await costOf(db, "alimtalk")).toLocaleString()}원).
+      문자 대체발송은 꺼 두어, <b>알림톡 자체가 통했는지</b>만 확인합니다.</p>
     <div class="form-divider">카카오에 등록할 문구 <span class="badge ${tplDone === tplEntries.length ? "badge-ok" : "badge-wait"}">${tplDone}/${tplEntries.length} 등록</span></div>
     <p class="panel-hint">알림톡은 심사받은 문구와 <b>글자 하나까지</b> 같아야 발송됩니다. 아래 문구를 그대로 복사해 등록하고, 받은 코드를 위 칸에 넣으세요.
       용도별로 템플릿이 따로 필요합니다 — 인증번호를 '서명 요청' 템플릿으로 보내면 문구가 달라 거절됩니다.</p>
@@ -2992,6 +3098,8 @@ export async function superConsole(ctx) {
       </div>
 
       <div class="sgroup" id="s-settings" data-tab="settings">
+        ${cronPanel}
+        ${migratePanel}
         ${securityPanel}
     <section class="panel"><h2 class="panel-title">플랫폼 설정</h2>
       <form method="post" action="/super/platform-mode" class="stack-form compact">

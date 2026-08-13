@@ -220,6 +220,34 @@ export async function chargeContract(db, assoc, { documentId, title }) {
 
 // ---------- 과금 게이트 ----------
 // 발송 1건 = 잔액 확인 → 선차감 → 발송 → 실패 시 환불. 순서를 이렇게 두면 중복 차감이 없다.
+// 운영자용 테스트 발송 — 템플릿 코드가 실제로 통하는지 지금 확인한다.
+// 코드가 틀리면 실계약 도중에야 알게 되는데, 그때는 상대방이 이미 기다리고 있다.
+// 제공사 오류 원문을 그대로 돌려준다 — "발송 실패" 다섯 글자로는 무엇을 고칠지 알 수 없다.
+// 크레딧을 차감하지 않고 정산에도 넣지 않는다(운영사 자신의 점검이다). 원가는 실제로 발생한다.
+export async function sendTest(env, db, { kind, to }) {
+  const phone = D.normalizePhone(to);
+  if (!D.isValidPhone(phone)) return { ok: false, error: "휴대폰 번호 형식이 올바르지 않습니다" };
+  if (!notifyEnabled(env)) {
+    const missing = ALIGO_VARS.filter((k) => !cfg(env, k));
+    return { ok: false, error: `워커에 없는 값: ${missing.join(", ")}` };
+  }
+  const tpl = await templateCodeFor(db, kind);
+  if (!tpl) return { ok: false, error: "이 종류의 템플릿 코드가 비어 있습니다" };
+  const t = TEMPLATES[kind];
+  // 심사받은 문구 그대로에 예시 값만 끼운다 — 문구가 다르면 카카오가 거절하므로 이게 진짜 시험이다
+  const vars = {};
+  for (const v of t.vars) vars[v] = { 상호: "테스트", 이름: "홍길동", 문서명: "테스트 계약서", 기한: "12월 31일",
+    검증코드: "TEST1234", 인증번호: "123456", 유효시간: String(D.OTP_TTL_MIN), 연락처: "010-0000-0000",
+    지역: "서울", 제목: "테스트 공지", 내용: "테스트 발송입니다." }[v] || "테스트";
+  const text = renderTemplate(kind, vars);
+  try {
+    const r = await sendVia(env, { to: phone, templateCode: tpl, text, smsFallback: false });
+    return r.ok ? { ok: true, tpl, to: D.maskPhone(phone) } : { ok: false, error: r.error, tpl };
+  } catch (e) {
+    return { ok: false, error: String((e && e.message) || e).slice(0, 300), tpl };
+  }
+}
+
 export async function sendOne(env, db, { assoc, kind, to, text, buttonName, buttonUrl, templateCode }) {
   const phone = D.normalizePhone(to);
   const masked = D.maskPhone(phone);

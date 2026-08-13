@@ -309,3 +309,28 @@ export async function runWeekly(env) {
   console.log("weekly job", JSON.stringify({ backup, report }));
   return { backup, report };
 }
+
+// ---------- 정기 작업이 '실제로 돌았는지' 기록 ----------
+// 크론이 등록되지 않으면 아무 일도 일어나지 않는데, 화면에는 아무 표시도 없었다.
+// 그래서 백업이 한 번도 만들어지지 않은 채 몇 달이 지났다(요일 자리에 0 을 쓴 탓).
+// 이제는 돌 때마다 시각을 남겨서, 안 돌고 있으면 /super 에서 바로 보이게 한다.
+export const CRON_JOBS = { weekly: "주간 백업·리포트", daily: "일일 서명 리마인더", webhooks: "웹훅 재전송" };
+export const cronRunKey = (job) => `cron_run:${job}`;
+export const jobForCron = (cron) => (cron === CRON.weekly ? "weekly" : cron === CRON.webhooks ? "webhooks" : "daily");
+
+// 크론 한 번의 실행 = 작업 수행 + 실행 기록. index.js 의 scheduled() 가 이것만 부른다.
+export async function runCron(cron, env, now = Date.now()) {
+  const job = jobForCron(cron);
+  let result = null, error = "";
+  try {
+    result = job === "weekly" ? await runWeekly(env) : job === "webhooks" ? await runWebhooks(env) : await runDaily(env);
+  } catch (e) {
+    error = String((e && e.message) || e).slice(0, 300);
+  }
+  // 기록 실패가 작업 자체를 실패시키면 안 된다
+  await D.setSetting(env.DB, cronRunKey(job), JSON.stringify({
+    at: new Date(now).toISOString(), ms: Date.now() - now, error, cron,
+  })).catch(() => {});
+  if (error) console.log("cron error", job, error);
+  return result;
+}

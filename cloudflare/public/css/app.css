@@ -415,6 +415,12 @@ a.bc-val:hover{text-decoration:underline}
   background:var(--bg-alt);border:1px solid var(--line);font-size:.76rem;color:var(--no-fg)}
 .envcheck span.is-on{color:var(--green-700);border-color:var(--green-600)}
 .envcheck b{font-size:.8rem}
+/* 시크릿 이전 — 항목마다 상태가 다르므로 카드로 끊어 준다 */
+.mig-item{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:10px 0;background:var(--bg-alt)}
+.mig-item.is-on{border-color:var(--green-600);background:transparent}
+.mig-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:6px}
+.mig-item p{margin:6px 0;font-size:.85rem;line-height:1.6;color:var(--muted)}
+.mig-item .hint-steps{margin:8px 0 6px;font-size:.85rem;line-height:1.7}
 
 /* 영업 파이프라인 */
 .stage-strip{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 14px}

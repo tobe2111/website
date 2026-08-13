@@ -8,7 +8,7 @@ import * as storage from "./storage.js";
 import { countable } from "./traffic.js";
 import { parseEmbed } from "./embed.js";
 import { cap, sniffImage, EMAIL_RE, MAX_IMAGE_BYTES, slugify, esc } from "./util.js";
-import { contentHash, sealRecord, newVerifyCode, SEAL_VER, fieldsHashOf } from "./esign.js";
+import { contentHash, sealRecord, newVerifyCode, SEAL_VER, fieldsHashOf, keyStorage, verifyChain } from "./esign.js";
 import { isFieldKind, round4, FIELD_KINDS, pageCount } from "./paper.js";
 import { builtinById, isBuiltinId, normalizeTemplate, extractVars, applyVars, resolveFieldPages } from "./templates.js";
 import { resolveExtToken, makeExtToken, extSignUrl, sendSignLink, remindExternals, originFor, rememberOrigin } from "./extsign.js";
@@ -18,7 +18,7 @@ import { planOf } from "./plans.js";
 import { seedDemo } from "./demoContent.js";
 import { seedStarter } from "./starterContent.js";
 import { KINDS, kindById, PRESETS, assocTerms } from "./kinds.js";
-import { TEMPLATE_KEYS, sendMany, sendOne, notifyEnabled, wonToJeon, renderTemplate, templateButton, billingMode, chargeContract, BILLING_MODES, priceOf } from "./notify.js";
+import { TEMPLATE_KEYS, TEMPLATES, sendTest, sendMany, sendOne, notifyEnabled, wonToJeon, renderTemplate, templateButton, billingMode, chargeContract, BILLING_MODES, priceOf } from "./notify.js";
 
 // ctx.request 는 내부 호출 경로에서 없을 수 있다 — 감사 기록이 본 기능을 죽이면 안 된다
 const uaOf = (ctx) => { try { return ctx.request.headers.get("user-agent") || ""; } catch { return ""; } };
@@ -248,6 +248,44 @@ export async function superSetUnitPrice(ctx) {
 }
 
 // 슈퍼: 알림톡 판매단가·템플릿 코드 설정
+// D1 에 남은 시크릿 사본 삭제.
+// 워커 Secret 이 실제로 들어와 있을 때만 허용한다 — 그 시점엔 워커 값이 이미 우선하므로
+// D1 사본은 아무도 쓰지 않는 상태다. 반대로 워커에 값이 없는데 지우면, 다음 요청에서
+// 새 값이 자동 생성되어 로그인이 전부 풀리고 예전 백업을 영원히 못 열게 된다.
+export async function superSecretDrop(ctx) {
+  const { db, form, env } = ctx;
+  const key = (form.get("key") || "").trim();
+  if (key !== "session_secret" && key !== "sign_key") return back("/super", "알 수 없는 항목입니다.", true);
+  if (!(await D.getSetting(db, key))) return back("/super#s-settings", "이미 지워져 있습니다.");
+
+  if (key === "session_secret") {
+    if (!env.SESSION_SECRET_IS_WORKER)
+      return back("/super#s-settings", "워커 Secret 이 아직 확인되지 않았습니다. 지금 지우면 로그인이 전부 풀리고 예전 백업을 열 수 없게 됩니다.", true);
+  } else {
+    if (keyStorage(env) !== "secret")
+      return back("/super#s-settings", "워커 Secret 이 아직 확인되지 않았습니다. 지금 지우면 이미 받은 서명을 검증할 수 없게 됩니다.", true);
+    // 워커 키로 기존 서명이 실제로 검증되는지 확인한 뒤에만 지운다
+    if (!verifyChain(await D.listSignatureChain(db)).ok)
+      return back("/super#s-settings", "서명 사슬 검증이 통과하지 않아 사본을 지우지 않았습니다. 옮긴 키가 현행 키와 같은지 확인해 주세요.", true);
+  }
+  await D.delSetting(db, key);
+  await audit(ctx, "시크릿이전", `${key} DB 사본 삭제`, null);
+  return back("/super#s-settings", "DB 사본을 지웠습니다. 이제 이 값은 워커 Secret 에만 있습니다.");
+}
+
+// 템플릿 코드 시험 발송 — 결과(제공사 오류 원문)를 플래시로 되돌려 준다.
+export async function superNotifyTest(ctx) {
+  const { db, form, env } = ctx;
+  const kind = (form.get("kind") || "").trim();
+  if (!TEMPLATES[kind]) return back("/super#s-money", "알 수 없는 알림 종류입니다.", true);
+  const to = (form.get("phone") || "").trim();
+  const r = await sendTest(env, db, { kind, to });
+  await audit(ctx, "테스트발송", `${kind} → ${r.ok ? "성공" : "실패"}`, null);
+  return r.ok
+    ? back("/super#s-money", `테스트 발송 성공 — ${TEMPLATES[kind].label} (${r.to}). 휴대폰을 확인해 주세요.`)
+    : back("/super#s-money", `테스트 발송 실패 — ${TEMPLATES[kind].label}: ${r.error}`, true);
+}
+
 export async function superNotifySettings(ctx) {
   const { db, form } = ctx;
   const price = parseInt(form.get("price_alimtalk") || "", 10);
