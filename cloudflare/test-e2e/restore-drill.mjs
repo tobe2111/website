@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const worker = (await import(path.join(ROOT, "src/index.js"))).default;
+const { CRON } = await import(path.join(ROOT, "src/scheduled.js"));
 const { makeEnv } = await import(path.join(ROOT, "test/shim.js"));
 const D = await import(path.join(ROOT, "src/db.js"));
 const E = await import(path.join(ROOT, "src/esign.js"));
@@ -86,7 +87,7 @@ const before = {
 ok(before.sigs === 2 && before.chain.ok, "원본 준비 — 서명 2건, 사슬 정상", `잔액 ${before.balance.toLocaleString()}원`);
 
 // ── ② 주간 크론으로 백업
-await worker.scheduled({ cron: "0 18 * * 0" }, env, { waitUntil: (p) => p });
+await worker.scheduled({ cron: CRON.weekly }, env, { waitUntil: (p) => p });
 await new Promise((r) => setTimeout(r, 80));
 const keys = [...env.MEDIA._store.keys()].filter((k) => k.endsWith(".json.enc"));
 ok(keys.length === 1, "주간 크론이 암호화 백업을 남김", keys[0] || "(없음)");

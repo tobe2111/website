@@ -9,6 +9,17 @@ import { sealAnchor } from "./esign.js";
 import { remindExternals, originFor } from "./extsign.js";
 import { kindOf, assocTerms } from "./kinds.js";
 
+// 크론 표현식 — wrangler.toml [triggers].crons 와 '글자 하나까지' 같아야 한다.
+// scheduled() 가 이 문자열로 어떤 작업인지 가른다. 한쪽만 고치면 조용히 엉뚱한 작업이 돈다.
+// ⚠️ 요일 자리에 0 을 쓰면 안 된다 — Cloudflare 는 요일을 1-7(SUN-SAT)로만 받고,
+//    0 이 들어가면 크론 등록 API 가 통째로 실패한다(code 10100). 그러면 세 개 다 등록되지 않아
+//    백업·리마인더·웹훅이 전부 멈춘다. 실제로 그 상태였다. 헷갈리지 않게 이름(SUN)으로 쓴다.
+export const CRON = {
+  weekly: "0 18 * * SUN", // 일 18:00 UTC = 월 03:00 KST — 백업 + 주간 리포트
+  daily: "0 0 * * *",     // 매일 09:00 KST — 서명 기한 리마인더
+  webhooks: "*/5 * * * *", // 5분마다 — 웹훅 재전송 큐
+};
+
 const BACKUP_PREFIX = "backups/";
 const MANIFEST_KEY = "backups/index.json"; // R2 list() 없이도 보존 개수를 관리하기 위한 목록
 const KEEP = 8; // 주 1회 × 8주 보존

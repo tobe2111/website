@@ -8,7 +8,7 @@ import * as api from "./api.js";
 import { setMediaBase, setOrigin, setAssetVer, layout } from "./render.js";
 import { html, text, redirect, notFoundResponse, forbidden } from "./http.js";
 import { ensureSchema } from "./schema.js";
-import { runWeekly, runDaily, runWebhooks } from "./scheduled.js";
+import { runWeekly, runDaily, runWebhooks, CRON } from "./scheduled.js";
 import { resolveSessionSecret } from "./secrets.js";
 
 const _schemaReady = new WeakSet(); // DB 별 스키마 준비 캐시
@@ -311,8 +311,9 @@ export default {
   async scheduled(event, env, ctx) {
     await ensureSchema(env.DB);
     const full = { ...env, SESSION_SECRET: await resolveSessionSecret(env) };
-    // 크론 표현식으로 분기 — 주간(백업·리포트) vs 매일(서명 기한 리마인더)
-    ctx.waitUntil(event.cron === "0 18 * * 0" ? runWeekly(full) : event.cron === "*/5 * * * *" ? runWebhooks(full) : runDaily(full));
+    // 크론 표현식으로 분기 — 주간(백업·리포트) / 5분(웹훅 큐) / 그 외는 매일(서명 기한 리마인더).
+    // 문자열은 scheduled.js 의 CRON 한 곳에서만 정의한다 (wrangler.toml 과 대조하는 테스트가 있다).
+    ctx.waitUntil(event.cron === CRON.weekly ? runWeekly(full) : event.cron === CRON.webhooks ? runWebhooks(full) : runDaily(full));
   },
 };
 

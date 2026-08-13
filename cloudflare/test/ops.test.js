@@ -1,6 +1,7 @@
 // 운영 고도화: 자동 백업(암호화)·초성 검색·행사 ics·부관리자·서명 메일 가드
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { CRON } from "../src/scheduled.js";
 import worker from "../src/index.js";
 import { makeEnv } from "./shim.js";
 import * as D from "../src/db.js";
@@ -31,7 +32,7 @@ test("주간 백업: scheduled → R2 에 암호화 저장, 복호화하면 원�
   const env = makeEnv();
   const { a } = await seed(env);
   const waits = [];
-  await worker.scheduled({ cron: "0 18 * * 0" }, env, { waitUntil: (p) => waits.push(p) });
+  await worker.scheduled({ cron: CRON.weekly }, env, { waitUntil: (p) => waits.push(p) });
   await Promise.all(waits);
   const manifest = JSON.parse(new TextDecoder().decode(await (await env.MEDIA.get("backups/index.json")).arrayBuffer()));
   assert.equal(manifest.length, 1);
