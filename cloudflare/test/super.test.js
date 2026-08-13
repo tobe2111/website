@@ -411,14 +411,13 @@ const ALL_ON = {
   RESEND_API_KEY: "re_ZZSECRETZZ", MAIL_FROM: "no-reply@lister.kr",
 };
 
-test("개통 체크리스트: 아무것도 없으면 막고 있는 것 5건을 이름으로 알려준다", async () => {
+test("개통 체크리스트: 아무것도 없으면 막고 있는 것 4건을 이름으로 알려준다", async () => {
   const html = await superHtml();
   assert.match(html, /개통 체크리스트/);
-  assert.match(html, /5건 남음/);
-  for (const label of ["SESSION_SECRET", "전자서명 개인키", "알림톡 발송 키", "알림톡 템플릿 코드", "이메일 발송"])
+  assert.match(html, /4건 남음/);
+  for (const label of ["SESSION_SECRET", "전자서명 개인키", "알림톡 발송 키", "알림톡 템플릿 코드"])
     assert.match(html, new RegExp(label), `${label} 항목이 있어야`);
   assert.match(html, /ALIGO_API_KEY/, "어떤 변수를 넣어야 하는지까지");
-  assert.match(html, /RESEND_API_KEY/);
 });
 
 test("개통 체크리스트: 템플릿이 일부만 등록되면 빠진 것을 이름으로 짚어준다", async () => {
@@ -450,7 +449,7 @@ test("조직 목록에 유형 배지가 붙는다 (셀렉트를 열지 않아도
 
 // 발송 수단은 알림톡·이메일 중 하나면 된다.
 // 알림톡으로만 운영하기로 한 곳에 이메일이 영원히 빨간 항목으로 남으면 안 된다.
-test("알림톡이 완비되면 이메일은 더 이상 막고 있는 것이 아니다", async () => {
+test("알림톡만 갖추면 개통 준비가 끝난다 (이메일 없이)", async () => {
   const kp = await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]);
   const html = await superHtml({
     SESSION_SECRET: "s", SIGN_PRIVATE_KEY: JSON.stringify(await crypto.subtle.exportKey("jwk", kp.privateKey)),
@@ -461,12 +460,12 @@ test("알림톡이 완비되면 이메일은 더 이상 막고 있는 것이 아
   assert.ok(!/건 남음/.test(html));
 });
 
-test("알림톡도 이메일도 없으면 '아무 안내도 안 나간다'고 말한다", async () => {
-  const kp = await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]);
-  const html = await superHtml({
-    SESSION_SECRET: "s", SIGN_PRIVATE_KEY: JSON.stringify(await crypto.subtle.exportKey("jwk", kp.privateKey)),
-  }, 0);
-  assert.match(html, /어떤 안내도 나가지 않습니다/);
+// 이메일 발송은 제품에서 뺐다. 개통 체크리스트에 이메일 항목이 남아 있으면
+// 영원히 지워지지 않는 할 일이 되고, 화면의 안내문도 사실이 아니게 된다.
+test("개통 체크리스트에 이메일 항목이 없다", async () => {
+  const html = await superHtml();
+  assert.ok(!/RESEND_API_KEY/.test(html), "이메일 변수를 요구하지 않는다");
+  assert.ok(!/이메일 발송<\/b>/.test(html), "이메일 발송 항목이 없다");
 });
 
 // "넣었는데 왜 안 변하지"를 사람에게 물어야만 알 수 있으면 안 된다.

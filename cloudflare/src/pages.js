@@ -1739,7 +1739,7 @@ export async function adminDocumentDetail(ctx) {
     <div class="dash-head"><div><p class="section-eyebrow">E-SIGN</p><h1 class="dash-title">${esc(d.title)} ${d.closed ? '<span class="badge badge-no">마감</span>' : ""}${d.ordered ? ' <span class="badge badge-info">순차</span>' : ""}${d.due_date ? `<span class="badge ${D.isPastDue(d) ? "badge-no" : "badge-wait"}">기한 ${esc(d.due_date)}</span>` : ""}</h1>
       <p class="dash-sub"><a href="${base}/admin/documents">← 문서 목록</a> · 서명 ${sigs.length}명</p></div>
       <div class="dash-head-actions">
-        ${d.closed ? "" : `<form method="post" action="${base}/admin/documents/${d.id}/remind" class="inline-form" data-confirm="미서명자에게 알림톡·이메일로 리마인더를 보낼까요? (알림톡은 잔액이 차감됩니다)"><button class="btn btn-primary btn-sm">미서명자 재알림</button></form>`}
+        ${d.closed ? "" : `<form method="post" action="${base}/admin/documents/${d.id}/remind" class="inline-form" data-confirm="미서명자에게 알림톡으로 리마인더를 보낼까요? (잔액이 차감됩니다)"><button class="btn btn-primary btn-sm">미서명자 재알림</button></form>`}
         <a href="${base}/documents/${d.id}/paper" class="btn btn-ghost btn-sm">📄 완성본 보기</a>
         <a href="${base}/documents/${d.id}/evidence" class="btn btn-ghost btn-sm">📦 증적 패키지</a>
         <a href="${base}/admin/documents/${d.id}/fields" class="btn btn-ghost btn-sm">🖊 필드 배치${fieldN ? ` (${fieldN})` : ""}</a>
@@ -1944,7 +1944,7 @@ export async function esignSignupForm(ctx) {
         <button class="btn btn-primary btn-block">무료로 시작하기</button>
       </form>
       <p class="auth-note">시작하면 표준 서식(임대차·용역·비밀유지·동의서)이 준비된 상태로 바로 계약서를 만들 수 있습니다.
-        ${trial > 0 ? `가입 시 <b>${trial.toLocaleString()}원</b>의 알림톡 체험 크레딧을 드립니다.` : "이메일 발송은 바로 되고, 카카오 알림톡은 크레딧 충전 후 사용합니다."}</p>
+        ${trial > 0 ? `가입 시 <b>${trial.toLocaleString()}원</b>의 알림톡 체험 크레딧을 드립니다.` : "카카오 알림톡 발송은 크레딧을 충전한 뒤 사용합니다."}</p>
       <p class="auth-note">이미 계정이 있으신가요? <a href="/login">로그인</a></p>
     </div></div></section>`
     : `<section class="section page-top"><div class="container narrow">
@@ -1982,7 +1982,7 @@ export async function esignLanding(ctx) {
     <div class="es-steps">
       ${step(1, "계약서 만들기", "표준 서식(임대차·용역·NDA·동의서)을 고르고 빈칸만 채웁니다. 쓰던 서식을 저장해 재사용할 수도 있습니다.")}
       ${step(2, "서명 자리 배치", "계약서 위를 클릭해 서명·도장·날짜·체크 자리를 놓습니다. 누가 어디에 채울지 사람별로 지정합니다.")}
-      ${step(3, "링크 발송", "이름과 연락처만 넣으면 카카오 알림톡·메일로 각자의 서명 링크가 갑니다. 순서대로 받게 할 수도 있습니다.")}
+      ${step(3, "링크 발송", "이름과 연락처만 넣으면 카카오 알림톡으로 각자의 서명 링크가 갑니다. 카톡을 안 쓰는 분께는 문자로 갑니다. 순서대로 받게 할 수도 있습니다.")}
       ${step(4, "본인확인 후 서명", "휴대폰 인증번호로 본인을 확인하고, 계약서 위에서 직접 서명하거나 도장을 찍습니다.")}
       ${step(5, "증적 확보", "체결되면 완성본·확인서·감사추적·검증절차가 한 벌(ZIP)로 남습니다. 소송에 그대로 제출할 수 있습니다.")}
     </div>
@@ -2153,7 +2153,7 @@ async function esignHome(ctx) {
       <h1 class="landing-title">전자계약</h1>
       <p class="landing-lead">${esc(assoc.tagline || "종이 없이, 만나지 않고, 법적 효력 있는 계약을 체결합니다.")}</p>
       <div class="hero-actions">${mine}</div>
-      <p class="hero-note">계약 상대방은 <b>가입 없이</b> 문자·메일로 받은 링크로 바로 서명합니다.
+      <p class="hero-note">계약 상대방은 <b>가입 없이</b> 카카오톡·문자로 받은 링크로 바로 서명합니다.
         서명하실 분은 받으신 링크를 열어 주세요 — 이 화면에서 로그인할 필요가 없습니다.</p>
     </div></section>
     <section class="section"><div class="container">
@@ -2161,7 +2161,7 @@ async function esignHome(ctx) {
       <div class="feature-grid">${[
         ["📄", "계약서 작성", "표준 서식을 고르고 빈칸만 채웁니다"],
         ["🖊", "서명 자리 배치", "서명·도장·날짜 자리를 계약서 위에 놓습니다"],
-        ["📲", "링크 발송", "상대방에게 문자·메일로 서명 링크가 갑니다"],
+        ["📲", "링크 발송", "상대방에게 카카오톡·문자로 서명 링크가 갑니다"],
         ["🔐", "본인확인·서명", "휴대폰 인증 후 그 자리에서 서명·날인"],
         ["📦", "증적 확보", "확인서·감사추적·검증절차를 한 벌로 보관"],
         ["🔎", "누구나 검증", "검증코드로 제3자가 위변조를 확인"],
@@ -2639,8 +2639,6 @@ export async function superConsole(ctx) {
     if (!((await D.getSetting(db, key)) || "").trim()) tplMissing.push(TEMPLATES[kind] ? TEMPLATES[kind].label : kind);
   }
   const tplTotal = Object.keys(TEMPLATE_KEYS).length;
-  // 알림톡이 실제로 나갈 수 있는 상태인가 — 키 4개 + 서명 관련 템플릿이 모두 등록됐는가
-  const alimtalkReady = notifyEnabled(env) && tplMissing.length === 0;
   const blockers = [
     // 백업 암호화 키가 D1 안에만 있으면, D1 을 잃는 순간 R2 의 백업도 함께 못 쓰게 된다
     // (키가 백업 안에 들어 있어 백업을 열어야만 키가 나온다). 백업의 존재 이유가 사라지는 지점이다.
@@ -2667,12 +2665,6 @@ export async function superConsole(ctx) {
       why: tplMissing.length ? `미등록: <b>${tplMissing.map(esc).join(" · ")}</b> — 이 종류는 발송이 실패합니다.` : "",
       how: "아래 <b>알림톡·정산</b> 에 카카오에 등록할 문구 원문이 있습니다. 그대로 심사 신청하고, 받은 코드를 같은 화면에 적으세요.",
       go: ["#s-money", "알림톡·정산으로"] },
-    // 발송 수단은 알림톡·이메일 중 '하나만' 있으면 된다. 둘 다 요구하면, 알림톡으로만
-    // 운영하기로 정한 곳에 영원히 지워지지 않는 빨간 항목이 남는다.
-    { on: emailOn(env) || alimtalkReady, label: "이메일 발송",
-      why: "지금은 알림톡도 이메일도 안 되어 <b>어떤 안내도 나가지 않습니다.</b> 둘 중 하나는 있어야 합니다.",
-      how: "알림톡을 쓰실 거면 위 두 항목만 끝내면 되고, 이 항목은 자동으로 사라집니다. 이메일도 함께 쓰시려면 Resend(resend.com) 무료 가입 → 발신 도메인 인증 → 워커 변수에 등록하세요.",
-      code: "RESEND_API_KEY · MAIL_FROM" },
   ];
   const blocked = blockers.filter((b) => !b.on);
   const launchPanel = `<section class="panel ${blocked.length ? "panel-warn" : "panel-accent"}">
@@ -2809,7 +2801,9 @@ export async function superConsole(ctx) {
       <tr><td>미완료 재알림</td><td>미서명자 1인당 1통</td><td>보낼 때만</td></tr>
     </tbody></table>
     <p class="panel-hint">서명자 1인당 <b>3통</b>(요청·본인확인·완료). 본인확인을 끄면 2통.
-      이메일만 등록된 서명자는 메일로 나가 비용이 들지 않습니다.</p>
+      ${emailOn(env)
+        ? "이메일만 등록된 서명자는 메일로 나가 비용이 들지 않습니다."
+        : "<b>번호가 없는 서명자에게는 아무 안내도 나가지 않습니다</b> — 서명 링크를 문서 화면에서 복사해 직접 보내야 합니다."}</p>
     <div class="form-divider">서명자 수별 손익 <small>(본인확인 켠 기준 · 원가 ${(await costOf(db, "alimtalk")).toLocaleString()}원)</small></div>
     <div class="table-scroll"><table class="admin-table tpl-count">
       <thead><tr><th>서명자</th><th>발송</th><th>원가</th><th>매출</th><th>마진</th></tr></thead><tbody>
@@ -3013,7 +3007,7 @@ export async function superConsole(ctx) {
         <button class="btn btn-ghost btn-sm">정보 저장</button></form>
       <p class="panel-hint">공개 신청: <a href="/apply" target="_blank">/apply</a> · 약관: <a href="/terms" target="_blank">/terms</a> · 개인정보처리방침: <a href="/privacy" target="_blank">/privacy</a></p></section>
         ${superPanel}
-    <details class="panel ops-guide"><summary class="panel-title">🧭 운영 가이드 — 도메인·지도·이메일 설정 위치</summary>
+    <details class="panel ops-guide"><summary class="panel-title">🧭 운영 가이드 — 도메인·지도 설정 위치</summary>
       <div class="ops-body">
       <h3>네이버 지도 (도메인 바뀔 때마다!)</h3>
       <ol>
@@ -3030,12 +3024,6 @@ export async function superConsole(ctx) {
         <li>아래 상인회 목록의 <b>개별 도메인</b> 칸에 같은 도메인 입력·저장</li>
         <li>네이버 지도 사용 시 → 위의 Web 서비스 URL 에도 추가</li>
       </ol>
-      <h3>이메일 자동 발송 (비번 재설정·입점 승인 메일)</h3>
-      <ol>
-        <li><a href="https://resend.com" target="_blank" rel="noopener">Resend</a> 가입 → API 키 발급 (무료 월 3,000통)</li>
-        <li>Workers &amp; Pages → 이 워커 → Settings → Variables 에 <code>RESEND_API_KEY</code>(Secret), <code>MAIL_FROM</code> 등록</li>
-        <li>미설정 시에도 사이트는 정상 — 수동 안내 방식으로 동작합니다</li>
-      </ol>
       <h3>사진 직접 서빙 (설정 완료 ✓)</h3>
       <p>R2 버킷 공개 도메인(r2.dev) → 워커 변수 <code>MEDIA_PUBLIC_BASE</code>. 트래픽 커지면 커스텀 도메인으로 값만 교체.</p>
       </div></details>
@@ -3048,7 +3036,7 @@ export async function superConsole(ctx) {
 
 // ================= 계정 =================
 export function account(ctx) {
-  const { assoc, base, user, query, csrf } = ctx;
+  const { assoc, base, user, query, csrf, env } = ctx;
   // 2FA 상태별 UI
   let twofa;
   if (user.totp_enabled) {
@@ -3079,7 +3067,9 @@ export function account(ctx) {
     <h1 class="article-title">계정 설정</h1>${flashOf(query)}
     ${superLink}
     <section class="panel"><h2 class="panel-title">알림 받을 휴대폰</h2>
-      <p class="panel-hint">서명 요청·공지를 카카오 알림톡으로 받습니다. 비워 두면 이메일로만 안내됩니다.</p>
+      <p class="panel-hint">서명 요청·공지를 카카오 알림톡으로 받습니다. ${emailOn(env)
+        ? "비워 두면 이메일로만 안내됩니다."
+        : "<b>비워 두면 어떤 안내도 받지 못합니다</b> — 이 조직은 이메일 발송을 쓰지 않습니다."}</p>
       <form method="post" action="/account/phone" class="stack-form compact">
         <label>휴대폰<input type="tel" name="phone" value="${esc(user.phone ? user.phone.replace(/^(\d{3})(\d{3,4})(\d{4})$/, "$1-$2-$3") : "")}" maxlength="13" inputmode="numeric" placeholder="010-1234-5678" autocomplete="tel" /></label>
         <button class="btn btn-primary btn-sm">저장</button></form></section>

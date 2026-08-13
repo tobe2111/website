@@ -2221,7 +2221,7 @@ export async function applySubmit(ctx) {
     message: cap(form.get("message"), 2000),
   });
   await D.createNotification(db, { associationId: null, kind: "application", message: `새 입점 신청: ${assocName} (${contactEmail})`, link: "/super" });
-  return back("/apply", "신청이 접수되었습니다. 검토 후 이메일로 안내드리겠습니다.");
+  return back("/apply", "신청이 접수되었습니다. 검토 후 연락드리겠습니다.");
 }
 
 // ---------- 슈퍼: 입점 신청 승인/반려 ----------
