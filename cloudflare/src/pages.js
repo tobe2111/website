@@ -2639,6 +2639,8 @@ export async function superConsole(ctx) {
     if (!((await D.getSetting(db, key)) || "").trim()) tplMissing.push(TEMPLATES[kind] ? TEMPLATES[kind].label : kind);
   }
   const tplTotal = Object.keys(TEMPLATE_KEYS).length;
+  // 알림톡이 실제로 나갈 수 있는 상태인가 — 키 4개 + 서명 관련 템플릿이 모두 등록됐는가
+  const alimtalkReady = notifyEnabled(env) && tplMissing.length === 0;
   const blockers = [
     // 백업 암호화 키가 D1 안에만 있으면, D1 을 잃는 순간 R2 의 백업도 함께 못 쓰게 된다
     // (키가 백업 안에 들어 있어 백업을 열어야만 키가 나온다). 백업의 존재 이유가 사라지는 지점이다.
@@ -2660,9 +2662,11 @@ export async function superConsole(ctx) {
       why: tplMissing.length ? `미등록: <b>${tplMissing.map(esc).join(" · ")}</b> — 이 종류는 발송이 실패합니다.` : "",
       how: "아래 <b>알림톡·정산</b> 에 카카오에 등록할 문구 원문이 있습니다. 그대로 심사 신청하고, 받은 코드를 같은 화면에 적으세요.",
       go: ["#s-money", "알림톡·정산으로"] },
-    { on: emailOn(env), label: "이메일 발송",
-      why: "알림톡 심사가 끝나기 전까지 유일한 발송 수단입니다. 비밀번호 재설정 링크도 여기 걸립니다.",
-      how: "Resend(resend.com) 무료 플랜 가입 → 발신 도메인 인증 → 워커 변수에 등록",
+    // 발송 수단은 알림톡·이메일 중 '하나만' 있으면 된다. 둘 다 요구하면, 알림톡으로만
+    // 운영하기로 정한 곳에 영원히 지워지지 않는 빨간 항목이 남는다.
+    { on: emailOn(env) || alimtalkReady, label: "이메일 발송",
+      why: "지금은 알림톡도 이메일도 안 되어 <b>어떤 안내도 나가지 않습니다.</b> 둘 중 하나는 있어야 합니다.",
+      how: "알림톡을 쓰실 거면 위 두 항목만 끝내면 되고, 이 항목은 자동으로 사라집니다. 이메일도 함께 쓰시려면 Resend(resend.com) 무료 가입 → 발신 도메인 인증 → 워커 변수에 등록하세요.",
       code: "RESEND_API_KEY · MAIL_FROM" },
   ];
   const blocked = blockers.filter((b) => !b.on);

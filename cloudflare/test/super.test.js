@@ -447,3 +447,24 @@ test("조직 목록에 유형 배지가 붙는다 (셀렉트를 열지 않아도
   const html = await superHtml();
   assert.match(html, /한빛법무법인<\/a>\s*<span class="badge badge-info">전자계약<\/span>/);
 });
+
+// 발송 수단은 알림톡·이메일 중 하나면 된다.
+// 알림톡으로만 운영하기로 한 곳에 이메일이 영원히 빨간 항목으로 남으면 안 된다.
+test("알림톡이 완비되면 이메일은 더 이상 막고 있는 것이 아니다", async () => {
+  const kp = await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]);
+  const html = await superHtml({
+    SESSION_SECRET: "s", SIGN_PRIVATE_KEY: JSON.stringify(await crypto.subtle.exportKey("jwk", kp.privateKey)),
+    ALIGO_API_KEY: "a", ALIGO_USER_ID: "b", ALIGO_SENDER_KEY: "c", ALIGO_SENDER: "0212345678",
+    // RESEND 없음 — 이메일은 안 쓰기로 한 상태
+  }, Object.keys(TEMPLATE_KEYS).length);
+  assert.match(html, /준비 완료/, "알림톡만으로도 개통 준비가 끝나야 한다");
+  assert.ok(!/건 남음/.test(html));
+});
+
+test("알림톡도 이메일도 없으면 '아무 안내도 안 나간다'고 말한다", async () => {
+  const kp = await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]);
+  const html = await superHtml({
+    SESSION_SECRET: "s", SIGN_PRIVATE_KEY: JSON.stringify(await crypto.subtle.exportKey("jwk", kp.privateKey)),
+  }, 0);
+  assert.match(html, /어떤 안내도 나가지 않습니다/);
+});
