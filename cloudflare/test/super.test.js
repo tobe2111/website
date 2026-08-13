@@ -468,3 +468,21 @@ test("알림톡도 이메일도 없으면 '아무 안내도 안 나간다'고 �
   }, 0);
   assert.match(html, /어떤 안내도 나가지 않습니다/);
 });
+
+// "넣었는데 왜 안 변하지"를 사람에게 물어야만 알 수 있으면 안 된다.
+// 넷을 AND 로 묶어 놨으므로 하나만 빠져도 전부 꺼지는데, 화면은 그냥 '필요' 라고만 했다.
+test("알리고 키가 일부만 도달하면 어느 이름이 빠졌는지 화면이 짚어준다", async () => {
+  const html = await superHtml({ ALIGO_API_KEY: "a", ALIGO_USER_ID: "b", ALIGO_SENDER_KEY: "c" }); // SENDER 빠짐
+  const strip = (/<div class="envcheck">([\s\S]*?)<\/div>/.exec(html) || [])[1] || "";
+  assert.ok(strip, "변수별 도달 여부 줄이 있어야");
+  for (const k of ["ALIGO_API_KEY", "ALIGO_USER_ID", "ALIGO_SENDER_KEY"])
+    assert.match(strip, new RegExp(`is-on[^<]*"><b>✓</b> <code>${k}</code>`), `${k} 는 도달로 표시`);
+  assert.match(strip, /<span class=""><b>✗<\/b> <code>ALIGO_SENDER<\/code>/, "빠진 것만 ✗");
+});
+
+// 대시보드에 값을 붙여넣으면 줄바꿈이 딸려 오는 일이 잦다.
+// 공백만 든 값을 '있음'으로 세면 체크리스트는 초록인데 발송은 인증 실패로 죽는다.
+test("공백만 든 값은 있는 것으로 세지 않는다", async () => {
+  const html = await superHtml({ ALIGO_API_KEY: "a", ALIGO_USER_ID: "b", ALIGO_SENDER_KEY: "c", ALIGO_SENDER: "  \n " });
+  assert.match(html, /<span class=""><b>✗<\/b> <code>ALIGO_SENDER<\/code>/);
+});

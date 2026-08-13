@@ -6,7 +6,7 @@ import { verifyInviteToken, SALES_STAGES, otpRequired, selfSignupOn } from "./ap
 import { html, notFoundResponse, back, redirect } from "./http.js";
 import { countable } from "./traffic.js";
 import { galleryItem } from "./media-render.js";
-import { priceOf, costOf, jeonToWon, notifyEnabled, TEMPLATE_KEYS, TEMPLATES, billingMode, BILLING_MODES } from "./notify.js";
+import { priceOf, costOf, jeonToWon, notifyEnabled, ALIGO_VARS, hasCfg, TEMPLATE_KEYS, TEMPLATES, billingMode, BILLING_MODES } from "./notify.js";
 import { providerLabel } from "./embed.js";
 import { verifySignature, publicKeyJwk, publicKeyFingerprint, keyStorage, algorithm, verifyChain, verifyAnchor } from "./esign.js";
 import { renderPaper, fieldBox, FIELD_KINDS, paginate, pageCount } from "./paper.js";
@@ -2655,8 +2655,13 @@ export async function superConsole(ctx) {
       how: "아래 <b>설정·보안</b> 에 옮기는 순서가 있습니다. 이미 받은 서명이 있으면 <b>현행 키를 그대로</b> 옮기세요 — 새로 만들면 전부 검증 실패합니다.",
       go: ["#s-settings", "설정·보안으로"] },
     { on: notifyEnabled(env), label: "알림톡 발송 키",
-      why: "없으면 카카오 알림톡이 한 건도 나가지 않습니다. 서명 요청·재알림·본인확인이 전부 이메일로만 갑니다.",
-      how: "알리고(smartsms.aligo.in) 가입 → 카카오 발신프로필 등록 → 워커 <b>Settings → Variables</b> 에 Secret 4개 등록",
+      // 넷을 AND 로 묶어 두었기 때문에 하나만 빠져도 발송이 통째로 죽는다.
+      // "넣었는데 왜 안 변하냐"를 사람이 물어야만 알 수 있으면 안 된다 —
+      // 워커가 실제로 무엇을 받았는지 이름별로 보여 준다. 값은 절대 찍지 않는다.
+      why: `없으면 카카오 알림톡이 한 건도 나가지 않습니다. 넷 <b>모두</b> 있어야 켜집니다 — 하나라도 비면 전부 꺼집니다.
+        <div class="envcheck">${ALIGO_VARS.map((k) => `<span class="${hasCfg(env, k) ? "is-on" : ""}"><b>${hasCfg(env, k) ? "✓" : "✗"}</b> <code>${k}</code></span>`).join("")}</div>
+        <p class="muted">✗ 는 이 워커가 그 이름을 <b>못 받고 있다</b>는 뜻입니다. 대시보드에 보이는데 여기가 ✗ 라면 ① 이름 철자·앞뒤 공백, ② <b>Deploy</b> 를 안 누름, ③ Preview 환경에 넣음, ④ <b>Text 로 넣어서 배포 때 지워짐</b>(<code>wrangler.toml</code> 의 <code>[vars]</code> 가 평문 변수를 덮어씁니다 — 반드시 <b>Secret</b>) 중 하나입니다.</p>`,
+      how: "알리고(smartsms.aligo.in) 가입 → 카카오 발신프로필 등록 → 워커 <b>Settings → Variables and Secrets</b> 에 <b>Secret</b> 4개 등록 후 <b>Deploy</b>",
       code: "ALIGO_API_KEY · ALIGO_USER_ID · ALIGO_SENDER_KEY · ALIGO_SENDER" },
     { on: tplMissing.length === 0, label: `알림톡 템플릿 코드 (${tplTotal - tplMissing.length}/${tplTotal})`,
       why: tplMissing.length ? `미등록: <b>${tplMissing.map(esc).join(" · ")}</b> — 이 종류는 발송이 실패합니다.` : "",
@@ -2681,6 +2686,9 @@ export async function superConsole(ctx) {
         ${b.on ? "" : `${b.why ? `<p>${b.why}</p>` : ""}<p>${b.how}</p>
           ${b.code ? `<code>${esc(b.code)}</code>` : ""}
           ${b.go ? `<a href="${b.go[0]}" data-goto="${b.go[0].replace("#s-", "")}">${esc(b.go[1])} →</a>` : ""}`}</div></li>`).join("")}</ul>
+    <p class="panel-hint">이 화면이 지금 돌고 있는 배포:
+      <code>${esc((env.CF_VERSION_METADATA && env.CF_VERSION_METADATA.id ? String(env.CF_VERSION_METADATA.id) : "").slice(0, 8) || "확인 불가")}</code>
+      — 대시보드 <b>Deployments</b> 맨 위 버전과 같으면 최신입니다. 다르면 아직 반영 전이니 잠시 뒤 새로고침하세요.</p>
   </section>`;
 
   const securityPanel = `<section class="panel ${keyMode === "secret" ? "" : "panel-warn"}"><h2 class="panel-title">전자서명 보안

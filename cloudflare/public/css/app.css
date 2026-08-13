@@ -409,6 +409,12 @@ a.bc-val:hover{text-decoration:underline}
 .wire-list code{font-size:.76rem;color:var(--muted);background:var(--bg-alt);padding:2px 6px;border-radius:4px}
 .wire-dot{flex:none;width:9px;height:9px;margin-top:7px;border-radius:50%;background:var(--line)}
 .wire-list li.is-on .wire-dot{background:var(--green-600)}
+/* 변수 이름별 도달 여부 — "넣었는데 왜 안 되지"를 화면에서 바로 가르는 줄. 값은 절대 넣지 않는다. */
+.envcheck{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 2px}
+.envcheck span{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:6px;
+  background:var(--bg-alt);border:1px solid var(--line);font-size:.76rem;color:var(--no-fg)}
+.envcheck span.is-on{color:var(--green-700);border-color:var(--green-600)}
+.envcheck b{font-size:.8rem}
 
 /* 영업 파이프라인 */
 .stage-strip{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 14px}

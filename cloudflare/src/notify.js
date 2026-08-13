@@ -10,7 +10,16 @@
 import * as D from "./db.js";
 
 // ---------- 설정 ----------
-export const notifyEnabled = (env) => !!(env.ALIGO_API_KEY && env.ALIGO_USER_ID && env.ALIGO_SENDER_KEY && env.ALIGO_SENDER);
+// 알림톡 발송에 필요한 워커 변수 4종. 목록을 여기 한 곳에만 두어야
+// 화면(개통 체크리스트)의 진단과 실제 판정이 어긋나지 않는다.
+export const ALIGO_VARS = ["ALIGO_API_KEY", "ALIGO_USER_ID", "ALIGO_SENDER_KEY", "ALIGO_SENDER"];
+// 대시보드에 값을 붙여넣을 때 줄바꿈·공백이 딸려 들어가는 일이 흔하다. 그대로 보내면
+// 알리고가 "인증 실패"만 돌려줘 원인을 찾기 어렵다 — 읽는 지점에서 한 번 다듬는다.
+const cfg = (env, key) => String(env[key] == null ? "" : env[key]).trim();
+// 화면(개통 체크리스트)이 판정과 똑같은 잣대로 표시하도록 같은 함수를 쓴다.
+export const hasCfg = (env, key) => !!cfg(env, key);
+// 넷 중 하나라도 비면 발송 경로 전체가 꺼진다 — 부분 동작은 없다.
+export const notifyEnabled = (env) => ALIGO_VARS.every((k) => !!cfg(env, k));
 
 const DEFAULT_PRICE = { alimtalk: 22, sms: 33 }; // 판매가 기본값 (원/건, 정수)
 
@@ -148,7 +157,7 @@ let tokenCache = { token: "", exp: 0 };
 async function aligoToken(env) {
   const now = Date.now();
   if (tokenCache.token && tokenCache.exp > now) return tokenCache.token;
-  const body = new URLSearchParams({ apikey: env.ALIGO_API_KEY, userid: env.ALIGO_USER_ID });
+  const body = new URLSearchParams({ apikey: cfg(env, "ALIGO_API_KEY"), userid: cfg(env, "ALIGO_USER_ID") });
   const res = await fetch("https://kakaoapi.aligo.in/akv10/token/create/30/s/", { method: "POST", body });
   const j = await res.json().catch(() => ({}));
   if (String(j.code) !== "0" || !j.token) throw new Error("토큰 발급 실패: " + (j.message || res.status));
@@ -161,12 +170,12 @@ async function aligoToken(env) {
 async function sendVia(env, { to, templateCode, text, smsFallback = true, buttonName = "", buttonUrl = "" }) {
   const token = await aligoToken(env);
   const body = new URLSearchParams({
-    apikey: env.ALIGO_API_KEY,
-    userid: env.ALIGO_USER_ID,
+    apikey: cfg(env, "ALIGO_API_KEY"),
+    userid: cfg(env, "ALIGO_USER_ID"),
     token,
-    senderkey: env.ALIGO_SENDER_KEY,
+    senderkey: cfg(env, "ALIGO_SENDER_KEY"),
     tpl_code: templateCode,
-    sender: env.ALIGO_SENDER,
+    sender: cfg(env, "ALIGO_SENDER"),
     receiver_1: to,
     subject_1: "알림",
     message_1: text,
