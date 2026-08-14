@@ -445,9 +445,9 @@ test("개통 체크리스트: 시크릿 값 자체는 화면에 절대 찍지 �
     assert.ok(!html.includes(v), `시크릿 값 노출: ${v}`);
 });
 
-test("조직 목록에 유형 배지가 붙는다 (셀렉트를 열지 않아도 구분)", async () => {
+test("고객사 카드에 유형 배지가 붙는다 (열어 보지 않아도 구분)", async () => {
   const html = await superHtml();
-  assert.match(html, /한빛법무법인<\/a>\s*<span class="badge badge-info">전자계약<\/span>/);
+  assert.match(html, /<b>한빛법무법인<\/b>\s*<span class="badge badge-info">전자계약<\/span>/);
 });
 
 // 발송 수단은 알림톡·이메일 중 하나면 된다.
@@ -613,10 +613,10 @@ test("운영사 콘솔 통계는 조직 유형별로 센다", async () => {
     body: new URLSearchParams({ _csrf: tk, email: "kc@platform.kr", password: "super1234" }) });
   const jar = [seed, ...(lr.headers.getSetCookie?.() || []).map((c) => c.split(";")[0])].join("; ");
   const html = await (await f("/super", { headers: { cookie: jar } })).text();
-  const cards = (/<div class="stat-cards">([\s\S]*?)<\/div>\s*<\/div>/.exec(html) || [])[1] || html;
-  assert.match(cards, /<span class="stat-num">2<\/span><span class="stat-label">전자계약/, "전자계약 2곳이 따로 세어져야");
-  assert.ok(!/<span class="stat-label">상인회<\/span><\/div>\s*<div class="stat-card"><span class="stat-num">\d+<\/span><span class="stat-label">승인 업체/.test(html)
-    || /전자계약/.test(cards), "전체를 '상인회' 하나로 뭉뚱그리면 안 된다");
+  const sub = (/<p class="dash-sub">([\s\S]*?)<\/p>/.exec(html) || [])[1] || "";
+  assert.match(sub, /전자계약 2/, "전자계약 2곳이 따로 세어져야");
+  assert.match(sub, /상인회 1/);
+  assert.match(sub, /고객사 3곳/);
 });
 
 // ── 조직 하나를 모아 보는 화면
@@ -768,4 +768,27 @@ test("제품 소개에 법적 효력과 '안 되는 것'이 함께 적혀 있다
   assert.match(html, /전자서명법/);
   assert.match(html, /다만, 이건 안 됩니다/, "못 하는 것을 안 적으면 도입 후에 사고가 난다");
   assert.match(html, /인감증명서를 대신하지 않습니다/);
+});
+
+// ── 화면이 복잡해서 못 쓰겠다는 말이 나왔다. 같은 것을 두 군데 그리던 게 원인이었다.
+test("고객사 목록은 화면에 한 번만 나온다", async () => {
+  const html = await superHtml();
+  assert.equal((html.match(/class="org-grid"/g) || []).length, 1, "같은 목록을 두 번 그리면 어느 쪽이 진짜인지 헷갈린다");
+  assert.ok(!/data-tab="assoc"/.test(html), "조직 탭은 홈에 합쳤다");
+  assert.ok(!/<th>개별 도메인<\/th>/.test(html), "큰 표는 조직 화면이 대신한다");
+});
+
+test("탭은 넷이고 홈이 곧 고객사 화면이다", async () => {
+  const html = await superHtml();
+  const tabs = [...html.matchAll(/data-tab="(\w+)"/g)].map((m) => m[1]);
+  assert.deepEqual([...new Set(tabs)], ["home", "sales", "money", "settings"]);
+});
+
+// 표를 없애면서 신호까지 잃으면 안 된다 — 오래 조용한 곳은 영업이 봐야 할 대상이다.
+test("오래 조용한 고객사는 카드에서도 눈에 띈다", async () => {
+  const S = await superSession();
+  const a = await D.createAssociation(S.env.DB, { slug: "cold", name: "잠든곳", kind: "merchant" });
+  await S.env.DB.prepare("UPDATE associations SET created_at='2020-01-01 00:00:00' WHERE id=?").bind(a.id).run();
+  const html = await S.get("/super");
+  assert.match(html, /class="act-stamp is-cold"/);
 });

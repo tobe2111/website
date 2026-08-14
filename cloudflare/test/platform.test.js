@@ -93,8 +93,8 @@ test("상인회별 지도 키 오버라이드: 슈퍼 저장 → 지도 페이�
   assert.equal((await D.getAssociationById(env.DB, a.id)).map_client_id, "tenantkey99");
   html = await (await get(env, jar(), "/t/s/map")).text();
   assert.match(html, /maps\.js\?ncpKeyId=tenantkey99/);
-  // 슈퍼 콘솔에 입력칸 노출
-  assert.match(await (await get(env, j, "/super")).text(), /name="map_client_id" value="tenantkey99"/);
+  // 조직 화면에 입력칸 노출
+  assert.match(await (await get(env, j, `/super/org/${a.id}`)).text(), /name="map_client_id" value="tenantkey99"/);
   // 잘못된 형식은 거부
   r = await post(env, j, `/super/association/${a.id}/mapkey`, { map_client_id: "bad key!" }, "/super");
   assert.equal((await D.getAssociationById(env.DB, a.id)).map_client_id, "tenantkey99");

@@ -2675,7 +2675,7 @@ export async function superOrg(ctx) {
 
   const body = `<section class="dash"><div class="container">
     <div class="dash-head"><div>
-      <p class="section-eyebrow"><a href="/super#s-assoc" data-goto="assoc">← 고객사 목록</a></p>
+      <p class="section-eyebrow"><a href="/super#s-home" data-goto="home">← 고객사 목록</a></p>
       <h1 class="dash-title">${esc(a.name)}
         <span class="badge ${K.badge}">${esc(K.label)}</span>
         ${a.active ? '<span class="badge badge-ok">활성</span>' : '<span class="badge badge-no">비활성</span>'}</h1>
@@ -2751,12 +2751,14 @@ export async function superOrg(ctx) {
         <form method="post" action="/super/association/${a.id}/demo" class="inline-form"
           data-confirm="'${esc(a.name)}' 을(를) 데모용 샘플로 채웁니다.&#10;&#10;⚠️ 이 조직의 기존 점포·공지·행사·게시글이 모두 삭제됩니다. (다른 조직은 영향 없음)&#10;&#10;계속할까요?">${ret}
           <button class="btn btn-ghost btn-sm">${demoAt ? "데모 다시 채우기" : "데모 채우기"}</button></form></span>
-      ${demoAt ? `<p class="panel-hint">✓ 데모 적용 ${esc(kstStamp(demoAt, { year: false }))}</p>` : ""}
-      ${env.NAVER_MAP_CLIENT_ID ? `<div class="form-divider">지도 키</div>
+      <p class="panel-hint">${demoAt
+        ? `✓ 데모 적용 ${esc(kstStamp(demoAt, { year: false }))}`
+        : '<span class="demo-stamp is-none">데모 미적용</span>'}</p>
+      ${`<div class="form-divider">지도 키</div>
       <form method="post" action="/super/association/${a.id}/mapkey" class="stack-form compact">${ret}
         <label class="mini-label">이 조직만 다른 Maps 앱 쓰기 <small>(비우면 공용 키)</small>
           <input type="text" name="map_client_id" value="${esc(a.map_client_id || "")}" placeholder="공용이면 비워 두세요" /></label>
-        <button class="btn btn-ghost btn-sm">저장</button></form>` : ""}
+        <button class="btn btn-ghost btn-sm">저장</button></form>`}
     </section>` : ""}
 
     <section class="panel panel-warn"><h2 class="panel-title">되돌릴 수 없는 것</h2>
@@ -2781,7 +2783,6 @@ export async function superConsole(ctx) {
   const list = await D.listAllAssociations(db);
   const auditLog = await D.listAudit(db, null, 15);
   const pendingApps = await D.listApplications(db, "pending");
-  const usage = await D.usageByAssociation(db);
   // 보조 정보(데모 시각·영업 메모·마지막 활동·관리자 목록)는 하나가 실패해도
   // 콘솔 전체가 500 으로 죽지 않게 각각 감쌉니다. 상인회 목록·승인 같은 본 기능은
   // 못 쓰게 되면 안 되는 화면이기 때문입니다. 실패한 항목은 화면에 그대로 알립니다.
@@ -2792,19 +2793,8 @@ export async function superConsole(ctx) {
       return fallback;
     }
   };
-  const demoSeeded = new Map((await soft("데모 적용 시각", () => D.demoSeedStamps(db), [])).map((r) => [r.aid, r.seeded_at]));
   const appNotes = await soft("영업 기록", () => D.listApplicationNotes(db), []);
   const lastAct = new Map((await soft("마지막 활동", () => D.lastActivityByAssociation(db), [])).map((r) => [r.aid, r.last_at]));
-  const adminsBy = new Map();
-  for (const u of await soft("관리자 계정", () => D.listAllAdmins(db), [])) {
-    if (!adminsBy.has(u.association_id)) adminsBy.set(u.association_id, []);
-    adminsBy.get(u.association_id).push(u);
-  }
-  const aliasBy = new Map();
-  for (const r of await D.listSlugAliases(db)) {
-    if (!aliasBy.has(r.association_id)) aliasBy.set(r.association_id, []);
-    aliasBy.get(r.association_id).push(r.slug);
-  }
   const platformMode = (await D.getSetting(db, "platform_mode")) === "1";
   const siteName = (await D.getSetting(db, "site_name")) || "상인회 플랫폼";
   const operator = (await D.getSetting(db, "operator")) || "";
@@ -2825,12 +2815,12 @@ export async function superConsole(ctx) {
       <div><b>${esc(u.email)}</b> <span class="badge ${u.totp_enabled ? "badge-ok" : "badge-muted"}">${u.totp_enabled ? "2단계 인증 사용" : "2단계 인증 없음"}</span>
         <p>${esc(u.name || "")} · 생성 ${esc(kstDate(u.created_at))}</p></div></li>`).join("")}</ul>
     ${supers.some((u) => !u.totp_enabled) ? `<p class="panel-hint">이 계정 하나가 뚫리면 <b>모든 고객사</b>의 데이터가 열립니다. <a href="/account">계정 설정</a>에서 2단계 인증을 켜 두시길 권합니다.</p>` : ""}</section>`;
-  const wiredPanel = `<section class="panel"><h2 class="panel-title">있으면 좋은 것 <span class="badge ${wired.every((w) => w[1]) ? "badge-ok" : "badge-muted"}">${wired.filter((w) => w[1]).length}/${wired.length} 켜짐</span></h2>
+  const wiredPanel = `<details class="panel panel-fold"><summary class="panel-title">있으면 좋은 것 <span class="badge ${wired.every((w) => w[1]) ? "badge-ok" : "badge-muted"}">${wired.filter((w) => w[1]).length}/${wired.length} 켜짐</span></summary>
     <p class="panel-hint">모두 선택 사항입니다. 꺼져 있어도 사이트는 정상 동작하며, 값은 <b>Workers &amp; Pages → 이 워커 → Settings → Variables</b> 에서 넣습니다.</p>
     <ul class="wire-list">${wired.map(([label, on, keys, help]) => `<li class="${on ? "is-on" : ""}">
       <span class="wire-dot" aria-hidden="true"></span>
       <div><b>${esc(label)}</b> <span class="badge ${on ? "badge-ok" : "badge-muted"}">${on ? "켜짐" : "안 켜짐"}</span>
-        <p>${esc(help)}</p><code>${esc(keys)}</code></div></li>`).join("")}</ul></section>`;
+        <p>${esc(help)}</p><code>${esc(keys)}</code></div></li>`).join("")}</ul></details>`;
   // ----- 알림톡 재판매: 판매단가·템플릿·충전 승인·매출 -----
   const [pendCredits, notifyUsage, unitPrice] = await Promise.all([
     D.listPendingCreditOrders(db), D.platformMessageUsage(db), priceOf(db, "alimtalk"),
@@ -2861,14 +2851,6 @@ export async function superConsole(ctx) {
   const totalRevenue = notifyUsage.reduce((a, u) => a + (u.revenue || 0), 0);
   const totalCharged = notifyUsage.reduce((a, u) => a + (u.charged || 0), 0);
   const totalSent = notifyUsage.reduce((a, u) => a + (u.sent || 0), 0);
-  const notifyRows = notifyUsage.map((u) => `<tr><td>${esc(u.name)}</td>
-    <td>${(u.sent || 0).toLocaleString()}건</td><td>${(u.revenue || 0).toLocaleString()}원</td>
-    <td>${(u.charged || 0).toLocaleString()}원</td><td>${(u.balance || 0).toLocaleString()}원</td>
-    <td><form method="post" action="/super/association/${u.id}/unit-price" class="inline-form price-form">
-      <input type="number" name="unit_price" value="${u.unit_price || 0}" min="0" max="1000" step="1" aria-label="${esc(u.name)} 단가" />
-      <button class="btn btn-xs btn-ghost">저장</button></form>
-      <small>${u.unit_price ? `전용 ${u.unit_price}원` : `기본 ${unitPrice}원`}</small></td></tr>`).join("")
-    || `<tr><td colspan="6" class="empty">조직이 없습니다.</td></tr>`;
   // ----- 전자서명 키·사슬 상태 (보안) -----
   const keyMode = keyStorage(env);
   const keyFp = await publicKeyFingerprint(env).catch(() => "(확인 불가)");
@@ -3125,9 +3107,6 @@ export async function superConsole(ctx) {
     </div>
     <div class="form-divider">충전 신청 (입금 확인 후 승인)</div>
     <div class="table-scroll"><table class="admin-table"><thead><tr><th>조직</th><th>금액</th><th>입금자·신청</th><th>처리</th></tr></thead><tbody>${creditRows}</tbody></table></div>
-    <div class="form-divider">조직별 사용</div>
-    <div class="table-scroll"><table class="admin-table"><thead><tr><th>조직</th><th>발송</th><th>매출</th><th>충전</th><th>잔액</th><th>단가(원/건)</th></tr></thead><tbody>${notifyRows}</tbody></table></div>
-    <p class="panel-hint">단가를 <b>0</b> 으로 두면 플랫폼 기본가(${unitPrice.toLocaleString()}원)를 씁니다. 규모가 큰 곳에 낮은 단가를, 작은 곳엔 기본가를 적용하는 식으로 조직마다 다르게 받을 수 있습니다.</p>
     <div class="form-divider">단가·템플릿 설정</div>
     <form method="post" action="/super/notify-settings" class="stack-form">
       <label class="mini-label">알림톡 판매단가 (원/건)<input type="number" name="price_alimtalk" value="${unitPrice}" min="0" max="1000" required /></label>
@@ -3197,12 +3176,8 @@ export async function superConsole(ctx) {
       : `<p class="panel-hint">발송당 과금은 인원이 늘어도 마진율이 일정합니다(${unitPrice ? Math.round(((unitPrice - baseCost) / unitPrice) * 100) : 0}%).</p>`}
     </section>`;
 
-  const usagePanel = `<section class="panel"><h2 class="panel-title">조직별 사용량 <span class="badge badge-muted">R2 총 ${fmtBytes(ps.storage)}</span></h2>
-    <div class="table-scroll"><table class="admin-table"><thead><tr><th>조직</th><th>회원</th><th>미디어</th><th>저장용량</th><th>플랜</th></tr></thead><tbody>
-      ${usage.length ? usage.map((u) => `<tr><td>${esc(u.name)}</td><td>${u.members}명</td><td>${u.media_count}개</td><td>${fmtBytes(u.storage)}</td><td>${esc((PLANS[u.plan] || PLANS.free).label)}</td></tr>`).join("") : `<tr><td colspan="5" class="empty">데이터 없음</td></tr>`}
-    </tbody></table></div>
-    <p class="panel-hint">R2 무료 한도 10GB 기준 사용량입니다. 사진은 업로드 시 자동 축소(WebP)되어 저장됩니다.</p></section>`;
-  const planOpts = (cur) => PLAN_KEYS.map((k) => `<option value="${k}"${k === cur ? " selected" : ""}>${esc(PLANS[k].label)}</option>`).join("");
+  const usagePanel = `<details class="panel panel-fold"><summary class="panel-title">저장용량 <span class="badge badge-muted">R2 총 ${fmtBytes(ps.storage)}</span></summary>
+    <p class="panel-hint">무료 한도 10GB 기준입니다. 조직별 사용량은 그 조직 화면에서 봅니다.</p></details>`;
   // 영업 파이프라인 — 신청/발굴 건을 단계별로 굴리고, 연락 기록을 그 자리에 남깁니다.
   const noteMap = new Map();
   for (const n of appNotes) { if (!noteMap.has(n.application_id)) noteMap.set(n.application_id, []); noteMap.get(n.application_id).push(n); }
@@ -3245,42 +3220,6 @@ export async function superConsole(ctx) {
           <label>연락처 (선택)<input type="text" name="contact_phone" maxlength="40" /></label></div>
         <label>메모<textarea name="message" rows="2" maxlength="2000" placeholder="어디서 알게 됐는지, 규모, 관심사 등"></textarea></label>
         <button class="btn btn-primary btn-sm">영업 목록에 추가</button></form></details></section>`;
-  const rows = list.map((a) => `<tr><td><a href="/t/${esc(a.slug)}" target="_blank">${esc(a.name)}</a>
-      <span class="badge ${kindById(a.kind).badge}">${esc(kindById(a.kind).label)}</span>${kindById(a.kind).usesLanding ? `<span class="badge badge-muted">${esc((PRESETS[a.preset] || {}).label || "")}</span>` : ""}
-      <form method="post" action="/super/association/${a.id}/slug" class="domain-form" title="주소를 바꿔도 옛 주소로 들어온 사람은 새 주소로 자동 이동합니다.">
-        <span class="slug-pre">/t/</span><input type="text" name="slug" value="${esc(a.slug)}" pattern="[a-z0-9-]+" maxlength="40" />
-        <button class="btn btn-xs btn-ghost">주소</button></form>
-      ${(aliasBy.get(a.id) || []).length ? `<small class="domain-hint">옛 주소 ${(aliasBy.get(a.id) || []).map((x) => esc(prettyPath(x))).join(", ")} → 자동 이동</small>` : ""}
-      <ul class="admin-mini">${(adminsBy.get(a.id) || []).map((u) => `<li><span title="${esc(u.name)}">${esc(u.email)}</span>
-        <form method="post" action="/super/admin/${u.id}/reset-password" data-confirm="${esc(u.email)} 의 임시 비밀번호를 발급할까요?&#10;기존 비밀번호는 즉시 무효가 됩니다."><button class="btn btn-xs btn-ghost" title="로그인이 안 될 때 임시 비밀번호를 발급합니다">임시 비번</button></form></li>`).join("") || `<li class="admin-none">관리자 계정 없음</li>`}</ul></td>
-    <td><form method="post" action="/super/association/${a.id}/domain" class="domain-form">
-      <input type="text" name="domain" value="${esc(a.custom_domain || "")}" placeholder="예: seocho-market.kr" />
-      <button class="btn btn-xs btn-ghost">저장</button></form>
-      ${a.custom_domain ? `<small class="domain-hint">✅ <a href="https://${esc(a.custom_domain)}" target="_blank">${esc(a.custom_domain)}</a></small>` : ""}
-      <form method="post" action="/super/association/${a.id}/mapkey" class="domain-form" style="margin-top:4px" title="이 조직만 다른 Maps 앱을 쓰게 할 때 (비우면 공용 키)">
-      <input type="text" name="map_client_id" value="${esc(a.map_client_id || "")}" placeholder="지도 키(선택·공용이면 비움)" />
-      <button class="btn btn-xs btn-ghost">저장</button></form></td>
-    <td><form method="post" action="/super/association/${a.id}/plan" class="plan-form"><select name="plan">${planOpts(a.plan || "free")}</select><button class="btn btn-xs btn-ghost">변경</button></form>
-      <form method="post" action="/super/association/${a.id}/kind" class="plan-form" style="margin-top:4px" title="보이는 메뉴와 관리자 화면이 바뀝니다. 데이터는 지워지지 않습니다.">
-        <select name="kind">${KIND_KEYS.map((k) => `<option value="${k}"${(a.kind || "merchant") === k ? " selected" : ""}>${esc(KINDS[k].label)}</option>`).join("")}</select>
-        <select name="preset" title="랜딩형 제품의 업종 문구">${PRESET_KEYS.map((k) => `<option value="${k}"${(a.preset || "franchise") === k ? " selected" : ""}>${esc(PRESETS[k].label)}</option>`).join("")}</select>
-        <button class="btn btn-xs btn-ghost">유형</button></form></td>
-    <td>${a.active ? '<span class="badge badge-ok">활성</span>' : '<span class="badge badge-no">비활성</span>'}
-      ${(() => { const t = lastAct.get(a.id); if (!t) return `<small class="act-stamp is-cold">활동 없음</small>`;
-        const days = Math.floor((Date.now() - Date.parse(t.includes("T") ? t : t.replace(" ", "T") + "Z")) / 86400000);
-        return `<small class="act-stamp${days >= 30 ? " is-cold" : ""}" title="점포·공지·행사·게시글·서명을 통틀어 마지막으로 움직인 시각">${days <= 0 ? "오늘 활동" : `${days}일 전 활동`}</small>`; })()}</td>
-    <td class="actions-cell"><a class="btn btn-xs btn-ghost" href="/t/${esc(a.slug)}/admin">관리</a>
-      <form method="post" action="/super/association/${a.id}/toggle"><button class="btn btn-xs btn-ghost">${a.active ? "비활성화" : "활성화"}</button></form>
-      <form method="post" action="/super/association/${a.id}/starter" data-confirm="'${esc(a.name)}' 에 시작 세트를 넣을까요?&#10;&#10;첫 공지 3건과 가입 동의서를 넣습니다. 이미 있는 것은 건드리지 않습니다."><button class="btn btn-xs btn-ghost" title="실전용 — 비어 있는 항목만 채웁니다(가짜 점포·회원 없음)">시작 세트</button></form>
-      <span class="demo-cell">${demoSeeded.has(a.id)
-        ? `<small class="demo-stamp" title="마지막으로 데모 콘텐츠를 채운 시각">✓ 데모 적용 ${esc(kstStamp(demoSeeded.get(a.id), { year: false }))}</small>`
-        : `<small class="demo-stamp is-none">데모 미적용</small>`}
-      <form method="post" action="/super/association/${a.id}/demo" data-confirm="'${esc(a.name)}' 을(를) 데모용 샘플 사이트로 채웁니다.&#10;&#10;⚠️ 이 상인회의 기존 점포·공지·행사·게시글이 모두 삭제되고 데모 콘텐츠로 대체됩니다. (다른 상인회는 영향 없음)&#10;&#10;계속할까요?"><button class="btn btn-xs btn-ghost" title="영업 소개용 샘플 콘텐츠(점포 25곳·메뉴·공지·행사·게시판·투표·전자서명)를 한 번에 채웁니다">${demoSeeded.has(a.id) ? "데모 다시 채우기" : "데모 채우기"}</button></form></span>
-      <details class="danger-del"><summary class="btn btn-xs btn-ghost">삭제</summary>
-        <form method="post" action="/super/association/${a.id}/delete" data-confirm="정말 '${esc(a.name)}' 을(를) 삭제할까요?&#10;&#10;⚠️ 점포·회원 계정·공지·게시글·서명 기록이 모두 사라지며 되돌릴 수 없습니다.">
-          <p class="del-warn">되돌릴 수 없습니다. 확인용으로 주소 <code>${esc(a.slug)}</code> 를 입력하세요.</p>
-          <input type="text" name="confirm_slug" placeholder="${esc(a.slug)}" required autocomplete="off" />
-          <button class="btn btn-xs btn-danger">영구 삭제</button></form></details></td></tr>`).join("") || `<tr><td colspan="5" class="empty">조직이 없습니다.</td></tr>`;
   // 첫 화면에 고객사를 올린다 — 매일 여는 것이 이것인데 탭 안쪽에 묻혀 있었다.
   // 여기서는 고르기만 한다. 손보는 일은 조직 화면(/super/org/:id) 한 곳에 모여 있다.
   const balByAssoc = new Map(notifyUsage.map((u) => [u.id, u.balance || 0]));
@@ -3293,14 +3232,15 @@ export async function superConsole(ctx) {
       <span class="org-top"><b>${esc(a.name)}</b>
         <span class="badge ${K.badge}">${esc(K.label)}</span>${a.active ? "" : '<span class="badge badge-no">비활성</span>'}</span>
       <span class="org-meta"><code>${esc(prettyPath("/t/" + a.slug))}</code></span>
-      <span class="org-foot">${d === null ? "활동 없음" : d <= 0 ? "오늘 활동" : `${d}일 전 활동`}
+      <span class="org-foot"><span class="act-stamp${d === null || d >= 30 ? " is-cold" : ""}"
+        title="점포·공지·행사·게시글·서명을 통틀어 마지막으로 움직인 시각">${d === null ? "활동 없음" : d <= 0 ? "오늘 활동" : `${d}일 전 활동`}</span>
         · 알림톡 ${bal > 0 ? `${bal.toLocaleString()}원` : "<b class=\"txt-warn\">잔액 없음</b>"}</span></a>`;
   }).join("");
   const orgPanel = `<section class="panel"><div class="panel-head"><h2 class="panel-title">고객사 <span class="badge badge-muted">${list.length}곳</span></h2>
-      <span class="pill-row"><a class="btn btn-xs btn-ghost" href="#s-assoc" data-goto="assoc">새로 만들기 · 전체 표</a></span></div>
+      <span class="pill-row"><a class="btn btn-xs btn-ghost" href="#new-assoc">＋ 새 조직</a></span></div>
     ${list.length ? `<div class="org-grid">${orgCards}</div>
       <p class="panel-hint">한 곳을 누르면 주소·유형·요금제·알림톡·관리자 계정이 <b>한 화면에</b> 모여 있습니다.</p>`
-      : `<p class="panel-hint">아직 고객사가 없습니다. <a href="#s-assoc" data-goto="assoc">첫 조직 만들기 →</a></p>`}
+      : `<p class="panel-hint">아직 고객사가 없습니다. <a href="#new-assoc">첫 조직 만들기 →</a></p>`}
   </section>`;
 
   // 콘솔이 한 화면에 14개 패널로 쏟아지던 것을 5개 묶음으로 나눈다.
@@ -3314,8 +3254,7 @@ export async function superConsole(ctx) {
     ? `<div class="super-todo">${todo.map((t) => `<a href="#s-${t.tab}" class="super-todo-item"><b>${t.n}</b><span>${esc(t.label)}</span></a>`).join("")}</div>`
     : `<div class="super-todo is-clear"><span>지금 처리할 일이 없습니다 ✓</span></div>`;
   const TABS = [
-    ["home", "홈", "◎", blocked.length],
-    ["assoc", "조직", "▤"],           // 상인회와 전자계약 조직이 함께 들어 있다
+    ["home", "고객사", "▤", blocked.length],
     ["sales", "영업", "◈", pendingApps.length],
     ["money", "알림톡·정산", "₩", pendCredits.length],
     ["settings", "설정·보안", "⚙", keyMode === "secret" ? 0 : 1],
@@ -3329,7 +3268,7 @@ export async function superConsole(ctx) {
   const body = `<section class="dash"><div class="container">
     <div class="dash-head"><div><p class="section-eyebrow">리스터코퍼레이션 · 운영사</p><h1 class="dash-title">운영사 콘솔</h1>
       <p class="dash-sub">고객사 ${ps.associations}곳 · 사용자 ${ps.users}명 — ${kindCounts.map(([, label, n]) => `${esc(label)} ${n}`).join(" · ")}</p></div>
-      <div class="dash-head-actions"><a href="#s-assoc" class="btn btn-primary btn-sm" data-goto="assoc">＋ 새 조직</a>
+      <div class="dash-head-actions"><a href="#new-assoc" class="btn btn-primary btn-sm" data-goto="home">＋ 새 조직</a>
         <form method="post" action="/logout"><button class="btn btn-ghost btn-sm">로그아웃</button></form></div></div>${flashOf(query)}
     ${loadWarnings.length ? `<div class="flash flash-err"><b>일부 정보를 불러오지 못했습니다.</b> 나머지 기능은 그대로 쓰실 수 있습니다.<br />${loadWarnings.map((w) => esc(w)).join("<br />")}</div>` : ""}
     ${todoBar}
@@ -3339,17 +3278,9 @@ export async function superConsole(ctx) {
         ${launchPanel}
         ${cronAlive ? "" : cronPanel}
         ${orgPanel}
-    <div class="stat-cards">${kindCounts.map(([, label, n]) =>
-      `<div class="stat-card"><span class="stat-num">${n}</span><span class="stat-label">${esc(label)}</span></div>`).join("")}
-      <div class="stat-card"><span class="stat-num">${ps.businesses}</span><span class="stat-label">승인 업체</span></div>
-      <div class="stat-card"><span class="stat-num">${ps.users}</span><span class="stat-label">사용자</span></div>
-      <div class="stat-card"><span class="stat-num">${ps.media}</span><span class="stat-label">미디어</span></div></div>
         <section class="panel"><h2 class="panel-title">이번 달 알림톡 손익 <span class="badge ${margin > 0 ? "badge-ok" : "badge-muted"}">${margin.toLocaleString()}원</span></h2>
           <p class="panel-hint">건당 판매 ${unitPrice.toLocaleString()}원 · 마진율 ${marginPct}%. 자세한 내역은 <a href="#s-money" data-goto="money">알림톡·정산</a> 에서 봅니다.</p></section>
-      </div>
-
-      <div class="sgroup" id="s-assoc" data-tab="assoc">
-    <section class="panel panel-accent" id="new-assoc"><h2 class="panel-title">➕ 새 조직 만들기</h2>
+    <details class="panel panel-accent panel-fold" id="new-assoc"><summary class="panel-title">➕ 새 조직 만들기</summary>
       <form method="post" action="/super/association" class="stack-form">
         <div class="form-two"><label>조직 이름<input type="text" name="name" required /></label><label>대표 색상<input type="color" name="brand_color" value="#0b6e4f" /></label></div>
         <label>유형<select name="kind">
@@ -3361,8 +3292,8 @@ export async function superConsole(ctx) {
         <div class="form-divider">관리자 계정</div>
         <div class="form-two"><label>관리자 이름<input type="text" name="admin_name" /></label><label>관리자 이메일<input type="email" name="admin_email" required /></label></div>
         <label>관리자 비밀번호 (8자 이상)<input type="password" name="admin_password" required minlength="8" /></label>
-        <button class="btn btn-primary">조직 만들기</button></form></section>
-    <section class="panel" id="clone-assoc"><h2 class="panel-title">📄 기존 사이트 복제해서 만들기</h2>
+        <button class="btn btn-primary">조직 만들기</button></form></details>
+    <details class="panel panel-fold" id="clone-assoc"><summary class="panel-title">📄 기존 사이트 복제해서 만들기</summary>
       <p class="panel-hint">잘 만들어 둔 사이트를 본으로 새 고객사를 찍어 냅니다. 프랜차이즈든 상인회든 같습니다.
         <b>복사되는 것</b>: 유형·업종 문구·대표색·홈/랜딩 화면 구성·캠페인 사본.
         <b>복사되지 않는 것</b>: 회원·점포·상담 신청·계약 — 남의 실제 데이터는 절대 따라오지 않습니다.</p>
@@ -3376,12 +3307,7 @@ export async function superConsole(ctx) {
         <div class="form-divider">관리자 계정</div>
         <div class="form-two"><label>관리자 이름<input type="text" name="admin_name" /></label><label>관리자 이메일<input type="email" name="admin_email" required /></label></div>
         <label>관리자 비밀번호 (8자 이상)<input type="password" name="admin_password" required minlength="8" /></label>
-        <button class="btn btn-primary">복제해서 만들기</button></form></section>
-    <section class="panel"><h2 class="panel-title">조직 목록</h2>
-      <p class="panel-hint">개별 도메인: 도메인을 입력·저장한 뒤 <b>Cloudflare 대시보드 → 이 워커 → Settings → Domains &amp; Routes → Add → Custom Domain</b> 으로 같은 도메인을 추가해야 실제 접속됩니다(그 도메인이 이 Cloudflare 계정에 등록되어 있어야 함).</p>
-      <div class="table-scroll"><table class="admin-table">
-      <thead><tr><th>조직</th><th>개별 도메인</th><th>플랜</th><th>상태</th><th>관리</th></tr></thead><tbody>${rows}</tbody></table></div></section>
-        ${usagePanel}
+        <button class="btn btn-primary">복제해서 만들기</button></form></details>
       </div>
 
       <div class="sgroup" id="s-sales" data-tab="sales">
@@ -3398,6 +3324,7 @@ export async function superConsole(ctx) {
         ${cronAlive ? cronPanel : ""}
         ${migratePanel}
         ${wiredPanel}
+        ${usagePanel}
         ${securityPanel}
     <section class="panel"><h2 class="panel-title">플랫폼 설정</h2>
       <form method="post" action="/super/platform-mode" class="stack-form compact">
@@ -3433,8 +3360,9 @@ export async function superConsole(ctx) {
       <h3>사진 직접 서빙 (설정 완료 ✓)</h3>
       <p>R2 버킷 공개 도메인(r2.dev) → 워커 변수 <code>MEDIA_PUBLIC_BASE</code>. 트래픽 커지면 커스텀 도메인으로 값만 교체.</p>
       </div></details>
-    <section class="panel"><h2 class="panel-title">감사 로그 (플랫폼)</h2>
-      <ul class="audit-list">${auditLog.length ? auditLog.map((a) => `<li><span class="audit-action">${esc(a.action)}</span> <span class="audit-detail">${esc(a.detail)}</span><span class="audit-meta">${esc(a.actor_name)} · ${esc(kstStamp(a.created_at, { year: false }))}</span></li>`).join("") : `<li class="empty">기록이 없습니다.</li>`}</ul></section>      </div>
+    <details class="panel panel-fold"><summary class="panel-title">감사 로그 (플랫폼)</summary>
+      <ul class="audit-list">${auditLog.length ? auditLog.map((a) => `<li><span class="audit-action">${esc(a.action)}</span> <span class="audit-detail">${esc(a.detail)}</span><span class="audit-meta">${esc(a.actor_name)} · ${esc(kstStamp(a.created_at, { year: false }))}</span></li>`).join("") : `<li class="empty">기록이 없습니다.</li>`}</ul></details>
+      </div>
 
     </div></div></div></section>`;
   return html(layout({ title: "운영사 콘솔", console: "super", user, body, csrf, scripts: `<script src="${assetUrl("/js/super-tabs.js")}" defer></script>` }));

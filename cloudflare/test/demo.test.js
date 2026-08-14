@@ -40,14 +40,14 @@ before(async () => {
   cookie = [seed, ...(r.headers.getSetCookie?.() || []).map((c) => c.split(";")[0])].join("; ");
 });
 
-test("슈퍼 콘솔에 '데모 채우기' 버튼이 있다", async () => {
-  const r = await req("GET", "/super", { cookie });
+test("조직 화면에 '데모 채우기' 버튼이 있다", async () => {
+  const r = await req("GET", `/super/org/${assoc.id}`, { cookie });
   assert.equal(r.status, 200);
   assert.match(await r.text(), /데모 채우기/);
 });
 
 test("채우기 전에는 '데모 미적용'으로 보인다", async () => {
-  const r = await req("GET", "/super", { cookie });
+  const r = await req("GET", `/super/org/${assoc.id}`, { cookie });
   const html = await r.text();
   assert.match(html, /데모 미적용/, "아직 안 채운 상인회는 그렇게 표시돼야 함");
   assert.doesNotMatch(html, /데모 적용 \d/, "채운 적 없는데 시각이 뜨면 안 됨");
@@ -86,8 +86,8 @@ test("버튼을 누르면 콘텐츠가 채워지고 공개 페이지에 나온�
   assert.match(html, /골목마다 사람이 있고/, "상인회 태그라인 반영");
 });
 
-test("채우고 나면 슈퍼 콘솔에 적용 시각이 남는다", async () => {
-  const r = await req("GET", "/super", { cookie });
+test("채우고 나면 조직 화면에 적용 시각이 남는다", async () => {
+  const r = await req("GET", `/super/org/${assoc.id}`, { cookie });
   const html = await r.text();
   assert.match(html, /✓ 데모 적용 \d{2}-\d{2} \d{2}:\d{2}/, "언제 채웠는지 보여야 누른 걸 알 수 있음");
   assert.match(html, /데모 다시 채우기/, "이미 채운 곳은 버튼 문구도 바뀌어야 함");
