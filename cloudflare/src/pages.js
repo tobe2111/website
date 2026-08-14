@@ -3105,6 +3105,12 @@ export async function superConsole(ctx) {
       <div class="form-two">${tplInputs}</div>
       <p class="panel-hint">템플릿 코드는 플랫폼 카카오 채널에 등록·심사 통과된 값이어야 합니다. 비어 있으면 <b>그 종류만</b> 발송되지 않습니다(다른 종류는 정상).</p>
       <button class="btn btn-primary btn-sm">알림톡 설정 저장</button></form>
+    <form method="post" action="/super/notify-sync" class="inline-form" style="margin-top:10px"
+      data-confirm="알리고에 등록된 템플릿 목록을 받아 코드 칸을 자동으로 채웁니다. 계속할까요?">
+      <button class="btn btn-ghost btn-sm"${notifyEnabled(env) ? "" : " disabled"}>알리고에서 코드 불러오기</button></form>
+    <p class="panel-hint">손으로 일곱 개를 옮겨 적으면 오타 하나로 그 종류만 조용히 실패합니다.
+      <b>알리고에 등록된 문구와 대조해</b> 맞는 것만 채우고, 못 찾은 것·아직 심사 중인 것은 이름으로 알려 드립니다.
+      ${notifyEnabled(env) ? "" : "<b>알리고 키가 있어야 쓸 수 있습니다.</b>"}</p>
     <div class="form-divider">시험 발송 <span class="badge badge-muted">크레딧 차감 없음</span></div>
     <p class="panel-hint">코드가 틀렸는지는 <b>보내 봐야</b> 알 수 있습니다. 실제 계약 중에 알게 되면 상대방이 기다리는 상태가 됩니다.
       본인 번호로 한 종류씩 보내 보세요 — 실패하면 <b>카카오·알리고가 준 오류 문구를 그대로</b> 보여 줍니다.</p>

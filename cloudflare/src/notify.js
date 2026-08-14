@@ -191,6 +191,59 @@ async function sendVia(env, { to, templateCode, text, smsFallback = true, button
   return { ok: true, id: j.info && j.info.mid ? String(j.info.mid) : "" };
 }
 
+// ---------- 템플릿 코드 자동 채우기 ----------
+// 심사가 끝나면 템플릿마다 코드가 나온다. 그걸 사람이 일곱 칸에 손으로 옮겨 적으면
+// 오타 하나로 그 종류만 조용히 발송에 실패한다 — 계약 도중에야 알게 되는 실패다.
+// 제공사에 등록된 목록을 그대로 받아와 문구로 대조해 채운다.
+const squash = (t) => String(t || "").replace(/\s+/g, " ").trim();
+// 응답 키 이름은 제공사 문서와 실제가 어긋나는 일이 잦다 — 있을 법한 이름을 모두 훑는다.
+const pick = (row, names) => { for (const n of names) if (row && row[n] != null && row[n] !== "") return String(row[n]); return ""; };
+export function normalizeProviderTemplate(row) {
+  return {
+    code: pick(row, ["templtCode", "tpl_code", "templateCode", "code"]),
+    name: pick(row, ["templtName", "tpl_name", "templateName", "name"]),
+    content: pick(row, ["templtContent", "tpl_content", "templateContent", "content"]),
+    // APR=승인, REQ=심사중, REJ=반려 (문자열이 다를 수 있어 원문도 남긴다)
+    inspection: pick(row, ["inspStatus", "inspectionStatus", "insp_status"]),
+  };
+}
+export async function listProviderTemplates(env) {
+  if (!notifyEnabled(env)) {
+    const missing = ALIGO_VARS.filter((k) => !cfg(env, k));
+    return { ok: false, error: `워커에 없는 값: ${missing.join(", ")}` };
+  }
+  let token;
+  try { token = await aligoToken(env); }
+  catch (e) { return { ok: false, error: String((e && e.message) || e).slice(0, 200) }; }
+  const body = new URLSearchParams({
+    apikey: cfg(env, "ALIGO_API_KEY"), userid: cfg(env, "ALIGO_USER_ID"), token,
+    senderkey: cfg(env, "ALIGO_SENDER_KEY"),
+  });
+  let j;
+  try {
+    const res = await fetch("https://kakaoapi.aligo.in/akv10/template/list/", { method: "POST", body });
+    j = await res.json();
+  } catch (e) { return { ok: false, error: "목록을 받아오지 못했습니다: " + String((e && e.message) || e).slice(0, 160) }; }
+  if (String(j.code) !== "0") return { ok: false, error: j.message || "목록 조회 실패" };
+  const raw = Array.isArray(j.list) ? j.list : Array.isArray(j.data) ? j.data : [];
+  return { ok: true, list: raw.map(normalizeProviderTemplate).filter((t) => t.code) };
+}
+// 우리 문구와 제공사에 등록된 문구를 맞춰 본다.
+// ① 문구가 그대로 같으면 확실하다(알림톡은 글자까지 같아야 발송되므로 이게 가장 강한 근거).
+// ② 아니면 템플릿 이름이 우리 이름을 담고 있는지 본다.
+// 어느 쪽도 아니면 채우지 않는다 — 엉뚱한 코드를 넣으면 그 종류가 통째로 실패한다.
+export function matchTemplates(list) {
+  const matched = {}, unmatched = [];
+  for (const [kind, t] of Object.entries(TEMPLATES)) {
+    const byBody = list.find((x) => squash(x.content) === squash(t.body));
+    const byName = byBody || list.find((x) => x.name && squash(x.name) === squash(t.label));
+    const loose = byName || list.find((x) => x.name && squash(x.name).includes(squash(t.label)));
+    if (loose) matched[kind] = { code: loose.code, how: byBody ? "문구 일치" : "이름 일치", inspection: loose.inspection };
+    else unmatched.push(t.label);
+  }
+  return { matched, unmatched };
+}
+
 // ---------- 과금 방식 ----------
 // per_send : 발송 1건마다 차감 (기본). 인원·재알림이 늘면 매출도 함께 는다.
 // per_doc  : 계약 1건마다 한 번만 차감. 그 계약에서 나가는 서명 관련 발송은 모두 무료.

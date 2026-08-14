@@ -18,7 +18,7 @@ import { planOf, PLANS, PLAN_KEYS, planPriceKey } from "./plans.js";
 import { seedDemo } from "./demoContent.js";
 import { seedStarter } from "./starterContent.js";
 import { KINDS, kindById, PRESETS, assocTerms } from "./kinds.js";
-import { TEMPLATE_KEYS, TEMPLATES, sendTest, sendMany, sendOne, notifyEnabled, wonToJeon, renderTemplate, templateButton, billingMode, chargeContract, BILLING_MODES, priceOf } from "./notify.js";
+import { TEMPLATE_KEYS, TEMPLATES, sendTest, listProviderTemplates, matchTemplates, sendMany, sendOne, notifyEnabled, wonToJeon, renderTemplate, templateButton, billingMode, chargeContract, BILLING_MODES, priceOf } from "./notify.js";
 
 // ctx.request 는 내부 호출 경로에서 없을 수 있다 — 감사 기록이 본 기능을 죽이면 안 된다
 const uaOf = (ctx) => { try { return ctx.request.headers.get("user-agent") || ""; } catch { return ""; } };
@@ -307,6 +307,31 @@ export async function superPlanPrices(ctx) {
   }
   await audit(ctx, "요금제", "월 요금 저장", null);
   return back("/super#s-settings", "요금제를 저장했습니다.");
+}
+
+// 알리고에 등록된 템플릿 목록을 받아 코드 칸을 자동으로 채운다.
+// 손으로 일곱 개를 옮겨 적으면 오타 하나로 그 종류만 조용히 실패한다.
+export async function superSyncTemplates(ctx) {
+  const { db, env } = ctx;
+  const r = await listProviderTemplates(env);
+  if (!r.ok) return back("/super#s-money", `템플릿 목록을 받지 못했습니다 — ${r.error}`, true);
+  if (!r.list.length) return back("/super#s-money", "알리고에 등록된 템플릿이 없습니다. 발신프로필이 맞는지 확인해 주세요.", true);
+
+  const { matched, unmatched } = matchTemplates(r.list);
+  let saved = 0, waiting = [];
+  for (const [kind, m] of Object.entries(matched)) {
+    const key = TEMPLATE_KEYS[kind];
+    if ((await D.getSetting(db, key)) === m.code) continue;
+    await D.setSetting(db, key, m.code);
+    saved++;
+    // 심사가 안 끝난 것은 채워 두되 아직 못 보낸다고 알린다
+    if (m.inspection && !/^APR/i.test(m.inspection)) waiting.push(TEMPLATES[kind].label);
+  }
+  await audit(ctx, "템플릿동기화", `${saved}건 채움 · 목록 ${r.list.length}건`, null);
+  const parts = [`알리고에서 ${r.list.length}건을 받아 ${saved}건을 채웠습니다.`];
+  if (waiting.length) parts.push(`아직 심사 중: ${waiting.join(" · ")}`);
+  if (unmatched.length) parts.push(`못 찾은 것: ${unmatched.join(" · ")} — 문구가 다르거나 아직 등록 전입니다.`);
+  return back("/super#s-money", parts.join(" "), unmatched.length > 0);
 }
 
 export async function superNotifySettings(ctx) {

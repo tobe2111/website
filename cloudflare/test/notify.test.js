@@ -353,3 +353,50 @@ test("시험 발송: 워커에 없는 값을 이름으로 짚어준다", async (
   assert.match(r.error, /ALIGO_SENDER_KEY/);
   assert.match(r.error, /ALIGO_SENDER/);
 });
+
+// ── 템플릿 코드 자동 채우기
+// 심사가 끝나면 코드 일곱 개를 손으로 옮겨 적어야 했다. 오타 하나면 그 종류만
+// 조용히 실패하고, 계약 도중에야 알게 된다. 목록을 받아 문구로 대조해 채운다.
+test("문구가 같은 템플릿을 찾아 코드를 짝지운다", () => {
+  const list = [
+    { templtCode: "TPL_REQ", templtName: "아무 이름", templtContent: N.TEMPLATES.sign_request.body, inspStatus: "APR" },
+    { templtCode: "TPL_OTP", templtName: "전자서명 본인확인", templtContent: "전혀 다른 문구", inspStatus: "REQ" },
+    { templtCode: "TPL_ETC", templtName: "남의 서비스 템플릿", templtContent: "관계 없음", inspStatus: "APR" },
+  ];
+  const { matched, unmatched } = N.matchTemplates(list.map(N.normalizeProviderTemplate));
+  assert.equal(matched.sign_request.code, "TPL_REQ");
+  assert.equal(matched.sign_request.how, "문구 일치", "문구가 같으면 가장 확실한 근거");
+  assert.equal(matched.sign_otp.code, "TPL_OTP");
+  assert.equal(matched.sign_otp.how, "이름 일치");
+  assert.equal(matched.sign_otp.inspection, "REQ", "심사 상태를 그대로 들고 와야 안내할 수 있다");
+  assert.ok(unmatched.includes("전자서명 완료"), "못 찾은 것은 이름으로 알려야");
+  assert.ok(!Object.values(matched).some((m) => m.code === "TPL_ETC"), "남의 템플릿을 끌어오면 안 된다");
+});
+
+test("줄바꿈·공백 차이는 같은 문구로 본다", () => {
+  const body = N.TEMPLATES.notice.body.replace(/\n/g, "\r\n") + "  ";
+  const { matched } = N.matchTemplates([{ code: "TPL_N", name: "", content: body, inspection: "APR" }]);
+  assert.equal(matched.notice.code, "TPL_N");
+});
+
+test("키가 없으면 무엇이 없는지 이름으로 알려준다", async () => {
+  const r = await N.listProviderTemplates({ ALIGO_API_KEY: "k" });
+  assert.equal(r.ok, false);
+  assert.match(r.error, /ALIGO_USER_ID/);
+});
+
+test("제공사가 오류를 주면 그 문구를 그대로 돌려준다", async () => {
+  const env2 = { ALIGO_API_KEY: "k", ALIGO_USER_ID: "u", ALIGO_SENDER_KEY: "s", ALIGO_SENDER: "0212345678" };
+  const of = globalThis.fetch;
+  globalThis.fetch = async (u) => ({ ok: true, status: 200,
+    json: async () => String(u).includes("token/create") ? { code: 0, token: "T" } : { code: -99, message: "발신프로필 없음" } });
+  let r; try { r = await N.listProviderTemplates(env2); } finally { globalThis.fetch = of; }
+  assert.equal(r.ok, false);
+  assert.match(r.error, /발신프로필 없음/);
+});
+
+test("응답 키 이름이 달라도 읽어낸다", () => {
+  const a = N.normalizeProviderTemplate({ templtCode: "A", templtName: "n", templtContent: "c", inspStatus: "APR" });
+  const b = N.normalizeProviderTemplate({ tpl_code: "A", tpl_name: "n", tpl_content: "c", insp_status: "APR" });
+  assert.deepEqual(a, b);
+});

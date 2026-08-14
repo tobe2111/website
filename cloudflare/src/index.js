@@ -75,6 +75,7 @@ const GLOBAL = [
   ["POST", "/super/credit/:id", api.superCreditApprove, "SUPERADMIN"],
   ["POST", "/super/secret-drop", api.superSecretDrop, "SUPERADMIN"],
   ["POST", "/super/notify-test", api.superNotifyTest, "SUPERADMIN"],
+  ["POST", "/super/notify-sync", api.superSyncTemplates, "SUPERADMIN"],
   ["POST", "/super/plan-prices", api.superPlanPrices, "SUPERADMIN"],
   ["POST", "/super/notify-settings", api.superNotifySettings, "SUPERADMIN"],
   ["POST", "/super/billing-mode", api.superBillingMode, "SUPERADMIN"],
