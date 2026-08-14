@@ -424,6 +424,31 @@ a.bc-val:hover{text-decoration:underline}
 .mig-map{margin:8px 0!important;font-size:.85rem;line-height:1.8}
 .mig-map code{font-size:.8rem}
 
+/* ── 운영사 콘솔 ──────────────────────────────────────────────
+   고객사 관리 화면(/admin)과 겉이 똑같으면, 지금 어느 쪽을 만지고 있는지 헷갈린다.
+   여기서 한 조작은 모든 고객사에 미치므로, 색과 띠로 확실히 갈라 둔다.
+   초록(고객 브랜드)은 고객이 보는 화면의 것이고, 운영사 화면은 먹빛 남색을 쓴다. */
+body[data-console="super"]{
+  --brand:#2b3a5c; --brand-600:#2b3a5c; --brand-700:#22304d; --brand-900:#161f33;
+  --green-600:#2b3a5c; --green-700:#22304d; --green-900:#161f33;
+  --on-brand:#ffffff; --brand-text:#22304d;
+}
+.console-strip{background:#161f33;color:#c9d3e8;font-size:.82rem;line-height:1.5}
+.console-strip-in{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;padding:7px 0}
+.console-strip b{color:#fff;font-weight:800;letter-spacing:.01em}
+.console-strip b+span{color:#95a4c4}
+.console-strip span b{color:#e8eefb;font-weight:700}
+.console-strip .strip-out{margin-left:auto;color:#c9d3e8;text-decoration:underline;text-underline-offset:2px;white-space:nowrap}
+.console-strip .strip-out:hover{color:#fff}
+.console-strip .strip-out:focus-visible{outline:2px solid #fff;outline-offset:2px;border-radius:3px}
+@media (max-width:560px){ .console-strip .strip-out{margin-left:0} }
+/* 운영사 화면의 머리글도 같은 계열로 — 배지 하나가 아니라 화면 전체가 달라 보여야 한다 */
+body[data-console="super"] .site-header{background:#1e2a44;border-bottom-color:#2b3a5c}
+body[data-console="super"] .site-header .brand,
+body[data-console="super"] .site-header .main-nav a{color:#e8eefb}
+body[data-console="super"] .site-header .main-nav a:hover{color:#fff}
+body[data-console="super"] .brand-mark{color:#8fa6d8}
+
 /* 영업 파이프라인 */
 .stage-strip{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 14px}
 .stage-chip{padding:5px 11px;border-radius:999px;background:var(--bg-alt);border:1px solid var(--line);font-size:.82rem;color:var(--muted)}

@@ -56,7 +56,7 @@ export function brandTextInk(hex) {
   return "#" + rgb.map((v) => v.toString(16).padStart(2, "0")).join("");
 }
 
-export function layout({ title, assoc, base = "", user = null, body, activeNav = "", description = "", scripts = "", csrf = "", ogImage = "", preloadImage = "", jsonLd = null, product = null }) {
+export function layout({ title, assoc, base = "", user = null, body, activeNav = "", description = "", scripts = "", csrf = "", ogImage = "", preloadImage = "", jsonLd = null, product = null, console: consoleKind = "" }) {
   const nav = assoc ? navHtml(base, user, activeNav, assoc.kind, assoc.preset)
     : product && product.nav !== false ? productNav(user, activeNav, product) : "";
   // 상인회에 속하지 않은 화면의 이름: 제품이 지정되면 그 제품, 아니면 운영사.
@@ -106,8 +106,11 @@ ${assoc ? `<link rel="alternate" type="application/rss+xml" title="${brand} 공�
 <link rel="apple-touch-icon" href="/img/icon-180.png" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" /></head>
-<body${assoc && kindById(assoc.kind).usesLanding ? ` data-base="${esc(base)}" data-csrf="${esc(csrf || "")}"` : ""}>
+<body${consoleKind ? ` data-console="${esc(consoleKind)}"` : ""}${assoc && kindById(assoc.kind).usesLanding ? ` data-base="${esc(base)}" data-csrf="${esc(csrf || "")}"` : ""}>
 <a class="skip-link" href="#main">본문 바로가기</a>
+${consoleKind === "super" ? `<div class="console-strip"><div class="container console-strip-in">
+  <b>운영사 콘솔</b><span>여기서 하는 일은 <b>모든 고객사</b>에 적용됩니다</span>
+  <a href="/" class="strip-out">고객이 보는 화면 →</a></div></div>` : ""}
 <header class="site-header" id="siteHeader">
   <div class="container header-inner">
     <a class="brand" href="${product ? product.home || "/esign" : base || "/"}">${assoc && assoc.logo ? `<img class="brand-logo" src="${esc(mediaUrl(assoc.logo))}" alt="" />` : `<span class="brand-mark">${mark}</span>`}<span>${brand}</span></a>

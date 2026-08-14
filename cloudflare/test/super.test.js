@@ -303,11 +303,11 @@ test("상인회 홈페이지 메뉴에 '슈퍼'가 보이지 않는다", async (
   assert.ok(a);
 });
 
-test("슈퍼 콘솔 입구는 계정 화면에 있다", async () => {
+test("운영사 콘솔 입구는 계정 화면에 있다", async () => {
   const r = await req("GET", "/account", { cookie });
   assert.equal(r.status, 200);
   const html = await r.text();
-  assert.match(html, /슈퍼 콘솔 열기/);
+  assert.match(html, /운영사 콘솔 열기/);
   assert.match(html, /href="\/super"/);
 });
 
@@ -315,7 +315,7 @@ test("상인회 관리자에게는 슈퍼 콘솔 입구가 보이지 않는다",
   const { admin } = await makeAssoc("nav-admin");
   const l = await login(admin.email, "admin1234");
   const html = await (await req("GET", "/t/nav-admin/account", { cookie: l.jar })).text();
-  assert.doesNotMatch(html, /슈퍼 콘솔 열기/);
+  assert.doesNotMatch(html, /운영사 콘솔 열기/);
 });
 
 // ── 접근 통제: 슈퍼 콘솔은 슈퍼 관리자 전용인가 (말이 아니라 실제 응답으로 확인)
@@ -377,7 +377,7 @@ test("보조 정보가 하나 실패해도 콘솔 본 기능은 열린다", asyn
   const html = await r.text();
   assert.match(html, /일부 정보를 불러오지 못했습니다/, "실패한 항목을 알려 줘야 함");
   assert.match(html, /영업 기록/, "어느 항목이 실패했는지 밝혀야 함");
-  assert.match(html, /상인회 목록/, "본 기능은 그대로 보여야 함");
+  assert.match(html, /조직 목록/, "본 기능은 그대로 보여야 함");
   db()._db.exec(`CREATE TABLE application_notes (id INTEGER PRIMARY KEY AUTOINCREMENT,
     application_id INTEGER NOT NULL, actor_name TEXT NOT NULL DEFAULT '', body TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now')))`);
@@ -583,4 +583,38 @@ test("시크릿 옮기기: DB 이름과 워커 변수 이름의 대응을 화면
   assert.match(html, /DB · session_secret<\/code> → 넣을 곳 <code>워커 · SESSION_SECRET/);
   assert.match(html, /DB · sign_key<\/code> → 넣을 곳 <code>워커 · SIGN_PRIVATE_KEY/);
   assert.match(html, /이름이 서로 다릅니다/);
+});
+
+// ── 운영사 콘솔과 고객사 관리 화면이 겉으로 구분되어야 한다
+// 여기서 한 조작은 모든 고객사에 미치는데, 두 화면이 똑같이 생겨서 헷갈렸다.
+test("운영사 콘솔은 고객사 화면과 다른 껍데기를 쓴다", async () => {
+  const html = await superHtml();
+  assert.match(html, /<body data-console="super"/, "색·띠가 이 표시로 갈린다");
+  assert.match(html, /console-strip/, "늘 보이는 띠가 있어야");
+  assert.match(html, /모든 고객사<\/b>에 적용됩니다/, "무엇을 만지고 있는지 말해 줘야");
+  assert.match(html, /운영사 콘솔/);
+  assert.ok(!/section-eyebrow">SUPER</.test(html), "영문 약어 대신 사람 말로");
+});
+
+// 제품이 셋인데 통계가 '상인회' 하나로만 세고 있었다 — 무엇을 파는 회사인지 화면에서 안 읽혔다.
+test("운영사 콘솔 통계는 조직 유형별로 센다", async () => {
+  const e2 = makeEnv();
+  await D.setSetting(e2.DB, "session_secret", "auto-generated");
+  const pw = await hashPassword("super1234");
+  await D.createUser(e2.DB, { email: "kc@platform.kr", passwordHash: pw.hash, salt: pw.salt, name: "운영자", role: "SUPERADMIN", associationId: null });
+  await D.createAssociation(e2.DB, { slug: "m1", name: "가나상인회", kind: "merchant" });
+  await D.createAssociation(e2.DB, { slug: "e1", name: "한빛법무법인", kind: "esign" });
+  await D.createAssociation(e2.DB, { slug: "e2", name: "두빛법무법인", kind: "esign" });
+  const f = (p, init) => worker.fetch(new Request(BASE + p, init), e2, { waitUntil() {}, passThroughOnException() {} });
+  const g = await f("/login");
+  const seed = (g.headers.getSetCookie?.() || []).find((c) => c.startsWith("sc_csrf_seed="))?.split(";")[0] || "";
+  const tk = (/name="_csrf" value="([^"]+)"/.exec(await g.text()) || [])[1];
+  const lr = await f("/login", { method: "POST", headers: { cookie: seed, origin: BASE, "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ _csrf: tk, email: "kc@platform.kr", password: "super1234" }) });
+  const jar = [seed, ...(lr.headers.getSetCookie?.() || []).map((c) => c.split(";")[0])].join("; ");
+  const html = await (await f("/super", { headers: { cookie: jar } })).text();
+  const cards = (/<div class="stat-cards">([\s\S]*?)<\/div>\s*<\/div>/.exec(html) || [])[1] || html;
+  assert.match(cards, /<span class="stat-num">2<\/span><span class="stat-label">전자계약/, "전자계약 2곳이 따로 세어져야");
+  assert.ok(!/<span class="stat-label">상인회<\/span><\/div>\s*<div class="stat-card"><span class="stat-num">\d+<\/span><span class="stat-label">승인 업체/.test(html)
+    || /전자계약/.test(cards), "전체를 '상인회' 하나로 뭉뚱그리면 안 된다");
 });

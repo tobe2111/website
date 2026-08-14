@@ -1363,7 +1363,7 @@ export async function admin(ctx) {
   const leads = isFranchise ? await D.leadStats(db, assoc.id) : null;
 
   const body = `<section class="dash"><div class="container">
-    <div class="dash-head"><div><p class="section-eyebrow">ADMIN · ${esc(assoc.name)}</p><h1 class="dash-title">${isEsign ? "전자계약 관리" : isFranchise ? "가맹 모집 관리" : "관리자 대시보드"}</h1>
+    <div class="dash-head"><div><p class="section-eyebrow">조직 관리 · ${esc(assoc.name)}</p><h1 class="dash-title">${isEsign ? "전자계약 관리" : isFranchise ? "가맹 모집 관리" : "관리자 대시보드"}</h1>
       <p class="dash-sub">${isEsign ? "계약 창구" : isFranchise ? "랜딩페이지" : "홈페이지"}: <a href="${base}" target="_blank">${esc(prettyPath(base))}</a></p></div>
       <div class="dash-head-actions">${isFranchise ? `<a href="${base}/admin/leads" class="btn btn-primary btn-sm">상담 DB ${leads.total}건</a>
         <a href="${base}/admin/landing" class="btn btn-ghost btn-sm">랜딩 편집</a>`
@@ -2573,12 +2573,12 @@ export async function superConsole(ctx) {
   ];
   const supers = await soft("슈퍼 계정 목록", () => D.listSuperAdmins(db), []);
   const superPanel = `<section class="panel"><h2 class="panel-title">이 콘솔에 접근 가능한 계정 <span class="badge ${supers.length > 1 ? "badge-wait" : "badge-ok"}">${supers.length}개</span></h2>
-    <p class="panel-hint">슈퍼 관리자만 이 화면과 상인회 생성·삭제를 쓸 수 있습니다. 상인회 관리자·사장님 계정으로는 주소를 직접 입력해도 들어올 수 없습니다.
+    <p class="panel-hint">운영사 계정만 이 화면과 조직 생성·삭제를 쓸 수 있습니다. 고객사 관리자·사장님 계정으로는 주소를 직접 입력해도 들어올 수 없습니다.
       ${supers.length > 1 ? " <b>계정이 둘 이상입니다 — 모르는 계정이 있으면 즉시 확인하세요.</b>" : ""}</p>
     <ul class="wire-list">${supers.map((u) => `<li class="is-on"><span class="wire-dot" aria-hidden="true"></span>
       <div><b>${esc(u.email)}</b> <span class="badge ${u.totp_enabled ? "badge-ok" : "badge-muted"}">${u.totp_enabled ? "2단계 인증 사용" : "2단계 인증 없음"}</span>
         <p>${esc(u.name || "")} · 생성 ${esc(kstDate(u.created_at))}</p></div></li>`).join("")}</ul>
-    ${supers.some((u) => !u.totp_enabled) ? `<p class="panel-hint">이 계정 하나가 뚫리면 모든 상인회 데이터가 열립니다. <a href="/account">계정 설정</a>에서 2단계 인증을 켜 두시길 권합니다.</p>` : ""}</section>`;
+    ${supers.some((u) => !u.totp_enabled) ? `<p class="panel-hint">이 계정 하나가 뚫리면 <b>모든 고객사</b>의 데이터가 열립니다. <a href="/account">계정 설정</a>에서 2단계 인증을 켜 두시길 권합니다.</p>` : ""}</section>`;
   const wiredPanel = `<section class="panel"><h2 class="panel-title">있으면 좋은 것 <span class="badge ${wired.every((w) => w[1]) ? "badge-ok" : "badge-muted"}">${wired.filter((w) => w[1]).length}/${wired.length} 켜짐</span></h2>
     <p class="panel-hint">모두 선택 사항입니다. 꺼져 있어도 사이트는 정상 동작하며, 값은 <b>Workers &amp; Pages → 이 워커 → Settings → Variables</b> 에서 넣습니다.</p>
     <ul class="wire-list">${wired.map(([label, on, keys, help]) => `<li class="${on ? "is-on" : ""}">
@@ -2805,7 +2805,7 @@ export async function superConsole(ctx) {
     <form method="post" action="/super/esign-settings" class="stack-form compact otp-toggle">
       <label class="check"><input type="checkbox" name="esign_otp" value="1"${otpOn ? " checked" : ""} data-autosubmit /> 서명 시 <b>휴대폰 본인확인(인증번호)</b> 요구</label>
       <p class="panel-hint">켜면 서명 직전 회원 휴대폰으로 6자리 인증번호를 보내고, 확인해야 서명이 완료됩니다.
-        인증번호 1건도 알림톡 크레딧에서 차감됩니다(상인회 부담). 계정 도용·대리 서명을 막는 가장 효과적인 수단입니다.</p></form>
+        인증번호 1건도 알림톡 크레딧에서 차감됩니다(고객사 부담). 계정 도용·대리 서명을 막는 가장 효과적인 수단입니다.</p></form>
     <p class="panel-hint">지문을 따로 적어 두면, 키가 몰래 교체됐는지 확인할 수 있습니다. 서명 사슬은 각 서명이 직전 서명의 봉인값을 포함해 엮인 구조라 중간 기록을 지우면 끊깁니다.</p></section>`;
 
   // ----- 월별 정산 (마진 계산 + 공유 계정 대사) -----
@@ -2831,11 +2831,11 @@ export async function superConsole(ctx) {
       <form method="get" action="/super" class="inline-form"><select name="m" data-autosubmit>${monthOpts}</select><button class="btn btn-xs btn-ghost">이동</button></form></div>
     <div class="stat-cards">
       <div class="stat-card left"><div class="stat-top"><span class="stat-label">발송</span></div><span class="stat-num">${sT.sent.toLocaleString()}</span><div class="stat-delta mut">건 (성공분만)</div></div>
-      <div class="stat-card left"><div class="stat-top"><span class="stat-label">매출</span></div><span class="stat-num">${sT.rev.toLocaleString()}</span><div class="stat-delta mut">원 · 상인회 차감액</div></div>
+      <div class="stat-card left"><div class="stat-top"><span class="stat-label">매출</span></div><span class="stat-num">${sT.rev.toLocaleString()}</span><div class="stat-delta mut">원 · 고객사 차감액</div></div>
       <div class="stat-card left"><div class="stat-top"><span class="stat-label">원가</span></div><span class="stat-num">${sT.base.toLocaleString()}</span><div class="stat-delta mut">원 · 건당 ${unitCost}원 기준</div></div>
       <div class="stat-card left"><div class="stat-top"><span class="stat-label">마진</span></div><span class="stat-num">${margin.toLocaleString()}</span><div class="stat-delta ${margin > 0 ? "up" : "mut"}">원 (${marginPct}%)</div></div>
     </div>
-    <div class="table-scroll"><table class="admin-table"><thead><tr><th>상인회</th><th>발송</th><th>매출</th><th>원가</th><th>마진</th><th>마진율</th></tr></thead><tbody>${settleRows}</tbody></table></div>
+    <div class="table-scroll"><table class="admin-table"><thead><tr><th>조직</th><th>발송</th><th>매출</th><th>원가</th><th>마진</th><th>마진율</th></tr></thead><tbody>${settleRows}</tbody></table></div>
     <div class="form-divider">원가 설정 (CPaaS 실제 계약가)</div>
     <form method="post" action="/super/notify-cost" class="stack-form compact">
       <label class="mini-label">알림톡 원가 (원/건)<input type="number" name="cost_alimtalk" value="${unitCost}" min="0" max="1000" step="0.1" required /></label>
@@ -2849,10 +2849,10 @@ export async function superConsole(ctx) {
     <table class="verify-table"><tr><th>이 플랫폼 템플릿</th><td>${
       (await Promise.all(Object.values(TEMPLATE_KEYS).map((k) => D.getSetting(db, k)))).filter(Boolean).map((c) => `<code>${esc(c)}</code>`).join(" · ") || "<span class=\"muted\">아직 등록되지 않음</span>"
     }</td></tr>
-    <tr><th>발송 참조 코드</th><td><code>SCM-{상인회id}-{템플릿}</code> — 발송 로그에 함께 기록됩니다</td></tr></table></section>`;
+    <tr><th>발송 참조 코드</th><td><code>SCM-{조직id}-{템플릿}</code> — 발송 로그에 함께 기록됩니다</td></tr></table></section>`;
 
   const notifySuperPanel = `<section class="panel panel-accent"><h2 class="panel-title">알림톡 판매 <span class="badge badge-brand">건당 ${unitPrice.toLocaleString()}원</span>${pendCredits.length ? ` <span class="badge badge-wait">충전 대기 ${pendCredits.length}</span>` : ""}</h2>
-    <p class="panel-hint">상인회가 선불로 충전하고 발송할 때마다 차감됩니다. <b>판매단가 − 원가 = 마진</b>이며, 발송 실패는 자동 환불되어 매출로 잡히지 않습니다.
+    <p class="panel-hint">고객사가 선불로 충전하고 발송할 때마다 차감됩니다. <b>판매단가 − 원가 = 마진</b>이며, 발송 실패는 자동 환불되어 매출로 잡히지 않습니다.
       ${notifyEnabled(env) ? "" : '<b class="txt-warn">아직 알리고 키가 설정되지 않아 실제 발송은 되지 않습니다.</b>'}</p>
     <div class="stat-cards">
       <div class="stat-card left"><div class="stat-top"><span class="stat-label">누적 발송</span></div><span class="stat-num">${totalSent.toLocaleString()}</span><div class="stat-delta mut">건</div></div>
@@ -2860,10 +2860,10 @@ export async function superConsole(ctx) {
       <div class="stat-card left"><div class="stat-top"><span class="stat-label">누적 충전</span></div><span class="stat-num">${totalCharged.toLocaleString()}</span><div class="stat-delta mut">원 (입금 기준)</div></div>
     </div>
     <div class="form-divider">충전 신청 (입금 확인 후 승인)</div>
-    <div class="table-scroll"><table class="admin-table"><thead><tr><th>상인회</th><th>금액</th><th>입금자·신청</th><th>처리</th></tr></thead><tbody>${creditRows}</tbody></table></div>
-    <div class="form-divider">상인회별 사용</div>
-    <div class="table-scroll"><table class="admin-table"><thead><tr><th>상인회</th><th>발송</th><th>매출</th><th>충전</th><th>잔액</th><th>단가(원/건)</th></tr></thead><tbody>${notifyRows}</tbody></table></div>
-    <p class="panel-hint">단가를 <b>0</b> 으로 두면 플랫폼 기본가(${unitPrice.toLocaleString()}원)를 씁니다. 규모가 큰 상인회에 낮은 단가를, 소규모엔 기본가를 적용하는 식으로 상인회마다 다르게 받을 수 있습니다.</p>
+    <div class="table-scroll"><table class="admin-table"><thead><tr><th>조직</th><th>금액</th><th>입금자·신청</th><th>처리</th></tr></thead><tbody>${creditRows}</tbody></table></div>
+    <div class="form-divider">조직별 사용</div>
+    <div class="table-scroll"><table class="admin-table"><thead><tr><th>조직</th><th>발송</th><th>매출</th><th>충전</th><th>잔액</th><th>단가(원/건)</th></tr></thead><tbody>${notifyRows}</tbody></table></div>
+    <p class="panel-hint">단가를 <b>0</b> 으로 두면 플랫폼 기본가(${unitPrice.toLocaleString()}원)를 씁니다. 규모가 큰 곳에 낮은 단가를, 작은 곳엔 기본가를 적용하는 식으로 조직마다 다르게 받을 수 있습니다.</p>
     <div class="form-divider">단가·템플릿 설정</div>
     <form method="post" action="/super/notify-settings" class="stack-form">
       <label class="mini-label">알림톡 판매단가 (원/건)<input type="number" name="price_alimtalk" value="${unitPrice}" min="0" max="1000" required /></label>
@@ -2933,8 +2933,8 @@ export async function superConsole(ctx) {
       : `<p class="panel-hint">발송당 과금은 인원이 늘어도 마진율이 일정합니다(${unitPrice ? Math.round(((unitPrice - baseCost) / unitPrice) * 100) : 0}%).</p>`}
     </section>`;
 
-  const usagePanel = `<section class="panel"><h2 class="panel-title">상인회별 사용량 <span class="badge badge-muted">R2 총 ${fmtBytes(ps.storage)}</span></h2>
-    <div class="table-scroll"><table class="admin-table"><thead><tr><th>상인회</th><th>회원</th><th>미디어</th><th>저장용량</th><th>플랜</th></tr></thead><tbody>
+  const usagePanel = `<section class="panel"><h2 class="panel-title">조직별 사용량 <span class="badge badge-muted">R2 총 ${fmtBytes(ps.storage)}</span></h2>
+    <div class="table-scroll"><table class="admin-table"><thead><tr><th>조직</th><th>회원</th><th>미디어</th><th>저장용량</th><th>플랜</th></tr></thead><tbody>
       ${usage.length ? usage.map((u) => `<tr><td>${esc(u.name)}</td><td>${u.members}명</td><td>${u.media_count}개</td><td>${fmtBytes(u.storage)}</td><td>${esc((PLANS[u.plan] || PLANS.free).label)}</td></tr>`).join("") : `<tr><td colspan="5" class="empty">데이터 없음</td></tr>`}
     </tbody></table></div>
     <p class="panel-hint">R2 무료 한도 10GB 기준 사용량입니다. 사진은 업로드 시 자동 축소(WebP)되어 저장됩니다.</p></section>`;
@@ -2965,17 +2965,17 @@ export async function superConsole(ctx) {
         <button class="btn btn-xs btn-ghost">기록</button></form>
       ${notes.length ? `<ul class="lead-log">${notes.slice(0, 5).map((n) => `<li><span>${esc(n.body)}</span><time>${esc(kstStamp(n.created_at, { year: false }))} · ${esc(n.actor_name)}</time></li>`).join("")}${notes.length > 5 ? `<li class="lead-more">외 ${notes.length - 5}건</li>` : ""}</ul>` : ""}
       <div class="lead-actions">
-        <form method="post" action="/super/application/${a.id}/approve" data-confirm="'${esc(a.assoc_name)}' 을(를) 승인하고 상인회·관리자 계정을 발급할까요?"><button class="btn btn-xs btn-primary">승인·발급</button></form>
+        <form method="post" action="/super/application/${a.id}/approve" data-confirm="'${esc(a.assoc_name)}' 을(를) 승인하고 조직·관리자 계정을 발급할까요?"><button class="btn btn-xs btn-primary">승인·발급</button></form>
         <form method="post" action="/super/application/${a.id}/reject" data-confirm="반려할까요? 목록에서 사라집니다."><button class="btn btn-xs btn-ghost">반려</button></form></div>
     </article>`;
   }).join("");
   const appsPanel = `<section class="panel panel-accent"><div class="panel-head"><h2 class="panel-title">영업 파이프라인 <span class="badge ${pendingApps.length ? "badge-wait" : "badge-muted"}">${pendingApps.length}건 진행</span>${dueSoon ? ` <span class="badge badge-no">연락할 때 ${dueSoon}건</span>` : ""}</h2></div>
-    <p class="panel-hint">공개 신청(<a href="/apply" target="_blank">/apply</a>)으로 들어온 건과 직접 발굴한 상인회를 함께 관리합니다. 승인하면 홈과 관리자 계정이 바로 발급됩니다.</p>
+    <p class="panel-hint">공개 신청(<a href="/apply" target="_blank">/apply</a>)으로 들어온 건과 직접 발굴한 곳을 함께 관리합니다. 승인하면 홈과 관리자 계정이 바로 발급됩니다.</p>
     ${pendingApps.length ? `<div class="stage-strip">${Object.entries(SALES_STAGES).map(([k, v]) => `<span class="stage-chip stage-${k}">${esc(v)} <b>${stageCount(k)}</b></span>`).join("")}</div>
     <div class="lead-grid">${appCards}</div>` : `<p class="panel-hint">진행 중인 건이 없습니다.</p>`}
-    <details class="lead-add"><summary class="btn btn-ghost btn-sm">＋ 직접 발굴한 상인회 추가</summary>
+    <details class="lead-add"><summary class="btn btn-ghost btn-sm">＋ 직접 발굴한 곳 추가</summary>
       <form method="post" action="/super/prospect" class="stack-form compact">
-        <div class="form-two"><label>상인회 이름<input type="text" name="assoc_name" required maxlength="100" placeholder="예: 방배동 먹자골목 상인회" /></label>
+        <div class="form-two"><label>조직 이름<input type="text" name="assoc_name" required maxlength="100" placeholder="예: 방배동 먹자골목 상인회" /></label>
           <label>담당자<input type="text" name="contact_name" maxlength="60" placeholder="예: 김회장" /></label></div>
         <div class="form-two"><label>이메일 (선택)<input type="email" name="contact_email" /></label>
           <label>연락처 (선택)<input type="text" name="contact_phone" maxlength="40" /></label></div>
@@ -2993,7 +2993,7 @@ export async function superConsole(ctx) {
       <input type="text" name="domain" value="${esc(a.custom_domain || "")}" placeholder="예: seocho-market.kr" />
       <button class="btn btn-xs btn-ghost">저장</button></form>
       ${a.custom_domain ? `<small class="domain-hint">✅ <a href="https://${esc(a.custom_domain)}" target="_blank">${esc(a.custom_domain)}</a></small>` : ""}
-      <form method="post" action="/super/association/${a.id}/mapkey" class="domain-form" style="margin-top:4px" title="이 상인회만 다른 Maps 앱을 쓰게 할 때 (비우면 공용 키)">
+      <form method="post" action="/super/association/${a.id}/mapkey" class="domain-form" style="margin-top:4px" title="이 조직만 다른 Maps 앱을 쓰게 할 때 (비우면 공용 키)">
       <input type="text" name="map_client_id" value="${esc(a.map_client_id || "")}" placeholder="지도 키(선택·공용이면 비움)" />
       <button class="btn btn-xs btn-ghost">저장</button></form></td>
     <td><form method="post" action="/super/association/${a.id}/plan" class="plan-form"><select name="plan">${planOpts(a.plan || "free")}</select><button class="btn btn-xs btn-ghost">변경</button></form>
@@ -3037,9 +3037,12 @@ export async function superConsole(ctx) {
   const sideNav = `<aside class="console-side"><nav id="superNav">${TABS.map(([id, label, icon, badge]) =>
     `<a href="#s-${id}" data-tab="${id}">${icon} ${esc(label)}${badge ? `<span class="side-badge">${badge}</span>` : ""}</a>`).join("")}</nav></aside>`;
 
+  // 제품이 셋이므로 "몇 곳"만으로는 무엇을 파는 회사인지 화면에서 읽히지 않는다.
+  const kindCounts = KIND_KEYS.map((k) => [k, KINDS[k].label, list.filter((a) => (a.kind || "merchant") === k).length])
+    .filter(([, , n]) => n > 0);
   const body = `<section class="dash"><div class="container">
-    <div class="dash-head"><div><p class="section-eyebrow">SUPER</p><h1 class="dash-title">플랫폼 관리</h1>
-      <p class="dash-sub">운영 중 ${ps.associations}곳 · 가입 점포 ${ps.businesses}곳 · 사용자 ${ps.users}명</p></div>
+    <div class="dash-head"><div><p class="section-eyebrow">리스터코퍼레이션 · 운영사</p><h1 class="dash-title">운영사 콘솔</h1>
+      <p class="dash-sub">고객사 ${ps.associations}곳 · 사용자 ${ps.users}명 — ${kindCounts.map(([, label, n]) => `${esc(label)} ${n}`).join(" · ")}</p></div>
       <div class="dash-head-actions"><a href="#s-assoc" class="btn btn-primary btn-sm" data-goto="assoc">＋ 새 조직</a>
         <form method="post" action="/logout"><button class="btn btn-ghost btn-sm">로그아웃</button></form></div></div>${flashOf(query)}
     ${loadWarnings.length ? `<div class="flash flash-err"><b>일부 정보를 불러오지 못했습니다.</b> 나머지 기능은 그대로 쓰실 수 있습니다.<br />${loadWarnings.map((w) => esc(w)).join("<br />")}</div>` : ""}
@@ -3048,7 +3051,8 @@ export async function superConsole(ctx) {
 
       <div class="sgroup" id="s-home" data-tab="home">
         ${launchPanel}
-    <div class="stat-cards"><div class="stat-card"><span class="stat-num">${ps.associations}</span><span class="stat-label">상인회</span></div>
+    <div class="stat-cards">${kindCounts.map(([, label, n]) =>
+      `<div class="stat-card"><span class="stat-num">${n}</span><span class="stat-label">${esc(label)}</span></div>`).join("")}
       <div class="stat-card"><span class="stat-num">${ps.businesses}</span><span class="stat-label">승인 업체</span></div>
       <div class="stat-card"><span class="stat-num">${ps.users}</span><span class="stat-label">사용자</span></div>
       <div class="stat-card"><span class="stat-num">${ps.media}</span><span class="stat-label">미디어</span></div></div>
@@ -3109,7 +3113,7 @@ export async function superConsole(ctx) {
     <section class="panel"><h2 class="panel-title">플랫폼 설정</h2>
       <form method="post" action="/super/platform-mode" class="stack-form compact">
         <div class="row-toggle"><label class="switch"><input type="checkbox" name="on" value="1"${platformMode ? " checked" : ""} /><span class="track"></span></label>
-          <span>루트(첫 화면)를 <b>플랫폼 소개 랜딩</b>으로 표시 <small style="color:var(--muted)">(끄면 상인회가 1곳일 때 그 홈으로 바로 이동)</small></span></div>
+          <span>루트(첫 화면)를 <b>플랫폼 소개 랜딩</b>으로 표시 <small style="color:var(--muted)">(끄면 조직이 1곳일 때 그 홈으로 바로 이동)</small></span></div>
         <button class="btn btn-ghost btn-sm">저장</button></form>
       <div class="form-divider">플랫폼/운영자 정보 (약관·개인정보처리방침·푸터에 표시)</div>
       <form method="post" action="/super/platform-info" class="stack-form compact">
@@ -3127,14 +3131,14 @@ export async function superConsole(ctx) {
         <li><a href="https://console.ncloud.com" target="_blank" rel="noopener">네이버 클라우드 콘솔</a> → Maps → Application 목록 → 해당 앱 <b>[변경]</b></li>
         <li><b>Web 서비스 URL</b> 에 지도가 표시될 도메인을 <b>추가</b> (예: <code>https://website.tobe211167.workers.dev</code>, 개별 도메인 연결 시 그 도메인도)</li>
         <li>기존 주소는 지우지 말 것 — 미등록 도메인에선 지도가 "인증 실패" 회색 화면이 됩니다</li>
-        <li>URL 은 앱당 <b>최대 10개</b> — 초과 시 Maps 앱을 하나 더 만들고, 아래 상인회 목록의 <b>지도 키</b> 칸에 새 앱의 Client ID 를 넣으면 그 상인회만 새 앱을 사용합니다</li>
+        <li>URL 은 앱당 <b>최대 10개</b> — 초과 시 Maps 앱을 하나 더 만들고, 아래 조직 목록의 <b>지도 키</b> 칸에 새 앱의 Client ID 를 넣으면 그 조직만 새 앱을 사용합니다</li>
         <li>사장님 대시보드의 <b>"주소로 찾기"</b>(주소→좌표 자동 변환)를 쓰려면 같은 Maps 앱에서 <b>Geocoding</b> 서비스도 체크해 주세요 — 미활성이어도 지도 클릭 방식은 그대로 동작합니다</li>
       </ol>
-      <h3>개별 도메인 연결 (상인회 1곳당)</h3>
+      <h3>개별 도메인 연결 (조직 1곳당)</h3>
       <ol>
         <li>도메인을 이 Cloudflare 계정에 추가 (Domains → Add)</li>
         <li>Workers &amp; Pages → 이 워커 → Settings → <b>Domains &amp; Routes → Add → Custom Domain</b></li>
-        <li>아래 상인회 목록의 <b>개별 도메인</b> 칸에 같은 도메인 입력·저장</li>
+        <li>아래 조직 목록의 <b>개별 도메인</b> 칸에 같은 도메인 입력·저장</li>
         <li>네이버 지도 사용 시 → 위의 Web 서비스 URL 에도 추가</li>
       </ol>
       <h3>사진 직접 서빙 (설정 완료 ✓)</h3>
@@ -3144,7 +3148,7 @@ export async function superConsole(ctx) {
       <ul class="audit-list">${auditLog.length ? auditLog.map((a) => `<li><span class="audit-action">${esc(a.action)}</span> <span class="audit-detail">${esc(a.detail)}</span><span class="audit-meta">${esc(a.actor_name)} · ${esc(kstStamp(a.created_at, { year: false }))}</span></li>`).join("") : `<li class="empty">기록이 없습니다.</li>`}</ul></section>      </div>
 
     </div></div></div></section>`;
-  return html(layout({ title: "슈퍼 관리자", user, body, csrf, scripts: `<script src="${assetUrl("/js/super-tabs.js")}" defer></script>` }));
+  return html(layout({ title: "운영사 콘솔", console: "super", user, body, csrf, scripts: `<script src="${assetUrl("/js/super-tabs.js")}" defer></script>` }));
 }
 
 // ================= 계정 =================
@@ -3170,11 +3174,11 @@ export function account(ctx) {
     twofa = `<p class="panel-hint">인증 앱으로 로그인을 한 단계 더 보호합니다. (관리자 계정 권장)</p>
       <form method="post" action="/account/2fa/setup"><button class="btn btn-primary btn-sm">2단계 인증 설정 시작</button></form>`;
   }
-  // 슈퍼 콘솔 입구는 여기 둡니다 — 상인회 사이트 메뉴에 두면 그 상인회의 기능처럼 보입니다.
+  // 운영사 콘솔 입구는 여기 둡니다 — 고객사 사이트 메뉴에 두면 그 조직의 기능처럼 보입니다.
   const superLink = user.role === "SUPERADMIN"
-    ? `<section class="panel panel-accent"><h2 class="panel-title">플랫폼 운영</h2>
-        <p class="panel-hint">상인회 개설·영업 관리·사용량은 슈퍼 콘솔에서 봅니다. 상인회 홈페이지와는 별개의 화면입니다.</p>
-        <a class="btn btn-primary btn-sm" href="/super">슈퍼 콘솔 열기</a></section>`
+    ? `<section class="panel panel-accent"><h2 class="panel-title">운영사 콘솔</h2>
+        <p class="panel-hint">조직 개설·영업 관리·사용량은 운영사 콘솔에서 봅니다. 고객사 화면과는 별개입니다.</p>
+        <a class="btn btn-primary btn-sm" href="/super">운영사 콘솔 열기</a></section>`
     : "";
   const body = `<section class="section page-top"><div class="container narrow">
     <h1 class="article-title">계정 설정</h1>${flashOf(query)}
@@ -3236,11 +3240,11 @@ export async function setupForm(ctx) {
   const body = `<section class="section page-top"><div class="container auth-wrap"><div class="auth-card">
     <h1 class="auth-title">첫 설정</h1><p class="auth-sub">상인회와 관리자 계정을 만들어 시작하세요. (최초 1회)</p>${flashOf(query)}
     <form method="post" action="/setup" class="stack-form">
-      <label>상인회 이름<input type="text" name="assoc_name" required maxlength="100" placeholder="예: 서초구 상인회" /></label>
+      <label>조직 이름<input type="text" name="assoc_name" required maxlength="100" placeholder="예: 서초구 상인회" /></label>
       <div class="form-divider">상인회 관리자 (ADMIN)</div>
       <label>관리자 이메일<input type="email" name="admin_email" required /></label>
       <label>관리자 비밀번호 (8자 이상)<input type="password" name="admin_password" required minlength="8" /></label>
-      <div class="form-divider">슈퍼 관리자 (플랫폼 전체 · 사이트 복제 권한)</div>
+      <div class="form-divider">운영사 계정 (모든 고객사 · 사이트 복제 권한)</div>
       <label>슈퍼 이메일<input type="email" name="super_email" required /></label>
       <label>슈퍼 비밀번호 (8자 이상)<input type="password" name="super_password" required minlength="8" /></label>
       <button class="btn btn-primary btn-block">설정 완료하고 시작</button>

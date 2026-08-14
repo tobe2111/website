@@ -102,7 +102,7 @@ test("슈퍼: 새 상인회 생성(멀티테넌트) + 격리", async () => {
   const j = jar(); await login(j, "super@p.kr", "super1234");
   let r = await get(j, "/super");
   assert.equal(r.status, 200);
-  assert.match(await r.text(), /플랫폼 관리/);
+  assert.match(await r.text(), /운영사 콘솔/);
   r = await post(j, "/super/association", { name: "강남 상인회", admin_email: "gadmin@x.kr", admin_password: "admin1234", admin_name: "강남관리자" });
   assert.equal(r.status, 303);
   const gangnam = await D.getAssociationBySlug(env.DB, "gangnam");
