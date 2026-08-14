@@ -175,6 +175,8 @@ test("오래 잠든 상인회는 눈에 띄게 표시된다", async () => {
   for (const t of ["notices", "businesses"])
     await db().prepare(`UPDATE ${t} SET created_at='2020-01-01 00:00:00' WHERE association_id=?`).bind(a.id).run();
   await db().prepare(`UPDATE businesses SET updated_at='2020-01-01 00:00:00' WHERE association_id=?`).bind(a.id).run();
+  // 개설일도 함께 옮긴다 — 갓 만든 곳은 활동이 없는 게 당연해서 '조용함'으로 세지 않는다
+  await db().prepare(`UPDATE associations SET created_at='2020-01-01 00:00:00' WHERE id=?`).bind(a.id).run();
   const html = await (await req("GET", "/super", { cookie })).text();
   assert.match(html, /class="act-stamp is-cold"/, "30일 넘게 조용하면 강조돼야 함");
 });
@@ -798,4 +800,50 @@ test("업종 문구를 쓰는 유형만 표시로 구분된다", async () => {
   assert.match(html, /<option value="franchise" data-landing="1"/);
   assert.ok(!/<option value="merchant" data-landing/.test(html));
   assert.ok(!/<option value="esign" data-landing/.test(html));
+});
+
+// ── 목록은 손이 가야 하는 곳부터 보여야 한다. 만든 순서는 운영자에게 아무 뜻이 없다.
+test("고객사 카드는 손볼 곳부터 오고, 이유를 스스로 말한다", async () => {
+  const S = await superSession();
+  const ok = await D.createAssociation(S.env.DB, { slug: "ok", name: "정상곳", kind: "merchant" });
+  const off = await D.createAssociation(S.env.DB, { slug: "off", name: "닫힌곳", kind: "merchant" });
+  await D.addCredit(S.env.DB, ok.id, 5000);
+  await S.env.DB.prepare("UPDATE associations SET active=0 WHERE id=?").bind(off.id).run();
+  await S.env.DB.prepare("UPDATE associations SET created_at=datetime('now') WHERE id=?").bind(ok.id).run();
+  const html = await S.get("/super");
+
+  const order = [...html.matchAll(/<b>(정상곳|닫힌곳)<\/b>/g)].map((m) => m[1]);
+  assert.deepEqual(order, ["닫힌곳", "정상곳"], "화면이 닫힌 곳이 먼저 와야");
+  assert.match(html, /고객이 보는 화면이 닫혀 있습니다/, "왜 손봐야 하는지 카드가 말해야");
+  assert.match(html, /badge-no">손볼 곳 1</);
+  assert.match(html, /class="org-card is-off needs"/);
+});
+
+test("모두 정상이면 손볼 곳 배지가 없다", async () => {
+  const S = await superSession();
+  const a = await D.createAssociation(S.env.DB, { slug: "fine", name: "정상곳", kind: "merchant" });
+  await D.addCredit(S.env.DB, a.id, 5000);
+  await S.env.DB.prepare("UPDATE associations SET created_at=datetime('now') WHERE id=?").bind(a.id).run();
+  const html = await S.get("/super");
+  assert.ok(!/손볼 곳/.test(html));
+  assert.match(html, /모두 정상입니다/);
+  assert.ok(!/class="org-card[^"]*needs"/.test(html));
+});
+
+// 알림톡 화면은 한 패널에 여덟 덩어리가 쌓여 있었다 — 매일 하는 일과 한 번 하는 설정이 같은 무게였다.
+test("알림톡 화면은 하는 빈도로 나뉜다", async () => {
+  const html = await superHtml();
+  assert.match(html, /panel-title">알림톡 판매/, "매일 보는 것(충전 승인)은 펼쳐진 채");
+  assert.match(html, /<details class="panel panel-fold"><summary class="panel-title">알림톡 설정/, "설정은 접힌 채");
+  assert.match(html, /<details class="panel panel-fold"><summary class="panel-title">계산 근거/, "참고표도 접힌 채");
+});
+
+// 갓 만든 고객사가 만들자마자 "한 달째 조용함"으로 뜨면, 그 경고를 아무도 안 믿게 된다.
+test("방금 만든 고객사는 조용한 곳으로 세지 않는다", async () => {
+  const S = await superSession();
+  const a = await D.createAssociation(S.env.DB, { slug: "new", name: "새로만든곳", kind: "merchant" });
+  await D.addCredit(S.env.DB, a.id, 5000);
+  const html = await S.get("/super");
+  assert.ok(!/한 달 넘게 아무 움직임이 없습니다/.test(html));
+  assert.ok(!/손볼 곳/.test(html));
 });

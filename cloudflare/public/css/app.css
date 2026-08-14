@@ -443,6 +443,9 @@ a.bc-val:hover{text-decoration:underline}
 .org-top b{font-size:.95rem;font-weight:750}
 .org-meta code{font-size:.74rem;color:var(--muted);background:none;padding:0}
 .org-foot{font-size:.76rem;color:var(--muted)}
+/* 손이 가야 하는 곳은 카드가 스스로 이유를 말한다 — 목록을 훑다 놓치지 않게 */
+.org-card.needs{border-color:var(--no);background:var(--no-bg)}
+.org-why{font-size:.78rem;font-weight:600;color:var(--no-fg);line-height:1.45}
 @media (prefers-reduced-motion:reduce){ .org-card{transition:none} .org-card:hover{transform:none} }
 
 /* 조직 화면의 주소 입력 — /t/ 와 칸이 한 줄로 붙어야 무엇을 고치는지 보인다 */
@@ -486,7 +489,12 @@ body[data-console="super"]{
 .console-strip .strip-out{margin-left:auto;color:#c9d3e8;text-decoration:underline;text-underline-offset:2px;white-space:nowrap}
 .console-strip .strip-out:hover{color:#fff}
 .console-strip .strip-out:focus-visible{outline:2px solid #fff;outline-offset:2px;border-radius:3px}
-@media (max-width:560px){ .console-strip .strip-out{margin-left:0} }
+@media (max-width:560px){
+  /* 좁은 화면에서는 설명을 접고 이름과 나가는 길만 남긴다 — 띠가 두 줄을 먹으면
+     정작 봐야 할 고객사 목록이 접힌 화면 밖으로 밀린다 */
+  .console-strip b+span{display:none}
+  .console-strip .strip-out{margin-left:auto}
+}
 /* 운영사 화면의 머리글도 같은 계열로 — 배지 하나가 아니라 화면 전체가 달라 보여야 한다 */
 body[data-console="super"] .site-header{background:#1e2a44;border-bottom-color:#2b3a5c}
 body[data-console="super"] .site-header .brand,
@@ -1040,7 +1048,14 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
   .console-grid{grid-template-columns:1fr}
   .console-side{position:static;top:auto}
   .console-side nav{flex-direction:row;flex-wrap:wrap;gap:6px}
-  .console-side a{padding:8px 12px;font-size:13px}
+  /* 손가락으로 누르는 자리다 — 실측 17px 이던 것을 44px 로 올린다.
+     좁은 화면에서 탭이 두 줄로 접히므로 각 칸이 고르게 나뉘도록 flex 로 늘린다. */
+  .console-side a{min-height:44px;padding:0 14px;font-size:14px;flex:1 1 auto;justify-content:center}
+}
+/* 운영사 띠의 '고객이 보는 화면' 도 같은 이유로 넉넉히 */
+@media (max-width:860px){
+  .console-strip .strip-out{display:inline-flex;align-items:center;min-height:44px}
+  .console-strip-in{padding:0}
 }
 
 /* 법적 페이지 */

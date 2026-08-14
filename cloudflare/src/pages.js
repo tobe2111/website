@@ -3068,6 +3068,11 @@ export async function superConsole(ctx) {
     </div>
     <div class="form-divider">충전 신청 (입금 확인 후 승인)</div>
     <div class="table-scroll"><table class="admin-table"><thead><tr><th>조직</th><th>금액</th><th>입금자·신청</th><th>처리</th></tr></thead><tbody>${creditRows}</tbody></table></div>
+    </section>
+
+    <details class="panel panel-fold"><summary class="panel-title">알림톡 설정
+      <span class="badge ${tplDone === tplEntries.length ? "badge-ok" : "badge-wait"}">템플릿 ${tplDone}/${tplEntries.length}</span></summary>
+    <p class="panel-hint">한 번 정해 두면 다시 볼 일이 거의 없는 것들입니다.</p>
     <div class="form-divider">단가·템플릿 설정</div>
     <form method="post" action="/super/notify-settings" class="stack-form">
       <label class="mini-label">알림톡 판매단가 (원/건)<input type="number" name="price_alimtalk" value="${unitPrice}" min="0" max="1000" required /></label>
@@ -3108,6 +3113,10 @@ export async function superConsole(ctx) {
     <p class="panel-hint">${mode === "per_doc"
       ? `계약을 만들 때 <b>${unitPrice.toLocaleString()}원</b>을 한 번 받고, 그 계약의 서명 요청·본인확인·완료 안내·재알림은 모두 무료입니다. 공지 발송은 이 요금과 별개로 건당 과금됩니다.`
       : `발송 1건마다 <b>${unitPrice.toLocaleString()}원</b>씩 차감합니다. 서명자·재알림이 늘면 매출도 함께 늘어납니다.`}</p>
+    </details>
+
+    <details class="panel panel-fold"><summary class="panel-title">계산 근거 <span class="badge badge-muted">참고</span></summary>
+    <p class="panel-hint">단가를 정하거나 과금 방식을 고를 때 보는 표입니다. 평소에는 볼 일이 없습니다.</p>
     <div class="form-divider">계약 1건에 몇 통이 나가나</div>
     <table class="admin-table tpl-count"><thead><tr><th>단계</th><th>발송</th><th>필수</th></tr></thead><tbody>
       <tr><td>서명 요청</td><td>서명자 1인당 1통</td><td>필수</td></tr>
@@ -3135,7 +3144,7 @@ export async function superConsole(ctx) {
       현재 단가 ${unitPrice.toLocaleString()}원 기준으로 서명자 <b>${Math.max(1, Math.floor(unitPrice / (3 * baseCost)))}명</b>까지 이익이고,
       그보다 많으면 손해입니다. 재알림을 보낼수록 손익분기가 더 앞당겨집니다.</p>`
       : `<p class="panel-hint">발송당 과금은 인원이 늘어도 마진율이 일정합니다(${unitPrice ? Math.round(((unitPrice - baseCost) / unitPrice) * 100) : 0}%).</p>`}
-    </section>`;
+    </details>`;
 
   const usagePanel = `<details class="panel panel-fold"><summary class="panel-title">저장용량 <span class="badge badge-muted">R2 총 ${fmtBytes(ps.storage)}</span></summary>
     <p class="panel-hint">무료 한도 10GB 기준입니다. 조직별 사용량은 그 조직 화면에서 봅니다.</p></details>`;
@@ -3184,23 +3193,42 @@ export async function superConsole(ctx) {
   // 첫 화면에 고객사를 올린다 — 매일 여는 것이 이것인데 탭 안쪽에 묻혀 있었다.
   // 여기서는 고르기만 한다. 손보는 일은 조직 화면(/super/org/:id) 한 곳에 모여 있다.
   const balByAssoc = new Map(notifyUsage.map((u) => [u.id, u.balance || 0]));
-  const orgCards = list.map((a) => {
+  // 손이 가야 하는 곳이 위로 온다 — 만든 순서는 운영자에게 아무 뜻이 없다.
+  // 순서: 비활성 → 잔액 없음 → 오래 조용함 → 나머지는 최근 활동순.
+  const asMs = (t) => (t ? Date.parse(t.includes("T") ? t : t.replace(" ", "T") + "Z") : NaN);
+  const orgAttention = (a) => {
+    // 갓 만든 곳은 아직 아무 활동이 없는 게 당연하다 — 개설일을 바닥으로 삼지 않으면
+    // 새 고객사가 만들자마자 "한 달째 조용함"으로 뜬다.
+    // Math.max 는 NaN 하나만 섞여도 NaN 이 된다 — 있는 값만 모아서 고른다
+    const stamps = [asMs(lastAct.get(a.id)), asMs(a.created_at)].filter(Number.isFinite);
+    const d = stamps.length ? Math.floor((Date.now() - Math.max(...stamps)) / 86400000) : null;
+    if (!a.active) return { rank: 0, why: "비활성 — 고객이 보는 화면이 닫혀 있습니다", d };
+    if (!(balByAssoc.get(a.id) > 0)) return { rank: 1, why: "알림톡 잔액이 없어 안내가 나가지 않습니다", d };
+    if (d === null || d >= 30) return { rank: 2, why: "한 달 넘게 아무 움직임이 없습니다", d };
+    return { rank: 3, why: "", d };
+  };
+  const ranked = list.map((a) => ({ a, ...orgAttention(a) }))
+    .sort((x, y) => x.rank - y.rank || (x.d === null ? 1e9 : x.d) - (y.d === null ? 1e9 : y.d));
+  const needAttention = ranked.filter((r) => r.rank < 3).length;
+  const orgCards = ranked.map(({ a, why, d }) => {
     const K = kindById(a.kind);
-    const t = lastAct.get(a.id);
-    const d = t ? Math.floor((Date.now() - Date.parse(t.includes("T") ? t : t.replace(" ", "T") + "Z")) / 86400000) : null;
     const bal = balByAssoc.get(a.id) || 0;
-    return `<a class="org-card${a.active ? "" : " is-off"}" href="/super/org/${a.id}">
+    return `<a class="org-card${a.active ? "" : " is-off"}${why ? " needs" : ""}" href="/super/org/${a.id}">
       <span class="org-top"><b>${esc(a.name)}</b>
         <span class="badge ${K.badge}">${esc(K.label)}</span>${a.active ? "" : '<span class="badge badge-no">비활성</span>'}</span>
       <span class="org-meta"><code>${esc(prettyPath("/t/" + a.slug))}</code></span>
+      ${why ? `<span class="org-why">${esc(why)}</span>` : ""}
       <span class="org-foot"><span class="act-stamp${d === null || d >= 30 ? " is-cold" : ""}"
         title="점포·공지·행사·게시글·서명을 통틀어 마지막으로 움직인 시각">${d === null ? "활동 없음" : d <= 0 ? "오늘 활동" : `${d}일 전 활동`}</span>
         · 알림톡 ${bal > 0 ? `${bal.toLocaleString()}원` : "<b class=\"txt-warn\">잔액 없음</b>"}</span></a>`;
   }).join("");
-  const orgPanel = `<section class="panel"><div class="panel-head"><h2 class="panel-title">고객사 <span class="badge badge-muted">${list.length}곳</span></h2>
+  const orgPanel = `<section class="panel"><div class="panel-head"><h2 class="panel-title">고객사 <span class="badge badge-muted">${list.length}곳</span>${
+      needAttention ? `<span class="badge badge-no">손볼 곳 ${needAttention}</span>` : ""}</h2>
       <span class="pill-row"><a class="btn btn-xs btn-ghost" href="#new-assoc">＋ 새 조직</a></span></div>
     ${list.length ? `<div class="org-grid">${orgCards}</div>
-      <p class="panel-hint">한 곳을 누르면 주소·유형·요금제·알림톡·관리자 계정이 <b>한 화면에</b> 모여 있습니다.</p>`
+      <p class="panel-hint">${needAttention
+        ? "<b>손볼 곳이 위에 옵니다</b> — 화면이 닫힌 곳, 잔액이 없어 안내가 못 나가는 곳, 한 달 넘게 조용한 곳 순입니다."
+        : "모두 정상입니다. 최근 움직인 순서로 보여 드립니다."} 한 곳을 누르면 주소·유형·요금제·알림톡·관리자 계정이 <b>한 화면에</b> 모여 있습니다.</p>`
       : `<p class="panel-hint">아직 고객사가 없습니다. <a href="#new-assoc">첫 조직 만들기 →</a></p>`}
   </section>`;
 
