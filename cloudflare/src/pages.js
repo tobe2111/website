@@ -2734,10 +2734,12 @@ export async function superConsole(ctx) {
   const sessionValue = await D.getSetting(db, "session_secret");
   const migrate = [
     { key: "session_secret", name: "SESSION_SECRET", label: "세션·백업 암호화 키",
+      shape: "96자짜리 긴 문자열 하나 (예: <code>3f8a2c91e04b…</code>)",
       onWorker: !!env.SESSION_SECRET_IS_WORKER, inDb: !!sessionValue, value: sessionValue || "",
       risk: "새로 만들면 <b>로그인이 전부 풀리고</b> 이미 보낸 서명 링크가 무효가 됩니다. 주간 백업도 이 값으로 암호화되므로, 값이 바뀌면 <b>예전 백업을 열 수 없습니다.</b>",
       why: "이 값이 D1 안에 있는 동안은, 백업을 여는 열쇠가 백업 안에 함께 들어 있는 셈입니다 — D1 을 잃으면 R2 의 백업도 못 엽니다." },
     { key: "sign_key", name: "SIGN_PRIVATE_KEY", label: "전자서명 개인키",
+      shape: "중괄호로 시작하는 JSON 한 줄 (<code>{\"kty\":\"OKP\",…}</code>) — <b>{ 부터 } 까지 전부</b>",
       onWorker: keyMode === "secret", inDb: !!signKeyInDb, value: signKeyInDb || "",
       risk: "새로 만들면 <b>이미 받은 서명이 전부 검증에 실패합니다.</b> 반드시 현행 키를 그대로 옮기세요.",
       why: "D1 을 읽을 수 있는 사람이 과거 서명을 위조할 수 있습니다.",
@@ -2757,12 +2759,15 @@ export async function superConsole(ctx) {
           <span class="badge ${done ? "badge-ok" : m.onWorker ? "badge-wait" : "badge-no"}">${state}</span></div>
         ${done ? "" : `<p>${m.why}</p>
         <div class="flash flash-warn">${m.risk}</div>
+        <p class="mig-map">지금 있는 곳 <code>DB · ${esc(m.key)}</code> → 넣을 곳 <code>워커 · ${esc(m.name)}</code>
+          <br><span class="muted">이름이 서로 다릅니다. Cloudflare 에 적을 이름은 <b>${esc(m.name)}</b> 입니다.
+          값은 ${m.shape}</span></p>
         <ol class="hint-steps">
           <li>${m.value
             ? `<button type="button" class="btn btn-ghost btn-sm" data-copy="${esc(m.value)}">현행 값 복사</button>`
             : "<span class=\"muted\">DB 에 값이 없습니다 (이미 워커에만 있는 상태)</span>"}</li>
           <li>Workers &amp; Pages → <b>website</b> → Settings → Variables and Secrets → ＋ Add →
-            이름 <code>${esc(m.name)}</code>, Type <b>Secret</b>, 값은 붙여넣기 → <b>Deploy</b></li>
+            Variable name 칸에 <code>${esc(m.name)}</code>, Type <b>Secret</b>, Value 칸에 붙여넣기 → <b>Deploy</b></li>
           <li>배포 후 이 화면을 새로고침하면 <b>사본만 남음</b> 으로 바뀝니다. 그때 아래 버튼으로 DB 사본을 지웁니다.</li>
         </ol>
         ${m.onWorker && m.inDb

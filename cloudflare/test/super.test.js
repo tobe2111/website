@@ -575,3 +575,12 @@ test("시크릿 값은 화면 텍스트로 그리지 않는다 (복사 버튼 �
   assert.ok(!visible.includes("auto-generated"), "값이 본문에 노출되면 안 된다");
   assert.match(html, /data-copy="auto-generated"/, "복사 버튼으로는 넘겨줘야 한다");
 });
+
+// D1 안 이름(session_secret)과 워커 변수 이름(SESSION_SECRET)이 달라서 실제로 헷갈렸다.
+// 두 이름의 대응을 화면이 직접 보여 줘야 한다.
+test("시크릿 옮기기: DB 이름과 워커 변수 이름의 대응을 화면에 적는다", async () => {
+  const html = await superHtml();
+  assert.match(html, /DB · session_secret<\/code> → 넣을 곳 <code>워커 · SESSION_SECRET/);
+  assert.match(html, /DB · sign_key<\/code> → 넣을 곳 <code>워커 · SIGN_PRIVATE_KEY/);
+  assert.match(html, /이름이 서로 다릅니다/);
+});
