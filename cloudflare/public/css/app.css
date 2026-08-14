@@ -424,6 +424,31 @@ a.bc-val:hover{text-decoration:underline}
 .mig-map{margin:8px 0!important;font-size:.85rem;line-height:1.8}
 .mig-map code{font-size:.8rem}
 
+/* 끝난 패널은 접어 둔다 — 접힌 상태에서도 무엇이 끝났는지는 제목줄로 읽힌다 */
+.panel-fold>summary{cursor:pointer;list-style:none;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.panel-fold>summary::-webkit-details-marker{display:none}
+.panel-fold>summary::after{content:"펴기";margin-left:auto;font-size:.75rem;font-weight:700;color:var(--muted)}
+.panel-fold[open]>summary::after{content:"접기"}
+.panel-fold>summary:focus-visible{outline:2px solid var(--brand);outline-offset:3px;border-radius:4px}
+
+/* 고객사 카드 — 매일 여는 화면이라 첫 화면에 둔다. 여기서는 고르기만 한다. */
+.org-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-top:4px}
+.org-card{display:flex;flex-direction:column;gap:5px;padding:12px 14px;border:1px solid var(--line);
+  border-radius:10px;background:var(--bg-alt);text-decoration:none;color:inherit;
+  transition:border-color .15s,transform .15s}
+.org-card:hover{border-color:var(--brand);transform:translateY(-1px)}
+.org-card:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+.org-card.is-off{opacity:.6}
+.org-top{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.org-top b{font-size:.95rem;font-weight:750}
+.org-meta code{font-size:.74rem;color:var(--muted);background:none;padding:0}
+.org-foot{font-size:.76rem;color:var(--muted)}
+@media (prefers-reduced-motion:reduce){ .org-card{transition:none} .org-card:hover{transform:none} }
+
+/* 조직 화면의 주소 입력 — /t/ 와 칸이 한 줄로 붙어야 무엇을 고치는지 보인다 */
+.slug-row{display:flex;align-items:center;gap:0}
+.slug-row input{flex:1;min-width:0}
+
 /* ── 운영사 콘솔 ──────────────────────────────────────────────
    고객사 관리 화면(/admin)과 겉이 똑같으면, 지금 어느 쪽을 만지고 있는지 헷갈린다.
    여기서 한 조작은 모든 고객사에 미치므로, 색과 띠로 확실히 갈라 둔다.

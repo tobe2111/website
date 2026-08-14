@@ -618,3 +618,88 @@ test("운영사 콘솔 통계는 조직 유형별로 센다", async () => {
   assert.ok(!/<span class="stat-label">상인회<\/span><\/div>\s*<div class="stat-card"><span class="stat-num">\d+<\/span><span class="stat-label">승인 업체/.test(html)
     || /전자계약/.test(cards), "전체를 '상인회' 하나로 뭉뚱그리면 안 된다");
 });
+
+// ── 조직 하나를 모아 보는 화면
+// 한 고객사를 손보려면 주소는 조직 탭, 크레딧은 정산 탭… 화면을 세 번 갈아타야 했다.
+async function superSession() {
+  const e2 = makeEnv();
+  await D.setSetting(e2.DB, "session_secret", "auto-generated");
+  const pw = await hashPassword("super1234");
+  await D.createUser(e2.DB, { email: "org@platform.kr", passwordHash: pw.hash, salt: pw.salt, name: "운영자", role: "SUPERADMIN", associationId: null });
+  const f = (p, init) => worker.fetch(new Request(BASE + p, init), e2, { waitUntil() {}, passThroughOnException() {} });
+  const g = await f("/login");
+  const seed = (g.headers.getSetCookie?.() || []).find((c) => c.startsWith("sc_csrf_seed="))?.split(";")[0] || "";
+  const tk = (/name="_csrf" value="([^"]+)"/.exec(await g.text()) || [])[1];
+  const lr = await f("/login", { method: "POST", headers: { cookie: seed, origin: BASE, "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ _csrf: tk, email: "org@platform.kr", password: "super1234" }) });
+  const jar = [seed, ...(lr.headers.getSetCookie?.() || []).map((c) => c.split(";")[0])].join("; ");
+  return { env: e2, f, jar, get: async (p) => (await f(p, { headers: { cookie: jar } })).text() };
+}
+
+test("조직 한 곳의 정보가 한 화면에 모여 있다", async () => {
+  const S = await superSession();
+  const a = await D.createAssociation(S.env.DB, { slug: "hanbit", name: "한빛법무법인", kind: "esign" });
+  await D.addCredit(S.env.DB, a.id, 5000);
+  const html = await S.get(`/super/org/${a.id}`);
+  assert.match(html, /한빛법무법인/);
+  for (const section of ["주소", "유형·요금제", "알림톡", "관리자 계정", "되돌릴 수 없는 것"])
+    assert.match(html, new RegExp(section), `${section} 가 한 화면에 있어야`);
+  assert.match(html, /잔액 5,000원/, "크레딧을 보려고 정산 탭으로 갈 필요가 없어야");
+  assert.match(html, /관리자 계정이 없습니다/, "아무도 로그인 못 하는 상태는 말해 줘야");
+  assert.match(html, /<body data-console="super"/, "운영사 껍데기를 그대로 써야");
+});
+
+test("조직 화면에서 고치면 그 화면으로 돌아온다", async () => {
+  const S = await superSession();
+  const a = await D.createAssociation(S.env.DB, { slug: "old-slug", name: "테스트", kind: "merchant" });
+  const page = await S.get(`/super/org/${a.id}`);
+  const csrf = (/name="_csrf" value="([^"]+)"/.exec(page) || [])[1];
+  const res = await S.f(`/super/association/${a.id}/slug`, {
+    method: "POST", headers: { cookie: S.jar, origin: BASE, "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ _csrf: csrf, slug: "new-slug", return: `/super/org/${a.id}` }) });
+  assert.match(res.headers.get("location") || "", new RegExp(`^/super/org/${a.id}\\?`), "목록으로 튕기면 안 된다");
+  assert.equal((await D.getAssociationById(S.env.DB, a.id)).slug, "new-slug");
+});
+
+test("돌아갈 곳으로 바깥 주소를 넣을 수 없다 (열린 리다이렉트 차단)", async () => {
+  const S = await superSession();
+  const a = await D.createAssociation(S.env.DB, { slug: "safe", name: "테스트", kind: "merchant" });
+  const page = await S.get(`/super/org/${a.id}`);
+  const csrf = (/name="_csrf" value="([^"]+)"/.exec(page) || [])[1];
+  for (const bad of ["https://evil.example/x", "//evil.example", "/admin", "/super/../x"]) {
+    const res = await S.f(`/super/association/${a.id}/plan`, {
+      method: "POST", headers: { cookie: S.jar, origin: BASE, "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ _csrf: csrf, plan: "free", return: bad }) });
+    assert.match(res.headers.get("location") || "", /^\/super\?/, `막아야 할 값이 통과됨: ${bad}`);
+  }
+});
+
+test("없는 조직을 열면 404", async () => {
+  const S = await superSession();
+  const res = await S.f("/super/org/99999", { headers: { cookie: S.jar } });
+  assert.equal(res.status, 404);
+});
+
+// ── 첫 화면에 고객사가 있어야 한다
+test("운영사 콘솔 첫 화면에 고객사 목록이 있다", async () => {
+  const S = await superSession();
+  await D.createAssociation(S.env.DB, { slug: "aa", name: "가나상인회", kind: "merchant" });
+  const html = await S.get("/super");
+  const home = (/<div class="sgroup" id="s-home"[\s\S]*?<div class="sgroup"/.exec(html) || [""])[0];
+  assert.match(home, /org-grid/, "첫 화면(홈 묶음)에 있어야 — 탭 안쪽에 묻히면 안 된다");
+  assert.match(home, /가나상인회/);
+  assert.match(home, /href="\/super\/org\/\d+"/, "눌러서 그 조직 화면으로 가야");
+});
+
+// ── 끝난 것은 접힌다
+test("개통이 끝나면 체크리스트는 접힌 채로 나온다", async () => {
+  const kp = await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]);
+  const done = await superHtml({ ...ALL_ON, SIGN_PRIVATE_KEY: JSON.stringify(await crypto.subtle.exportKey("jwk", kp.privateKey)) },
+    Object.keys(TEMPLATE_KEYS).length, true);
+  assert.match(done, /<details class="panel panel-accent panel-fold">\s*<summary class="panel-title">개통 체크리스트/);
+  assert.match(done, /<details class="panel panel-fold"><summary class="panel-title">정기 작업/);
+
+  const todo = await superHtml();
+  assert.match(todo, /<section class="panel panel-warn">\s*<h2 class="panel-title">개통 체크리스트/, "남았으면 펼쳐진 채로");
+  assert.match(todo, /<section class="panel panel-warn"><h2 class="panel-title">정기 작업/);
+});

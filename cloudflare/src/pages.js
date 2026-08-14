@@ -2529,6 +2529,144 @@ export async function verifyPage(ctx) {
 }
 
 // ================= 슈퍼관리자 =================
+// ================= 조직 한 곳만 모아 보기 =================
+// 조직 하나에 대한 일이 여섯 탭에 흩어져 있었다 — 주소는 조직 탭, 크레딧은 정산 탭,
+// 사용량은 또 다른 탭. 고객사 한 곳을 손보려면 화면을 세 번 갈아타야 했다.
+// 여기서는 그 조직에 대한 모든 것을 한 화면에 모은다. 고쳐도 이 화면에 남는다.
+export async function superOrg(ctx) {
+  const { db, user, query, csrf, params, env } = ctx;
+  const id = parseInt(params.id, 10);
+  const a = Number.isFinite(id) ? await D.getAssociationById(db, id) : null;
+  if (!a) return notFoundResponse(ctx);
+  const K = kindById(a.kind);
+  const here = `/super/org/${a.id}`;
+  const ret = `<input type="hidden" name="return" value="${esc(here)}" />`;
+
+  const [aliases, admins, usageAll, notifyAll, balance, ownPrice, basePrice, lastActs, demoStamps] = await Promise.all([
+    D.listSlugAliases(db).catch(() => []),
+    D.listAllAdmins(db).catch(() => []),
+    D.usageByAssociation(db).catch(() => []),
+    D.platformMessageUsage(db).catch(() => []),
+    D.getBalance(db, a.id).catch(() => 0),
+    D.getUnitPrice(db, a.id).catch(() => 0),
+    priceOf(db, "alimtalk"),
+    D.lastActivityByAssociation(db).catch(() => []),
+    D.demoSeedStamps(db).catch(() => []),
+  ]);
+  const myAliases = aliases.filter((r) => r.association_id === a.id).map((r) => r.slug);
+  const myAdmins = admins.filter((u) => u.association_id === a.id);
+  const use = usageAll.find((u) => u.id === a.id) || { members: 0, media_count: 0, storage: 0 };
+  const msg = notifyAll.find((u) => u.id === a.id) || { sent: 0, revenue: 0, charged: 0 };
+  const lastAt = (lastActs.find((r) => r.aid === a.id) || {}).last_at || "";
+  const demoAt = (demoStamps.find((r) => r.aid === a.id) || {}).seeded_at || "";
+  const planOpts = (cur) => PLAN_KEYS.map((k) => `<option value="${k}"${k === cur ? " selected" : ""}>${esc(PLANS[k].label)}</option>`).join("");
+  const days = lastAt ? Math.floor((Date.now() - Date.parse(lastAt.includes("T") ? lastAt : lastAt.replace(" ", "T") + "Z")) / 86400000) : null;
+
+  const stat = (n, label, hint) => `<div class="stat-card left"><div class="stat-top"><span class="stat-label">${esc(label)}</span></div>
+    <span class="stat-num">${n}</span>${hint ? `<div class="stat-delta mut">${hint}</div>` : ""}</div>`;
+
+  const body = `<section class="dash"><div class="container">
+    <div class="dash-head"><div>
+      <p class="section-eyebrow"><a href="/super#s-assoc" data-goto="assoc">← 고객사 목록</a></p>
+      <h1 class="dash-title">${esc(a.name)}
+        <span class="badge ${K.badge}">${esc(K.label)}</span>
+        ${a.active ? '<span class="badge badge-ok">활성</span>' : '<span class="badge badge-no">비활성</span>'}</h1>
+      <p class="dash-sub">공개 주소 <a href="/t/${esc(a.slug)}" target="_blank">${esc(prettyPath(`/t/${a.slug}`))}</a>
+        · ${days === null ? "활동 없음" : days <= 0 ? "오늘 활동" : `${days}일 전 활동`}</p></div>
+      <div class="dash-head-actions">
+        <a href="/t/${esc(a.slug)}/admin" class="btn btn-primary btn-sm">관리 화면 열기</a>
+        <a href="/t/${esc(a.slug)}" target="_blank" class="btn btn-ghost btn-sm">고객이 보는 화면</a></div></div>
+    ${flashOf(query)}
+
+    <div class="stat-cards">
+      ${stat(use.members, "회원", "명")}
+      ${stat(use.media_count, "사진", `${fmtBytes(use.storage)}`)}
+      ${stat(balance.toLocaleString(), "알림톡 잔액", "원")}
+      ${stat((msg.sent || 0).toLocaleString(), "누적 발송", `매출 ${(msg.revenue || 0).toLocaleString()}원`)}
+    </div>
+
+    <section class="panel"><h2 class="panel-title">주소</h2>
+      <form method="post" action="/super/association/${a.id}/slug" class="stack-form compact">${ret}
+        <label class="mini-label">공개 주소 <small>(영문 소문자·숫자·하이픈)</small>
+          <span class="slug-row"><span class="slug-pre">/t/</span>
+          <input type="text" name="slug" value="${esc(a.slug)}" pattern="[a-z0-9-]+" maxlength="40" required /></span></label>
+        <button class="btn btn-ghost btn-sm">주소 바꾸기</button></form>
+      ${myAliases.length ? `<p class="panel-hint">옛 주소 ${myAliases.map((x) => `<code>${esc(prettyPath("/t/" + x))}</code>`).join(" · ")} 로 들어와도 자동으로 넘어옵니다.</p>`
+        : `<p class="panel-hint">주소를 바꿔도 옛 주소로 들어온 사람은 새 주소로 자동 이동합니다 — 이미 나간 링크가 죽지 않습니다.</p>`}
+      <div class="form-divider">개별 도메인</div>
+      <form method="post" action="/super/association/${a.id}/domain" class="stack-form compact">${ret}
+        <label class="mini-label">이 조직만 쓰는 도메인 <small>(Cloudflare 에 Custom Domain 먼저 연결)</small>
+          <input type="text" name="domain" value="${esc(a.custom_domain || "")}" placeholder="예: seocho-market.kr" /></label>
+        <button class="btn btn-ghost btn-sm">저장</button></form>
+      ${a.custom_domain ? `<p class="panel-hint">✅ <a href="https://${esc(a.custom_domain)}" target="_blank">${esc(a.custom_domain)}</a></p>` : ""}
+    </section>
+
+    <section class="panel"><h2 class="panel-title">유형·요금제</h2>
+      <p class="panel-hint">유형을 바꾸면 <b>보이는 메뉴와 관리 화면이 통째로 달라집니다.</b> 데이터는 지워지지 않습니다.</p>
+      <form method="post" action="/super/association/${a.id}/kind" class="stack-form compact">${ret}
+        <label class="mini-label">제품 유형<select name="kind">${KIND_KEYS.map((k) =>
+          `<option value="${k}"${(a.kind || "merchant") === k ? " selected" : ""}>${esc(KINDS[k].label)}</option>`).join("")}</select></label>
+        <label class="mini-label">업종 문구 <small>(랜딩형 제품에만 적용)</small><select name="preset">${PRESET_KEYS.map((k) =>
+          `<option value="${k}"${(a.preset || "franchise") === k ? " selected" : ""}>${esc(PRESETS[k].label)}</option>`).join("")}</select></label>
+        <button class="btn btn-ghost btn-sm">유형 저장</button></form>
+      <div class="form-divider">요금제</div>
+      <form method="post" action="/super/association/${a.id}/plan" class="stack-form compact">${ret}
+        <label class="mini-label">플랜<select name="plan">${planOpts(a.plan || "free")}</select></label>
+        <button class="btn btn-ghost btn-sm">변경</button></form>
+    </section>
+
+    <section class="panel"><h2 class="panel-title">알림톡 <span class="badge ${balance > 0 ? "badge-ok" : "badge-no"}">잔액 ${balance.toLocaleString()}원</span></h2>
+      <p class="panel-hint">${balance > 0
+        ? `현재 단가로 약 <b>${Math.floor(balance / Math.max(1, ownPrice || basePrice)).toLocaleString()}건</b> 보낼 수 있습니다.`
+        : "<b>잔액이 없어 발송이 되지 않습니다.</b> 충전 신청은 정산 화면에서 승인합니다."}
+        충전 승인은 <a href="/super#s-money" data-goto="money">알림톡·정산</a> 에서 합니다.</p>
+      <form method="post" action="/super/association/${a.id}/unit-price" class="stack-form compact">${ret}
+        <label class="mini-label">이 조직 전용 단가 (원/건) <small>(0 이면 기본가 ${basePrice.toLocaleString()}원)</small>
+          <input type="number" name="unit_price" value="${ownPrice || 0}" min="0" max="1000" /></label>
+        <button class="btn btn-ghost btn-sm">단가 저장</button></form>
+    </section>
+
+    <section class="panel"><h2 class="panel-title">관리자 계정 <span class="badge badge-muted">${myAdmins.length}명</span></h2>
+      ${myAdmins.length ? `<ul class="admin-mini">${myAdmins.map((u) => `<li><span title="${esc(u.name)}">${esc(u.email)}</span>
+        <form method="post" action="/super/admin/${u.id}/reset-password" data-confirm="${esc(u.email)} 의 임시 비밀번호를 발급할까요?&#10;기존 비밀번호는 즉시 무효가 됩니다.">${ret}
+          <button class="btn btn-xs btn-ghost">임시 비밀번호</button></form></li>`).join("")}</ul>`
+        : `<p class="panel-hint"><b>관리자 계정이 없습니다.</b> 이 조직은 아무도 로그인할 수 없는 상태입니다.</p>`}
+    </section>
+
+    ${K.usesLanding || (a.kind || "merchant") === "merchant" ? `<section class="panel"><h2 class="panel-title">내용 채우기</h2>
+      <p class="panel-hint"><b>시작 세트</b>는 실전용입니다 — 비어 있는 항목만 채우고 있는 것은 건드리지 않습니다.
+        <b>데모</b>는 영업 소개용 가짜 데이터라 <b>기존 내용을 지우고</b> 덮어씁니다.</p>
+      <span class="pill-row">
+        <form method="post" action="/super/association/${a.id}/starter" class="inline-form"
+          data-confirm="'${esc(a.name)}' 에 시작 세트를 넣을까요?&#10;&#10;첫 공지 3건과 가입 동의서를 넣습니다. 이미 있는 것은 건드리지 않습니다.">${ret}
+          <button class="btn btn-ghost btn-sm">시작 세트 넣기</button></form>
+        <form method="post" action="/super/association/${a.id}/demo" class="inline-form"
+          data-confirm="'${esc(a.name)}' 을(를) 데모용 샘플로 채웁니다.&#10;&#10;⚠️ 이 조직의 기존 점포·공지·행사·게시글이 모두 삭제됩니다. (다른 조직은 영향 없음)&#10;&#10;계속할까요?">${ret}
+          <button class="btn btn-ghost btn-sm">${demoAt ? "데모 다시 채우기" : "데모 채우기"}</button></form></span>
+      ${demoAt ? `<p class="panel-hint">✓ 데모 적용 ${esc(kstStamp(demoAt, { year: false }))}</p>` : ""}
+      ${env.NAVER_MAP_CLIENT_ID ? `<div class="form-divider">지도 키</div>
+      <form method="post" action="/super/association/${a.id}/mapkey" class="stack-form compact">${ret}
+        <label class="mini-label">이 조직만 다른 Maps 앱 쓰기 <small>(비우면 공용 키)</small>
+          <input type="text" name="map_client_id" value="${esc(a.map_client_id || "")}" placeholder="공용이면 비워 두세요" /></label>
+        <button class="btn btn-ghost btn-sm">저장</button></form>` : ""}
+    </section>` : ""}
+
+    <section class="panel panel-warn"><h2 class="panel-title">되돌릴 수 없는 것</h2>
+      <form method="post" action="/super/association/${a.id}/toggle" class="inline-form"
+        data-confirm="${a.active ? `'${esc(a.name)}' 을(를) 비활성화하면 고객이 보는 화면이 닫힙니다. 계속할까요?` : `'${esc(a.name)}' 을(를) 다시 열까요?`}">${ret}
+        <button class="btn btn-ghost btn-sm">${a.active ? "비활성화 (화면 닫기)" : "다시 활성화"}</button></form>
+      <p class="panel-hint">비활성화는 되돌릴 수 있습니다 — 데이터는 그대로 두고 화면만 닫습니다.</p>
+      <details class="danger-del"><summary class="btn btn-ghost btn-sm">영구 삭제</summary>
+        <form method="post" action="/super/association/${a.id}/delete"
+          data-confirm="정말 '${esc(a.name)}' 을(를) 삭제할까요?&#10;&#10;⚠️ 점포·회원 계정·공지·게시글·서명 기록이 모두 사라지며 되돌릴 수 없습니다.">
+          <p class="del-warn">되돌릴 수 없습니다. 확인용으로 주소 <code>${esc(a.slug)}</code> 를 입력하세요.</p>
+          <input type="text" name="confirm_slug" placeholder="${esc(a.slug)}" required autocomplete="off" />
+          <button class="btn btn-xs btn-danger">영구 삭제</button></form></details>
+    </section>
+  </div></section>`;
+  return html(layout({ title: `${a.name} · 고객사`, console: "super", user, body, csrf }));
+}
+
 export async function superConsole(ctx) {
   const { db, env, user, query, csrf } = ctx;
   const ps = await D.platformStats(db);
@@ -2681,8 +2819,11 @@ export async function superConsole(ctx) {
       go: ["#s-money", "알림톡·정산으로"] },
   ];
   const blocked = blockers.filter((b) => !b.on);
-  const launchPanel = `<section class="panel ${blocked.length ? "panel-warn" : "panel-accent"}">
-    <h2 class="panel-title">개통 체크리스트 <span class="badge ${blocked.length ? "badge-no" : "badge-ok"}">${blocked.length ? `${blocked.length}건 남음` : "준비 완료"}</span></h2>
+  // 다 끝나면 접어 둔다 — 끝난 목록이 매일 첫 화면 맨 위를 차지하면,
+  // 정작 봐야 할 것(고객사·오늘 할 일)이 아래로 밀린다. 필요할 때 펴 보면 된다.
+  const launchOpen = blocked.length > 0;
+  const launchPanel = `<${launchOpen ? "section" : "details"} class="panel ${blocked.length ? "panel-warn" : "panel-accent panel-fold"}">
+    <${launchOpen ? "h2" : "summary"} class="panel-title">개통 체크리스트 <span class="badge ${blocked.length ? "badge-no" : "badge-ok"}">${blocked.length ? `${blocked.length}건 남음` : "준비 완료"}</span></${launchOpen ? "h2" : "summary"}>
     <p class="panel-hint">${blocked.length
       ? "아래가 <b>지금 기능을 막고 있는 것</b>들입니다. 전부 바깥 서비스 계정 등록이라 이 화면에서 끝나지 않고, 어디서 무엇을 받아 와야 하는지만 적어 두었습니다."
       : "실서비스에 필요한 것이 모두 켜졌습니다. 실제 계약 1건을 본인 번호로 끝까지 보내 확인해 보세요."}</p>
@@ -2695,7 +2836,7 @@ export async function superConsole(ctx) {
     <p class="panel-hint">이 화면이 지금 돌고 있는 배포:
       <code>${esc((env.CF_VERSION_METADATA && env.CF_VERSION_METADATA.id ? String(env.CF_VERSION_METADATA.id) : "").slice(0, 8) || "확인 불가")}</code>
       — 대시보드 <b>Deployments</b> 맨 위 버전과 같으면 최신입니다. 다르면 아직 반영 전이니 잠시 뒤 새로고침하세요.</p>
-  </section>`;
+  </${launchOpen ? "section" : "details"}>`;
 
   // 정기 작업 상태 — 개통이 끝난 뒤에도 크론이 조용히 죽는 일은 계속 생길 수 있다.
   // "언제 마지막으로 돌았나"를 늘 보이게 두는 것이 유일한 방어다.
@@ -2708,8 +2849,8 @@ export async function superConsole(ctx) {
     const h = Math.floor(m / 60);
     return h < 48 ? `${h}시간 전` : `${Math.floor(h / 24)}일 전`;
   };
-  const cronPanel = `<section class="panel ${cronAlive ? "" : "panel-warn"}"><h2 class="panel-title">정기 작업
-      <span class="badge ${cronAlive ? "badge-ok" : "badge-no"}">${cronAlive ? "돌고 있음" : "멈춰 있음"}</span></h2>
+  const cronPanel = `<${cronAlive ? "details" : "section"} class="panel ${cronAlive ? "panel-fold" : "panel-warn"}"><${cronAlive ? "summary" : "h2"} class="panel-title">정기 작업
+      <span class="badge ${cronAlive ? "badge-ok" : "badge-no"}">${cronAlive ? "돌고 있음" : "멈춰 있음"}</span></${cronAlive ? "summary" : "h2"}>
     <p class="panel-hint">사람이 누르지 않아도 저절로 돌아야 하는 일들입니다. ${cronAlive
       ? "마지막으로 돈 시각이 계속 갱신되면 정상입니다."
       : "<b>크론이 등록되지 않으면 아무 일도 일어나지 않는데 사이트는 멀쩡해 보입니다.</b> 그래서 여기에 시각을 남깁니다."}</p>
@@ -2722,7 +2863,7 @@ export async function superConsole(ctx) {
     }).join("")}</table>
     <p class="panel-hint">주간 작업은 월요일 새벽 3시(KST)에 백업을 만듭니다. 일일 작업은 매일 아침 9시에
       기한이 다가온 계약의 미서명자에게 재알림을 보냅니다. 웹훅은 5분마다 밀린 전송을 재시도합니다.</p>
-  </section>`;
+  </${cronAlive ? "details" : "section"}>`;
 
   // ----- 시크릿 이전 (D1 → 워커 Secret) -----
   // 가장 위험한 수작업이다. 새 값을 만들면 로그인이 전부 풀리고 이미 받은 서명이 검증에 실패한다.
@@ -2746,8 +2887,8 @@ export async function superConsole(ctx) {
       blockDrop: !chain.ok, blockWhy: "서명 사슬 검증이 통과해야 사본을 지울 수 있습니다 — 지금 워커 키로 기존 서명이 확인되지 않습니다." },
   ];
   const migrateDone = migrate.every((m) => m.onWorker && !m.inDb);
-  const migratePanel = `<section class="panel ${migrateDone ? "" : "panel-warn"}"><h2 class="panel-title">시크릿 옮기기
-      <span class="badge ${migrateDone ? "badge-ok" : "badge-no"}">${migrateDone ? "완료" : `${migrate.filter((m) => !(m.onWorker && !m.inDb)).length}건 남음`}</span></h2>
+  const migratePanel = `<${migrateDone ? "details" : "section"} class="panel ${migrateDone ? "panel-fold" : "panel-warn"}"><${migrateDone ? "summary" : "h2"} class="panel-title">시크릿 옮기기
+      <span class="badge ${migrateDone ? "badge-ok" : "badge-no"}">${migrateDone ? "완료" : `${migrate.filter((m) => !(m.onWorker && !m.inDb)).length}건 남음`}</span></${migrateDone ? "summary" : "h2"}>
     <p class="panel-hint">두 값을 데이터베이스에서 <b>워커 Secret</b> 으로 옮깁니다.
       <b>새로 만들지 말고 지금 값을 그대로 옮기세요</b> — 아래 복사 버튼이 현행 값을 클립보드에 넣어 줍니다.
       값은 화면에 그리지 않습니다(캡처해도 찍히지 않습니다).</p>
@@ -2780,7 +2921,7 @@ export async function superConsole(ctx) {
           : m.inDb ? '<p class="muted">워커에 Secret 이 확인되면 여기에 <b>DB 사본 지우기</b> 버튼이 나타납니다.</p>' : ""}`}
       </div>`;
     }).join("")}
-  </section>`;
+  </${migrateDone ? "details" : "section"}>`;
 
   const securityPanel = `<section class="panel ${keyMode === "secret" ? "" : "panel-warn"}"><h2 class="panel-title">전자서명 보안
       ${keyMode === "secret" ? '<span class="badge badge-ok">키 안전 보관</span>' : '<span class="badge badge-no">키가 DB에 있음</span>'}
@@ -3017,6 +3158,28 @@ export async function superConsole(ctx) {
           <p class="del-warn">되돌릴 수 없습니다. 확인용으로 주소 <code>${esc(a.slug)}</code> 를 입력하세요.</p>
           <input type="text" name="confirm_slug" placeholder="${esc(a.slug)}" required autocomplete="off" />
           <button class="btn btn-xs btn-danger">영구 삭제</button></form></details></td></tr>`).join("") || `<tr><td colspan="5" class="empty">조직이 없습니다.</td></tr>`;
+  // 첫 화면에 고객사를 올린다 — 매일 여는 것이 이것인데 탭 안쪽에 묻혀 있었다.
+  // 여기서는 고르기만 한다. 손보는 일은 조직 화면(/super/org/:id) 한 곳에 모여 있다.
+  const balByAssoc = new Map(notifyUsage.map((u) => [u.id, u.balance || 0]));
+  const orgCards = list.map((a) => {
+    const K = kindById(a.kind);
+    const t = lastAct.get(a.id);
+    const d = t ? Math.floor((Date.now() - Date.parse(t.includes("T") ? t : t.replace(" ", "T") + "Z")) / 86400000) : null;
+    const bal = balByAssoc.get(a.id) || 0;
+    return `<a class="org-card${a.active ? "" : " is-off"}" href="/super/org/${a.id}">
+      <span class="org-top"><b>${esc(a.name)}</b>
+        <span class="badge ${K.badge}">${esc(K.label)}</span>${a.active ? "" : '<span class="badge badge-no">비활성</span>'}</span>
+      <span class="org-meta"><code>${esc(prettyPath("/t/" + a.slug))}</code></span>
+      <span class="org-foot">${d === null ? "활동 없음" : d <= 0 ? "오늘 활동" : `${d}일 전 활동`}
+        · 알림톡 ${bal > 0 ? `${bal.toLocaleString()}원` : "<b class=\"txt-warn\">잔액 없음</b>"}</span></a>`;
+  }).join("");
+  const orgPanel = `<section class="panel"><div class="panel-head"><h2 class="panel-title">고객사 <span class="badge badge-muted">${list.length}곳</span></h2>
+      <span class="pill-row"><a class="btn btn-xs btn-ghost" href="#s-assoc" data-goto="assoc">새로 만들기 · 전체 표</a></span></div>
+    ${list.length ? `<div class="org-grid">${orgCards}</div>
+      <p class="panel-hint">한 곳을 누르면 주소·유형·요금제·알림톡·관리자 계정이 <b>한 화면에</b> 모여 있습니다.</p>`
+      : `<p class="panel-hint">아직 고객사가 없습니다. <a href="#s-assoc" data-goto="assoc">첫 조직 만들기 →</a></p>`}
+  </section>`;
+
   // 콘솔이 한 화면에 14개 패널로 쏟아지던 것을 5개 묶음으로 나눈다.
   // 왼쪽에서 하나를 고르면 그것만 보인다(JS 꺼져 있으면 전부 보이는 문서로 폴백).
   const todo = [
@@ -3051,6 +3214,7 @@ export async function superConsole(ctx) {
 
       <div class="sgroup" id="s-home" data-tab="home">
         ${launchPanel}
+        ${orgPanel}
     <div class="stat-cards">${kindCounts.map(([, label, n]) =>
       `<div class="stat-card"><span class="stat-num">${n}</span><span class="stat-label">${esc(label)}</span></div>`).join("")}
       <div class="stat-card"><span class="stat-num">${ps.businesses}</span><span class="stat-label">승인 업체</span></div>

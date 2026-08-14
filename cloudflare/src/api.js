@@ -219,13 +219,13 @@ export async function superCloneAssociation(ctx) {
 export async function superSetKind(ctx) {
   const { db, form, params } = ctx;
   const a = await D.getAssociationById(db, Number(params.id) || 0);
-  if (!a) return back("/super", "조직을 찾을 수 없습니다.", true);
+  if (!a) return back(superBackTo(ctx), "조직을 찾을 수 없습니다.", true);
   const kind = D.normalizeKind(form.get("kind"));
   await D.setAssociationKind(db, a.id, kind);
   // 업종 문구는 랜딩형에서만 의미가 있지만, 유형을 오갈 수 있으니 값이 오면 그대로 보관한다
   if (form.get("preset")) await D.setAssociationPreset(db, a.id, D.normalizePreset(form.get("preset")));
   await audit(ctx, "조직유형변경", `${a.name}: ${KIND_LABEL[kind]}`, null);
-  return back("/super", `'${a.name}' 을(를) ${KIND_LABEL[kind]} 으로 바꿨습니다. 기존 데이터는 그대로 있습니다.`);
+  return back(superBackTo(ctx), `'${a.name}' 을(를) ${KIND_LABEL[kind]} 으로 바꿨습니다. 기존 데이터는 그대로 있습니다.`);
 }
 
 export async function superBillingMode(ctx) {
@@ -239,12 +239,12 @@ export async function superBillingMode(ctx) {
 export async function superSetUnitPrice(ctx) {
   const { db, params, form } = ctx;
   const a = await D.getAssociationById(db, Number(params.id));
-  if (!a) return back("/super", "상인회를 찾을 수 없습니다.", true);
+  if (!a) return back(superBackTo(ctx), "상인회를 찾을 수 없습니다.", true);
   const p = parseInt(String(form.get("unit_price") || "").replace(/[^\d]/g, ""), 10);
-  if (!Number.isFinite(p) || p < 0 || p > 1000) return back("/super", "단가는 0~1000원 사이로 입력해 주세요. (0 = 기본가 적용)", true);
+  if (!Number.isFinite(p) || p < 0 || p > 1000) return back(superBackTo(ctx), "단가는 0~1000원 사이로 입력해 주세요. (0 = 기본가 적용)", true);
   await D.setUnitPrice(db, a.id, p);
   await audit(ctx, "상인회단가", `${a.name} → ${p === 0 ? "기본가" : p + "원"}`, null);
-  return back("/super", `'${a.name}' 알림톡 단가를 ${p === 0 ? "플랫폼 기본가로" : p.toLocaleString() + "원으로"} 설정했습니다.`);
+  return back(superBackTo(ctx), `'${a.name}' 알림톡 단가를 ${p === 0 ? "플랫폼 기본가로" : p.toLocaleString() + "원으로"} 설정했습니다.`);
 }
 
 // 슈퍼: 알림톡 판매단가·템플릿 코드 설정
@@ -252,6 +252,14 @@ export async function superSetUnitPrice(ctx) {
 // 워커 Secret 이 실제로 들어와 있을 때만 허용한다 — 그 시점엔 워커 값이 이미 우선하므로
 // D1 사본은 아무도 쓰지 않는 상태다. 반대로 워커에 값이 없는데 지우면, 다음 요청에서
 // 새 값이 자동 생성되어 로그인이 전부 풀리고 예전 백업을 영원히 못 열게 된다.
+// 조직 하나를 모아 보는 화면(/super/org/:id)에서 고친 뒤에도 그 화면에 남아야 한다.
+// 목록으로 튕기면 "방금 뭘 고쳤더라"를 다시 찾아야 한다.
+// 열린 리다이렉트가 되지 않도록 /super 로 시작하는 우리 경로만 허용한다.
+export function superBackTo(ctx, fallback = "/super") {
+  const v = (ctx.form && ctx.form.get("return")) || "";
+  return /^\/super(\/[\w/-]*)?(#[\w-]*)?$/.test(v) ? v : fallback;
+}
+
 export async function superSecretDrop(ctx) {
   const { db, form, env } = ctx;
   const key = (form.get("key") || "").trim();
@@ -1692,19 +1700,19 @@ export async function superCreateAssociation(ctx) {
 export async function superSeedDemo(ctx) {
   const { db, env, params } = ctx;
   const a = await D.getAssociationById(db, Number(params.id));
-  if (!a) return back("/super", "상인회를 찾을 수 없습니다.", true);
+  if (!a) return back(superBackTo(ctx), "상인회를 찾을 수 없습니다.", true);
   const r = await seedDemo(env, db, a);
   await audit(ctx, "데모콘텐츠", `${a.name} — 점포 ${r.businesses}곳·공지 ${r.notices}건·행사 ${r.events}건·서명문서 ${r.documents}건`, a.id);
-  return back("/super", `'${a.name}' 에 데모 콘텐츠를 채웠습니다. 점포 ${r.businesses}곳 · 메뉴 ${r.products}개 · 공지 ${r.notices}건 · 행사 ${r.events}건 · 전자서명 문서 ${r.documents}건(서명 ${r.signatures}명). 사장님 데모 계정 ${r.ownerEmail} / 비밀번호 ${r.password} (시연 후 반드시 변경하세요)`);
+  return back(superBackTo(ctx), `'${a.name}' 에 데모 콘텐츠를 채웠습니다. 점포 ${r.businesses}곳 · 메뉴 ${r.products}개 · 공지 ${r.notices}건 · 행사 ${r.events}건 · 전자서명 문서 ${r.documents}건(서명 ${r.signatures}명). 사장님 데모 계정 ${r.ownerEmail} / 비밀번호 ${r.password} (시연 후 반드시 변경하세요)`);
 }
 
 export async function superToggleAssociation(ctx) {
   const { db, params } = ctx;
   const a = await D.getAssociationById(db, Number(params.id));
-  if (!a) return back("/super", "상인회를 찾을 수 없습니다.", true);
+  if (!a) return back(superBackTo(ctx), "상인회를 찾을 수 없습니다.", true);
   await D.setAssociationActive(db, a.id, a.active ? 0 : 1);
   await audit(ctx, "상인회상태", `${a.name} → ${a.active ? "비활성" : "활성"}`, null);
-  return back("/super", `'${a.name}' 상태를 변경했습니다.`);
+  return back(superBackTo(ctx), `'${a.name}' 상태를 변경했습니다.`);
 }
 
 // ---------- 비밀번호 찾기 (내부 알림, 이메일 없이) ----------
@@ -2210,34 +2218,34 @@ export async function setupSubmit(ctx) {
 export async function superSetSlug(ctx) {
   const { db, form, params } = ctx;
   const a = await D.getAssociationById(db, Number(params.id));
-  if (!a) return back("/super", "조직을 찾을 수 없습니다.", true);
+  if (!a) return back(superBackTo(ctx), "조직을 찾을 수 없습니다.", true);
   const want = (form.get("slug") || "").toLowerCase().trim();
   if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(want) || want.length > 40)
-    return back("/super", "주소는 영문 소문자·숫자·하이픈만 쓸 수 있습니다. (예: seocho)", true);
-  if (RESERVED_SLUGS.has(want)) return back("/super", `'${want}' 는 시스템이 쓰는 주소라 사용할 수 없습니다.`, true);
+    return back(superBackTo(ctx), "주소는 영문 소문자·숫자·하이픈만 쓸 수 있습니다. (예: seocho)", true);
+  if (RESERVED_SLUGS.has(want)) return back(superBackTo(ctx), `'${want}' 는 시스템이 쓰는 주소라 사용할 수 없습니다.`, true);
   const r = await D.renameAssociationSlug(db, a.id, want);
-  if (!r.ok) return back("/super", r.reason === "taken" ? "이미 쓰이고 있는 주소입니다." : "주소가 그대로입니다.", true);
+  if (!r.ok) return back(superBackTo(ctx), r.reason === "taken" ? "이미 쓰이고 있는 주소입니다." : "주소가 그대로입니다.", true);
   await audit(ctx, "주소변경", `${a.name}: /t/${r.from} → /t/${r.to}`, null);
-  return back("/super", `'${a.name}' 주소를 /t/${r.to} 로 바꿨습니다. 옛 주소 /t/${r.from} 로 들어와도 새 주소로 이동합니다.`);
+  return back(superBackTo(ctx), `'${a.name}' 주소를 /t/${r.to} 로 바꿨습니다. 옛 주소 /t/${r.from} 로 들어와도 새 주소로 이동합니다.`);
 }
 
 export async function superSetDomain(ctx) {
   const { db, form, params } = ctx;
   const a = await D.getAssociationById(db, Number(params.id));
-  if (!a) return back("/super", "상인회를 찾을 수 없습니다.", true);
-  if (!planOf(a).customDomain) return back("/super", "이 상인회 플랜은 개별 도메인을 지원하지 않습니다.", true);
+  if (!a) return back(superBackTo(ctx), "상인회를 찾을 수 없습니다.", true);
+  if (!planOf(a).customDomain) return back(superBackTo(ctx), "이 상인회 플랜은 개별 도메인을 지원하지 않습니다.", true);
   // 입력 정리: 프로토콜·경로 제거, 소문자화
   let domain = (form.get("domain") || "").toLowerCase().trim()
     .replace(/^https?:\/\//, "").replace(/\/.*$/, "").replace(/\.$/, "");
   if (domain && !/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(domain))
-    return back("/super", "도메인 형식을 확인해 주세요. (예: seocho-market.kr)", true);
+    return back(superBackTo(ctx), "도메인 형식을 확인해 주세요. (예: seocho-market.kr)", true);
   if (domain) {
     const dup = await D.getAssociationByDomain(db, domain);
-    if (dup && dup.id !== a.id) return back("/super", "이미 다른 상인회에 연결된 도메인입니다.", true);
+    if (dup && dup.id !== a.id) return back(superBackTo(ctx), "이미 다른 상인회에 연결된 도메인입니다.", true);
   }
   await D.setAssociationDomain(db, a.id, domain);
   await audit(ctx, "도메인연결", `${a.name} → ${domain || "(해제)"}`, null);
-  return back("/super", domain
+  return back(superBackTo(ctx), domain
     ? `'${a.name}' 에 ${domain} 을 연결했습니다. Cloudflare 워커의 Custom Domain 에도 같은 도메인을 추가하세요.`
     : `'${a.name}' 도메인 연결을 해제했습니다.`);
 }
@@ -2348,12 +2356,12 @@ export async function superAddApplicationNote(ctx) {
 export async function superResetAdminPassword(ctx) {
   const { db, params } = ctx;
   const target = await D.getUserById(db, Number(params.id));
-  if (!target || target.role !== "ADMIN") return back("/super", "대상 관리자를 찾을 수 없습니다.", true);
+  if (!target || target.role !== "ADMIN") return back(superBackTo(ctx), "대상 관리자를 찾을 수 없습니다.", true);
   const temp = tempPassword();
   const { hash, salt } = await hashPassword(temp);
   await D.updateUserPassword(db, target.id, hash, salt);
   await audit(ctx, "관리자비번재발급", target.email, null);
-  return back("/super", `${target.email} 임시 비밀번호: ${temp} — 전달 후 변경 안내하세요.`);
+  return back(superBackTo(ctx), `${target.email} 임시 비밀번호: ${temp} — 전달 후 변경 안내하세요.`);
 }
 
 // ---------- 슈퍼: 실전용 시작 세트 ----------
@@ -2361,13 +2369,13 @@ export async function superResetAdminPassword(ctx) {
 export async function superSeedStarter(ctx) {
   const { db, user, params } = ctx;
   const a = await D.getAssociationById(db, Number(params.id));
-  if (!a) return back("/super", "상인회를 찾을 수 없습니다.", true);
+  if (!a) return back(superBackTo(ctx), "상인회를 찾을 수 없습니다.", true);
   const r = await seedStarter(ctx.env, db, a, { createdBy: user.id });
   if (!r.notices && !r.documents)
-    return back("/super", `'${a.name}' 은(는) 이미 ${r.skipped.join("·")}이(가) 있어 넣을 것이 없었습니다.`);
+    return back(superBackTo(ctx), `'${a.name}' 은(는) 이미 ${r.skipped.join("·")}이(가) 있어 넣을 것이 없었습니다.`);
   await audit(ctx, "시작세트", `${a.name} — 공지 ${r.notices}건·서명문서 ${r.documents}건`, a.id);
   const skip = r.skipped.length ? ` (${r.skipped.join("·")}은(는) 이미 있어 건너뜀)` : "";
-  return back("/super", `'${a.name}' 에 시작 세트를 넣었습니다. 공지 ${r.notices}건 · 전자서명 문서 ${r.documents}건${skip}`);
+  return back(superBackTo(ctx), `'${a.name}' 에 시작 세트를 넣었습니다. 공지 ${r.notices}건 · 전자서명 문서 ${r.documents}건${skip}`);
 }
 
 // ---------- 슈퍼: 상인회 삭제 ----------
@@ -2389,24 +2397,24 @@ export async function superDeleteAssociation(ctx) {
 export async function superSetMapKey(ctx) {
   const { db, form, params } = ctx;
   const a = await D.getAssociationById(db, Number(params.id));
-  if (!a) return back("/super", "상인회를 찾을 수 없습니다.", true);
+  if (!a) return back(superBackTo(ctx), "상인회를 찾을 수 없습니다.", true);
   const key = (form.get("map_client_id") || "").trim();
-  if (key && !/^[a-z0-9]{4,24}$/i.test(key)) return back("/super", "지도 키 형식이 올바르지 않습니다. (영문·숫자)", true);
+  if (key && !/^[a-z0-9]{4,24}$/i.test(key)) return back(superBackTo(ctx), "지도 키 형식이 올바르지 않습니다. (영문·숫자)", true);
   await D.setAssociationMapKey(db, a.id, key);
   await audit(ctx, "지도키", `${a.name} → ${key || "(공용)"}`, null);
-  return back("/super", key ? `'${a.name}' 전용 지도 키를 설정했습니다.` : `'${a.name}' 지도 키를 공용으로 되돌렸습니다.`);
+  return back(superBackTo(ctx), key ? `'${a.name}' 전용 지도 키를 설정했습니다.` : `'${a.name}' 지도 키를 공용으로 되돌렸습니다.`);
 }
 
 export async function superSetPlan(ctx) {
   const { db, form, params } = ctx;
   const { PLAN_KEYS } = await import("./plans.js");
   const a = await D.getAssociationById(db, Number(params.id));
-  if (!a) return back("/super", "상인회를 찾을 수 없습니다.", true);
+  if (!a) return back(superBackTo(ctx), "상인회를 찾을 수 없습니다.", true);
   const plan = form.get("plan");
-  if (!PLAN_KEYS.includes(plan)) return back("/super", "잘못된 플랜입니다.", true);
+  if (!PLAN_KEYS.includes(plan)) return back(superBackTo(ctx), "잘못된 플랜입니다.", true);
   await D.setAssociationPlan(db, a.id, plan);
   await audit(ctx, "플랜변경", `${a.name} → ${plan}`, null);
-  return back("/super", `'${a.name}' 플랜을 ${plan} 으로 변경했습니다.`);
+  return back(superBackTo(ctx), `'${a.name}' 플랜을 ${plan} 으로 변경했습니다.`);
 }
 
 // ---------- 슈퍼: 플랫폼 랜딩 모드 토글 ----------
