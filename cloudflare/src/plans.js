@@ -8,3 +8,18 @@ export const PLANS = {
 export const PLAN_KEYS = Object.keys(PLANS);
 export const planOf = (assoc) => PLANS[(assoc && assoc.plan)] || PLANS.free;
 export const planLabel = (assoc) => planOf(assoc).label;
+
+// 월 요금은 코드에 박지 않는다 — 얼마에 팔지는 운영사가 정하는 일이고,
+// 코드에 숫자를 넣어 두면 화면에는 뜨는데 실제로는 안 받는 값이 되기 쉽다.
+// 운영사 콘솔에서 넣은 값만 화면에 나오고, 안 넣으면 요금 안내 자체가 나오지 않는다.
+export const planPriceKey = (k) => `plan_price:${k}`;
+export async function planPrices(getSetting, db) {
+  const out = {};
+  for (const k of PLAN_KEYS) {
+    const raw = await getSetting(db, planPriceKey(k));
+    const n = parseInt(raw || "", 10);
+    if (Number.isFinite(n) && n >= 0) out[k] = n;
+  }
+  return out;
+}
+

@@ -125,3 +125,18 @@ test("알림톡 개통 전 안전장치: 이메일 폴백 + 수단 없으면 본
   assert.match(r2.headers.get("location") || "", /err=1/, "발송 수단 없이 켜지면 안 됨");
   assert.notEqual(await D.getSetting(e0.DB, "esign_otp"), "1");
 });
+
+// ── 전자계약 조직의 관리 화면은 '계약'을 먼저 보여줘야 한다.
+// 예전엔 알림함·담당자·브랜딩이 첫 화면을 차지해서, 매일 하는 일
+// (누가 아직 서명 안 했나)을 보려면 다른 화면으로 들어가야 했다.
+// 기한 판정이 하루라도 어긋나면 "기한 지남" 이 잘못 떠서 아무도 안 믿게 된다.
+test("기한 판정: 오늘까지는 안 지난 것, 어제까지면 지난 것", async () => {
+  const { isOverdue } = await import("../src/pages.js");
+  const kst = (offsetDays = 0) =>
+    new Date(Date.now() + 9 * 3600 * 1000 + offsetDays * 86400000).toISOString().slice(0, 10);
+  assert.equal(isOverdue({ closed: 0, due_date: kst(0) }), false, "오늘이 기한이면 아직 안 지난 것");
+  assert.equal(isOverdue({ closed: 0, due_date: kst(1) }), false, "내일이 기한이면 당연히 안 지난 것");
+  assert.equal(isOverdue({ closed: 0, due_date: kst(-1) }), true);
+  assert.equal(isOverdue({ closed: 1, due_date: kst(-1) }), false, "체결된 계약은 기한을 따지지 않는다");
+  assert.equal(isOverdue({ closed: 0, due_date: "" }), false, "기한이 없으면 지날 수도 없다");
+});

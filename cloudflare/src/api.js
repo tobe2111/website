@@ -14,7 +14,7 @@ import { builtinById, isBuiltinId, normalizeTemplate, extractVars, applyVars, re
 import { resolveExtToken, makeExtToken, extSignUrl, sendSignLink, remindExternals, originFor, rememberOrigin } from "./extsign.js";
 import { enqueueDocEvent, newApiKey, hashApiKey, KEY_PREFIX, checkWebhookUrl } from "./apiv1.js";
 import { turnstileVerify } from "./turnstile.js";
-import { planOf } from "./plans.js";
+import { planOf, PLANS, PLAN_KEYS, planPriceKey } from "./plans.js";
 import { seedDemo } from "./demoContent.js";
 import { seedStarter } from "./starterContent.js";
 import { KINDS, kindById, PRESETS, assocTerms } from "./kinds.js";
@@ -292,6 +292,21 @@ export async function superNotifyTest(ctx) {
   return r.ok
     ? back("/super#s-money", `테스트 발송 성공 — ${TEMPLATES[kind].label} (${r.to}). 휴대폰을 확인해 주세요.`)
     : back("/super#s-money", `테스트 발송 실패 — ${TEMPLATES[kind].label}: ${r.error}`, true);
+}
+
+// 요금제 월 요금 — 얼마에 팔지는 운영사가 정한다. 비우면 화면에 요금 안내가 나오지 않는다.
+export async function superPlanPrices(ctx) {
+  const { db, form } = ctx;
+  for (const k of PLAN_KEYS) {
+    const raw = (form.get(`price_${k}`) || "").replace(/[,\s]/g, "");
+    if (raw === "") { await D.delSetting(db, planPriceKey(k)); continue; }
+    const n = parseInt(raw, 10);
+    if (!Number.isFinite(n) || n < 0 || n > 100000000)
+      return back("/super#s-settings", `${PLANS[k].label} 요금은 0원 이상으로 입력해 주세요.`, true);
+    await D.setSetting(db, planPriceKey(k), String(n));
+  }
+  await audit(ctx, "요금제", "월 요금 저장", null);
+  return back("/super#s-settings", "요금제를 저장했습니다.");
 }
 
 export async function superNotifySettings(ctx) {

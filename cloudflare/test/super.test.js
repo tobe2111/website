@@ -718,3 +718,54 @@ test("정기 작업은 멈췄을 때만 첫 화면에 뜬다", async () => {
   assert.ok(!/id="cron-panel"/.test(aliveHome), "잘 돌면 첫 화면에서 비켜야");
   assert.match(alive, /id="cron-panel"/, "설정 화면에는 남아 있어야");
 });
+
+// ── 요금제: 얼마에 팔지는 운영사가 정한다. 코드가 지어낸 숫자가 화면에 뜨면 안 된다.
+import { superPlanPrices } from "../src/api.js";
+import { planPrices } from "../src/plans.js";
+
+
+// 빈 DB 는 첫 실행으로 보고 /setup 으로 보낸다 — 소개 화면을 보려면 계정이 하나 있어야 한다
+async function seededEnv() {
+  const e = makeEnv();
+  const pw = await hashPassword("x12345678");
+  await D.createUser(e.DB, { email: "seed@platform.kr", passwordHash: pw.hash, salt: pw.salt, name: "운영자", role: "SUPERADMIN", associationId: null });
+  return e;
+}
+const esignHtml = async (e) => (await worker.fetch(new Request(BASE + "/esign"), e, { waitUntil() {}, passThroughOnException() {} })).text();
+
+test("요금을 안 정했으면 제품 소개에 요금 안내가 아예 안 나온다", async () => {
+  const html = await esignHtml(await seededEnv());
+  assert.ok(!/얼마인가/.test(html), "정하지도 않은 금액을 화면에 띄우면 안 된다");
+  assert.ok(!/원 \/ 월/.test(html));
+});
+
+test("요금을 넣으면 제품 소개에 그대로 나온다", async () => {
+  const e = await seededEnv();
+  await D.setSetting(e.DB, "plan_price:basic", "49000");
+  await D.setSetting(e.DB, "plan_price:free", "0");
+  const html = await esignHtml(e);
+  assert.match(html, /얼마인가/);
+  assert.match(html, /49,000<small>원 \/ 월/);
+  assert.match(html, /발송만 건당 22원/, "알림톡은 실제 단가에서 가져와야");
+  assert.ok(!/프로/.test(html.split("PRICE")[1] || ""), "안 넣은 플랜은 안 나와야");
+});
+
+test("요금 칸을 비우면 다시 감춰진다", async () => {
+  const e = makeEnv();
+  const pw = await hashPassword("x12345678");
+  const u = await D.createUser(e.DB, { email: "pp@platform.kr", passwordHash: pw.hash, salt: pw.salt, name: "운영자", role: "SUPERADMIN", associationId: null });
+  await D.setSetting(e.DB, "plan_price:basic", "49000");
+  const ctx = { db: e.DB, env: e, form: new Map([["price_free", ""], ["price_basic", ""], ["price_pro", ""]]),
+    user: { id: u.id, name: "운영자", role: "SUPERADMIN", association_id: null }, ip: "1.1.1.1" };
+  await superPlanPrices(ctx);
+  assert.deepEqual(await planPrices(D.getSetting, e.DB), {}, "비운 값은 지워져야");
+});
+
+// ── 제품 소개: 사는 사람이 가장 먼저 묻는 것에 답해야 한다
+test("제품 소개에 법적 효력과 '안 되는 것'이 함께 적혀 있다", async () => {
+  const html = await esignHtml(await seededEnv());
+  assert.match(html, /법적으로 유효한가/);
+  assert.match(html, /전자서명법/);
+  assert.match(html, /다만, 이건 안 됩니다/, "못 하는 것을 안 적으면 도입 후에 사고가 난다");
+  assert.match(html, /인감증명서를 대신하지 않습니다/);
+});

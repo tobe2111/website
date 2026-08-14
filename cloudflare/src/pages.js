@@ -20,7 +20,7 @@ import { parseLandingLayout, renderLanding, LANDING_CATALOG, safeSrc } from "./f
 import { KINDS, KIND_KEYS, PRESETS, PRESET_KEYS, kindOf, kindById, assocTerms } from "./kinds.js";
 import { turnstileWidget, turnstileScript } from "./turnstile.js";
 import { otpauthUri } from "./totp.js";
-import { PLANS, PLAN_KEYS } from "./plans.js";
+import { PLANS, PLAN_KEYS, planPrices } from "./plans.js";
 import { emailEnabled as emailOn } from "./email.js";
 import { CRON, CRON_JOBS, cronRunKey } from "./scheduled.js";
 
@@ -1359,7 +1359,8 @@ export async function admin(ctx) {
   const T = assocTerms(assoc);
   const isEsign = K.id === "esign";
   const isFranchise = C.landing;
-  const docCount = (await D.listDocuments(db, assoc.id)).length;
+  const docs = await D.listDocuments(db, assoc.id);
+  const docCount = docs.length;
   const leads = isFranchise ? await D.leadStats(db, assoc.id) : null;
 
   const body = `<section class="dash"><div class="container">
@@ -1387,14 +1388,18 @@ export async function admin(ctx) {
     </nav></aside>
     <div class="console-main">
     ${onboardPanel(base, assoc, s, members.length, notices.length, { docCount, balance, leads })}
+    ${isEsign ? inFlightPanel(base, docs) : ""}
     <div class="stat-cards" id="p-stats">
-      ${isEsign ? `<div class="stat-card"><span class="stat-num">${docCount}</span><span class="stat-label">계약서</span></div>
-      <div class="stat-card"><span class="stat-num">${members.length}</span><span class="stat-label">담당자</span></div>`
+      ${isEsign ? (() => { const o = docs.filter((d) => !d.closed); const over = o.filter((d) => isOverdue(d));
+        return `<div class="stat-card${o.length ? " stat-alert" : ""}"><span class="stat-num">${o.length}</span><span class="stat-label">서명 대기</span></div>
+      <div class="stat-card${over.length ? " stat-alert" : ""}"><span class="stat-num">${over.length}</span><span class="stat-label">기한 지남</span></div>
+      <div class="stat-card"><span class="stat-num">${docCount - o.length}</span><span class="stat-label">체결 완료</span></div>
+      <div class="stat-card"><span class="stat-num">${members.length}</span><span class="stat-label">담당자</span></div>`; })()
       : `<div class="stat-card"><span class="stat-num">${s.businesses}</span><span class="stat-label">승인 업체</span></div>
       <div class="stat-card${s.pending ? " stat-alert" : ""}"><span class="stat-num">${s.pending}</span><span class="stat-label">승인 대기</span></div>
       <div class="stat-card"><span class="stat-num">${s.notices}</span><span class="stat-label">공지</span></div>
       <div class="stat-card"><span class="stat-num">${s.events}</span><span class="stat-label">행사</span></div>`}
-      <div class="stat-card"><span class="stat-num">${s.mediaCount}</span><span class="stat-label">미디어</span></div></div>
+      ${isEsign ? "" : `<div class="stat-card"><span class="stat-num">${s.mediaCount}</span><span class="stat-label">미디어</span></div>`}</div>
     <section class="panel" id="p-notif"><div class="panel-head"><h2 class="panel-title">알림함${unread ? ` <span class="badge badge-wait">${unread}</span>` : ""}</h2>
       ${unread ? `<form method="post" action="${base}/admin/notifications/read"><button class="btn btn-xs btn-ghost">모두 읽음</button></form>` : ""}</div>
       <ul class="notif-list">${notifRows}</ul></section>
@@ -1487,6 +1492,49 @@ ${isFranchise ? `    <section class="panel panel-accent" id="p-home"><h2 class="
     </div>
     </div></div></div></section>`;
   return html(layout({ title: "관리자", assoc, base, user, body, activeNav: `${base}/admin`, csrf, scripts: `<script src="${assetUrl("/js/layout-editor.js")}" defer></script><script src="${assetUrl("/js/upload-resize.js")}" defer></script><script src="${assetUrl("/js/share.js")}" defer></script>` }));
+}
+
+// 기한이 지났는가 — due_date 는 'YYYY-MM-DD' 이고 그날 자정까지로 본다(KST 기준).
+export function isOverdue(d, now = Date.now()) {
+  if (d.closed || !d.due_date) return false;
+  const today = new Date(now + 9 * 3600 * 1000).toISOString().slice(0, 10);
+  return d.due_date < today;
+}
+
+// 진행 중인 계약 — 전자계약 조직 관리자가 매일 확인하는 유일한 것.
+// 예전엔 이걸 보려면 계약서 화면으로 따로 들어가야 했고, 대시보드 첫 화면은
+// 알림함·담당자·브랜딩이 차지하고 있었다. 매일 하는 일이 맨 앞에 와야 한다.
+function inFlightPanel(base, docs) {
+  const open = docs.filter((d) => !d.closed);
+  if (!open.length) {
+    return `<section class="panel"><h2 class="panel-title">진행 중인 계약</h2>
+      <p class="panel-hint">${docs.length ? "서명을 기다리는 계약이 없습니다. 모두 체결됐습니다." : "아직 만든 계약이 없습니다."}
+        <a href="${base}/admin/documents">계약서 만들기 →</a></p></section>`;
+  }
+  // 급한 것이 위로 — 기한 지난 것, 그다음 기한 가까운 것, 기한 없는 것은 뒤로
+  const sorted = [...open].sort((a, b) => {
+    const A = a.due_date || "9999-99-99", B = b.due_date || "9999-99-99";
+    return A < B ? -1 : A > B ? 1 : 0;
+  });
+  const overdue = sorted.filter((d) => isOverdue(d)).length;
+  const rows = sorted.slice(0, 8).map((d) => {
+    const late = isOverdue(d);
+    return `<tr class="${late ? "row-late" : ""}">
+      <td><a href="${base}/admin/documents/${d.id}">${esc(d.title)}</a></td>
+      <td>${d.sign_count}명 서명</td>
+      <td>${d.due_date
+        ? `${esc(d.due_date)} ${late ? '<span class="badge badge-no">기한 지남</span>' : ""}`
+        : '<span class="muted">기한 없음</span>'}</td>
+      <td class="actions-cell"><a class="btn btn-xs btn-ghost" href="${base}/admin/documents/${d.id}">열기</a></td></tr>`;
+  }).join("");
+  return `<section class="panel ${overdue ? "panel-warn" : ""}"><div class="panel-head">
+      <h2 class="panel-title">진행 중인 계약 <span class="badge ${overdue ? "badge-no" : "badge-wait"}">${open.length}건${overdue ? ` · 기한 지남 ${overdue}` : ""}</span></h2>
+      <span class="pill-row"><a class="btn btn-xs btn-ghost" href="${base}/admin/documents">전체 보기</a></span></div>
+    <div class="table-scroll"><table class="admin-table"><thead><tr><th>계약서</th><th>서명</th><th>기한</th><th></th></tr></thead>
+      <tbody>${rows}</tbody></table></div>
+    ${open.length > 8 ? `<p class="panel-hint">기한이 급한 8건만 보여 드립니다. 나머지는 <a href="${base}/admin/documents">전체 보기</a>에서.</p>` : ""}
+    ${overdue ? `<p class="panel-hint"><b>기한이 지난 계약이 ${overdue}건 있습니다.</b> 계약서를 열어 <b>미서명자 재알림</b>을 보내거나, 상대방에게 직접 연락하세요.</p>` : ""}
+  </section>`;
 }
 
 // 관리자 온보딩 체크리스트 (모두 완료되면 자동으로 사라짐)
@@ -1966,6 +2014,24 @@ export async function esignLanding(ctx) {
   const siteName = (await D.getSetting(db, "esign_brand")) || "전자계약";
   const origin = url.origin;
   const step = (n, t, d) => `<div class="es-step"><span class="es-n">${n}</span><div><h3>${esc(t)}</h3><p>${esc(d)}</p></div></div>`;
+  // 요금은 운영사 콘솔에 넣은 값만 보여 준다. 안 정했으면 아예 안 띄운다 —
+  // 화면에는 있는데 실제로는 안 받는 금액이 제일 나쁘다.
+  const prices = await planPrices(D.getSetting, db);
+  const sendPrice = await priceOf(db, "alimtalk");
+  const shown = PLAN_KEYS.filter((k) => prices[k] !== undefined);
+  const priceSection = !shown.length ? "" : `
+  <section class="section"><div class="container">
+    <div class="section-head"><p class="section-eyebrow">PRICE</p><h2 class="section-title">얼마인가</h2></div>
+    <div class="price-grid">${shown.map((k) => `<div class="price-card${k === "basic" ? " is-pick" : ""}">
+      <h3>${esc(PLANS[k].label)}</h3>
+      <p class="price-num">${prices[k] === 0 ? "0" : prices[k].toLocaleString()}<small>원 / 월</small></p>
+      <p class="price-note">${prices[k] === 0 ? "계약서 만들기·서명받기·증적 모두 포함" : "부가세 별도"}</p>
+    </div>`).join("")}</div>
+    <p class="landing-lead" style="text-align:center">계약서를 만들고 서명받는 것 자체는 요금제에 포함됩니다.
+      <b>알림톡 발송만 건당 ${sendPrice.toLocaleString()}원</b>으로 따로 계산합니다 — 미리 충전해 두고 쓴 만큼 차감됩니다.
+      계약 한 건에 서명자 1인당 3통(요청·본인확인·완료)이 나갑니다.</p>
+    <p class="panel-hint" style="text-align:center">API 호출·증적 다운로드·위변조 검증에는 추가 요금이 없습니다.</p>
+  </div></section>`;
   const body = `
   <section class="landing-hero es-hero"><div class="container">
     <p class="hero-eyebrow">가입 없이 링크 하나로 — 전자계약</p>
@@ -2028,6 +2094,30 @@ export async function esignLanding(ctx) {
       <button class="btn btn-primary btn-block">검증하기</button></form>
   </div></section>
 
+  <section class="section section-alt"><div class="container">
+    <div class="section-head"><p class="section-eyebrow">LEGAL</p><h2 class="section-title">법적으로 유효한가</h2></div>
+    <div class="container narrow">
+    <p class="landing-lead">유효합니다. 「전자문서 및 전자거래 기본법」 제4조는 전자문서가 종이 문서와 같은 효력을 가진다고 정하고,
+      「전자서명법」 제3조는 <b>전자서명이라는 이유만으로 효력을 부인할 수 없다</b>고 정합니다.
+      2020년 개정으로 공인인증서 독점이 폐지되어, 지금은 <b>본인 확인과 위변조 방지가 되는 방식</b>이면 됩니다.</p>
+    <p class="landing-lead">그래서 이 서비스는 다툼이 생겼을 때 필요한 것을 남깁니다 —
+      <b>누가</b>(휴대폰 본인확인) <b>언제</b>(시점 앵커) <b>무엇에</b>(본문·입력값·좌표 해시) 서명했는지,
+      그리고 <b>그 뒤로 바뀌지 않았다는 것</b>(Ed25519 봉인·서명 사슬)까지 한 벌로 묶어 드립니다.</p>
+    <div class="honest-box">
+      <h3>다만, 이건 안 됩니다</h3>
+      <ul>
+        <li><b>법으로 종이·공증을 요구하는 계약</b>은 대상이 아닙니다. 유언, 일부 가족관계 서류 등이 그렇습니다.</li>
+        <li><b>인감증명서를 대신하지 않습니다.</b> 상대가 인감을 요구하면 별도로 받으셔야 합니다.</li>
+        <li><b>국토부 부동산거래 전자계약시스템과는 다른 서비스</b>입니다. 그쪽이 필요한 거래는 그쪽을 쓰셔야 합니다.</li>
+        <li>본인확인은 <b>휴대폰 번호 기준</b>입니다. 명의도용까지 막지는 못합니다 —
+          중요한 계약은 신분증 사본을 첨부로 함께 받으시길 권합니다.</li>
+      </ul>
+      <p>업종에 따라 요구되는 요건이 다를 수 있으니, 큰 금액의 계약은 법률 자문을 함께 받으시길 권합니다.</p>
+    </div></div>
+  </div></section>
+
+  ${priceSection}
+
   <section class="section"><div class="container narrow" style="text-align:center">
     <h2 class="section-title">지금 시작하세요</h2>
     <p class="landing-lead">1분이면 됩니다. 신용카드도 설치도 필요 없습니다.<br />
@@ -2055,6 +2145,24 @@ export async function homepageLanding(ctx) {
   const { db, csrf, user } = ctx;
   const product = await homepageProduct(db);
   const step = (n, t, d) => `<div class="es-step"><span class="es-n">${n}</span><div><h3>${esc(t)}</h3><p>${esc(d)}</p></div></div>`;
+  // 요금은 운영사 콘솔에 넣은 값만 보여 준다. 안 정했으면 아예 안 띄운다 —
+  // 화면에는 있는데 실제로는 안 받는 금액이 제일 나쁘다.
+  const prices = await planPrices(D.getSetting, db);
+  const sendPrice = await priceOf(db, "alimtalk");
+  const shown = PLAN_KEYS.filter((k) => prices[k] !== undefined);
+  const priceSection = !shown.length ? "" : `
+  <section class="section"><div class="container">
+    <div class="section-head"><p class="section-eyebrow">PRICE</p><h2 class="section-title">얼마인가</h2></div>
+    <div class="price-grid">${shown.map((k) => `<div class="price-card${k === "basic" ? " is-pick" : ""}">
+      <h3>${esc(PLANS[k].label)}</h3>
+      <p class="price-num">${prices[k] === 0 ? "0" : prices[k].toLocaleString()}<small>원 / 월</small></p>
+      <p class="price-note">${prices[k] === 0 ? "계약서 만들기·서명받기·증적 모두 포함" : "부가세 별도"}</p>
+    </div>`).join("")}</div>
+    <p class="landing-lead" style="text-align:center">계약서를 만들고 서명받는 것 자체는 요금제에 포함됩니다.
+      <b>알림톡 발송만 건당 ${sendPrice.toLocaleString()}원</b>으로 따로 계산합니다 — 미리 충전해 두고 쓴 만큼 차감됩니다.
+      계약 한 건에 서명자 1인당 3통(요청·본인확인·완료)이 나갑니다.</p>
+    <p class="panel-hint" style="text-align:center">API 호출·증적 다운로드·위변조 검증에는 추가 요금이 없습니다.</p>
+  </div></section>`;
   const body = `
   <section class="landing-hero es-hero"><div class="container">
     <p class="hero-eyebrow">프랜차이즈 · 가맹점 모집을 위한</p>
@@ -2848,6 +2956,22 @@ export async function superConsole(ctx) {
     const h = Math.floor(m / 60);
     return h < 48 ? `${h}시간 전` : `${Math.floor(h / 24)}일 전`;
   };
+  // 얼마에 팔지는 코드가 정할 일이 아니다. 여기 넣은 값만 제품 소개에 나오고,
+  // 비워 두면 요금 안내 자체가 나오지 않는다 — 안 받는 값이 화면에 뜨는 것보다 낫다.
+  const prices = await planPrices(D.getSetting, db);
+  const pricePanel = `<section class="panel"><h2 class="panel-title">요금제 <span class="badge ${Object.keys(prices).length ? "badge-ok" : "badge-muted"}">${Object.keys(prices).length ? "공개 중" : "비공개"}</span></h2>
+    <p class="panel-hint">여기 넣은 금액이 <a href="/esign" target="_blank">제품 소개 화면</a>의 요금 안내에 그대로 나갑니다.
+      <b>비워 두면 요금 안내가 나오지 않습니다</b> — 아직 안 정하셨으면 비워 두세요. 부가세 별도 표기로 나갑니다.</p>
+    <form method="post" action="/super/plan-prices" class="stack-form compact">
+      <div class="form-two">${PLAN_KEYS.map((k) =>
+        `<label class="mini-label">${esc(PLANS[k].label)} <small>(원/월)</small>
+          <input type="number" name="price_${k}" value="${prices[k] === undefined ? "" : prices[k]}" min="0" max="100000000" step="1000" placeholder="비우면 미표시" /></label>`).join("")}</div>
+      <button class="btn btn-ghost btn-sm">요금제 저장</button></form>
+    <p class="panel-hint">알림톡은 요금제와 별개로 <b>선불 충전 후 발송당 ${unitPrice.toLocaleString()}원</b>입니다
+      (원가 ${(await costOf(db, "alimtalk")).toLocaleString()}원 · 마진 ${(unitPrice - (await costOf(db, "alimtalk"))).toLocaleString()}원).
+      단가는 <a href="#s-money" data-goto="money">알림톡·정산</a> 에서 바꿉니다.</p>
+  </section>`;
+
   const cronPanel = `<${cronAlive ? "details" : "section"} class="panel ${cronAlive ? "panel-fold" : "panel-warn"}" id="cron-panel"><${cronAlive ? "summary" : "h2"} class="panel-title">정기 작업
       <span class="badge ${cronAlive ? "badge-ok" : "badge-no"}">${cronAlive ? "돌고 있음" : "멈춰 있음"}</span></${cronAlive ? "summary" : "h2"}>
     <p class="panel-hint">사람이 누르지 않아도 저절로 돌아야 하는 일들입니다. ${cronAlive
@@ -3270,6 +3394,7 @@ export async function superConsole(ctx) {
       </div>
 
       <div class="sgroup" id="s-settings" data-tab="settings">
+        ${pricePanel}
         ${cronAlive ? cronPanel : ""}
         ${migratePanel}
         ${wiredPanel}

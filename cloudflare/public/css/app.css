@@ -449,6 +449,26 @@ a.bc-val:hover{text-decoration:underline}
 .slug-row{display:flex;align-items:center;gap:0}
 .slug-row input{flex:1;min-width:0}
 
+/* 제품 소개 — 요금 */
+.price-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin:6px 0 20px}
+.price-card{border:1px solid var(--line);border-radius:12px;padding:20px 18px;text-align:center;background:var(--bg)}
+.price-card.is-pick{border-color:var(--brand);box-shadow:0 0 0 1px var(--brand) inset}
+.price-card h3{font-size:.95rem;font-weight:750;color:var(--muted);letter-spacing:.02em}
+.price-num{font-size:2rem;font-weight:800;letter-spacing:-.03em;margin:8px 0 4px;font-variant-numeric:tabular-nums}
+.price-num small{font-size:.85rem;font-weight:600;color:var(--muted);margin-left:3px;letter-spacing:0}
+.price-note{font-size:.82rem;color:var(--muted)}
+
+/* 제품 소개 — 정직한 한계. 팔 때 숨기면 도입 후에 사고가 난다. */
+.honest-box{border:1px solid var(--line);border-left:3px solid var(--no);border-radius:0 10px 10px 0;
+  padding:16px 18px;margin-top:22px;background:var(--bg-alt)}
+.honest-box h3{font-size:1rem;font-weight:750;margin-bottom:8px}
+.honest-box ul{margin:0 0 10px;padding-left:18px;display:grid;gap:7px}
+.honest-box li{font-size:.9rem;line-height:1.65;color:var(--text)}
+.honest-box p{font-size:.85rem;color:var(--muted);margin:0}
+/* 기한 지난 계약은 줄 자체가 눈에 띄어야 한다 — 배지 하나로는 훑을 때 넘어간다 */
+.row-late td{background:var(--no-bg)}
+.row-late td:first-child a{font-weight:700;color:var(--no-fg)}
+
 /* ── 운영사 콘솔 ──────────────────────────────────────────────
    고객사 관리 화면(/admin)과 겉이 똑같으면, 지금 어느 쪽을 만지고 있는지 헷갈린다.
    여기서 한 조작은 모든 고객사에 미치므로, 색과 띠로 확실히 갈라 둔다.
