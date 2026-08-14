@@ -431,10 +431,10 @@ test("개통 체크리스트: 템플릿이 일부만 등록되면 빠진 것을 
   assert.ok(!/미등록: <b>전자서명 요청/.test(html), "등록된 것은 미등록 목록에 없어야");
 });
 
-test("개통 체크리스트: 다 갖추면 준비 완료 + 할 일 없음", async () => {
+test("개통 체크리스트: 다 갖추면 화면에서 사라진다", async () => {
   const kp = await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]);
   const html = await superHtml({ ...ALL_ON, SIGN_PRIVATE_KEY: JSON.stringify(await crypto.subtle.exportKey("jwk", kp.privateKey)) }, Object.keys(TEMPLATE_KEYS).length, true);
-  assert.match(html, /준비 완료/);
+  assert.ok(!/개통 체크리스트/.test(html), "끝난 안내는 자리를 차지하면 안 된다");
   assert.match(html, /처리할 일이 없습니다/);
   assert.ok(!/건 남음/.test(html));
 });
@@ -459,7 +459,7 @@ test("알림톡만 갖추면 개통 준비가 끝난다 (이메일 없이)", asy
     ALIGO_API_KEY: "a", ALIGO_USER_ID: "b", ALIGO_SENDER_KEY: "c", ALIGO_SENDER: "0212345678",
     // RESEND 없음 — 이메일은 안 쓰기로 한 상태
   }, Object.keys(TEMPLATE_KEYS).length, true);
-  assert.match(html, /준비 완료/, "알림톡만으로도 개통 준비가 끝나야 한다");
+  assert.ok(!/개통 체크리스트/.test(html), "알림톡만으로도 개통 준비가 끝나야 한다");
   assert.ok(!/건 남음/.test(html));
 });
 
@@ -692,14 +692,29 @@ test("운영사 콘솔 첫 화면에 고객사 목록이 있다", async () => {
 });
 
 // ── 끝난 것은 접힌다
-test("개통이 끝나면 체크리스트는 접힌 채로 나온다", async () => {
+// 한 번 쓰고 버리는 안내는 끝나면 사라져야 한다 — 접힌 줄도 매일 자리를 차지한다.
+// 되돌아가면(설정이 빠지면) 저절로 다시 나타나므로 지워도 안전하다.
+test("끝난 개통 안내는 사라지고, 되돌아가면 다시 나타난다", async () => {
   const kp = await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]);
   const done = await superHtml({ ...ALL_ON, SIGN_PRIVATE_KEY: JSON.stringify(await crypto.subtle.exportKey("jwk", kp.privateKey)) },
     Object.keys(TEMPLATE_KEYS).length, true);
-  assert.match(done, /<details class="panel panel-accent panel-fold">\s*<summary class="panel-title">개통 체크리스트/);
-  assert.match(done, /<details class="panel panel-fold"><summary class="panel-title">정기 작업/);
+  assert.ok(!/개통 체크리스트/.test(done));
+  assert.ok(!/시크릿 옮기기/.test(done), "옮기고 나면 다시 볼 일이 없다");
+  assert.match(done, /<details class="panel panel-fold" id="cron-panel">/, "감시는 남되 접혀 있어야");
 
   const todo = await superHtml();
-  assert.match(todo, /<section class="panel panel-warn">\s*<h2 class="panel-title">개통 체크리스트/, "남았으면 펼쳐진 채로");
-  assert.match(todo, /<section class="panel panel-warn"><h2 class="panel-title">정기 작업/);
+  assert.match(todo, /<section class="panel panel-warn">\s*<h2 class="panel-title">개통 체크리스트/, "남았으면 다시 나타나야");
+  assert.match(todo, /시크릿 옮기기/);
+});
+
+// 정기 작업은 개통이 아니라 감시다 — 멈추면 첫 화면으로 올라와야 한다.
+test("정기 작업은 멈췄을 때만 첫 화면에 뜬다", async () => {
+  const dead = await superHtml();
+  const deadHome = (/<div class="sgroup" id="s-home"[\s\S]*?<div class="sgroup"/.exec(dead) || [""])[0];
+  assert.match(deadHome, /id="cron-panel"/, "멈췄으면 첫 화면에서 보여야");
+
+  const alive = await superHtml({}, 0, true);
+  const aliveHome = (/<div class="sgroup" id="s-home"[\s\S]*?<div class="sgroup"/.exec(alive) || [""])[0];
+  assert.ok(!/id="cron-panel"/.test(aliveHome), "잘 돌면 첫 화면에서 비켜야");
+  assert.match(alive, /id="cron-panel"/, "설정 화면에는 남아 있어야");
 });

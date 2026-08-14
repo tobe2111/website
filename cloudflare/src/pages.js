@@ -2821,9 +2821,8 @@ export async function superConsole(ctx) {
   const blocked = blockers.filter((b) => !b.on);
   // 다 끝나면 접어 둔다 — 끝난 목록이 매일 첫 화면 맨 위를 차지하면,
   // 정작 봐야 할 것(고객사·오늘 할 일)이 아래로 밀린다. 필요할 때 펴 보면 된다.
-  const launchOpen = blocked.length > 0;
-  const launchPanel = `<${launchOpen ? "section" : "details"} class="panel ${blocked.length ? "panel-warn" : "panel-accent panel-fold"}">
-    <${launchOpen ? "h2" : "summary"} class="panel-title">개통 체크리스트 <span class="badge ${blocked.length ? "badge-no" : "badge-ok"}">${blocked.length ? `${blocked.length}건 남음` : "준비 완료"}</span></${launchOpen ? "h2" : "summary"}>
+  const launchPanel = blocked.length === 0 ? "" : `<section class="panel panel-warn">
+    <h2 class="panel-title">개통 체크리스트 <span class="badge badge-no">${blocked.length}건 남음</span></h2>
     <p class="panel-hint">${blocked.length
       ? "아래가 <b>지금 기능을 막고 있는 것</b>들입니다. 전부 바깥 서비스 계정 등록이라 이 화면에서 끝나지 않고, 어디서 무엇을 받아 와야 하는지만 적어 두었습니다."
       : "실서비스에 필요한 것이 모두 켜졌습니다. 실제 계약 1건을 본인 번호로 끝까지 보내 확인해 보세요."}</p>
@@ -2836,7 +2835,7 @@ export async function superConsole(ctx) {
     <p class="panel-hint">이 화면이 지금 돌고 있는 배포:
       <code>${esc((env.CF_VERSION_METADATA && env.CF_VERSION_METADATA.id ? String(env.CF_VERSION_METADATA.id) : "").slice(0, 8) || "확인 불가")}</code>
       — 대시보드 <b>Deployments</b> 맨 위 버전과 같으면 최신입니다. 다르면 아직 반영 전이니 잠시 뒤 새로고침하세요.</p>
-  </${launchOpen ? "section" : "details"}>`;
+  </section>`;
 
   // 정기 작업 상태 — 개통이 끝난 뒤에도 크론이 조용히 죽는 일은 계속 생길 수 있다.
   // "언제 마지막으로 돌았나"를 늘 보이게 두는 것이 유일한 방어다.
@@ -2849,7 +2848,7 @@ export async function superConsole(ctx) {
     const h = Math.floor(m / 60);
     return h < 48 ? `${h}시간 전` : `${Math.floor(h / 24)}일 전`;
   };
-  const cronPanel = `<${cronAlive ? "details" : "section"} class="panel ${cronAlive ? "panel-fold" : "panel-warn"}"><${cronAlive ? "summary" : "h2"} class="panel-title">정기 작업
+  const cronPanel = `<${cronAlive ? "details" : "section"} class="panel ${cronAlive ? "panel-fold" : "panel-warn"}" id="cron-panel"><${cronAlive ? "summary" : "h2"} class="panel-title">정기 작업
       <span class="badge ${cronAlive ? "badge-ok" : "badge-no"}">${cronAlive ? "돌고 있음" : "멈춰 있음"}</span></${cronAlive ? "summary" : "h2"}>
     <p class="panel-hint">사람이 누르지 않아도 저절로 돌아야 하는 일들입니다. ${cronAlive
       ? "마지막으로 돈 시각이 계속 갱신되면 정상입니다."
@@ -2887,8 +2886,8 @@ export async function superConsole(ctx) {
       blockDrop: !chain.ok, blockWhy: "서명 사슬 검증이 통과해야 사본을 지울 수 있습니다 — 지금 워커 키로 기존 서명이 확인되지 않습니다." },
   ];
   const migrateDone = migrate.every((m) => m.onWorker && !m.inDb);
-  const migratePanel = `<${migrateDone ? "details" : "section"} class="panel ${migrateDone ? "panel-fold" : "panel-warn"}"><${migrateDone ? "summary" : "h2"} class="panel-title">시크릿 옮기기
-      <span class="badge ${migrateDone ? "badge-ok" : "badge-no"}">${migrateDone ? "완료" : `${migrate.filter((m) => !(m.onWorker && !m.inDb)).length}건 남음`}</span></${migrateDone ? "summary" : "h2"}>
+  const migratePanel = migrateDone ? "" : `<section class="panel panel-warn"><h2 class="panel-title">시크릿 옮기기
+      <span class="badge badge-no">${migrate.filter((m) => !(m.onWorker && !m.inDb)).length}건 남음</span></h2>
     <p class="panel-hint">두 값을 데이터베이스에서 <b>워커 Secret</b> 으로 옮깁니다.
       <b>새로 만들지 말고 지금 값을 그대로 옮기세요</b> — 아래 복사 버튼이 현행 값을 클립보드에 넣어 줍니다.
       값은 화면에 그리지 않습니다(캡처해도 찍히지 않습니다).</p>
@@ -2921,7 +2920,7 @@ export async function superConsole(ctx) {
           : m.inDb ? '<p class="muted">워커에 Secret 이 확인되면 여기에 <b>DB 사본 지우기</b> 버튼이 나타납니다.</p>' : ""}`}
       </div>`;
     }).join("")}
-  </${migrateDone ? "details" : "section"}>`;
+  </section>`;
 
   const securityPanel = `<section class="panel ${keyMode === "secret" ? "" : "panel-warn"}"><h2 class="panel-title">전자서명 보안
       ${keyMode === "secret" ? '<span class="badge badge-ok">키 안전 보관</span>' : '<span class="badge badge-no">키가 DB에 있음</span>'}
@@ -3214,6 +3213,7 @@ export async function superConsole(ctx) {
 
       <div class="sgroup" id="s-home" data-tab="home">
         ${launchPanel}
+        ${cronAlive ? "" : cronPanel}
         ${orgPanel}
     <div class="stat-cards">${kindCounts.map(([, label, n]) =>
       `<div class="stat-card"><span class="stat-num">${n}</span><span class="stat-label">${esc(label)}</span></div>`).join("")}
@@ -3222,7 +3222,6 @@ export async function superConsole(ctx) {
       <div class="stat-card"><span class="stat-num">${ps.media}</span><span class="stat-label">미디어</span></div></div>
         <section class="panel"><h2 class="panel-title">이번 달 알림톡 손익 <span class="badge ${margin > 0 ? "badge-ok" : "badge-muted"}">${margin.toLocaleString()}원</span></h2>
           <p class="panel-hint">건당 판매 ${unitPrice.toLocaleString()}원 · 마진율 ${marginPct}%. 자세한 내역은 <a href="#s-money" data-goto="money">알림톡·정산</a> 에서 봅니다.</p></section>
-        ${wiredPanel}
       </div>
 
       <div class="sgroup" id="s-assoc" data-tab="assoc">
@@ -3271,8 +3270,9 @@ export async function superConsole(ctx) {
       </div>
 
       <div class="sgroup" id="s-settings" data-tab="settings">
-        ${cronPanel}
+        ${cronAlive ? cronPanel : ""}
         ${migratePanel}
+        ${wiredPanel}
         ${securityPanel}
     <section class="panel"><h2 class="panel-title">플랫폼 설정</h2>
       <form method="post" action="/super/platform-mode" class="stack-form compact">
