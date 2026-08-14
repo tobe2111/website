@@ -375,7 +375,7 @@ export async function adminLanding(ctx) {
       <div class="form-two">
         <form method="post" action="${base}/admin/landing/variant" class="stack-form compact">
           <div class="form-two"><label>사본 이름<input type="text" name="name" required maxlength="40" placeholder="예: 인스타 광고용" /></label>
-            <label>주소<input type="text" name="slug" required maxlength="40" pattern="[a-z0-9-]+" placeholder="instagram" /></label></div>
+            <label>주소<input type="text" name="slug" required maxlength="40" pattern="[a-z0-9\-]+" placeholder="instagram" /></label></div>
           <button class="btn btn-primary btn-sm">현재 내용으로 사본 만들기</button></form>
         ${cur ? `<form method="post" action="${base}/admin/landing/variant/${encodeURIComponent(cur.slug)}/delete" class="stack-form compact"
             data-confirm="'${esc(cur.name || cur.slug)}' 사본을 지울까요?&#10;이미 받은 상담 신청은 그대로 남습니다.">
@@ -2697,7 +2697,7 @@ export async function superOrg(ctx) {
       <form method="post" action="/super/association/${a.id}/slug" class="stack-form compact">${ret}
         <label class="mini-label">공개 주소 <small>(영문 소문자·숫자·하이픈)</small>
           <span class="slug-row"><span class="slug-pre">/t/</span>
-          <input type="text" name="slug" value="${esc(a.slug)}" pattern="[a-z0-9-]+" maxlength="40" required /></span></label>
+          <input type="text" name="slug" value="${esc(a.slug)}" pattern="[a-z0-9\-]+" maxlength="40" required /></span></label>
         <button class="btn btn-ghost btn-sm">주소 바꾸기</button></form>
       ${myAliases.length ? `<p class="panel-hint">옛 주소 ${myAliases.map((x) => `<code>${esc(prettyPath("/t/" + x))}</code>`).join(" · ")} 로 들어와도 자동으로 넘어옵니다.</p>`
         : `<p class="panel-hint">주소를 바꿔도 옛 주소로 들어온 사람은 새 주소로 자동 이동합니다 — 이미 나간 링크가 죽지 않습니다.</p>`}
@@ -2858,11 +2858,9 @@ export async function superConsole(ctx) {
   const otpOn = (await D.getSetting(db, "esign_otp")) === "1";
   const anchor = await D.lastAnchor(db);
 
-  // ----- 개통 체크리스트 -----
-  // 여기 걸린 항목은 '있으면 좋은 것'이 아니라 '없으면 기능이 죽는 것'이다.
-  // 예: 템플릿 코드가 비면 그 종류의 알림톡이 통째로 실패한다(잔액은 차감되지 않지만 아무것도 안 나간다).
-  // 이 목록이 없으면 "지금 뭘 해야 하지"를 사람에게 물어야만 알 수 있었다.
-  const secretInDb = !!(await D.getSetting(db, "session_secret"));
+  // ----- 개통 상태 -----
+  // 예전에는 이 값들로 '개통 체크리스트'를 그렸지만, 항목마다 제 집이 생기면서
+  // (알림톡 화면·정기 작업 패널·시크릿 옮기기 패널) 같은 말을 두 번 하는 목록이 됐다.
   // 크론이 실제로 돌고 있는가 — 등록이 안 되면 아무 일도 안 일어나는데 화면엔 표시가 없었다.
   // 5분짜리 웹훅 작업이 가장 빠른 신호다. 20분 넘게 소식이 없으면 등록이 안 된 것으로 본다.
   const cronRuns = {};
@@ -2872,61 +2870,6 @@ export async function superConsole(ctx) {
   const CRON_STALE_MS = 20 * 60 * 1000;
   const lastTick = cronRuns.webhooks && Date.parse(cronRuns.webhooks.at);
   const cronAlive = !!(lastTick && Date.now() - lastTick < CRON_STALE_MS);
-  const tplMissing = [];
-  for (const [kind, key] of Object.entries(TEMPLATE_KEYS)) {
-    if (!((await D.getSetting(db, key)) || "").trim()) tplMissing.push(TEMPLATES[kind] ? TEMPLATES[kind].label : kind);
-  }
-  const tplTotal = Object.keys(TEMPLATE_KEYS).length;
-  const blockers = [
-    // 백업 암호화 키가 D1 안에만 있으면, D1 을 잃는 순간 R2 의 백업도 함께 못 쓰게 된다
-    // (키가 백업 안에 들어 있어 백업을 열어야만 키가 나온다). 백업의 존재 이유가 사라지는 지점이다.
-    // env 로 들어왔는지 D1 에서 자동 생성됐는지는 핸들러 안에서 구분되지 않는다
-    // (요청마다 resolveSessionSecret 이 env 를 채운다). D1 에 사본이 남아 있는지로 본다.
-    { on: !secretInDb, label: "SESSION_SECRET 을 Secret 으로",
-      why: "이 값이 D1 안에 있습니다. 주간 백업은 이 값으로 암호화되는데, 값 자체가 백업 안에 들어 있습니다 — <b>D1 을 잃으면 R2 의 백업을 영원히 열 수 없습니다.</b> 세션·서명 링크 서명에도 같은 값이 쓰입니다.",
-      how: "D1 콘솔에서 <code>SELECT value FROM settings WHERE key='session_secret'</code> 로 <b>현행 값을 그대로</b> 복사해 워커 변수에 <b>Secret</b> 으로 등록하고, 배포 후 <code>DELETE FROM settings WHERE key='session_secret'</code> 로 사본을 지웁니다. 새 값을 만들면 로그인 세션과 이미 보낸 서명 링크가 전부 무효가 됩니다.",
-      code: "SESSION_SECRET" },
-    { on: keyMode === "secret", label: "전자서명 개인키를 Secret 으로",
-      why: "지금은 키가 D1 에 있습니다. DB 를 읽을 수 있으면 과거 서명을 위조할 수 있습니다.",
-      how: "아래 <b>설정·보안</b> 에 옮기는 순서가 있습니다. 이미 받은 서명이 있으면 <b>현행 키를 그대로</b> 옮기세요 — 새로 만들면 전부 검증 실패합니다.",
-      go: ["#s-settings", "설정·보안으로"] },
-    { on: notifyEnabled(env), label: "알림톡 발송 키",
-      // 넷을 AND 로 묶어 두었기 때문에 하나만 빠져도 발송이 통째로 죽는다.
-      // "넣었는데 왜 안 변하냐"를 사람이 물어야만 알 수 있으면 안 된다 —
-      // 워커가 실제로 무엇을 받았는지 이름별로 보여 준다. 값은 절대 찍지 않는다.
-      why: `없으면 카카오 알림톡이 한 건도 나가지 않습니다. 넷 <b>모두</b> 있어야 켜집니다 — 하나라도 비면 전부 꺼집니다.
-        <div class="envcheck">${ALIGO_VARS.map((k) => `<span class="${hasCfg(env, k) ? "is-on" : ""}"><b>${hasCfg(env, k) ? "✓" : "✗"}</b> <code>${k}</code></span>`).join("")}</div>
-        <p class="muted">✗ 는 이 워커가 그 이름을 <b>못 받고 있다</b>는 뜻입니다. 대시보드에 보이는데 여기가 ✗ 라면 ① 이름 철자·앞뒤 공백, ② <b>Deploy</b> 를 안 누름, ③ Preview 환경에 넣음, ④ <b>Text 로 넣어서 배포 때 지워짐</b>(<code>wrangler.toml</code> 의 <code>[vars]</code> 가 평문 변수를 덮어씁니다 — 반드시 <b>Secret</b>) 중 하나입니다.</p>`,
-      how: "알리고(smartsms.aligo.in) 가입 → 카카오 발신프로필 등록 → 워커 <b>Settings → Variables and Secrets</b> 에 <b>Secret</b> 4개 등록 후 <b>Deploy</b>",
-      code: "ALIGO_API_KEY · ALIGO_USER_ID · ALIGO_SENDER_KEY · ALIGO_SENDER" },
-    { on: cronAlive, label: "정기 작업(크론) 등록",
-      why: `5분마다 도는 작업이 ${cronRuns.webhooks ? "20분 넘게 소식이 없습니다" : "<b>한 번도 돌지 않았습니다</b>"}. 크론이 등록되지 않으면 <b>주간 백업·서명 리마인더·웹훅 재전송이 전부 멈춥니다</b> — 사이트는 멀쩡해 보이므로 알아채기 어렵습니다.`,
-      how: "워커 <b>Settings → Trigger Events → Cron Triggers</b> 에 3개가 있는지 확인하세요. 비어 있으면 최근 배포가 크론 등록 단계에서 실패한 것입니다 — Deployments 의 빌드 로그 맨 끝을 보세요. 등록 직후라면 최대 5분 뒤 이 항목이 자동으로 사라집니다.",
-      code: Object.values(CRON).join(" · ") },
-    { on: tplMissing.length === 0, label: `알림톡 템플릿 코드 (${tplTotal - tplMissing.length}/${tplTotal})`,
-      why: tplMissing.length ? `미등록: <b>${tplMissing.map(esc).join(" · ")}</b> — 이 종류는 발송이 실패합니다.` : "",
-      how: "아래 <b>알림톡·정산</b> 에 카카오에 등록할 문구 원문이 있습니다. 그대로 심사 신청하고, 받은 코드를 같은 화면에 적으세요.",
-      go: ["#s-money", "알림톡·정산으로"] },
-  ];
-  const blocked = blockers.filter((b) => !b.on);
-  // 다 끝나면 접어 둔다 — 끝난 목록이 매일 첫 화면 맨 위를 차지하면,
-  // 정작 봐야 할 것(고객사·오늘 할 일)이 아래로 밀린다. 필요할 때 펴 보면 된다.
-  const launchPanel = blocked.length === 0 ? "" : `<section class="panel panel-warn">
-    <h2 class="panel-title">개통 체크리스트 <span class="badge badge-no">${blocked.length}건 남음</span></h2>
-    <p class="panel-hint">${blocked.length
-      ? "아래가 <b>지금 기능을 막고 있는 것</b>들입니다. 전부 바깥 서비스 계정 등록이라 이 화면에서 끝나지 않고, 어디서 무엇을 받아 와야 하는지만 적어 두었습니다."
-      : "실서비스에 필요한 것이 모두 켜졌습니다. 실제 계약 1건을 본인 번호로 끝까지 보내 확인해 보세요."}</p>
-    <ul class="wire-list">${blockers.map((b) => `<li class="${b.on ? "is-on" : ""}">
-      <span class="wire-dot" aria-hidden="true"></span>
-      <div><b>${esc(b.label)}</b> <span class="badge ${b.on ? "badge-ok" : "badge-no"}">${b.on ? "완료" : "필요"}</span>
-        ${b.on ? "" : `${b.why ? `<p>${b.why}</p>` : ""}<p>${b.how}</p>
-          ${b.code ? `<code>${esc(b.code)}</code>` : ""}
-          ${b.go ? `<a href="${b.go[0]}" data-goto="${b.go[0].replace("#s-", "")}">${esc(b.go[1])} →</a>` : ""}`}</div></li>`).join("")}</ul>
-    <p class="panel-hint">이 화면이 지금 돌고 있는 배포:
-      <code>${esc((env.CF_VERSION_METADATA && env.CF_VERSION_METADATA.id ? String(env.CF_VERSION_METADATA.id) : "").slice(0, 8) || "확인 불가")}</code>
-      — 대시보드 <b>Deployments</b> 맨 위 버전과 같으면 최신입니다. 다르면 아직 반영 전이니 잠시 뒤 새로고침하세요.</p>
-  </section>`;
-
   // 정기 작업 상태 — 개통이 끝난 뒤에도 크론이 조용히 죽는 일은 계속 생길 수 있다.
   // "언제 마지막으로 돌았나"를 늘 보이게 두는 것이 유일한 방어다.
   const agoText = (iso) => {
@@ -2992,6 +2935,9 @@ export async function superConsole(ctx) {
       blockDrop: !chain.ok, blockWhy: "서명 사슬 검증이 통과해야 사본을 지울 수 있습니다 — 지금 워커 키로 기존 서명이 확인되지 않습니다." },
   ];
   const migrateDone = migrate.every((m) => m.onWorker && !m.inDb);
+  const deployLine = `<p class="panel-hint">지금 돌고 있는 배포:
+    <code>${esc((env.CF_VERSION_METADATA && env.CF_VERSION_METADATA.id ? String(env.CF_VERSION_METADATA.id) : "").slice(0, 8) || "확인 불가")}</code>
+    — 대시보드 <b>Deployments</b> 맨 위 버전과 같으면 최신입니다. 다르면 아직 반영 전이니 잠시 뒤 새로고침하세요.</p>`;
   const migratePanel = migrateDone ? "" : `<section class="panel panel-warn"><h2 class="panel-title">시크릿 옮기기
       <span class="badge badge-no">${migrate.filter((m) => !(m.onWorker && !m.inDb)).length}건 남음</span></h2>
     <p class="panel-hint">두 값을 데이터베이스에서 <b>워커 Secret</b> 으로 옮깁니다.
@@ -3003,6 +2949,10 @@ export async function superConsole(ctx) {
       return `<div class="mig-item ${done ? "is-on" : ""}">
         <div class="mig-head"><b><code>${esc(m.name)}</code></b> <span class="muted">${esc(m.label)}</span>
           <span class="badge ${done ? "badge-ok" : m.onWorker ? "badge-wait" : "badge-no"}">${state}</span></div>
+        <div class="envcheck">
+          <span class="${m.onWorker ? "is-on" : ""}"><b>${m.onWorker ? "✓" : "✗"}</b> 워커 Secret</span>
+          <span class="${m.inDb ? "" : "is-on"}"><b>${m.inDb ? "✗" : "✓"}</b> DB 사본 ${m.inDb ? "남아 있음" : "없음"}</span>
+        </div>
         ${done ? "" : `<p>${m.why}</p>
         <div class="flash flash-warn">${m.risk}</div>
         <p class="mig-map">지금 있는 곳 <code>DB · ${esc(m.key)}</code> → 넣을 곳 <code>워커 · ${esc(m.name)}</code>
@@ -3023,9 +2973,13 @@ export async function superConsole(ctx) {
                  data-confirm="워커 Secret 이 확인되었습니다. DB 사본을 지울까요? (워커 값이 이미 쓰이고 있어 동작은 바뀌지 않습니다)">
                  <input type="hidden" name="_csrf" value="${esc(csrf)}" /><input type="hidden" name="key" value="${esc(m.key)}" />
                  <button class="btn btn-primary btn-sm">DB 사본 지우기</button></form>`)
-          : m.inDb ? '<p class="muted">워커에 Secret 이 확인되면 여기에 <b>DB 사본 지우기</b> 버튼이 나타납니다.</p>' : ""}`}
+          : m.inDb ? `<p class="muted"><b>DB 사본 지우기 버튼이 아직 없습니다.</b> 위 줄이 <code>✗ 워커 Secret</code> 이면,
+              이 워커가 <code>${esc(m.name)}</code> 라는 이름을 못 받고 있다는 뜻입니다 —
+              ① 이름 철자·앞뒤 공백, ② <b>Deploy</b> 를 안 누름, ③ Preview 환경에 넣음,
+              ④ Text 로 넣어서 배포 때 지워짐(반드시 <b>Secret</b>) 중 하나입니다.</p>` : ""}`}
       </div>`;
     }).join("")}
+    ${deployLine}
   </section>`;
 
   const securityPanel = `<section class="panel ${keyMode === "secret" ? "" : "panel-warn"}"><h2 class="panel-title">전자서명 보안
@@ -3100,6 +3054,13 @@ export async function superConsole(ctx) {
   const notifySuperPanel = `<section class="panel panel-accent"><h2 class="panel-title">알림톡 판매 <span class="badge badge-brand">건당 ${unitPrice.toLocaleString()}원</span>${pendCredits.length ? ` <span class="badge badge-wait">충전 대기 ${pendCredits.length}</span>` : ""}</h2>
     <p class="panel-hint">고객사가 선불로 충전하고 발송할 때마다 차감됩니다. <b>판매단가 − 원가 = 마진</b>이며, 발송 실패는 자동 환불되어 매출로 잡히지 않습니다.
       ${notifyEnabled(env) ? "" : '<b class="txt-warn">아직 알리고 키가 설정되지 않아 실제 발송은 되지 않습니다.</b>'}</p>
+    ${notifyEnabled(env) ? "" : `<div class="flash flash-warn">
+      <b>넷이 모두 있어야 발송이 켜집니다 — 하나라도 비면 한 통도 안 나갑니다.</b>
+      <div class="envcheck">${ALIGO_VARS.map((k) => `<span class="${hasCfg(env, k) ? "is-on" : ""}"><b>${hasCfg(env, k) ? "✓" : "✗"}</b> <code>${k}</code></span>`).join("")}</div>
+      <p>✗ 는 이 워커가 그 이름을 <b>못 받고 있다</b>는 뜻입니다. 대시보드에 보이는데 여기가 ✗ 라면
+        ① 이름 철자·앞뒤 공백, ② <b>Deploy</b> 를 안 누름, ③ Preview 환경에 넣음,
+        ④ <b>Text 로 넣어서 배포 때 지워짐</b>(<code>wrangler.toml</code> 의 <code>[vars]</code> 가 평문 변수를 덮어씁니다 — 반드시 <b>Secret</b>) 중 하나입니다.</p>
+      <p>넣는 곳: Workers &amp; Pages → <b>website</b> → Settings → Variables and Secrets → ＋ Add → Type <b>Secret</b> → Deploy</p></div>`}
     <div class="stat-cards">
       <div class="stat-card left"><div class="stat-top"><span class="stat-label">누적 발송</span></div><span class="stat-num">${totalSent.toLocaleString()}</span><div class="stat-delta mut">건</div></div>
       <div class="stat-card left"><div class="stat-top"><span class="stat-label">발송 매출</span></div><span class="stat-num">${totalRevenue.toLocaleString()}</span><div class="stat-delta mut">원 (차감 확정분)</div></div>
@@ -3248,13 +3209,12 @@ export async function superConsole(ctx) {
   const todo = [
     pendCredits.length ? { n: pendCredits.length, label: "충전 승인 대기", tab: "money" } : null,
     dueSoon ? { n: dueSoon, label: "오늘 연락할 영업", tab: "sales" } : null,
-    blocked.length ? { n: blocked.length, label: "개통 준비", tab: "home" } : null,
   ].filter(Boolean);
   const todoBar = todo.length
     ? `<div class="super-todo">${todo.map((t) => `<a href="#s-${t.tab}" class="super-todo-item"><b>${t.n}</b><span>${esc(t.label)}</span></a>`).join("")}</div>`
     : `<div class="super-todo is-clear"><span>지금 처리할 일이 없습니다 ✓</span></div>`;
   const TABS = [
-    ["home", "고객사", "▤", blocked.length],
+    ["home", "고객사", "▤"],
     ["sales", "영업", "◈", pendingApps.length],
     ["money", "알림톡·정산", "₩", pendCredits.length],
     ["settings", "설정·보안", "⚙", keyMode === "secret" ? 0 : 1],
@@ -3275,20 +3235,25 @@ export async function superConsole(ctx) {
     <div class="console-grid">${sideNav}<div class="console-main">
 
       <div class="sgroup" id="s-home" data-tab="home">
-        ${launchPanel}
         ${cronAlive ? "" : cronPanel}
         ${orgPanel}
         <section class="panel"><h2 class="panel-title">이번 달 알림톡 손익 <span class="badge ${margin > 0 ? "badge-ok" : "badge-muted"}">${margin.toLocaleString()}원</span></h2>
           <p class="panel-hint">건당 판매 ${unitPrice.toLocaleString()}원 · 마진율 ${marginPct}%. 자세한 내역은 <a href="#s-money" data-goto="money">알림톡·정산</a> 에서 봅니다.</p></section>
     <details class="panel panel-accent panel-fold" id="new-assoc"><summary class="panel-title">➕ 새 조직 만들기</summary>
-      <form method="post" action="/super/association" class="stack-form">
-        <div class="form-two"><label>조직 이름<input type="text" name="name" required /></label><label>대표 색상<input type="color" name="brand_color" value="#0b6e4f" /></label></div>
-        <label>유형<select name="kind">
-          ${KIND_KEYS.map((k) => `<option value="${k}">${esc(KINDS[k].createLabel || KINDS[k].label)} — ${esc(KINDS[k].createHint)}</option>`).join("")}
+      <p class="panel-hint"><b>고객사 한 곳</b>을 새로 여는 작업입니다 — 서초구 상인회, ○○법무법인처럼
+        <b>실제로 돈을 내고 쓰는 조직 하나</b>. 서식이나 견본을 만드는 게 아닙니다.
+        만들면 그 조직만의 주소(<code>/t/이름</code>)와 관리자 계정이 함께 생깁니다.</p>
+      <form method="post" action="/super/association" class="stack-form" id="new-assoc-form">
+        <div class="form-two"><label>조직 이름 <small>(고객사 실제 이름 — 화면 곳곳에 그대로 나옵니다)</small>
+          <input type="text" name="name" required placeholder="예: 서초구 상인회" /></label>
+          <label>대표 색상 <small>(그 조직 화면의 버튼·강조색)</small><input type="color" name="brand_color" value="#0b6e4f" /></label></div>
+        <label>유형 <small>(무엇을 파는지 — 이걸로 화면과 메뉴가 통째로 달라집니다)</small><select name="kind" id="new-kind">
+          ${KIND_KEYS.map((k) => `<option value="${k}"${KINDS[k].usesLanding ? ' data-landing="1"' : ""}>${esc(KINDS[k].createLabel || KINDS[k].label)} — ${esc(KINDS[k].createHint)}</option>`).join("")}
         </select></label>
-        <label>업종 문구 <small>(랜딩형 제품에만 적용 — 기본 문구가 업종에 맞게 채워집니다)</small>
+        <label class="only-landing">업종 문구 <small>(가맹점 모집 랜딩에만 씁니다 — 상인회·전자계약은 골라도 무시됩니다)</small>
           <select name="preset">${PRESET_KEYS.map((k) => `<option value="${k}">${esc(PRESETS[k].label)}</option>`).join("")}</select></label>
-        <label>한 줄 소개<input type="text" name="tagline" /></label>
+        <label>한 줄 소개 <small>(고객사 홈 첫 화면의 큰 문구 · 검색결과 설명 · 카톡 공유 미리보기에 나옵니다. 비우면 유형에 맞는 기본 문구가 들어갑니다)</small>
+          <input type="text" name="tagline" maxlength="200" placeholder="예: 함께 성장하는 우리 동네 상권" /></label>
         <div class="form-divider">관리자 계정</div>
         <div class="form-two"><label>관리자 이름<input type="text" name="admin_name" /></label><label>관리자 이메일<input type="email" name="admin_email" required /></label></div>
         <label>관리자 비밀번호 (8자 이상)<input type="password" name="admin_password" required minlength="8" /></label>
@@ -3338,7 +3303,8 @@ export async function superConsole(ctx) {
         <div class="form-two"><label>문의 이메일<input type="email" name="contact_email" value="${esc(contactEmail)}" /></label>
           <label>문의 전화(선택)<input type="text" name="contact_phone" value="${esc(contactPhone)}" maxlength="40" /></label></div>
         <button class="btn btn-ghost btn-sm">정보 저장</button></form>
-      <p class="panel-hint">공개 신청: <a href="/apply" target="_blank">/apply</a> · 약관: <a href="/terms" target="_blank">/terms</a> · 개인정보처리방침: <a href="/privacy" target="_blank">/privacy</a></p></section>
+      <p class="panel-hint">공개 신청: <a href="/apply" target="_blank">/apply</a> · 약관: <a href="/terms" target="_blank">/terms</a> · 개인정보처리방침: <a href="/privacy" target="_blank">/privacy</a></p>    ${deployLine}
+  </section>
         ${superPanel}
     <details class="panel ops-guide"><summary class="panel-title">🧭 운영 가이드 — 도메인·지도 설정 위치</summary>
       <div class="ops-body">

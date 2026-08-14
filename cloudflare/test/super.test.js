@@ -387,8 +387,13 @@ test("보조 정보가 하나 실패해도 콘솔 본 기능은 열린다", asyn
 import { TEMPLATE_KEYS } from "../src/notify.js";
 import { cronRunKey, runCron } from "../src/scheduled.js";
 
-async function superHtml(extra = {}, tplCount = 0, cronAlive = false) {
+async function superHtml(extra = {}, tplCount = 0, cronAlive = false, dbCopies = false) {
   const e2 = makeEnv(extra);
+  // 워커에도 값이 있고 D1 에도 사본이 남은 상태 — '사본만 남음' 을 재현한다
+  if (dbCopies) {
+    await D.setSetting(e2.DB, "session_secret", "old-copy");
+    await D.setSetting(e2.DB, "sign_key", JSON.stringify({ kty: "OKP", crv: "Ed25519", x: "x", d: "d" }));
+  }
   // 크론이 방금 돈 것으로 표시 — 개통 체크리스트의 '정기 작업' 항목이 이걸 본다
   if (cronAlive) await D.setSetting(e2.DB, cronRunKey("webhooks"), JSON.stringify({ at: new Date().toISOString(), ms: 3, error: "" }));
   // '아무것도 설정 안 된' 상태 = 시크릿이 D1 에 자동 생성돼 있는 상태
@@ -414,31 +419,6 @@ const ALL_ON = {
   RESEND_API_KEY: "re_ZZSECRETZZ", MAIL_FROM: "no-reply@lister.kr",
 };
 
-test("개통 체크리스트: 아무것도 없으면 막고 있는 것 5건을 이름으로 알려준다", async () => {
-  const html = await superHtml();
-  assert.match(html, /개통 체크리스트/);
-  assert.match(html, /5건 남음/);
-  for (const label of ["SESSION_SECRET", "전자서명 개인키", "알림톡 발송 키", "알림톡 템플릿 코드", "정기 작업"])
-    assert.match(html, new RegExp(label), `${label} 항목이 있어야`);
-  assert.match(html, /ALIGO_API_KEY/, "어떤 변수를 넣어야 하는지까지");
-});
-
-test("개통 체크리스트: 템플릿이 일부만 등록되면 빠진 것을 이름으로 짚어준다", async () => {
-  const html = await superHtml({}, 3);
-  // 총 개수는 템플릿을 늘릴 때마다 바뀐다 — 숫자를 박지 말고 정의에서 가져온다
-  assert.match(html, new RegExp(`알림톡 템플릿 코드 \\(3/${Object.keys(TEMPLATE_KEYS).length}\\)`));
-  assert.match(html, /전자서명 본인확인/, "미등록 템플릿 이름이 보여야");
-  assert.ok(!/미등록: <b>전자서명 요청/.test(html), "등록된 것은 미등록 목록에 없어야");
-});
-
-test("개통 체크리스트: 다 갖추면 화면에서 사라진다", async () => {
-  const kp = await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]);
-  const html = await superHtml({ ...ALL_ON, SIGN_PRIVATE_KEY: JSON.stringify(await crypto.subtle.exportKey("jwk", kp.privateKey)) }, Object.keys(TEMPLATE_KEYS).length, true);
-  assert.ok(!/개통 체크리스트/.test(html), "끝난 안내는 자리를 차지하면 안 된다");
-  assert.match(html, /처리할 일이 없습니다/);
-  assert.ok(!/건 남음/.test(html));
-});
-
 test("개통 체크리스트: 시크릿 값 자체는 화면에 절대 찍지 않는다", async () => {
   const html = await superHtml(ALL_ON, Object.keys(TEMPLATE_KEYS).length);
   for (const v of ["ZZAPIZZ", "ZZUSERZZ", "ZZSENDKEYZZ", "0299998888", "re_ZZSECRETZZ"])
@@ -452,28 +432,11 @@ test("고객사 카드에 유형 배지가 붙는다 (열어 보지 않아도 �
 
 // 발송 수단은 알림톡·이메일 중 하나면 된다.
 // 알림톡으로만 운영하기로 한 곳에 이메일이 영원히 빨간 항목으로 남으면 안 된다.
-test("알림톡만 갖추면 개통 준비가 끝난다 (이메일 없이)", async () => {
-  const kp = await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]);
-  const html = await superHtml({
-    SESSION_SECRET: "s", SIGN_PRIVATE_KEY: JSON.stringify(await crypto.subtle.exportKey("jwk", kp.privateKey)),
-    ALIGO_API_KEY: "a", ALIGO_USER_ID: "b", ALIGO_SENDER_KEY: "c", ALIGO_SENDER: "0212345678",
-    // RESEND 없음 — 이메일은 안 쓰기로 한 상태
-  }, Object.keys(TEMPLATE_KEYS).length, true);
-  assert.ok(!/개통 체크리스트/.test(html), "알림톡만으로도 개통 준비가 끝나야 한다");
-  assert.ok(!/건 남음/.test(html));
-});
-
 // 이메일 발송은 제품에서 뺐다. 개통 체크리스트에 이메일 항목이 남아 있으면
 // 영원히 지워지지 않는 할 일이 되고, 화면의 안내문도 사실이 아니게 된다.
-test("개통 체크리스트에 이메일 항목이 없다", async () => {
-  const html = await superHtml();
-  assert.ok(!/RESEND_API_KEY/.test(html), "이메일 변수를 요구하지 않는다");
-  assert.ok(!/이메일 발송<\/b>/.test(html), "이메일 발송 항목이 없다");
-});
-
 // "넣었는데 왜 안 변하지"를 사람에게 물어야만 알 수 있으면 안 된다.
 // 넷을 AND 로 묶어 놨으므로 하나만 빠져도 전부 꺼지는데, 화면은 그냥 '필요' 라고만 했다.
-test("알리고 키가 일부만 도달하면 어느 이름이 빠졌는지 화면이 짚어준다", async () => {
+test("알리고 키가 일부만 도달하면 어느 이름이 빠졌는지 알림톡 화면이 짚어준다", async () => {
   const html = await superHtml({ ALIGO_API_KEY: "a", ALIGO_USER_ID: "b", ALIGO_SENDER_KEY: "c" }); // SENDER 빠짐
   const strip = (/<div class="envcheck">([\s\S]*?)<\/div>/.exec(html) || [])[1] || "";
   assert.ok(strip, "변수별 도달 여부 줄이 있어야");
@@ -503,7 +466,7 @@ test("정기 작업이 한 번도 안 돌았으면 화면이 그렇게 말한다
 test("최근에 돌았으면 '돌고 있음' 으로 바뀐다", async () => {
   const html = await superHtml({}, 0, true);
   assert.match(html, /돌고 있음/);
-  assert.match(html, /정기 작업\(크론\) 등록<\/b> <span class="badge badge-ok">완료/, "체크리스트에서도 완료로");
+  assert.match(html, /id="cron-panel"/, "설정 화면에는 남아 있어야");
 });
 
 test("오래 전에 돌았으면 멈춘 것으로 본다 (20분 기준)", async () => {
@@ -694,19 +657,6 @@ test("운영사 콘솔 첫 화면에 고객사 목록이 있다", async () => {
 // ── 끝난 것은 접힌다
 // 한 번 쓰고 버리는 안내는 끝나면 사라져야 한다 — 접힌 줄도 매일 자리를 차지한다.
 // 되돌아가면(설정이 빠지면) 저절로 다시 나타나므로 지워도 안전하다.
-test("끝난 개통 안내는 사라지고, 되돌아가면 다시 나타난다", async () => {
-  const kp = await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]);
-  const done = await superHtml({ ...ALL_ON, SIGN_PRIVATE_KEY: JSON.stringify(await crypto.subtle.exportKey("jwk", kp.privateKey)) },
-    Object.keys(TEMPLATE_KEYS).length, true);
-  assert.ok(!/개통 체크리스트/.test(done));
-  assert.ok(!/시크릿 옮기기/.test(done), "옮기고 나면 다시 볼 일이 없다");
-  assert.match(done, /<details class="panel panel-fold" id="cron-panel">/, "감시는 남되 접혀 있어야");
-
-  const todo = await superHtml();
-  assert.match(todo, /<section class="panel panel-warn">\s*<h2 class="panel-title">개통 체크리스트/, "남았으면 다시 나타나야");
-  assert.match(todo, /시크릿 옮기기/);
-});
-
 // 정기 작업은 개통이 아니라 감시다 — 멈추면 첫 화면으로 올라와야 한다.
 test("정기 작업은 멈췄을 때만 첫 화면에 뜬다", async () => {
   const dead = await superHtml();
@@ -791,4 +741,61 @@ test("오래 조용한 고객사는 카드에서도 눈에 띈다", async () => 
   await S.env.DB.prepare("UPDATE associations SET created_at='2020-01-01 00:00:00' WHERE id=?").bind(a.id).run();
   const html = await S.get("/super");
   assert.match(html, /class="act-stamp is-cold"/);
+});
+
+// 브라우저는 pattern 을 정규식 v 모드로 컴파일한다. v 모드에서는 문자 클래스 안의 '-' 를
+// 이스케이프하지 않으면 정규식이 통째로 깨지고, 그 칸의 입력 검증이 조용히 꺼진다.
+// (콘솔에만 "Invalid character class" 가 찍혀서 알아채기 어렵다.)
+test("입력 검증 pattern 은 모든 브라우저에서 컴파일된다", async () => {
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(new URL("../src/pages.js", import.meta.url), "utf8");
+  const pats = [...src.matchAll(/pattern="([^"]+)"/g)].map((m) => m[1]);
+  assert.ok(pats.length, "검사할 pattern 이 있어야");
+  for (const p of pats) {
+    // HTML 의 pattern 은 통째로 감싸 anchored 로 평가된다 — 브라우저와 같은 방식으로 시험한다
+    assert.doesNotThrow(() => new RegExp(`^(?:${p.replace(/\\\\/g, "\\")})$`, "v"), `v 모드에서 깨지는 pattern: ${p}`);
+  }
+});
+
+// "옮겼는데 사본 지우기 버튼이 안 뜬다" — 왜 안 뜨는지를 화면이 말해야 한다.
+test("시크릿 옮기기는 워커·DB 상태를 이름별로 보여 준다", async () => {
+  const html = await superHtml(); // 워커 Secret 없음 · D1 에 값 있음
+  assert.match(html, /<span class=""><b>✗<\/b> 워커 Secret<\/span>/, "워커에 안 왔으면 ✗");
+  assert.match(html, /DB 사본 남아 있음/);
+  assert.match(html, /DB 사본 지우기 버튼이 아직 없습니다/, "안 뜨는 이유를 그 자리에 적어야");
+  assert.match(html, /Text 로 넣어서 배포 때 지워짐/);
+});
+
+test("워커 Secret 이 확인되면 지우기 버튼이 나타난다", async () => {
+  const kp = await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]);
+  const html = await superHtml({ SESSION_SECRET: "worker-value",
+    SIGN_PRIVATE_KEY: JSON.stringify(await crypto.subtle.exportKey("jwk", kp.privateKey)) }, 0, false, true);
+  assert.match(html, /<span class="is-on"><b>✓<\/b> 워커 Secret<\/span>/);
+  assert.match(html, /action="\/super\/secret-drop"/, "확인됐으면 버튼이 있어야");
+  assert.ok(!/DB 사본 지우기 버튼이 아직 없습니다/.test(html));
+});
+
+// 배포 버전은 체크리스트와 함께 사라지면 안 된다 — "지금 보는 게 최신인가"는 계속 필요하다
+test("지금 돌고 있는 배포 버전을 볼 수 있다", async () => {
+  const html = await superHtml();
+  assert.match(html, /지금 돌고 있는 배포/);
+});
+
+// "새 조직이 뭘 만드는 건지", "업종 문구는 상인회면 뭘 골라야 하는지",
+// "한 줄 소개는 어디 들어가는지" — 폼만 보고는 알 수 없어서 물어봐야 했다.
+test("새 조직 폼은 무엇을 만드는지·값이 어디 쓰이는지 그 자리에서 말한다", async () => {
+  const html = await superHtml();
+  assert.match(html, /실제로 돈을 내고 쓰는 조직 하나/, "서식·견본이 아니라는 걸 밝혀야");
+  assert.match(html, /가맹점 모집 랜딩에만 씁니다/, "업종 문구가 어디 쓰이는지");
+  assert.match(html, /상인회·전자계약은 골라도 무시됩니다/);
+  assert.match(html, /첫 화면의 큰 문구 · 검색결과 설명 · 카톡 공유 미리보기/, "한 줄 소개가 어디 나오는지");
+});
+
+// 랜딩을 쓰는 유형이 무엇인지는 kinds.js 가 정한다 — 화면 JS 가 유형 이름을 외우면
+// 유형이 늘거나 이름이 바뀔 때 조용히 어긋난다.
+test("업종 문구를 쓰는 유형만 표시로 구분된다", async () => {
+  const html = await superHtml();
+  assert.match(html, /<option value="franchise" data-landing="1"/);
+  assert.ok(!/<option value="merchant" data-landing/.test(html));
+  assert.ok(!/<option value="esign" data-landing/.test(html));
 });

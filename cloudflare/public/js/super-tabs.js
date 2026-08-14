@@ -69,3 +69,19 @@
     });
   });
 })();
+
+// 새 조직 만들기 — '업종 문구'는 모집 랜딩에만 쓰이는데 늘 보여서
+// "상인회면 뭘 골라야 하지?" 하고 멈추게 된다. 해당 유형일 때만 보여 준다.
+(function () {
+  var kind = document.getElementById("new-kind");
+  if (!kind) return;
+  var form = document.getElementById("new-assoc-form");
+  var rows = form ? form.querySelectorAll(".only-landing") : [];
+  function sync() {
+    var opt = kind.options[kind.selectedIndex];
+    var on = !!(opt && opt.dataset.landing);
+    for (var i = 0; i < rows.length; i++) rows[i].hidden = !on;
+  }
+  kind.addEventListener("change", sync);
+  sync();
+})();
