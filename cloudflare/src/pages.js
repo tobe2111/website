@@ -1274,8 +1274,8 @@ export async function admin(ctx) {
       <td>${p.hidden ? '<span class="badge badge-neutral">숨김</span>' : (p.sold_out ? '<span class="badge badge-no">품절</span>' : '<span class="badge badge-ok">노출</span>')}</td>
       <td class="actions-cell"><form method="post" action="${base}/admin/product/${p.id}/hide"><button class="btn btn-xs btn-ghost">${p.hidden ? "다시 노출" : "숨기기"}</button></form></td></tr>`).join("")}
     </tbody></table></div></section>` : "";
-  const auditPanel = `<section class="panel"><h2 class="panel-title">감사 로그 <span class="badge badge-muted">최근 ${auditLog.length}</span></h2>
-    <ul class="audit-list">${auditLog.length ? auditLog.map((a) => `<li><span class="audit-action">${esc(a.action)}</span> <span class="audit-detail">${esc(a.detail)}</span><span class="audit-meta">${esc(a.actor_name)} · ${esc(kstStamp(a.created_at, { year: false }))}</span></li>`).join("") : `<li class="empty">기록이 없습니다.</li>`}</ul></section>`;
+  const auditPanel = `<details class="panel panel-fold"><summary class="panel-title">감사 로그 <span class="badge badge-muted">최근 ${auditLog.length}</span></summary>
+    <ul class="audit-list">${auditLog.length ? auditLog.map((a) => `<li><span class="audit-action">${esc(a.action)}</span> <span class="audit-detail">${esc(a.detail)}</span><span class="audit-meta">${esc(a.actor_name)} · ${esc(kstStamp(a.created_at, { year: false }))}</span></li>`).join("") : `<li class="empty">기록이 없습니다.</li>`}</ul></details>`;
 
   const bizRows = all.length ? all.map((b) => `<tr><td><a href="${base}/business/${esc(b.slug)}" target="_blank">${esc(b.name)}</a><br /><small>${esc(b.category)}</small></td>
     <td>${esc(b.owner_name)}<br /><small>${esc(b.owner_email)}</small></td><td>${statusBadge(b.status)}</td>
@@ -1331,8 +1331,9 @@ export async function admin(ctx) {
   const msgRows = msgs.length ? msgs.map((m) => `<tr><td>${esc(kstStamp(m.created_at, { year: false }))}</td><td>${esc(m.kind || "-")}</td>
     <td>${esc(m.recipient)}</td><td>${m.status === "sent" ? '<span class="badge badge-ok">발송</span>' : `<span class="badge badge-no">실패</span>`}</td>
     <td>${m.cost ? m.cost.toLocaleString() + "원" : "-"}</td></tr>`).join("") : `<tr><td colspan="5" class="empty">발송 내역이 없습니다.</td></tr>`;
-  const notifyPanel = `<section class="panel" id="p-notify"><div class="panel-head">
-      <h2 class="panel-title">알림톡 <span class="badge ${balance > 0 ? "badge-ok" : "badge-wait"}">잔액 ${balance.toLocaleString()}원</span></h2></div>
+  // 잔액이 모자라면 펴 둔다 — 그때는 충전이 급한 일이다. 넉넉하면 접어 둔다.
+  const notifyPanel = `<${balance < unitPrice ? "section" : "details"} class="panel${balance < unitPrice ? "" : " panel-fold"}" id="p-notify">
+      <${balance < unitPrice ? "h2" : "summary"} class="panel-title">알림톡 <span class="badge ${balance > 0 ? "badge-ok" : "badge-wait"}">잔액 ${balance.toLocaleString()}원</span></${balance < unitPrice ? "h2" : "summary"}>
     <p class="panel-hint">서명 요청·리마인더를 카카오톡으로 보냅니다. 건당 <b>${unitPrice.toLocaleString()}원</b> — 지금 잔액으로 <b>약 ${sendable.toLocaleString()}건</b> 보낼 수 있습니다.
       알림 받을 회원은 <b>${withPhone}명</b>(휴대폰 등록 기준 · 전체 ${members.length}명)입니다.</p>
     ${balance < unitPrice ? `<div class="flash flash-warn">잔액이 부족해 알림톡이 발송되지 않습니다. 아래에서 충전을 신청해 주세요.</div>` : ""}
@@ -1348,7 +1349,8 @@ export async function admin(ctx) {
     </div>
     <div class="form-divider">발송 이력 <span class="badge badge-muted">누적 ${(msgStats.n || 0).toLocaleString()}건 · ${(msgStats.spent || 0).toLocaleString()}원${msgStats.failed ? ` · 실패 ${msgStats.failed}` : ""}</span></div>
     <div class="table-scroll"><table class="admin-table"><thead><tr><th>시각</th><th>종류</th><th>수신</th><th>상태</th><th>차감</th></tr></thead><tbody>${msgRows}</tbody></table></div>
-    <p class="panel-hint">실패한 건은 자동으로 환불되어 잔액이 복구됩니다. 수신번호는 개인정보 보호를 위해 가려서 저장합니다.</p></section>`;
+    <p class="panel-hint">실패한 건은 자동으로 환불되어 잔액이 복구됩니다. 수신번호는 개인정보 보호를 위해 가려서 저장합니다.</p>
+    </${balance < unitPrice ? "section" : "details"}>`;
 
   const notifRows = notifs.length ? notifs.map((n) => `<li class="${n.is_read ? "" : "unread"}"><span class="notif-dot"></span><a href="${esc(n.link || base + "/admin")}" class="notif-msg">${esc(n.message)}</a><time>${esc(kstStamp(n.created_at, { year: false }))}</time></li>`).join("") : `<li class="empty">알림이 없습니다.</li>`;
   const noticeCats = NOTICE_CATEGORIES.map((c) => `<option value="${esc(c)}"${c === "안내" ? " selected" : ""}>${esc(c)}</option>`).join("");
@@ -1419,7 +1421,7 @@ export async function admin(ctx) {
         <input type="text" class="invite-url" value="${esc(`${ORIGIN}${base}/invite?t=${encodeURIComponent(query.get("invite"))}`)}" readonly data-select-all />
         <span class="pill-row"><button type="button" class="btn btn-sm btn-primary" data-share data-share-url="${esc(`${ORIGIN}${base}/invite?t=${encodeURIComponent(query.get("invite"))}`)}" data-share-title="${esc(assoc.name)} 입점 초대">카톡으로 보내기 / 복사</button></span>
         <p class="panel-hint">사장님이 링크를 열어 이메일·비밀번호만 정하면 가게가 <b>승인 절차 없이 바로 공개</b>됩니다.</p></div>` : ""}
-      ${isEsign ? "" : `<details class="help-box" style="margin-top:14px" ${query.get("invite") ? "" : "open"}><summary>📨 사장님 초대 링크 만들기 (가장 쉬운 온보딩)</summary>
+      ${isEsign ? "" : `<details class="help-box" style="margin-top:14px"${query.get("invite") || s.businesses ? "" : " open"}><summary>📨 사장님 초대 링크 만들기 (가장 쉬운 온보딩)</summary>
         <div class="help-body"><p class="help-lead">가게 이름만 입력해 링크를 만들고 카톡으로 보내세요. 사장님은 이메일·비밀번호만 정하면 끝 — 가게가 바로 공개됩니다.</p>
         <form method="post" action="${base}/admin/invite" class="stack-form compact">
           <div class="form-two"><label>가게 이름<input type="text" name="biz_name" required maxlength="100" /></label><label>업종<select name="category">${CATEGORIES.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("")}</select></label></div>
@@ -1454,10 +1456,10 @@ ${isFranchise ? `    <section class="panel panel-accent" id="p-home"><h2 class="
       <span class="pill-row"><a href="${base}/admin/landing" class="btn btn-primary btn-sm">랜딩페이지 편집</a>
         <a href="${base}/admin/leads" class="btn btn-ghost btn-sm">상담 DB (신규 ${leads.fresh}건)</a>
         <a href="${base}" target="_blank" class="btn btn-ghost btn-sm">공개 화면 보기</a></span></section>`
-  : isEsign ? "" : `    <section class="panel" id="p-home"><h2 class="panel-title">홈페이지 구성 편집</h2>
+  : isEsign ? "" : `    <details class="panel panel-fold" id="p-home"><summary class="panel-title">홈페이지 구성 편집 <span class="badge badge-muted">한 번 정해 두는 것</span></summary>
       <p class="panel-hint">섹션을 켜고 끄거나 순서(▲▼)를 바꾸고 문구를 직접 수정할 수 있습니다.</p>
-      ${layoutEditor(base, lay)}</section>`}
-    <section class="panel" id="p-brand"><h2 class="panel-title">${isEsign ? "조직 정보 · 브랜딩" : isFranchise ? "브랜드 정보 · 브랜딩" : "상인회 정보 · 브랜딩"}</h2>
+      ${layoutEditor(base, lay)}</details>`}
+    <details class="panel panel-fold" id="p-brand"><summary class="panel-title">${isEsign ? "조직 정보 · 브랜딩" : isFranchise ? "브랜드 정보 · 브랜딩" : "상인회 정보 · 브랜딩"} <span class="badge badge-muted">한 번 정해 두는 것</span></summary>
       <form method="post" action="${base}/admin/settings" enctype="multipart/form-data" class="stack-form">
         <div class="form-two"><label>${isEsign ? "조직" : isFranchise ? "브랜드" : "상인회"} 이름<input type="text" name="name" value="${esc(assoc.name)}" required /></label><label>대표 색상<input type="color" name="brand_color" value="${esc(assoc.brand_color)}" /></label></div>
         <label>한 줄 소개<input type="text" name="tagline" value="${esc(assoc.tagline)}" /></label>
@@ -1470,7 +1472,7 @@ ${isFranchise ? `    <section class="panel panel-accent" id="p-home"><h2 class="
         <div class="form-two"><label>네이버 서치어드바이저 코드<input type="text" name="naver_verification" value="${esc(assoc.naver_verification || "")}" placeholder="content=&quot;…&quot; 안의 값만" /></label>
           <label>구글 서치콘솔 코드<input type="text" name="google_verification" value="${esc(assoc.google_verification || "")}" placeholder="content=&quot;…&quot; 안의 값만" /></label></div>
         <p class="panel-hint">입력하면 모든 페이지에 확인 메타 태그가 자동 삽입됩니다. 등록 후 사이트맵 <code>/sitemap.xml</code> 과 RSS <code>${esc(prettyPath(base))}/feed.xml</code> 을 제출하세요.</p>
-        <button class="btn btn-primary btn-sm">브랜딩 저장</button></form></section>
+        <button class="btn btn-primary btn-sm">브랜딩 저장</button></form></details>
     ${isEsign ? "" : `<section class="panel" id="p-biz"><h2 class="panel-title">업체 관리</h2><div class="table-scroll"><table class="admin-table">
       <thead><tr><th>업체</th><th>사장님</th><th>상태</th><th>처리</th></tr></thead><tbody>${bizRows}</tbody></table></div></section>
     <div id="p-products">${productModPanel}</div>`}
@@ -1672,15 +1674,18 @@ export async function signForm(ctx) {
     ${fillBar}
     ${docView}
     ${d.attachment ? `<p class="doc-attach">📎 계약서 원문: <a href="${esc(mediaUrl(d.attachment))}" target="_blank" rel="noopener">${esc(d.attachment_name || "계약서.pdf")}</a> <small>— 이 파일의 내용도 해시에 포함되어 봉인됩니다</small></p>` : ""}
-    <p class="doc-hash">문서 해시: <code>${esc(d.content_hash)}</code></p>
+    <details class="doc-hash"><summary>문서 지문 <code>${esc(String(d.content_hash).slice(0, 8))}…${esc(String(d.content_hash).slice(-8))}</code></summary>
+      <p>이 계약서 내용으로 계산한 값입니다. 글자 하나만 바뀌어도 값이 달라지므로, 나중에 문서가 바뀌지 않았는지 이 값으로 확인할 수 있습니다.</p>
+      <code>${esc(d.content_hash)}</code></details>
     ${otpDone ? `${needOtp ? '<p class="otp-ok">✅ 휴대폰 본인확인 완료 — 이 서명에는 본인확인 기록이 함께 남습니다.</p>' : ""}
     <form method="post" action="${base}/sign/${d.id}" class="stack-form sign-form" id="signForm">
       ${padBlock}
       <input type="hidden" name="signature" id="signatureData" />
       <input type="hidden" name="fields" id="fieldValues" />
       <label>서명자 성명<input type="text" name="signer_name" id="signerName" value="${esc(user.name)}" required /></label>
-      <label class="check"><input type="checkbox" name="consent" value="1" required /> 위 내용을 확인했으며 본인이 전자서명하는 데 동의합니다.</label>
-      <button class="btn btn-primary btn-block" id="signSubmit">전자서명 제출</button></form>` : ""}
+      <label class="check check-tap"><input type="checkbox" name="consent" value="1" required id="signConsent" /> 위 내용을 확인했으며 본인이 전자서명하는 데 동의합니다.</label>
+      <button class="btn btn-primary btn-block" id="signSubmit">전자서명 제출</button>
+      <p class="sign-why" id="signWhy">위 <b>동의</b>에 체크하면 제출할 수 있습니다.</p></form>` : ""}
     ${dialog}
     <p class="auth-note">서명 시 서명자·시각·IP·기기·문서해시가 기록되고 Ed25519 디지털 서명으로 봉인됩니다.</p>
     <details class="decline-box"><summary>이 문서에 동의할 수 없습니다 (거절)</summary>
@@ -1819,7 +1824,7 @@ export async function adminDocumentDetail(ctx) {
 
 // 서식에서 문서 만들기 — 빈칸({{변수}})과 당사자만 채우면 본문·배치가 완성된다.
 export async function adminDocumentNew(ctx) {
-  const { db, assoc, base, user, query, csrf } = ctx;
+  const { db, assoc, base, user, query, csrf, env } = ctx;
   const lead = Number(query.get("lead")) ? await D.getLead(db, Number(query.get("lead")), assoc.id) : null;
   const raw = query.get("tpl") || "";
   const src = isBuiltinId(raw) ? builtinById(raw) : await D.getTemplate(db, Number(raw) || 0);
@@ -1831,8 +1836,24 @@ export async function adminDocumentNew(ctx) {
     ? t.vars.map((v) => `<label>${esc(v)}<input type="text" name="var_${esc(v)}" maxlength="200" placeholder="${esc(v)}" /></label>`).join("")
     : `<p class="panel-hint">이 서식에는 채울 빈칸이 없습니다.</p>`;
   // 서식의 필드는 '당사자 1·2' 로 되어 있다 — 실제 회원을 여기에 연결한다
+  // 전자계약의 기본은 '가입하지 않은 상대방'과 맺는 계약이다. 예전에는 여기서 사내 회원만
+  // 고를 수 있어서, 계약서를 일단 만들고 상세 화면에 다시 들어가 외부 서명자를 붙여야 했다.
+  // 회원이 하나도 없으면 버튼이 아예 잠겨서 계약을 시작조차 못 했다.
   const partyRows = (t.parties.length ? t.parties : ["서명자"]).map((p, i) =>
-    `<label>${esc(p)}<select name="party_${i}"${members.length ? " required" : ""}><option value="">— 선택 —</option>${memberOpts}</select></label>`).join("");
+    `<div class="party-row">
+      <label>${esc(p)}<select name="party_${i}" class="party-pick" data-party="${i}" required>
+        <option value="">— 선택 —</option>${memberOpts}
+        <option value="ext">✉ 외부 상대방 — 가입하지 않은 사람</option>
+      </select></label>
+      <div class="party-ext" data-party="${i}" hidden>
+        <div class="form-two"><label>이름<input type="text" name="ext_name_${i}" maxlength="60" placeholder="예: 홍길동" /></label>
+          <label>소속·상호 <small>(선택)</small><input type="text" name="ext_org_${i}" maxlength="80" placeholder="예: ○○상사" /></label></div>
+        <div class="form-two"><label>휴대폰<input type="tel" name="ext_phone_${i}" maxlength="13" inputmode="numeric" placeholder="010-1234-5678" /></label>
+          <label>이메일 <small>(선택)</small><input type="email" name="ext_email_${i}" maxlength="120" placeholder="link@example.com" /></label></div>
+        <p class="panel-hint">이 연락처로 서명 링크와 본인확인 번호가 갑니다.
+          ${emailOn(env) ? "휴대폰이 있으면 알림톡으로, 없으면 이메일로 갑니다." : "<b>이 조직은 이메일 발송을 쓰지 않으므로 휴대폰이 필요합니다.</b>"}</p>
+      </div>
+    </div>`).join("");
   const preview = renderPaper(applyVars(t.body, {}), { fieldsFor: () => "" });
   const body = `<section class="dash"><div class="container">
     <div class="dash-head"><div><p class="section-eyebrow">E-SIGN · 서식</p><h1 class="dash-title">${esc(t.title)}</h1>
@@ -1846,17 +1867,19 @@ export async function adminDocumentNew(ctx) {
           <label>문서 제목<input type="text" name="title" required maxlength="200" value="${esc(t.title)}" /></label>
           ${t.vars.length ? `<div class="form-divider">빈칸 채우기</div><div class="tpl-vars">${varInputs}</div>` : ""}
           <div class="form-divider">당사자 지정</div>
-          ${members.length ? `<div class="tpl-vars">${partyRows}</div>` : `<p class="flash flash-warn">서명할 회원이 없습니다. 먼저 회원을 등록해 주세요.</p>`}
+          ${partyRows}
+          ${members.length ? "" : `<p class="panel-hint">사내에 등록된 서명자가 없습니다 — <b>외부 상대방</b>으로 진행하시면 됩니다.</p>`}
           <div class="form-two"><label>서명 기한 (선택)<input type="date" name="due_date" /></label>
             <label class="check check-inline"><input type="checkbox" name="ordered" value="1"${t.ordered ? " checked" : ""} /> 순차 서명</label></div>
-          <button class="btn btn-primary btn-block"${members.length ? "" : " disabled"}>문서 만들고 서명 요청</button>
+          <button class="btn btn-primary btn-block">문서 만들고 서명 요청</button>
           <p class="panel-hint">만든 뒤에도 <b>필드 배치</b> 화면에서 서명 자리를 옮길 수 있습니다 (서명 시작 전까지).</p>
         </form>
       </section>
       <div class="tpl-preview"><p class="tpl-preview-cap">미리보기 — 빈칸은 밑줄로 표시됩니다</p>
         <div class="paper-wrap">${preview}</div></div>
     </div></div></section>`;
-  return html(layout({ title: t.title, assoc, base, user, body, csrf, scripts: `<script src="${assetUrl("/js/paper.js")}" defer></script>` }));
+  return html(layout({ title: t.title, assoc, base, user, body, csrf,
+    scripts: `<script src="${assetUrl("/js/paper.js")}" defer></script><script src="${assetUrl("/js/doc-new.js")}" defer></script>` }));
 }
 
 // 우리 상인회 서식 관리 — 만든 문서를 서식으로 저장해 다음부터 재사용
@@ -2356,13 +2379,16 @@ export async function extSignForm(ctx) {
       <button type="button" class="btn btn-ghost btn-sm field-jump" id="fieldJump" hidden>다음 항목으로 이동 ↓</button>` : ""}
     ${docView}
     ${d.attachment ? `<p class="doc-attach">📎 계약서 원문: <a href="${esc(mediaUrl(d.attachment))}" target="_blank" rel="noopener">${esc(d.attachment_name || "계약서.pdf")}</a></p>` : ""}
-    <p class="doc-hash">문서 해시: <code>${esc(d.content_hash)}</code></p>
+    <details class="doc-hash"><summary>문서 지문 <code>${esc(String(d.content_hash).slice(0, 8))}…${esc(String(d.content_hash).slice(-8))}</code></summary>
+      <p>이 계약서 내용으로 계산한 값입니다. 글자 하나만 바뀌어도 값이 달라지므로, 나중에 문서가 바뀌지 않았는지 이 값으로 확인할 수 있습니다.</p>
+      <code>${esc(d.content_hash)}</code></details>
     ${otpDone ? `<form method="post" action="${to}" class="stack-form sign-form" id="signForm">
       ${hasSignField ? "" : `<label>서명<div class="sign-pad-wrap"><canvas id="signPad" class="sign-pad" width="600" height="200"></canvas><button type="button" class="btn btn-ghost btn-xs sign-clear" id="signClear">지우기</button></div></label>`}
       <input type="hidden" name="signature" id="signatureData" /><input type="hidden" name="fields" id="fieldValues" />
       <label>서명자 성명<input type="text" name="signer_name" id="signerName" value="${esc(signer.name)}" required maxlength="60" /></label>
-      <label class="check"><input type="checkbox" name="consent" value="1" required /> 위 내용을 확인했으며 본인이 전자서명하는 데 동의합니다.</label>
-      <button class="btn btn-primary btn-block" id="signSubmit">전자서명 제출</button></form>` : ""}
+      <label class="check check-tap"><input type="checkbox" name="consent" value="1" required id="signConsent" /> 위 내용을 확인했으며 본인이 전자서명하는 데 동의합니다.</label>
+      <button class="btn btn-primary btn-block" id="signSubmit">전자서명 제출</button>
+      <p class="sign-why" id="signWhy">위 <b>동의</b>에 체크하면 제출할 수 있습니다.</p></form>` : ""}
     <p class="auth-note">서명 시 서명자·시각·IP·기기·문서해시가 기록되고 Ed25519 디지털 서명으로 봉인됩니다.
       서명이 끝나면 확인서를 ${signer.email ? esc(maskEmail(signer.email)) : "등록된 연락처"}로 보내드립니다.</p>
     <details class="decline-box"><summary>이 계약에 동의할 수 없습니다 (거절)</summary>

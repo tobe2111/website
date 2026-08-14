@@ -446,6 +446,28 @@ a.bc-val:hover{text-decoration:underline}
 /* 손이 가야 하는 곳은 카드가 스스로 이유를 말한다 — 목록을 훑다 놓치지 않게 */
 .org-card.needs{border-color:var(--no);background:var(--no-bg)}
 .org-why{font-size:.78rem;font-weight:600;color:var(--no-fg);line-height:1.45}
+
+/* 당사자 지정 — '외부 상대방'을 고르면 연락처 칸이 그 자리에서 열린다 */
+.party-row{display:flex;flex-direction:column;gap:8px;margin-bottom:14px}
+.party-ext{border-left:3px solid var(--brand);background:var(--bg-alt);border-radius:0 8px 8px 0;
+  padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+.party-ext[hidden]{display:none}
+.party-ext .panel-hint{margin:0}
+
+/* 서명 화면 — 필수 동의는 손가락으로 누르는 자리다(실측 13px 였다) */
+.check-tap{display:flex;align-items:center;gap:10px;min-height:44px;padding:6px 2px;cursor:pointer;line-height:1.5}
+/* 330행의 .stack-form label.check input 이 폭을 auto 로 돌려놓는다 — 같은 무게로 이긴다 */
+.check-tap input[type=checkbox],.stack-form label.check-tap input[type=checkbox]{
+  width:22px;height:22px;min-height:22px;flex:none;accent-color:var(--brand)}
+.sign-why{font-size:.82rem;color:var(--muted);margin-top:8px;text-align:center}
+.sign-why.is-ready{color:var(--brand-text);font-weight:600}
+/* 문서 지문 — 서명자에게 64자는 뜻이 없다. 접어 두고 대조할 사람만 편다. */
+details.doc-hash{margin:14px 0;font-size:.8rem;color:var(--muted)}
+details.doc-hash>summary{cursor:pointer;min-height:44px;display:flex;align-items:center;gap:6px}
+/* 서명 화면의 펼침 항목은 전부 손가락 자리다 */
+.sign-decline>summary,.decline-box>summary{min-height:44px;display:flex;align-items:center}
+details.doc-hash p{margin:6px 0;line-height:1.6}
+details.doc-hash code{word-break:break-all;font-size:.74rem}
 @media (prefers-reduced-motion:reduce){ .org-card{transition:none} .org-card:hover{transform:none} }
 
 /* 조직 화면의 주소 입력 — /t/ 와 칸이 한 줄로 붙어야 무엇을 고치는지 보인다 */

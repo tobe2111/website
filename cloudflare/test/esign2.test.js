@@ -140,3 +140,71 @@ test("기한 판정: 오늘까지는 안 지난 것, 어제까지면 지난 것"
   assert.equal(isOverdue({ closed: 1, due_date: kst(-1) }), false, "체결된 계약은 기한을 따지지 않는다");
   assert.equal(isOverdue({ closed: 0, due_date: "" }), false, "기한이 없으면 지날 수도 없다");
 });
+
+// ── 전자계약의 기본은 '가입하지 않은 상대방'과 맺는 계약이다.
+// 예전에는 만들기 화면에서 사내 회원만 고를 수 있어서, 계약서를 일단 만들고
+// 상세 화면에 다시 들어가 외부 서명자를 붙여야 했다. 사내 회원이 하나도 없으면
+// 버튼이 잠겨 계약을 시작조차 못 했다.
+test("만들기 화면에서 외부 상대방을 바로 지정할 수 있다", async () => {
+  const { default: worker } = await import("../src/index.js");
+  const { hashPassword } = await import("../src/crypto.js");
+  const e = makeEnv();
+  const B = "https://x.test";
+  const a = await D.createAssociation(e.DB, { slug: "law", name: "한빛법무법인", kind: "esign" });
+  const pw = await hashPassword("pass1234");
+  await D.createUser(e.DB, { email: "law@a.kr", passwordHash: pw.hash, salt: pw.salt, name: "김담당", role: "ADMIN", associationId: a.id });
+  const f = (p, i) => worker.fetch(new Request(B + p, i), e, { waitUntil() {}, passThroughOnException() {} });
+  const g = await f("/login");
+  const seed = (g.headers.getSetCookie?.() || []).find((c) => c.startsWith("sc_csrf_seed="))?.split(";")[0] || "";
+  const tk = (/name="_csrf" value="([^"]+)"/.exec(await g.text()) || [])[1];
+  const lr = await f("/login", { method: "POST", headers: { cookie: seed, origin: B, "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ _csrf: tk, email: "law@a.kr", password: "pass1234" }) });
+  const jar = [seed, ...(lr.headers.getSetCookie?.() || []).map((c) => c.split(";")[0])].join("; ");
+
+  const form = await (await f("/t/law/admin/documents/new?tpl=b-lease", { headers: { cookie: jar } })).text();
+  assert.match(form, /외부 상대방 — 가입하지 않은 사람/, "만들기 화면에서 바로 고를 수 있어야");
+  assert.match(form, /name="ext_phone_0"/);
+  assert.ok(!/<button class="btn btn-primary btn-block" disabled>/.test(form), "사내 회원이 없어도 잠기면 안 된다");
+
+  const csrf = (/name="_csrf" value="([^"]+)"/.exec(form) || [])[1];
+  const res = await f("/t/law/admin/documents", { method: "POST",
+    headers: { cookie: jar, origin: B, "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ _csrf: csrf, template: "b-lease", title: "○○상가 임대차계약",
+      party_0: "ext", ext_name_0: "김갑", ext_phone_0: "010-1111-2222",
+      party_1: "ext", ext_name_1: "이을", ext_phone_1: "010-3333-4444" }) });
+  assert.equal(res.status, 303);
+
+  const docs = await D.listDocuments(e.DB, a.id);
+  assert.equal(docs.length, 1, "문서가 만들어져야");
+  const ext = await D.listExternalSigners(e.DB, docs[0].id);
+  assert.deepEqual(ext.map((x) => x.name), ["김갑", "이을"], "두 상대방이 서명자로 등록돼야");
+
+  // 서식의 서명 자리가 각 상대방에게 붙어야 한다 — 안 붙으면 아무도 채울 수 없는 칸이 된다
+  const fields = await D.listFields(e.DB, docs[0].id);
+  assert.ok(fields.length, "서식 필드가 복사돼야");
+  const owners = new Set(fields.map((f2) => f2.assignee).filter(Boolean));
+  for (const x of ext) assert.ok(owners.has(-x.id), `${x.name} 의 서명 자리가 있어야 (담당자 -${x.id})`);
+});
+
+test("외부 상대방을 골랐는데 연락처가 없으면 만들지 않는다", async () => {
+  const { default: worker } = await import("../src/index.js");
+  const { hashPassword } = await import("../src/crypto.js");
+  const e = makeEnv();
+  const B = "https://x.test";
+  const a = await D.createAssociation(e.DB, { slug: "law2", name: "두빛", kind: "esign" });
+  const pw = await hashPassword("pass1234");
+  await D.createUser(e.DB, { email: "l2@a.kr", passwordHash: pw.hash, salt: pw.salt, name: "담당", role: "ADMIN", associationId: a.id });
+  const f = (p, i) => worker.fetch(new Request(B + p, i), e, { waitUntil() {}, passThroughOnException() {} });
+  const g = await f("/login");
+  const seed = (g.headers.getSetCookie?.() || []).find((c) => c.startsWith("sc_csrf_seed="))?.split(";")[0] || "";
+  const tk = (/name="_csrf" value="([^"]+)"/.exec(await g.text()) || [])[1];
+  const lr = await f("/login", { method: "POST", headers: { cookie: seed, origin: B, "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ _csrf: tk, email: "l2@a.kr", password: "pass1234" }) });
+  const jar = [seed, ...(lr.headers.getSetCookie?.() || []).map((c) => c.split(";")[0])].join("; ");
+  const csrf = (/name="_csrf" value="([^"]+)"/.exec(await (await f("/t/law2/admin/documents/new?tpl=b-nda", { headers: { cookie: jar } })).text()) || [])[1];
+  const res = await f("/t/law2/admin/documents", { method: "POST",
+    headers: { cookie: jar, origin: B, "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ _csrf: csrf, template: "b-nda", title: "비밀유지약정", party_0: "ext", ext_name_0: "김갑" }) });
+  assert.match(decodeURIComponent(res.headers.get("location") || ""), /휴대폰 또는 이메일이 필요합니다/);
+  assert.equal((await D.listDocuments(e.DB, a.id)).length, 0, "반쪽짜리 문서가 남으면 안 된다");
+});

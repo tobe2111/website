@@ -245,7 +245,13 @@ const ok = (cond, name) => { if (cond) { pass++; console.log("  ✓", name); } e
   // 날짜 필드
   await p.locator('.pf-mine[data-kind="date"]').click();
   await p.click("#fdOk"); // 오늘 날짜가 기본값
-  ok(await p.locator("#signSubmit").isDisabled() === false, "필수 항목을 다 채우면 제출 잠금 해제");
+  // 필수 항목을 다 채워도 '동의' 전에는 아직 잠겨 있어야 한다 — 버튼이 눌리는데 브라우저가
+  // 막아 세우면, 사람은 왜 안 되는지 모른 채 페이지를 닫는다.
+  ok(await p.locator("#signSubmit").isDisabled() === true, "동의 전에는 여전히 잠겨 있음");
+  ok((await p.locator("#signWhy").textContent()).includes("동의"), "왜 못 누르는지 알려 줌");
+  await p.locator("#signConsent").check();
+  ok(await p.locator("#signSubmit").isDisabled() === false, "필수 항목 + 동의를 마치면 제출 잠금 해제");
+  ok((await p.locator("#signWhy").textContent()).includes("제출할 수 있습니다"), "이제 된다고 알려 줌");
   ok((await p.locator("#fieldProgress").textContent()).includes("모두 채웠"), "완료 안내로 바뀜");
 
   // 도장 생성 (선택 항목)

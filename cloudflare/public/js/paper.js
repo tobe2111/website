@@ -227,8 +227,18 @@
     if (counter) counter.textContent = left ? "남은 필수 항목 " + left + "개 / " + need + "개" : "필수 항목을 모두 채웠습니다 ✓";
     if (counter) counter.className = left ? "field-progress" : "field-progress done";
     if (jump) jump.hidden = left === 0;
+    // 제출이 왜 안 눌리는지 말해 준다 — 회색 버튼만 보이면 사람은 페이지를 닫는다.
+    var consent = document.getElementById("signConsent");
+    var why = document.getElementById("signWhy");
+    var blocked = left > 0 || (consent && !consent.checked);
     var submit = document.getElementById("signSubmit");
-    if (submit) submit.disabled = left > 0;
+    if (submit) submit.disabled = blocked;
+    if (why) {
+      why.textContent = left > 0
+        ? "남은 필수 항목 " + left + "개를 채우면 제출할 수 있습니다."
+        : (consent && !consent.checked) ? "위 동의에 체크하면 제출할 수 있습니다." : "이제 제출할 수 있습니다.";
+      why.className = blocked ? "sign-why" : "sign-why is-ready";
+    }
   }
   // 휴대폰에서는 A4 지면이 40% 남짓으로 줄어 서명칸이 13px 안팎이 된다 — 손가락으로 정확히
   // 누르기 어렵다. 그래서 이 버튼이 '이동'에서 끝나지 않고 그 자리를 바로 열어 준다.
@@ -242,6 +252,8 @@
     // 스크롤이 끝난 뒤 열어야 대화상자 위치가 튀지 않는다
     setTimeout(function () { openDialog(p); }, 260);
   });
+  var consentBox = document.getElementById("signConsent");
+  if (consentBox) consentBox.addEventListener("change", progress);
   progress();
 
   var form = document.getElementById("signForm");

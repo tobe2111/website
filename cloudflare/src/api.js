@@ -883,6 +883,7 @@ export async function adminCreateDocument(ctx) {
   // 서식에서 만들기 — 본문의 {{빈칸}} 을 입력값으로 치환하고, 배치까지 그대로 복사한다.
   const tplId = (form.get("template") || "").trim();
   let tpl = null, tplBody = "", partyMap = [];
+  const externalParties = []; // 가입하지 않은 상대방 — 문서를 만든 뒤에 서명자로 등록한다
   if (tplId) {
     const src = isBuiltinId(tplId) ? builtinById(tplId) : await D.getTemplate(db, Number(tplId) || 0);
     if (!src) return back(base + "/admin/documents", "서식을 찾을 수 없습니다.", true);
@@ -895,12 +896,28 @@ export async function adminCreateDocument(ctx) {
     const members = await D.listSignerCandidates(db, assoc.id, assoc.kind);
     const valid = new Set(members.map((m) => m.id));
     const n = Math.max(1, tpl.parties.length);
+    const to = base + "/admin/documents";
     for (let i = 0; i < n; i++) {
-      const id = Number(form.get("party_" + i)) || 0;
-      if (id && !valid.has(id)) return back(base + "/admin/documents", "이 상인회 회원만 당사자로 지정할 수 있습니다.", true);
+      const raw = String(form.get("party_" + i) || "").trim();
+      if (raw === "ext") {
+        // 가입하지 않은 상대방 — 여기서 받아 두고 문서를 만든 뒤에 서명자로 등록한다
+        const name = cap((form.get("ext_name_" + i) || "").replace(/[\x00-\x1f\x7f]/g, " ").trim(), 60);
+        const email = cap((form.get("ext_email_" + i) || "").toLowerCase().trim(), 120);
+        const phone = D.normalizePhone(form.get("ext_phone_" + i) || "");
+        const org = cap((form.get("ext_org_" + i) || "").trim(), 80);
+        if (!name) return back(to, "외부 상대방의 이름을 입력해 주세요.", true);
+        if (email && !EMAIL_RE.test(email)) return back(to, "외부 상대방의 이메일 형식을 확인해 주세요.", true);
+        if (phone && !D.isValidPhone(phone)) return back(to, "외부 상대방의 휴대폰 번호 형식을 확인해 주세요.", true);
+        if (!email && !phone) return back(to, `${name}님께 링크를 보낼 휴대폰 또는 이메일이 필요합니다.`, true);
+        externalParties.push({ i, name, email, phone, org });
+        partyMap.push(0); // 자리만 잡아 두고, 실제 id 는 만든 뒤에 채운다
+        continue;
+      }
+      const id = Number(raw) || 0;
+      if (id && !valid.has(id)) return back(to, "이 조직의 사람만 당사자로 지정할 수 있습니다.", true);
       partyMap.push(id);
     }
-    if (!partyMap.some(Boolean)) return back(base + "/admin/documents", "당사자를 한 명 이상 지정해 주세요.", true);
+    if (!partyMap.some(Boolean) && !externalParties.length) return back(to, "당사자를 한 명 이상 지정해 주세요.", true);
   }
   const body = tpl ? cap(tplBody, 20000) : cap((form.get("body") || "").trim(), 20000);
   if (!title || !body) return back(base + "/admin/documents", "제목과 본문을 입력하세요.", true);
@@ -937,7 +954,17 @@ export async function adminCreateDocument(ctx) {
   if (attKey) await D.setDocumentAttachment(db, doc.id, attKey, attName, attHash);
   // 서식이면 당사자 지정 순서가 곧 서명 순서이고, 배치는 당사자 → 실제 회원으로 옮겨 붙인다
   if (tpl) {
-    const signers = partyMap.filter(Boolean);
+    // 외부 상대방을 실제 서명자로 등록한다. 필드의 담당자는 음수 id 로 가리킨다(내부 회원과 구분).
+    const extLinks = [];
+    for (const e of externalParties) {
+      const signOrder = await D.nextSignOrder(db, doc.id);
+      const signer = await D.addExternalSigner(db, { documentId: doc.id, name: e.name, email: e.email, phone: e.phone, org: e.org, signOrder });
+      partyMap[e.i] = -signer.id;
+      const token = await makeExtToken(ctx.env.SESSION_SECRET, signer.id, doc.id);
+      const via = await sendSignLink(ctx.env, db, { assoc, doc, signer, origin: new URL(ctx.request.url).origin }).catch(() => "");
+      extLinks.push({ name: e.name, token, via });
+    }
+    const signers = partyMap.filter((v) => v > 0);
     await D.createSignatureRequests(db, doc.id, signers);
     const pages = pageCount(body);
     const placed = resolveFieldPages(tpl.fields, pages).map((f) => ({
@@ -947,6 +974,15 @@ export async function adminCreateDocument(ctx) {
     })).filter((f) => isFieldKind(f.kind) && f.x + f.w <= 1.0001 && f.y + f.h <= 1.0001);
     if (placed.length) await D.replaceFields(db, doc.id, placed);
     const recips = (await D.listSignerCandidates(db, assoc.id, assoc.kind)).filter((m) => signers.includes(m.id));
+    if (extLinks.length) {
+      const sentN = extLinks.filter((x) => x.via).length;
+      const note = sentN === extLinks.length
+        ? `상대방 ${extLinks.length}명에게 서명 링크를 보냈습니다.`
+        : `상대방 ${extLinks.length}명 중 ${sentN}명에게 보냈습니다 — 나머지는 아래에서 링크를 복사해 직접 전달해 주세요.`;
+      await D.logDocEvent(db, { documentId: doc.id, userId: user.id, actorName: user.name, kind: "created", detail: `서식: ${tpl.title}`, ip: ctx.ip || "", userAgent: uaOf(ctx) });
+      await audit(ctx, "서명문서생성", `${title} (서식: ${tpl.title})`);
+      return redirect(`${base}/admin/documents/${doc.id}?msg=${encodeURIComponent(note)}`);
+    }
     await D.logDocEvent(db, { documentId: doc.id, userId: user.id, actorName: user.name, kind: "created", detail: `서식: ${tpl.title}`, ip: ctx.ip || "", userAgent: uaOf(ctx) });
     await notifyNewDocument(ctx, doc, title, dueDate, ordered, recips);
     await audit(ctx, "서명문서생성", `${title} (서식: ${tpl.title})`);
