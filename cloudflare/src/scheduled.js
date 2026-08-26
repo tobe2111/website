@@ -215,10 +215,16 @@ export async function runSignReminders(env) {
     const unsigned = await D.listUnsigned(db, d.id);
     const targets = canAlimtalk ? unsigned.filter((t) => t.phone) : [];
     if (targets.length) {
+      // ⚠️ 여기서 문구를 직접 쓰면 안 된다. 알림톡은 심사받은 문구와 글자까지 같아야
+      // 발송되므로, 손으로 쓴 문장은 카카오가 거절한다(사내 회원 재알림이 통째로 죽는다).
+      // 반드시 심사받은 템플릿에 변수만 갈아 끼운다.
+      const { renderTemplate, templateButton } = await import("./notify.js");
       const r = await sendMany(env, db, {
         assoc, kind: "sign_remind", recipients: targets,
-        textFor: (m) => `[${assoc.name}] ${m.name}님, '${d.title}' 전자서명 기한이 ${d.due_date}까지입니다. 아직 서명이 완료되지 않았습니다.`,
-        buttonName: "서명하러 가기", buttonUrl: `${origin}/t/${d.assoc_slug}/sign`,
+        textFor: (m) => renderTemplate("sign_remind", {
+          상호: assoc.name, 이름: m.name, 문서명: d.title, 기한: d.due_date || "미지정",
+        }),
+        buttonName: templateButton("sign_remind"), buttonUrl: `${origin}/t/${d.assoc_slug}/sign`,
       });
       sent += r.sent;
     } else if (canEmail) {

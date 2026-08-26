@@ -369,7 +369,7 @@ test("문구가 같은 템플릿을 찾아 코드를 짝지운다", () => {
   assert.equal(matched.sign_otp.code, "TPL_OTP");
   assert.equal(matched.sign_otp.how, "이름 일치");
   assert.equal(matched.sign_otp.inspection, "REQ", "심사 상태를 그대로 들고 와야 안내할 수 있다");
-  assert.ok(unmatched.includes("전자서명 완료"), "못 찾은 것은 이름으로 알려야");
+  assert.ok(unmatched.includes("계약서 전자서명 완료"), "못 찾은 것은 이름으로 알려야");
   assert.ok(!Object.values(matched).some((m) => m.code === "TPL_ETC"), "남의 템플릿을 끌어오면 안 된다");
 });
 
@@ -399,4 +399,66 @@ test("응답 키 이름이 달라도 읽어낸다", () => {
   const a = N.normalizeProviderTemplate({ templtCode: "A", templtName: "n", templtContent: "c", inspStatus: "APR" });
   const b = N.normalizeProviderTemplate({ tpl_code: "A", tpl_name: "n", tpl_content: "c", insp_status: "APR" });
   assert.deepEqual(a, b);
+});
+
+// ── 카카오 심사 기준 (2026-08 반려 사유에서 뽑은 것)
+// 7개 중 5개가 반려됐고 이유가 셋으로 모였다. 문구를 손볼 때 같은 실수를 반복하지 않게 고정한다.
+test("모든 템플릿에 고정 문장이 충분히 있다 (변수만으로 이루어지면 반려)", () => {
+  for (const [kind, t] of Object.entries(N.TEMPLATES)) {
+    const fixed = t.body.replace(/#\{[^}]+\}/g, "").replace(/\s+/g, "");
+    assert.ok(fixed.length >= 40, `${kind}: 변수를 빼면 ${fixed.length}자뿐 — 발송 목적을 판단할 수 없다`);
+  }
+});
+
+test("말머리(첫 줄)가 무슨 메시지인지 알 수 있을 만큼 구체적이다", () => {
+  // '전자서명', '서명 요청' 처럼 넓은 말머리는 반려됐다.
+  for (const [kind, t] of Object.entries(N.TEMPLATES)) {
+    const head = t.body.split("\n")[0].replace(/#\{[^}]+\}/g, "").replace(/[\[\]]/g, "").trim();
+    assert.ok(head.length >= 6, `${kind}: 말머리가 너무 짧다 — "${head}"`);
+    assert.ok(!/^전자서명$|^서명 요청$/.test(head), `${kind}: 광범위한 말머리 — "${head}"`);
+  }
+});
+
+test("수신자가 왜 이 메시지를 받는지 본문이 밝힌다", () => {
+  // "수신 대상을 명확하게 확인하기 어렵다"가 반려 사유 중 하나였다.
+  const 수신단서 = /본 안내는|담당자님|신청해 주셔서|본인이 요청/;
+  for (const [kind, t] of Object.entries(N.TEMPLATES)) {
+    assert.match(t.body, 수신단서, `${kind}: 수신 대상·계기를 밝히는 문장이 없다`);
+  }
+});
+
+test("사내 담당자용 템플릿은 사내용임을 밝힌다", () => {
+  // 사내 관리자 대상인지 물어보는 반려가 있었다.
+  assert.match(N.TEMPLATES.lead_new.body, /사내 업무용/);
+  assert.match(N.TEMPLATES.lead_new.body, /담당자님/);
+});
+
+// 손으로 쓴 문장을 보내면 카카오가 거절한다 — 재알림이 실제로 그 상태였다.
+test("기한 재알림은 손글씨가 아니라 심사 문구로 나간다", async () => {
+  const { runSignReminders } = await import("../src/scheduled.js");
+  const a = await D.createAssociation(db, { slug: "rm", name: "리마인드", kind: "esign" });
+  await D.setSetting(db, "tpl_sign_remind", "TPL_RM");
+  await D.addCredit(db, a.id, 10000);
+  const pw = { hash: "h", salt: "s" };
+  const u = await D.createUser(db, { email: "m@a.kr", passwordHash: pw.hash, salt: pw.salt, name: "박회원", role: "MERCHANT", associationId: a.id });
+  await D.setUserPhone(db, u.id, "01099998888");
+  const doc = await D.createDocument(db, { associationId: a.id, title: "회비 납부 동의서", body: "b", contentHash: "h",
+    createdBy: null, ordered: 0, dueDate: new Date(Date.now() + 86400000).toISOString().slice(0, 10) });
+  await D.createSignatureRequests(db, doc.id, [u.id]);
+
+  const envOk = { ...env, DB: db, PUBLIC_ORIGIN: "https://x.test",
+    ALIGO_API_KEY: "k", ALIGO_USER_ID: "u", ALIGO_SENDER_KEY: "s", ALIGO_SENDER: "0212345678" };
+  const of = globalThis.fetch;
+  const bodies = [];
+  globalThis.fetch = async (u2, init) => {
+    if (!String(u2).includes("token/create")) bodies.push(Object.fromEntries(init.body.entries()));
+    return { ok: true, status: 200, json: async () => String(u2).includes("token/create") ? { code: 0, token: "T" } : { code: 0, info: { mid: 1 } } };
+  };
+  try { await runSignReminders(envOk); } finally { globalThis.fetch = of; }
+
+  const mine = bodies.find((b) => b.receiver_1 === "01099998888");
+  assert.ok(mine, "회원에게 재알림이 나가야");
+  assert.equal(mine.message_1, N.renderTemplate("sign_remind",
+    { 상호: a.name, 이름: "박회원", 문서명: doc.title, 기한: doc.due_date }),
+    "심사받은 문구 그대로여야 — 손으로 쓴 문장은 카카오가 거절한다");
 });

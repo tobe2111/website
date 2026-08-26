@@ -75,12 +75,12 @@ test("템플릿 문구의 변수는 선언된 것만 쓴다", () => {
 
 test("값을 끼워 넣으면 심사 문구의 구조가 그대로 유지된다", () => {
   const out = renderTemplate("sign_request", { 상호: "서초 상인회", 이름: "김갑", 문서명: "임대차", 기한: "2026-12-31" });
-  assert.match(out, /^\[서초 상인회\] 전자서명 요청/);
-  assert.match(out, /▶ 문서: 임대차/);
+  assert.match(out, /^\[서초 상인회\] 계약서 전자서명 요청 안내/);
+  assert.match(out, /▶ 계약서명: 임대차/);
   assert.doesNotMatch(out, /#\{/, "치환되지 않은 변수가 남으면 안 됨");
   // 빈 값이 와도 줄 구조는 무너지지 않는다
   const empty = renderTemplate("sign_request", { 상호: "x" });
-  assert.match(empty, /▶ 기한: -/);
+  assert.match(empty, /▶ 서명 기한: -/);
   assert.equal(empty.split("\n").length, out.split("\n").length);
 });
 
@@ -130,7 +130,7 @@ test("서명 완료 확인서도 전용 템플릿으로 나간다", async () => 
   const done = sends.find((x) => x.tpl === "TPL_SIGN_DONE");
   assert.ok(done, `완료 템플릿으로 발송: ${sends.map((s) => s.tpl)}`);
   assert.match(done.text, /전자서명 완료/);
-  assert.match(done.text, /검증코드: [0-9a-f]+/);
+  assert.match(done.text, /▶ 문서 검증번호: [0-9a-f]+/);
 });
 
 test("템플릿 코드가 없는 종류만 막히고 나머지는 정상 발송된다", async () => {
