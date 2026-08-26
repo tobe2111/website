@@ -153,3 +153,59 @@ test("성능 계측: Server-Timing 헤더 (D1 쿼리 수·시간)", async () => 
   const n = Number(/D1 (\d+) queries/.exec(st)[1]);
   assert.ok(n > 0 && n < 40, `홈 쿼리 수 상한 확인 — 콜드스타트 DDL 포함 (${n})`);
 });
+
+// ── 홈 첫 화면 배경 영상
+// 영상은 '있으면 좋은 것'이다. 사진이 poster 로 깔려 있어야 영상이 뜨기 전에도,
+// 데이터를 아끼거나 움직임을 꺼 둔 방문자에게도 첫 화면이 비지 않는다.
+// 빈 DB 는 첫 실행으로 보고 /setup 으로 보낸다 — 공개 화면을 보려면 계정이 하나 있어야 한다
+async function seeded() {
+  const e = makeEnv();
+  const pw = await hashPassword("x12345678");
+  await D.createUser(e.DB, { email: "seed@a.kr", passwordHash: pw.hash, salt: pw.salt, name: "운영", role: "SUPERADMIN", associationId: null });
+  return e;
+}
+const heroOf = async (e, slug) => (await worker.fetch(new Request("https://x.test/t/" + slug + "/"), e, { waitUntil() {}, passThroughOnException() {} })).text();
+
+test("배경 영상을 넣으면 사진이 poster 로 함께 깔린다", async () => {
+  const e = await seeded();
+  const a = await D.createAssociation(e.DB, { slug: "vid", name: "영상 상인회", kind: "merchant" });
+  await D.updateAssociation(e.DB, a.id, { name: a.name, tagline: "", brand_color: "#0a7d40",
+    phone: "", email: "", address: "", logo: "", hero_image: "photo.webp", hero_video: "clip.mp4" });
+  const html = await heroOf(e, "vid");
+  assert.match(html, /<video class="hp-video"[^>]*autoplay[^>]*muted[^>]*loop[^>]*playsinline/, "무음 자동재생 반복이어야 배경으로 쓸 수 있다");
+  assert.match(html, /poster="[^"]*photo\.webp"/, "사진이 poster 로 깔려야");
+  assert.match(html, /<source src="[^"]*clip\.mp4"/);
+  assert.match(html, /class="hero-pro has-photo has-video"/);
+});
+
+test("영상이 없으면 예전처럼 사진만 쓴다", async () => {
+  const e = await seeded();
+  const a = await D.createAssociation(e.DB, { slug: "img", name: "사진 상인회", kind: "merchant" });
+  await D.updateAssociation(e.DB, a.id, { name: a.name, tagline: "", brand_color: "#0a7d40",
+    phone: "", email: "", address: "", logo: "", hero_image: "photo.webp", hero_video: "" });
+  const html = await heroOf(e, "img");
+  assert.ok(!/hp-video/.test(html));
+  assert.match(html, /hp-photo/);
+});
+
+test("따옴표가 섞인 파일명이 와도 배경 속성을 깨뜨리지 않는다", async () => {
+  // 파일명에 따옴표가 섞이면 style="background-image:url('…')" 나 poster="…" 가
+  // 중간에서 끊기고, 그 뒤가 속성으로 읽힌다. 읽는 자리에서 걷어내는지 본다.
+  const e = await seeded();
+  const a = await D.createAssociation(e.DB, { slug: "esc", name: "따옴표", kind: "merchant" });
+  await D.updateAssociation(e.DB, a.id, { name: a.name, tagline: "", brand_color: "#0a7d40",
+    phone: "", email: "", address: "", logo: "", hero_image: `x'"y.webp`, hero_video: `v'"z.mp4` });
+  const html = await heroOf(e, "esc");
+  const tag = (/<video[^>]*>/.exec(html) || [""])[0];
+  assert.ok(tag, "영상 태그가 있어야");
+  assert.equal((tag.match(/"/g) || []).length % 2, 0, "속성 따옴표가 짝이 맞아야 (중간에 끊기면 홀수가 된다)");
+  assert.ok(!html.includes(`v'"`) && !html.includes(`x'"`), "따옴표가 그대로 나가면 안 된다");
+});
+
+// 움직임을 꺼 둔 방문자에게는 영상을 감춘다 — 스타일에 그 장치가 있어야 한다.
+test("움직임 최소화 설정이면 영상을 감추는 규칙이 있다", async () => {
+  const { readFileSync } = await import("node:fs");
+  const css = readFileSync(new URL("../public/css/app.css", import.meta.url), "utf8");
+  const block = /@media\s*\(prefers-reduced-motion:reduce\)\s*\{[^}]*\.hp-video\s*\{\s*display:\s*none/;
+  assert.match(css, block, "영상을 감추는 규칙이 있어야");
+});

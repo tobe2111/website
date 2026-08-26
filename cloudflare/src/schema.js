@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS associations (
   email       TEXT NOT NULL DEFAULT '',
   logo        TEXT NOT NULL DEFAULT '',
   hero_image  TEXT NOT NULL DEFAULT '',    -- 홈 히어로 배경 사진(R2 키). 비우면 프리미엄 그라데이션 히어로
+  hero_video  TEXT NOT NULL DEFAULT '',    -- 홈 히어로 배경 영상(R2 키·선택). 사진이 poster 가 된다
   map_lat     REAL NOT NULL DEFAULT 37.4837,
   map_lng     REAL NOT NULL DEFAULT 127.0324,
   map_zoom    INTEGER NOT NULL DEFAULT 14,
@@ -622,7 +623,7 @@ CREATE INDEX IF NOT EXISTS idx_landing_asset_assoc ON landing_assets(association
 // 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
 // 마이그레이션 세대 — migrateColumns 에 단계를 추가할 때마다 +1
 // 36 = 두 갈래(트렁크 33 · 모집형 35)를 합친 세대. 양쪽 DB 모두 다시 한 번 마이그레이션을 타게 한다.
-export const SCHEMA_VERSION = "38";
+export const SCHEMA_VERSION = "39";
 
 export async function ensureSchema(db) {
   const has = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='associations'").first();
@@ -713,6 +714,11 @@ async function migrateColumns(db) {
   // v15: 홈 히어로 배경 사진 컬럼
   if (!cols.some((c) => c.name === "hero_image")) {
     await db.prepare("ALTER TABLE associations ADD COLUMN hero_image TEXT NOT NULL DEFAULT ''").run();
+  }
+  // v39: 홈 히어로 배경 영상 (선택). 사진은 poster 로 함께 쓰인다 —
+  // 영상이 뜨기 전과, 움직임을 꺼 둔 방문자에게 보이는 화면이 그 사진이다.
+  if (!cols.some((c) => c.name === "hero_video")) {
+    await db.prepare("ALTER TABLE associations ADD COLUMN hero_video TEXT NOT NULL DEFAULT ''").run();
   }
   // v17: 알림톡 — 회원 휴대폰 + 선불 크레딧/원장/충전신청/발송로그
   const ucols = (await db.prepare("PRAGMA table_info(users)").all()).results || [];

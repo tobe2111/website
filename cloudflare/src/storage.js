@@ -1,7 +1,8 @@
-// R2 오브젝트 스토리지 (사진). 영상은 임베드라 저장하지 않음.
+// R2 오브젝트 스토리지 (사진 + 히어로 배경 영상).
 import { randomHex } from "./crypto.js";
 
-const EXT = { "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "image/gif": ".gif", "application/pdf": ".pdf" };
+const EXT = { "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "image/gif": ".gif", "application/pdf": ".pdf",
+  "video/mp4": ".mp4", "video/webm": ".webm" };
 export const extForType = (ct) => EXT[ct] || "";
 
 // R2 바인딩(MEDIA)이 없으면 사진 저장 비활성 — 사이트 나머지는 정상 동작.

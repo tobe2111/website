@@ -251,3 +251,37 @@ document.addEventListener("click", (e) => {
     delete input.dataset.shrinking;
   }, false);
 })();
+
+// 저장하면 저장됐다고 말해 준다 — 화면이 길면 맨 위 안내문은 눈에 안 들어온다.
+// 성공 안내는 떠오르는 알림으로 바꿔 보여 주고(3.5초 뒤 사라짐),
+// 오류는 그 자리에 남겨 둔다(읽고 고쳐야 하는 내용이라 사라지면 안 된다).
+(function () {
+  var box = document.querySelector("main .flash");
+  if (!box) return;
+  var msg = (box.textContent || "").trim();
+  if (!msg) return;
+  var isErr = box.classList.contains("flash-err");
+
+  if (isErr) { box.scrollIntoView({ block: "center", behavior: "smooth" }); return; }
+
+  box.remove();
+  var t = document.createElement("div");
+  t.className = "toast-save";
+  t.setAttribute("role", "status");
+  t.setAttribute("aria-live", "polite");
+  t.textContent = msg;
+  document.body.appendChild(t);
+  requestAnimationFrame(function () { t.classList.add("on"); });
+  setTimeout(function () {
+    t.classList.remove("on");
+    setTimeout(function () { t.remove(); }, 320);
+  }, 3500);
+  // 주소창에 남은 ?msg= 를 지운다 — 새로고침할 때마다 같은 알림이 다시 뜨면 거짓말이 된다
+  try {
+    var u = new URL(location.href);
+    if (u.searchParams.has("msg")) {
+      u.searchParams.delete("msg"); u.searchParams.delete("err");
+      history.replaceState(null, "", u.pathname + (u.search ? u.search : "") + u.hash);
+    }
+  } catch (e) {}
+})();

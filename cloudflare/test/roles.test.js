@@ -395,3 +395,50 @@ test("/esign 에는 상인회 간판이 하나도 없다", async () => {
     assert.match(html, /href="\/esign\/signup"/, `${p} 에 제품 메뉴가 있어야`);
   }
 });
+
+// ── 상인회 관리자 페이지는 아무나 들어가면 안 된다.
+// 멀티테넌트에서 제일 무서운 사고는 '남의 상인회 관리 화면이 열리는 것'이다.
+// 한 번 확인하고 끝낼 일이 아니라 계속 지켜져야 하므로 여기 못 박아 둔다.
+test("관리자 화면은 로그인·소속·권한 세 가지를 모두 본다", async () => {
+  const e = makeEnv();
+  const B = "https://x.test";
+  const mine = await D.createAssociation(e.DB, { slug: "seocho", name: "서초구 상인회", kind: "merchant" });
+  const other = await D.createAssociation(e.DB, { slug: "gangnam", name: "강남 상인회", kind: "merchant" });
+  const pw = await hashPassword("pass1234");
+  await D.createUser(e.DB, { email: "admin@a.kr", passwordHash: pw.hash, salt: pw.salt, name: "서초회장", role: "ADMIN", associationId: mine.id });
+  await D.createUser(e.DB, { email: "owner@a.kr", passwordHash: pw.hash, salt: pw.salt, name: "사장님", role: "MERCHANT", associationId: mine.id });
+  const f = (p, i) => worker.fetch(new Request(B + p, i), e, { waitUntil() {}, passThroughOnException() {} });
+  const login = async (email) => {
+    const g = await f("/login");
+    const seed = (g.headers.getSetCookie?.() || []).find((c) => c.startsWith("sc_csrf_seed="))?.split(";")[0] || "";
+    const tk = (/name="_csrf" value="([^"]+)"/.exec(await g.text()) || [])[1];
+    const lr = await f("/login", { method: "POST", headers: { cookie: seed, origin: B, "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ _csrf: tk, email, password: "pass1234" }) });
+    return [seed, ...(lr.headers.getSetCookie?.() || []).map((c) => c.split(";")[0])].join("; ");
+  };
+
+  // ① 로그인하지 않았으면 로그인으로 보낸다
+  for (const p of ["/t/seocho/admin", "/t/seocho/admin/documents", "/t/seocho/admin/api", "/super"]) {
+    const r = await f(p);
+    assert.equal(r.status, 303, `${p}: 비로그인인데 막지 않았다`);
+    assert.match(r.headers.get("location") || "", /^\/login\?/, `${p}: 로그인으로 보내야`);
+  }
+  // ② 남의 상인회 관리 화면은 로그인해도 못 연다
+  const adminJar = await login("admin@a.kr");
+  for (const p of ["/t/gangnam/admin", "/t/gangnam/admin/documents"]) {
+    const r = await f(p, { headers: { cookie: adminJar } });
+    assert.equal(r.status, 403, `${p}: 남의 상인회가 열렸다`);
+  }
+  // ③ 같은 상인회라도 사장님(MERCHANT) 은 관리 화면을 못 연다
+  const ownerJar = await login("owner@a.kr");
+  for (const p of ["/t/seocho/admin", "/t/seocho/admin/api"]) {
+    const r = await f(p, { headers: { cookie: ownerJar } });
+    assert.equal(r.status, 403, `${p}: 권한 없는 계정이 열었다`);
+  }
+  // ④ 화면에 들고 나는 길이 보인다
+  const anon = await (await f("/t/seocho/")).text();
+  assert.match(anon, /href="[^"]*\/login"/, "비로그인 화면에 로그인 링크가 있어야");
+  const inside = await (await f("/t/seocho/", { headers: { cookie: adminJar } })).text();
+  assert.match(inside, /action="\/logout"/, "로그인한 화면에 로그아웃이 있어야");
+  assert.match(inside, /\/t\/seocho\/admin/, "관리자에게 관리 화면 입구가 보여야");
+});

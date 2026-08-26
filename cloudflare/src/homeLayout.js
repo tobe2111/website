@@ -360,9 +360,17 @@ function heroSection(s, deps) {
   const sug = deps.suggestNames && deps.suggestNames.length;
   // 배경 사진이 있으면 사진 + 어두운 베일(가독성), 없으면 그라데이션 + 광원 + 랜드마크 실루엣.
   const photo = deps.heroImage;
-  const bg = photo
-    ? `<div class="hp-photo" style="background-image:url('${String(photo).replace(/['"\\]/g, "")}')"></div><div class="hp-photo-veil"></div>`
-    : `<span class="hp-glow hp-glow-1"></span><span class="hp-glow hp-glow-2"></span>`;
+  const video = deps.heroVideo;
+  // 영상은 '있으면 좋은 것'이다. 사진을 poster 로 깔아 두면 영상이 뜨기 전에도,
+  // 데이터를 아끼는 방문자에게도, 움직임을 꺼 둔 방문자에게도 첫 화면이 비지 않는다.
+  const clean = (u) => String(u || "").replace(/['"\\]/g, "");
+  const bg = video
+    ? `<video class="hp-video" autoplay muted loop playsinline preload="metadata"
+        ${photo ? `poster="${clean(photo)}"` : ""} aria-hidden="true" tabindex="-1"><source src="${clean(video)}" /></video>
+       ${photo ? `<div class="hp-photo" style="background-image:url('${clean(photo)}')"></div>` : ""}<div class="hp-photo-veil"></div>`
+    : photo
+      ? `<div class="hp-photo" style="background-image:url('${clean(photo)}')"></div><div class="hp-photo-veil"></div>`
+      : `<span class="hp-glow hp-glow-1"></span><span class="hp-glow hp-glow-2"></span>`;
   // 우측 정보 패널 — 상호와 검색창만 놓인 텅 빈 대문 대신, 실제 정보로 첫 화면을 채웁니다.
   // 점포가 0곳인 상권에서는 숫자 대신 '모집 중' 상태를 보여 빈 칸을 만들지 않습니다.
   const a = deps.assoc || {};
@@ -391,7 +399,7 @@ function heroSection(s, deps) {
     <dl class="hp-counts">${countRows}</dl>
     <a class="btn btn-primary btn-block" href="${base}/register">우리 가게 입점 신청</a>
   </aside>`;
-  return `<section class="hero-pro${photo ? " has-photo" : ""}">
+  return `<section class="hero-pro${photo || video ? " has-photo" : ""}${video ? " has-video" : ""}">
     <div class="hero-pro-bg" aria-hidden="true">${bg}</div>
     <div class="container hp-inner">
       <div class="hp-lead">

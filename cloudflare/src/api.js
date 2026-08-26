@@ -697,6 +697,24 @@ export async function adminDeleteEvent(ctx) {
   }
   return back(base + "/admin", "행사를 삭제했습니다.");
 }
+// 히어로 배경 영상 저장 — 파일 이름이나 MIME 은 얼마든지 속일 수 있으므로 실제 바이트로 본다.
+// mp4/mov 는 4바이트 뒤에 "ftyp", webm 은 EBML 매직(1A 45 DF A3)으로 시작한다.
+const HERO_VIDEO_MAX = 8 * 1024 * 1024; // 8MB — 첫 화면에서 받는 파일이다. 크면 시골 LTE 에서 첫 인상이 망가진다
+function sniffVideo(buf) {
+  if (buf[0] === 0x1a && buf[1] === 0x45 && buf[2] === 0xdf && buf[3] === 0xa3) return "video/webm";
+  if (buf[4] === 0x66 && buf[5] === 0x74 && buf[6] === 0x79 && buf[7] === 0x70) return "video/mp4";
+  return "";
+}
+async function saveHeroVideo(env, file) {
+  if (!file || typeof file !== "object" || !file.size) return { key: "" };
+  if (!storage.enabled(env)) return { error: "파일 저장소(R2)가 연결되지 않아 영상을 올릴 수 없습니다." };
+  if (file.size > HERO_VIDEO_MAX) return { error: `배경 영상은 ${Math.round(HERO_VIDEO_MAX / 1024 / 1024)}MB 이하만 올릴 수 있습니다. (올리신 파일 ${(file.size / 1024 / 1024).toFixed(1)}MB)` };
+  const buf = new Uint8Array(await file.arrayBuffer());
+  const type = sniffVideo(buf);
+  if (!type) return { error: "MP4 또는 WebM 영상만 올릴 수 있습니다." };
+  return { key: await storage.save(env, buf, type) };
+}
+
 export async function adminSettings(ctx) {
   const { db, env, form, base, assoc } = ctx;
   if (!(form.get("name") || "").trim()) return back(base + "/admin", "상인회 이름을 입력하세요.", true);
@@ -711,9 +729,15 @@ export async function adminSettings(ctx) {
   if (hup.error) return back(base + "/admin", hup.error, true);
   if (hup.images[0]) { if (assoc.hero_image) await storage.remove(env, assoc.hero_image); heroImage = hup.images[0].filename; }
   else if (form.get("hero_image_clear") === "1") { if (assoc.hero_image) await storage.remove(env, assoc.hero_image); heroImage = ""; }
+  // 히어로 배경 영상 (선택) — 사진이 poster 가 되므로, 영상만 있고 사진이 없으면 첫 프레임이 뜨기 전까지 빈 화면이 된다.
+  let heroVideo = assoc.hero_video || "";
+  const vres = await saveHeroVideo(env, form.get("hero_video"));
+  if (vres.error) return back(base + "/admin", vres.error, true);
+  if (vres.key) { if (heroVideo) await storage.remove(env, heroVideo); heroVideo = vres.key; }
+  else if (form.get("hero_video_clear") === "1") { if (heroVideo) await storage.remove(env, heroVideo); heroVideo = ""; }
   // 검색엔진 소유 확인 코드: 메타 태그 content 로 그대로 나가므로 안전한 문자만 허용
   const verCode = (v) => (cap(v, 100) || "").replace(/[^-\w.]/g, "");
-  await D.updateAssociation(db, assoc.id, { name: cap(form.get("name").trim(), 100), tagline: cap(form.get("tagline"), 200), brand_color: color, phone: cap(form.get("phone"), 40), email: cap(form.get("email"), 120), address: cap(form.get("address"), 200), logo, hero_image: heroImage,
+  await D.updateAssociation(db, assoc.id, { name: cap(form.get("name").trim(), 100), tagline: cap(form.get("tagline"), 200), brand_color: color, phone: cap(form.get("phone"), 40), email: cap(form.get("email"), 120), address: cap(form.get("address"), 200), logo, hero_image: heroImage, hero_video: heroVideo,
     naver_verification: verCode(form.get("naver_verification")), google_verification: verCode(form.get("google_verification")) });
   await audit(ctx, "브랜딩수정", "");
   return back(base + "/admin", "상인회 정보가 저장되었습니다.");

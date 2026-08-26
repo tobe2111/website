@@ -21,14 +21,19 @@ async function get(j, p) { const r = await worker.fetch(new Request(BASE + p, { 
 async function tok(j) { return (/name="_csrf" value="([^"]+)"/.exec(await (await get(j, "/login")).text()) || [])[1]; }
 async function post(j, p, f) { const t = await tok(j); const b = new URLSearchParams({ _csrf: t, ...f }); const r = await worker.fetch(new Request(BASE + p, { method: "POST", headers: { cookie: ch(j), "content-type": "application/x-www-form-urlencoded" }, body: b.toString() }), env); absorb(j, r); return r; }
 
-test("PWA: manifest + service worker + head 링크", async () => {
+test("설치 배너가 뜨지 않는다 (웹으로만 쓰는 서비스)", async () => {
+  // manifest 를 걸고 display:standalone 이면 브라우저가 '앱 설치'를 권한다.
+  // 제품마다 간판이 다른데 설치 이름은 하나뿐이라, 남의 간판으로 설치되는 꼴이 된다.
+  const home = await (await get(jar(), "/t/seocho")).text();
+  assert.ok(!/rel="manifest"/.test(home), "매니페스트를 걸면 설치 배너가 뜬다");
+  assert.match(home, /theme-color/, "테마색은 그대로 남아야");
+  const sw = await get(jar(), "/sw.js");
+  assert.equal(sw.status, 200, "오프라인 캐시는 그대로 쓴다");
   const m = await get(jar(), "/manifest.webmanifest");
   assert.equal(m.status, 200);
-  const sw = await get(jar(), "/sw.js");
-  assert.equal(sw.status, 200);
-  const home = await (await get(jar(), "/t/seocho")).text();
-  assert.match(home, /rel="manifest"/);
-  assert.match(home, /theme-color/);
+  const mj = JSON.parse(await m.text());
+  assert.equal(mj.display, "browser", "직접 열어 봐도 설치 대상이 되면 안 된다");
+  assert.ok(!/상인회|전자계약/.test(mj.name + mj.short_name), "제품 하나의 간판을 달면 안 된다");
 });
 
 test("SEO: sitemap.xml + robots.txt", async () => {

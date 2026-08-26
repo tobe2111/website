@@ -447,6 +447,24 @@ a.bc-val:hover{text-decoration:underline}
 .org-card.needs{border-color:var(--no);background:var(--no-bg)}
 .org-why{font-size:.78rem;font-weight:600;color:var(--no-fg);line-height:1.45}
 
+/* 히어로 배경 영상 — 사진(poster) 위에 얹는다. 영상이 못 뜨면 사진이 그대로 남는다. */
+.hp-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0}
+.hero-pro.has-video .hp-photo{z-index:-1} /* 영상이 뜨면 사진은 뒤로 — poster 로만 쓰인다 */
+/* 움직임을 꺼 둔 방문자에게는 영상을 감춘다. 사진(또는 그라데이션)이 그대로 보인다. */
+@media (prefers-reduced-motion:reduce){
+  .hp-video{display:none}
+  .hero-pro.has-video .hp-photo{z-index:0}
+}
+
+/* 저장 알림 — 길어진 화면에서 맨 위 안내문은 안 보인다. 떠올랐다 사라진다. */
+.toast-save{position:fixed;left:50%;bottom:24px;transform:translate(-50%,14px);z-index:300;
+  max-width:min(92vw,460px);padding:13px 20px;border-radius:999px;
+  background:var(--ink,#17211c);color:#fff;font-size:.92rem;font-weight:600;line-height:1.5;
+  box-shadow:0 10px 30px rgba(0,0,0,.22);opacity:0;transition:opacity .22s ease,transform .22s ease;
+  text-align:center;pointer-events:none}
+.toast-save.on{opacity:1;transform:translate(-50%,0)}
+@media (prefers-reduced-motion:reduce){ .toast-save{transition:opacity .01s} }
+
 /* 당사자 지정 — '외부 상대방'을 고르면 연락처 칸이 그 자리에서 열린다 */
 .party-row{display:flex;flex-direction:column;gap:8px;margin-bottom:14px}
 .party-ext{border-left:3px solid var(--brand);background:var(--bg-alt);border-radius:0 8px 8px 0;

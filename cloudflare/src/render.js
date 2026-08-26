@@ -56,6 +56,10 @@ export function brandTextInk(hex) {
   return "#" + rgb.map((v) => v.toString(16).padStart(2, "0")).join("");
 }
 
+// ⚠️ <link rel="manifest"> 를 일부러 걸지 않는다. 걸면 브라우저가 '앱 설치' 배너를 띄우는데,
+// 이 서비스는 웹으로만 쓰고 설치를 권할 일이 없다(제품마다 간판도 달라 설치 이름이 남의 것이 된다).
+// 아이콘·테마색은 아래 meta/link 로 충분하다. manifest.webmanifest 파일 자체는 남겨 두되
+// display 를 browser 로 두어, 직접 열어 봐도 설치 대상이 되지 않는다.
 export function layout({ title, assoc, base = "", user = null, body, activeNav = "", description = "", scripts = "", csrf = "", ogImage = "", preloadImage = "", jsonLd = null, product = null, console: consoleKind = "" }) {
   const nav = assoc ? navHtml(base, user, activeNav, assoc.kind, assoc.preset)
     : product && product.nav !== false ? productNav(user, activeNav, product) : "";
@@ -100,7 +104,6 @@ ${assoc && assoc.naver_verification ? `<meta name="naver-site-verification" cont
 ${assoc && assoc.google_verification ? `<meta name="google-site-verification" content="${esc(assoc.google_verification)}" />` : ""}
 ${assoc ? `<link rel="alternate" type="application/rss+xml" title="${brand} 공지·소식" href="${base}/feed.xml" />` : ""}
 <meta property="og:locale" content="ko_KR" />
-<link rel="manifest" href="/manifest.webmanifest" />
 <meta name="theme-color" content="${brandColor}" />
 <link rel="icon" href="/img/icon.svg" />
 <link rel="apple-touch-icon" href="/img/icon-180.png" />
