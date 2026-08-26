@@ -95,6 +95,7 @@ GitHub Actions(`.github/workflows/notion-sync.yml`)가 사람이 직접 푸시�
 
 ```bash
 node --experimental-sqlite --test cloudflare/test/*.test.js   # 로직 (wrangler 불필요)
+node --experimental-sqlite cloudflare/test-e2e/send-drill.mjs # 발송 리허설 (알리고 요청을 가로채 검증)
 node --experimental-sqlite cloudflare/scripts/measure.mjs     # 성능 실측
 node --experimental-sqlite cloudflare/scripts/a11y.mjs        # 접근성 실측 (WCAG AA)
 ```
