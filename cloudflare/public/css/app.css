@@ -463,6 +463,9 @@ a.bc-val:hover{text-decoration:underline}
   box-shadow:0 10px 30px rgba(0,0,0,.22);opacity:0;transition:opacity .22s ease,transform .22s ease;
   text-align:center;pointer-events:none}
 .toast-save.on{opacity:1;transform:translate(-50%,0)}
+/* 고른 파일 미리보기 — 저장 전이라는 걸 분명히 적는다 */
+.pv-note{font-size:.8rem;color:var(--brand-text);font-weight:600;margin:0 0 8px}
+.hero-img-cur video{display:block;margin:2px 0 8px}
 @media (prefers-reduced-motion:reduce){ .toast-save{transition:opacity .01s} }
 
 /* 당사자 지정 — '외부 상대방'을 고르면 연락처 칸이 그 자리에서 열린다 */
@@ -1081,6 +1084,9 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .console-side a:hover{background:var(--bg-alt);color:var(--ink)}
 .console-side .side-ext{color:var(--brand-text);margin-top:2px}
 .console-side .side-ext:first-of-type{border-top:1px solid var(--line-soft);margin-top:6px;padding-top:12px}
+/* 탭(이 화면 안에서 옮겨 다니는 것)과 바깥 링크(다른 화면으로 나가는 것)를 갈라 준다 */
+.console-side .side-sep{display:block;height:1px;background:var(--line-soft);margin:8px 4px}
+@media (max-width:860px){ .console-side .side-sep{display:none} }
 .side-badge{margin-left:auto;background:var(--wait-bg);color:var(--wait-fg);font-size:11px;font-weight:700;border-radius:999px;padding:1px 7px}
 .console-main{min-width:0}
 .console-main [id]{scroll-margin-top:calc(var(--header-h) + 12px)}

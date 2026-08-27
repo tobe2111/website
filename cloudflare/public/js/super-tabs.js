@@ -1,8 +1,9 @@
-// 슈퍼 콘솔 탭 — 한 화면에 쏟아지던 패널을 묶음 단위로 하나씩만 보여준다.
+// 콘솔 탭 — 한 화면에 쏟아지던 패널을 묶음 단위로 하나씩만 보여준다.
+// 운영사 콘솔(/super)과 고객사 관리 화면(/admin) 이 같은 장치를 쓴다.
 // JS 가 없으면 아무것도 숨기지 않는다(전부 이어진 긴 문서로 그대로 동작).
 (function () {
   "use strict";
-  var nav = document.getElementById("superNav");
+  var nav = document.getElementById("superNav") || document.getElementById("consoleNav");
   var groups = document.querySelectorAll(".sgroup");
   if (!nav || !groups.length) return;
   document.documentElement.classList.add("has-supertabs");

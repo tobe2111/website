@@ -82,14 +82,14 @@ test("이메일 미설정 폴백: 관리자 알림 경로 유지", async () => {
   assert.match(decodeURIComponent(r.headers.get("location")), /관리자가 확인 후/);
 });
 
-test("전체 백업 JSON + 온보딩 체크리스트", async () => {
+test("전체 백업 JSON", async () => {
   const env = makeEnv();
   await seed(env);
   const j = jar();
   await post(env, j, "/login", { email: "adm@s.kr", password: "admin1234" }, "/login");
-  // 온보딩: 소개·공지 미완료 → 체크리스트 노출
+  // 시작 체크리스트·참여 계측은 뺐다 — 처음 보는 사람에게 화면만 늘렸다
   const adminHtml = await (await get(env, j, "/t/seocho/admin")).text();
-  assert.match(adminHtml, /시작 체크리스트/);
+  assert.ok(!/시작 체크리스트|참여 계측/.test(adminHtml));
   // 백업 JSON
   const r = await get(env, j, "/t/seocho/admin/export.json");
   assert.equal(r.status, 200);
@@ -208,4 +208,56 @@ test("움직임 최소화 설정이면 영상을 감추는 규칙이 있다", as
   const css = readFileSync(new URL("../public/css/app.css", import.meta.url), "utf8");
   const block = /@media\s*\(prefers-reduced-motion:reduce\)\s*\{[^}]*\.hp-video\s*\{\s*display:\s*none/;
   assert.match(css, block, "영상을 감추는 규칙이 있어야");
+});
+
+// ── 관리 화면 구조: 한 화면에 열두 덩어리가 쏟아지던 것을 하는 일별 묶음으로
+// 처음 보는 사람이 "여기서 뭘 해야 하나"를 훑지 않고 고를 수 있어야 한다.
+test("관리 화면은 하는 일별 탭으로 나뉜다", async () => {
+  const e = await seeded();
+  const a = await D.createAssociation(e.DB, { slug: "tabs", name: "탭 상인회", kind: "merchant" });
+  const pw = await hashPassword("pass1234");
+  await D.createUser(e.DB, { email: "t@a.kr", passwordHash: pw.hash, salt: pw.salt, name: "회장", role: "ADMIN", associationId: a.id });
+  const B = "https://x.test";
+  const f = (p, i) => worker.fetch(new Request(B + p, i), e, { waitUntil() {}, passThroughOnException() {} });
+  const g = await f("/login");
+  const seed = (g.headers.getSetCookie?.() || []).find((c) => c.startsWith("sc_csrf_seed="))?.split(";")[0] || "";
+  const tk = (/name="_csrf" value="([^"]+)"/.exec(await g.text()) || [])[1];
+  const lr = await f("/login", { method: "POST", headers: { cookie: seed, origin: B, "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ _csrf: tk, email: "t@a.kr", password: "pass1234" }) });
+  const jar = [seed, ...(lr.headers.getSetCookie?.() || []).map((c) => c.split(";")[0])].join("; ");
+  const html = await (await f("/t/tabs/admin", { headers: { cookie: jar } })).text();
+
+  const tabs = [...html.matchAll(/<div class="sgroup" id="s-(\w+)"/g)].map((m) => m[1]);
+  assert.deepEqual(tabs, ["home", "people", "content", "notify", "settings"]);
+  assert.match(html, /id="consoleNav"/, "탭 장치가 붙을 자리가 있어야");
+  assert.match(html, /super-tabs\.js/, "탭 장치를 싣어야");
+
+  // 처음 보면 복잡해 보이던 두 가지는 뺐다
+  assert.ok(!/시작 체크리스트/.test(html));
+  assert.ok(!/참여 계측/.test(html));
+
+  // 같은 패널이 두 군데 그려지면 어느 쪽이 진짜인지 헷갈린다
+  assert.equal((html.match(/id="p-biz"/g) || []).length, 1, "업체 관리가 한 번만");
+  assert.equal((html.match(/id="p-brand"/g) || []).length, 1, "브랜딩이 한 번만");
+  assert.equal((html.match(/id="p-notify"/g) || []).length, 1, "알림톡이 한 번만");
+});
+
+// 파일을 고르면 그 자리에서 미리보기가 바뀌어야 한다 — 저장해야만 바뀌면 제대로 골랐는지 알 수 없다.
+test("파일 미리보기 장치가 관리 화면에 실린다", async () => {
+  const e = await seeded();
+  const a = await D.createAssociation(e.DB, { slug: "pv", name: "미리보기", kind: "merchant" });
+  const pw = await hashPassword("pass1234");
+  await D.createUser(e.DB, { email: "p@a.kr", passwordHash: pw.hash, salt: pw.salt, name: "회장", role: "ADMIN", associationId: a.id });
+  const B = "https://x.test";
+  const f = (p, i) => worker.fetch(new Request(B + p, i), e, { waitUntil() {}, passThroughOnException() {} });
+  const g = await f("/login");
+  const seed = (g.headers.getSetCookie?.() || []).find((c) => c.startsWith("sc_csrf_seed="))?.split(";")[0] || "";
+  const tk = (/name="_csrf" value="([^"]+)"/.exec(await g.text()) || [])[1];
+  const lr = await f("/login", { method: "POST", headers: { cookie: seed, origin: B, "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ _csrf: tk, email: "p@a.kr", password: "pass1234" }) });
+  const jar = [seed, ...(lr.headers.getSetCookie?.() || []).map((c) => c.split(";")[0])].join("; ");
+  const html = await (await f("/t/pv/admin", { headers: { cookie: jar } })).text();
+  assert.match(html, /file-preview\.js/);
+  assert.match(html, /name="hero_image"[^>]*accept="image\/\*"/);
+  assert.match(html, /name="hero_video"[^>]*accept="video\/mp4,video\/webm"/);
 });

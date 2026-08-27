@@ -1261,14 +1261,6 @@ export async function admin(ctx) {
   const lay = parseLayout(assoc.home_layout, assoc.name);
   // 핵심 가설 계측: "회원이 스스로 채운다"가 성립하는가. 셀프 등록률 30% 이상이면 성립 신호.
   const selfOk = met.total >= 5 && met.selfRate >= 30;
-  const metricsPanel = `<section class="panel panel-accent"><div class="panel-head"><h2 class="panel-title">참여 계측 <span class="badge badge-brand">핵심 지표</span></h2>
-      <span class="badge ${met.total < 5 ? "badge-neutral" : selfOk ? "badge-ok" : "badge-wait"}">${met.total < 5 ? "표본 부족" : selfOk ? "가설 성립 신호" : "관찰 중"}</span></div>
-    <p class="panel-hint">사장님이 직접 채우는 살아있는 홈인지 재는 세 숫자입니다. 표본 ${met.total}곳 기준.</p>
-    <div class="stat-cards">
-      <div class="stat-card left"><div class="stat-top"><span class="stat-label">셀프 등록률</span></div><span class="stat-num">${met.selfRate}%</span><div class="stat-delta ${met.selfRate >= 30 ? "up" : "mut"}">직접 ${met.selfCnt} · 대행 ${met.proxyCnt}</div></div>
-      <div class="stat-card left"><div class="stat-top"><span class="stat-label">정보 채움률</span></div><span class="stat-num">${met.filledRate}%</span><div class="stat-delta mut">소개·사진 있는 업체 ${met.filledCnt}곳</div></div>
-      <div class="stat-card left"><div class="stat-top"><span class="stat-label">최근 30일 갱신률</span></div><span class="stat-num">${met.refreshRate}%</span><div class="stat-delta mut">갱신 ${met.refreshedCnt}곳</div></div></div>
-    <p class="panel-hint" style="margin-top:14px">판정 기준: 셀프 등록률 <strong>30%↑</strong> 이면 "회원이 채우는 서비스" 성립 → 확장 단계. 못 넘으면 "관리자가 쉽게 채우는 도구"로 포지셔닝.</p></section>`;
   const productModPanel = assocProducts.length ? `<section class="panel"><h2 class="panel-title">제품 진열 관리 <span class="badge badge-muted">${assocProducts.length}</span></h2>
     <p class="panel-hint">부적절한 제품은 숨길 수 있습니다. (사장님 화면에는 '관리자 숨김'으로 표시됩니다)</p>
     <div class="table-scroll"><table class="admin-table"><thead><tr><th>제품</th><th>점포</th><th>상태</th><th>처리</th></tr></thead><tbody>
@@ -1368,6 +1360,15 @@ export async function admin(ctx) {
   const docCount = docs.length;
   const leads = isFranchise ? await D.leadStats(db, assoc.id) : null;
 
+  // 한 화면에 열두 덩어리가 쏟아지던 것을 하는 일별로 묶는다.
+  // 처음 보는 사람이 "여기서 뭘 해야 하나"를 훑지 않고 고를 수 있어야 한다.
+  const ADMIN_TABS = [
+    ["home", "현황", SIDE_SVG.stats, unread || 0],
+    [isEsign ? "people" : "people", isEsign ? "담당자" : "회원·점포", SIDE_SVG.users, isEsign ? 0 : (s.pending || 0)],
+    ...(isEsign ? [] : [["content", isFranchise ? "가맹점·콘텐츠" : "콘텐츠", SIDE_SVG.mega, 0]]),
+    ["notify", "알림톡", SIDE_SVG.bell, 0],
+    ["settings", "설정", SIDE_SVG.palette, 0],
+  ];
   const body = `<section class="dash"><div class="container">
     <div class="dash-head"><div><p class="section-eyebrow">조직 관리 · ${esc(assoc.name)}</p><h1 class="dash-title">${isEsign ? "전자계약 관리" : isFranchise ? "가맹 모집 관리" : "관리자 대시보드"}</h1>
       <p class="dash-sub">${isEsign ? "계약 창구" : isFranchise ? "랜딩페이지" : "홈페이지"}: <a href="${base}" target="_blank">${esc(prettyPath(base))}</a></p></div>
@@ -1376,15 +1377,12 @@ export async function admin(ctx) {
         : `<a href="${base}/admin/documents" class="btn btn-primary btn-sm">계약서 만들기</a>`}</div></div>
     ${flashOf(query)}
     <div class="console-grid">
-    <aside class="console-side"><nav>
-      <a href="#p-stats">${SIDE_SVG.stats} 현황</a><a href="#p-notif">${SIDE_SVG.bell} 알림함${unread ? ` <span class="side-badge">${unread}</span>` : ""}</a>
+    <aside class="console-side"><nav id="consoleNav">
+      ${ADMIN_TABS.map(([id, label, ico, badge]) =>
+        `<a href="#s-${id}" data-tab="${id}">${ico} ${esc(label)}${badge ? ` <span class="side-badge">${badge}</span>` : ""}</a>`).join("")}
+      <span class="side-sep"></span>
       ${isFranchise ? `<a href="${base}/admin/leads" class="side-ext">${SIDE_SVG.users} 상담 DB${leads.fresh ? ` <span class="side-badge">${leads.fresh}</span>` : ""}</a>
       <a href="${base}/admin/landing" class="side-ext">${SIDE_SVG.home} 랜딩페이지</a>` : ""}
-      <a href="#p-members">${SIDE_SVG.users} ${isEsign ? "담당자" : "회원"}</a>
-      ${isEsign ? "" : `<a href="#p-biz">${SIDE_SVG.store} ${isFranchise ? "가맹점" : "업체 승인"}${s.pending ? ` <span class="side-badge">${s.pending}</span>` : ""}</a>
-      <a href="#p-products">${SIDE_SVG.tag} 제품</a>${isFranchise ? "" : `<a href="#p-dues">${SIDE_SVG.stats} 회비 장부</a><a href="#p-home">${SIDE_SVG.home} 홈 구성</a>`}`}
-      <a href="#p-brand">${SIDE_SVG.palette} 브랜딩</a>${isEsign ? "" : `<a href="#p-content">${SIDE_SVG.mega} 공지·행사</a>`}
-      <a href="#p-notify">${SIDE_SVG.bell} 알림톡</a>
       ${isEsign || isFranchise ? "" : `<a href="${base}/polls" class="side-ext">${SIDE_SVG.bell} 안건 투표</a>`}
       <a href="${base}/admin/documents" class="side-ext">${SIDE_SVG.sign} 계약서</a>
       <a href="${base}/admin/templates" class="side-ext">${SIDE_SVG.sign} 서식</a>
@@ -1392,7 +1390,7 @@ export async function admin(ctx) {
       <a href="${base}" target="_blank" class="side-ext">${SIDE_SVG.ext} 사이트 보기</a>
     </nav></aside>
     <div class="console-main">
-    ${onboardPanel(base, assoc, s, members.length, notices.length, { docCount, balance, leads })}
+    <div class="sgroup" id="s-home" data-tab="home">
     ${isEsign ? inFlightPanel(base, docs) : ""}
     <div class="stat-cards" id="p-stats">
       ${isEsign ? (() => { const o = docs.filter((d) => !d.closed); const over = o.filter((d) => isOverdue(d));
@@ -1408,7 +1406,9 @@ export async function admin(ctx) {
     <section class="panel" id="p-notif"><div class="panel-head"><h2 class="panel-title">알림함${unread ? ` <span class="badge badge-wait">${unread}</span>` : ""}</h2>
       ${unread ? `<form method="post" action="${base}/admin/notifications/read"><button class="btn btn-xs btn-ghost">모두 읽음</button></form>` : ""}</div>
       <ul class="notif-list">${notifRows}</ul></section>
-    ${metricsPanel}
+    </div>
+
+    <div class="sgroup" id="s-people" data-tab="people">
     <section class="panel" id="p-members"><div class="panel-head"><h2 class="panel-title">${isEsign ? "담당자 관리" : "회원 관리"} <span class="badge badge-muted">${isEsign ? staffList.length : members.length}명</span></h2>
       <span class="pill-row">${members.length && !isEsign ? `<a class="btn btn-xs btn-ghost" href="${base}/admin/members.csv">명단 CSV</a>` : ""}<a class="btn btn-xs btn-ghost" href="${base}/admin/export.json">전체 백업(JSON)</a></span></div>
       ${isEsign ? `<p class="panel-hint">계약서를 만들고 보내는 사람들입니다. <b>담당자</b>는 계약 업무만 하고 설정·API 키·과금은 볼 수 없습니다.
@@ -1446,14 +1446,17 @@ export async function admin(ctx) {
           <div class="form-two"><label>성함<input type="text" name="name" required /></label><label>이메일<input type="email" name="email" required /></label></div>
           <button class="btn btn-primary btn-sm">부관리자 발급 + 임시 비번</button></form></div></details>`}
       ${isEsign ? "" : `<details class="help-box" style="margin-top:14px"><summary>사장님 대신 등록하기 (대행)</summary>
-        <div class="help-body"><p class="help-lead">사장님이 직접 못 하실 때 총무가 대신 계정을 만들어 드립니다. 임시 비밀번호를 전달하세요. (대행 등록은 참여 계측에 '대행'으로 집계됩니다.)</p>
+        <div class="help-body"><p class="help-lead">사장님이 직접 못 하실 때 총무가 대신 계정을 만들어 드립니다. 임시 비밀번호를 전달하세요.</p>
         <form method="post" action="${base}/admin/members/add" class="stack-form compact">
           <div class="form-two"><label>사장님 성함<input type="text" name="name" required /></label><label>이메일<input type="email" name="email" required /></label></div>
           <div class="form-two"><label>업체명<input type="text" name="business_name" required /></label><label>업종<input type="text" name="category" placeholder="예: 음식점" /></label></div>
           <button class="btn btn-primary btn-sm">대행 등록 + 임시 비번 발급</button></form></div></details>`}</section>
     ${isEsign || isFranchise ? "" : duesPanel}
-    ${notifyPanel}
-    ${auditPanel}
+    ${isEsign ? "" : `<section class="panel" id="p-biz"><h2 class="panel-title">${isFranchise ? "가맹점" : "업체"} 관리</h2><div class="table-scroll"><table class="admin-table">
+      <thead><tr><th>업체</th><th>사장님</th><th>상태</th><th>관리</th></tr></thead><tbody>${bizRows}</tbody></table></div></section>`}
+    </div>
+
+${isEsign ? "" : `<div class="sgroup" id="s-content" data-tab="content">`}
 ${isFranchise ? `    <section class="panel panel-accent" id="p-home"><h2 class="panel-title">랜딩페이지</h2>
       <p class="panel-hint">가맹점 모집 화면의 문구·순서·표시 여부는 전용 편집기에서 바꿉니다. 들어온 상담 신청은 상담 DB 에 쌓입니다.</p>
       <span class="pill-row"><a href="${base}/admin/landing" class="btn btn-primary btn-sm">랜딩페이지 편집</a>
@@ -1462,7 +1465,28 @@ ${isFranchise ? `    <section class="panel panel-accent" id="p-home"><h2 class="
   : isEsign ? "" : `    <details class="panel panel-fold" id="p-home"><summary class="panel-title">홈페이지 구성 편집 <span class="badge badge-muted">한 번 정해 두는 것</span></summary>
       <p class="panel-hint">섹션을 켜고 끄거나 순서(▲▼)를 바꾸고 문구를 직접 수정할 수 있습니다.</p>
       ${layoutEditor(base, lay)}</details>`}
-    <details class="panel panel-fold" id="p-brand"><summary class="panel-title">${isEsign ? "조직 정보 · 브랜딩" : isFranchise ? "브랜드 정보 · 브랜딩" : "상인회 정보 · 브랜딩"} <span class="badge badge-muted">한 번 정해 두는 것</span></summary>
+    ${isEsign ? "" : `<div id="p-products">${productModPanel}</div>`}
+    ${isEsign ? "" : `<div class="dash-grid" id="p-content">
+      <section class="panel"><h2 class="panel-title">공지·소식</h2>
+        <form method="post" action="${base}/admin/notice" enctype="multipart/form-data" class="stack-form compact">
+          <input type="text" name="title" placeholder="제목" required /><textarea name="body" rows="3" placeholder="내용"></textarea>
+          <div class="form-two"><label class="mini-label">카테고리<select name="tag">${noticeCats}</select></label><label class="check"><input type="checkbox" name="pinned" value="1" /> 상단 고정</label></div>
+          <label class="mini-label">대표 이미지 <small>(선택)</small><input type="file" name="image" accept="image/*" /></label>
+          <button class="btn btn-primary btn-sm">등록</button></form>
+        <ul class="admin-mini-list">${noticeRows2}</ul></section>
+      <section class="panel"><h2 class="panel-title">행사</h2>
+        <form method="post" action="${base}/admin/event" enctype="multipart/form-data" class="stack-form compact">
+          <input type="text" name="title" placeholder="행사명" required /><input type="date" name="event_date" required />
+          <input type="text" name="place" placeholder="장소" /><textarea name="description" rows="2" placeholder="설명"></textarea>
+          <label class="mini-label">대표 이미지 <small>(선택 · 홈에 포스터형 카드로 표시)</small><input type="file" name="image" accept="image/*" /></label>
+          <button class="btn btn-primary btn-sm">등록</button></form>
+        <ul class="admin-mini-list">${eventRows}</ul></section></div>`}
+    ${isEsign ? "" : "</div>"}
+
+    <div class="sgroup" id="s-notify" data-tab="notify">${notifyPanel}</div>
+
+    <div class="sgroup" id="s-settings" data-tab="settings">
+    <section class="panel" id="p-brand"><h2 class="panel-title">${isEsign ? "조직 정보 · 브랜딩" : isFranchise ? "브랜드 정보 · 브랜딩" : "상인회 정보 · 브랜딩"}</h2>
       <form method="post" action="${base}/admin/settings" enctype="multipart/form-data" class="stack-form">
         <div class="form-two"><label>${isEsign ? "조직" : isFranchise ? "브랜드" : "상인회"} 이름<input type="text" name="name" value="${esc(assoc.name)}" required /></label><label>대표 색상<input type="color" name="brand_color" value="${esc(assoc.brand_color)}" /></label></div>
         <label>한 줄 소개<input type="text" name="tagline" value="${esc(assoc.tagline)}" /></label>
@@ -1481,28 +1505,12 @@ ${isFranchise ? `    <section class="panel panel-accent" id="p-home"><h2 class="
         <div class="form-two"><label>네이버 서치어드바이저 코드<input type="text" name="naver_verification" value="${esc(assoc.naver_verification || "")}" placeholder="content=&quot;…&quot; 안의 값만" /></label>
           <label>구글 서치콘솔 코드<input type="text" name="google_verification" value="${esc(assoc.google_verification || "")}" placeholder="content=&quot;…&quot; 안의 값만" /></label></div>
         <p class="panel-hint">입력하면 모든 페이지에 확인 메타 태그가 자동 삽입됩니다. 등록 후 사이트맵 <code>/sitemap.xml</code> 과 RSS <code>${esc(prettyPath(base))}/feed.xml</code> 을 제출하세요.</p>
-        <button class="btn btn-primary btn-sm">브랜딩 저장</button></form></details>
-    ${isEsign ? "" : `<section class="panel" id="p-biz"><h2 class="panel-title">업체 관리</h2><div class="table-scroll"><table class="admin-table">
-      <thead><tr><th>업체</th><th>사장님</th><th>상태</th><th>처리</th></tr></thead><tbody>${bizRows}</tbody></table></div></section>
-    <div id="p-products">${productModPanel}</div>`}
-    <div class="dash-grid" id="p-content"${isEsign ? ' hidden' : ""}>
-      <section class="panel"><h2 class="panel-title">공지·소식</h2>
-        <form method="post" action="${base}/admin/notice" enctype="multipart/form-data" class="stack-form compact">
-          <input type="text" name="title" placeholder="제목" required /><textarea name="body" rows="3" placeholder="내용"></textarea>
-          <div class="form-two"><label class="mini-label">카테고리<select name="tag">${noticeCats}</select></label><label class="check"><input type="checkbox" name="pinned" value="1" /> 상단 고정</label></div>
-          <label class="mini-label">대표 이미지 <small>(선택)</small><input type="file" name="image" accept="image/*" /></label>
-          <button class="btn btn-primary btn-sm">등록</button></form>
-        <ul class="admin-mini-list">${noticeRows2}</ul></section>
-      <section class="panel"><h2 class="panel-title">행사</h2>
-        <form method="post" action="${base}/admin/event" enctype="multipart/form-data" class="stack-form compact">
-          <input type="text" name="title" placeholder="행사명" required /><input type="date" name="event_date" required />
-          <input type="text" name="place" placeholder="장소" /><textarea name="description" rows="2" placeholder="설명"></textarea>
-          <label class="mini-label">대표 이미지 <small>(선택 · 홈에 포스터형 카드로 표시)</small><input type="file" name="image" accept="image/*" /></label>
-          <button class="btn btn-primary btn-sm">등록</button></form>
-        <ul class="admin-mini-list">${eventRows}</ul></section>
+        <button class="btn btn-primary btn-sm">브랜딩 저장</button></form></section>
+    ${auditPanel}
     </div>
-    </div></div></div></section>`;
-  return html(layout({ title: "관리자", assoc, base, user, body, activeNav: `${base}/admin`, csrf, scripts: `<script src="${assetUrl("/js/layout-editor.js")}" defer></script><script src="${assetUrl("/js/upload-resize.js")}" defer></script><script src="${assetUrl("/js/share.js")}" defer></script>` }));
+        </div></div></div></section>`;
+  return html(layout({ title: "관리자", assoc, base, user, body, activeNav: `${base}/admin`, csrf,
+    scripts: `<script src="${assetUrl("/js/layout-editor.js")}" defer></script><script src="${assetUrl("/js/upload-resize.js")}" defer></script><script src="${assetUrl("/js/file-preview.js")}" defer></script><script src="${assetUrl("/js/share.js")}" defer></script><script src="${assetUrl("/js/super-tabs.js")}" defer></script>` }));
 }
 
 // 기한이 지났는가 — due_date 는 'YYYY-MM-DD' 이고 그날 자정까지로 본다(KST 기준).
@@ -1548,35 +1556,6 @@ function inFlightPanel(base, docs) {
   </section>`;
 }
 
-// 관리자 온보딩 체크리스트 (모두 완료되면 자동으로 사라짐)
-function onboardPanel(base, assoc, stats, memberCount, noticeCount, esign = {}) {
-  const branded = (assoc.brand_color && assoc.brand_color !== "#0b6e4f") || !!assoc.logo;
-  const leads = esign.leads || { total: 0 };
-  // 전자계약 조직에는 공지·업체 승인·점포 가입 링크가 없다. 그대로 두면 404 로 가는 체크리스트가 된다.
-  const steps = assoc.kind === "franchise" ? [
-    { done: !!assoc.landing_layout, label: "랜딩페이지 문구 채우기 — 강점·절차·비용", href: base + "/admin/landing" },
-    { done: branded, label: "대표 색·로고 정하기 — 화면 전체 색이 함께 바뀝니다", href: "#p-brand" },
-    { done: !!(assoc.phone && assoc.phone.trim()), label: "대표 전화 등록 — 고정 하단 바에 전화 버튼이 생깁니다", href: "#p-brand" },
-    { done: !!assoc.hero_image, label: "첫 화면 배경 사진 올리기", href: "#p-brand" },
-    { done: leads.total > 0, label: "첫 상담 신청 받기 — 랜딩 주소를 광고·SNS에 알리세요", href: base + "/admin/leads" },
-  ] : assoc.kind === "esign" ? [
-    { done: !!(esign.docCount > 0), label: "첫 계약서 만들기 — 표준 서식에서 시작", href: base + "/admin/documents" },
-    { done: memberCount > 0, label: "담당자 계정 발급", href: "#p-members" },
-    { done: (esign.balance || 0) > 0, label: "알림톡 크레딧 충전 — 카카오로 서명 요청 보내기", href: "#p-notify" },
-    { done: branded, label: "대표 색·로고 정하기 — 계약서와 안내 화면에 쓰입니다", href: "#p-brand" },
-  ] : [
-    { done: !!(assoc.tagline && assoc.tagline.trim()), label: "상인회 한 줄 소개 쓰기", href: "#p-brand" },
-    { done: branded, label: "대표 색·로고 정하기", href: "#p-brand" },
-    { done: noticeCount > 0, label: "첫 공지 올리기", href: "#p-content" },
-    { done: memberCount > 0, label: "회원(사장님) 모집 — 가입 링크 공유", href: base + "/register" },
-    { done: stats.pending === 0, label: "가입 승인 대기 처리", href: "#p-biz" },
-  ];
-  const remain = steps.filter((x) => !x.done).length;
-  if (!remain) return "";
-  return `<section class="panel onboard"><div class="panel-head"><h2 class="panel-title">시작 체크리스트 <span class="badge badge-wait">${steps.length - remain}/${steps.length}</span></h2></div>
-    <ul class="onboard-list">${steps.map((x) => `<li class="${x.done ? "done" : ""}">
-      <span class="ob-check">${x.done ? "✓" : ""}</span><a href="${x.href}">${x.label}</a></li>`).join("")}</ul></section>`;
-}
 
 // 상인회 전체 데이터 내보내기 (백업·이전용 JSON)
 export async function adminExportAll(ctx) {
