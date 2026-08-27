@@ -7,7 +7,7 @@ import { back, redirect } from "./http.js";
 import * as storage from "./storage.js";
 import { countable } from "./traffic.js";
 import { parseEmbed } from "./embed.js";
-import { cap, sniffImage, EMAIL_RE, MAX_IMAGE_BYTES, slugify, esc } from "./util.js";
+import { cap, sniffImage, EMAIL_RE, MAX_IMAGE_BYTES, slugify, esc, safeNext } from "./util.js";
 import { contentHash, sealRecord, newVerifyCode, SEAL_VER, fieldsHashOf, keyStorage, verifyChain } from "./esign.js";
 import { isFieldKind, round4, FIELD_KINDS, pageCount } from "./paper.js";
 import { builtinById, isBuiltinId, normalizeTemplate, extractVars, applyVars, resolveFieldPages } from "./templates.js";
@@ -105,7 +105,9 @@ export async function login(ctx) {
   }
   const token = await sessionTokenForUser(user, env.SESSION_SECRET);
   addCookie(sessionCookie(token, isProd));
-  return redirect(await postLoginPath(db, user));
+  // 서명 링크를 눌렀다가 로그인하러 온 사람은 그 문서로 돌려보낸다.
+  // (safeNext 가 같은 사이트 경로만 통과시킨다 — 열린 리다이렉트 차단)
+  return redirect(safeNext(form.get("next")) || (await postLoginPath(db, user)));
 }
 
 export async function logout(ctx) {
@@ -1048,7 +1050,12 @@ export async function adminCreateDocument(ctx) {
   await D.logDocEvent(db, { documentId: doc.id, userId: user.id, actorName: user.name, kind: "created", ip: ctx.ip || "", userAgent: uaOf(ctx) });
   await notifyNewDocument(ctx, doc, title, dueDate, ordered, recipients);
   await audit(ctx, "서명문서생성", title);
-  return back(base + "/admin/documents", ordered ? "순차 서명 문서를 생성했습니다." : "문서를 생성했습니다.");
+  // 목록이 아니라 그 문서로 보낸다 — 서명 링크와 현황이 거기 있다.
+  // 알림톡이 꺼져 있으면 관리자가 직접 링크를 전달해야 하므로, 어디로 가야 하는지가 특히 중요하다.
+  const note = notifyEnabled(ctx.env)
+    ? ordered ? "순차 서명 문서를 만들었습니다." : "문서를 만들었습니다."
+    : "문서를 만들었습니다. 아래 [보내기 · 복사] 로 서명 링크를 전달해 주세요.";
+  return redirect(`${base}/admin/documents/${doc.id}?msg=${encodeURIComponent(note)}`);
 }
 // 웹훅 큐에 넣고, 모두 서명이 끝났으면 완료 이벤트도 함께 남긴다.
 async function notifyWebhook(ctx, doc, event, payload) {
@@ -1266,7 +1273,11 @@ export async function adminAddExternalSigner(ctx) {
   if (!name) return back(to, "서명자 이름을 입력해 주세요.", true);
   if (email && !EMAIL_RE.test(email)) return back(to, "이메일 형식을 확인해 주세요.", true);
   if (phone && !D.isValidPhone(phone)) return back(to, "휴대폰 번호 형식을 확인해 주세요.", true);
-  if (!email && !phone) return back(to, "링크를 보낼 이메일 또는 휴대폰 중 하나는 필요합니다.", true);
+  // 연락처는 '자동 발송'에만 필요하다. 링크를 손으로 전달하겠다는 관리자에게까지 강제하면,
+  // 알림톡 심사가 끝나기 전에는 계약을 한 건도 보낼 수 없게 된다.
+  // 다만 본인확인(OTP)이 켜져 있으면 인증번호를 보낼 곳이 있어야 하므로 그때는 받는다.
+  if (!email && !phone && (await otpRequired(db)))
+    return back(to, "본인확인이 켜져 있어 이메일 또는 휴대폰 중 하나가 필요합니다. (설정에서 본인확인을 끄면 링크만으로 서명할 수 있습니다)", true);
   if ((await D.listExternalSigners(db, d.id)).length >= 20) return back(to, "외부 서명자는 최대 20명까지 추가할 수 있습니다.", true);
 
   const signOrder = await D.nextSignOrder(db, d.id);
@@ -1277,7 +1288,7 @@ export async function adminAddExternalSigner(ctx) {
   const via = await sendSignLink(env, db, { assoc, doc: d, signer, origin: new URL(request.url).origin });
   const sent = via === "alimtalk" ? "알림톡을 보냈습니다." : via === "email" ? "이메일을 보냈습니다." : "";
   await audit(ctx, "외부서명자추가", `${d.title}: ${name}`);
-  return redirect(`${to}?extlink=${encodeURIComponent(token)}&msg=${encodeURIComponent(`${name}님을 추가했습니다. ${sent || "아래 링크를 직접 전달해 주세요."}`)}`);
+  return redirect(`${to}?extlink=${encodeURIComponent(token)}&msg=${encodeURIComponent(`${name}님을 추가했습니다. ${sent || "아래 [보내기 · 복사] 로 링크를 전달해 주세요."}`)}`);
 }
 
 export async function adminRemoveExternalSigner(ctx) {
@@ -1486,11 +1497,27 @@ export async function adminCloseDocument(ctx) {
   await audit(ctx, "서명문서마감", d.title);
   return back(base + "/admin/documents", "문서를 마감했습니다.");
 }
-// 서명 요청 안내 메일 — 실패해도 문서 생성 자체는 유효하므로 되돌리지 않는다
+// 서명 요청 안내 — 실패해도 문서 생성 자체는 유효하므로 되돌리지 않는다.
+//
+// ⚠️ 예전에는 이 함수가 이메일만 보냈다. 제품에서 이메일을 뺀 뒤로는 사내 회원이 서명 대상이 돼도
+//    아무 통보를 못 받았다 — 다음 날 기한 임박 리마인더(크론)가 돌 때까지 문서가 있는 줄도 몰랐다.
+//    휴대폰이 있으면 심사받은 sign_request 템플릿으로 알림톡을 먼저 보낸다.
+//    알림톡이 꺼져 있으면 아무것도 보내지 않는다 — 대신 관리자가 문서 화면에서 링크를 직접 전달한다.
 async function notifyNewDocument(ctx, doc, title, dueDate, ordered, recipients) {
-  if (!emailEnabled(ctx.env) || !recipients || !recipients.length) return;
+  if (!recipients || !recipients.length) return;
   const { assoc, base } = ctx;
   const origin = new URL(ctx.request.url).origin;
+  const byPhone = recipients.filter((m) => D.isValidPhone(m.phone || ""));
+  if (byPhone.length && notifyEnabled(ctx.env)) {
+    await sendMany(ctx.env, ctx.db, {
+      assoc, kind: "sign_request", recipients: byPhone,
+      textFor: (m) => renderTemplate("sign_request", {
+        상호: assoc.name, 이름: m.name, 문서명: title, 기한: dueDate || "미지정",
+      }),
+      buttonName: templateButton("sign_request"), buttonUrl: `${origin}${base}/sign`,
+    }).catch(() => {});
+  }
+  if (!emailEnabled(ctx.env)) return;
   await Promise.all(recipients.filter((m) => m.email).map((m) => sendEmailFor(ctx.env, ctx.db, assoc, {
     kind: "sign_request", to: m.email,
     subject: `[${assoc.name}] 전자서명 요청 — ${title}`,

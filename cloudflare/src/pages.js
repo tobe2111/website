@@ -1,6 +1,6 @@
 // 공개/인증 페이지 핸들러 (async). ctx = { env, db, assoc, base, user, url, query, csrf, params }
 import * as D from "./db.js";
-import { esc, cap, clip, openBadge, openNow, fmtBytes, kstStamp, kstDate, prettyPath } from "./util.js";
+import { esc, cap, clip, openBadge, openNow, fmtBytes, kstStamp, kstDate, prettyPath, safeNext } from "./util.js";
 import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG, ORIGIN, assetUrl } from "./render.js";
 import { verifyInviteToken, SALES_STAGES, otpRequired, selfSignupOn } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
 import { html, notFoundResponse, back, redirect } from "./http.js";
@@ -698,10 +698,13 @@ export function loginForm(ctx) {
   // 전자계약만 쓰는 조직·플랫폼 전역에서 "상인회 회원 로그인"은 남의 옷이다
   const esign = assoc && assoc.kind === "esign";
   const sub = esign ? "계약서를 만들고 보내는 분들의 로그인" : assoc ? "상인회 회원·관리자 로그인" : "로그인 후 이용하실 수 있습니다";
+  // 서명 링크를 눌렀다가 로그인 화면으로 온 사람은, 로그인이 끝나면 그 문서로 돌아가야 한다
+  const nextTo = safeNext(query.get("next") || "");
   const body = `<section class="section page-top"><div class="container auth-wrap"><div class="auth-card">
     ${authHead("로그인", sub)}
     ${flash(query.get("msg") || "", query.get("err") ? "err" : "ok")}
     <form method="post" action="/login" class="stack-form">
+      ${nextTo ? `<input type="hidden" name="next" value="${esc(nextTo)}" />` : ""}
       <label>이메일<input type="email" name="email" required autocomplete="email" /></label>
       <label>비밀번호<input type="password" name="password" required autocomplete="current-password" /></label>
       <label class="totp-login">2단계 인증 코드 <small>(설정한 경우만)</small><input type="text" name="totp" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" placeholder="000000" /></label>
@@ -1331,7 +1334,8 @@ export async function admin(ctx) {
       <${balance < unitPrice ? "h2" : "summary"} class="panel-title">알림톡 <span class="badge ${balance > 0 ? "badge-ok" : "badge-wait"}">잔액 ${balance.toLocaleString()}원</span></${balance < unitPrice ? "h2" : "summary"}>
     <p class="panel-hint">서명 요청·리마인더를 카카오톡으로 보냅니다. 건당 <b>${unitPrice.toLocaleString()}원</b> — 지금 잔액으로 <b>약 ${sendable.toLocaleString()}건</b> 보낼 수 있습니다.
       알림 받을 회원은 <b>${withPhone}명</b>(휴대폰 등록 기준 · 전체 ${members.length}명)입니다.</p>
-    ${balance < unitPrice ? `<div class="flash flash-warn">잔액이 부족해 알림톡이 발송되지 않습니다. 아래에서 충전을 신청해 주세요.</div>` : ""}
+    ${balance < unitPrice ? `<div class="flash flash-warn"><b>잔액이 부족해 알림톡이 발송되지 않습니다.</b> 아래에서 충전을 신청해 주세요.<br />
+      그동안에도 계약은 진행할 수 있습니다 — 문서 화면의 <b>[보내기 · 복사]</b> 로 서명 링크를 카톡·문자로 직접 보내시면 됩니다.</div>` : ""}
     <div class="form-two">
       <form method="post" action="${base}/admin/credit/order" class="stack-form compact">
         <label>충전 금액 <small>(1만원 이상 · 1,000원 단위)</small>
@@ -1751,37 +1755,56 @@ export async function adminDocumentDetail(ctx) {
   const nextTurn = d.ordered ? reqStatus.find((u) => !u.signed && !u.declined_at) : null;
   const exts = await D.listExternalSigners(db, d.id);
   const extToken = query && query.get ? query.get("extlink") : "";
-  const extRows = exts.length ? exts.map((e) => `<li><span class="req-order">${e.sign_order}</span>
+  // 링크는 언제든 다시 꺼내 볼 수 있어야 한다.
+  // 예전에는 발급 직후 한 번만 보여 주고 사라져서, 창을 닫으면 같은 사람을 또 등록하는 수밖에 없었다.
+  // 토큰은 서명값(HMAC)이라 같은 서명자·같은 문서면 늘 같은 값이 나온다 — 다시 계산하면 그만이다.
+  const linkOrigin = assoc.custom_domain ? `https://${assoc.custom_domain}` : ORIGIN;
+  const extTokens = await Promise.all(exts.map((e) => makeExtToken(env.SESSION_SECRET, e.id, d.id)));
+  const canTalk = notifyEnabled(env);
+  const otpOn = await otpRequired(db);
+  // 카톡·문자에 그대로 붙여 넣을 수 있는 한 통. 모바일은 공유 시트, PC 는 복사된다.
+  const shareMsg = (who) => `${who ? who + "님, " : ""}${assoc.name} 「${d.title}」 전자서명 요청입니다.`
+    + `${d.due_date ? ` (기한 ${d.due_date})` : ""} 아래 링크에서 내용 확인 후 서명해 주세요.`;
+  const linkRow = (url, who) => `<span class="link-row">
+      <input type="text" class="invite-url" value="${esc(url)}" readonly data-select-all aria-label="${esc(who || "")} 서명 링크" />
+      <button type="button" class="btn btn-xs btn-primary" data-share data-share-url="${esc(url)}"
+        data-share-title="${esc(d.title)} 전자서명" data-share-text="${esc(shareMsg(who))}">보내기 · 복사</button></span>`;
+  const extRows = exts.length ? exts.map((e, i) => `<li${extToken && extTokens[i] === extToken ? ' class="is-new"' : ""}><span class="req-order">${e.sign_order}</span>
       <span class="req-name">${esc(e.name)}</span> <small>${esc(e.org || "")}${e.email ? ` · ${esc(e.email)}` : ""}${e.phone ? ` · ${esc(D.maskPhone(e.phone))}` : ""}</small>
       <span class="badge badge-info">외부</span>
       ${e.signed ? '<span class="badge badge-ok">완료</span>' : e.declined_at ? `<span class="badge badge-no">거절</span><br /><small class="decline-why">사유: ${esc(e.decline_reason || "")}</small>`
         : `<span class="badge badge-wait">${e.opened_at ? "열람함 · 미서명" : "미열람"}</span>`}
       ${e.signed ? "" : `<form method="post" action="${base}/admin/documents/${d.id}/external/${e.id}/delete" class="inline-form" data-confirm="${esc(e.name)}님을 서명자에서 빼시겠습니까?"><button class="btn btn-xs btn-ghost">삭제</button></form>`}
+      ${e.signed || e.declined_at ? "" : linkRow(`${linkOrigin}/esign/${extTokens[i]}`, e.name)}
     </li>`).join("") : "";
   const extPanel = `<section class="panel"><h2 class="panel-title">외부 서명자 <span class="badge badge-muted">${exts.length}</span></h2>
     <p class="panel-hint">회원이 아닌 계약 상대방(임차인·거래처 등)에게 <b>가입 없이 서명할 수 있는 링크</b>를 보냅니다.
-      링크는 위조할 수 없는 서명값이 붙어 있어 다른 사람이 열 수 없습니다.</p>
+      링크는 위조할 수 없는 서명값이 붙어 있어 다른 사람이 열 수 없습니다.
+      ${canTalk ? "연락처를 넣으면 알림톡으로 자동 발송되고, 아래 링크로 직접 보내셔도 됩니다."
+        : "<b>지금은 자동 발송이 꺼져 있습니다 — 아래 링크를 복사해 카톡·문자로 직접 보내세요.</b> 링크만으로 서명까지 다 됩니다."}</p>
     ${extRows ? `<ul class="req-list">${extRows}</ul>` : ""}
-    ${extToken ? `<div class="invite-box"><p class="invite-box-title">✅ 서명 링크가 만들어졌습니다</p>
-      <input type="text" class="invite-url" value="${esc(`${ORIGIN}/esign/${extToken}`)}" readonly data-select-all />
-      <span class="pill-row"><button type="button" class="btn btn-sm btn-primary" data-share data-share-url="${esc(`${ORIGIN}/esign/${extToken}`)}" data-share-title="${esc(d.title)} 전자서명">카톡으로 보내기 / 복사</button></span>
-      <p class="panel-hint">이 링크는 지금만 표시됩니다. 필요하면 복사해 두세요 (다시 보려면 서명자를 새로 추가해야 합니다).</p></div>` : ""}
     ${d.closed ? "" : `<form method="post" action="${base}/admin/documents/${d.id}/external" class="stack-form compact">
       <div class="form-two"><label>이름<input type="text" name="name" required maxlength="60" placeholder="예: 홍길동" value="${esc(lead ? lead.name : "")}" /></label>
         <label>소속·상호 (선택)<input type="text" name="org" maxlength="80" placeholder="예: ○○상사" /></label></div>
-      <div class="form-two"><label>이메일<input type="email" name="email" maxlength="120" placeholder="link@example.com" value="${esc(lead ? lead.email : "")}" /></label>
-        <label>휴대폰<input type="tel" name="phone" maxlength="13" inputmode="numeric" placeholder="010-1234-5678" value="${esc(lead ? lead.phone : "")}" /></label></div>
-      <p class="panel-hint">둘 중 하나는 필요합니다 — 그 연락처로 링크와 본인확인 번호가 갑니다.</p>
+      <div class="form-two"><label>이메일 ${otpOn ? "" : "<small>(선택)</small>"}<input type="email" name="email" maxlength="120" placeholder="link@example.com" value="${esc(lead ? lead.email : "")}" /></label>
+        <label>휴대폰 ${otpOn ? "" : "<small>(선택)</small>"}<input type="tel" name="phone" maxlength="13" inputmode="numeric" placeholder="010-1234-5678" value="${esc(lead ? lead.phone : "")}" /></label></div>
+      <p class="panel-hint">${otpOn
+        ? "본인확인(휴대폰 인증)이 켜져 있어 <b>연락처가 반드시 필요합니다</b> — 그 번호로 인증번호가 갑니다."
+        : "연락처는 <b>비워 두셔도 됩니다.</b> 넣으면 알림톡으로 자동 발송되고, 비우면 발급된 링크를 직접 전달하시면 됩니다."}</p>
       <button class="btn btn-primary btn-sm">서명 링크 발급</button></form>`}</section>`;
   const reqPanel = rc.total ? `<section class="panel"><h2 class="panel-title">서명 현황 <span class="badge ${rc.signed === rc.total ? "badge-ok" : "badge-wait"}">${rc.signed}/${rc.total} (${pct}%)</span>${d.ordered ? ' <span class="badge badge-info">순차</span>' : ""}</h2>
     <div class="progress"><span style="width:${pct}%"></span></div>
     <ul class="req-list">${reqStatus.map((u) => `<li>${d.ordered ? `<span class="req-order">${u.sign_order}</span>` : ""}<span class="req-name">${esc(u.name)}</span> <small>${esc(u.email)}</small> ${u.signed ? '<span class="badge badge-ok">완료</span>' : u.declined_at ? `<span class="badge badge-no">거절</span><br /><small class="decline-why">사유: ${esc(u.decline_reason || "")}</small>` : (d.ordered ? (nextTurn && nextTurn.id === u.id ? '<span class="badge badge-wait">서명 차례</span>' : '<span class="badge badge-muted">대기</span>') : '<span class="badge badge-wait">미서명</span>')}</li>`).join("")}</ul>
-    ${d.ordered && nextTurn ? `<p class="panel-hint">현재 <b>${esc(nextTurn.name)}</b>님 차례입니다.</p>` : ""}</section>` : `<section class="panel"><p class="panel-hint">전체 공개 문서(누구나 서명 가능).</p></section>`;
+    ${d.ordered && nextTurn ? `<p class="panel-hint">현재 <b>${esc(nextTurn.name)}</b>님 차례입니다.</p>` : ""}
+    ${rc.signed === rc.total ? "" : `<div class="form-divider">회원에게 보낼 링크</div>
+      <p class="panel-hint">회원(가입한 사람)은 이 주소에서 서명합니다 — <b>로그인이 필요합니다.</b>
+        ${canTalk ? "" : "지금은 자동 발송이 꺼져 있으니 이 링크를 카톡·문자로 직접 보내 주세요."}</p>
+      ${linkRow(`${linkOrigin}${base}/sign/${d.id}`, "")}`}</section>` : `<section class="panel"><p class="panel-hint">전체 공개 문서(누구나 서명 가능).</p></section>`;
   const body = `<section class="dash"><div class="container">
     <div class="dash-head"><div><p class="section-eyebrow">E-SIGN</p><h1 class="dash-title">${esc(d.title)} ${d.closed ? '<span class="badge badge-no">마감</span>' : ""}${d.ordered ? ' <span class="badge badge-info">순차</span>' : ""}${d.due_date ? `<span class="badge ${D.isPastDue(d) ? "badge-no" : "badge-wait"}">기한 ${esc(d.due_date)}</span>` : ""}</h1>
       <p class="dash-sub"><a href="${base}/admin/documents">← 문서 목록</a> · 서명 ${sigs.length}명</p></div>
       <div class="dash-head-actions">
-        ${d.closed ? "" : `<form method="post" action="${base}/admin/documents/${d.id}/remind" class="inline-form" data-confirm="미서명자에게 알림톡으로 리마인더를 보낼까요? (잔액이 차감됩니다)"><button class="btn btn-primary btn-sm">미서명자 재알림</button></form>`}
+        ${d.closed || !canTalk ? "" : `<form method="post" action="${base}/admin/documents/${d.id}/remind" class="inline-form" data-confirm="미서명자에게 알림톡으로 리마인더를 보낼까요? (잔액이 차감됩니다)"><button class="btn btn-primary btn-sm">미서명자 재알림</button></form>`}
         <a href="${base}/documents/${d.id}/paper" class="btn btn-ghost btn-sm">📄 완성본 보기</a>
         <a href="${base}/documents/${d.id}/evidence" class="btn btn-ghost btn-sm">📦 증적 패키지</a>
         <a href="${base}/admin/documents/${d.id}/fields" class="btn btn-ghost btn-sm">🖊 필드 배치${fieldN ? ` (${fieldN})` : ""}</a>
@@ -1807,7 +1830,9 @@ export async function adminDocumentDetail(ctx) {
         <span class="audit-detail">${esc(e.actor_name || "")}${e.detail ? ` — ${esc(e.detail)}` : ""}</span>
         <span class="audit-meta">${esc(kstStamp(e.created_at, { year: false }))}${e.ip ? ` · ${esc(e.ip)}` : ""}</span></li>`).join("") : `<li class="empty">아직 기록이 없습니다.</li>`}</ul></section>
     </div></section>`;
-  return html(layout({ title: d.title, assoc, base, user, body, csrf }));
+  // share.js 가 없으면 '보내기 · 복사' 버튼이 눌러도 아무 일도 안 하는 죽은 버튼이 된다.
+  return html(layout({ title: d.title, assoc, base, user, body, csrf,
+    scripts: `<script src="${assetUrl("/js/share.js")}" defer></script>` }));
 }
 
 // 서식에서 문서 만들기 — 빈칸({{변수}})과 당사자만 채우면 본문·배치가 완성된다.
@@ -3070,6 +3095,8 @@ export async function superConsole(ctx) {
       ${notifyEnabled(env) ? "" : '<b class="txt-warn">아직 알리고 키가 설정되지 않아 실제 발송은 되지 않습니다.</b>'}</p>
     ${notifyEnabled(env) ? "" : `<div class="flash flash-warn">
       <b>넷이 모두 있어야 발송이 켜집니다 — 하나라도 비면 한 통도 안 나갑니다.</b>
+      <p>다만 <b>서비스가 멈추지는 않습니다.</b> 고객사 관리자는 문서 화면의 [보내기 · 복사] 로
+        서명 링크를 카톡·문자로 직접 보내 계약을 끝까지 진행할 수 있습니다 — 심사가 끝날 때까지 이렇게 씁니다.</p>
       <div class="envcheck">${ALIGO_VARS.map((k) => `<span class="${hasCfg(env, k) ? "is-on" : ""}"><b>${hasCfg(env, k) ? "✓" : "✗"}</b> <code>${k}</code></span>`).join("")}</div>
       <p>✗ 는 이 워커가 그 이름을 <b>못 받고 있다</b>는 뜻입니다. 대시보드에 보이는데 여기가 ✗ 라면
         ① 이름 철자·앞뒤 공백, ② <b>Deploy</b> 를 안 누름, ③ Preview 환경에 넣음,

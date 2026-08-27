@@ -23,10 +23,15 @@
     if (!btn) return;
     var url = btn.getAttribute("data-share-url") || location.href;
     var title = btn.getAttribute("data-share-title") || document.title;
+    // data-share-text 가 있으면 링크만이 아니라 '보낼 말' 한 통을 통째로 넘긴다.
+    // 카톡 대화창에 붙여 넣었을 때 주소 한 줄만 덩그러니 가면 받는 사람이 무엇인지 모른다.
+    var text = btn.getAttribute("data-share-text") || "";
     if (navigator.share) {
-      navigator.share({ title: title, url: url }).catch(function () {});
+      navigator.share(text ? { title: title, text: text, url: url } : { title: title, url: url }).catch(function () {});
     } else {
-      copy(url).then(function () { toast("링크가 복사되었습니다"); });
+      copy(text ? text + "\n" + url : url).then(function () {
+        toast(text ? "보낼 메시지가 복사되었습니다" : "링크가 복사되었습니다");
+      });
     }
   });
 })();

@@ -1,5 +1,5 @@
 // Cloudflare Worker 진입점 — 라우팅 · 테넌트 해석 · 인증 · CSRF · 보안헤더
-import { parseCookies, esc } from "./util.js";
+import { parseCookies, esc, safeNext } from "./util.js";
 import { SESSION_COOKIE, CSRF_COOKIE, ensureCsrfSeed, csrfToken, csrfValid, userFromToken, ROLES } from "./auth.js";
 import * as D from "./db.js";
 import * as apiv1 from "./apiv1.js";
@@ -263,9 +263,13 @@ function securityHeaders(env) {
   };
 }
 
-function authorize(user, auth, assoc) {
+// wantPath: 로그인 뒤 돌아갈 자리. 관리자가 카톡으로 보낸 서명 링크를 회원이 눌렀을 때,
+// 로그인 화면에서 끝나 버리면 정작 서명해야 할 문서를 스스로 찾아 들어가야 한다.
+// GET 만 넘긴다 — POST 를 로그인 뒤에 다시 실행하면 안 된다.
+function authorize(user, auth, assoc, wantPath = "") {
   if (!auth) return true;
-  if (!user) return "/login?err=1&msg=" + encodeURIComponent("로그인이 필요합니다.");
+  if (!user) return "/login?err=1&msg=" + encodeURIComponent("로그인이 필요합니다.")
+    + (safeNext(wantPath) ? "&next=" + encodeURIComponent(wantPath) : "");
   if (auth === "USER") return true;
   if (auth === "SUPERADMIN") return user.role === ROLES.SUPERADMIN;
   const own = assoc && user.association_id === assoc.id; // 이 조직 소속인가
@@ -421,7 +425,7 @@ async function handle(request, env) {
       : canon;
     const route = matchRoute(TENANT, request.method, t.subpath);
     if (route) {
-      const ok = authorize(user, route.auth, assoc);
+      const ok = authorize(user, route.auth, assoc, request.method === "GET" ? pathname : "");
       if (ok !== true) return finalize(typeof ok === "string" ? redirect(ok) : forbidden(), setCookies, env, timing);
       const res = await route.handler({ ...baseCtx, assoc, base: t.base, params: route.params });
       return finalize(res, setCookies, env, timing, tCanon);
@@ -429,7 +433,7 @@ async function handle(request, env) {
     // 테넌트 경로에 없으면 전역 라우트 폴백 (개별 도메인·서브도메인에서 /login, /verify, /sitemap.xml 등)
     const gt = matchRoute(GLOBAL, request.method, t.subpath);
     if (gt) {
-      const ok = authorize(user, gt.auth, assoc);
+      const ok = authorize(user, gt.auth, assoc, request.method === "GET" ? pathname : "");
       if (ok !== true) return finalize(typeof ok === "string" ? redirect(ok) : forbidden(), setCookies, env, timing);
       const res = await gt.handler({ ...baseCtx, assoc, base: t.base, params: gt.params });
       return finalize(res, setCookies, env, timing, tCanon);
@@ -443,7 +447,7 @@ async function handle(request, env) {
   //    (로그인하지 않아도 /super 가 그대로 열렸습니다.) 같은 검사를 반드시 통과시킵니다.
   const g = matchRoute(GLOBAL, request.method, pathname);
   if (g) {
-    const ok = authorize(user, g.auth, null);
+    const ok = authorize(user, g.auth, null, request.method === "GET" ? pathname : "");
     if (ok !== true) return finalize(typeof ok === "string" ? redirect(ok) : forbidden(), setCookies, env, timing);
     const res = await g.handler({ ...baseCtx, params: g.params });
     return finalize(res, setCookies, env, timing, canon);

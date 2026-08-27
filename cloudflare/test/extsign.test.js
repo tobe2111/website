@@ -243,12 +243,50 @@ test("문서 상세에 외부 서명자 현황이 보인다", async () => {
   assert.match(h, /서명 링크 발급/);
 });
 
-test("이메일·휴대폰이 둘 다 없으면 링크를 만들지 않는다", async () => {
+// 링크가 발급 직후 한 번만 보이던 시절엔, 창을 닫으면 같은 사람을 또 등록하는 수밖에 없었다.
+test("서명 링크는 언제 다시 열어도 그 자리에 있다", async () => {
+  const jar = await loginAs("ad@x.kr", "admin1234");
+  const pending = await D.addExternalSigner(db, { documentId: doc.id, name: "재방문확인", email: "again@example.com", signOrder: 9 });
+  const h = await (await req("GET", `/t/s/admin/documents/${doc.id}`, { cookie: jar })).text();
+  const t = await makeExtToken(env.SESSION_SECRET, pending.id, doc.id);
+  assert.ok(h.includes(`/esign/${t}`), "미서명자 줄에 링크가 그대로 있어야");
+  assert.match(h, /data-share-text="[^"]*전자서명 요청/, "붙여 넣을 말까지 준비돼 있어야");
+  assert.match(h, /share\.js/, "버튼을 살리는 스크립트가 실려 있어야");
+});
+
+// 알림톡이 꺼진 상태(=심사 대기 중)에서도 관리자가 스스로 계약을 진행할 수 있어야 한다.
+test("알림톡이 꺼져 있으면 직접 보내라고 말해 준다", async () => {
+  const jar = await loginAs("ad@x.kr", "admin1234");
+  const h = await (await req("GET", `/t/s/admin/documents/${doc.id}`, { cookie: jar })).text();
+  assert.match(h, /자동 발송이 꺼져 있습니다/);
+  assert.match(h, /회원에게 보낼 링크/, "회원용 서명 주소도 함께 줘야");
+  assert.ok(h.includes(`/t/s/sign/${doc.id}`), "회원 서명 주소가 실제로 있어야");
+  assert.ok(!/미서명자 재알림/.test(h), "보낼 수단이 없는데 재알림 버튼을 두면 눌러도 헛일이다");
+});
+
+// 연락처 없이도 링크는 만들어져야 한다 — 관리자가 카톡으로 직접 보내는 길을 막으면,
+// 알림톡 심사가 끝날 때까지 계약을 한 건도 못 보낸다.
+test("연락처가 없어도 링크는 만들어진다 (손으로 전달하는 길)", async () => {
   const jar = await loginAs("ad@x.kr", "admin1234");
   const path = `/t/s/admin/documents/${doc.id}`;
   const csrf = await csrfFrom(jar, path);
   const r = await req("POST", `${path}/external`, { cookie: jar, body: { _csrf: csrf, name: "연락불가" } });
+  const loc = r.headers.get("location") || "";
+  assert.ok(!/err=1/.test(loc), "연락처 없다고 막으면 안 된다");
+  assert.match(loc, /extlink=/, "발급된 링크가 화면으로 넘어와야");
+  const page = await (await req("GET", path, { cookie: jar })).text();
+  assert.match(page, /연락불가[\s\S]{0,900}?data-share-url="[^"]*\/esign\//, "그 사람 줄에 링크가 붙어 있어야");
+});
+
+// 본인확인(OTP)이 켜져 있으면 인증번호를 보낼 곳이 있어야 하므로 그때만 연락처를 받는다.
+test("본인확인이 켜져 있으면 연락처를 받는다", async () => {
+  const jar = await loginAs("ad@x.kr", "admin1234");
+  const path = `/t/s/admin/documents/${doc.id}`;
+  await D.setSetting(env.DB, "esign_otp", "1");
+  const csrf = await csrfFrom(jar, path);
+  const r = await req("POST", `${path}/external`, { cookie: jar, body: { _csrf: csrf, name: "인증필요" } });
   assert.match(r.headers.get("location") || "", /err=1/);
+  await D.setSetting(env.DB, "esign_otp", "0");
 });
 
 test("이미 서명한 외부 서명자는 삭제할 수 없다", async () => {
@@ -279,4 +317,34 @@ test("외부 서명자의 열람·서명이 감사 추적에 남는다", async (
   assert.ok(viewed, "열람 기록");
   assert.ok(signed, "서명 기록");
   assert.match(signed.detail, /외부 서명자/);
+});
+
+// 관리자가 카톡으로 보낸 회원 서명 링크는 로그인 벽을 넘어서도 목적지를 기억해야 한다.
+// 예전에는 로그인하면 대시보드로 떨어져, 정작 서명할 문서를 스스로 찾아 들어가야 했다.
+test("서명 링크를 눌러 로그인해도 그 문서로 돌아온다", async () => {
+  const want = `/t/s/sign/${doc.id}`;
+  const r = await req("GET", want);
+  const loc = r.headers.get("location") || "";
+  assert.match(loc, /^\/login\?/, "로그인으로 보내야");
+  assert.ok(decodeURIComponent(loc).includes(`next=${want}`), `돌아갈 자리를 들고 가야: ${loc}`);
+
+  const g = await req("GET", loc);
+  const page = await g.text();
+  assert.ok(page.includes(`name="next" value="${want}"`), "로그인 폼이 그 자리를 물고 있어야");
+
+  const seed = (g.headers.getSetCookie?.() || []).find((c) => c.startsWith("sc_csrf_seed="))?.split(";")[0] || "";
+  const tk = (/name="_csrf" value="([^"]+)"/.exec(page) || [])[1];
+  const lr = await req("POST", "/login", { cookie: seed, body: { _csrf: tk, email: "m@x.kr", password: "member1234", next: want } });
+  assert.equal(lr.headers.get("location"), want, "로그인 뒤 바로 그 문서로");
+});
+
+test("돌아갈 자리로 바깥 주소를 넣을 수 없다", async () => {
+  const g = await req("GET", "/login");
+  const seed = (g.headers.getSetCookie?.() || []).find((c) => c.startsWith("sc_csrf_seed="))?.split(";")[0] || "";
+  const tk = (/name="_csrf" value="([^"]+)"/.exec(await g.text()) || [])[1];
+  for (const bad of ["https://evil.example/x", "//evil.example", "\\\\evil.example", "javascript:alert(1)"]) {
+    const r = await req("POST", "/login", { cookie: seed, body: { _csrf: tk, email: "m@x.kr", password: "member1234", next: bad } });
+    const loc = r.headers.get("location") || "";
+    assert.ok(!loc.includes("evil") && !loc.includes("javascript"), `막아야 할 값이 통과됨: ${bad} → ${loc}`);
+  }
 });

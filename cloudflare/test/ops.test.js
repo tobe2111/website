@@ -98,7 +98,11 @@ test("서명 문서 생성: 이메일 미설정이어도 정상 동작(발송 �
   const j = jar(); await post(env, j, "/login", { email: "a@s.kr", password: "admin1234" });
   const r = await post(env, j, "/t/seocho/admin/documents", { title: "가을 협약", body: "동의합니다", target: "all" }, "/t/seocho/admin/documents");
   assert.equal(r.status, 303);
-  assert.match(decodeURIComponent(r.headers.get("location")), /문서를 생성/);
+  const loc = decodeURIComponent(r.headers.get("location"));
+  assert.match(loc, /문서를 만들었습니다/);
+  // 목록이 아니라 그 문서로 보내야 한다 — 서명 링크가 거기 있다
+  assert.match(loc, /\/t\/seocho\/admin\/documents\/\d+\?/);
+  assert.match(loc, /보내기 · 복사/, "발송 수단이 없으면 어떻게 전달하는지 알려줘야");
 });
 
 // 새 표를 만들고 백업 목록에 넣는 걸 잊으면, 복원할 때가 되어서야 안다.

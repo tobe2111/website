@@ -143,3 +143,11 @@ export function maskEmail(e) {
   if (!b) return "";
   return `${a.slice(0, 2)}${"*".repeat(Math.max(1, a.length - 2))}@${b}`;
 }
+
+// 로그인 뒤 돌아갈 자리로 쓸 수 있는 값인가.
+// 같은 사이트 안의 경로 하나만 허용한다 — `//evil.example` 같은 값을 그대로 넘기면
+// "로그인하세요" 를 미끼로 남의 사이트로 보내는 열린 리다이렉트가 된다.
+export const safeNext = (p) => {
+  const s = String(p || "");
+  return /^\/[\w\-./%가-힣]*$/.test(s) && !s.startsWith("//") && s.length <= 300 ? s : "";
+};
