@@ -3276,8 +3276,7 @@ export async function superConsole(ctx) {
   const body = `<section class="dash"><div class="container">
     <div class="dash-head"><div><p class="section-eyebrow">리스터코퍼레이션 · 운영사</p><h1 class="dash-title">운영사 콘솔</h1>
       <p class="dash-sub">고객사 ${ps.associations}곳 · 사용자 ${ps.users}명 — ${kindCounts.map(([, label, n]) => `${esc(label)} ${n}`).join(" · ")}</p></div>
-      <div class="dash-head-actions"><a href="#new-assoc" class="btn btn-primary btn-sm" data-goto="home">＋ 새 조직</a>
-        <form method="post" action="/logout"><button class="btn btn-ghost btn-sm">로그아웃</button></form></div></div>${flashOf(query)}
+      <div class="dash-head-actions"><a href="#new-assoc" class="btn btn-primary btn-sm" data-goto="home">＋ 새 조직</a></div></div>${flashOf(query)}
     ${loadWarnings.length ? `<div class="flash flash-err"><b>일부 정보를 불러오지 못했습니다.</b> 나머지 기능은 그대로 쓰실 수 있습니다.<br />${loadWarnings.map((w) => esc(w)).join("<br />")}</div>` : ""}
     ${todoBar}
     <div class="console-grid">${sideNav}<div class="console-main">
@@ -3285,8 +3284,6 @@ export async function superConsole(ctx) {
       <div class="sgroup" id="s-home" data-tab="home">
         ${cronAlive ? "" : cronPanel}
         ${orgPanel}
-        <section class="panel"><h2 class="panel-title">이번 달 알림톡 손익 <span class="badge ${margin > 0 ? "badge-ok" : "badge-muted"}">${margin.toLocaleString()}원</span></h2>
-          <p class="panel-hint">건당 판매 ${unitPrice.toLocaleString()}원 · 마진율 ${marginPct}%. 자세한 내역은 <a href="#s-money" data-goto="money">알림톡·정산</a> 에서 봅니다.</p></section>
     <details class="panel panel-accent panel-fold" id="new-assoc"><summary class="panel-title">➕ 새 조직 만들기</summary>
       <p class="panel-hint"><b>고객사 한 곳</b>을 새로 여는 작업입니다 — 서초구 상인회, ○○법무법인처럼
         <b>실제로 돈을 내고 쓰는 조직 하나</b>. 서식이나 견본을 만드는 게 아닙니다.
@@ -3328,16 +3325,15 @@ export async function superConsole(ctx) {
       </div>
 
       <div class="sgroup" id="s-money" data-tab="money">
+        <section class="panel"><h2 class="panel-title">이번 달 알림톡 손익 <span class="badge ${margin > 0 ? "badge-ok" : "badge-muted"}">${margin.toLocaleString()}원</span></h2>
+          <p class="panel-hint">건당 판매 ${unitPrice.toLocaleString()}원 · 마진율 ${marginPct}%.</p></section>
         ${notifySuperPanel}
         ${settlementPanel}
+        ${pricePanel}
       </div>
 
       <div class="sgroup" id="s-settings" data-tab="settings">
-        ${pricePanel}
-        ${cronAlive ? cronPanel : ""}
         ${migratePanel}
-        ${wiredPanel}
-        ${usagePanel}
         ${securityPanel}
     <section class="panel"><h2 class="panel-title">플랫폼 설정</h2>
       <form method="post" action="/super/platform-mode" class="stack-form compact">
@@ -3354,6 +3350,10 @@ export async function superConsole(ctx) {
       <p class="panel-hint">공개 신청: <a href="/apply" target="_blank">/apply</a> · 약관: <a href="/terms" target="_blank">/terms</a> · 개인정보처리방침: <a href="/privacy" target="_blank">/privacy</a></p>    ${deployLine}
   </section>
         ${superPanel}
+    <p class="section-eyebrow group-div">시스템 — 평소엔 열어 볼 일이 없습니다</p>
+        ${cronAlive ? cronPanel : ""}
+        ${wiredPanel}
+        ${usagePanel}
     <details class="panel ops-guide"><summary class="panel-title">🧭 운영 가이드 — 도메인·지도 설정 위치</summary>
       <div class="ops-body">
       <h3>네이버 지도 (도메인 바뀔 때마다!)</h3>

@@ -639,6 +639,34 @@ test("돌아갈 곳으로 바깥 주소를 넣을 수 없다 (열린 리다이�
   }
 });
 
+// 일하다 간판을 누르면 고객이 보는 랜딩으로 튕겨 나갔다 — 콘솔 안에서 간판은 '콘솔 홈'이어야 한다.
+test("운영사 콘솔의 간판은 콘솔 홈으로, 랜딩은 따로 오른쪽 위 버튼", async () => {
+  const S = await superSession();
+  const a = await D.createAssociation(S.env.DB, { slug: "brandlink", name: "테스트", kind: "merchant" });
+  for (const path of ["/super", `/super/org/${a.id}`]) {
+    const html = await S.get(path);
+    const brand = (/<a class="brand" href="([^"]+)"/.exec(html) || [])[1];
+    assert.equal(brand, "/super", `${path}: 간판이 랜딩으로 나가면 안 된다`);
+    assert.match(html, /<nav class="main-nav" id="mainNav">[\s\S]*?<a href="\/" class="nav-out"[^>]*>랜딩페이지/,
+      `${path}: 랜딩페이지 버튼이 머리글 오른쪽에 있어야`);
+    assert.match(html, /<nav class="main-nav"[\s\S]*?action="\/logout"/, `${path}: 로그아웃도 머리글에`);
+  }
+});
+
+// 설정 탭이 요금제·정산·보안·시스템을 다 받아 열 개짜리 서랍장이 돼 있었다.
+// 돈은 돈끼리, 설정은 설정끼리 — 찾는 곳이 하나여야 한다.
+const sgroupOf = (html, id) => (html.split('<div class="sgroup"').find((p) => p.startsWith(` id="s-${id}"`)) || "");
+test("돈에 관한 것은 알림톡·정산 한 곳에 모인다", async () => {
+  const html = await superHtml();
+  const money = sgroupOf(html, "money");
+  const settings = sgroupOf(html, "settings");
+  assert.ok(money && settings, "묶음을 못 찾음");
+  assert.match(money, /panel-title">요금제/, "요금제 금액은 정산 탭에");
+  assert.match(money, /이번 달 알림톡 손익/, "손익도 정산 탭에");
+  assert.ok(!/panel-title">요금제/.test(settings), "설정 탭에 요금제가 남으면 두 군데를 뒤지게 된다");
+  assert.match(settings, /group-div">시스템/, "평소 안 여는 것들은 가름줄 아래로");
+});
+
 test("없는 조직을 열면 404", async () => {
   const S = await superSession();
   const res = await S.f("/super/org/99999", { headers: { cookie: S.jar } });

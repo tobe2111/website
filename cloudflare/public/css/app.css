@@ -144,6 +144,9 @@ img,video{max-width:100%;display:block}
 .section-head{max-width:none;margin:0 0 clamp(22px,3vw,30px);padding-bottom:14px;border-bottom:1px solid var(--line-soft);text-align:left}
 .section-eyebrow{font-weight:600;font-size:.74rem;letter-spacing:.1em;color:var(--muted)}
 .section-dark .section-eyebrow{color:rgba(255,255,255,.5)}
+/* 콘솔 안에서 성격이 다른 패널 묶음을 가르는 줄 — 여기부터는 평소에 안 여는 것들이다 */
+.group-div{display:flex;align-items:center;gap:10px;margin:26px 0 12px;text-transform:none}
+.group-div::after{content:"";flex:1;height:1px;background:var(--line)}
 .section-title{font-size:clamp(1.35rem,2.4vw,1.8rem);font-weight:700;letter-spacing:-.03em;margin-top:6px}
 .section-lead{margin-top:6px;color:var(--muted);font-size:.92rem}
 .section-dark .section-lead{color:rgba(255,255,255,.82)}
@@ -529,14 +532,10 @@ body[data-console="super"]{
 .console-strip b{color:#fff;font-weight:800;letter-spacing:.01em}
 .console-strip b+span{color:#95a4c4}
 .console-strip span b{color:#e8eefb;font-weight:700}
-.console-strip .strip-out{margin-left:auto;color:#c9d3e8;text-decoration:underline;text-underline-offset:2px;white-space:nowrap}
-.console-strip .strip-out:hover{color:#fff}
-.console-strip .strip-out:focus-visible{outline:2px solid #fff;outline-offset:2px;border-radius:3px}
 @media (max-width:560px){
-  /* 좁은 화면에서는 설명을 접고 이름과 나가는 길만 남긴다 — 띠가 두 줄을 먹으면
+  /* 좁은 화면에서는 설명을 접고 이름만 남긴다 — 띠가 두 줄을 먹으면
      정작 봐야 할 고객사 목록이 접힌 화면 밖으로 밀린다 */
   .console-strip b+span{display:none}
-  .console-strip .strip-out{margin-left:auto}
 }
 /* 운영사 화면의 머리글도 같은 계열로 — 배지 하나가 아니라 화면 전체가 달라 보여야 한다 */
 body[data-console="super"] .site-header{background:#1e2a44;border-bottom-color:#2b3a5c}
@@ -544,6 +543,11 @@ body[data-console="super"] .site-header .brand,
 body[data-console="super"] .site-header .main-nav a{color:#e8eefb}
 body[data-console="super"] .site-header .main-nav a:hover{color:#fff}
 body[data-console="super"] .brand-mark{color:#8fa6d8}
+/* 콘솔 밖(고객이 보는 화면)으로 나가는 링크는 일부러 콘솔 색과 다르게 — 실수로 눌러 나가는 일을 줄인다 */
+body[data-console="super"] .site-header .nav-out{padding:6px 12px;border:1px solid #3d4f78;border-radius:999px;font-size:.86rem;font-weight:600;white-space:nowrap}
+body[data-console="super"] .site-header .nav-out:hover{background:#2b3a5c;color:#fff}
+body[data-console="super"] .site-header .nav-logout .btn{color:#c9d3e8;border-color:transparent}
+body[data-console="super"] .site-header .nav-logout .btn:hover{color:#fff;background:#2b3a5c}
 
 /* 영업 파이프라인 */
 .stage-strip{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 14px}
@@ -1098,10 +1102,9 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
      좁은 화면에서 탭이 두 줄로 접히므로 각 칸이 고르게 나뉘도록 flex 로 늘린다. */
   .console-side a{min-height:44px;padding:0 14px;font-size:14px;flex:1 1 auto;justify-content:center}
 }
-/* 운영사 띠의 '고객이 보는 화면' 도 같은 이유로 넉넉히 */
+/* 머리글의 '랜딩페이지' 도 같은 이유로 넉넉히 */
 @media (max-width:860px){
-  .console-strip .strip-out{display:inline-flex;align-items:center;min-height:44px}
-  .console-strip-in{padding:0}
+  body[data-console="super"] .site-header .nav-out{display:inline-flex;align-items:center;min-height:44px}
 }
 
 /* 법적 페이지 */

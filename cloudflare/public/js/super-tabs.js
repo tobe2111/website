@@ -8,7 +8,9 @@
   if (!nav || !groups.length) return;
   document.documentElement.classList.add("has-supertabs");
 
-  var KEY = "super-tab";
+  // 운영사 콘솔과 고객사 관리 화면은 탭 이름이 다르다(설정·home 만 겹친다).
+  // 한 열쇠를 같이 쓰면 /admin 설정 탭을 보다 /super 로 넘어갔을 때 엉뚱하게 설정 탭이 열린다.
+  var KEY = "tab:" + (nav.id === "superNav" ? "super" : "admin");
   function show(tab, push) {
     var found = false;
     groups.forEach(function (g) {
@@ -28,14 +30,32 @@
   if (!initial) { try { initial = sessionStorage.getItem(KEY) || ""; } catch (e) {} }
   show(initial || groups[0].dataset.tab, false);
 
+  // 접힌 서랍으로 보내는 링크는 펴 준다.
+  // 예전엔 '＋ 새 조직'을 눌러도 닫힌 '➕ 새 조직 만들기' 앞까지만 가서, 한 번 더 눌러야 했다.
+  function reveal(id) {
+    var el = id && document.getElementById(id);
+    if (!el) return false;
+    var g = el.closest(".sgroup");
+    if (g && g.dataset.tab && !g.classList.contains("on")) show(g.dataset.tab, true);
+    if (el.tagName === "DETAILS") el.open = true;
+    var d = el.closest("details");
+    while (d) { d.open = true; d = d.parentElement && d.parentElement.closest("details"); }
+    el.scrollIntoView({ block: "start" });
+    var focusable = el.querySelector("input:not([type=hidden]), select, textarea");
+    if (focusable) focusable.focus({ preventScroll: true });
+    return true;
+  }
+
   // 사이드 메뉴 + 본문 안의 바로가기 링크 모두 같은 동작
   document.addEventListener("click", function (e) {
-    var a = e.target.closest("a[data-tab], a[data-goto]");
-    if (!a) return;
+    var a = e.target.closest("a[data-tab], a[data-goto], a[href^='#']");
+    if (!a || a.classList.contains("skip-link")) return;
     var tab = a.dataset.tab || a.dataset.goto;
-    if (!tab) return;
-    e.preventDefault();
-    show(tab, true);
+    var href = a.getAttribute("href") || "";
+    var id = href.charAt(0) === "#" ? href.slice(1) : "";
+    if (!tab && id.slice(0, 2) === "s-") tab = id.slice(2);
+    if (tab) { e.preventDefault(); show(tab, true); }
+    if (id && id.slice(0, 2) !== "s-" && reveal(id)) e.preventDefault();
   });
   window.addEventListener("hashchange", function () {
     var t = (location.hash || "").replace(/^#s-/, "");

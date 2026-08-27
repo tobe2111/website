@@ -62,6 +62,7 @@ export function brandTextInk(hex) {
 // display 를 browser 로 두어, 직접 열어 봐도 설치 대상이 되지 않는다.
 export function layout({ title, assoc, base = "", user = null, body, activeNav = "", description = "", scripts = "", csrf = "", ogImage = "", preloadImage = "", jsonLd = null, product = null, console: consoleKind = "" }) {
   const nav = assoc ? navHtml(base, user, activeNav, assoc.kind, assoc.preset)
+    : consoleKind === "super" ? superNav()
     : product && product.nav !== false ? productNav(user, activeNav, product) : "";
   // 상인회에 속하지 않은 화면의 이름: 제품이 지정되면 그 제품, 아니면 운영사.
   // 예전 기본값("상인회 플랫폼")은 전자계약 고객에게 남의 서비스 간판으로 보였다.
@@ -112,11 +113,10 @@ ${assoc ? `<link rel="alternate" type="application/rss+xml" title="${brand} 공�
 <body${consoleKind ? ` data-console="${esc(consoleKind)}"` : ""}${assoc && kindById(assoc.kind).usesLanding ? ` data-base="${esc(base)}" data-csrf="${esc(csrf || "")}"` : ""}>
 <a class="skip-link" href="#main">본문 바로가기</a>
 ${consoleKind === "super" ? `<div class="console-strip"><div class="container console-strip-in">
-  <b>운영사 콘솔</b><span>여기서 하는 일은 <b>모든 고객사</b>에 적용됩니다</span>
-  <a href="/" class="strip-out">고객이 보는 화면 →</a></div></div>` : ""}
+  <b>운영사 콘솔</b><span>여기서 하는 일은 <b>모든 고객사</b>에 적용됩니다</span></div></div>` : ""}
 <header class="site-header" id="siteHeader">
   <div class="container header-inner">
-    <a class="brand" href="${product ? product.home || "/esign" : base || "/"}">${assoc && assoc.logo ? `<img class="brand-logo" src="${esc(mediaUrl(assoc.logo))}" alt="" />` : `<span class="brand-mark">${mark}</span>`}<span>${brand}</span></a>
+    <a class="brand" href="${consoleKind === "super" ? "/super" : product ? product.home || "/esign" : base || "/"}">${assoc && assoc.logo ? `<img class="brand-logo" src="${esc(mediaUrl(assoc.logo))}" alt="" />` : `<span class="brand-mark">${mark}</span>`}<span>${brand}</span></a>
     <button class="nav-toggle" id="navToggle" aria-label="메뉴 열기" aria-expanded="false"><span></span><span></span><span></span></button>
     <nav class="main-nav" id="mainNav">${nav}</nav>
   </div>
@@ -159,6 +159,14 @@ function stickyBar(assoc, base) {
 
 // 독립 제품 상단 메뉴 — 상인회 메뉴(점포·지도·게시판)는 한 줄도 들어가지 않는다.
 // product.links / product.cta 를 주면 그 제품의 메뉴가 되고, 없으면 전자계약 메뉴(기본)를 쓴다.
+// 운영사 콘솔 헤더 오른쪽.
+// 간판(로고)은 콘솔 안에서 '홈으로'여야 한다 — 예전엔 여기가 고객용 랜딩(/)으로 빠져서,
+// 일하다 로고를 누르면 콘솔 밖으로 튕겨 나갔다. 랜딩은 따로 버튼을 준다.
+function superNav() {
+  return `<a href="/" class="nav-out" target="_blank" rel="noopener">랜딩페이지 ↗</a>`
+    + `<form method="post" action="/logout" class="nav-logout"><button class="btn btn-ghost btn-sm">로그아웃</button></form>`;
+}
+
 function productNav(user, active, product = null) {
   const link = (href, label) => `<a href="${esc(href)}"${active === href ? ' class="active" aria-current="page"' : ""}>${esc(label)}</a>`;
   if (product && Array.isArray(product.links) && product.links.length) {
