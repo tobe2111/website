@@ -6,7 +6,7 @@ import { verifyInviteToken, SALES_STAGES, otpRequired, selfSignupOn } from "./ap
 import { html, notFoundResponse, back, redirect } from "./http.js";
 import { countable } from "./traffic.js";
 import { galleryItem } from "./media-render.js";
-import { priceOf, costOf, jeonToWon, notifyEnabled, ALIGO_VARS, hasCfg, TEMPLATE_KEYS, TEMPLATES, billingMode, BILLING_MODES } from "./notify.js";
+import { priceOf, costOf, jeonToWon, notifyEnabled, autoNotifyOn, canAutoSend, ALIGO_VARS, hasCfg, TEMPLATE_KEYS, TEMPLATES, billingMode, BILLING_MODES } from "./notify.js";
 import { providerLabel } from "./embed.js";
 import { verifySignature, publicKeyJwk, publicKeyFingerprint, keyStorage, algorithm, verifyChain, verifyAnchor } from "./esign.js";
 import { renderPaper, fieldBox, FIELD_KINDS, paginate, pageCount } from "./paper.js";
@@ -1242,7 +1242,7 @@ const csvCell = (v) => {
 
 // ================= 관리자 =================
 export async function admin(ctx) {
-  const { db, assoc, base, user, query, csrf } = ctx;
+  const { db, env, assoc, base, user, query, csrf } = ctx;
   // 독립 쿼리 병렬화 — D1 은 쿼리마다 왕복이라 직렬 대기가 관리자 TTFB 의 주범이었음
   const duePeriod0 = /^\d{4}-\d{2}$/.test(query.get("due_period") || "") ? query.get("due_period") : D.kstToday().slice(0, 7);
   const [s, all, notices, events, members, admins, notifs, unread, auditLog, met, assocProducts, allRsvps, dueRowsRaw] = await Promise.all([
@@ -1329,12 +1329,30 @@ export async function admin(ctx) {
   const msgRows = msgs.length ? msgs.map((m) => `<tr><td>${esc(kstStamp(m.created_at, { year: false }))}</td><td>${esc(m.kind || "-")}</td>
     <td>${esc(m.recipient)}</td><td>${m.status === "sent" ? '<span class="badge badge-ok">발송</span>' : `<span class="badge badge-no">실패</span>`}</td>
     <td>${m.cost ? m.cost.toLocaleString() + "원" : "-"}</td></tr>`).join("") : `<tr><td colspan="5" class="empty">발송 내역이 없습니다.</td></tr>`;
-  // 잔액이 모자라면 펴 둔다 — 그때는 충전이 급한 일이다. 넉넉하면 접어 둔다.
-  const notifyPanel = `<${balance < unitPrice ? "section" : "details"} class="panel${balance < unitPrice ? "" : " panel-fold"}" id="p-notify">
-      <${balance < unitPrice ? "h2" : "summary"} class="panel-title">알림톡 <span class="badge ${balance > 0 ? "badge-ok" : "badge-wait"}">잔액 ${balance.toLocaleString()}원</span></${balance < unitPrice ? "h2" : "summary"}>
+  // 알림 자동화가 꺼져 있으면(기본) 이 패널은 '잔액'이 아니라 '켜시겠습니까'가 주제다.
+  const autoOn = autoNotifyOn(assoc);
+  const platformReady = notifyEnabled(env);
+  const otpOn = await otpRequired(db);
+  const notifyOpen = autoOn ? balance < unitPrice : true;
+  const autoSwitch = `<form method="post" action="${base}/admin/notify-auto" class="stack-form compact">
+      <input type="hidden" name="on" value="${autoOn ? "0" : "1"}" />
+      <div class="row-toggle"><label class="switch"><input type="checkbox" ${autoOn ? "checked " : ""}disabled aria-hidden="true" tabindex="-1" /><span class="track"></span></label>
+        <span><b>알림 자동화 ${autoOn ? "켜짐" : "꺼짐"}</b>
+          <small style="color:var(--muted)">${autoOn
+            ? "서명 요청 · 미서명 재알림 · 완료 안내가 카카오톡으로 자동 발송됩니다"
+            : "지금은 한 통도 자동으로 나가지 않습니다 — 서명 링크를 직접 보내 계약을 진행합니다"}</small></span></div>
+      <button class="btn ${autoOn ? "btn-ghost" : "btn-primary"} btn-sm"${!autoOn && !platformReady ? " disabled" : ""}>${autoOn ? "자동화 끄기" : "자동화 켜기"}</button>
+      ${!autoOn && !platformReady ? `<p class="panel-hint">아직 운영사 쪽 발송 준비(알림톡 심사)가 끝나지 않아 켤 수 없습니다. 끝나면 이 버튼이 열립니다.</p>` : ""}
+      ${autoOn && otpOn ? "" : otpOn ? `<p class="panel-hint"><b>본인확인(휴대폰 인증)이 켜져 있습니다.</b> 자동화가 꺼져 있으면 인증번호를 보낼 수 없어 서명이 완료되지 않습니다 — 운영사에 본인확인 해제를 요청하거나 자동화를 켜 주세요.</p>` : ""}
+    </form>`;
+  const notifyPanel = `<${notifyOpen ? "section" : "details"} class="panel${notifyOpen ? "" : " panel-fold"}${autoOn ? "" : " panel-accent"}" id="p-notify">
+      <${notifyOpen ? "h2" : "summary"} class="panel-title">알림 자동화 <span class="badge ${autoOn ? "badge-ok" : "badge-muted"}">${autoOn ? "켜짐" : "꺼짐"}</span>${
+        autoOn ? ` <span class="badge ${balance > 0 ? "badge-ok" : "badge-wait"}">잔액 ${balance.toLocaleString()}원</span>` : ""}</${notifyOpen ? "h2" : "summary"}>
+    ${autoSwitch}
+    <div class="form-divider">알림톡 요금</div>
     <p class="panel-hint">서명 요청·리마인더를 카카오톡으로 보냅니다. 건당 <b>${unitPrice.toLocaleString()}원</b> — 지금 잔액으로 <b>약 ${sendable.toLocaleString()}건</b> 보낼 수 있습니다.
       알림 받을 회원은 <b>${withPhone}명</b>(휴대폰 등록 기준 · 전체 ${members.length}명)입니다.</p>
-    ${balance < unitPrice ? `<div class="flash flash-warn"><b>잔액이 부족해 알림톡이 발송되지 않습니다.</b> 아래에서 충전을 신청해 주세요.<br />
+    ${autoOn && balance < unitPrice ? `<div class="flash flash-warn"><b>잔액이 부족해 알림톡이 발송되지 않습니다.</b> 아래에서 충전을 신청해 주세요.<br />
       그동안에도 계약은 진행할 수 있습니다 — 문서 화면의 <b>[보내기 · 복사]</b> 로 서명 링크를 카톡·문자로 직접 보내시면 됩니다.</div>` : ""}
     <div class="form-two">
       <form method="post" action="${base}/admin/credit/order" class="stack-form compact">
@@ -1760,7 +1778,7 @@ export async function adminDocumentDetail(ctx) {
   // 토큰은 서명값(HMAC)이라 같은 서명자·같은 문서면 늘 같은 값이 나온다 — 다시 계산하면 그만이다.
   const linkOrigin = assoc.custom_domain ? `https://${assoc.custom_domain}` : ORIGIN;
   const extTokens = await Promise.all(exts.map((e) => makeExtToken(env.SESSION_SECRET, e.id, d.id)));
-  const canTalk = notifyEnabled(env);
+  const canTalk = canAutoSend(env, assoc);
   const otpOn = await otpRequired(db);
   // 카톡·문자에 그대로 붙여 넣을 수 있는 한 통. 모바일은 공유 시트, PC 는 복사된다.
   const shareMsg = (who) => `${who ? who + "님, " : ""}${assoc.name} 「${d.title}」 전자서명 요청입니다.`
@@ -2762,7 +2780,9 @@ export async function superOrg(ctx) {
         <button class="btn btn-ghost btn-sm">변경</button></form>
     </section>
 
-    <section class="panel"><h2 class="panel-title">알림톡 <span class="badge ${balance > 0 ? "badge-ok" : "badge-no"}">잔액 ${balance.toLocaleString()}원</span></h2>
+    <section class="panel"><h2 class="panel-title">알림톡 <span class="badge ${autoNotifyOn(a) ? "badge-ok" : "badge-muted"}">자동화 ${autoNotifyOn(a) ? "켜짐" : "꺼짐"}</span> <span class="badge ${balance > 0 ? "badge-ok" : "badge-no"}">잔액 ${balance.toLocaleString()}원</span></h2>
+      ${autoNotifyOn(a) ? "" : `<p class="panel-hint"><b>이 조직은 자동 발송을 쓰지 않습니다.</b> 관리자가 서명 링크를 카톡·문자로 직접 보내 계약을 진행합니다 —
+        정상 상태이며, 켜고 끄는 것은 그 조직 관리자가 자기 관리 화면에서 정합니다(운영사가 대신 켜지 않습니다).</p>`}
       <p class="panel-hint">${balance > 0
         ? `현재 단가로 약 <b>${Math.floor(balance / Math.max(1, ownPrice || basePrice)).toLocaleString()}건</b> 보낼 수 있습니다.`
         : "<b>잔액이 없어 발송이 되지 않습니다.</b> 충전 신청은 정산 화면에서 승인합니다."}

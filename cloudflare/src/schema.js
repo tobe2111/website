@@ -15,6 +15,8 @@ CREATE TABLE IF NOT EXISTS associations (
   logo        TEXT NOT NULL DEFAULT '',
   hero_image  TEXT NOT NULL DEFAULT '',    -- 홈 히어로 배경 사진(R2 키). 비우면 프리미엄 그라데이션 히어로
   hero_video  TEXT NOT NULL DEFAULT '',    -- 홈 히어로 배경 영상(R2 키·선택). 사진이 poster 가 된다
+  notify_auto INTEGER NOT NULL DEFAULT 0,  -- 알림 자동화. 0 이면 이 조직은 알림톡을 한 통도 자동으로 보내지 않고,
+                                           -- 관리자가 서명 링크를 카톡·문자로 직접 전달한다(기본값).
   map_lat     REAL NOT NULL DEFAULT 37.4837,
   map_lng     REAL NOT NULL DEFAULT 127.0324,
   map_zoom    INTEGER NOT NULL DEFAULT 14,
@@ -623,7 +625,7 @@ CREATE INDEX IF NOT EXISTS idx_landing_asset_assoc ON landing_assets(association
 // 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
 // 마이그레이션 세대 — migrateColumns 에 단계를 추가할 때마다 +1
 // 36 = 두 갈래(트렁크 33 · 모집형 35)를 합친 세대. 양쪽 DB 모두 다시 한 번 마이그레이션을 타게 한다.
-export const SCHEMA_VERSION = "39";
+export const SCHEMA_VERSION = "40";
 
 export async function ensureSchema(db) {
   const has = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='associations'").first();
@@ -719,6 +721,12 @@ async function migrateColumns(db) {
   // 영상이 뜨기 전과, 움직임을 꺼 둔 방문자에게 보이는 화면이 그 사진이다.
   if (!cols.some((c) => c.name === "hero_video")) {
     await db.prepare("ALTER TABLE associations ADD COLUMN hero_video TEXT NOT NULL DEFAULT ''").run();
+  }
+  // v40: 알림 자동화 스위치. 기본은 꺼짐 — 켜기 전까지 자동 발송이 한 통도 나가지 않는다.
+  // 기존 조직도 0 으로 들어온다. 알림톡을 실제로 쓰던 곳이면 관리 화면에서 한 번 켜 주면 된다.
+  // (모르는 새 자동 발송이 시작돼 남의 크레딧이 줄어드는 쪽이 더 나쁘다)
+  if (!cols.some((c) => c.name === "notify_auto")) {
+    await db.prepare("ALTER TABLE associations ADD COLUMN notify_auto INTEGER NOT NULL DEFAULT 0").run();
   }
   // v17: 알림톡 — 회원 휴대폰 + 선불 크레딧/원장/충전신청/발송로그
   const ucols = (await db.prepare("PRAGMA table_info(users)").all()).results || [];

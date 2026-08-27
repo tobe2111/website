@@ -59,6 +59,9 @@ for (const [kind, t] of Object.entries(N.TEMPLATES)) {
 }
 await D.setSetting(db, "esign_otp", "1"); // 본인확인 켠 상태로 검증한다
 const assoc = await D.createAssociation(db, { slug: "law", name: "한빛법무법인", kind: "esign" });
+// 알림 자동화는 조직마다 켜는 스위치이고 기본이 꺼짐이다 — 실제 고객처럼 한 번 켜고 시작한다
+await D.setNotifyAuto(db, assoc.id, 1);
+assoc.notify_auto = 1;
 const pw = await hashPassword("pass1234");
 const admin = await D.createUser(db, { email: "law@a.kr", passwordHash: pw.hash, salt: pw.salt, name: "김담당", role: "ADMIN", associationId: assoc.id });
 await D.addCredit(db, assoc.id, 100000);

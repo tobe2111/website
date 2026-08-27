@@ -18,7 +18,7 @@ import { planOf, PLANS, PLAN_KEYS, planPriceKey } from "./plans.js";
 import { seedDemo } from "./demoContent.js";
 import { seedStarter } from "./starterContent.js";
 import { KINDS, kindById, PRESETS, assocTerms } from "./kinds.js";
-import { TEMPLATE_KEYS, TEMPLATES, sendTest, listProviderTemplates, matchTemplates, sendMany, sendOne, notifyEnabled, wonToJeon, renderTemplate, templateButton, billingMode, chargeContract, BILLING_MODES, priceOf } from "./notify.js";
+import { TEMPLATE_KEYS, TEMPLATES, sendTest, listProviderTemplates, matchTemplates, sendMany, sendOne, notifyEnabled, autoNotifyOn, canAutoSend, wonToJeon, renderTemplate, templateButton, billingMode, chargeContract, BILLING_MODES, priceOf } from "./notify.js";
 
 // ctx.request 는 내부 호출 경로에서 없을 수 있다 — 감사 기록이 본 기능을 죽이면 안 된다
 const uaOf = (ctx) => { try { return ctx.request.headers.get("user-agent") || ""; } catch { return ""; } };
@@ -147,6 +147,22 @@ export async function register(ctx) {
 // 충전 금액은 자유 입력 — 상인회 규모가 제각각이라 고정 금액만으로는 맞지 않는다.
 // 최소 1만원(소액 입금 확인 부담), 최대 500만원(오입력 방지) 사이 1천원 단위.
 const CHARGE_MIN = 10000, CHARGE_MAX = 5000000, CHARGE_STEP = 1000;
+// 알림 자동화 켜기/끄기 — 이 조직 이름으로 자동 발송을 할지 말지.
+// 끄면 서명 요청·재알림·완료 안내가 한 통도 나가지 않고, 관리자가 링크를 직접 전달한다.
+export async function adminNotifyAuto(ctx) {
+  const { db, form, base, assoc, env } = ctx;
+  const to = `${base}/admin#p-notify`;
+  const on = form.get("on") === "1";
+  // 켤 수 없는 상태에서 켜 두면 "켰는데 왜 안 가지"가 된다. 지금 못 보내는 이유를 그대로 말한다.
+  if (on && !notifyEnabled(env))
+    return back(to, "아직 운영사 쪽 발송 설정이 끝나지 않아 켤 수 없습니다. (알림톡 심사·키 등록이 끝나면 켜집니다)", true);
+  await D.setNotifyAuto(db, assoc.id, on);
+  await audit(ctx, "알림자동화", on ? "켬" : "끔");
+  return back(to, on
+    ? "알림 자동화를 켰습니다. 이제 서명 요청·재알림·완료 안내가 카카오톡으로 자동 발송됩니다."
+    : "알림 자동화를 껐습니다. 계약은 문서 화면의 [보내기 · 복사] 로 직접 보내시면 됩니다.");
+}
+
 export async function adminCreditOrder(ctx) {
   const { db, form, base, assoc } = ctx;
   const amount = parseInt(String(form.get("amount") || "").replace(/[^\d]/g, ""), 10);
@@ -1052,7 +1068,7 @@ export async function adminCreateDocument(ctx) {
   await audit(ctx, "서명문서생성", title);
   // 목록이 아니라 그 문서로 보낸다 — 서명 링크와 현황이 거기 있다.
   // 알림톡이 꺼져 있으면 관리자가 직접 링크를 전달해야 하므로, 어디로 가야 하는지가 특히 중요하다.
-  const note = notifyEnabled(ctx.env)
+  const note = canAutoSend(ctx.env, assoc)
     ? ordered ? "순차 서명 문서를 만들었습니다." : "문서를 만들었습니다."
     : "문서를 만들었습니다. 아래 [보내기 · 복사] 로 서명 링크를 전달해 주세요.";
   return redirect(`${base}/admin/documents/${doc.id}?msg=${encodeURIComponent(note)}`);
@@ -1226,7 +1242,7 @@ export async function extOtpSend(ctx) {
   await D.upsertExtOtp(db, { externalId: signer.id, codeHash: await sha256Hex(`ext|${signer.id}|${code}`), phone: signer.phone });
   const msg = renderTemplate("sign_otp", { 상호: assoc.name, 인증번호: code, 유효시간: D.OTP_TTL_MIN });
   let via = "";
-  if (hasPhone && notifyEnabled(env)) {
+  if (hasPhone && canAutoSend(env, assoc)) {
     const r = await sendOne(env, db, { assoc, kind: "sign_otp", to: signer.phone, text: msg });
     if (r.ok) via = `${D.maskPhone(signer.phone)} 으로 알림톡을`;
     else if (r.insufficient) { await D.clearExtOtp(db, signer.id); return back(to, "발송 크레딧이 부족해 인증번호를 보내지 못했습니다. 요청하신 분께 문의해 주세요.", true); }
@@ -1414,7 +1430,7 @@ export async function adminRemindDocument(ctx) {
     detail: `대상 ${targets.length}명`, ip: ctx.ip || "" });
   const link = `${origin}${base}/sign`;
   // 알림톡이 아직 준비되지 않았으면(채널 승인 대기 등) 전원 이메일로 보낸다
-  const canTalk = notifyEnabled(env);
+  const canTalk = canAutoSend(env, assoc);
   const withPhone = canTalk ? targets.filter((t) => t.phone) : [];
   let msg = "";
   if (withPhone.length) {
@@ -1508,7 +1524,7 @@ async function notifyNewDocument(ctx, doc, title, dueDate, ordered, recipients) 
   const { assoc, base } = ctx;
   const origin = new URL(ctx.request.url).origin;
   const byPhone = recipients.filter((m) => D.isValidPhone(m.phone || ""));
-  if (byPhone.length && notifyEnabled(ctx.env)) {
+  if (byPhone.length && canAutoSend(ctx.env, assoc)) {
     await sendMany(ctx.env, ctx.db, {
       assoc, kind: "sign_request", recipients: byPhone,
       textFor: (m) => renderTemplate("sign_request", {
@@ -2240,7 +2256,7 @@ async function collectExtraAnswers(ctx, variant) {
 const LEAD_NOTIFY_DAILY_CAP = 200;
 async function notifyLead(ctx, lead) {
   const { db, env, assoc, base } = ctx;
-  if (!notifyEnabled(env)) return;
+  if (!canAutoSend(env, assoc)) return;
   const sentToday = await D.countMessagesSince(db, assoc.id, ["lead_new", "lead_ack"], 24);
   if (sentToday >= LEAD_NOTIFY_DAILY_CAP) return;
   const origin = await originFor(env, db, assoc);

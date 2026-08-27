@@ -6,12 +6,20 @@ import { makeEnv } from "./shim.js";
 import * as D from "../src/db.js";
 import * as N from "../src/notify.js";
 
+// 알림 자동화는 조직마다 켜는 스위치이고 기본이 '꺼짐' 이다(켜지 않은 곳에 자동 발송이
+// 붙어 남의 크레딧이 줄면 안 된다). 발송 로직을 시험하려면 실제 고객처럼 한 번 켠다.
+const orgSending = async (db, opts) => {
+  const a = await D.createAssociation(db, opts);
+  await D.setNotifyAuto(db, a.id, 1);
+  return D.getAssociationById(db, a.id); // 켠 뒤의 행을 돌려줘야 한다 — 옛 사본에는 꺼짐이 박혀 있다
+};
+
 let env, db, assoc;
 
 before(async () => {
   env = makeEnv();
   db = env.DB;
-  assoc = await D.createAssociation(db, { slug: "seocho", name: "서초구 상인회" });
+  assoc = await orgSending(db, { slug: "seocho", name: "서초구 상인회" });
 });
 
 test("휴대폰 정규화·검증·마스킹", () => {
@@ -46,7 +54,7 @@ test("차감 → 잔액 감소, 잔액보다 큰 차감은 거부(잔액 불변)
 });
 
 test("잔액 정확히 0까지 쓸 수 있고, 그 다음 건은 거부", async () => {
-  const a = await D.createAssociation(db, { slug: "edge", name: "경계 상인회" });
+  const a = await orgSending(db, { slug: "edge", name: "경계 상인회" });
   await D.addCredit(db, a.id, 44);                       // 정확히 2건치
   assert.equal((await D.spendCredit(db, a.id, 22)).ok, true);
   assert.equal((await D.spendCredit(db, a.id, 22)).ok, true);
@@ -63,7 +71,7 @@ test("판매단가: 기본값 + 슈퍼관리자 설정 반영", async () => {
 });
 
 test("발송 설정(알리고 키) 없으면 차감 없이 실패 처리", async () => {
-  const a = await D.createAssociation(db, { slug: "nokey", name: "키없음" });
+  const a = await orgSending(db, { slug: "nokey", name: "키없음" });
   await D.addCredit(db, a.id, 1000);
   const r = await N.sendOne(env, db, { assoc: a, kind: "sign_request", to: "010-1111-2222", text: "테스트" });
   assert.equal(r.ok, false);
@@ -74,7 +82,7 @@ test("발송 설정(알리고 키) 없으면 차감 없이 실패 처리", async
 });
 
 test("발송 실패 시 크레딧 자동 환불 (차감 → 실패 → 환불로 잔액 복구)", async () => {
-  const a = await D.createAssociation(db, { slug: "refund", name: "환불검증" });
+  const a = await orgSending(db, { slug: "refund", name: "환불검증" });
   await D.addCredit(db, a.id, 1000);
   await D.setSetting(db, "tpl_sign_request", "TPL_TEST_01");
   // 알리고 키는 주되, fetch 를 실패시켜 발송 실패 경로를 태운다
@@ -95,7 +103,7 @@ test("발송 실패 시 크레딧 자동 환불 (차감 → 실패 → 환불로
 });
 
 test("발송 성공 시 차감 확정 + 매출 로그 (수신번호는 마스킹 저장)", async () => {
-  const a = await D.createAssociation(db, { slug: "sendok", name: "발송성공" });
+  const a = await orgSending(db, { slug: "sendok", name: "발송성공" });
   await D.addCredit(db, a.id, 1000);
   await D.setSetting(db, "tpl_sign_request", "TPL_TEST_01");
   const envOk = { ...env, ALIGO_API_KEY: "k", ALIGO_USER_ID: "u", ALIGO_SENDER_KEY: "s", ALIGO_SENDER: "0212345678" };
@@ -120,7 +128,7 @@ test("발송 성공 시 차감 확정 + 매출 로그 (수신번호는 마스킹
 });
 
 test("잔액 소진 시 남은 인원 발송을 멈추고 보고", async () => {
-  const a = await D.createAssociation(db, { slug: "bulk", name: "대량발송" });
+  const a = await orgSending(db, { slug: "bulk", name: "대량발송" });
   await D.addCredit(db, a.id, 44); // 2건치
   await D.setSetting(db, "tpl_sign_remind", "TPL_REMIND_01");
   const envOk = { ...env, ALIGO_API_KEY: "k", ALIGO_USER_ID: "u", ALIGO_SENDER_KEY: "s", ALIGO_SENDER: "0212345678" };
@@ -144,7 +152,7 @@ test("잔액 소진 시 남은 인원 발송을 멈추고 보고", async () => {
 });
 
 test("충전 신청 → 승인 시에만 잔액 반영", async () => {
-  const a = await D.createAssociation(db, { slug: "order", name: "충전신청" });
+  const a = await orgSending(db, { slug: "order", name: "충전신청" });
   const o = await D.createCreditOrder(db, { associationId: a.id, amount: 50000, depositor: "홍길동" });
   assert.equal(o.status, "pending");
   assert.equal(await D.getBalance(db, a.id), 0, "승인 전에는 잔액 0");
@@ -180,8 +188,8 @@ test("기존 배포 DB(구버전) → 자동 마이그레이션으로 알림톡 
 });
 
 test("상인회별 단가: 전용가 우선, 0이면 플랫폼 기본가", async () => {
-  const big = await D.createAssociation(db, { slug: "big2", name: "대형" });
-  const sm = await D.createAssociation(db, { slug: "sm2", name: "소규모" });
+  const big = await orgSending(db, { slug: "big2", name: "대형" });
+  const sm = await orgSending(db, { slug: "sm2", name: "소규모" });
   await D.setSetting(db, "price_alimtalk", "22");
   assert.equal(await N.priceOf(db, "alimtalk", big.id), 22, "미설정이면 기본가");
   await D.setUnitPrice(db, big.id, 15);
@@ -192,8 +200,8 @@ test("상인회별 단가: 전용가 우선, 0이면 플랫폼 기본가", async
 });
 
 test("마진 정산: 발송 시점 원가를 스냅샷해 나중에 원가를 바꿔도 과거가 흔들리지 않는다", async () => {
-  const a1 = await D.createAssociation(db, { slug: "m1", name: "정산A" });
-  const a2 = await D.createAssociation(db, { slug: "m2", name: "정산B" });
+  const a1 = await orgSending(db, { slug: "m1", name: "정산A" });
+  const a2 = await orgSending(db, { slug: "m2", name: "정산B" });
   await D.setSetting(db, "price_alimtalk", "22");
   await D.setSetting(db, "cost_alimtalk_jeon", "650"); // 6.5원
   await D.setSetting(db, "tpl_sign_request", "TPL_X");
@@ -231,7 +239,7 @@ test("소수점 원가(6.5원)를 반올림 없이 정확히 집계한다", asyn
   // 정수 '원'으로 저장하면 6.5→6 또는 7 로 반올림돼 1,000건에 500원이 어긋난다.
   assert.equal(N.wonToJeon(6.5), 650);
   assert.equal(N.jeonToWon(650), 6.5);
-  const a = await D.createAssociation(db, { slug: "dec", name: "소수점" });
+  const a = await orgSending(db, { slug: "dec", name: "소수점" });
   await D.setSetting(db, "cost_alimtalk_jeon", "650");
   await D.setSetting(db, "price_alimtalk", "22");
   await D.setSetting(db, "tpl_sign_request", "TPL_D");
@@ -287,7 +295,7 @@ test("잔액이 없어도 계약 상대방에게는 이메일이 간다", async 
     return new Response("ok");
   };
   try {
-    const a = await D.createAssociation(env.DB, { slug: "eo2", name: "조직2", kind: "esign" });
+    const a = await orgSending(env.DB, { slug: "eo2", name: "조직2", kind: "esign" });
     await D.setSetting(env.DB, "tpl_sign_request", "TPL_A"); // 템플릿은 있고 잔액만 0
     const { contentHash } = await import("../src/esign.js");
     const d = await D.createDocument(env.DB, { associationId: a.id, title: "계약", body: "본문",
@@ -306,7 +314,7 @@ test("잔액이 없어도 계약 상대방에게는 이메일이 간다", async 
 
 // 템플릿 코드가 틀렸는지는 보내 봐야 안다. 실계약 중에 알게 되면 상대방이 기다리는 상태가 된다.
 test("시험 발송: 크레딧을 차감하지 않고 정산에도 잡히지 않는다", async () => {
-  const a = await D.createAssociation(db, { slug: "t1", name: "시험" });
+  const a = await orgSending(db, { slug: "t1", name: "시험" });
   await D.setSetting(db, "tpl_sign_request", "TPL_OK");
   await D.addCredit(db, a.id, 10000);
   const envOk = { ...env, ALIGO_API_KEY: "k", ALIGO_USER_ID: "u", ALIGO_SENDER_KEY: "s", ALIGO_SENDER: "0212345678" };
@@ -436,7 +444,7 @@ test("사내 담당자용 템플릿은 사내용임을 밝힌다", () => {
 // 손으로 쓴 문장을 보내면 카카오가 거절한다 — 재알림이 실제로 그 상태였다.
 test("기한 재알림은 손글씨가 아니라 심사 문구로 나간다", async () => {
   const { runSignReminders } = await import("../src/scheduled.js");
-  const a = await D.createAssociation(db, { slug: "rm", name: "리마인드", kind: "esign" });
+  const a = await orgSending(db, { slug: "rm", name: "리마인드", kind: "esign" });
   await D.setSetting(db, "tpl_sign_remind", "TPL_RM");
   await D.addCredit(db, a.id, 10000);
   const pw = { hash: "h", salt: "s" };
@@ -461,4 +469,57 @@ test("기한 재알림은 손글씨가 아니라 심사 문구로 나간다", as
   assert.equal(mine.message_1, N.renderTemplate("sign_remind",
     { 상호: a.name, 이름: "박회원", 문서명: doc.title, 기한: doc.due_date }),
     "심사받은 문구 그대로여야 — 손으로 쓴 문장은 카카오가 거절한다");
+});
+
+// ---------- 알림 자동화 스위치 ----------
+// 알림톡은 편의지 필수가 아니다. 켜지 않은 조직에서 한 통이라도 자동으로 나가면
+// 그 조직의 크레딧이 모르는 새 줄어든다 — 그래서 기본은 '꺼짐' 이고, 게이트는 발송 함수 안에 둔다.
+test("자동화가 꺼져 있으면 한 통도 나가지 않는다", async () => {
+  const env = makeEnv({ ALIGO_API_KEY: "k", ALIGO_USER_ID: "u", ALIGO_SENDER_KEY: "s", ALIGO_SENDER: "0212345678" });
+  let called = 0;
+  const real = globalThis.fetch;
+  globalThis.fetch = async () => { called++; return new Response(JSON.stringify({ code: 0, token: "t" }), { headers: { "content-type": "application/json" } }); };
+  try {
+    const a = await D.createAssociation(env.DB, { slug: "off", name: "자동화꺼짐" });
+    assert.equal(a.notify_auto, 0, "새 조직은 꺼진 채로 시작해야");
+    await D.addCredit(env.DB, a.id, 100000);
+    await D.setSetting(env.DB, "tpl_notice", "TPL_N");
+    const r = await N.sendOne(env, env.DB, { assoc: a, kind: "notice", to: "010-1111-2222", text: "본문" });
+    assert.equal(r.ok, false);
+    assert.equal(r.skipped, true, "'실패'가 아니라 '건너뜀' 이어야");
+    assert.equal(called, 0, "제공사를 부르지도 말아야");
+    assert.equal(await D.getBalance(env.DB, a.id), 100000, "돈이 한 푼도 줄면 안 된다");
+    assert.equal((await D.listMessages(env.DB, a.id, 20)).length, 0,
+      "고칠 것이 없는 붉은 실패 줄을 발송 내역에 쌓지 말 것");
+  } finally { globalThis.fetch = real; }
+});
+
+test("켜면 그때부터 나간다", async () => {
+  const env = makeEnv({ ALIGO_API_KEY: "k", ALIGO_USER_ID: "u", ALIGO_SENDER_KEY: "s", ALIGO_SENDER: "0212345678" });
+  const real = globalThis.fetch;
+  globalThis.fetch = async (u) => new Response(JSON.stringify(/token\/create/.test(String(u)) ? { code: 0, token: "t" } : { code: 0 }), { headers: { "content-type": "application/json" } });
+  try {
+    const a = await orgSending(env.DB, { slug: "on", name: "자동화켜짐" });
+    await D.addCredit(env.DB, a.id, 100000);
+    await D.setSetting(env.DB, "tpl_notice", "TPL_N");
+    const r = await N.sendOne(env, env.DB, { assoc: a, kind: "notice", to: "010-1111-2222", text: "본문" });
+    assert.equal(r.ok, true);
+    assert.ok((await D.getBalance(env.DB, a.id)) < 100000, "켠 뒤에는 차감된다");
+  } finally { globalThis.fetch = real; }
+});
+
+test("여러 명에게 보낼 때도 같은 게이트를 지난다", async () => {
+  const env = makeEnv({ ALIGO_API_KEY: "k", ALIGO_USER_ID: "u", ALIGO_SENDER_KEY: "s", ALIGO_SENDER: "0212345678" });
+  let called = 0;
+  const real = globalThis.fetch;
+  globalThis.fetch = async () => { called++; return new Response("{}"); };
+  try {
+    const a = await D.createAssociation(env.DB, { slug: "off2", name: "꺼짐대량" });
+    await D.addCredit(env.DB, a.id, 100000);
+    const r = await N.sendMany(env, env.DB, { assoc: a, kind: "notice",
+      recipients: [{ name: "가", phone: "01011112222" }, { name: "나", phone: "01033334444" }], textFor: () => "본문" });
+    assert.equal(r.sent, 0);
+    assert.equal(r.skipped, true);
+    assert.equal(called, 0);
+  } finally { globalThis.fetch = real; }
 });

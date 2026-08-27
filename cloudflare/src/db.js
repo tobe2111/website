@@ -82,6 +82,8 @@ export const getAssociationByDomain = (db, host) => first(db, "SELECT * FROM ass
 export const setAssociationDomain = (db, id, domain) => run(db, "UPDATE associations SET custom_domain=? WHERE id=?", domain || "", id);
 export const setAssociationMapKey = (db, id, key) => run(db, "UPDATE associations SET map_client_id=? WHERE id=?", key || "", id);
 export const setAssociationPlan = (db, id, plan) => run(db, "UPDATE associations SET plan=? WHERE id=?", plan, id);
+// 알림 자동화 스위치. 꺼져 있으면 이 조직 이름으로는 자동 발송이 한 통도 나가지 않는다.
+export const setNotifyAuto = (db, id, on) => run(db, "UPDATE associations SET notify_auto=? WHERE id=?", on ? 1 : 0, id);
 export const countMembers = async (db, aid) => (await first(db, "SELECT COUNT(*) AS n FROM users WHERE association_id=? AND role='MERCHANT'", aid)).n;
 export const countBusinessImages = async (db, businessId) => (await first(db, "SELECT COUNT(*) AS n FROM media WHERE business_id=? AND kind='image'", businessId)).n;
 

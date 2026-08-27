@@ -12,6 +12,14 @@ import { contentHash } from "../src/esign.js";
 import { TEMPLATES, TEMPLATE_KEYS, renderTemplate, templateButton } from "../src/notify.js";
 import { makeExtToken, remindExternals } from "../src/extsign.js";
 
+// 알림 자동화는 조직마다 켜는 스위치이고 기본이 '꺼짐' 이다(켜지 않은 곳에 자동 발송이
+// 붙어 남의 크레딧이 줄면 안 된다). 발송 로직을 시험하려면 실제 고객처럼 한 번 켠다.
+const orgSending = async (db, opts) => {
+  const a = await D.createAssociation(db, opts);
+  await D.setNotifyAuto(db, a.id, 1);
+  return D.getAssociationById(db, a.id); // 켠 뒤의 행을 돌려줘야 한다 — 옛 사본에는 꺼짐이 박혀 있다
+};
+
 let env, db, a, admin, doc, ext1, ext2, token1;
 const BASE = "http://localhost";
 const BODY = Array.from({ length: 30 }, (_, i) => `제${i + 1}조 계약 조항.`).join("\n");
@@ -39,7 +47,7 @@ before(async () => {
     ALIGO_API_KEY: "k", ALIGO_USER_ID: "u", ALIGO_SENDER_KEY: "sk", ALIGO_SENDER: "0212345678",
   });
   db = env.DB;
-  a = await D.createAssociation(db, { slug: "s", name: "서초 상인회" });
+  a = await orgSending(db, { slug: "s", name: "서초 상인회" });
   const { hashPassword } = await import("../src/crypto.js");
   const h = await hashPassword("admin1234");
   admin = await D.createUser(db, { email: "ad@x.kr", passwordHash: h.hash, salt: h.salt, name: "관리자", role: "ADMIN", associationId: a.id });
@@ -394,7 +402,7 @@ test("공지는 계약과 무관하므로 계약당 모드에서도 발송당 �
 
 test("잔액이 없으면 계약 요금 청구가 실패한다", async () => {
   const { chargeContract } = await import("../src/notify.js");
-  const poor = await D.createAssociation(db, { slug: "poor", name: "잔액없음" });
+  const poor = await orgSending(db, { slug: "poor", name: "잔액없음" });
   const d = await D.createDocument(db, { associationId: poor.id, title: "무일푼", body: "본문",
     contentHash: await contentHash("본문"), createdBy: null, ordered: 0, dueDate: "" });
   const r = await chargeContract(db, poor, { documentId: d.id, title: d.title });

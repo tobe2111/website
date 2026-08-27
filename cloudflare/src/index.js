@@ -187,6 +187,7 @@ const TENANT = [
   ["POST", "/admin/leads/:id/delete", api.adminLeadDelete, "ADMIN"],
   ["GET", "/admin/documents", pages.adminDocuments, "STAFF"],
   ["POST", "/admin/credit/order", api.adminCreditOrder, "ADMIN"],
+  ["POST", "/admin/notify-auto", api.adminNotifyAuto, "ADMIN"],
   ["POST", "/admin/documents", api.adminCreateDocument, "STAFF"],
   ["GET",  "/admin/documents/new", pages.adminDocumentNew, "STAFF"],
   ["GET", "/admin/documents/:id", pages.adminDocumentDetail, "STAFF"],

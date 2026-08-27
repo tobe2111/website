@@ -198,14 +198,14 @@ export async function runSignReminders(env) {
   const db = env.DB;
   const docs = await D.listDocsNeedingRemind(db);
   const { emailEnabled, sendEmailFor, mailShell, mailButton } = await import("./email.js");
-  const { notifyEnabled } = await import("./notify.js");
+  const { canAutoSend } = await import("./notify.js");
   const { esc } = await import("./util.js");
   let sent = 0, docsDone = 0, skipped = 0;
   for (const d of docs) {
     const assoc = await D.getAssociationById(db, d.association_id);
     if (!assoc) continue;
     const price = await priceOf(db, "alimtalk");
-    const canAlimtalk = notifyEnabled(env) && (await D.getBalance(db, assoc.id)) >= price;
+    const canAlimtalk = canAutoSend(env, assoc) && (await D.getBalance(db, assoc.id)) >= price;
     const canEmail = emailEnabled(env);
     if (!canAlimtalk && !canEmail) { skipped++; continue; } // 보낼 수단이 아예 없다 — 다음날 다시
     // 크론에는 요청이 없다 — 개별 도메인 → PUBLIC_ORIGIN → 학습해 둔 주소 순으로 찾는다

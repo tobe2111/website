@@ -315,7 +315,25 @@ export async function sendTest(env, db, { kind, to }) {
   }
 }
 
+// ---------- 알림 자동화 스위치 ----------
+// 조직마다 켜고 끈다. 꺼져 있으면 이 조직 이름으로는 한 통도 자동으로 나가지 않는다 —
+// 관리자가 서명 링크를 카톡·문자로 직접 보내는 방식으로 계약이 진행된다.
+//
+// 왜 켜는 걸 기본으로 두지 않는가:
+//   ① 알림톡은 건당 돈이 나간다. 모르는 새 시작되면 남의 크레딧이 줄어든다.
+//   ② 심사가 끝나지 않은 템플릿으로 보내면 실패만 쌓이고 그 이유는 관리자에게 보이지 않는다.
+//   ③ 손으로 보내도 계약은 똑같이 끝난다 — 자동은 편의지 필수가 아니다.
+// 그래서 관리 화면에서 명시적으로 한 번 켠 조직에만 자동 발송이 붙는다.
+export const autoNotifyOn = (assoc) => !!(assoc && assoc.notify_auto);
+// 이 조직이 지금 실제로 자동 발송을 할 수 있는가 — 운영사 설정(키)과 조직 스위치가 모두 켜져야 한다.
+// 화면에서 '자동으로 나갑니다' 라고 쓰기 전에는 반드시 이걸 본다.
+export const canAutoSend = (env, assoc) => notifyEnabled(env) && autoNotifyOn(assoc);
+// 자동 발송을 건너뛴 것은 '실패'가 아니다 — 발송 내역에 실패로 남기면
+// 관리자가 고칠 것이 없는 붉은 줄을 매일 보게 된다. 조용히 건너뛰고 그렇게 알린다.
+const SKIPPED = { ok: false, skipped: true, error: "알림 자동화가 꺼져 있습니다" };
+
 export async function sendOne(env, db, { assoc, kind, to, text, buttonName, buttonUrl, templateCode }) {
+  if (!autoNotifyOn(assoc)) return SKIPPED;
   const phone = D.normalizePhone(to);
   const masked = D.maskPhone(phone);
   if (!D.isValidPhone(phone)) {
@@ -358,6 +376,7 @@ export async function sendOne(env, db, { assoc, kind, to, text, buttonName, butt
 
 // 여러 명에게 발송. 잔액이 떨어지면 그 지점에서 멈추고 남은 인원을 알려준다(부분 성공 허용).
 export async function sendMany(env, db, { assoc, kind, recipients, textFor, buttonName, buttonUrl }) {
+  if (!autoNotifyOn(assoc)) return { sent: 0, failed: 0, cost: 0, stopped: false, skipped: true, total: recipients.length };
   let sent = 0, failed = 0, cost = 0, stopped = false;
   const tpl = await templateCodeFor(db, kind);
   for (const m of recipients) {

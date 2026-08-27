@@ -158,8 +158,8 @@ test("성능 계측: Server-Timing 헤더 (D1 쿼리 수·시간)", async () => 
 // 영상은 '있으면 좋은 것'이다. 사진이 poster 로 깔려 있어야 영상이 뜨기 전에도,
 // 데이터를 아끼거나 움직임을 꺼 둔 방문자에게도 첫 화면이 비지 않는다.
 // 빈 DB 는 첫 실행으로 보고 /setup 으로 보낸다 — 공개 화면을 보려면 계정이 하나 있어야 한다
-async function seeded() {
-  const e = makeEnv();
+async function seeded(vars = {}) {
+  const e = makeEnv(vars);
   const pw = await hashPassword("x12345678");
   await D.createUser(e.DB, { email: "seed@a.kr", passwordHash: pw.hash, salt: pw.salt, name: "운영", role: "SUPERADMIN", associationId: null });
   return e;
@@ -260,4 +260,47 @@ test("파일 미리보기 장치가 관리 화면에 실린다", async () => {
   assert.match(html, /file-preview\.js/);
   assert.match(html, /name="hero_image"[^>]*accept="image\/\*"/);
   assert.match(html, /name="hero_video"[^>]*accept="video\/mp4,video\/webm"/);
+});
+
+// ── 알림 자동화는 조직이 스스로 켜는 스위치다.
+// "알림톡이 있어야만 쓸 수 있는 서비스" 로 두면, 심사가 몇 주 걸리는 동안 아무것도 못 판다.
+test("관리 화면에서 알림 자동화를 켜고 끈다", async () => {
+  const e = await seeded({ ALIGO_API_KEY: "k", ALIGO_USER_ID: "u", ALIGO_SENDER_KEY: "s", ALIGO_SENDER: "0212345678" });
+  const a = await D.createAssociation(e.DB, { slug: "sw", name: "스위치", kind: "esign" });
+  const pw = await hashPassword("pass1234");
+  await D.createUser(e.DB, { email: "sw@a.kr", passwordHash: pw.hash, salt: pw.salt, name: "회장", role: "ADMIN", associationId: a.id });
+  const j = jar(); await post(e, j, "/login", { email: "sw@a.kr", password: "pass1234" });
+
+  const before = await (await get(e, j, "/t/sw/admin")).text();
+  assert.match(before, /알림 자동화 <span class="badge badge-muted">꺼짐/, "기본은 꺼짐이어야");
+  assert.match(before, /자동화 켜기/, "켜는 버튼이 있어야");
+  assert.match(before, /한 통도 자동으로 나가지 않습니다/, "지금 어떤 상태인지 말해 줘야");
+
+  const r = await post(e, j, "/t/sw/admin/notify-auto", { on: "1" }, "/t/sw/admin");
+  assert.equal(r.status, 303);
+  assert.equal((await D.getAssociationById(e.DB, a.id)).notify_auto, 1);
+
+  const after = await (await get(e, j, "/t/sw/admin")).text();
+  assert.match(after, /알림 자동화 <span class="badge badge-ok">켜짐/);
+  assert.match(after, /자동화 끄기/);
+
+  await post(e, j, "/t/sw/admin/notify-auto", { on: "0" }, "/t/sw/admin");
+  assert.equal((await D.getAssociationById(e.DB, a.id)).notify_auto, 0, "다시 끌 수 있어야");
+});
+
+// 켤 수 없는 상태에서 켜 두면 "켰는데 왜 안 가지" 가 된다.
+test("운영사 발송 준비가 안 됐으면 켜지지 않고 이유를 말한다", async () => {
+  const e = await seeded(); // 알리고 키 없음 = 심사·등록 전
+  const a = await D.createAssociation(e.DB, { slug: "sw2", name: "스위치2", kind: "esign" });
+  const pw = await hashPassword("pass1234");
+  await D.createUser(e.DB, { email: "sw2@a.kr", passwordHash: pw.hash, salt: pw.salt, name: "회장", role: "ADMIN", associationId: a.id });
+  const j = jar(); await post(e, j, "/login", { email: "sw2@a.kr", password: "pass1234" });
+
+  const html = await (await get(e, j, "/t/sw2/admin")).text();
+  assert.match(html, /자동화 켜기<\/button>/);
+  assert.match(html, /발송 준비\(알림톡 심사\)가 끝나지 않아 켤 수 없습니다/, "왜 못 켜는지 말해 줘야");
+
+  const r = await post(e, j, "/t/sw2/admin/notify-auto", { on: "1" }, "/t/sw2/admin");
+  assert.match(decodeURIComponent(r.headers.get("location") || ""), /err=1/);
+  assert.equal((await D.getAssociationById(e.DB, a.id)).notify_auto, 0, "켜지면 안 된다");
 });

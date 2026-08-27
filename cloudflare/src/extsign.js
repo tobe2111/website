@@ -53,7 +53,7 @@ export async function rememberOrigin(db, origin) {
 // 회원처럼 공용 /sign 주소를 보낼 수 없으므로, 발송을 이 한 곳으로 모아 둔다.
 // 반환: 보낸 수단("alimtalk" | "email") 또는 null(보낼 수단이 없거나 실패)
 export async function sendSignLink(env, db, { assoc, doc, signer, origin, remind = false }) {
-  const { sendOne, notifyEnabled, renderTemplate, templateButton } = await import("./notify.js");
+  const { sendOne, canAutoSend, renderTemplate, templateButton } = await import("./notify.js");
   const { sendEmailFor, emailEnabled, mailShell, mailButton } = await import("./email.js");
   const { esc } = await import("./util.js");
   if (!origin) return null; // 절대 주소를 모르면 깨진 링크가 된다 — 보내지 않는다
@@ -63,7 +63,7 @@ export async function sendSignLink(env, db, { assoc, doc, signer, origin, remind
   const kind = remind ? "sign_remind" : "sign_request";
   const text = renderTemplate(kind, { 상호: assoc.name, 이름: signer.name, 문서명: doc.title, 기한: doc.due_date || "미지정" });
 
-  if (D.isValidPhone(signer.phone || "") && notifyEnabled(env)) {
+  if (D.isValidPhone(signer.phone || "") && canAutoSend(env, assoc)) {
     const r = await sendOne(env, db, { assoc, kind, to: signer.phone, text,
       buttonName: templateButton(kind), buttonUrl: link });
     if (r.ok) return "alimtalk";
