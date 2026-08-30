@@ -1062,7 +1062,7 @@ export function urdealPage(ctx) {
       <div class="uv-col"><h4>이 홈페이지 (무료)</h4><ul><li>가게 소개·사진·소식</li><li>보여주기 쿠폰 (결제 없음)</li><li>지도·검색 노출</li></ul></div>
       <div class="uv-col is-urdeal"><h4>유어딜 (판매 채널)</h4><ul><li>이용권·교환권 실제 판매</li><li>동네딜로 신규 손님 유입</li><li>결제·정산 대행</li></ul></div>
     </div>
-    <p class="panel-hint" style="text-align:center">등록 문의: <a href="${base}/contact">상인회 문의하기</a> 또는 유어딜에서 직접 신청</p>
+    <p class="panel-hint">등록 문의: <a href="${base}/contact">상인회 문의하기</a> 또는 유어딜에서 직접 신청</p>
   </div></section>`;
   return html(layout({ title: "유어딜 연동", assoc, base, user, body, csrf, description: "이용권·교환권·동네딜 — 유어딜로 우리 가게 매출 만들기" }));
 }
@@ -2080,10 +2080,10 @@ export async function esignLanding(ctx) {
       <p class="price-num">${prices[k] === 0 ? "0" : prices[k].toLocaleString()}<small>원 / 월</small></p>
       <p class="price-note">${prices[k] === 0 ? "계약서 만들기·서명받기·증적 모두 포함" : "부가세 별도"}</p>
     </div>`).join("")}</div>
-    <p class="landing-lead" style="text-align:center">계약서를 만들고 서명받는 것 자체는 요금제에 포함됩니다.
+    <p class="landing-lead">계약서를 만들고 서명받는 것 자체는 요금제에 포함됩니다.
       <b>알림톡 발송만 건당 ${sendPrice.toLocaleString()}원</b>으로 따로 계산합니다 — 미리 충전해 두고 쓴 만큼 차감됩니다.
       계약 한 건에 서명자 1인당 3통(요청·본인확인·완료)이 나갑니다.</p>
-    <p class="panel-hint" style="text-align:center">API 호출·증적 다운로드·위변조 검증에는 추가 요금이 없습니다.</p>
+    <p class="panel-hint">API 호출·증적 다운로드·위변조 검증에는 추가 요금이 없습니다.</p>
   </div></section>`;
   const body = `
   <section class="landing-hero es-hero"><div class="container">
@@ -2119,14 +2119,14 @@ export async function esignLanding(ctx) {
          ["공개키 공개", "공개키를 상시 공개해 누구나 직접 검증할 수 있습니다"],
         ].map(([t, d]) => `<div class="feature-card"><h3>${esc(t)}</h3><p>${esc(d)}</p></div>`).join("")}
     </div>
-    <p class="panel-hint" style="text-align:center;margin-top:18px">
+    <p class="panel-hint" style="margin-top:18px">
       공개키: <a href="/.well-known/esign-public-key" target="_blank"><code>/.well-known/esign-public-key</code></a> ·
       시점 앵커: <a href="/.well-known/esign-anchors" target="_blank"><code>/.well-known/esign-anchors</code></a></p>
   </div></section>
 
   <section class="section"><div class="container narrow">
     <div class="section-head"><h2 class="section-title">우리 시스템에서 자동으로</h2></div>
-    <p class="landing-lead" style="text-align:center">한 번의 호출로 계약서 생성·서명 링크 발급·발송까지 끝납니다. API 호출은 무료입니다.</p>
+    <p class="landing-lead">한 번의 호출로 계약서 생성·서명 링크 발급·발송까지 끝납니다. API 호출은 무료입니다.</p>
     <pre class="code-block">curl -X POST ${esc(origin)}/api/v1/documents \
   -H "Authorization: Bearer sk_live_..." \
   -H "content-type: application/json" \
@@ -2136,12 +2136,12 @@ export async function esignLanding(ctx) {
     "variables": { "임대인": "김갑", "임차인": "이을", "보증금": "50,000,000" },
     "signers": [{ "name": "이을", "phone": "010-1234-5678" }]
   }'</pre>
-    <p class="panel-hint" style="text-align:center">서명·거절·완료는 웹훅으로 즉시 알려 드립니다. 전체 명세: <a href="/api/v1/docs" target="_blank">/api/v1/docs</a></p>
+    <p class="panel-hint">서명·거절·완료는 웹훅으로 즉시 알려 드립니다. 전체 명세: <a href="/api/v1/docs" target="_blank">/api/v1/docs</a></p>
   </div></section>
 
   <section class="section section-alt"><div class="container narrow">
     <div class="section-head"><h2 class="section-title">받으신 계약이 진짜인지 확인</h2></div>
-    <p class="landing-lead" style="text-align:center">확인서의 검증 코드를 넣으면 누구나 위변조 여부를 확인할 수 있습니다. 로그인은 필요 없습니다.</p>
+    <p class="landing-lead">확인서의 검증 코드를 넣으면 누구나 위변조 여부를 확인할 수 있습니다. 로그인은 필요 없습니다.</p>
     <form method="get" action="/verify" class="stack-form" style="max-width:420px;margin:0 auto">
       <label>검증 코드<input type="text" name="code" placeholder="확인서에 적힌 코드" required /></label>
       <button class="btn btn-primary btn-block">검증하기</button></form>
@@ -2171,7 +2171,7 @@ export async function esignLanding(ctx) {
 
   ${priceSection}
 
-  <section class="section"><div class="container narrow" style="text-align:center">
+  <section class="section"><div class="container narrow">
     <h2 class="section-title">지금 시작하세요</h2>
     <p class="landing-lead">1분이면 됩니다. 신용카드도 설치도 필요 없습니다.<br />
       쓰시던 계약서 양식을 옮겨 드리길 원하시면 문의를 남겨 주세요.</p>
@@ -2211,10 +2211,10 @@ export async function homepageLanding(ctx) {
       <p class="price-num">${prices[k] === 0 ? "0" : prices[k].toLocaleString()}<small>원 / 월</small></p>
       <p class="price-note">${prices[k] === 0 ? "계약서 만들기·서명받기·증적 모두 포함" : "부가세 별도"}</p>
     </div>`).join("")}</div>
-    <p class="landing-lead" style="text-align:center">계약서를 만들고 서명받는 것 자체는 요금제에 포함됩니다.
+    <p class="landing-lead">계약서를 만들고 서명받는 것 자체는 요금제에 포함됩니다.
       <b>알림톡 발송만 건당 ${sendPrice.toLocaleString()}원</b>으로 따로 계산합니다 — 미리 충전해 두고 쓴 만큼 차감됩니다.
       계약 한 건에 서명자 1인당 3통(요청·본인확인·완료)이 나갑니다.</p>
-    <p class="panel-hint" style="text-align:center">API 호출·증적 다운로드·위변조 검증에는 추가 요금이 없습니다.</p>
+    <p class="panel-hint">API 호출·증적 다운로드·위변조 검증에는 추가 요금이 없습니다.</p>
   </div></section>`;
   const body = `
   <section class="landing-hero es-hero"><div class="container">
@@ -2257,7 +2257,7 @@ export async function homepageLanding(ctx) {
       ${step(5, "계약으로 잇습니다", "상담 건에서 바로 가맹계약서를 만들어 서명 링크를 보냅니다. 이름·번호를 다시 옮겨 적지 않습니다.")}
       ${step(6, "엑셀로 내려받습니다", "CSV 한 번이면 영업팀 시트로 그대로 옮겨집니다.")}
     </div>
-    <p class="panel-hint" style="text-align:center;margin-top:18px">방문 수 대비 <b>전환율</b>과 <b>광고 출처별</b> 집계가 함께 나옵니다 —
+    <p class="panel-hint" style="margin-top:18px">방문 수 대비 <b>전환율</b>과 <b>광고 출처별</b> 집계가 함께 나옵니다 —
       어느 광고가 실제로 신청을 만들었는지 보고 예산을 옮기세요.</p>
   </div></section>
 
@@ -2286,7 +2286,7 @@ export async function homepageLanding(ctx) {
     </div>
   </div></section>
 
-  <section class="section"><div class="container narrow" style="text-align:center">
+  <section class="section"><div class="container narrow">
     <h2 class="section-title">가맹점 모집, 화면부터 바꿔 보세요</h2>
     <p class="landing-lead">문의는 무료입니다. 브랜드 자료만 있으면 어떤 구성이 맞을지 먼저 잡아 드립니다.</p>
     <div class="hero-actions" style="justify-content:center">
@@ -2331,7 +2331,7 @@ async function esignHome(ctx) {
     </div></section>
     <section class="section section-alt"><div class="container narrow">
       <div class="section-head"><h2 class="section-title">서명한 계약이 진짜인지 확인</h2></div>
-      <p class="landing-lead" style="text-align:center">확인서에 적힌 검증 코드를 넣으면 누구나 위변조 여부를 확인할 수 있습니다.</p>
+      <p class="landing-lead">확인서에 적힌 검증 코드를 넣으면 누구나 위변조 여부를 확인할 수 있습니다.</p>
       <form method="get" action="/verify" class="stack-form" style="max-width:420px;margin:0 auto">
         <label>검증 코드<input type="text" name="code" placeholder="확인서에 적힌 코드" required /></label>
         <button class="btn btn-primary btn-block">검증하기</button></form>
@@ -3535,7 +3535,7 @@ export async function platformLanding(ctx) {
   const bizCounts = new Map((await Promise.all(list.map(async (a) => [a.id, (await D.stats(db, a.id)).businesses]))));
   const safeColor = (c) => /^#[0-9a-fA-F]{3,8}$/.test(c || "") ? c : "#0b6e4f";
   const cards = list.map((a) => `<a class="tenant-card" href="${a.custom_domain ? "https://" + esc(a.custom_domain) : "/t/" + esc(a.slug)}">
-    <span class="tc-band" style="background:linear-gradient(135deg,${safeColor(a.brand_color)},${safeColor(a.brand_color)}cc)"><span class="tc-glow" aria-hidden="true"></span></span>
+    <span class="tc-band" style="background:${safeColor(a.brand_color)}"></span>
     <span class="tc-avatar">${a.logo ? `<img src="${esc(mediaUrl(a.logo))}" alt="" />` : `<b>${esc(a.name.slice(0, 1))}</b>`}</span>
     <span class="tc-body"><strong>${esc(a.name)}</strong><em>${esc(a.tagline || "")}</em>
       <span class="tc-meta">${STOREFRONT_SVG} 가입 점포 ${bizCounts.get(a.id) || 0}곳</span></span>

@@ -98,3 +98,38 @@ test("히어로에 떠다니는 광원이 없다", async () => {
   assert.ok(!/@keyframes hpFloat/.test(css), "광원을 움직이던 애니메이션이 남아 있습니다");
   assert.ok(!/\.biz-hero::before\{[^}]*blur\(/.test(css), "점포 화면 히어로에도 같은 광원이 있었습니다");
 });
+
+// 브랜드색에 다른 색을 섞은 사선 그라데이션, 글자에 씌운 그라데이션, 카드 위 빛무리 —
+// 셋 다 "예쁘게 만들어 주세요" 에 기계가 내놓는 기본값이다. 남겨 둘 그라데이션은
+// 사진 위 베일(글자가 읽혀야 한다)과 남의 브랜드색(유튜브·인스타)뿐이다.
+test("장식용 그라데이션이 없다", async () => {
+  const { readFileSync } = await import("node:fs");
+  const css = readFileSync(new URL("../public/css/app.css", import.meta.url), "utf8");
+  const src = readFileSync(new URL("../src/pages.js", import.meta.url), "utf8");
+  assert.ok(!/background-clip:text/.test(css), "글자에 씌운 그라데이션이 남아 있습니다");
+  assert.ok(!/\.tc-glow/.test(css + src), "카드 위 빛무리가 남아 있습니다");
+  const grads = [...css.matchAll(/linear-gradient\(([^)]*)\)/g)].map((m) => m[1]);
+  const decorative = grads.filter((g) => /var\(--brand|var\(--green/.test(g));
+  assert.deepEqual(decorative, [], "브랜드색 그라데이션이 남아 있습니다: " + decorative.join(" | "));
+});
+
+// 알약 모양 배지가 화면마다 열 개씩 떠 있으면 '무엇이 중요한지' 가 아니라 장식으로 읽힌다.
+// 정말 둥글어야 하는 것(토글 손잡이·진행 막대·번호 원·원형 버튼)만 남긴다.
+test("배지·태그가 알약 모양이 아니다", async () => {
+  const { readFileSync } = await import("node:fs");
+  const css = readFileSync(new URL("../public/css/app.css", import.meta.url), "utf8");
+  const pillOk = /^(\.progress|\.req-order|\.switch|\.ob-check|\.share-toast|\.sns-btn|\.gallery-item|\.market-open)/;
+  const pills = [...css.matchAll(/(^|\n)([.\w][^{\n]*)\{[^}]*border-radius:999px/g)]
+    .map((m) => m[2].trim()).filter((sel) => !pillOk.test(sel));
+  assert.deepEqual(pills, [], "알약 모양이 남아 있습니다: " + pills.join(", "));
+});
+
+// 0 30px 70px 짜리 그림자는 카드가 화면 위에 '뜬' 것처럼 보이게 한다.
+// 서류를 다루는 서비스에서는 실선 한 줄이 더 정직하다.
+test("카드가 화면 위에 뜨지 않는다", async () => {
+  const { readFileSync } = await import("node:fs");
+  const css = readFileSync(new URL("../public/css/app.css", import.meta.url), "utf8");
+  const blurs = [...css.matchAll(/--sh-\d:0 \d+px (\d+)px/g)].map((m) => Number(m[1]));
+  assert.ok(blurs.length >= 3, "그림자 토큰을 못 찾음");
+  assert.ok(Math.max(...blurs) <= 20, `그림자가 너무 큽니다(최대 ${Math.max(...blurs)}px)`);
+});
