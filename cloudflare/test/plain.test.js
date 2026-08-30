@@ -133,3 +133,45 @@ test("카드가 화면 위에 뜨지 않는다", async () => {
   assert.ok(blurs.length >= 3, "그림자 토큰을 못 찾음");
   assert.ok(Math.max(...blurs) <= 20, `그림자가 너무 큽니다(최대 ${Math.max(...blurs)}px)`);
 });
+
+// 브랜드색 후광은 사선(linear)뿐 아니라 방사형(radial)으로도 여섯 군데 더 있었다 —
+// 제목 뒤, 로그인 화면 뒤, 404 뒤, 초대 상자 뒤. 같은 장치이므로 같이 막는다.
+test("브랜드색 후광이 없다", async () => {
+  const { readFileSync } = await import("node:fs");
+  const css = readFileSync(new URL("../public/css/app.css", import.meta.url), "utf8");
+  const halos = [...css.matchAll(/radial-gradient\(([^)]*)\)/g)].map((m) => m[1])
+    .filter((g) => /var\(--brand|var\(--green/.test(g));
+  assert.deepEqual(halos, [], "브랜드색 방사형 후광이 남아 있습니다: " + halos.join(" | "));
+});
+
+// 한 페이지 안에서 글이 시작하는 세로선은 하나여야 한다.
+// 제목은 왼쪽 · 단계는 가운데 · 마무리는 가운데면, 읽는 눈이 절마다 자리를 다시 찾는다.
+test("제품 소개 화면의 정렬 축이 하나다", async () => {
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(new URL("../src/pages.js", import.meta.url), "utf8");
+  const from = src.indexOf("export async function esignLanding");
+  const to = src.indexOf("export async function", src.indexOf("export async function homepageLanding") + 10);
+  const seg = src.slice(from, to);
+  assert.ok(!/container narrow/.test(seg), "좁은 칸과 넓은 칸이 섞이면 왼쪽 끝이 두 개가 됩니다");
+  assert.ok(!/text-align:center/.test(seg), "가운데 정렬이 남아 있습니다");
+  assert.ok(!/justify-content:center/.test(seg), "가운데로 몬 단추 줄이 남아 있습니다");
+
+  const css = readFileSync(new URL("../public/css/app.css", import.meta.url), "utf8");
+  assert.match(css, /\.landing-hero\{[^}]*text-align:left/, "제품 소개 첫 화면도 같은 축이어야");
+  assert.match(css, /\.es-steps\{[^}]*margin:0\}/, "단계 목록이 가운데로 밀리면 안 됩니다");
+});
+
+// 열두 칸을 카드로 흩으면 '위에서 아래로' 라는 순서가 사라진다 —
+// 정작 손님이 알고 싶은 "내 페이지가 어떻게 생겼나" 를 말해 주지 못한다.
+test("모집 랜딩 소개는 카드 벽이 아니라 차례로 보여 준다", async () => {
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(new URL("../src/pages.js", import.meta.url), "utf8");
+  // '한 장에 들어가는 것' 절만 잘라 본다 — 함수 경계로 자르면 옆 화면의 격자까지 걸린다
+  const from = src.indexOf("한 장에 들어가는 것");
+  assert.ok(from > 0, "그 절을 못 찾음");
+  const seg = src.slice(from, src.indexOf("</section>", from));
+  assert.match(seg, /<ol class="page-outline">/, "완성된 페이지의 순서를 보여 줘야");
+  assert.ok(!/feature-grid/.test(seg), "카드 격자가 남아 있습니다");
+  // 열두 줄이 다 있어야 한다 — 짧아 보이려고 내용을 지운 게 아니다
+  assert.equal((seg.match(/\["[^"]+", "/g) || []).length, 12, "열두 줄이 그대로 있어야");
+});

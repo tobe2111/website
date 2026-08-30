@@ -116,7 +116,7 @@ img,video{max-width:100%;display:block}
 
 /* ---------- Hero (라이트·Apple 톤) ---------- */
 .hero{position:relative;overflow:hidden;color:var(--ink);background:var(--bg)}
-.hero-bg{position:absolute;inset:0;z-index:0;pointer-events:none;background:radial-gradient(90% 60% at 50% -8%, var(--brand-50), transparent 62%)}
+.hero-bg{display:none}
 .hero-bg::after{content:none}
 .hero-inner{position:relative;z-index:1;padding:clamp(40px,7vw,72px) 20px clamp(36px,5vw,56px)}
 .hero-eyebrow{display:inline-block;font-weight:600;font-size:.9rem;color:var(--brand-text);background:var(--surface);padding:7px 15px;border-radius:4px;border:1px solid var(--line-soft);box-shadow:var(--sh-1);margin-bottom:20px}
@@ -924,11 +924,11 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .domain-hint a{color:var(--brand-text)}
 
 /* ---------- 플랫폼 랜딩 ---------- */
-.landing-hero{position:relative;overflow:hidden;padding:clamp(56px,9vw,120px) 0 clamp(40px,7vw,80px);text-align:center;background:radial-gradient(100% 72% at 50% -12%, var(--brand-50), transparent 68%)}
+.landing-hero{position:relative;overflow:hidden;padding:clamp(56px,9vw,120px) 0 clamp(40px,7vw,80px);text-align:left;border-bottom:1px solid var(--line-soft)}
 .landing-title{font-size:clamp(2rem,6vw,3.6rem);font-weight:800;line-height:1.1;letter-spacing:-.035em;margin:10px 0 16px}
 .landing-title span{color:var(--brand-text)}
 .landing-lead{max-width:640px;margin:0 0 26px;color:var(--ink-soft);font-size:clamp(1rem,2.5vw,1.2rem);line-height:1.7}
-.landing-hero .hero-actions{justify-content:center}
+.landing-hero .hero-actions{justify-content:flex-start}
 .feature-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
 .feature-card{background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--r-lg);padding:26px;box-shadow:var(--sh-1);transition:box-shadow .25s}
 .feature-card:hover{box-shadow:var(--sh-2);border-color:var(--line)}
@@ -1026,7 +1026,6 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .row-toggle{display:flex;align-items:center;gap:10px}
 /* 404 (디자인: 그라디언트 숫자 + 브랜드 글로우) */
 .nf-wrap{position:relative;min-height:66vh;display:grid;place-items:center;padding:60px 20px;overflow:hidden}
-.nf-wrap::before{content:"";position:absolute;inset:0;background:radial-gradient(60% 50% at 50% 30%, var(--brand-50), transparent 70%);pointer-events:none}
 .nf-inner{position:relative;text-align:center;max-width:480px}
 .nf-num{font-size:clamp(72px,18vw,140px);font-weight:800;line-height:1;letter-spacing:-.04em;color:var(--line);margin-bottom:8px}
 .nf-title{font-size:clamp(1.4rem,4vw,1.9rem);font-weight:800;letter-spacing:-.02em;margin-bottom:10px}
@@ -1068,7 +1067,7 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .ops-body code{font-family:var(--mono);font-size:.85em;background:var(--bg-alt);padding:2px 6px;border-radius:5px}
 .ops-body a{color:var(--brand-text);font-weight:600;text-decoration:underline}
 /* 빈 상권 첫 상점 초대 카드 */
-.first-invite{position:relative;overflow:hidden;text-align:center;padding:clamp(40px,7vw,72px) 24px;border-radius:var(--r-xl);border:1px solid var(--line-soft);background:radial-gradient(80% 90% at 50% -10%, var(--brand-50), var(--surface) 70%);box-shadow:var(--sh-1)}
+.first-invite{position:relative;overflow:hidden;text-align:center;padding:clamp(40px,7vw,72px) 24px;border-radius:var(--r-xl);border:1px solid var(--line-soft);background:var(--surface);box-shadow:var(--sh-1)}
 .first-invite-badge{display:inline-block;font-size:.78rem;font-weight:800;letter-spacing:.08em;color:var(--brand-text);background:var(--surface);border:1px solid var(--line-soft);border-radius:4px;padding:7px 16px;box-shadow:var(--sh-1);margin-bottom:18px}
 .first-invite h3{font-size:clamp(1.3rem,3.4vw,1.8rem);font-weight:800;letter-spacing:-.02em;margin-bottom:12px}
 .first-invite p{color:var(--ink-soft);line-height:1.7;margin-bottom:24px}
@@ -1243,7 +1242,6 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 /* 쇼케이스 밴드 — 상호를 거대하게 반복하던 '야경 밴드'를 걷어내고,
    한 줄 문장 + 실제 숫자(점포·소식·행사)를 보여주는 조용한 잉크 밴드로 교체 */
 .showcase{position:relative;overflow:hidden;background:var(--ink-deep);color:#fff;padding:clamp(56px,8vw,88px) 0;text-align:center;margin:8px 0}
-.showcase::before{content:"";position:absolute;left:50%;top:-40%;transform:translateX(-50%);width:min(820px,120%);height:420px;background:radial-gradient(circle,color-mix(in oklab,var(--brand),transparent 78%),transparent 70%);filter:blur(70px);pointer-events:none}
 .sc-sky{display:none} /* 사각형 스카이라인 폐기 */
 .sc-inner{position:relative;z-index:1}
 .sc-eyebrow{font-size:clamp(11.5px,1.1vw,13px);font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.45);margin-bottom:16px}
@@ -1407,7 +1405,6 @@ a.hf-val:hover{text-decoration:underline}
 .stat-card.stat-alert .stat-num{color:var(--wait-fg)}
 /* 인증 화면 프리미엄 — 카드 뒤 은은한 브랜드 글로우 + 리치 섀도우 */
 .auth-wrap{position:relative}
-.auth-wrap::before{content:"";position:absolute;left:50%;top:-48px;transform:translateX(-50%);width:min(760px,120%);height:440px;background:radial-gradient(58% 60% at 50% 0%,var(--brand-tint),transparent 72%);opacity:.6;z-index:0;pointer-events:none}
 .auth-card{position:relative;z-index:1;box-shadow:0 18px 48px rgba(20,30,28,.09),0 3px 10px rgba(20,30,28,.05)}
 .auth-mark{background:var(--brand-700);color:#fff} /* 그라디언트 → 단색 (버튼·마크 규칙 통일) */
 
@@ -1638,7 +1635,7 @@ tr.is-loss td{background:var(--no-bg);color:var(--no-fg)}
 /* 전자계약 제품 랜딩 */
 .hero-note{margin-top:16px;color:var(--muted);font-size:.9rem}
 .hero-note a{color:var(--brand-text);font-weight:700}
-.es-steps{display:grid;gap:14px;max-width:760px;margin:0 auto}
+.es-steps{display:grid;gap:14px;max-width:760px;margin:0}
 .es-step{display:flex;gap:16px;align-items:flex-start;padding:18px 20px;background:var(--surface);
   border:1px solid var(--line-soft);border-radius:var(--r-lg);box-shadow:var(--sh-1)}
 .es-n{flex:none;width:34px;height:34px;border-radius:50%;background:var(--brand);color:#fff;
@@ -1646,6 +1643,39 @@ tr.is-loss td{background:var(--no-bg);color:var(--no-fg)}
 .es-step h3{font-size:1rem;font-weight:800;margin-bottom:4px}
 .es-step p{color:var(--ink-soft);line-height:1.65;font-size:.92rem}
 .field-note{display:block;margin-top:4px;color:var(--muted);font-size:.78rem;font-weight:400}
+
+/* ── 차례 목록 — 완성된 페이지를 위에서 아래로 훑는 형태.
+   열두 칸을 카드로 흩으면 순서가 사라진다. 왼쪽 세로선 하나가 '한 장' 임을 말해 준다. */
+.page-outline{max-width:760px;margin:0;padding:0 0 0 22px;list-style:none;counter-reset:po;border-left:2px solid var(--line)}
+.page-outline li{counter-increment:po;position:relative;display:grid;grid-template-columns:150px minmax(0,1fr);
+  gap:4px 18px;align-items:baseline;padding:11px 0;border-bottom:1px solid var(--line-soft)}
+.page-outline li:last-child{border-bottom:0}
+.page-outline li::before{content:counter(po);position:absolute;left:-34px;top:12px;width:22px;text-align:right;
+  font-size:.76rem;font-weight:600;color:var(--muted);font-variant-numeric:tabular-nums}
+.page-outline b{font-weight:700;letter-spacing:-.02em}
+.page-outline span{color:var(--muted);font-size:.92rem;line-height:1.6}
+/* 이 페이지가 존재하는 이유인 줄 하나는 눈에 걸려야 한다 */
+.page-outline li.is-key b{color:var(--brand-text)}
+.page-outline li.is-key::before{color:var(--brand-text);font-weight:800}
+@media (max-width:620px){
+  .page-outline{padding-left:18px}
+  .page-outline li{grid-template-columns:1fr;padding:10px 0}
+  .page-outline li::before{left:-30px;top:11px}
+}
+
+/* ── 요지 둘 — 나머지와 같은 크기로 늘어놓으면 무엇이 이 절의 요지인지 알 수 없다 */
+.lede-pair{display:grid;grid-template-columns:repeat(2,1fr);gap:clamp(24px,4vw,48px);max-width:900px}
+.lede h3{font-size:clamp(1.1rem,1.9vw,1.35rem);font-weight:700;letter-spacing:-.03em;margin-bottom:8px}
+.lede p{color:var(--ink-soft);line-height:1.72;font-size:.97rem}
+@media (max-width:720px){.lede-pair{grid-template-columns:1fr;gap:22px}}
+
+/* ── 당연히 되는 것들 — 카드가 아니라 줄로. 읽는 데 드는 품이 실제 중요도에 맞는다 */
+.plain-list{max-width:820px;margin:12px 0 0;padding:0;list-style:none}
+.plain-list li{display:grid;grid-template-columns:150px minmax(0,1fr);gap:4px 18px;align-items:baseline;
+  padding:12px 0;border-top:1px solid var(--line-soft)}
+.plain-list b{font-weight:700;letter-spacing:-.02em}
+.plain-list span{color:var(--muted);font-size:.92rem;line-height:1.6}
+@media (max-width:620px){.plain-list li{grid-template-columns:1fr;padding:11px 0}}
 
 /* =========================================================
    프랜차이즈 가맹점 모집 랜딩 (kind=franchise)

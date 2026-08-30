@@ -2124,7 +2124,7 @@ export async function esignLanding(ctx) {
       시점 앵커: <a href="/.well-known/esign-anchors" target="_blank"><code>/.well-known/esign-anchors</code></a></p>
   </div></section>
 
-  <section class="section"><div class="container narrow">
+  <section class="section"><div class="container">
     <div class="section-head"><h2 class="section-title">우리 시스템에서 자동으로</h2></div>
     <p class="landing-lead">한 번의 호출로 계약서 생성·서명 링크 발급·발송까지 끝납니다. API 호출은 무료입니다.</p>
     <pre class="code-block">curl -X POST ${esc(origin)}/api/v1/documents \
@@ -2139,17 +2139,16 @@ export async function esignLanding(ctx) {
     <p class="panel-hint">서명·거절·완료는 웹훅으로 즉시 알려 드립니다. 전체 명세: <a href="/api/v1/docs" target="_blank">/api/v1/docs</a></p>
   </div></section>
 
-  <section class="section section-alt"><div class="container narrow">
+  <section class="section section-alt"><div class="container">
     <div class="section-head"><h2 class="section-title">받으신 계약이 진짜인지 확인</h2></div>
     <p class="landing-lead">확인서의 검증 코드를 넣으면 누구나 위변조 여부를 확인할 수 있습니다. 로그인은 필요 없습니다.</p>
-    <form method="get" action="/verify" class="stack-form" style="max-width:420px;margin:0 auto">
+    <form method="get" action="/verify" class="stack-form" style="max-width:420px">
       <label>검증 코드<input type="text" name="code" placeholder="확인서에 적힌 코드" required /></label>
       <button class="btn btn-primary btn-block">검증하기</button></form>
   </div></section>
 
   <section class="section section-alt"><div class="container">
     <div class="section-head"><h2 class="section-title">법적으로 유효한가</h2></div>
-    <div class="container narrow">
     <p class="landing-lead">유효합니다. 「전자문서 및 전자거래 기본법」 제4조는 전자문서가 종이 문서와 같은 효력을 가진다고 정하고,
       「전자서명법」 제3조는 <b>전자서명이라는 이유만으로 효력을 부인할 수 없다</b>고 정합니다.
       2020년 개정으로 공인인증서 독점이 폐지되어, 지금은 <b>본인 확인과 위변조 방지가 되는 방식</b>이면 됩니다.</p>
@@ -2171,11 +2170,11 @@ export async function esignLanding(ctx) {
 
   ${priceSection}
 
-  <section class="section"><div class="container narrow">
+  <section class="section"><div class="container">
     <h2 class="section-title">지금 시작하세요</h2>
     <p class="landing-lead">1분이면 됩니다. 신용카드도 설치도 필요 없습니다.<br />
       쓰시던 계약서 양식을 옮겨 드리길 원하시면 문의를 남겨 주세요.</p>
-    <div class="hero-actions" style="justify-content:center">
+    <div class="hero-actions">
       <a href="/esign/signup" class="btn btn-primary btn-lg">무료로 시작하기</a>
       <a href="/apply?kind=esign" class="btn btn-ghost btn-lg">도입 문의</a></div>
   </div></section>`;
@@ -2229,8 +2228,9 @@ export async function homepageLanding(ctx) {
 
   <section class="section" id="included"><div class="container">
     <div class="section-head"><h2 class="section-title">한 장에 들어가는 것</h2>
-      <p class="section-lead">아래 섹션이 기본으로 들어갑니다. 필요 없는 섹션은 끄고, 순서는 직접 바꿉니다.</p></div>
-    <div class="feature-grid">
+      <p class="section-lead">완성된 페이지를 위에서 아래로 훑으면 이 순서입니다.
+        필요 없는 줄은 끄고, 순서는 끌어서 바꿉니다.</p></div>
+    <ol class="page-outline">
       ${[["히어로", "첫 화면에서 브랜드와 제안을 한 문장으로"],
          ["흐르는 띠", "핵심 숫자·강점을 반복 노출"],
          ["브랜드 소개", "왜 이 브랜드인지 설명하는 본문과 사진"],
@@ -2239,12 +2239,12 @@ export async function homepageLanding(ctx) {
          ["메뉴·상품", "대표 상품을 사진·가격과 함께"],
          ["가맹 절차", "상담부터 오픈까지의 단계"],
          ["가맹 비용", "표로 정리 · 상담 전에는 가려 두기 가능"],
-         ["상담 신청 폼", "이 페이지의 목적 — 연락처 수집"],
+         ["상담 신청 폼", "이 페이지의 목적 — 연락처 수집", true],
          ["매장 안내", "운영 중인 가맹점 목록과 지도"],
          ["자주 묻는 질문", "망설임을 미리 걷어내기"],
          ["고정 하단 바", "모든 페이지에서 전화·신청이 한 번에"],
-        ].map(([t, d]) => `<div class="feature-card"><h3>${esc(t)}</h3><p>${esc(d)}</p></div>`).join("")}
-    </div>
+        ].map(([t, d, key]) => `<li${key ? ' class="is-key"' : ""}><b>${esc(t)}</b><span>${esc(d)}</span></li>`).join("")}
+    </ol>
   </div></section>
 
   <section class="section section-alt" id="db"><div class="container">
@@ -2258,25 +2258,29 @@ export async function homepageLanding(ctx) {
       ${step(6, "엑셀로 내려받습니다", "CSV 한 번이면 영업팀 시트로 그대로 옮겨집니다.")}
     </div>
     <p class="panel-hint" style="margin-top:18px">방문 수 대비 <b>전환율</b>과 <b>광고 출처별</b> 집계가 함께 나옵니다 —
-      어느 광고가 실제로 신청을 만들었는지 보고 예산을 옮기세요.</p>
+      어느 광고가 실제로 신청을 만들었는지 보고 예산을 옮기세요.
+      인스타용·검색광고용 <b>문구를 따로 둔 랜딩</b>을 여러 벌 만들어 어느 쪽이 더 신청을 만드는지 나란히 비교할 수 있습니다.</p>
   </div></section>
 
   <section class="section"><div class="container">
-    <div class="section-head"><h2 class="section-title">맡기고 끝이 아니라, 직접 고칩니다</h2></div>
-    <div class="feature-grid">
+    <div class="section-head"><h2 class="section-title">맡기고 끝이 아니라, 직접 고칩니다</h2>
+      <p class="section-lead">문구 하나 바꾸려고 제작사에 메일을 쓰지 않습니다.</p></div>
+    <div class="lede-pair">
       ${[["관리자가 직접 수정", "문구·순서·사진을 관리자 화면에서 바꿉니다. 사진은 올리면 바로 붙고, 수정 요청을 기다릴 필요가 없습니다."],
-         ["초안으로 고치고 발행", "고치는 동안 손님에게는 옛 화면이 보입니다. 미리보기로 확인한 뒤 발행하세요."],
-         ["모바일 우선", "가맹 문의는 대부분 휴대폰에서 옵니다. 고정 하단 바로 전화·신청이 어느 페이지에서든 손끝에 있습니다."],
-         ["캠페인별 랜딩", "인스타용·검색광고용 문구를 따로 두고 어느 쪽이 더 신청을 만드는지 전환율로 비교합니다."],
+         ["초안으로 고치고 발행", "고치는 동안 손님에게는 옛 화면이 그대로 보입니다. 미리보기로 확인한 뒤 발행하세요."],
+        ].map(([t, d]) => `<div class="lede"><h3>${esc(t)}</h3><p>${esc(d)}</p></div>`).join("")}
+    </div>
+    <p class="section-lead" style="margin-top:34px">그 밖에 따로 말씀하지 않아도 기본으로 들어갑니다.</p>
+    <ul class="plain-list">
+      ${[["모바일 우선", "가맹 문의는 대부분 휴대폰에서 옵니다. 고정 하단 바로 전화·신청이 어느 화면에서든 손끝에 있습니다."],
+         ["우리 도메인 연결", "브랜드 도메인을 그대로 붙이고, 검색 노출 설정도 함께 잡아 드립니다."],
          ["개인정보 자동 파기", "상담에 필요한 항목만 받고, 처리 끝난 건은 정한 기간이 지나면 매일 자동으로 지웁니다."],
          ["스팸 차단", "봇 방지·허니팟·중복 제출 차단이 기본입니다. 쓰레기 DB가 쌓이지 않습니다."],
-         ["전자계약 연계", "상담 건에서 바로 가맹계약서를 만들어 링크로 보내고 그 자리에서 체결합니다."],
-         ["우리 도메인 연결", "브랜드 도메인을 그대로 붙일 수 있고, 검색 노출 설정도 함께 잡아 드립니다."],
-        ].map(([t, d]) => `<div class="feature-card"><h3>${esc(t)}</h3><p>${esc(d)}</p></div>`).join("")}
-    </div>
+        ].map(([t, d]) => `<li><b>${esc(t)}</b><span>${esc(d)}</span></li>`).join("")}
+    </ul>
   </div></section>
 
-  <section class="section section-alt"><div class="container narrow">
+  <section class="section section-alt"><div class="container">
     <div class="section-head"><h2 class="section-title">제작은 이렇게 진행됩니다</h2></div>
     <div class="es-steps">
       ${step(1, "문의 · 상담", "브랜드와 모집 목표를 듣습니다. 지금 쓰시는 자료가 있으면 그대로 받습니다.")}
@@ -2286,10 +2290,10 @@ export async function homepageLanding(ctx) {
     </div>
   </div></section>
 
-  <section class="section"><div class="container narrow">
+  <section class="section"><div class="container">
     <h2 class="section-title">가맹점 모집, 화면부터 바꿔 보세요</h2>
     <p class="landing-lead">문의는 무료입니다. 브랜드 자료만 있으면 어떤 구성이 맞을지 먼저 잡아 드립니다.</p>
-    <div class="hero-actions" style="justify-content:center">
+    <div class="hero-actions">
       <a href="/apply?kind=franchise" class="btn btn-primary btn-lg">제작 문의하기</a>
       <a href="/esign" class="btn btn-ghost btn-lg">전자계약도 보기</a></div>
   </div></section>`;
@@ -2301,7 +2305,7 @@ export async function homepageLanding(ctx) {
 async function esignHome(ctx) {
   const { db, assoc, base, user, csrf, query } = ctx;
   const notices = await D.listNotices(db, assoc.id, 3);
-  const noticeHtml = notices.length ? `<section class="section section-alt"><div class="container narrow">
+  const noticeHtml = notices.length ? `<section class="section section-alt"><div class="container">
     <h2 class="biz-section-title">공지</h2><ul class="notice-list">${notices.map((n) => `<li><a href="${base}/notices/${n.id}">
       <span class="notice-title">${esc(n.title)}</span><time>${esc(kstDate(n.created_at, "."))}</time></a></li>`).join("")}</ul></div></section>` : "";
   // 계약을 만드는 사람과 서명하는 사람이 같을 수 있다 — 해당하는 입구를 모두 보여 준다
@@ -2329,10 +2333,10 @@ async function esignHome(ctx) {
         ["누구나 검증", "검증코드로 제3자가 위변조를 확인"],
       ].map(([t, d]) => `<div class="feature-card"><h3>${esc(t)}</h3><p>${esc(d)}</p></div>`).join("")}</div>
     </div></section>
-    <section class="section section-alt"><div class="container narrow">
+    <section class="section section-alt"><div class="container">
       <div class="section-head"><h2 class="section-title">서명한 계약이 진짜인지 확인</h2></div>
       <p class="landing-lead">확인서에 적힌 검증 코드를 넣으면 누구나 위변조 여부를 확인할 수 있습니다.</p>
-      <form method="get" action="/verify" class="stack-form" style="max-width:420px;margin:0 auto">
+      <form method="get" action="/verify" class="stack-form" style="max-width:420px">
         <label>검증 코드<input type="text" name="code" placeholder="확인서에 적힌 코드" required /></label>
         <button class="btn btn-primary btn-block">검증하기</button></form>
     </div></section>
