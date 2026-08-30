@@ -460,9 +460,12 @@ export async function seedDemo(env, db, assoc, { emailDomain = "demo.kr" } = {})
       b.lat, b.lng, b.insta || "", i % 3 === 2 ? "proxy" : "self", at(-60 + i * 3), at(-Math.round(i * 2.4)));
     if (i === 4 || i === 17) await run(`UPDATE businesses SET day_off_date=? WHERE association_id=? AND slug=?`, ymd(0), aid, b.slug); // 두 곳은 '오늘 휴무' — 전부 영업중이면 오히려 가짜처럼 보임
     const bid = await firstId(`SELECT id FROM businesses WHERE association_id=? AND slug=?`, aid, b.slug);
-    // 대표 이미지 — 워커에 함께 배포된 정적 커버(/img/demo/*.jpg). 외부 호스트 의존 없음.
+    // 대표 이미지 — 워커에 함께 배포된 정적 커버(/img/demo/*.svg). 외부 호스트 의존 없음.
+    // 예전에는 가게마다 다른 파스텔 그라데이션이었다. 열다섯 장이 저마다 다른 색이면
+    // 색이 정보가 아니라 소음이 되고, 화면 전체가 '기계가 채운 자리' 로 읽힌다.
+    // 지금은 한 계열의 중성색 세 가지만 돌려 쓴다 — 진짜 사진이 들어오면 그대로 대체된다.
     if (b.cover) await run(`INSERT INTO media (business_id, kind, filename, thumb, caption) VALUES (?,'image',?,?,?)`,
-      bid, `/img/demo/${b.cover}.jpg`, `/img/demo/${b.cover}.jpg`, `${b.name} 대표 이미지`);
+      bid, `/img/demo/${b.cover}.svg`, `/img/demo/${b.cover}.svg`, `${b.name} 대표 이미지`);
 
     for (let j = 0; j < b.products.length; j++) {
       const [n, price, d] = b.products[j];

@@ -38,7 +38,7 @@ test("소식 피드: 등록 → 가게 페이지·홈 노출, 삭제 동작", as
   assert.equal(r.status, 303);
   assert.match(await (await get(env, jar(), `/t/seocho/business/${encodeURIComponent(b.slug)}`)).text(), /생딸기 크레페/);
   const home = await (await get(env, jar(), "/t/seocho")).text();
-  assert.match(home, /동네 새소식/);
+  assert.match(home, /가게가 전하는 소식/);
   assert.match(home, /생딸기 크레페/);
   const uid = (await D.listUpdates(env.DB, b.id))[0].id;
   await post(env, j, `/t/seocho/dashboard/updates/${uid}/delete`, {}, "/t/seocho/dashboard");

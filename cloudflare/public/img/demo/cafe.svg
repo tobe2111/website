@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" width="1200" height="800" role="img" aria-label="사진 준비 중">
+  <rect width="1200" height="800" fill="#eeeae4"/>
+  <path d="M0 560 L340 400 L560 520 L840 330 L1200 540 L1200 800 L0 800 Z" fill="#e2ddd5"/>
+  <circle cx="900" cy="210" r="52" fill="#e2ddd5"/>
+</svg>

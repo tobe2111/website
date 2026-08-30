@@ -151,7 +151,7 @@ img,video{max-width:100%;display:block}
 .section-lead{margin-top:6px;color:var(--muted);font-size:.92rem}
 .section-dark .section-lead{color:rgba(255,255,255,.82)}
 .section-more{text-align:center;margin-top:32px}
-.cta-inner{text-align:center;max-width:640px;margin-inline:auto}
+.cta-inner{text-align:left;max-width:640px;margin-inline:0}
 .cta-inner .btn{margin-top:22px}
 
 /* ---------- Chips / badges ---------- */
@@ -1016,7 +1016,7 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .hero-search .btn-primary:hover{background:var(--brand-600)}
 /* 업종 필터 — 큼직한 파스텔 타일 대신 가로로 훑는 칩 줄 */
 .cat-grid{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:24px}
-.cat-tile{display:inline-flex;flex-direction:row;align-items:center;gap:7px;padding:8px 14px 8px 10px;border-radius:var(--r-pill);background:var(--surface);border:1px solid var(--line-soft);text-align:left;transition:border-color .18s,background .18s}
+.cat-tile{display:inline-flex;flex-direction:row;align-items:center;gap:7px;padding:8px 14px 8px 10px;border-radius:6px;background:var(--surface);border:1px solid var(--line-soft);text-align:left;transition:border-color .18s,background .18s}
 .cat-tile:hover{transform:none;box-shadow:none;border-color:var(--brand-500);background:var(--brand-tint)}
 .cat-ico{display:grid;place-items:center;width:22px;height:22px;border-radius:0;background:none;color:var(--brand-text)}
 .cat-ico svg{width:17px;height:17px}
@@ -1139,12 +1139,12 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .mb-chev{flex:none;display:grid;place-items:center;width:32px;height:32px;color:var(--muted);transition:transform .2s var(--ease),color .2s}
 .map-banner:hover .mb-chev{color:var(--brand-text);transform:translateX(3px)}
 /* 가입 CTA — 웜 패널 유지, 장식 글로우 제거 */
-.join-cta{position:relative;overflow:hidden;text-align:center;padding:clamp(32px,5vw,52px) 24px;border-radius:var(--r-lg);border:1px solid var(--line-soft);background:var(--bg-alt)}
+.join-cta{position:relative;overflow:hidden;text-align:left;padding:clamp(32px,5vw,52px) 24px;border-radius:var(--r-lg);border:1px solid var(--line-soft);background:var(--bg-alt)}
 .jc-glow{display:none}
-.jc-mark{position:relative;width:44px;height:44px;border-radius:var(--r-md);margin:0 auto 18px;background:var(--brand-tint);color:var(--brand-text)}
+.jc-mark{position:relative;width:44px;height:44px;border-radius:var(--r-md);margin:0 0 18px;background:var(--brand-tint);color:var(--brand-text)}
 .jc-mark svg{width:22px;height:22px}
 .join-cta h2{position:relative;font-size:clamp(1.25rem,2.6vw,1.6rem);font-weight:700;letter-spacing:-.025em;margin-bottom:10px}
-.join-cta p{position:relative;max-width:42ch;margin:0 auto 24px;color:var(--muted);line-height:1.75;font-size:.95rem}
+.join-cta p{position:relative;max-width:52ch;margin:0 0 24px;color:var(--muted);line-height:1.75;font-size:.95rem}
 
 /* 행사 이미지 카드 (시안: 16:10 사진 + 오버레이 + 날짜 칩) */
 .event-photo-card{position:relative;aspect-ratio:16/10;border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--sh-1);transition:box-shadow .25s}
@@ -1216,7 +1216,7 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .feat-search input{flex:1;min-width:0;padding:12px 18px;border:1px solid var(--line);border-radius:var(--r-pill);background:var(--surface);font-size:.95rem}
 .feat-search input:focus{outline:none;border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-ring)}
 .feat-search .btn{border-radius:var(--r-pill);padding-inline:16px;display:inline-flex;align-items:center}
-.feat-more{border-radius:var(--r-pill)}
+.feat-more{border-radius:6px}
 /* 바로가기 카드 — 민트/베이지/포레스트 3색 조합을 버리고 한 가지 표면으로 통일.
    서로 다른 색 카드 세 장이 나란한 배치가 아마추어 느낌의 큰 원인이었습니다. */
 .feat-cards{display:grid;grid-template-columns:1fr 1fr;gap:14px}
@@ -1226,7 +1226,7 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .feat-card .fc-ico svg{width:21px;height:21px}
 .feat-card .fc-txt{display:flex;flex-direction:column;gap:2px;min-width:0}
 .feat-card .fc-txt strong{font-size:1rem;font-weight:700;letter-spacing:-.02em;color:var(--ink)}
-.feat-card .fc-txt em{font-style:normal;font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.feat-card .fc-txt em{font-style:normal;font-size:.78rem;color:var(--muted)}
 .feat-card::after{content:"›";margin-left:auto;padding-left:8px;font-size:1.25rem;line-height:1;color:var(--line);transition:color .2s,transform .2s var(--ease)}
 .feat-card:hover::after{color:var(--brand-text);transform:translateX(2px)}
 .feat-mint{grid-row:span 2}
@@ -1241,18 +1241,11 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 
 /* 쇼케이스 밴드 — 상호를 거대하게 반복하던 '야경 밴드'를 걷어내고,
    한 줄 문장 + 실제 숫자(점포·소식·행사)를 보여주는 조용한 잉크 밴드로 교체 */
-.showcase{position:relative;overflow:hidden;background:var(--ink-deep);color:#fff;padding:clamp(56px,8vw,88px) 0;text-align:center;margin:8px 0}
+.showcase{position:relative;overflow:hidden;background:var(--ink-deep);color:#fff;padding:clamp(52px,7vw,80px) 0;text-align:left;margin:8px 0}
 .sc-sky{display:none} /* 사각형 스카이라인 폐기 */
 .sc-inner{position:relative;z-index:1}
-.sc-eyebrow{font-size:clamp(11.5px,1.1vw,13px);font-weight:600;letter-spacing:.08em;color:rgba(255,255,255,.45);margin-bottom:16px}
-.sc-big{font-size:clamp(1.35rem,3vw,2rem);font-weight:600;line-height:1.5;letter-spacing:-.025em;max-width:32ch;margin:0 auto 10px;color:rgba(255,255,255,.95);text-wrap:balance}
-.sc-sub{color:rgba(255,255,255,.5);font-size:.95rem;margin-bottom:30px}
-.sc-stats{display:flex;justify-content:center;flex-wrap:wrap;gap:clamp(28px,6vw,64px);margin:0 0 32px;padding-top:28px;border-top:1px solid rgba(255,255,255,.1)}
-.sc-stats div{display:grid;gap:5px}
-.sc-stats dt{order:2;font-size:.78rem;letter-spacing:.08em;color:rgba(255,255,255,.45)}
-.sc-stats dd{order:1;font-size:clamp(1.6rem,3.4vw,2.1rem);font-weight:600;letter-spacing:-.03em;line-height:1}
-.showcase .btn-primary{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.28);box-shadow:none}
-.showcase .btn-primary:hover{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.5)}
+.sc-big{font-size:clamp(1.35rem,3vw,2rem);font-weight:600;line-height:1.5;letter-spacing:-.025em;max-width:34ch;margin:0 0 10px;color:rgba(255,255,255,.95);text-wrap:balance}
+.sc-sub{color:rgba(255,255,255,.5);font-size:.95rem;margin-bottom:0;max-width:52ch}
 
 /* ===================== 프리미엄 폴리시 (v3.1) ===================== */
 :root{
@@ -1267,8 +1260,6 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
   --line:#e2e0da; --line-soft:#edebe5;
 }
 /* 스크롤 리빌 */
-html.reveal-on .reveal{opacity:0;transform:translateY(28px);transition:opacity .8s var(--ease),transform .8s var(--ease)}
-html.reveal-on .reveal.in{opacity:1;transform:none}
 /* 프리미엄 타이포 — Pretendard, 큰 디스플레이 + 조밀한 자간 */
 .hi-title{font-weight:800;letter-spacing:-.035em;line-height:1.12}
 .hi-eyebrow{letter-spacing:.18em;font-size:clamp(11px,1.2vw,13px);opacity:.82;font-weight:600}
@@ -1367,9 +1358,8 @@ a.hf-val:hover{text-decoration:underline}
 .hp-panel .btn-primary{margin-top:4px;background:#fff;color:var(--ink-deep)}
 .hp-panel .btn-primary:hover{background:rgba(255,255,255,.86)}
 @media (max-width:940px){
-  .hp-inner{grid-template-columns:1fr;text-align:center;gap:30px;padding-block:clamp(48px,8vw,72px) clamp(80px,10vw,104px)}
-  .hp-sub,.hp-search{margin-inline:auto}
-  .hp-panel{text-align:left;max-width:420px;margin-inline:auto;width:100%}
+  .hp-inner{grid-template-columns:1fr;text-align:left;gap:30px;padding-block:clamp(48px,8vw,72px) clamp(80px,10vw,104px)}
+  .hp-panel{text-align:left;max-width:420px;width:100%}
 }
 /* 한글에는 넓은 자간이 어울리지 않습니다 (자간 .2em 이면 '함 께  만 드 는' 처럼 흩어짐) */
 .hp-eyebrow{font-weight:600;font-size:clamp(11.5px,1.1vw,13px);letter-spacing:.08em;color:rgba(255,255,255,.52)}
@@ -1423,13 +1413,6 @@ a.hf-val:hover{text-decoration:underline}
 .step-cta span{font-size:.87rem;color:var(--muted)}
 
 /* 입점 혜택 6칸 */
-.benefit-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
-.benefit-card{padding:22px;background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--r-lg);transition:border-color .2s,box-shadow .25s}
-.benefit-card:hover{border-color:var(--line);box-shadow:var(--sh-2)}
-.bc-ico{display:grid;place-items:center;width:38px;height:38px;border-radius:var(--r-md);background:var(--brand-tint);color:var(--brand-text);margin-bottom:14px}
-.bc-ico svg{width:19px;height:19px}
-.benefit-card strong{display:block;font-size:1rem;font-weight:600;letter-spacing:-.02em;margin-bottom:6px}
-.benefit-card p{font-size:.88rem;line-height:1.7;color:var(--muted)}
 
 /* 자주 묻는 질문 — 2열 아코디언 */
 .faq-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 20px;align-content:start}
@@ -1647,7 +1630,7 @@ tr.is-loss td{background:var(--no-bg);color:var(--no-fg)}
 /* ── 차례 목록 — 완성된 페이지를 위에서 아래로 훑는 형태.
    열두 칸을 카드로 흩으면 순서가 사라진다. 왼쪽 세로선 하나가 '한 장' 임을 말해 준다. */
 .page-outline{max-width:760px;margin:0;padding:0 0 0 22px;list-style:none;counter-reset:po;border-left:2px solid var(--line)}
-.page-outline li{counter-increment:po;position:relative;display:grid;grid-template-columns:150px minmax(0,1fr);
+.page-outline li{counter-increment:po;position:relative;display:grid;grid-template-columns:minmax(130px,170px) minmax(0,1fr);
   gap:4px 18px;align-items:baseline;padding:11px 0;border-bottom:1px solid var(--line-soft)}
 .page-outline li:last-child{border-bottom:0}
 .page-outline li::before{content:counter(po);position:absolute;left:-34px;top:12px;width:22px;text-align:right;
@@ -1670,8 +1653,9 @@ tr.is-loss td{background:var(--no-bg);color:var(--no-fg)}
 @media (max-width:720px){.lede-pair{grid-template-columns:1fr;gap:22px}}
 
 /* ── 당연히 되는 것들 — 카드가 아니라 줄로. 읽는 데 드는 품이 실제 중요도에 맞는다 */
-.plain-list{max-width:820px;margin:12px 0 0;padding:0;list-style:none}
-.plain-list li{display:grid;grid-template-columns:150px minmax(0,1fr);gap:4px 18px;align-items:baseline;
+.plain-list{max-width:820px;margin:0;padding:0;list-style:none}
+.plain-list:first-child li:first-child{border-top:0}
+.plain-list li{display:grid;grid-template-columns:minmax(150px,190px) minmax(0,1fr);gap:4px 18px;align-items:baseline;
   padding:12px 0;border-top:1px solid var(--line-soft)}
 .plain-list b{font-weight:700;letter-spacing:-.02em}
 .plain-list span{color:var(--muted);font-size:.92rem;line-height:1.6}
@@ -1682,8 +1666,8 @@ tr.is-loss td{background:var(--no-bg);color:var(--no-fg)}
    상인회 홈보다 대비를 크게 준다 — 광고를 타고 들어온 사람은 3초 안에 판단한다.
    색은 테넌트 --brand 에서 파생되므로 브랜드마다 다른 얼굴이 나온다.
    ========================================================= */
-.fr-eyebrow{display:inline-block;font-size:.8rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase;
-  color:var(--brand-text);background:var(--brand-50);padding:6px 14px;border-radius:var(--r-pill);margin-bottom:18px}
+.fr-eyebrow{display:inline-block;font-size:.8rem;font-weight:700;letter-spacing:0;
+  color:var(--brand-text);background:var(--brand-50);padding:6px 12px;border-radius:4px;margin-bottom:18px}
 .fr-eyebrow.center{display:block;width:max-content;margin-inline:auto}
 .fr-hl{color:var(--brand-text);white-space:nowrap}
 .fr-head{margin-bottom:34px}
@@ -1729,7 +1713,7 @@ tr.is-loss td{background:var(--no-bg);color:var(--no-fg)}
   border-radius:var(--r-lg);box-shadow:var(--sh-1);transition:.16s var(--ease)}
 .fr-strength:hover{box-shadow:var(--sh-2);border-color:var(--brand-300)}
 .fr-strength-no{display:inline-block;font-size:.74rem;font-weight:800;letter-spacing:.08em;color:var(--brand-text);
-  background:var(--brand-50);padding:4px 10px;border-radius:var(--r-pill);margin-bottom:12px}
+  background:var(--brand-50);padding:4px 10px;border-radius:4px;margin-bottom:12px}
 .fr-strength strong{display:block;font-size:1.08rem;font-weight:800;line-height:1.4}
 .fr-strength p{margin-top:8px;color:var(--ink-soft);font-size:.92rem;line-height:1.7}
 
@@ -1827,7 +1811,7 @@ body:has(.fr-sticky){padding-bottom:68px}
 .lead-table select{font-size:.8rem;padding:4px 6px}
 .lead-msg summary{font-size:.8rem;color:var(--brand-text);cursor:pointer;font-weight:700}
 .lead-msg p{margin-top:6px;font-size:.85rem;color:var(--ink-soft);max-width:260px;white-space:pre-wrap}
-.pill{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:var(--r-pill);
+.pill{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:4px;
   border:1px solid var(--line);background:var(--surface);font-size:.82rem;font-weight:700;color:var(--ink-soft)}
 .pill:hover{border-color:var(--brand-300)}
 .pill-on{background:var(--brand);border-color:var(--brand);color:var(--on-brand)}
@@ -1847,7 +1831,7 @@ body:has(.fr-sticky){padding-bottom:68px}
 .asset-grid li.empty{grid-column:1/-1}
 .img-field{display:grid;gap:6px;padding:10px;border:1px dashed var(--line);border-radius:var(--r-md);background:var(--surface-2)}
 .img-field-preview img{max-height:110px;width:auto;border-radius:var(--r-sm)}
-.draft-mark{color:var(--wait-fg);background:var(--wait-bg);padding:1px 8px;border-radius:var(--r-pill);font-size:.82rem}
+.draft-mark{color:var(--wait-fg);background:var(--wait-bg);padding:1px 8px;border-radius:4px;font-size:.82rem}
 .preview-bar{position:sticky;top:var(--header-h);z-index:50;background:var(--wait-bg);color:var(--wait-fg);
   border-bottom:1px solid var(--wait);padding:10px 20px;text-align:center;font-size:.9rem;font-weight:700}
 .preview-bar a{margin-left:10px;text-decoration:underline}

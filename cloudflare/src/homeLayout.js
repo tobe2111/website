@@ -148,9 +148,9 @@ export function defaultLayout(assocName = "우리 상인회") {
     { type: "hero", enabled: true, eyebrow: "함께 만드는 우리 동네", title: "", highlight: "", subtitle: "", primaryLabel: "", showStats: false },
     { type: "featurecards", enabled: true, title: "", lead: "" },
     { type: "businesses", enabled: true, title: "지금 문 연 가게", lead: "" },
-    { type: "updates", enabled: true, title: "동네 새소식" },
+    { type: "updates", enabled: true, title: "가게가 전하는 소식" },
     { type: "mapbanner", enabled: true, title: "우리 동네 점포 지도", subtitle: "" },
-    { type: "notices", enabled: true, title: "동네 소식" },
+    { type: "notices", enabled: true, title: "상인회 공지" },
     { type: "events", enabled: true, title: "다가오는 행사" },
     { type: "showcase", enabled: true, title: "", lead: "" },
     { type: "steps", enabled: true, title: "입점은 이렇게 진행됩니다", lead: "" },
@@ -186,7 +186,7 @@ export function parseLayout(json, assocName) {
     // 구버전 업그레이드: 동네 새소식 섹션이 없으면 업체 섹션 뒤에 추가
     if (!out.some((s) => s.type === "updates")) {
       const i = out.findIndex((s) => s.type === "businesses");
-      out.splice(i >= 0 ? i + 1 : out.length, 0, { type: "updates", enabled: true, title: "동네 새소식" });
+      out.splice(i >= 0 ? i + 1 : out.length, 0, { type: "updates", enabled: true, title: "가게가 전하는 소식" });
     }
     // 안내 섹션 업그레이드 — 점포가 적은 상권에서 홈이 텅 비지 않게, 가입 배너 앞에 순서대로 주입
     const guides = [
@@ -263,7 +263,7 @@ function renderSection(s, deps) {
       return featureCardsSection(s, deps);
     case "updates":
       if (!deps.updatesHtml) return ""; // 소식 없으면 섹션 숨김
-      return sectionWrap("", s.title || "동네 새소식", "", `<div class="update-grid">${deps.updatesHtml}</div>`);
+      return sectionWrap("", s.title || "가게가 전하는 소식", "", `<div class="update-grid">${deps.updatesHtml}</div>`);
     case "mapbanner": {
       const n = deps.stats ? deps.stats.businesses : 0; // counts.businesses 는 페이지당 카드 수 — 전체 수는 stats
       if (!n) return ""; // 점포가 0곳이면 빈 지도로 보내는 배너일 뿐이라 숨깁니다
@@ -277,24 +277,19 @@ function renderSection(s, deps) {
         </a></div></section>`;
     }
     case "showcase": {
-      // 상호를 거대하게 반복하는 대신, 한 줄 문장 + 실제 숫자를 보여줍니다.
-      const nm = (deps.assoc && deps.assoc.name) || "우리 상인회";
+      // 이 자리는 상인회가 자기 목소리로 한 문장 말하는 곳이다. 그 이상을 넣지 않는다.
+      //
+      // 예전에는 여기에 가입 점포·공지·행사 숫자를 크게 세 개 박았는데,
+      //   ① 첫 화면 오른쪽 정보 패널이 이미 같은 세 숫자를 보여 준다 — 한 페이지에 두 번이었다.
+      //   ② 25곳·6건·3건 을 2rem 으로 키우면 자랑이 아니라 초라해 보인다.
+      //      작은 숫자는 크게 쓸수록 작아 보인다.
+      // 안내 단추도 뺐다 — 바로 위 점포 목록과 맨 아래 가입 유도가 이미 같은 곳으로 보낸다.
       const big = esc(s.title || (deps.assoc && deps.assoc.tagline) || "우리 동네 상권의 오늘을 함께 만들어 갑니다.");
       const sub = esc(s.lead || "");
-      const st = deps.stats || {};
-      const nums = [["가입 점포", st.businesses], ["공지·소식", st.notices], ["행사", st.events]]
-        .filter(([, v]) => Number(v) > 0)
-        .map(([k, v]) => `<div><dt>${k}</dt><dd>${Number(v).toLocaleString("ko-KR")}</dd></div>`)
-        .join("");
       return `<section class="showcase">
         <div class="container sc-inner">
-          <p class="sc-eyebrow">${esc(nm)}</p>
           <p class="sc-big">${big}</p>
           ${sub ? `<p class="sc-sub">${sub}</p>` : ""}
-          ${nums ? `<dl class="sc-stats">${nums}</dl>` : ""}
-          ${Number(st.businesses) > 0
-            ? `<a class="btn btn-primary" href="${deps.base}/businesses">가입 점포 둘러보기</a>`
-            : `<a class="btn btn-primary" href="${deps.base}/register">우리 가게 입점 신청</a>`}
         </div></section>`;
     }
     case "steps": {
@@ -308,11 +303,11 @@ function renderSection(s, deps) {
          <span>가입비·이용료 없음 · 사진은 나중에 올려도 됩니다</span></div>`);
     }
     case "benefits": {
-      const cards = DEFAULT_BENEFITS.map(([k, t, d]) => `<li class="benefit-card">
-        <span class="bc-ico" aria-hidden="true">${BENEFIT_ICONS[k]}</span>
-        <strong>${t}</strong><p>${d}</p>
-      </li>`).join("");
-      return sectionWrap("", s.title || "입점하면 생기는 것", s.lead || "", `<ul class="benefit-grid">${cards}</ul>`);
+      // 여섯 칸 카드 격자였다. '제목 한 줄 + 설명 한 줄' 이 여섯 번 반복되는 것은
+      // 카드가 아니라 목록이다 — 카드로 만들면 읽는 품만 늘고 아무것도 더 말해 주지 않는다.
+      // 이 화면에서 카드 모양은 '사진이 있는 가게' 하나만 쓴다. 그래야 카드가 뜻을 갖는다.
+      const rows = DEFAULT_BENEFITS.map(([, t, d]) => `<li><b>${t}</b><span>${d}</span></li>`).join("");
+      return sectionWrap("", s.title || "입점하면 생기는 것", s.lead || "", `<ul class="plain-list">${rows}</ul>`);
     }
     case "faq": {
       const items = DEFAULT_FAQ.map(([q, a]) => `<details class="faq-item"><summary>${q}</summary><p>${a}</p></details>`).join("");
@@ -420,14 +415,15 @@ function heroSection(s, deps) {
 // 바로가기 카드 밴드 — 왼쪽 소개(제목·문구·검색·버튼) + 오른쪽 3색 파스텔 카드가 히어로에 겹침
 function featureCardsSection(s, deps) {
   const base = deps.base;
+  const st = deps.stats || {};
   const cards = [
-    ["mint", "가입 점포 찾기", "Find member stores", `${base}/businesses`, FC_ICONS.store],
-    ["beige", "점포 지도", "Store map", `${base}/map`, FC_ICONS.map],
-    ["forest", "공지·소식", "News & notices", `${base}/notices`, FC_ICONS.news],
+    ["mint", "가입 점포 찾기", st.businesses ? `${Number(st.businesses).toLocaleString("ko-KR")}곳` : "업종·이름으로", `${base}/businesses`, FC_ICONS.store],
+    ["beige", "점포 지도", "걸어서 찾아가기", `${base}/map`, FC_ICONS.map],
+    ["forest", "공지·소식", st.notices ? `${Number(st.notices).toLocaleString("ko-KR")}건` : "상인회 알림", `${base}/notices`, FC_ICONS.news],
   ];
-  const cardHtml = cards.map(([tone, ko, en, href, ico]) => `<a class="feat-card feat-${tone}" href="${href}">
+  const cardHtml = cards.map(([tone, ko, sub, href, ico]) => `<a class="feat-card feat-${tone}" href="${href}">
       <span class="fc-ico" aria-hidden="true">${ico}</span>
-      <span class="fc-txt"><strong>${ko}</strong><em>${en}</em></span>
+      <span class="fc-txt"><strong>${ko}</strong><em>${sub}</em></span>
     </a>`).join("");
   return `<section class="feat-band"><div class="container">
     <div class="feat-cards feat-cards-row">${cardHtml}</div>

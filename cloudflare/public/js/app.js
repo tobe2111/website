@@ -105,31 +105,10 @@ if ("serviceWorker" in navigator) {
   setTimeout(apply, 3000); // 로드 이벤트 유실 대비
 })();
 
-// 스크롤 리빌 — 섹션이 뷰포트에 들어오면 아래에서 떠오르며 페이드인 (고급 미세 모션)
-// JS·IntersectionObserver 있을 때만 숨김 상태 적용(reveal-on) → JS 실패 시 FOUC 없음. 모션 최소화는 존중.
-(function () {
-  if (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-  if (!("IntersectionObserver" in window)) return;
-  var els = Array.prototype.slice.call(document.querySelectorAll("main > section"));
-  if (els.length < 2) return; // 단일 섹션 페이지(로그인 등)는 생략
-  document.documentElement.classList.add("reveal-on");
-  var io = new IntersectionObserver(function (entries) {
-    entries.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } });
-  }, { rootMargin: "0px 0px -8% 0px", threshold: 0.08 });
-  els.forEach(function (el, i) {
-    if (i === 0) return; // 첫 섹션(히어로)은 즉시 노출
-    el.classList.add("reveal");
-    io.observe(el);
-  });
-  // 이미 화면에 보이는(스크롤 없이 보이는) 섹션 즉시 표시 (관찰 타이밍 사각 보정)
-  setTimeout(function () {
-    els.forEach(function (el) {
-      if (!el.classList.contains("reveal")) return;
-      var r = el.getBoundingClientRect();
-      if (r.top < window.innerHeight * 0.92) el.classList.add("in");
-    });
-  }, 60);
-})();
+// 스크롤 리빌(섹션이 아래에서 떠오르며 페이드인)은 걷어냈다.
+// 절마다 0.8초씩 떠오르는 연출은 '기계가 만든 랜딩페이지' 의 표시이기도 하지만,
+// 그보다 손님이 보려는 것을 0.8초씩 늦춘다. 가게를 찾으러 온 사람에게는 방해다.
+// 내용은 스크롤하는 순간 이미 거기 있어야 한다.
 
 // 전화 클릭 집계 — 모바일 랜딩에서 통화 버튼은 상담 폼만큼 큰 전환 경로인데,
 // 링크를 눌러 앱이 뜨는 순간 페이지가 사라져 보통 집계에서 빠진다.

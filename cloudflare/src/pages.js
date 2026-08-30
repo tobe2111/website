@@ -3556,9 +3556,14 @@ export async function platformLanding(ctx) {
   </div></section>
   <section class="section" id="features"><div class="container">
     <div class="section-head"><h2 class="section-title">상인회에 필요한 모든 것</h2></div>
-    <div class="feature-grid">
-      ${[["가입 점포 안내", "점포별 소개·사진·영상(유튜브·릴스 링크)"], ["점포 지도", "네이버 지도에 우리 상권 점포를 한눈에"], ["공지·소식", "카테고리·검색되는 공지 게시판"], ["회원 게시판", "회원 전용 소통·다중 사진"], ["전자 동의서", "동의서·계약 전자서명(순차·검증)"], ["모바일 앱", "홈 화면 추가·설치형(PWA)"]].map(([t, d]) => `<div class="feature-card"><h3>${t}</h3><p>${d}</p></div>`).join("")}
-    </div></div></section>
+    <ul class="plain-list">
+      ${[["가입 점포 안내", "점포별 소개와 사진·영상(유튜브·릴스 링크를 그대로 붙입니다)"],
+         ["점포 지도", "네이버 지도 위에 우리 상권 점포를 한눈에"],
+         ["공지·소식", "카테고리로 나뉘고 검색되는 공지 게시판"],
+         ["회원 게시판", "회원만 들어오는 소통 공간 · 사진 여러 장"],
+         ["전자 동의서", "동의서·계약을 링크로 보내고 그 자리에서 서명받습니다"],
+        ].map(([t, d]) => `<li><b>${esc(t)}</b><span>${esc(d)}</span></li>`).join("")}
+    </ul></div></section>
   <section class="section section-alt"><div class="container">
     <div class="section-head"><h2 class="section-title">함께하는 상인회</h2></div>
     <div class="landing-assoc-grid">${cards}</div></div></section>

@@ -175,3 +175,32 @@ test("모집 랜딩 소개는 카드 벽이 아니라 차례로 보여 준다", 
   // 열두 줄이 다 있어야 한다 — 짧아 보이려고 내용을 지운 게 아니다
   assert.equal((seg.match(/\["[^"]+", "/g) || []).length, 12, "열두 줄이 그대로 있어야");
 });
+
+// 절마다 0.8초씩 떠오르는 스크롤 리빌은 '기계가 만든 랜딩페이지' 의 표시이자,
+// 손님이 보려는 것을 0.8초씩 늦추는 방해물이다. 가게를 찾으러 온 사람에게는 특히.
+test("스크롤 리빌이 없다", async () => {
+  const { readFileSync } = await import("node:fs");
+  const css = readFileSync(new URL("../public/css/app.css", import.meta.url), "utf8");
+  const js = readFileSync(new URL("../public/js/app.js", import.meta.url), "utf8");
+  assert.ok(!/reveal-on/.test(css + js), "스크롤 리빌이 남아 있습니다");
+});
+
+// 한글 화면에 영문 대문자 라벨을 얹으면 정보는 0인데 템플릿 인상만 커진다.
+// 게다가 우리말에 letter-spacing 을 크게 주면 '가 맹 점  모 집' 처럼 흩어진다.
+test("영문 대문자 라벨과 넓은 자간이 없다", async () => {
+  const { readFileSync } = await import("node:fs");
+  const css = readFileSync(new URL("../public/css/app.css", import.meta.url), "utf8");
+  assert.ok(!/text-transform:uppercase/.test(css), "대문자 변환 규칙이 남아 있습니다");
+  const home = readFileSync(new URL("../src/homeLayout.js", import.meta.url), "utf8");
+  assert.ok(!/"Find member stores"|"Store map"|"News & notices"/.test(home),
+    "바로가기 카드의 영문 부제가 남아 있습니다");
+});
+
+// 같은 숫자가 한 화면에 두 번 나오면, 두 번째는 정보가 아니라 장식이다.
+// 첫 화면 정보 패널이 이미 가입 점포·공지·행사를 보여 준다.
+test("상인회 홈에 같은 숫자를 두 번 쓰지 않는다", async () => {
+  const home = (await import("node:fs")).readFileSync(new URL("../src/homeLayout.js", import.meta.url), "utf8");
+  const from = home.indexOf('case "showcase"');
+  const seg = home.slice(from, home.indexOf('case "steps"', from));
+  assert.ok(!/sc-stats/.test(seg), "통계 밴드가 남아 있습니다 — 첫 화면 패널과 같은 숫자입니다");
+});
