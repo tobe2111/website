@@ -111,18 +111,24 @@ const ok = (cond, name) => { if (cond) { pass++; console.log("  ✓", name); } e
   ok(await p.evaluate(() => !document.getElementById("themeToggle")), "다크 토글 버튼 제거됨");
   await p.close();
 }
-// 2) 히어로 앰비언트 모션 — 부드러운 광원이 실제로 이동(모션 최소화 설정과 무관)
+// 2) 첫 화면에 떠다니는 흐린 광원이 없다.
+//    예전에는 blur 90px 짜리 원 두 개가 26초·30초 주기로 배경을 떠다녔다. AI 랜딩페이지의
+//    대표적인 인상이었고, 게다가 '움직임 최소화' 를 켠 방문자에게도 그대로 재생됐다
+//    (예전 검사는 그 재생을 오히려 성공으로 봤다). 먹빛 바탕과 타이포만 남긴다.
 {
   const p = await browser.newPage({ reducedMotion: "reduce" });
   await p.goto(`http://localhost:${PORT}/home.html`);
-  await p.waitForTimeout(2500);
-  const moved = await p.evaluate(() => {
-    const el = document.querySelector(".hp-glow-1");
-    if (!el) return false;
-    const m = new DOMMatrixReadOnly(getComputedStyle(el).transform);
-    return Math.abs(m.m41) > 1 || Math.abs(m.m42) > 1; // 광원이 이동 중이면 재생 확인
+  await p.waitForTimeout(1200);
+  const moving = await p.evaluate(() => {
+    if (document.querySelector(".hp-glow, .hp-glow-1, .hp-glow-2")) return "광원 요소가 남아 있음";
+    // 배경 어디에도 스스로 움직이는 것이 없어야 한다
+    for (const el of document.querySelectorAll(".hero-pro *, .hero-pro")) {
+      const cs = getComputedStyle(el);
+      if (cs.animationName && cs.animationName !== "none") return "움직이는 배경: " + cs.animationName;
+    }
+    return "";
   });
-  ok(moved, "reduce 설정에서도 히어로 광원 모션 재생");
+  ok(!moving, "첫 화면에 떠다니는 광원이 없다", moving);
   await p.close();
 }
 // 3) 모바일 메뉴

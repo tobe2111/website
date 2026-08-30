@@ -70,7 +70,7 @@ img,video{max-width:100%;display:block}
 .empty{color:var(--muted);padding:24px 0;text-align:center}
 
 /* ---------- Buttons (pill) ---------- */
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;font-weight:600;font-size:15px;line-height:1;min-height:44px;padding:0 20px;border-radius:var(--r-md);border:1px solid transparent;cursor:pointer;transition:transform .18s var(--ease),box-shadow .2s,background .2s,color .2s,border-color .2s;white-space:nowrap;font-family:inherit;letter-spacing:-.01em}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;font-weight:600;font-size:15px;line-height:1;min-height:44px;padding:0 20px;border-radius:var(--r-md);border:1px solid transparent;cursor:pointer;transition:box-shadow .2s,background .2s,color .2s,border-color .2s;white-space:nowrap;font-family:inherit;letter-spacing:-.01em}
 .btn:active{transform:translateY(1px)}
 .btn-lg{min-height:50px;padding:0 27px;font-size:17px}
 .btn-sm{min-height:40px;padding:0 18px;font-size:15px}
@@ -174,8 +174,8 @@ img,video{max-width:100%;display:block}
 
 /* ---------- Business grid (cards) ---------- */
 .market-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(232px,1fr));gap:14px}
-.market-card{background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--r-lg);overflow:hidden;box-shadow:none;transition:border-color .2s,box-shadow .25s,transform .22s var(--ease)}
-.market-card:hover{transform:translateY(-2px);border-color:var(--line);box-shadow:var(--sh-2)}
+.market-card{background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--r-lg);overflow:hidden;box-shadow:none;transition:border-color .2s,box-shadow .25s}
+.market-card:hover{border-color:var(--line);box-shadow:var(--sh-2)}
 .market-thumb{position:relative;display:block;aspect-ratio:3/2;overflow:hidden;background:var(--surface-2)}
 .market-thumb img{width:100%;height:100%;object-fit:cover;position:absolute;inset:0}
 /* 사진 없는 점포: 화면을 채우던 거대한 한 글자 → 절제된 모노그램 마크 */
@@ -216,9 +216,9 @@ img,video{max-width:100%;display:block}
 .event-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(340px,100%),1fr));gap:14px}
 /* 참가 신청 줄(.event-rsvp)은 카드 '아래 전체 폭' 띠로 설계됐는데, flex row 카드에서는
    세 번째 칸이 되어 "참가/신청/3곳"처럼 세로로 쪼개져 있었습니다. grid 로 바꿔 아래 줄에 붙입니다. */
-.event-card{display:grid;grid-template-columns:auto minmax(0,1fr);gap:0 16px;align-items:start;background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--r-lg);padding:20px;box-shadow:none;overflow:hidden;transition:border-color .2s,box-shadow .25s,transform .22s var(--ease)}
+.event-card{display:grid;grid-template-columns:auto minmax(0,1fr);gap:0 16px;align-items:start;background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--r-lg);padding:20px;box-shadow:none;overflow:hidden;transition:border-color .2s,box-shadow .25s}
 .event-card .event-rsvp{grid-column:1/-1;margin:16px -20px -20px;padding:11px 20px}
-.event-card:hover{transform:translateY(-2px);border-color:var(--line);box-shadow:var(--sh-2)}
+.event-card:hover{border-color:var(--line);box-shadow:var(--sh-2)}
 .event-date{flex:none;width:56px;height:56px;border-radius:var(--r-md);background:var(--brand-tint);color:var(--brand-text);display:grid;place-items:center;align-content:center;line-height:1}
 .event-date .d{font-size:1.35rem;font-weight:700;letter-spacing:-.03em}
 .event-date .m{font-size:.7rem;margin-top:3px;opacity:.8}
@@ -231,7 +231,6 @@ img,video{max-width:100%;display:block}
 /* 점포 상세 히어로 — 홈과 같은 잉크 톤으로 통일 (초록 그라디언트 + 형광 광원 제거) */
 .biz-hero{position:relative;overflow:hidden;isolation:isolate;background:var(--ink-deep);color:#fff;padding:clamp(44px,7vw,72px) 0 clamp(36px,5vw,56px)}
 .biz-hero>*{position:relative;z-index:1}
-.biz-hero::before{content:"";position:absolute;border-radius:50%;filter:blur(90px);z-index:0;pointer-events:none;width:620px;height:620px;left:-8%;top:-64%;background:radial-gradient(circle,color-mix(in oklab,var(--brand),transparent 76%),transparent 68%);animation:hpFloat1 26s ease-in-out infinite}
 .biz-hero h1{font-size:clamp(1.7rem,4vw,2.5rem);font-weight:700;letter-spacing:-.035em;margin:6px 0 14px}
 .biz-desc{font-size:1.05rem;line-height:1.75;max-width:680px;color:rgba(255,255,255,.68)}
 /* 점포 상세 히어로 — 홈과 같은 좌우 2단. 손님이 가장 먼저 찾는 전화·길찾기를 첫 화면에 올립니다 */
@@ -257,8 +256,8 @@ a.bc-val:hover{text-decoration:underline}
 .biz-section-title{font-size:1.15rem;font-weight:700;letter-spacing:-.025em;margin:38px 0 18px;padding-bottom:12px;border-bottom:1px solid var(--line-soft)}
 .biz-section-title:first-child{margin-top:0}
 .gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:40px}
-.gallery-item{position:relative;border:none;padding:0;border-radius:var(--radius-sm);overflow:hidden;background:#000;box-shadow:var(--shadow);cursor:pointer;display:block;width:100%;transition:transform .2s var(--ease),box-shadow .2s}
-.gallery-item:hover{transform:translateY(-4px);box-shadow:var(--shadow-lg)}
+.gallery-item{position:relative;border:none;padding:0;border-radius:var(--radius-sm);overflow:hidden;background:#000;box-shadow:var(--shadow);cursor:pointer;display:block;width:100%;transition:box-shadow .2s}
+.gallery-item:hover{box-shadow:var(--shadow-lg);border-color:var(--line)}
 .gallery-item img,.gallery-item video{width:100%;aspect-ratio:1/1;object-fit:cover;background:#111;display:block}
 .gallery-item figcaption{background:var(--surface);color:var(--ink-soft);font-size:.86rem;padding:8px 12px;text-align:left}
 /* 게시판 첨부는 사진만 오지 않습니다 — 배치도·견적서 같은 자료가 정사각형으로 잘리면
@@ -438,8 +437,8 @@ a.bc-val:hover{text-decoration:underline}
 .org-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-top:4px}
 .org-card{display:flex;flex-direction:column;gap:5px;padding:12px 14px;border:1px solid var(--line);
   border-radius:10px;background:var(--bg-alt);text-decoration:none;color:inherit;
-  transition:border-color .15s,transform .15s}
-.org-card:hover{border-color:var(--brand);transform:translateY(-1px)}
+  transition:border-color .15s}
+.org-card:hover{border-color:var(--brand)}
 .org-card:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
 .org-card.is-off{opacity:.6}
 .org-top{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
@@ -492,7 +491,6 @@ details.doc-hash>summary{cursor:pointer;min-height:44px;display:flex;align-items
 .sign-decline>summary,.decline-box>summary{min-height:44px;display:flex;align-items:center}
 details.doc-hash p{margin:6px 0;line-height:1.6}
 details.doc-hash code{word-break:break-all;font-size:.74rem}
-@media (prefers-reduced-motion:reduce){ .org-card{transition:none} .org-card:hover{transform:none} }
 
 /* 조직 화면의 주소 입력 — /t/ 와 칸이 한 줄로 붙어야 무엇을 고치는지 보인다 */
 .slug-row{display:flex;align-items:center;gap:0}
@@ -770,7 +768,6 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 }
 @media (prefers-reduced-motion:reduce){
   *{scroll-behavior:auto!important}
-  .btn:hover,.market-card:hover,.event-card:hover{transform:none}
 }
 
 /* ---------- 개선 기능 (CF): 감사로그·영업중·클러스터·2FA ---------- */
@@ -813,8 +810,8 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 /* 유어딜 연계 */
 .urdeal-promo{border:1px solid var(--line);position:relative}
 .up-badge{position:absolute;top:14px;right:16px;font-size:.68rem;font-weight:800;letter-spacing:.08em;color:var(--muted);border:1px solid var(--line);border-radius:99px;padding:3px 10px}
-.family-banner{display:flex;align-items:center;gap:18px;padding:22px 26px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface);box-shadow:var(--shadow);transition:transform .2s,box-shadow .2s}
-.family-banner:hover{transform:translateY(-2px);box-shadow:var(--sh-2)}
+.family-banner{display:flex;align-items:center;gap:18px;padding:22px 26px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface);box-shadow:var(--shadow);transition:box-shadow .2s}
+.family-banner:hover{box-shadow:var(--sh-2);border-color:var(--line)}
 .fb-badge{flex:none;font-size:.68rem;font-weight:800;letter-spacing:.08em;color:var(--brand-text);border:1px solid var(--brand);border-radius:99px;padding:4px 11px}
 .fb-text{display:grid;gap:2px}
 .fb-text strong{font-size:1.05rem}
@@ -866,8 +863,8 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .update-feed.compact{margin-top:14px;margin-bottom:0}
 /* 홈: 동네 새소식 카드 */
 .update-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,340px));gap:14px;justify-content:center}
-.update-card{display:flex;gap:12px;align-items:center;background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--radius-sm);padding:14px 16px;box-shadow:var(--sh-1);transition:transform .2s,box-shadow .2s}
-.update-card:hover{transform:translateY(-2px);box-shadow:var(--sh-2)}
+.update-card{display:flex;gap:12px;align-items:center;background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--radius-sm);padding:14px 16px;box-shadow:var(--sh-1);transition:box-shadow .2s}
+.update-card:hover{box-shadow:var(--sh-2);border-color:var(--line)}
 .uc-img{flex:none;width:56px;height:56px;border-radius:10px;overflow:hidden}
 .uc-img img{width:100%;height:100%;object-fit:cover}
 .uc-body{min-width:0}
@@ -933,14 +930,14 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .landing-lead{max-width:640px;margin:0 auto 26px;color:var(--ink-soft);font-size:clamp(1rem,2.5vw,1.2rem);line-height:1.7}
 .landing-hero .hero-actions{justify-content:center}
 .feature-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
-.feature-card{background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--r-lg);padding:26px;box-shadow:var(--sh-1);transition:transform .22s var(--ease),box-shadow .25s}
-.feature-card:hover{transform:translateY(-3px);box-shadow:var(--sh-2)}
+.feature-card{background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--r-lg);padding:26px;box-shadow:var(--sh-1);transition:box-shadow .25s}
+.feature-card:hover{box-shadow:var(--sh-2);border-color:var(--line)}
 .feature-card h3{font-size:1.15rem;font-weight:800;margin-bottom:6px;padding-top:14px;position:relative}
 .feature-card h3::before{content:"";position:absolute;top:0;left:0;width:28px;height:2px;background:var(--brand)}
 .feature-card p{color:var(--muted);font-size:.94rem;line-height:1.6}
 .landing-assoc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:16px}
-.landing-assoc{display:flex;flex-direction:column;align-items:center;gap:10px;padding:22px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);text-decoration:none;color:var(--ink);transition:transform .2s,box-shadow .2s}
-.landing-assoc:hover{transform:translateY(-4px);box-shadow:var(--shadow-lg)}
+.landing-assoc{display:flex;flex-direction:column;align-items:center;gap:10px;padding:22px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);text-decoration:none;color:var(--ink);transition:box-shadow .2s}
+.landing-assoc:hover{box-shadow:var(--shadow-lg);border-color:var(--line)}
 .landing-assoc-logo{width:56px;height:56px;border-radius:16px;display:grid;place-items:center;color:#fff;font-weight:900;font-size:1.4rem;overflow:hidden}
 .landing-assoc-logo img{width:100%;height:100%;object-fit:cover}
 .landing-assoc-name{font-weight:700;font-size:.95rem;text-align:center}
@@ -983,8 +980,8 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 /* ---------- 점포 제품 진열 (전시 전용) ---------- */
 /* 공개: 점포 상세 제품 그리드 */
 .product-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:16px;margin-bottom:40px}
-.product-card{margin:0;background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--sh-1);transition:transform .22s var(--ease),box-shadow .25s}
-.product-card:hover{transform:translateY(-3px);box-shadow:var(--sh-2)}
+.product-card{margin:0;background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--sh-1);transition:box-shadow .25s}
+.product-card:hover{box-shadow:var(--sh-2);border-color:var(--line)}
 .product-card.is-sold{opacity:.72}
 .product-photo{position:relative;aspect-ratio:1/1;background:var(--surface-2);display:grid;place-items:center;overflow:hidden}
 .product-photo img{width:100%;height:100%;object-fit:cover;transition:transform .45s var(--ease)}
@@ -1156,8 +1153,8 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .join-cta p{position:relative;max-width:42ch;margin:0 auto 24px;color:var(--muted);line-height:1.75;font-size:.95rem}
 
 /* 행사 이미지 카드 (시안: 16:10 사진 + 오버레이 + 날짜 칩) */
-.event-photo-card{position:relative;aspect-ratio:16/10;border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--sh-1);transition:transform .22s var(--ease),box-shadow .25s}
-.event-photo-card:hover{transform:translateY(-3px);box-shadow:var(--sh-2)}
+.event-photo-card{position:relative;aspect-ratio:16/10;border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--sh-1);transition:box-shadow .25s}
+.event-photo-card:hover{box-shadow:var(--sh-2);border-color:var(--line)}
 .event-photo-card img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 .epc-overlay{position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.72),transparent 58%)}
 .epc-date{align-self:flex-start;padding:5px 11px;border-radius:8px;background:rgba(0,0,0,.55);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);font-size:.8rem;font-weight:700;letter-spacing:.02em}
@@ -1167,8 +1164,8 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 
 /* 플랫폼 인덱스 테넌트 카드 (시안: 그라디언트 밴드 96px + 겹치는 아바타) */
 .landing-assoc-grid{grid-template-columns:repeat(auto-fill,minmax(240px,1fr))}
-.tenant-card{position:relative;display:block;background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--r-xl);overflow:hidden;box-shadow:var(--sh-1);transition:transform .22s var(--ease),box-shadow .25s;text-align:left}
-.tenant-card:hover{transform:translateY(-3px);box-shadow:var(--sh-2)}
+.tenant-card{position:relative;display:block;background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--r-xl);overflow:hidden;box-shadow:var(--sh-1);transition:box-shadow .25s;text-align:left}
+.tenant-card:hover{box-shadow:var(--sh-2);border-color:var(--line)}
 .tc-band{position:relative;display:block;height:96px}
 .tc-glow{position:absolute;right:-18px;top:-34px;width:110px;height:110px;border-radius:999px;background:radial-gradient(circle,rgba(255,255,255,.35),transparent 70%)}
 .tc-avatar{position:absolute;top:52px;left:16px;display:grid;place-items:center;width:52px;height:52px;border-radius:15px;background:var(--surface);border:1px solid var(--line-soft);box-shadow:var(--sh-1);overflow:hidden}
@@ -1231,8 +1228,8 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 /* 바로가기 카드 — 민트/베이지/포레스트 3색 조합을 버리고 한 가지 표면으로 통일.
    서로 다른 색 카드 세 장이 나란한 배치가 아마추어 느낌의 큰 원인이었습니다. */
 .feat-cards{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-.feat-card{position:relative;overflow:hidden;display:flex;align-items:center;gap:14px;padding:18px 20px;border-radius:var(--r-lg);background:var(--surface);border:1px solid var(--line-soft);box-shadow:var(--sh-2);transition:border-color .2s,box-shadow .25s,transform .25s var(--ease)}
-.feat-card:hover{transform:translateY(-2px);border-color:var(--line);box-shadow:var(--sh-3)}
+.feat-card{position:relative;overflow:hidden;display:flex;align-items:center;gap:14px;padding:18px 20px;border-radius:var(--r-lg);background:var(--surface);border:1px solid var(--line-soft);box-shadow:var(--sh-2);transition:border-color .2s,box-shadow .25s}
+.feat-card:hover{border-color:var(--line);box-shadow:var(--sh-3)}
 .feat-card .fc-ico{flex:none;display:inline-flex;align-items:center;justify-content:center;width:42px;height:42px;border-radius:var(--r-md);background:var(--brand-tint);color:var(--brand-text)}
 .feat-card .fc-ico svg{width:21px;height:21px}
 .feat-card .fc-txt{display:flex;flex-direction:column;gap:2px;min-width:0}
@@ -1296,9 +1293,8 @@ html.reveal-on .reveal.in{opacity:1;transform:none}
 .site-header.scrolled{background:rgba(252,251,249,.72);-webkit-backdrop-filter:saturate(180%) blur(16px);backdrop-filter:saturate(180%) blur(16px);border-bottom:1px solid var(--line-soft);box-shadow:var(--sh-1)}
 /* 카드 미세 상호작용 정돈 */
 .feat-card{will-change:transform}
-.market-card{transition:transform .25s var(--ease),box-shadow .3s}
-.market-card:hover{transform:translateY(-4px)}
-@media (prefers-reduced-motion:reduce){.market-card:hover{transform:none}}
+.market-card{transition:box-shadow .3s}
+.market-card:hover{border-color:var(--line)}
 /* 히어로 일러스트 앰비언트 모션 — 잔잔하지만 분명히 움직이는 생동감 (transform/opacity만, GPU 친화).
    장식용 무한 루프라 모션 최소화 설정과 무관하게 항상 재생(운영자 요청).
    ※ 스크롤 리빌·카드 호버 확대 등 '큰' 모션은 여전히 prefers-reduced-motion 을 존중. */
@@ -1358,9 +1354,6 @@ html.reveal-on .reveal.in{opacity:1;transform:none}
    만화풍 스카이라인 실루엣은 제거하고 타이포·여백으로 화면을 잡습니다. */
 .hero-pro{position:relative;overflow:hidden;isolation:isolate;color:#fff;background:var(--ink-deep)}
 .hero-pro-bg{position:absolute;inset:0;z-index:0}
-.hp-glow{position:absolute;border-radius:50%;filter:blur(90px);will-change:transform;pointer-events:none}
-.hp-glow-1{width:760px;height:760px;left:50%;margin-left:-380px;top:-58%;background:radial-gradient(circle,color-mix(in oklab,var(--brand),transparent 74%),transparent 68%);animation:hpFloat1 26s ease-in-out infinite}
-.hp-glow-2{width:520px;height:520px;right:-14%;bottom:-42%;background:radial-gradient(circle,rgba(255,255,255,.06),transparent 70%);animation:hpFloat2 30s ease-in-out infinite}
 .hp-skyline{display:none} /* 스카이라인 실루엣 폐기 */
 /* 좌우 2단 — 왼쪽 문구·검색 / 오른쪽 실제 정보 패널.
    상호와 검색창만 놓여 비어 보이던 대문을 정보로 채웁니다.
@@ -1399,8 +1392,6 @@ a.hf-val:hover{text-decoration:underline}
 .hp-search input:focus{border-color:rgba(255,255,255,.42);box-shadow:none;background:rgba(255,255,255,.11)}
 .hp-search .btn-primary{background:#fff;color:var(--ink-deep)}
 .hp-search .btn-primary:hover{background:rgba(255,255,255,.86)}
-@keyframes hpFloat1{0%,100%{transform:translate(0,0)}50%{transform:translate(72px,52px)}}
-@keyframes hpFloat2{0%,100%{transform:translate(0,0)}50%{transform:translate(-58px,34px)}}
 /* 카드가 히어로 하단에 살짝 겹치는 3열 행 */
 .feat-band{margin-top:clamp(-64px,-5vw,-44px);margin-bottom:8px}
 .feat-cards-row{grid-template-columns:repeat(3,1fr);gap:14px}
@@ -1419,8 +1410,8 @@ a.hf-val:hover{text-decoration:underline}
 .panel-title{position:relative;padding:0 0 12px;margin-bottom:16px;border-bottom:1px solid var(--line-soft);font-size:1.05rem;font-weight:700;letter-spacing:-.025em}
 .panel-title::before{content:none}
 /* 통계 카드: 프리미엄 대시보드 톤 */
-.stat-card{transition:transform .2s var(--ease),box-shadow .25s,border-color .2s}
-.stat-card:hover{transform:translateY(-3px);box-shadow:var(--sh-2)}
+.stat-card{transition:box-shadow .25s,border-color .2s}
+.stat-card:hover{box-shadow:var(--sh-2);border-color:var(--line)}
 .stat-num{color:var(--ink);letter-spacing:-.03em;font-weight:700} /* 숫자는 정보지 브랜드 강조 대상이 아닙니다 */
 .stat-card.stat-alert .stat-num{color:var(--wait-fg)}
 /* 인증 화면 프리미엄 — 카드 뒤 은은한 브랜드 글로우 + 리치 섀도우 */
@@ -1629,7 +1620,7 @@ a.cc-val:hover{color:var(--brand-text)}
 .tpl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
 .tpl-card{display:flex;flex-direction:column;gap:5px;padding:16px;background:var(--surface);border:1px solid var(--line);
   border-radius:var(--r-md);text-decoration:none;transition:.15s}
-.tpl-card:hover{border-color:var(--brand);box-shadow:0 4px 16px rgba(11,138,70,.12);transform:translateY(-1px)}
+.tpl-card:hover{border-color:var(--brand);box-shadow:0 4px 16px rgba(11,138,70,.12)}
 .tpl-title{font-weight:800;font-size:.98rem;color:var(--ink)}
 .tpl-sum{font-size:.84rem;color:var(--ink-soft);line-height:1.5}
 .tpl-meta{font-size:.76rem;color:var(--muted);margin-top:2px}
@@ -1715,7 +1706,7 @@ tr.is-loss td{background:var(--no-bg);color:var(--no-fg)}
 .fr-strength-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px}
 .fr-strength{position:relative;padding:26px 22px 24px;background:var(--surface);border:1px solid var(--line-soft);
   border-radius:var(--r-lg);box-shadow:var(--sh-1);transition:.16s var(--ease)}
-.fr-strength:hover{transform:translateY(-3px);box-shadow:var(--sh-2);border-color:var(--brand-300)}
+.fr-strength:hover{box-shadow:var(--sh-2);border-color:var(--brand-300)}
 .fr-strength-no{display:inline-block;font-size:.74rem;font-weight:800;letter-spacing:.08em;color:var(--brand-text);
   background:var(--brand-50);padding:4px 10px;border-radius:var(--r-pill);margin-bottom:12px}
 .fr-strength strong{display:block;font-size:1.08rem;font-weight:800;line-height:1.4}

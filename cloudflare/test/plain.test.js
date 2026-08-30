@@ -68,3 +68,33 @@ test("심사받은 알림톡 문구는 건드리지 않는다", async () => {
   for (const kind of ["sign_request", "sign_remind", "sign_done", "lead_new", "notice"])
     assert.match(TEMPLATES[kind].body, /▶ /, `${kind} 문구의 글머리가 사라졌다 — 카카오 승인이 무효가 된다`);
 });
+
+// 한글 제목 위에 얹힌 영문 대문자 라벨(SECURITY · HOW IT WORKS · FEATURES …)은
+// 템플릿에서 찍어냈다는 인상을 가장 크게 낸다. 눈썹은 '어느 화면인지'를 말할 때만 쓴다.
+test("영문 대문자 눈썹 라벨이 없다", async () => {
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(new URL("../src/pages.js", import.meta.url), "utf8");
+  const bad = [...src.matchAll(/section-eyebrow">([^<$]*)</g)]
+    .map((m) => m[1].trim())
+    .filter((t) => t && /^[A-Z][A-Z0-9 ·&-]*$/.test(t));
+  assert.deepEqual(bad, [], "영문 대문자 눈썹이 남아 있습니다: " + bad.join(", "));
+});
+
+// 마우스를 올리면 카드가 떠오르는 연출은 흔한 템플릿 문법이다.
+// 반응은 남기되(테두리·그림자) 들어올리지는 않는다.
+test("카드가 마우스에 떠오르지 않는다", async () => {
+  const { readFileSync } = await import("node:fs");
+  const css = readFileSync(new URL("../public/css/app.css", import.meta.url), "utf8");
+  const lift = [...css.matchAll(/([.\w-]+):hover\{[^}]*transform:translateY\([^}]*\}/g)].map((m) => m[1]);
+  assert.deepEqual(lift, [], "떠오르는 카드가 남아 있습니다: " + lift.join(", "));
+});
+
+// 히어로 뒤에서 떠다니던 흐린 그라데이션 원 — AI 랜딩페이지의 대표적 인상.
+test("히어로에 떠다니는 광원이 없다", async () => {
+  const { readFileSync } = await import("node:fs");
+  const css = readFileSync(new URL("../public/css/app.css", import.meta.url), "utf8");
+  const home = readFileSync(new URL("../src/homeLayout.js", import.meta.url), "utf8");
+  assert.ok(!/hp-glow/.test(css) && !/hp-glow/.test(home), "떠다니는 광원이 남아 있습니다");
+  assert.ok(!/@keyframes hpFloat/.test(css), "광원을 움직이던 애니메이션이 남아 있습니다");
+  assert.ok(!/\.biz-hero::before\{[^}]*blur\(/.test(css), "점포 화면 히어로에도 같은 광원이 있었습니다");
+});

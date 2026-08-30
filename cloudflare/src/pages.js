@@ -363,7 +363,7 @@ export async function adminLanding(ctx) {
   </li>`).join("") : `<li class="empty">아직 올린 사진이 없습니다.</li>`;
 
   const body = `<section class="dash"><div class="container">
-    <div class="dash-head"><div><p class="section-eyebrow">LANDING · ${esc(assoc.name)}</p><h1 class="dash-title">랜딩페이지 편집</h1>
+    <div class="dash-head"><div><p class="section-eyebrow">모집 랜딩 · ${esc(assoc.name)}</p><h1 class="dash-title">랜딩페이지 편집</h1>
       <p class="dash-sub">공개 주소: <a href="${publicUrl}" target="_blank">${esc(prettyPath(publicUrl))}</a>${hasDraft ? ` · <b class="draft-mark">발행되지 않은 수정본 있음</b>` : ""}</p></div>
       <div class="dash-head-actions"><a href="${base}/admin/leads" class="btn btn-primary btn-sm">상담 DB ${stats.total}건</a>
         <a href="${base}/admin" class="btn btn-ghost btn-sm">관리자</a></div></div>
@@ -499,7 +499,7 @@ export async function adminLeads(ctx) {
     }).join("");
 
   const body = `<section class="dash"><div class="container">
-    <div class="dash-head"><div><p class="section-eyebrow">LEADS · ${esc(assoc.name)}</p><h1 class="dash-title">가맹 상담 DB</h1>
+    <div class="dash-head"><div><p class="section-eyebrow">상담 신청 · ${esc(assoc.name)}</p><h1 class="dash-title">가맹 상담 DB</h1>
       <p class="dash-sub">랜딩페이지로 들어온 상담 신청입니다. 연락 결과를 상태로 남기면 어디까지 진행됐는지 한눈에 보입니다.</p></div>
       <div class="dash-head-actions"><a href="${base}/admin/leads.csv" class="btn btn-ghost btn-sm">CSV 내려받기</a>
         <a href="${base}/admin/landing" class="btn btn-primary btn-sm">랜딩 편집</a></div></div>
@@ -566,7 +566,7 @@ export async function businesses(ctx) {
   const covers = await D.coverImagesFor(db, items.map((b) => b.id));
   const cards = items.map((b) => businessCard(base, b, covers.get(b.id))).join("") || `<p class="empty">${openOnly ? "지금 영업 중인 가게가 없습니다." : q ? "검색 결과가 없습니다." : "등록된 점포가 없습니다."}</p>`;
   const body = `<section class="section page-top"><div class="container">
-    <div class="section-head"><p class="section-eyebrow">MEMBERS</p><h2 class="section-title">가입 점포 안내</h2><p class="section-lead">총 ${total}곳</p></div>
+    <div class="section-head"><h2 class="section-title">가입 점포 안내</h2><p class="section-lead">총 ${total}곳</p></div>
     <form method="get" action="${base}/businesses" class="board-search"><input type="search" name="q" value="${esc(q)}" placeholder="점포·업종 검색" /><button class="btn btn-ghost btn-sm">검색</button></form>
     <div class="chip-filters">${chips}</div>
     <div class="market-grid" id="bizGrid">${cards}</div>
@@ -742,7 +742,7 @@ export async function mapPage(ctx) {
   const loader = naver ? `<script src="https://oapi.map.naver.com/openapi/v3/maps.js?${esc(env.NAVER_MAP_PARAM || "ncpClientId")}=${esc(naver)}"></script><script src="${assetUrl("/js/map.js")}" defer></script>` : "";
   const markerData = markers.map((m) => ({ name: m.name, slug: m.slug, category: m.category, lat: m.lat, lng: m.lng, address: m.address || "", phone: m.phone || "" }));
   const body = `<section class="section page-top"><div class="container">
-    <div class="section-head"><p class="section-eyebrow">MAP</p><h2 class="section-title">가입 점포 지도</h2><p class="section-lead">${esc(assoc.name)} 가입 점포 ${markers.length}곳</p></div>
+    <div class="section-head"><h2 class="section-title">가입 점포 지도</h2><p class="section-lead">${esc(assoc.name)} 가입 점포 ${markers.length}곳</p></div>
     <div class="chip-filters">${chips}</div>${mapEl}
     <ul class="map-list">${listRows}</ul>
     <script type="application/json" id="mapData">${JSON.stringify(markerData).replace(/</g, "\\u003c")}</script>
@@ -793,7 +793,7 @@ export async function notices(ctx) {
   const chips = `<a href="${base}/notices${qs({ q })}" class="chip-filter${!tag ? " active" : ""}">전체</a>` +
     tags.map((t) => `<a href="${base}/notices${qs({ tag: t.tag, q })}" class="chip-filter${tag === t.tag ? " active" : ""}">${esc(t.tag)} <em>${t.n}</em></a>`).join("");
   const body = `<section class="section page-top"><div class="container">
-    <div class="section-head"><p class="section-eyebrow">NOTICE</p><h2 class="section-title">공지사항</h2><p class="section-lead">총 ${total}</p></div>
+    <div class="section-head"><h2 class="section-title">공지사항</h2><p class="section-lead">총 ${total}</p></div>
     <form method="get" action="${base}/notices" class="board-search">${tag ? `<input type="hidden" name="tag" value="${esc(tag)}">` : ""}<input type="search" name="q" value="${esc(q)}" placeholder="제목·내용 검색"><button class="btn btn-ghost btn-sm">검색</button></form>
     ${tags.length > 1 ? `<div class="chip-filters">${chips}</div>` : ""}
     <ul class="notice-list">${items.length ? noticeRows(base, items) : `<li class="empty">${q || tag ? "조건에 맞는 공지가 없습니다." : "등록된 공지가 없습니다."}</li>`}</ul>
@@ -845,7 +845,7 @@ export async function events(ctx) {
     cards.push(eventCard(base, e).replace("</article>", rsvp + "</article>"));
   }
   const body = `<section class="section page-top"><div class="container">
-    <div class="section-head"><p class="section-eyebrow">EVENTS</p><h2 class="section-title">행사·소식</h2>
+    <div class="section-head"><h2 class="section-title">행사·소식</h2>
       ${isMember ? `<p class="section-lead">회원은 행사별로 참가 신청을 할 수 있습니다. 명단은 관리자에게 전달됩니다.</p>` : ""}</div>
     ${flashOf(query)}
     <div class="event-grid">${cards.join("") || `<p class="empty">예정된 행사가 없습니다.</p>`}</div></div></section>`;
@@ -901,7 +901,7 @@ export async function polls(ctx) {
       <label>마감일 (선택·비우면 수동 마감)<input type="date" name="closes_at" /></label>
       <button class="btn btn-primary btn-sm">투표 시작</button></form></section>` : "";
   const body = `<section class="section page-top"><div class="container narrow">
-    <div class="section-head"><p class="section-eyebrow">VOTE</p><h2 class="section-title">안건 투표</h2>
+    <div class="section-head"><h2 class="section-title">안건 투표</h2>
       <p class="section-lead">총회에 못 오셔도 폰에서 의견을 남길 수 있습니다. 1인 1표, 마감 전 변경 가능.</p></div>
     ${flashOf(query)}
     ${createForm}
@@ -925,7 +925,7 @@ export async function board(ctx) {
       <span class="board-meta">${esc(p.author_name || "(탈퇴)")} · ${esc(kstDate(p.created_at, "."))}${p.comment_count ? ` · 댓글 ${p.comment_count}` : ""}</span></li>`;
   }).join("") : `<li class="empty">${q ? "검색 결과가 없습니다." : "아직 게시글이 없습니다."}</li>`;
   const body = `<section class="section page-top"><div class="container">
-    <div class="section-head"><p class="section-eyebrow">BOARD</p><h2 class="section-title">회원 게시판</h2><p class="section-lead">글 ${total}</p></div>
+    <div class="section-head"><h2 class="section-title">회원 게시판</h2><p class="section-lead">글 ${total}</p></div>
     ${flashOf(query)}
     <form method="get" action="${base}/board" class="board-search"><input type="search" name="q" value="${esc(q)}" placeholder="제목·내용 검색"><button class="btn btn-ghost btn-sm">검색</button></form>
     <section class="panel"><h2 class="panel-title">새 글 쓰기</h2>
@@ -1049,7 +1049,7 @@ export function urdealPage(ctx) {
     ["3", "손님이 매장에서 사용", "손님이 폰으로 이용권을 보여주면 확인 후 사용 처리 — 끝."],
   ];
   const body = `<section class="section page-top"><div class="container narrow">
-    <div class="section-head"><p class="section-eyebrow">PARTNER</p><h2 class="section-title">유어딜로 매출 만들기</h2>
+    <div class="section-head"><h2 class="section-title">유어딜로 매출 만들기</h2>
       <p class="section-lead">이 홈페이지는 우리 가게를 <b>알리는 곳</b>, 유어딜은 <b>파는 곳</b>입니다. 운영사의 커머스 서비스라 상인회 회원은 등록을 도와드립니다.</p></div>
     <div class="urdeal-hero">
       <span class="fb-badge">FAMILY SERVICE</span>
@@ -1184,7 +1184,7 @@ export async function dashboard(ctx) {
       <form method="post" action="${base}/dashboard/media/${m.id}/delete" data-confirm="삭제?"><button class="link-danger">삭제</button></form></figcaption></figure>`).join("") : `<p class="empty">아직 등록한 사진·영상이 없습니다.</p>`;
   const naver = assoc.map_client_id || env.NAVER_MAP_CLIENT_ID; // 상인회 전용 지도 키 우선
   const body = `<section class="dash"><div class="container">
-    <div class="dash-head"><div><p class="section-eyebrow">MY BUSINESS</p><h1 class="dash-title">${esc(b.name)} ${statusBadge(b.status)}</h1>
+    <div class="dash-head"><div><h1 class="dash-title">${esc(b.name)} ${statusBadge(b.status)}</h1>
       <p class="dash-sub">공개 주소: <a href="${base}/business/${esc(b.slug)}" target="_blank">${esc(prettyPath(base))}/business/${esc(b.slug)}</a></p></div>
       <div class="dash-head-actions">
         <form method="post" action="${base}/dashboard/dayoff" class="inline-form">
@@ -1620,7 +1620,7 @@ export async function signList(ctx) {
   const doneRows = all.filter((_, i) => signedFlags[i]).map((d) => `<li><span class="notice-tag badge-ok">서명 완료</span><span class="notice-title">${esc(d.title)}</span></li>`).join("") || `<li class="empty">서명 내역이 없습니다.</li>`;
   const body = `<section class="section page-top"><div class="container narrow">
     <a href="${assoc.kind === "esign" ? base + "/" : base + "/dashboard"}" class="back-link">← ${assoc.kind === "esign" ? "홈" : "내 업체"}</a>
-    <div class="section-head" style="text-align:left"><p class="section-eyebrow">E-SIGN</p><h1 class="section-title">전자서명</h1></div>${flashOf(query)}
+    <div class="section-head" style="text-align:left"><h1 class="section-title">전자서명</h1></div>${flashOf(query)}
     <h2 class="biz-section-title">서명 대기 (${todo.length})</h2><ul class="notice-list">${todoRows}</ul>
     <h2 class="biz-section-title" style="margin-top:32px">서명 완료</h2><ul class="notice-list">${doneRows}</ul></div></section>`;
   return html(layout({ title: "전자서명", assoc, base, user, body, csrf }));
@@ -1727,7 +1727,7 @@ export async function adminDocuments(ctx) {
   const tplCards = builtinsFor(assoc.kind).map(normalizeTemplate).map(card).join("");
   const myCards = myTpls.map(card).join("");
   const body = `<section class="dash"><div class="container">
-    <div class="dash-head"><div><p class="section-eyebrow">E-SIGN · ${esc(assoc.name)}</p><h1 class="dash-title">전자서명 문서</h1>
+    <div class="dash-head"><div><p class="section-eyebrow">전자계약 · ${esc(assoc.name)}</p><h1 class="dash-title">전자서명 문서</h1>
       <p class="dash-sub">${canAdmin ? `<a href="${base}/admin">← 관리자</a>` : `담당자 · ${esc(user.name)}`}</p></div>
       <div class="dash-head-actions"><a href="${base}/admin/templates" class="btn btn-ghost btn-sm">서식 관리</a>${canAdmin ? `<a href="${base}/admin/api" class="btn btn-ghost btn-sm">API 연동</a>` : ""}</div></div>${flashOf(query)}
     <section class="panel panel-accent"><h2 class="panel-title">서식으로 만들기</h2>
@@ -1818,7 +1818,7 @@ export async function adminDocumentDetail(ctx) {
         ${canTalk ? "" : "지금은 자동 발송이 꺼져 있으니 이 링크를 카톡·문자로 직접 보내 주세요."}</p>
       ${linkRow(`${linkOrigin}${base}/sign/${d.id}`, "")}`}</section>` : `<section class="panel"><p class="panel-hint">전체 공개 문서(누구나 서명 가능).</p></section>`;
   const body = `<section class="dash"><div class="container">
-    <div class="dash-head"><div><p class="section-eyebrow">E-SIGN</p><h1 class="dash-title">${esc(d.title)} ${d.closed ? '<span class="badge badge-no">마감</span>' : ""}${d.ordered ? ' <span class="badge badge-info">순차</span>' : ""}${d.due_date ? `<span class="badge ${D.isPastDue(d) ? "badge-no" : "badge-wait"}">기한 ${esc(d.due_date)}</span>` : ""}</h1>
+    <div class="dash-head"><div><h1 class="dash-title">${esc(d.title)} ${d.closed ? '<span class="badge badge-no">마감</span>' : ""}${d.ordered ? ' <span class="badge badge-info">순차</span>' : ""}${d.due_date ? `<span class="badge ${D.isPastDue(d) ? "badge-no" : "badge-wait"}">기한 ${esc(d.due_date)}</span>` : ""}</h1>
       <p class="dash-sub"><a href="${base}/admin/documents">← 문서 목록</a> · 서명 ${sigs.length}명</p></div>
       <div class="dash-head-actions">
         ${d.closed || !canTalk ? "" : `<form method="post" action="${base}/admin/documents/${d.id}/remind" class="inline-form" data-confirm="미서명자에게 알림톡으로 리마인더를 보낼까요? (잔액이 차감됩니다)"><button class="btn btn-primary btn-sm">미서명자 재알림</button></form>`}
@@ -1886,7 +1886,7 @@ export async function adminDocumentNew(ctx) {
     </div>`).join("");
   const preview = renderPaper(applyVars(t.body, {}), { fieldsFor: () => "" });
   const body = `<section class="dash"><div class="container">
-    <div class="dash-head"><div><p class="section-eyebrow">E-SIGN · 서식</p><h1 class="dash-title">${esc(t.title)}</h1>
+    <div class="dash-head"><div><p class="section-eyebrow">전자계약 · 서식</p><h1 class="dash-title">${esc(t.title)}</h1>
       <p class="dash-sub"><a href="${base}/admin/documents">← 문서 목록</a>${t.builtin ? " · 표준 서식" : " · 우리 서식"}</p></div></div>${flashOf(query)}
     <div class="tpl-layout">
       <section class="panel">
@@ -1929,7 +1929,7 @@ export async function adminTemplates(ctx) {
   }).join("") : `<tr><td colspan="4" class="empty">저장한 서식이 없습니다.</td></tr>`;
   const docOpts = docs.map((d) => `<option value="${d.id}">${esc(d.title)}</option>`).join("");
   const body = `<section class="dash"><div class="container">
-    <div class="dash-head"><div><p class="section-eyebrow">E-SIGN · 서식</p><h1 class="dash-title">${assoc.kind === "esign" ? "우리 서식" : "우리 상인회 서식"}</h1>
+    <div class="dash-head"><div><p class="section-eyebrow">전자계약 · 서식</p><h1 class="dash-title">${assoc.kind === "esign" ? "우리 서식" : "우리 상인회 서식"}</h1>
       <p class="dash-sub"><a href="${base}/admin/documents">← 문서 목록</a></p></div></div>${flashOf(query)}
     ${lead ? `<div class="flash flash-ok">상담 신청자 <b>${esc(lead.name)}</b>(${esc(lead.phone)})님에게 보낼 계약서입니다. 서식을 고르면 이어서 서명 링크를 발급합니다.</div>` : ""}
     <section class="panel panel-accent"><h2 class="panel-title">문서를 서식으로 저장</h2>
@@ -1973,7 +1973,7 @@ export async function adminApi(ctx) {
       <span class="audit-meta">${esc(kstStamp(w.created_at, { year: false }))}</span></li>`).join("")
     : `<li class="empty">전송 이력이 없습니다.</li>`;
   const body = `<section class="dash"><div class="container">
-    <div class="dash-head"><div><p class="section-eyebrow">E-SIGN · API</p><h1 class="dash-title">API 연동</h1>
+    <div class="dash-head"><div><p class="section-eyebrow">전자계약 · API</p><h1 class="dash-title">API 연동</h1>
       <p class="dash-sub"><a href="${base}/admin/documents">← 문서 목록</a> · 우리 시스템에서 계약을 자동으로 만들고 보냅니다</p></div>
       <div class="dash-head-actions"><a href="/api/v1/docs" target="_blank" class="btn btn-ghost btn-sm">API 문서</a></div></div>${flashOf(query)}
     ${fresh ? `<div class="invite-box"><p class="invite-box-title">새 API 키 — <b>지금만 보입니다</b></p>
@@ -2074,7 +2074,7 @@ export async function esignLanding(ctx) {
   const shown = PLAN_KEYS.filter((k) => prices[k] !== undefined);
   const priceSection = !shown.length ? "" : `
   <section class="section"><div class="container">
-    <div class="section-head"><p class="section-eyebrow">PRICE</p><h2 class="section-title">얼마인가</h2></div>
+    <div class="section-head"><h2 class="section-title">얼마인가</h2></div>
     <div class="price-grid">${shown.map((k) => `<div class="price-card${k === "basic" ? " is-pick" : ""}">
       <h3>${esc(PLANS[k].label)}</h3>
       <p class="price-num">${prices[k] === 0 ? "0" : prices[k].toLocaleString()}<small>원 / 월</small></p>
@@ -2098,7 +2098,7 @@ export async function esignLanding(ctx) {
   </div></section>
 
   <section class="section"><div class="container">
-    <div class="section-head"><p class="section-eyebrow">HOW</p><h2 class="section-title">보내고, 서명받고, 끝</h2></div>
+    <div class="section-head"><h2 class="section-title">보내고, 서명받고, 끝</h2></div>
     <div class="es-steps">
       ${step(1, "계약서 만들기", "표준 서식(임대차·용역·NDA·동의서)을 고르고 빈칸만 채웁니다. 쓰던 서식을 저장해 재사용할 수도 있습니다.")}
       ${step(2, "서명 자리 배치", "계약서 위를 클릭해 서명·도장·날짜·체크 자리를 놓습니다. 누가 어디에 채울지 사람별로 지정합니다.")}
@@ -2109,7 +2109,7 @@ export async function esignLanding(ctx) {
   </div></section>
 
   <section class="section section-alt"><div class="container">
-    <div class="section-head"><p class="section-eyebrow">SECURITY</p><h2 class="section-title">위변조를 어떻게 잡아내는가</h2></div>
+    <div class="section-head"><h2 class="section-title">위변조를 어떻게 잡아내는가</h2></div>
     <div class="feature-grid">
       ${[["본문 해시", "계약서 한 글자만 바뀌어도 해시가 달라져 드러납니다"],
          ["Ed25519 봉인", "서명자·시각·IP·기기를 디지털 서명으로 봉인합니다"],
@@ -2125,7 +2125,7 @@ export async function esignLanding(ctx) {
   </div></section>
 
   <section class="section"><div class="container narrow">
-    <div class="section-head"><p class="section-eyebrow">API</p><h2 class="section-title">우리 시스템에서 자동으로</h2></div>
+    <div class="section-head"><h2 class="section-title">우리 시스템에서 자동으로</h2></div>
     <p class="landing-lead" style="text-align:center">한 번의 호출로 계약서 생성·서명 링크 발급·발송까지 끝납니다. API 호출은 무료입니다.</p>
     <pre class="code-block">curl -X POST ${esc(origin)}/api/v1/documents \
   -H "Authorization: Bearer sk_live_..." \
@@ -2148,7 +2148,7 @@ export async function esignLanding(ctx) {
   </div></section>
 
   <section class="section section-alt"><div class="container">
-    <div class="section-head"><p class="section-eyebrow">LEGAL</p><h2 class="section-title">법적으로 유효한가</h2></div>
+    <div class="section-head"><h2 class="section-title">법적으로 유효한가</h2></div>
     <div class="container narrow">
     <p class="landing-lead">유효합니다. 「전자문서 및 전자거래 기본법」 제4조는 전자문서가 종이 문서와 같은 효력을 가진다고 정하고,
       「전자서명법」 제3조는 <b>전자서명이라는 이유만으로 효력을 부인할 수 없다</b>고 정합니다.
@@ -2205,7 +2205,7 @@ export async function homepageLanding(ctx) {
   const shown = PLAN_KEYS.filter((k) => prices[k] !== undefined);
   const priceSection = !shown.length ? "" : `
   <section class="section"><div class="container">
-    <div class="section-head"><p class="section-eyebrow">PRICE</p><h2 class="section-title">얼마인가</h2></div>
+    <div class="section-head"><h2 class="section-title">얼마인가</h2></div>
     <div class="price-grid">${shown.map((k) => `<div class="price-card${k === "basic" ? " is-pick" : ""}">
       <h3>${esc(PLANS[k].label)}</h3>
       <p class="price-num">${prices[k] === 0 ? "0" : prices[k].toLocaleString()}<small>원 / 월</small></p>
@@ -2228,7 +2228,7 @@ export async function homepageLanding(ctx) {
   </div></section>
 
   <section class="section" id="included"><div class="container">
-    <div class="section-head"><p class="section-eyebrow">INCLUDED</p><h2 class="section-title">한 장에 들어가는 것</h2>
+    <div class="section-head"><h2 class="section-title">한 장에 들어가는 것</h2>
       <p class="section-lead">아래 섹션이 기본으로 들어갑니다. 필요 없는 섹션은 끄고, 순서는 직접 바꿉니다.</p></div>
     <div class="feature-grid">
       ${[["히어로", "첫 화면에서 브랜드와 제안을 한 문장으로"],
@@ -2248,7 +2248,7 @@ export async function homepageLanding(ctx) {
   </div></section>
 
   <section class="section section-alt" id="db"><div class="container">
-    <div class="section-head"><p class="section-eyebrow">DB</p><h2 class="section-title">상담 신청이 쌓이는 방식</h2></div>
+    <div class="section-head"><h2 class="section-title">상담 신청이 쌓이는 방식</h2></div>
     <div class="es-steps">
       ${step(1, "방문자가 폼을 채웁니다", "성함·연락처·희망 지역·창업 예산·유입 경로. 필요 없는 칸은 뺄 수 있습니다.")}
       ${step(2, "즉시 알림이 갑니다", "담당자에게 카카오 알림톡과 메일이 바로 갑니다. 신청자에게도 접수 확인 문자가 나갑니다.")}
@@ -2262,7 +2262,7 @@ export async function homepageLanding(ctx) {
   </div></section>
 
   <section class="section"><div class="container">
-    <div class="section-head"><p class="section-eyebrow">WHY</p><h2 class="section-title">맡기고 끝이 아니라, 직접 고칩니다</h2></div>
+    <div class="section-head"><h2 class="section-title">맡기고 끝이 아니라, 직접 고칩니다</h2></div>
     <div class="feature-grid">
       ${[["관리자가 직접 수정", "문구·순서·사진을 관리자 화면에서 바꿉니다. 사진은 올리면 바로 붙고, 수정 요청을 기다릴 필요가 없습니다."],
          ["초안으로 고치고 발행", "고치는 동안 손님에게는 옛 화면이 보입니다. 미리보기로 확인한 뒤 발행하세요."],
@@ -2277,7 +2277,7 @@ export async function homepageLanding(ctx) {
   </div></section>
 
   <section class="section section-alt"><div class="container narrow">
-    <div class="section-head"><p class="section-eyebrow">HOW</p><h2 class="section-title">제작은 이렇게 진행됩니다</h2></div>
+    <div class="section-head"><h2 class="section-title">제작은 이렇게 진행됩니다</h2></div>
     <div class="es-steps">
       ${step(1, "문의 · 상담", "브랜드와 모집 목표를 듣습니다. 지금 쓰시는 자료가 있으면 그대로 받습니다.")}
       ${step(2, "구성 확정", "어떤 섹션을 쓸지, 어떤 항목을 받을지 함께 정합니다.")}
@@ -2319,7 +2319,7 @@ async function esignHome(ctx) {
         서명하실 분은 받으신 링크를 열어 주세요 — 이 화면에서 로그인할 필요가 없습니다.</p>
     </div></section>
     <section class="section"><div class="container">
-      <div class="section-head"><p class="section-eyebrow">HOW IT WORKS</p><h2 class="section-title">계약이 끝나는 과정</h2></div>
+      <div class="section-head"><h2 class="section-title">계약이 끝나는 과정</h2></div>
       <div class="feature-grid">${[
         ["계약서 작성", "표준 서식을 고르고 빈칸만 채웁니다"],
         ["서명 자리 배치", "서명·도장·날짜 자리를 계약서 위에 놓습니다"],
@@ -2524,7 +2524,7 @@ export async function adminDocFields(ctx) {
   // 이미 서명이 시작된 문서는 지면을 바꿀 수 없다 — 서명자가 본 화면과 달라지면 봉인의 의미가 사라진다
   if (signedAny) {
     const b = `<section class="dash"><div class="container">
-      <div class="dash-head"><div><p class="section-eyebrow">E-SIGN</p><h1 class="dash-title">필드 배치 — ${esc(d.title)}</h1></div></div>
+      <div class="dash-head"><div><h1 class="dash-title">필드 배치 — ${esc(d.title)}</h1></div></div>
       <div class="flash flash-warn">이미 서명이 시작된 문서입니다. 서명자가 확인한 지면이 바뀌면 안 되므로 배치를 수정할 수 없습니다.</div>
       <p><a href="${base}/admin/documents/${d.id}" class="btn btn-ghost btn-sm">← 문서로</a></p>
       <div class="paper-wrap">${renderPaper(d.body, { fieldsFor: fieldsRenderer(fields, { mode: "view", nameOf }) })}</div></div></section>`;
@@ -2538,7 +2538,7 @@ export async function adminDocFields(ctx) {
     reqs.map((r) => `<option value="${r.id}" data-name="${esc(r.name)}">${esc(r.name)}</option>`).join("") +
     extList.map((e) => `<option value="${-e.id}" data-name="${esc(e.name)}">${esc(e.name)} (외부)</option>`).join("");
   const body = `<section class="dash"><div class="container">
-    <div class="dash-head"><div><p class="section-eyebrow">E-SIGN · 필드 배치</p><h1 class="dash-title">${esc(d.title)}</h1>
+    <div class="dash-head"><div><p class="section-eyebrow">전자계약 · 필드 배치</p><h1 class="dash-title">${esc(d.title)}</h1>
       <p class="dash-sub"><a href="${base}/admin/documents/${d.id}">← 문서로</a> · 서명 대상 ${sigs.total}명</p></div></div>
     ${flashOf(query)}
     <section class="panel">
@@ -2583,7 +2583,7 @@ export async function documentPaper(ctx) {
   });
   const backTo = isAdmin ? `${base}/admin/documents/${d.id}` : `${base}/sign`;
   const body = `<section class="section page-top"><div class="container">
-    <div class="dash-head no-print"><div><p class="section-eyebrow">E-SIGN · 완성본</p><h1 class="dash-title">${esc(d.title)}</h1>
+    <div class="dash-head no-print"><div><p class="section-eyebrow">전자계약 · 완성본</p><h1 class="dash-title">${esc(d.title)}</h1>
       <p class="dash-sub"><a href="${backTo}">← 돌아가기</a> · 서명 ${rc.signed}/${rc.total}${done ? " · 체결 완료" : " · 진행 중"}</p></div>
       <div class="dash-head-actions"><button type="button" class="btn btn-primary btn-sm" data-print>인쇄 · PDF로 저장</button></div></div>
     <div class="paper-wrap">${paper}</div></div></section>
@@ -2603,7 +2603,6 @@ export async function certificatePage(ctx) {
   const row = (k, val) => `<tr><th>${esc(k)}</th><td>${val}</td></tr>`;
   const body = `<section class="section page-top"><div class="container narrow cert-sheet">
     <div class="cert-head">
-      <p class="section-eyebrow">CERTIFICATE OF ELECTRONIC SIGNATURE</p>
       <h1 class="article-title">전자서명 확인서</h1>
       <p class="cert-issuer">${esc(assoc ? assoc.name : "")}</p>
       <p class="cert-verdict">${v.valid
@@ -3552,7 +3551,7 @@ export async function platformLanding(ctx) {
     <p class="hero-note">프랜차이즈 본사이신가요? <a href="/homepage">가맹점 모집 홈페이지를 만들어 드립니다 →</a></p>
   </div></section>
   <section class="section" id="features"><div class="container">
-    <div class="section-head"><p class="section-eyebrow">FEATURES</p><h2 class="section-title">상인회에 필요한 모든 것</h2></div>
+    <div class="section-head"><h2 class="section-title">상인회에 필요한 모든 것</h2></div>
     <div class="feature-grid">
       ${[["가입 점포 안내", "점포별 소개·사진·영상(유튜브·릴스 링크)"], ["점포 지도", "네이버 지도에 우리 상권 점포를 한눈에"], ["공지·소식", "카테고리·검색되는 공지 게시판"], ["회원 게시판", "회원 전용 소통·다중 사진"], ["전자 동의서", "동의서·계약 전자서명(순차·검증)"], ["모바일 앱", "홈 화면 추가·설치형(PWA)"]].map(([t, d]) => `<div class="feature-card"><h3>${t}</h3><p>${d}</p></div>`).join("")}
     </div></div></section>

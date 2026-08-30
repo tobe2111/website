@@ -358,7 +358,7 @@ function heroSection(s, deps) {
   const title = esc(s.title || name).replace(/\n/g, "<br />");
   const sub = esc(s.subtitle || (deps.assoc && deps.assoc.tagline) || "우리 동네 상권을 한곳에서 만나보세요.");
   const sug = deps.suggestNames && deps.suggestNames.length;
-  // 배경 사진이 있으면 사진 + 어두운 베일(가독성), 없으면 그라데이션 + 광원 + 랜드마크 실루엣.
+  // 배경 사진이 있으면 사진 + 어두운 베일(가독성), 없으면 먹빛 바탕과 타이포만으로 잡는다.
   const photo = deps.heroImage;
   const video = deps.heroVideo;
   // 영상은 '있으면 좋은 것'이다. 사진을 poster 로 깔아 두면 영상이 뜨기 전에도,
@@ -370,7 +370,7 @@ function heroSection(s, deps) {
        ${photo ? `<div class="hp-photo" style="background-image:url('${clean(photo)}')"></div>` : ""}<div class="hp-photo-veil"></div>`
     : photo
       ? `<div class="hp-photo" style="background-image:url('${clean(photo)}')"></div><div class="hp-photo-veil"></div>`
-      : `<span class="hp-glow hp-glow-1"></span><span class="hp-glow hp-glow-2"></span>`;
+      : ""; // 배경 사진·영상이 없으면 먹빛 바탕 그대로 — 떠다니는 흐린 광원은 걷어냈다
   // 우측 정보 패널 — 상호와 검색창만 놓인 텅 빈 대문 대신, 실제 정보로 첫 화면을 채웁니다.
   // 점포가 0곳인 상권에서는 숫자 대신 '모집 중' 상태를 보여 빈 칸을 만들지 않습니다.
   const a = deps.assoc || {};
