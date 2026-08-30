@@ -63,12 +63,12 @@ export const pageCount = (body) => paginate(body).length;
 
 // ---------- 필드 ----------
 export const FIELD_KINDS = {
-  sign:  { label: "서명",   w: 0.22, h: 0.05, icon: "✍️" },
-  stamp: { label: "도장",   w: 0.09, h: 0.064, icon: "🔴" },
-  text:  { label: "텍스트", w: 0.24, h: 0.032, icon: "🔤" },
-  date:  { label: "날짜",   w: 0.16, h: 0.032, icon: "📅" },
-  name:  { label: "성명",   w: 0.18, h: 0.032, icon: "🪪" },
-  check: { label: "체크",   w: 0.035, h: 0.025, icon: "☑️" },
+  sign:  { label: "서명",   w: 0.22, h: 0.05 },
+  stamp: { label: "도장",   w: 0.09, h: 0.064 },
+  text:  { label: "텍스트", w: 0.24, h: 0.032 },
+  date:  { label: "날짜",   w: 0.16, h: 0.032 },
+  name:  { label: "성명",   w: 0.18, h: 0.032 },
+  check: { label: "체크",   w: 0.035, h: 0.025 },
 };
 export const isFieldKind = (k) => Object.prototype.hasOwnProperty.call(FIELD_KINDS, k);
 
@@ -116,9 +116,9 @@ export function fieldBox(f, { mode = "view", val = null, mine = false, assigneeN
       ? `<img src="${esc(val.imageUrl)}" alt="${esc(k.label)}" />`
       : f.kind === "check" ? `<span class="pf-check">✔</span>` : `<span class="pf-val">${esc(val.value)}</span>`;
   } else if (mode === "edit") {
-    inner = `<span class="pf-tag">${k.icon} ${esc(f.label || k.label)}</span>${assigneeName ? `<span class="pf-who">${esc(assigneeName)}</span>` : ""}<i class="pf-grip"></i>`;
+    inner = `<span class="pf-tag">${esc(f.label || k.label)}</span>${assigneeName ? `<span class="pf-who">${esc(assigneeName)}</span>` : ""}<i class="pf-grip"></i>`;
   } else if (mine) {
-    inner = `<span class="pf-tag">${k.icon} ${esc(f.label || k.label)}${f.required ? " *" : ""}</span>`;
+    inner = `<span class="pf-tag">${esc(f.label || k.label)}${f.required ? " *" : ""}</span>`;
   } else {
     inner = `<span class="pf-tag pf-other">${esc(assigneeName || k.label)}</span>`;
   }

@@ -196,7 +196,7 @@ test("외부 서명자는 로그인 없이 자기 계약의 완성본을 본다"
   const h = await r.text();
   assert.match(h, /paper-stack/);
   assert.match(h, /임대차 계약/);
-  assert.match(h, /인쇄 \/ PDF로 저장/);
+  assert.match(h, /인쇄 · PDF로 저장/);
 });
 
 test("외부 서명자는 자기 계약의 증적 패키지를 받는다", async () => {

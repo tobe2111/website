@@ -443,15 +443,15 @@ test("알리고 키가 일부만 도달하면 어느 이름이 빠졌는지 알�
   const strip = (/<div class="envcheck">([\s\S]*?)<\/div>/.exec(html) || [])[1] || "";
   assert.ok(strip, "변수별 도달 여부 줄이 있어야");
   for (const k of ["ALIGO_API_KEY", "ALIGO_USER_ID", "ALIGO_SENDER_KEY"])
-    assert.match(strip, new RegExp(`is-on[^<]*"><b>✓</b> <code>${k}</code>`), `${k} 는 도달로 표시`);
-  assert.match(strip, /<span class=""><b>✗<\/b> <code>ALIGO_SENDER<\/code>/, "빠진 것만 ✗");
+    assert.match(strip, new RegExp(`is-on[^<]*"><b>있음</b> <code>${k}</code>`), `${k} 는 도달로 표시`);
+  assert.match(strip, /<span class=""><b>없음<\/b> <code>ALIGO_SENDER<\/code>/, "빠진 것만 없음");
 });
 
 // 대시보드에 값을 붙여넣으면 줄바꿈이 딸려 오는 일이 잦다.
 // 공백만 든 값을 '있음'으로 세면 체크리스트는 초록인데 발송은 인증 실패로 죽는다.
 test("공백만 든 값은 있는 것으로 세지 않는다", async () => {
   const html = await superHtml({ ALIGO_API_KEY: "a", ALIGO_USER_ID: "b", ALIGO_SENDER_KEY: "c", ALIGO_SENDER: "  \n " });
-  assert.match(html, /<span class=""><b>✗<\/b> <code>ALIGO_SENDER<\/code>/);
+  assert.match(html, /<span class=""><b>없음<\/b> <code>ALIGO_SENDER<\/code>/);
 });
 
 // 크론이 등록되지 않으면 백업·리마인더·웹훅이 전부 멈추는데 사이트는 멀쩡해 보인다.
@@ -790,8 +790,8 @@ test("입력 검증 pattern 은 모든 브라우저에서 컴파일된다", asyn
 // "옮겼는데 사본 지우기 버튼이 안 뜬다" — 왜 안 뜨는지를 화면이 말해야 한다.
 test("시크릿 옮기기는 워커·DB 상태를 이름별로 보여 준다", async () => {
   const html = await superHtml(); // 워커 Secret 없음 · D1 에 값 있음
-  assert.match(html, /<span class=""><b>✗<\/b> 워커 Secret<\/span>/, "워커에 안 왔으면 ✗");
-  assert.match(html, /DB 사본 남아 있음/);
+  assert.match(html, /<span class=""><b>없음<\/b> 워커 Secret<\/span>/, "워커에 안 왔으면 없음");
+  assert.match(html, /<b>남아 있음<\/b> DB 사본/);
   assert.match(html, /DB 사본 지우기 버튼이 아직 없습니다/, "안 뜨는 이유를 그 자리에 적어야");
   assert.match(html, /Text 로 넣어서 배포 때 지워짐/);
 });
@@ -800,7 +800,7 @@ test("워커 Secret 이 확인되면 지우기 버튼이 나타난다", async ()
   const kp = await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]);
   const html = await superHtml({ SESSION_SECRET: "worker-value",
     SIGN_PRIVATE_KEY: JSON.stringify(await crypto.subtle.exportKey("jwk", kp.privateKey)) }, 0, false, true);
-  assert.match(html, /<span class="is-on"><b>✓<\/b> 워커 Secret<\/span>/);
+  assert.match(html, /<span class="is-on"><b>있음<\/b> 워커 Secret<\/span>/);
   assert.match(html, /action="\/super\/secret-drop"/, "확인됐으면 버튼이 있어야");
   assert.ok(!/DB 사본 지우기 버튼이 아직 없습니다/.test(html));
 });

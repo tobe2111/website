@@ -673,7 +673,7 @@ export async function adminBusinessStatus(ctx) {
       const origin = new URL(ctx.request.url).origin;
       const link = `${origin}${base}/business/${encodeURIComponent(b.slug)}`;
       await sendEmail(ctx.env, {
-        to: owner.email, subject: `🎉 '${b.name}' 가게가 공개되었습니다`,
+        to: owner.email, subject: `'${b.name}' 가게가 공개되었습니다`,
         html: mailShell("가게가 공개되었습니다!", `<p><b>${esc(b.name)}</b> 페이지가 ${esc(assoc.name)} 홈에 공개되었습니다.</p>
           ${mailButton(link, "내 가게 페이지 보기")}
           <p>대시보드에서 <b>가게 QR 코드</b>를 인쇄해 계산대에 붙이고, <b>공유하기</b>로 카톡방에 알려보세요.</p>`),

@@ -54,7 +54,7 @@
     document.getElementById("fpLabel").addEventListener("input", function () {
       if (!sel) return;
       sel.dataset.label = this.value;
-      sel.querySelector(".pf-tag").textContent = KINDS[sel.dataset.kind].icon + " " + (this.value || KINDS[sel.dataset.kind].label);
+      sel.querySelector(".pf-tag").textContent = this.value || KINDS[sel.dataset.kind].label;
     });
     document.getElementById("fpAssignee").addEventListener("change", function () {
       if (!sel) return;
@@ -80,7 +80,8 @@
       el.style.top = (round4(y) * 100) + "%";
       el.style.width = (k.w * 100) + "%";
       el.style.height = (k.h * 100) + "%";
-      el.innerHTML = '<span class="pf-tag">' + k.icon + " " + k.label + '</span><span class="pf-who"></span><i class="pf-grip"></i>';
+      el.innerHTML = '<span class="pf-tag"></span><span class="pf-who"></span><i class="pf-grip"></i>';
+      el.querySelector(".pf-tag").textContent = k.label;
       page.querySelector(".paper-layer").appendChild(el);
       return el;
     }

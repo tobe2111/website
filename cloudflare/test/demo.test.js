@@ -89,7 +89,7 @@ test("버튼을 누르면 콘텐츠가 채워지고 공개 페이지에 나온�
 test("채우고 나면 조직 화면에 적용 시각이 남는다", async () => {
   const r = await req("GET", `/super/org/${assoc.id}`, { cookie });
   const html = await r.text();
-  assert.match(html, /✓ 데모 적용 \d{2}-\d{2} \d{2}:\d{2}/, "언제 채웠는지 보여야 누른 걸 알 수 있음");
+  assert.match(html, /데모 적용 \d{2}-\d{2} \d{2}:\d{2}/, "언제 채웠는지 보여야 누른 걸 알 수 있음");
   assert.match(html, /데모 다시 채우기/, "이미 채운 곳은 버튼 문구도 바뀌어야 함");
 });
 

@@ -93,7 +93,7 @@ test("게시판: 사진 2장 글 작성 → 상세 갤러리 + 댓글", async ()
   assert.equal(r.status, 303);
   assert.match(await (await get(j, "/t/seocho/board/" + pid)).text(), /좋아요/);
   // 목록 썸네일 + 개수 배지
-  assert.match((await (await get(j, "/t/seocho/board")).text()).replace(/<[^>]+>/g, ""), /📎\s*2/);
+  assert.match((await (await get(j, "/t/seocho/board")).text()).replace(/<[^>]+>/g, ""), /사진\s*2/);
 });
 
 test("게시판: 비회원 차단", async () => {

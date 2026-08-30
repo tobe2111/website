@@ -560,8 +560,8 @@ export async function businesses(ctx) {
   if (openOnly) { items = items.filter((b) => openNow(b.hours) === true && !D.isDayOff(b)); total = items.length; cur = 1; pages = 1; }
   const cats = await D.distinctCategories(db, assoc.id);
   const chips = `<a href="${base}/businesses${qs({ q })}" class="chip-filter${!cat && !openOnly ? " active" : ""}">전체</a>` +
-    `<a href="${base}/businesses${qs({ q, open: "1" })}" class="chip-filter chip-open${openOnly ? " active" : ""}">● 지금 영업중</a>` +
-    `<button type="button" class="chip-filter chip-fav" id="favFilter" hidden>❤ 찜한 가게</button>` +
+    `<a href="${base}/businesses${qs({ q, open: "1" })}" class="chip-filter chip-open${openOnly ? " active" : ""}">지금 영업중</a>` +
+    `<button type="button" class="chip-filter chip-fav" id="favFilter" hidden>찜한 가게</button>` +
     cats.map((c) => `<a href="${base}/businesses${qs({ category: c.category, q })}" class="chip-filter${cat === c.category ? " active" : ""}">${esc(c.category)} <em>${c.n}</em></a>`).join("");
   const covers = await D.coverImagesFor(db, items.map((b) => b.id));
   const cards = items.map((b) => businessCard(base, b, covers.get(b.id))).join("") || `<p class="empty">${openOnly ? "지금 영업 중인 가게가 없습니다." : q ? "검색 결과가 없습니다." : "등록된 점포가 없습니다."}</p>`;
@@ -919,10 +919,10 @@ export async function board(ctx) {
   const rows = items.length ? items.map((p) => {
     const thumb = p.pi_thumb || p.pi_file || p.image;
     const cnt = (p.image_count || 0) + (p.image ? 1 : 0);
-    return `<li class="board-row${p.pinned ? " pinned" : ""}">${p.pinned ? `<span class="board-pin">📌</span>` : ""}
+    return `<li class="board-row${p.pinned ? " pinned" : ""}">${p.pinned ? `<span class="board-pin">고정</span>` : ""}
       ${thumb ? `<a href="${base}/board/${p.id}" class="board-thumb"><img src="${esc(mediaUrl(thumb))}" alt="" loading="lazy" /></a>` : ""}
-      <a href="${base}/board/${p.id}" class="board-title">${esc(p.title)}${cnt ? ` <span class="board-clip">📎${cnt > 1 ? cnt : ""}</span>` : ""}</a>
-      <span class="board-meta">${esc(p.author_name || "(탈퇴)")} · ${esc(kstDate(p.created_at, "."))}${p.comment_count ? ` · 💬 ${p.comment_count}` : ""}</span></li>`;
+      <a href="${base}/board/${p.id}" class="board-title">${esc(p.title)}${cnt ? ` <span class="board-clip">사진 ${cnt}</span>` : ""}</a>
+      <span class="board-meta">${esc(p.author_name || "(탈퇴)")} · ${esc(kstDate(p.created_at, "."))}${p.comment_count ? ` · 댓글 ${p.comment_count}` : ""}</span></li>`;
   }).join("") : `<li class="empty">${q ? "검색 결과가 없습니다." : "아직 게시글이 없습니다."}</li>`;
   const body = `<section class="section page-top"><div class="container">
     <div class="section-head"><p class="section-eyebrow">BOARD</p><h2 class="section-title">회원 게시판</h2><p class="section-lead">글 ${total}</p></div>
@@ -932,7 +932,7 @@ export async function board(ctx) {
       <form method="post" action="${base}/board" class="stack-form compact" enctype="multipart/form-data">
         <input type="text" name="title" placeholder="제목" required maxlength="200" />
         <textarea name="body" rows="4" placeholder="내용" required></textarea>
-        <label class="file-inline">📷 사진 첨부 (선택, 최대 6장)<input type="file" name="images" accept="image/*" multiple /></label>
+        <label class="file-inline">사진 첨부 (선택, 최대 6장)<input type="file" name="images" accept="image/*" multiple /></label>
         <button class="btn btn-primary btn-sm">등록</button></form></section>
     <ul class="board-list">${rows}</ul>
     ${pager((i) => `${base}/board${qs({ q, page: i })}`, cur, pages)}</div></section>`;
@@ -986,7 +986,7 @@ export async function editPost(ctx) {
       <label>제목<input type="text" name="title" value="${esc(p.title)}" required maxlength="200" /></label>
       <label>내용<textarea name="body" rows="8" required>${esc(p.body)}</textarea></label>
       ${existing}
-      <label class="file-inline">📷 사진 추가 (총 6장까지)<input type="file" name="images" accept="image/*" multiple /></label>
+      <label class="file-inline">사진 추가 (총 6장까지)<input type="file" name="images" accept="image/*" multiple /></label>
       <div class="post-actions"><button class="btn btn-primary">저장</button><a href="${base}/board/${p.id}" class="btn btn-ghost">취소</a></div>
     </form></div></section>`;
   return html(layout({ title: "글 수정", assoc, base, user, body, activeNav: `${base}/board`, csrf, scripts: `<script src="${assetUrl("/js/upload-resize.js")}" defer></script>` }));
@@ -1120,7 +1120,7 @@ export async function dashboard(ctx) {
     <div class="prod-list">${productRows}</div>
     <h3 class="panel-subtitle">제품 추가</h3>
     <form method="post" action="${base}/dashboard/products" enctype="multipart/form-data" class="stack-form compact">
-      <label class="file-drop"><input type="file" name="image" accept="image/*" /><span class="file-drop-text">📷 제품 사진 (선택·최대 8MB)</span></label>
+      <label class="file-drop"><input type="file" name="image" accept="image/*" /><span class="file-drop-text">제품 사진 (선택·최대 8MB)</span></label>
       <div class="form-two"><label>제품 이름<input name="name" required /></label><label>가격 <small>(선택)</small><input name="price" placeholder="예: 8,000원 · 시가 · 미표기" /></label></div>
       <label>한 줄 설명 <small>(선택)</small><input name="description" maxlength="300" /></label>
       <button class="btn btn-primary btn-sm">제품 추가</button></form></section>
@@ -1128,7 +1128,7 @@ export async function dashboard(ctx) {
       <p class="panel-hint">"오늘 딸기 들어왔어요" 같은 한 줄 소식을 올리면 <strong>가게 페이지와 상인회 홈 첫 화면</strong>에 바로 노출됩니다. 자주 올릴수록 손님이 자주 봅니다.</p>
       <form method="post" action="${base}/dashboard/updates" enctype="multipart/form-data" class="stack-form compact">
         <label>오늘의 소식<input name="body" required maxlength="300" placeholder="예: 오늘 생딸기 크레페 한정 20개!" /></label>
-        <label class="file-inline">📷 사진 1장 (선택)<input type="file" name="image" accept="image/*" /></label>
+        <label class="file-inline">사진 1장 (선택)<input type="file" name="image" accept="image/*" /></label>
         <button class="btn btn-primary btn-sm">소식 올리기</button></form>
       ${updates.length ? `<ul class="update-feed compact">${updates.map((u) => `<li class="update-item">
         ${u.image ? `<img class="update-img" src="${esc(mediaUrl(u.image))}" alt="" loading="lazy" />` : ""}
@@ -1175,13 +1175,12 @@ export async function dashboard(ctx) {
     <p class="panel-hint">4가지만 채우면 손님이 보는 가게 페이지가 완성됩니다.</p>
     <ul class="onboard-list">${mSteps.map((x) => `<li class="${x.done ? "done" : ""}"><span class="ob-check">${x.done ? "✓" : ""}</span><a href="${x.href}">${x.label}</a></li>`).join("")}</ul></section>` : "";
   const approveBanner = b.status === "approved" ? `<div class="approve-banner" data-dismiss-key="approved-${b.id}" hidden>
-    <span class="ab-emoji" aria-hidden="true">🎉</span>
     <div class="ab-text"><strong>가게가 공개되었습니다!</strong><p>아래 QR을 인쇄해 계산대에 붙이고, 가게 페이지의 공유 버튼으로 카톡방에 알려보세요.</p></div>
     <span class="ab-actions"><a class="btn btn-sm btn-primary" href="${base}/business/${esc(b.slug)}" target="_blank">내 가게 보기</a><button type="button" class="btn btn-sm btn-ghost" data-dismiss>닫기</button></span>
   </div>` : "";
   const opts = CATEGORIES.map((c) => `<option value="${esc(c)}"${c === b.category ? " selected" : ""}>${esc(c)}</option>`).join("");
   const grid = media.length ? media.map((m) => `<figure class="media-tile">${galleryItem(m, { showCaption: false })}<figcaption>
-      <span class="media-kind">${m.kind === "image" ? "🖼 사진" : (m.kind === "embed" ? "🎬 " + esc(providerLabel(m.provider)) : "🎬 영상")}</span>
+      <span class="media-kind">${m.kind === "image" ? "사진" : (m.kind === "embed" ? "" + esc(providerLabel(m.provider)) : "🎬 영상")}</span>
       <form method="post" action="${base}/dashboard/media/${m.id}/delete" data-confirm="삭제?"><button class="link-danger">삭제</button></form></figcaption></figure>`).join("") : `<p class="empty">아직 등록한 사진·영상이 없습니다.</p>`;
   const naver = assoc.map_client_id || env.NAVER_MAP_CLIENT_ID; // 상인회 전용 지도 키 우선
   const body = `<section class="dash"><div class="container">
@@ -1189,7 +1188,7 @@ export async function dashboard(ctx) {
       <p class="dash-sub">공개 주소: <a href="${base}/business/${esc(b.slug)}" target="_blank">${esc(prettyPath(base))}/business/${esc(b.slug)}</a></p></div>
       <div class="dash-head-actions">
         <form method="post" action="${base}/dashboard/dayoff" class="inline-form">
-          <button class="btn btn-sm ${dayOff ? "btn-primary" : "btn-ghost"}" title="가게 카드에 '오늘 휴무'로 표시됩니다. 내일 자동 해제.">${dayOff ? "🚫 오늘 휴무 중 (해제)" : "오늘 임시휴무"}</button></form>
+          <button class="btn btn-sm ${dayOff ? "btn-primary" : "btn-ghost"}" title="가게 카드에 '오늘 휴무'로 표시됩니다. 내일 자동 해제.">${dayOff ? "오늘 휴무 중 (해제)" : "오늘 임시휴무"}</button></form>
         <a href="${base}/sign" class="btn btn-ghost btn-sm">전자서명</a></div></div>
     ${flashOf(query)}
     ${approveBanner}
@@ -1216,10 +1215,10 @@ export async function dashboard(ctx) {
           <button class="btn btn-primary">정보 저장</button></form></section>
       <section class="panel" id="d-media"><h2 class="panel-title">사진 업로드</h2>
         <form method="post" action="${base}/dashboard/media" enctype="multipart/form-data" class="upload-form">
-          <label class="file-drop"><input type="file" name="files" accept="image/*" multiple /><span class="file-drop-text">📁 사진 선택 (최대 8MB)</span></label>
+          <label class="file-drop"><input type="file" name="files" accept="image/*" multiple /><span class="file-drop-text">사진 선택 (최대 8MB)</span></label>
           <input type="text" name="caption" placeholder="설명 (선택)" class="caption-input" />
           <button class="btn btn-primary btn-block">업로드</button></form>
-        <h3 class="panel-subtitle">🎬 영상 링크 추가</h3>
+        <h3 class="panel-subtitle">영상 링크 추가</h3>
         <p class="panel-hint">유튜브·쇼츠·인스타 릴스·네이버TV 주소를 붙여넣으세요. <small>단축 주소(naver.me/…)는 안 됩니다 — 영상을 열어 주소창의 원래 주소를 복사해 주세요.</small></p>
         <form method="post" action="${base}/dashboard/media/embed" class="stack-form compact">
           <input type="url" name="url" placeholder="영상 주소(링크)" required /><input type="text" name="caption" placeholder="설명 (선택)" maxlength="200" />
@@ -1442,16 +1441,16 @@ export async function admin(ctx) {
           <td class="actions-cell"><form method="post" action="${base}/admin/user/${m.id}/reset-password" data-confirm="임시 비밀번호를 발급할까요?"><button class="btn btn-xs btn-ghost">임시 비밀번호</button></form></td></tr>`).join("")}</tbody></table></div>` : ""}`
       : `<div class="table-scroll"><table class="admin-table"><thead><tr><th>회원</th><th>업체</th><th>비밀번호</th></tr></thead><tbody>${memberRows}</tbody></table></div>`}
       ${query.get("invite") ? `<div class="invite-box">
-        <p class="invite-box-title">✅ 초대 링크가 만들어졌습니다 <small>(7일 유효)</small></p>
+        <p class="invite-box-title">초대 링크가 만들어졌습니다 <small>(7일 유효)</small></p>
         <input type="text" class="invite-url" value="${esc(`${ORIGIN}${base}/invite?t=${encodeURIComponent(query.get("invite"))}`)}" readonly data-select-all />
         <span class="pill-row"><button type="button" class="btn btn-sm btn-primary" data-share data-share-url="${esc(`${ORIGIN}${base}/invite?t=${encodeURIComponent(query.get("invite"))}`)}" data-share-title="${esc(assoc.name)} 입점 초대">카톡으로 보내기 / 복사</button></span>
         <p class="panel-hint">사장님이 링크를 열어 이메일·비밀번호만 정하면 가게가 <b>승인 절차 없이 바로 공개</b>됩니다.</p></div>` : ""}
-      ${isEsign ? "" : `<details class="help-box" style="margin-top:14px"${query.get("invite") || s.businesses ? "" : " open"}><summary>📨 사장님 초대 링크 만들기 (가장 쉬운 온보딩)</summary>
+      ${isEsign ? "" : `<details class="help-box" style="margin-top:14px"${query.get("invite") || s.businesses ? "" : " open"}><summary>사장님 초대 링크 만들기 (가장 쉬운 온보딩)</summary>
         <div class="help-body"><p class="help-lead">가게 이름만 입력해 링크를 만들고 카톡으로 보내세요. 사장님은 이메일·비밀번호만 정하면 끝 — 가게가 바로 공개됩니다.</p>
         <form method="post" action="${base}/admin/invite" class="stack-form compact">
           <div class="form-two"><label>가게 이름<input type="text" name="biz_name" required maxlength="100" /></label><label>업종<select name="category">${CATEGORIES.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("")}</select></label></div>
           <button class="btn btn-primary btn-sm">초대 링크 만들기</button></form></div></details>`}
-      ${isEsign ? `<details class="help-box" style="margin-top:14px" open><summary>👤 담당자 추가</summary>
+      ${isEsign ? `<details class="help-box" style="margin-top:14px" open><summary>담당자 추가</summary>
         <div class="help-body"><p class="help-lead">계약서를 만들고 보낼 사람에게 계정을 발급합니다.
           <b>담당자</b>는 계약 업무만 하고 설정·API 키·과금은 볼 수 없습니다. <b>관리자</b>는 이 콘솔 전부를 함께 씁니다 — 믿을 수 있는 분에게만 주세요.</p>
         <form method="post" action="${base}/admin/admins/add" class="stack-form compact">
@@ -1461,7 +1460,7 @@ export async function admin(ctx) {
               <option value="STAFF">담당자 — 계약서 작성·발송만</option>
               <option value="ADMIN">관리자 — 설정·API·과금 포함</option></select></label></div>
           <button class="btn btn-primary btn-sm">계정 발급 + 임시 비번</button></form></div></details>`
-      : `<details class="help-box" style="margin-top:14px"><summary>👥 부관리자 추가 (회장·총무 공동 운영)</summary>
+      : `<details class="help-box" style="margin-top:14px"><summary>부관리자 추가 (회장·총무 공동 운영)</summary>
         <div class="help-body"><p class="help-lead">관리자 권한 계정을 하나 더 발급합니다. 승인·공지·브랜딩 등 이 콘솔의 모든 기능을 함께 쓸 수 있으니 믿을 수 있는 분에게만 발급하세요.</p>
         ${admins.length > 1 ? `<p class="panel-hint">현재 관리자: ${admins.map((u) => esc(u.name || u.email)).join(", ")}</p>` : ""}
         <form method="post" action="${base}/admin/admins/add" class="stack-form compact">
@@ -1683,11 +1682,11 @@ export async function signForm(ctx) {
     ${otpBlock}
     ${fillBar}
     ${docView}
-    ${d.attachment ? `<p class="doc-attach">📎 계약서 원문: <a href="${esc(mediaUrl(d.attachment))}" target="_blank" rel="noopener">${esc(d.attachment_name || "계약서.pdf")}</a> <small>— 이 파일의 내용도 해시에 포함되어 봉인됩니다</small></p>` : ""}
+    ${d.attachment ? `<p class="doc-attach">계약서 원문: <a href="${esc(mediaUrl(d.attachment))}" target="_blank" rel="noopener">${esc(d.attachment_name || "계약서.pdf")}</a> <small>— 이 파일의 내용도 해시에 포함되어 봉인됩니다</small></p>` : ""}
     <details class="doc-hash"><summary>문서 지문 <code>${esc(String(d.content_hash).slice(0, 8))}…${esc(String(d.content_hash).slice(-8))}</code></summary>
       <p>이 계약서 내용으로 계산한 값입니다. 글자 하나만 바뀌어도 값이 달라지므로, 나중에 문서가 바뀌지 않았는지 이 값으로 확인할 수 있습니다.</p>
       <code>${esc(d.content_hash)}</code></details>
-    ${otpDone ? `${needOtp ? '<p class="otp-ok">✅ 휴대폰 본인확인 완료 — 이 서명에는 본인확인 기록이 함께 남습니다.</p>' : ""}
+    ${otpDone ? `${needOtp ? '<p class="otp-ok">휴대폰 본인확인 완료 — 이 서명에는 본인확인 기록이 함께 남습니다.</p>' : ""}
     <form method="post" action="${base}/sign/${d.id}" class="stack-form sign-form" id="signForm">
       ${padBlock}
       <input type="hidden" name="signature" id="signatureData" />
@@ -1730,13 +1729,13 @@ export async function adminDocuments(ctx) {
   const body = `<section class="dash"><div class="container">
     <div class="dash-head"><div><p class="section-eyebrow">E-SIGN · ${esc(assoc.name)}</p><h1 class="dash-title">전자서명 문서</h1>
       <p class="dash-sub">${canAdmin ? `<a href="${base}/admin">← 관리자</a>` : `담당자 · ${esc(user.name)}`}</p></div>
-      <div class="dash-head-actions"><a href="${base}/admin/templates" class="btn btn-ghost btn-sm">📋 서식 관리</a>${canAdmin ? `<a href="${base}/admin/api" class="btn btn-ghost btn-sm">🔌 API 연동</a>` : ""}</div></div>${flashOf(query)}
-    <section class="panel panel-accent"><h2 class="panel-title">📋 서식으로 만들기 <span class="badge badge-brand">권장</span></h2>
+      <div class="dash-head-actions"><a href="${base}/admin/templates" class="btn btn-ghost btn-sm">서식 관리</a>${canAdmin ? `<a href="${base}/admin/api" class="btn btn-ghost btn-sm">API 연동</a>` : ""}</div></div>${flashOf(query)}
+    <section class="panel panel-accent"><h2 class="panel-title">서식으로 만들기</h2>
       <p class="panel-hint">표준 서식을 고르면 본문과 <b>서명·도장 자리까지</b> 그대로 들어옵니다. 빈칸만 채우면 끝입니다.</p>
       <div class="tpl-grid">${tplCards}</div>
       ${myTpls.length ? `<div class="form-divider">${assoc.kind === "esign" ? "우리 서식" : "우리 상인회 서식"}</div><div class="tpl-grid">${myCards}</div>` : ""}
     </section>
-    <details class="panel"><summary class="panel-title">✏️ 직접 입력해서 만들기</summary>
+    <details class="panel"><summary class="panel-title">직접 입력해서 만들기</summary>
       <form method="post" action="${base}/admin/documents" class="stack-form" enctype="multipart/form-data">
         <label>제목<input type="text" name="title" required placeholder="예: 2026 가입 동의서" /></label>
         <label>본문<textarea name="body" rows="8" required></textarea></label>
@@ -1823,13 +1822,13 @@ export async function adminDocumentDetail(ctx) {
       <p class="dash-sub"><a href="${base}/admin/documents">← 문서 목록</a> · 서명 ${sigs.length}명</p></div>
       <div class="dash-head-actions">
         ${d.closed || !canTalk ? "" : `<form method="post" action="${base}/admin/documents/${d.id}/remind" class="inline-form" data-confirm="미서명자에게 알림톡으로 리마인더를 보낼까요? (잔액이 차감됩니다)"><button class="btn btn-primary btn-sm">미서명자 재알림</button></form>`}
-        <a href="${base}/documents/${d.id}/paper" class="btn btn-ghost btn-sm">📄 완성본 보기</a>
-        <a href="${base}/documents/${d.id}/evidence" class="btn btn-ghost btn-sm">📦 증적 패키지</a>
-        <a href="${base}/admin/documents/${d.id}/fields" class="btn btn-ghost btn-sm">🖊 필드 배치${fieldN ? ` (${fieldN})` : ""}</a>
-        <button type="button" class="btn btn-ghost btn-sm" data-print>🖨 인쇄/PDF</button></div></div>
+        <a href="${base}/documents/${d.id}/paper" class="btn btn-ghost btn-sm">완성본 보기</a>
+        <a href="${base}/documents/${d.id}/evidence" class="btn btn-ghost btn-sm">증적 패키지</a>
+        <a href="${base}/admin/documents/${d.id}/fields" class="btn btn-ghost btn-sm">필드 배치${fieldN ? ` (${fieldN})` : ""}</a>
+        <button type="button" class="btn btn-ghost btn-sm" data-print>인쇄 · PDF</button></div></div>
     ${reqPanel}
     ${extPanel}
-    ${sigs.length || d.closed ? "" : `<details class="panel"><summary class="panel-title">✏️ 문서 수정 <small>(아직 아무도 서명하지 않았습니다)</small></summary>
+    ${sigs.length || d.closed ? "" : `<details class="panel"><summary class="panel-title">문서 수정 <small>(아직 아무도 서명하지 않았습니다)</small></summary>
       <p class="panel-hint">서명이 시작되면 잠깁니다. 본문을 고치면 문서 해시가 다시 계산되고, 쪽수가 줄면 마지막 쪽 밖의 필드를 끌어옵니다.</p>
       <form method="post" action="${base}/admin/documents/${d.id}/edit" class="stack-form">
         <label>제목<input type="text" name="title" value="${esc(d.title)}" required maxlength="200" /></label>
@@ -1838,7 +1837,7 @@ export async function adminDocumentDetail(ctx) {
           <label class="check check-inline"><input type="checkbox" name="ordered" value="1"${d.ordered ? " checked" : ""} /> 순차 서명</label></div>
         <button class="btn btn-primary btn-sm">수정 저장</button></form></details>`}
     <section class="panel"><h2 class="panel-title">문서 본문</h2><div class="doc-body">${docBody(d.body)}</div>
-      ${d.attachment ? `<p class="doc-attach">📎 <a href="${esc(mediaUrl(d.attachment))}" target="_blank" rel="noopener">${esc(d.attachment_name || "계약서.pdf")}</a></p>` : ""}
+      ${d.attachment ? `<p class="doc-attach"><a href="${esc(mediaUrl(d.attachment))}" target="_blank" rel="noopener">${esc(d.attachment_name || "계약서.pdf")}</a></p>` : ""}
       <p class="doc-hash">해시: <code>${esc(d.content_hash)}</code></p></section>
     <section class="panel"><h2 class="panel-title">서명 내역</h2><div class="table-scroll"><table class="admin-table">
       <thead><tr><th>서명자</th><th>서명</th><th>일시·IP</th><th>검증</th></tr></thead><tbody>${rows}</tbody></table></div></section>
@@ -1874,7 +1873,7 @@ export async function adminDocumentNew(ctx) {
     `<div class="party-row">
       <label>${esc(p)}<select name="party_${i}" class="party-pick" data-party="${i}" required>
         <option value="">— 선택 —</option>${memberOpts}
-        <option value="ext">✉ 외부 상대방 — 가입하지 않은 사람</option>
+        <option value="ext">외부 상대방 — 가입하지 않은 사람</option>
       </select></label>
       <div class="party-ext" data-party="${i}" hidden>
         <div class="form-two"><label>이름<input type="text" name="ext_name_${i}" maxlength="60" placeholder="예: 홍길동" /></label>
@@ -1976,8 +1975,8 @@ export async function adminApi(ctx) {
   const body = `<section class="dash"><div class="container">
     <div class="dash-head"><div><p class="section-eyebrow">E-SIGN · API</p><h1 class="dash-title">API 연동</h1>
       <p class="dash-sub"><a href="${base}/admin/documents">← 문서 목록</a> · 우리 시스템에서 계약을 자동으로 만들고 보냅니다</p></div>
-      <div class="dash-head-actions"><a href="/api/v1/docs" target="_blank" class="btn btn-ghost btn-sm">📖 API 문서</a></div></div>${flashOf(query)}
-    ${fresh ? `<div class="invite-box"><p class="invite-box-title">🔑 새 API 키 — <b>지금만 보입니다</b></p>
+      <div class="dash-head-actions"><a href="/api/v1/docs" target="_blank" class="btn btn-ghost btn-sm">API 문서</a></div></div>${flashOf(query)}
+    ${fresh ? `<div class="invite-box"><p class="invite-box-title">새 API 키 — <b>지금만 보입니다</b></p>
       <input type="text" class="invite-url" value="${esc(fresh)}" readonly data-select-all />
       <p class="panel-hint">이 값은 저장하지 않으므로 다시 볼 수 없습니다. 안전한 곳에 옮겨 두세요.
         잃어버리면 새 키를 발급하고 이 키를 폐기하면 됩니다.</p></div>` : ""}
@@ -2112,13 +2111,13 @@ export async function esignLanding(ctx) {
   <section class="section section-alt"><div class="container">
     <div class="section-head"><p class="section-eyebrow">SECURITY</p><h2 class="section-title">위변조를 어떻게 잡아내는가</h2></div>
     <div class="feature-grid">
-      ${[["📄", "본문 해시", "계약서 한 글자만 바뀌어도 해시가 달라져 드러납니다"],
-         ["✍️", "Ed25519 봉인", "서명자·시각·IP·기기를 디지털 서명으로 봉인합니다"],
-         ["📍", "입력값·좌표 봉인", "채운 값은 물론 '어느 자리에 채웠는지'까지 봉인해, 자리만 옮기는 조작도 탐지합니다"],
-         ["⛓", "서명 사슬", "각 서명이 직전 서명을 가리켜, 중간 기록을 지우면 사슬이 끊깁니다"],
-         ["⏱", "시점 앵커", "매일 사슬의 머리를 봉인해 '그 시점에 이미 존재했다'를 증명합니다"],
-         ["🔑", "공개키 공개", "공개키를 상시 공개해 누구나 직접 검증할 수 있습니다"],
-        ].map(([i, t, d]) => `<div class="feature-card"><span class="feature-ico">${i}</span><h3>${esc(t)}</h3><p>${esc(d)}</p></div>`).join("")}
+      ${[["본문 해시", "계약서 한 글자만 바뀌어도 해시가 달라져 드러납니다"],
+         ["Ed25519 봉인", "서명자·시각·IP·기기를 디지털 서명으로 봉인합니다"],
+         ["입력값·좌표 봉인", "채운 값은 물론 '어느 자리에 채웠는지'까지 봉인해, 자리만 옮기는 조작도 탐지합니다"],
+         ["서명 사슬", "각 서명이 직전 서명을 가리켜, 중간 기록을 지우면 사슬이 끊깁니다"],
+         ["시점 앵커", "매일 사슬의 머리를 봉인해 '그 시점에 이미 존재했다'를 증명합니다"],
+         ["공개키 공개", "공개키를 상시 공개해 누구나 직접 검증할 수 있습니다"],
+        ].map(([t, d]) => `<div class="feature-card"><h3>${esc(t)}</h3><p>${esc(d)}</p></div>`).join("")}
     </div>
     <p class="panel-hint" style="text-align:center;margin-top:18px">
       공개키: <a href="/.well-known/esign-public-key" target="_blank"><code>/.well-known/esign-public-key</code></a> ·
@@ -2232,19 +2231,19 @@ export async function homepageLanding(ctx) {
     <div class="section-head"><p class="section-eyebrow">INCLUDED</p><h2 class="section-title">한 장에 들어가는 것</h2>
       <p class="section-lead">아래 섹션이 기본으로 들어갑니다. 필요 없는 섹션은 끄고, 순서는 직접 바꿉니다.</p></div>
     <div class="feature-grid">
-      ${[["🏁", "히어로", "첫 화면에서 브랜드와 제안을 한 문장으로"],
-         ["🔁", "흐르는 띠", "핵심 숫자·강점을 반복 노출"],
-         ["📖", "브랜드 소개", "왜 이 브랜드인지 설명하는 본문과 사진"],
-         ["💪", "창업 강점", "점주가 궁금해하는 이유를 카드로"],
-         ["💬", "점주 후기", "실제 운영자의 말이 가장 강한 근거"],
-         ["🍽", "메뉴·상품", "대표 상품을 사진·가격과 함께"],
-         ["🧭", "가맹 절차", "상담부터 오픈까지의 단계"],
-         ["💰", "가맹 비용", "표로 정리 · 상담 전에는 가려 두기 가능"],
-         ["📝", "상담 신청 폼", "이 페이지의 목적 — 연락처 수집"],
-         ["📍", "매장 안내", "운영 중인 가맹점 목록과 지도"],
-         ["❓", "자주 묻는 질문", "망설임을 미리 걷어내기"],
-         ["📞", "고정 하단 바", "모든 페이지에서 전화·신청이 한 번에"],
-        ].map(([i, t, d]) => `<div class="feature-card"><span class="feature-ico">${i}</span><h3>${esc(t)}</h3><p>${esc(d)}</p></div>`).join("")}
+      ${[["히어로", "첫 화면에서 브랜드와 제안을 한 문장으로"],
+         ["흐르는 띠", "핵심 숫자·강점을 반복 노출"],
+         ["브랜드 소개", "왜 이 브랜드인지 설명하는 본문과 사진"],
+         ["창업 강점", "점주가 궁금해하는 이유를 카드로"],
+         ["점주 후기", "실제 운영자의 말이 가장 강한 근거"],
+         ["메뉴·상품", "대표 상품을 사진·가격과 함께"],
+         ["가맹 절차", "상담부터 오픈까지의 단계"],
+         ["가맹 비용", "표로 정리 · 상담 전에는 가려 두기 가능"],
+         ["상담 신청 폼", "이 페이지의 목적 — 연락처 수집"],
+         ["매장 안내", "운영 중인 가맹점 목록과 지도"],
+         ["자주 묻는 질문", "망설임을 미리 걷어내기"],
+         ["고정 하단 바", "모든 페이지에서 전화·신청이 한 번에"],
+        ].map(([t, d]) => `<div class="feature-card"><h3>${esc(t)}</h3><p>${esc(d)}</p></div>`).join("")}
     </div>
   </div></section>
 
@@ -2265,15 +2264,15 @@ export async function homepageLanding(ctx) {
   <section class="section"><div class="container">
     <div class="section-head"><p class="section-eyebrow">WHY</p><h2 class="section-title">맡기고 끝이 아니라, 직접 고칩니다</h2></div>
     <div class="feature-grid">
-      ${[["✏️", "관리자가 직접 수정", "문구·순서·사진을 관리자 화면에서 바꿉니다. 사진은 올리면 바로 붙고, 수정 요청을 기다릴 필요가 없습니다."],
-         ["👀", "초안으로 고치고 발행", "고치는 동안 손님에게는 옛 화면이 보입니다. 미리보기로 확인한 뒤 발행하세요."],
-         ["📱", "모바일 우선", "가맹 문의는 대부분 휴대폰에서 옵니다. 고정 하단 바로 전화·신청이 어느 페이지에서든 손끝에 있습니다."],
-         ["🎯", "캠페인별 랜딩", "인스타용·검색광고용 문구를 따로 두고 어느 쪽이 더 신청을 만드는지 전환율로 비교합니다."],
-         ["🔐", "개인정보 자동 파기", "상담에 필요한 항목만 받고, 처리 끝난 건은 정한 기간이 지나면 매일 자동으로 지웁니다."],
-         ["🛡", "스팸 차단", "봇 방지·허니팟·중복 제출 차단이 기본입니다. 쓰레기 DB가 쌓이지 않습니다."],
-         ["✍️", "전자계약 연계", "상담 건에서 바로 가맹계약서를 만들어 링크로 보내고 그 자리에서 체결합니다."],
-         ["🌐", "우리 도메인 연결", "브랜드 도메인을 그대로 붙일 수 있고, 검색 노출 설정도 함께 잡아 드립니다."],
-        ].map(([i, t, d]) => `<div class="feature-card"><span class="feature-ico">${i}</span><h3>${esc(t)}</h3><p>${esc(d)}</p></div>`).join("")}
+      ${[["관리자가 직접 수정", "문구·순서·사진을 관리자 화면에서 바꿉니다. 사진은 올리면 바로 붙고, 수정 요청을 기다릴 필요가 없습니다."],
+         ["초안으로 고치고 발행", "고치는 동안 손님에게는 옛 화면이 보입니다. 미리보기로 확인한 뒤 발행하세요."],
+         ["모바일 우선", "가맹 문의는 대부분 휴대폰에서 옵니다. 고정 하단 바로 전화·신청이 어느 페이지에서든 손끝에 있습니다."],
+         ["캠페인별 랜딩", "인스타용·검색광고용 문구를 따로 두고 어느 쪽이 더 신청을 만드는지 전환율로 비교합니다."],
+         ["개인정보 자동 파기", "상담에 필요한 항목만 받고, 처리 끝난 건은 정한 기간이 지나면 매일 자동으로 지웁니다."],
+         ["스팸 차단", "봇 방지·허니팟·중복 제출 차단이 기본입니다. 쓰레기 DB가 쌓이지 않습니다."],
+         ["전자계약 연계", "상담 건에서 바로 가맹계약서를 만들어 링크로 보내고 그 자리에서 체결합니다."],
+         ["우리 도메인 연결", "브랜드 도메인을 그대로 붙일 수 있고, 검색 노출 설정도 함께 잡아 드립니다."],
+        ].map(([t, d]) => `<div class="feature-card"><h3>${esc(t)}</h3><p>${esc(d)}</p></div>`).join("")}
     </div>
   </div></section>
 
@@ -2322,13 +2321,13 @@ async function esignHome(ctx) {
     <section class="section"><div class="container">
       <div class="section-head"><p class="section-eyebrow">HOW IT WORKS</p><h2 class="section-title">계약이 끝나는 과정</h2></div>
       <div class="feature-grid">${[
-        ["📄", "계약서 작성", "표준 서식을 고르고 빈칸만 채웁니다"],
-        ["🖊", "서명 자리 배치", "서명·도장·날짜 자리를 계약서 위에 놓습니다"],
-        ["📲", "링크 발송", "상대방에게 카카오톡·문자로 서명 링크가 갑니다"],
-        ["🔐", "본인확인·서명", "휴대폰 인증 후 그 자리에서 서명·날인"],
-        ["📦", "증적 확보", "확인서·감사추적·검증절차를 한 벌로 보관"],
-        ["🔎", "누구나 검증", "검증코드로 제3자가 위변조를 확인"],
-      ].map(([i, t, d]) => `<div class="feature-card"><span class="feature-ico">${i}</span><h3>${esc(t)}</h3><p>${esc(d)}</p></div>`).join("")}</div>
+        ["계약서 작성", "표준 서식을 고르고 빈칸만 채웁니다"],
+        ["서명 자리 배치", "서명·도장·날짜 자리를 계약서 위에 놓습니다"],
+        ["링크 발송", "상대방에게 카카오톡·문자로 서명 링크가 갑니다"],
+        ["본인확인·서명", "휴대폰 인증 후 그 자리에서 서명·날인"],
+        ["증적 확보", "확인서·감사추적·검증절차를 한 벌로 보관"],
+        ["누구나 검증", "검증코드로 제3자가 위변조를 확인"],
+      ].map(([t, d]) => `<div class="feature-card"><h3>${esc(t)}</h3><p>${esc(d)}</p></div>`).join("")}</div>
     </div></section>
     <section class="section section-alt"><div class="container narrow">
       <div class="section-head"><h2 class="section-title">서명한 계약이 진짜인지 확인</h2></div>
@@ -2369,7 +2368,7 @@ export async function extSignForm(ctx) {
   if (await D.hasSignedExt(db, d.id, signer.id))
     return shellPage(`<div class="flash flash-ok">이미 서명을 마치셨습니다. 확인서는 등록하신 연락처로 보내드렸습니다.</div>
       <p class="pill-row"><a href="/esign/${encodeURIComponent(params.token)}/paper" class="btn btn-primary btn-sm">계약서 완성본 보기</a>
-        <a href="/esign/${encodeURIComponent(params.token)}/evidence" class="btn btn-ghost btn-sm">📦 증적 패키지 받기</a></p>
+        <a href="/esign/${encodeURIComponent(params.token)}/evidence" class="btn btn-ghost btn-sm">증적 패키지 받기</a></p>
       <p class="panel-hint">증적 패키지에는 서명된 계약서·확인서·검증 방법이 들어 있습니다. 분쟁 시 그대로 쓰실 수 있습니다.</p>`, d.title);
   if (signer.declined_at)
     return shellPage(`<div class="flash flash-warn">이 계약의 서명을 거절하셨습니다.<br /><small>사유: ${esc(signer.decline_reason || "")}</small></div>`, d.title);
@@ -2409,7 +2408,7 @@ export async function extSignForm(ctx) {
     ${fields.length && otpDone ? `<div class="field-progress" id="fieldProgress"></div>
       <button type="button" class="btn btn-ghost btn-sm field-jump" id="fieldJump" hidden>다음 항목으로 이동 ↓</button>` : ""}
     ${docView}
-    ${d.attachment ? `<p class="doc-attach">📎 계약서 원문: <a href="${esc(mediaUrl(d.attachment))}" target="_blank" rel="noopener">${esc(d.attachment_name || "계약서.pdf")}</a></p>` : ""}
+    ${d.attachment ? `<p class="doc-attach">계약서 원문: <a href="${esc(mediaUrl(d.attachment))}" target="_blank" rel="noopener">${esc(d.attachment_name || "계약서.pdf")}</a></p>` : ""}
     <details class="doc-hash"><summary>문서 지문 <code>${esc(String(d.content_hash).slice(0, 8))}…${esc(String(d.content_hash).slice(-8))}</code></summary>
       <p>이 계약서 내용으로 계산한 값입니다. 글자 하나만 바뀌어도 값이 달라지므로, 나중에 문서가 바뀌지 않았는지 이 값으로 확인할 수 있습니다.</p>
       <code>${esc(d.content_hash)}</code></details>
@@ -2465,8 +2464,8 @@ export async function extPaper(ctx) {
   const body = `<section class="section page-top"><div class="container">
     <div class="dash-head no-print"><div><p class="section-eyebrow">${esc(assoc.name)} · 완성본</p><h1 class="dash-title">${esc(d.title)}</h1>
       <p class="dash-sub"><a href="/esign/${esc(ctx.params.token)}">← 돌아가기</a> · 서명 ${rc.signed}/${rc.total}${done ? " · 체결 완료" : " · 진행 중"}</p></div>
-      <div class="dash-head-actions"><button type="button" class="btn btn-primary btn-sm" data-print>🖨 인쇄 / PDF로 저장</button>
-        ${done ? `<a href="/esign/${esc(ctx.params.token)}/evidence" class="btn btn-ghost btn-sm">📦 증적 패키지</a>` : ""}</div></div>
+      <div class="dash-head-actions"><button type="button" class="btn btn-primary btn-sm" data-print>인쇄 · PDF로 저장</button>
+        ${done ? `<a href="/esign/${esc(ctx.params.token)}/evidence" class="btn btn-ghost btn-sm">증적 패키지</a>` : ""}</div></div>
     <div class="paper-wrap">${renderPaper(d.body, {
       fieldsFor: fieldsRenderer(fields, { mode: "view", nameOf }), watermark: done ? "" : "미완성" })}</div></div></section>
     <style>@media print{@page{size:A4;margin:0}body{background:#fff}}</style>`;
@@ -2532,7 +2531,7 @@ export async function adminDocFields(ctx) {
     return html(layout({ title: "필드 배치", assoc, base, user, body: b, csrf, scripts: `<script src="${assetUrl("/js/paper.js")}" defer></script>` }));
   }
   const palette = Object.entries(FIELD_KINDS).map(([k, v], i) =>
-    `<button type="button" class="fp-item${i === 0 ? " on" : ""}" data-kind="${esc(k)}">${v.icon} ${esc(v.label)}</button>`).join("");
+    `<button type="button" class="fp-item${i === 0 ? " on" : ""}" data-kind="${esc(k)}">${esc(v.label)}</button>`).join("");
   // 외부 서명자는 음수(-id)로 구분한다 — 회원 id 와 겹치지 않는 이름공간
   const extList = await D.listExternalSigners(db, d.id);
   const assigneeOpts = `<option value="0" data-name="">누구나(먼저 서명하는 사람)</option>` +
@@ -2586,7 +2585,7 @@ export async function documentPaper(ctx) {
   const body = `<section class="section page-top"><div class="container">
     <div class="dash-head no-print"><div><p class="section-eyebrow">E-SIGN · 완성본</p><h1 class="dash-title">${esc(d.title)}</h1>
       <p class="dash-sub"><a href="${backTo}">← 돌아가기</a> · 서명 ${rc.signed}/${rc.total}${done ? " · 체결 완료" : " · 진행 중"}</p></div>
-      <div class="dash-head-actions"><button type="button" class="btn btn-primary btn-sm" data-print>🖨 인쇄 / PDF로 저장</button></div></div>
+      <div class="dash-head-actions"><button type="button" class="btn btn-primary btn-sm" data-print>인쇄 · PDF로 저장</button></div></div>
     <div class="paper-wrap">${paper}</div></div></section>
     <style>@media print{@page{size:A4;margin:0}body{background:#fff}}</style>`;
   return html(layout({ title: `${d.title} — 완성본`, assoc, base, user, body, csrf, scripts: `<script src="${assetUrl("/js/paper.js")}" defer></script>` }));
@@ -2620,9 +2619,9 @@ export async function certificatePage(ctx) {
       ${row("서명 기기", `<small>${esc((sig.user_agent || "").slice(0, 120))}</small>`)}
       ${row("문서 해시 (SHA-256)", `<code class="cert-hash">${esc(sig.content_hash)}</code>`)}
       ${row("봉인값 (Ed25519)", `<code class="cert-hash">${esc(sig.record_hash)}</code>`)}
-      ${row("본문 무결성", v.contentOk ? "원본과 일치 ✅" : "변경됨 ❌")}
-      ${row("입력값·서명 위치", v.fieldsChecked ? (v.fieldsOk ? "원본과 일치 ✅" : "변경됨 ❌") : "해당 없음")}
-      ${row("봉인 무결성", v.sealOk ? "무결 ✅" : "손상 ❌")}
+      ${row("본문 무결성", v.contentOk ? "원본과 일치" : "변경됨")}
+      ${row("입력값·서명 위치", v.fieldsChecked ? (v.fieldsOk ? "원본과 일치" : "변경됨") : "해당 없음")}
+      ${row("봉인 무결성", v.sealOk ? "무결" : "손상")}
       ${row("검증 코드", `<code>${esc(sig.verify_code)}</code>`)}
       ${doc && doc.attachment ? row("첨부 계약서", esc(doc.attachment_name || "계약서.pdf")) : ""}
     </table>
@@ -2638,7 +2637,7 @@ export async function certificatePage(ctx) {
       <p class="cert-note">본 확인서는 서명 시점의 서명자·시각·접속 IP·문서 해시를 Ed25519 전자서명으로 봉인한 기록입니다.
         문서 본문이 한 글자라도 바뀌면 해시가 달라져 “변경됨”으로 표시됩니다.</p>
     </div>
-    <div class="cert-actions no-print"><button type="button" class="btn btn-primary btn-sm" data-print>🖨 인쇄 / PDF 저장</button>
+    <div class="cert-actions no-print"><button type="button" class="btn btn-primary btn-sm" data-print>인쇄 · PDF 저장</button>
       <a class="btn btn-ghost btn-sm" href="/verify/${esc(sig.verify_code)}">검증 페이지</a></div>
   </div></section>`;
   return html(layout({ title: "전자서명 확인서", assoc, body, csrf,
@@ -2685,8 +2684,8 @@ export async function verifyPage(ctx) {
       <table class="verify-table"><tr><th>문서</th><td>${esc(doc ? doc.title : "(삭제됨)")}</td></tr>
       <tr><th>서명자</th><td>${esc(sig.signer_name)}${sig.external_id ? ' <span class="badge badge-info">외부 서명자</span>' : ""}</td></tr>
       <tr><th>서명 시각</th><td>${esc(kstStamp(sig.signed_at))} <span class="tz">KST</span></td></tr>
-      <tr><th>봉인(Ed25519)</th><td>${v.sealOk ? "무결 ✅" : "손상 ❌"}</td></tr><tr><th>문서 본문</th><td>${v.contentOk ? "원본 일치 ✅" : "변경됨 ❌"}</td></tr>
-      <tr><th>입력값·서명 위치</th><td>${v.fieldsChecked ? (v.fieldsOk ? "원본 일치 ✅" : "변경됨 ❌") : "해당 없음"}</td></tr>
+      <tr><th>봉인(Ed25519)</th><td>${v.sealOk ? "무결" : "손상"}</td></tr><tr><th>문서 본문</th><td>${v.contentOk ? "원본 일치" : "변경됨"}</td></tr>
+      <tr><th>입력값·서명 위치</th><td>${v.fieldsChecked ? (v.fieldsOk ? "원본 일치" : "변경됨") : "해당 없음"}</td></tr>
       <tr><th>알고리즘</th><td>${esc(algorithm)}</td></tr></table></div>`;
   }
   const body = `<section class="section page-top"><div class="container narrow"><h1 class="article-title">전자서명 검증</h1>${inner}</div></section>`;
@@ -2763,7 +2762,7 @@ export async function superOrg(ctx) {
         <label class="mini-label">이 조직만 쓰는 도메인 <small>(Cloudflare 에 Custom Domain 먼저 연결)</small>
           <input type="text" name="domain" value="${esc(a.custom_domain || "")}" placeholder="예: seocho-market.kr" /></label>
         <button class="btn btn-ghost btn-sm">저장</button></form>
-      ${a.custom_domain ? `<p class="panel-hint">✅ <a href="https://${esc(a.custom_domain)}" target="_blank">${esc(a.custom_domain)}</a></p>` : ""}
+      ${a.custom_domain ? `<p class="panel-hint">연결됨 · <a href="https://${esc(a.custom_domain)}" target="_blank">${esc(a.custom_domain)}</a></p>` : ""}
     </section>
 
     <section class="panel"><h2 class="panel-title">유형·요금제</h2>
@@ -2808,10 +2807,10 @@ export async function superOrg(ctx) {
           data-confirm="'${esc(a.name)}' 에 시작 세트를 넣을까요?&#10;&#10;첫 공지 3건과 가입 동의서를 넣습니다. 이미 있는 것은 건드리지 않습니다.">${ret}
           <button class="btn btn-ghost btn-sm">시작 세트 넣기</button></form>
         <form method="post" action="/super/association/${a.id}/demo" class="inline-form"
-          data-confirm="'${esc(a.name)}' 을(를) 데모용 샘플로 채웁니다.&#10;&#10;⚠️ 이 조직의 기존 점포·공지·행사·게시글이 모두 삭제됩니다. (다른 조직은 영향 없음)&#10;&#10;계속할까요?">${ret}
+          data-confirm="'${esc(a.name)}' 을(를) 데모용 샘플로 채웁니다.&#10;&#10;이 조직의 기존 점포·공지·행사·게시글이 모두 삭제됩니다. (다른 조직은 영향 없음)&#10;&#10;계속할까요?">${ret}
           <button class="btn btn-ghost btn-sm">${demoAt ? "데모 다시 채우기" : "데모 채우기"}</button></form></span>
       <p class="panel-hint">${demoAt
-        ? `✓ 데모 적용 ${esc(kstStamp(demoAt, { year: false }))}`
+        ? `데모 적용 ${esc(kstStamp(demoAt, { year: false }))}`
         : '<span class="demo-stamp is-none">데모 미적용</span>'}</p>
       ${`<div class="form-divider">지도 키</div>
       <form method="post" action="/super/association/${a.id}/mapkey" class="stack-form compact">${ret}
@@ -2827,7 +2826,7 @@ export async function superOrg(ctx) {
       <p class="panel-hint">비활성화는 되돌릴 수 있습니다 — 데이터는 그대로 두고 화면만 닫습니다.</p>
       <details class="danger-del"><summary class="btn btn-ghost btn-sm">영구 삭제</summary>
         <form method="post" action="/super/association/${a.id}/delete"
-          data-confirm="정말 '${esc(a.name)}' 을(를) 삭제할까요?&#10;&#10;⚠️ 점포·회원 계정·공지·게시글·서명 기록이 모두 사라지며 되돌릴 수 없습니다.">
+          data-confirm="정말 '${esc(a.name)}' 을(를) 삭제할까요?&#10;&#10;점포·회원 계정·공지·게시글·서명 기록이 모두 사라지며 되돌릴 수 없습니다.">
           <p class="del-warn">되돌릴 수 없습니다. 확인용으로 주소 <code>${esc(a.slug)}</code> 를 입력하세요.</p>
           <input type="text" name="confirm_slug" placeholder="${esc(a.slug)}" required autocomplete="off" />
           <button class="btn btn-xs btn-danger">영구 삭제</button></form></details>
@@ -3009,8 +3008,8 @@ export async function superConsole(ctx) {
         <div class="mig-head"><b><code>${esc(m.name)}</code></b> <span class="muted">${esc(m.label)}</span>
           <span class="badge ${done ? "badge-ok" : m.onWorker ? "badge-wait" : "badge-no"}">${state}</span></div>
         <div class="envcheck">
-          <span class="${m.onWorker ? "is-on" : ""}"><b>${m.onWorker ? "✓" : "✗"}</b> 워커 Secret</span>
-          <span class="${m.inDb ? "" : "is-on"}"><b>${m.inDb ? "✗" : "✓"}</b> DB 사본 ${m.inDb ? "남아 있음" : "없음"}</span>
+          <span class="${m.onWorker ? "is-on" : ""}"><b>${m.onWorker ? "있음" : "없음"}</b> 워커 Secret</span>
+          <span class="${m.inDb ? "" : "is-on"}"><b>${m.inDb ? "남아 있음" : "없음"}</b> DB 사본</span>
         </div>
         ${done ? "" : `<p>${m.why}</p>
         <div class="flash flash-warn">${m.risk}</div>
@@ -3032,7 +3031,7 @@ export async function superConsole(ctx) {
                  data-confirm="워커 Secret 이 확인되었습니다. DB 사본을 지울까요? (워커 값이 이미 쓰이고 있어 동작은 바뀌지 않습니다)">
                  <input type="hidden" name="_csrf" value="${esc(csrf)}" /><input type="hidden" name="key" value="${esc(m.key)}" />
                  <button class="btn btn-primary btn-sm">DB 사본 지우기</button></form>`)
-          : m.inDb ? `<p class="muted"><b>DB 사본 지우기 버튼이 아직 없습니다.</b> 위 줄이 <code>✗ 워커 Secret</code> 이면,
+          : m.inDb ? `<p class="muted"><b>DB 사본 지우기 버튼이 아직 없습니다.</b> 위 줄이 <code>워커 Secret 없음</code> 이면,
               이 워커가 <code>${esc(m.name)}</code> 라는 이름을 못 받고 있다는 뜻입니다 —
               ① 이름 철자·앞뒤 공백, ② <b>Deploy</b> 를 안 누름, ③ Preview 환경에 넣음,
               ④ Text 로 넣어서 배포 때 지워짐(반드시 <b>Secret</b>) 중 하나입니다.</p>` : ""}`}
@@ -3117,8 +3116,8 @@ export async function superConsole(ctx) {
       <b>넷이 모두 있어야 발송이 켜집니다 — 하나라도 비면 한 통도 안 나갑니다.</b>
       <p>다만 <b>서비스가 멈추지는 않습니다.</b> 고객사 관리자는 문서 화면의 [보내기 · 복사] 로
         서명 링크를 카톡·문자로 직접 보내 계약을 끝까지 진행할 수 있습니다 — 심사가 끝날 때까지 이렇게 씁니다.</p>
-      <div class="envcheck">${ALIGO_VARS.map((k) => `<span class="${hasCfg(env, k) ? "is-on" : ""}"><b>${hasCfg(env, k) ? "✓" : "✗"}</b> <code>${k}</code></span>`).join("")}</div>
-      <p>✗ 는 이 워커가 그 이름을 <b>못 받고 있다</b>는 뜻입니다. 대시보드에 보이는데 여기가 ✗ 라면
+      <div class="envcheck">${ALIGO_VARS.map((k) => `<span class="${hasCfg(env, k) ? "is-on" : ""}"><b>${hasCfg(env, k) ? "있음" : "없음"}</b> <code>${k}</code></span>`).join("")}</div>
+      <p><b>없음</b> 은 이 워커가 그 이름을 못 받고 있다는 뜻입니다. 대시보드에 보이는데 여기가 없음이라면
         ① 이름 철자·앞뒤 공백, ② <b>Deploy</b> 를 안 누름, ③ Preview 환경에 넣음,
         ④ <b>Text 로 넣어서 배포 때 지워짐</b>(<code>wrangler.toml</code> 의 <code>[vars]</code> 가 평문 변수를 덮어씁니다 — 반드시 <b>Secret</b>) 중 하나입니다.</p>
       <p>넣는 곳: Workers &amp; Pages → <b>website</b> → Settings → Variables and Secrets → ＋ Add → Type <b>Secret</b> → Deploy</p></div>`}
@@ -3207,7 +3206,7 @@ export async function superConsole(ctx) {
           <td>${cost.toLocaleString()}원</td><td>${rev.toLocaleString()}원</td>
           <td><b>${margin.toLocaleString()}원</b> <small>(${rev ? Math.round((margin / rev) * 100) : 0}%)</small></td></tr>`;
       }).join("")}</tbody></table></div>
-    ${mode === "per_doc" ? `<p class="panel-hint txt-warn">⚠️ 계약당 정액은 <b>매출이 고정인데 원가는 서명자 수에 비례</b>합니다.
+    ${mode === "per_doc" ? `<p class="panel-hint txt-warn">계약당 정액은 <b>매출이 고정인데 원가는 서명자 수에 비례</b>합니다.
       현재 단가 ${unitPrice.toLocaleString()}원 기준으로 서명자 <b>${Math.max(1, Math.floor(unitPrice / (3 * baseCost)))}명</b>까지 이익이고,
       그보다 많으면 손해입니다. 재알림을 보낼수록 손익분기가 더 앞당겨집니다.</p>`
       : `<p class="panel-hint">발송당 과금은 인원이 늘어도 마진율이 일정합니다(${unitPrice ? Math.round(((unitPrice - baseCost) / unitPrice) * 100) : 0}%).</p>`}
@@ -3307,15 +3306,15 @@ export async function superConsole(ctx) {
   ].filter(Boolean);
   const todoBar = todo.length
     ? `<div class="super-todo">${todo.map((t) => `<a href="#s-${t.tab}" class="super-todo-item"><b>${t.n}</b><span>${esc(t.label)}</span></a>`).join("")}</div>`
-    : `<div class="super-todo is-clear"><span>지금 처리할 일이 없습니다 ✓</span></div>`;
+    : `<div class="super-todo is-clear"><span>지금 처리할 일이 없습니다</span></div>`;
   const TABS = [
-    ["home", "고객사", "▤"],
-    ["sales", "영업", "◈", pendingApps.length],
-    ["money", "알림톡·정산", "₩", pendCredits.length],
-    ["settings", "설정·보안", "⚙", keyMode === "secret" ? 0 : 1],
+    ["home", "고객사"],
+    ["sales", "영업", pendingApps.length],
+    ["money", "알림톡·정산", pendCredits.length],
+    ["settings", "설정·보안", keyMode === "secret" ? 0 : 1],
   ];
-  const sideNav = `<aside class="console-side"><nav id="superNav">${TABS.map(([id, label, icon, badge]) =>
-    `<a href="#s-${id}" data-tab="${id}">${icon} ${esc(label)}${badge ? `<span class="side-badge">${badge}</span>` : ""}</a>`).join("")}</nav></aside>`;
+  const sideNav = `<aside class="console-side"><nav id="superNav">${TABS.map(([id, label, badge]) =>
+    `<a href="#s-${id}" data-tab="${id}">${esc(label)}${badge ? `<span class="side-badge">${badge}</span>` : ""}</a>`).join("")}</nav></aside>`;
 
   // 제품이 셋이므로 "몇 곳"만으로는 무엇을 파는 회사인지 화면에서 읽히지 않는다.
   const kindCounts = KIND_KEYS.map((k) => [k, KINDS[k].label, list.filter((a) => (a.kind || "merchant") === k).length])
@@ -3331,7 +3330,7 @@ export async function superConsole(ctx) {
       <div class="sgroup" id="s-home" data-tab="home">
         ${cronAlive ? "" : cronPanel}
         ${orgPanel}
-    <details class="panel panel-accent panel-fold" id="new-assoc"><summary class="panel-title">➕ 새 조직 만들기</summary>
+    <details class="panel panel-accent panel-fold" id="new-assoc"><summary class="panel-title">새 조직 만들기</summary>
       <p class="panel-hint"><b>고객사 한 곳</b>을 새로 여는 작업입니다 — 서초구 상인회, ○○법무법인처럼
         <b>실제로 돈을 내고 쓰는 조직 하나</b>. 서식이나 견본을 만드는 게 아닙니다.
         만들면 그 조직만의 주소(<code>/t/이름</code>)와 관리자 계정이 함께 생깁니다.</p>
@@ -3350,7 +3349,7 @@ export async function superConsole(ctx) {
         <div class="form-two"><label>관리자 이름<input type="text" name="admin_name" /></label><label>관리자 이메일<input type="email" name="admin_email" required /></label></div>
         <label>관리자 비밀번호 (8자 이상)<input type="password" name="admin_password" required minlength="8" /></label>
         <button class="btn btn-primary">조직 만들기</button></form></details>
-    <details class="panel panel-fold" id="clone-assoc"><summary class="panel-title">📄 기존 사이트 복제해서 만들기</summary>
+    <details class="panel panel-fold" id="clone-assoc"><summary class="panel-title">기존 사이트 복제해서 만들기</summary>
       <p class="panel-hint">잘 만들어 둔 사이트를 본으로 새 고객사를 찍어 냅니다. 프랜차이즈든 상인회든 같습니다.
         <b>복사되는 것</b>: 유형·업종 문구·대표색·홈/랜딩 화면 구성·캠페인 사본.
         <b>복사되지 않는 것</b>: 회원·점포·상담 신청·계약 — 남의 실제 데이터는 절대 따라오지 않습니다.</p>
@@ -3401,7 +3400,7 @@ export async function superConsole(ctx) {
         ${cronAlive ? cronPanel : ""}
         ${wiredPanel}
         ${usagePanel}
-    <details class="panel ops-guide"><summary class="panel-title">🧭 운영 가이드 — 도메인·지도 설정 위치</summary>
+    <details class="panel ops-guide"><summary class="panel-title">운영 가이드 — 도메인·지도 설정 위치</summary>
       <div class="ops-body">
       <h3>네이버 지도 (도메인 바뀔 때마다!)</h3>
       <ol>
@@ -3418,7 +3417,7 @@ export async function superConsole(ctx) {
         <li>아래 조직 목록의 <b>개별 도메인</b> 칸에 같은 도메인 입력·저장</li>
         <li>네이버 지도 사용 시 → 위의 Web 서비스 URL 에도 추가</li>
       </ol>
-      <h3>사진 직접 서빙 (설정 완료 ✓)</h3>
+      <h3>사진 직접 서빙 (설정 완료)</h3>
       <p>R2 버킷 공개 도메인(r2.dev) → 워커 변수 <code>MEDIA_PUBLIC_BASE</code>. 트래픽 커지면 커스텀 도메인으로 값만 교체.</p>
       </div></details>
     <details class="panel panel-fold"><summary class="panel-title">감사 로그 (플랫폼)</summary>
@@ -3435,7 +3434,7 @@ export function account(ctx) {
   // 2FA 상태별 UI
   let twofa;
   if (user.totp_enabled) {
-    twofa = `<p class="panel-hint">✅ 2단계 인증이 <b>사용 중</b>입니다. 로그인 시 인증 앱의 6자리 코드가 필요합니다.</p>
+    twofa = `<p class="panel-hint">2단계 인증이 <b>사용 중</b>입니다. 로그인 시 인증 앱의 6자리 코드가 필요합니다.</p>
       <form method="post" action="/account/2fa/disable" class="stack-form compact">
         <label>해제하려면 현재 인증 코드 입력<input type="text" name="code" inputmode="numeric" pattern="[0-9]{6}" placeholder="000000" required /></label>
         <button class="btn btn-ghost btn-sm">2단계 인증 해제</button></form>`;
@@ -3555,7 +3554,7 @@ export async function platformLanding(ctx) {
   <section class="section" id="features"><div class="container">
     <div class="section-head"><p class="section-eyebrow">FEATURES</p><h2 class="section-title">상인회에 필요한 모든 것</h2></div>
     <div class="feature-grid">
-      ${[["🏪", "가입 점포 안내", "점포별 소개·사진·영상(유튜브·릴스 링크)"], ["🗺️", "점포 지도", "네이버 지도에 우리 상권 점포를 한눈에"], ["📢", "공지·소식", "카테고리·검색되는 공지 게시판"], ["💬", "회원 게시판", "회원 전용 소통·다중 사진"], ["✍️", "전자 동의서", "동의서·계약 전자서명(순차·검증)"], ["📱", "모바일 앱", "홈 화면 추가·설치형(PWA)"]].map(([i, t, d]) => `<div class="feature-card"><span class="feature-ico">${i}</span><h3>${t}</h3><p>${d}</p></div>`).join("")}
+      ${[["가입 점포 안내", "점포별 소개·사진·영상(유튜브·릴스 링크)"], ["점포 지도", "네이버 지도에 우리 상권 점포를 한눈에"], ["공지·소식", "카테고리·검색되는 공지 게시판"], ["회원 게시판", "회원 전용 소통·다중 사진"], ["전자 동의서", "동의서·계약 전자서명(순차·검증)"], ["모바일 앱", "홈 화면 추가·설치형(PWA)"]].map(([t, d]) => `<div class="feature-card"><h3>${t}</h3><p>${d}</p></div>`).join("")}
     </div></div></section>
   <section class="section section-alt"><div class="container">
     <div class="section-head"><h2 class="section-title">함께하는 상인회</h2></div>

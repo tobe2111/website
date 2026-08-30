@@ -102,7 +102,7 @@ export const LANDING_CATALOG = {
     ],
   },
   lead: {
-    label: "상담 신청 폼 ★ (DB 수집)",
+    label: "상담 신청 폼 (DB 수집)",
     fields: [
       { key: "title", label: "제목", type: "text" },
       { key: "lead", label: "설명", type: "textarea" },
