@@ -2702,6 +2702,7 @@ export async function extPaper(ctx) {
   const fields = await D.listFieldsWithValues(ctx.db, d.id);
   const reqs = await D.listRequestStatus(ctx.db, d.id);
   const exts = await D.listExternalSigners(ctx.db, d.id);
+  const parties = await D.listDocParties(ctx.db, d.id);
   const rc = await D.requestCounts(ctx.db, d.id);
   const done = rc.total > 0 && rc.signed === rc.total;
   const nameOf = (ref) => { if (ref < 0) { const e = exts.find((x) => x.id === -ref); return e ? e.name : ""; }
@@ -2711,8 +2712,9 @@ export async function extPaper(ctx) {
       <p class="dash-sub"><a href="/esign/${esc(ctx.params.token)}">← 돌아가기</a> · 서명 ${rc.signed}/${rc.total}${done ? " · 체결 완료" : " · 진행 중"}</p></div>
       <div class="dash-head-actions"><button type="button" class="btn btn-primary btn-sm" data-print>인쇄 · PDF로 저장</button>
         ${done ? `<a href="/esign/${esc(ctx.params.token)}/evidence" class="btn btn-ghost btn-sm">증적 패키지</a>` : ""}</div></div>
+    ${sealNote(fields, assoc ? assoc.name : "")}
     <div class="paper-wrap">${renderPaper(d.body, { scans, mediaUrl,
-      fieldsFor: fieldsRenderer(fields, { mode: "view", nameOf }), watermark: done ? "" : "미완성" })}</div></div></section>
+      fieldsFor: fieldsRenderer(fields, { mode: "view", nameOf, parties }), watermark: done ? "" : "미완성" })}</div></div></section>
     <style>@media print{@page{size:A4;margin:0}body{background:#fff}}</style>`;
   return html(layout({ title: `${d.title} — 완성본`, assoc, base: "", user: null, body, csrf: ctx.csrf,
     scripts: `<script src="${assetUrl("/js/paper.js")}" defer></script>` }));
@@ -2746,13 +2748,23 @@ export async function documentEvidence(ctx) {
 }
 
 // 지면에 놓인 필드를 페이지별로 뿌리는 헬퍼. fields 는 값(value/image)이 붙어 있을 수 있다.
-function fieldsRenderer(fields, { mode, myId = 0, nameOf = () => "" }) {
+// 계약서에 발신자 직인이 찍혀 있으면 그 사실을 종이에도 적는다.
+// 이 문서를 받은 제3자는 도장 두 개를 보고 "둘 다 서명했다" 로 읽는다 — 한쪽은 서명이 아니다.
+export const sealNote = (fields, orgName = "") => {
+  const n = (fields || []).filter((f) => f.auto === "seal" && (f.image || f.value)).length;
+  if (!n) return "";
+  return `<p class="seal-note">이 계약서의 도장 ${n}곳은 <b>${esc(orgName || "보내는 쪽")}</b>이 발송 전에 찍은 <b>직인</b>입니다.
+    상대방의 전자서명이 아니며, 어느 서명자의 봉인에도 들어가지 않습니다.
+    상대방의 서명은 서명 자리에 있고, 그 진위는 확인서·증적 패키지로 검증합니다.</p>`;
+};
+
+function fieldsRenderer(fields, { mode, myId = 0, nameOf = () => "", parties = {} }) {
   return (page) => fields.filter((f) => f.page === page).map((f) => {
     const val = f.value || f.image ? { value: f.value || "", imageUrl: f.image ? mediaUrl(f.image) : "" } : null;
-    // 아직 사람이 정해지지 않은 자리는 '1번째 당사자' 라고 보여 준다 — 빈칸으로 두면
+    // 아직 사람이 정해지지 않은 자리는 그 자리의 이름으로 보여 준다 — 빈칸으로 두면
     // 배치해 놓고도 누구 몫인지 알 수 없다.
     const who = f.auto === "seal" ? "우리 직인"
-      : f.assignee ? nameOf(f.assignee) : f.slot > 0 ? `${f.slot}번째 당사자` : "";
+      : f.assignee ? nameOf(f.assignee) : f.slot > 0 ? D.partyLabel(parties, f.slot) : "";
     return fieldBox(f, { mode, val, mine: mode === "fill" && !val && (f.assignee === myId || f.assignee === 0), assigneeName: who });
   }).join("");
 }
@@ -2766,20 +2778,21 @@ export async function adminDocFields(ctx) {
   const signedAny = (await D.listSignatures(db, d.id)).length > 0;
   const scans = await D.listDocPages(db, d.id);   // 올린 양식이면 이 그림들이 지면이다
   const reqs = await D.listRequestStatus(db, d.id);
+  const parties = await D.listDocParties(db, d.id);   // { 1: "임대인", … }
   // 값까지 함께 읽는다 — 우리 직인은 놓는 즉시 찍히므로, 값을 안 읽으면 배치 화면에서
   // 도장이 안 보여 "안 찍혔나" 싶어진다.
   const fields = await D.listFieldsWithValues(db, d.id);
   const extForName = await D.listExternalSigners(db, d.id);
   const nameOf = (ref) => { if (ref < 0) { const e = extForName.find((x) => x.id === -ref); return e ? e.name : ""; }
     const u = reqs.find((r) => r.id === ref); return u ? u.name : ""; };
-  const paper = renderPaper(d.body, { scans, mediaUrl, mode: "edit", fieldsFor: fieldsRenderer(fields, { mode: "edit", nameOf }) });
+  const paper = renderPaper(d.body, { scans, mediaUrl, mode: "edit", fieldsFor: fieldsRenderer(fields, { mode: "edit", nameOf, parties }) });
   // 이미 서명이 시작된 문서는 지면을 바꿀 수 없다 — 서명자가 본 화면과 달라지면 봉인의 의미가 사라진다
   if (signedAny) {
     const b = `<section class="dash"><div class="container">
       <div class="dash-head"><div><h1 class="dash-title">필드 배치 — ${esc(d.title)}</h1></div></div>
       <div class="flash flash-warn">이미 서명이 시작된 문서입니다. 서명자가 확인한 지면이 바뀌면 안 되므로 배치를 수정할 수 없습니다.</div>
       <p><a href="${base}/admin/documents/${d.id}" class="btn btn-ghost btn-sm">← 문서로</a></p>
-      <div class="paper-wrap">${renderPaper(d.body, { scans, mediaUrl, fieldsFor: fieldsRenderer(fields, { mode: "view", nameOf }) })}</div></div></section>`;
+      <div class="paper-wrap">${renderPaper(d.body, { scans, mediaUrl, fieldsFor: fieldsRenderer(fields, { mode: "view", nameOf, parties }) })}</div></div></section>`;
     return html(layout({ title: "필드 배치", assoc, base, user, body: b, csrf, scripts: `<script src="${assetUrl("/js/paper.js")}" defer></script>` }));
   }
   const palette = Object.entries(FIELD_KINDS).map(([k, v], i) =>
@@ -2790,8 +2803,10 @@ export async function adminDocFields(ctx) {
   // '첫 번째 당사자의 서명', '두 번째 당사자의 도장'. 누가 그 자리인지는 보내기 화면에서 정한다.
   const assigneeOpts = d.draft
     ? `<option value="0" data-name="">누구나(먼저 서명하는 사람)</option>` +
-      Array.from({ length: MAX_SLOTS }, (_, i) =>
-        `<option value="slot${i + 1}" data-name="${i + 1}번째 당사자">${i + 1}번째 당사자</option>`).join("")
+      Array.from({ length: MAX_SLOTS }, (_, i) => {
+        const label = esc(D.partyLabel(parties, i + 1));
+        return `<option value="slot${i + 1}" data-name="${label}">${label}</option>`;
+      }).join("")
     : `<option value="0" data-name="">누구나(먼저 서명하는 사람)</option>` +
       reqs.map((r) => `<option value="${r.id}" data-name="${esc(r.name)}">${esc(r.name)}</option>`).join("") +
       extList.map((e) => `<option value="${-e.id}" data-name="${esc(e.name)}">${esc(e.name)} (외부)</option>`).join("");
@@ -2801,7 +2816,7 @@ export async function adminDocFields(ctx) {
         ? `<a href="${base}/admin/documents/write?doc=${d.id}">← 계속 쓰기</a> · 아직 보내지 않은 계약서`
         : `<a href="${base}/admin/documents/${d.id}">← 문서로</a> · 서명 대상 ${sigs.total}명`}</p></div></div>
     ${flashOf(query)}
-    <p class="fp-hint">놓을 종류를 고른 뒤 <b>계약서 위를 클릭</b>하면 그 자리에 필드가 생깁니다. 드래그로 옮기고, 오른쪽 아래 손잡이로 크기를 조절하세요.
+    <p class="fp-hint">놓을 종류를 고른 뒤 <b>계약서 위를 누르면</b> 그 자리에 필드가 생깁니다. 끌어서 옮기고, 오른쪽 아래 손잡이로 크기를 조절하세요.
       ${d.draft
         ? "아직 보내기 전이라 서명자가 정해지지 않았습니다. 그래서 사람 대신 <b>몇 번째 당사자</b>로 놓아 둡니다 — 누가 그 자리인지는 보내기 화면에서 정합니다."
         : "각 필드는 <b>누가 채울지</b> 지정할 수 있습니다."}
@@ -2814,6 +2829,10 @@ export async function adminDocFields(ctx) {
         <span class="badge badge-info" id="fpKind"></span>
         <label>이름표<input type="text" id="fpLabel" maxlength="20" placeholder="예: 임차인 서명" /></label>
         <label>${d.draft ? "누구 자리" : "담당 서명자"}<select id="fpAssignee">${assigneeOpts}</select></label>
+        <!-- 자리를 고른 순간 그 자리를 뭐라고 부를지 바로 묻는다. '1번째 당사자' 는 배치하는
+             사람에게 아무것도 말해 주지 않는다 — 계약서는 임대인·임차인으로 말한다. -->
+        <label class="fp-partyname" id="fpPartyWrap" hidden>이 자리의 이름
+          <input type="text" id="fpPartyName" maxlength="20" placeholder="예: 임대인" autocomplete="off" /></label>
         <label class="check-inline"><input type="checkbox" id="fpReq" checked /> 필수</label>
         <!-- 도장 자리에만 뜬다. 회사는 계약마다 서명하지 않는다 — 직인이 이미 찍힌 계약서를 보낸다. -->
         <label class="check-inline fp-seal" id="fpSealWrap" hidden><input type="checkbox" id="fpSeal" /> 우리 직인</label>
@@ -2821,10 +2840,12 @@ export async function adminDocFields(ctx) {
       </div>
       <form method="post" action="${base}/admin/documents/${d.id}/fields" id="fieldsForm" class="fp-save">
         <input type="hidden" name="fields" id="fieldsData" />
+        <input type="hidden" name="parties" id="partiesData" />
         <button class="btn btn-primary">배치 저장</button></form>
     </div>
     <div class="paper-wrap">${paper}</div>
     <script type="application/json" id="fieldKinds">${JSON.stringify(FIELD_KINDS)}</script>
+    <script type="application/json" id="partyNames">${JSON.stringify(parties)}</script>
     </div></section>`;
   return html(layout({ title: "필드 배치", assoc, base, user, body, csrf, scripts: `<script src="${assetUrl("/js/paper.js")}" defer></script>` }));
 }
@@ -2843,10 +2864,11 @@ export async function documentPaper(ctx) {
   const rc = await D.requestCounts(db, d.id);
   const done = rc.total > 0 && rc.signed === rc.total;
   const extNames = await D.listExternalSigners(db, d.id);
+  const parties = await D.listDocParties(db, d.id);
   const nameOf = (ref) => { if (ref < 0) { const e = extNames.find((x) => x.id === -ref); return e ? e.name : ""; }
     const u = reqs.find((r) => r.id === ref); return u ? u.name : ""; };
   const paper = renderPaper(d.body, { scans, mediaUrl,
-    fieldsFor: fieldsRenderer(fields, { mode: "view", nameOf }),
+    fieldsFor: fieldsRenderer(fields, { mode: "view", nameOf, parties }),
     watermark: done ? "" : "미완성",
   });
   const backTo = isAdmin ? `${base}/admin/documents/${d.id}` : `${base}/sign`;
@@ -2854,6 +2876,7 @@ export async function documentPaper(ctx) {
     <div class="dash-head no-print"><div><p class="section-eyebrow">전자계약 · 완성본</p><h1 class="dash-title">${esc(d.title)}</h1>
       <p class="dash-sub"><a href="${backTo}">← 돌아가기</a> · 서명 ${rc.signed}/${rc.total}${done ? " · 체결 완료" : " · 진행 중"}</p></div>
       <div class="dash-head-actions"><button type="button" class="btn btn-primary btn-sm" data-print>인쇄 · PDF로 저장</button></div></div>
+    ${sealNote(fields, assoc.name)}
     <div class="paper-wrap">${paper}</div></div></section>
     <style>@media print{@page{size:A4;margin:0}body{background:#fff}}</style>`;
   return html(layout({ title: `${d.title} — 완성본`, assoc, base, user, body, csrf, scripts: `<script src="${assetUrl("/js/paper.js")}" defer></script>` }));
@@ -2867,6 +2890,8 @@ export async function certificatePage(ctx) {
   const doc = await D.getDocument(db, sig.document_id);
   const assoc = doc ? await D.getAssociationById(db, doc.association_id) : null;
   const v = await verifySignature(env, sig, doc);
+  // 계약서에 발신자 직인이 함께 찍혀 있는가 — 있으면 그것이 서명이 아님을 확인서에도 적는다
+  const sealed = doc ? (await D.listFieldsWithValues(db, doc.id)).some((f) => f.auto === "seal" && f.image) : false;
   const verifyUrl = `${ORIGIN}/verify/${encodeURIComponent(sig.verify_code)}`;
   const row = (k, val) => `<tr><th>${esc(k)}</th><td>${val}</td></tr>`;
   const body = `<section class="section page-top"><div class="container narrow cert-sheet">
@@ -2902,7 +2927,10 @@ export async function certificatePage(ctx) {
         </div>
       </div>
       <p class="cert-note">본 확인서는 서명 시점의 서명자·시각·접속 IP·문서 해시를 Ed25519 전자서명으로 봉인한 기록입니다.
-        문서 본문이 한 글자라도 바뀌면 해시가 달라져 “변경됨”으로 표시됩니다.</p>
+        문서 본문이 한 글자라도 바뀌면 해시가 달라져 “변경됨”으로 표시됩니다.
+        이 확인서가 확인하는 것은 <b>위 서명자 한 사람의 전자서명</b>입니다.${sealed
+        ? " 계약서에 함께 찍힌 발신자 <b>직인</b>은 보내는 쪽이 발송 전에 찍은 표시이며, 이 확인 범위에 들어가지 않습니다."
+        : ""}</p>
     </div>
     <div class="cert-actions no-print"><button type="button" class="btn btn-primary btn-sm" data-print>인쇄 · PDF 저장</button>
       <a class="btn btn-ghost btn-sm" href="/verify/${esc(sig.verify_code)}">검증 페이지</a></div>
@@ -3991,11 +4019,12 @@ export async function adminDocumentWrite(ctx) {
 
   // 서명 자리를 당사자별로 놓아 두었는가. 놓았다면 보내기 화면은 '누가 몇 번째 당사자인가' 를 묻는다.
   const slots = doc ? await D.usedSlots(db, doc.id) : [];
+  const partyNames = doc ? await D.listDocParties(db, doc.id) : {};
   const fieldN = doc ? await D.countFields(db, doc.id) : 0;
   const memberOpts = members.map((m) => `<option value="${m.id}">${esc(m.name)}${m.email ? ` (${esc(m.email)})` : ""}</option>`).join("");
   const partyRows = slots.length
     ? Array.from({ length: Math.max(...slots) }, (_, i) => `<div class="wt-party">
-        <div class="wt-party-no">${i + 1}번째 당사자</div>
+        <div class="wt-party-no">${esc(D.partyLabel(partyNames, i + 1))}</div>
         <select name="party_${i}" data-party="${i}" required>
           <option value="">— 고르세요 —</option>${memberOpts}
           <option value="ext">외부 상대방 (회원이 아닌 사람)</option></select>

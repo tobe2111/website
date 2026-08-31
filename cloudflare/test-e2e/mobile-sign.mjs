@@ -264,6 +264,40 @@ const zoomTap = await page.evaluate(async () => {
 ok(zoomTap && zoomTap.h >= 44, "지면을 크게 보면 서명 칸이 손가락 크기가 된다",
   zoomTap ? `${zoomTap.w}×${zoomTap.h}px` : "(확대 단추 없음)");
 
+// 11) 관리자도 폰으로 서명 자리를 놓을 수 있는가.
+//     0.42 배로 줄어든 지면에서는 칸이 16px, 손잡이가 5px 다 — 배치 화면은 배율 1.0 으로 시작한다.
+{
+  const dbody = "위탁 계약서\n\n제1조 (범위)\n  ① 을은 업무를 수행한다.\n\n본 계약을 증명하기 위하여 당사자는 아래에 전자서명한다.";
+  const draft = await D.createDocument(env.DB, { associationId: org.id, title: "폰에서 배치", body: dbody,
+    contentHash: await E.contentHash(dbody), createdBy: null, draft: 1 });
+  const admin = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
+  await admin.goto(`${BASE}/login`, { waitUntil: "networkidle" });
+  await admin.fill('input[name="email"]', "b@h.kr");
+  await admin.fill('input[name="password"]', "password1234");
+  await Promise.all([admin.waitForNavigation(), admin.locator("form button").first().tap()]);
+  await admin.goto(`${BASE}/t/hanbit/admin/documents/${draft.id}/fields`, { waitUntil: "networkidle" });
+
+  const start = await admin.evaluate(() => {
+    const s = document.querySelector(".paper-stack");
+    return s ? +(+getComputedStyle(s).getPropertyValue("--ps")).toFixed(2) : 0;
+  });
+  ok(start === 1, "배치 화면은 폰에서 실제 크기로 시작한다 (줄어든 지면에는 못 놓는다)", `배율 ${start}`);
+
+  await admin.tap('.fp-item[data-kind="sign"]').catch(() => {});
+  const sheet = admin.locator(".paper").first();
+  const pb = await sheet.boundingBox();
+  if (pb) await sheet.tap({ position: { x: pb.width * 0.3, y: pb.height * 0.8 } });
+  const put = await admin.locator(".paper .pf").count();
+  const gb = await admin.locator(".pf-grip").first().boundingBox().catch(() => null);
+  ok(put === 1, "지면을 손가락으로 눌러 자리를 놓는다", `${put}개`);
+  ok(gb && gb.width >= 20, "크기 손잡이가 손가락에 잡힌다", gb ? `${Math.round(gb.width)}px` : "(없음)");
+
+  await Promise.all([admin.waitForNavigation(), admin.locator(".fp-save button").tap()]);
+  ok((await D.countFields(env.DB, draft.id)) === 1, "폰에서 놓은 자리가 저장된다");
+  await admin.screenshot({ path: `${OUT}/m6-place.png` });
+  await admin.close();
+}
+
 await page.screenshot({ path: `${OUT}/m4-full.png`, fullPage: true });
 console.log(`\n결과: ${pass} 통과 / ${fail} 실패`);
 console.log(`스크린샷: ${OUT}/`);

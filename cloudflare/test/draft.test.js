@@ -74,6 +74,18 @@ test("임시저장: 처음이면 새로 만들고, 두 번째부터는 같은 �
   assert.match((await D.getDocument(env.DB, j1.id)).body, /제2조/);
 });
 
+test("아무것도 안 쓴 화면은 초안이 되지 않는다 (자동 저장이 3초마다 돈다)", async () => {
+  const { env, a, j } = await seed();
+  const r = await post(env, j, "/t/law/admin/documents/draft", { title: "", body: "   \n " }, "/t/law/admin/documents/write");
+  assert.equal(r.status, 400);
+  assert.equal((await D.listDrafts(env.DB, a.id)).length, 0, "작성기를 열어 두기만 해도 초안이 쌓이면 안 된다");
+
+  // 제목만 써도 저장은 된다 — 쓰기 시작한 것이므로
+  const ok = await post(env, j, "/t/law/admin/documents/draft", { title: "쓰기 시작", body: "" }, "/t/law/admin/documents/write");
+  assert.equal((await ok.json()).ok, true);
+  assert.equal((await D.listDrafts(env.DB, a.id)).length, 1);
+});
+
 test("이미 보낸 계약서는 임시저장으로 되돌릴 수 없다 (봉인된 본문을 몰래 고치는 길)", async () => {
   const { env, a, admin, j } = await seed();
   const body = "제1조 (범위)";
@@ -157,6 +169,54 @@ test("초안 위에는 사람 대신 '몇 번째 당사자' 로 자리를 놓는
   assert.equal(rows.length, 2);
   assert.deepEqual(rows.map((f) => f.slot), [1, 2]);
   assert.deepEqual(rows.map((f) => f.assignee), [0, 0], "아직 사람이 아니다");
+});
+
+test("당사자 자리에 이름을 붙이면 지면·보내기 화면·안내가 모두 그 이름으로 말한다", async () => {
+  const { env, a, admin, j } = await seed();
+  const d = await draftOf(env, a, admin);
+  await post(env, j, `/t/law/admin/documents/${d.id}/fields`, {
+    fields: JSON.stringify([
+      { kind: "sign", page: 0, x: 0.3, y: 0.8, w: 0.2, h: 0.05, assignee: "slot1", required: 1 },
+      { kind: "sign", page: 0, x: 0.3, y: 0.88, w: 0.2, h: 0.05, assignee: "slot2", required: 1 },
+    ]),
+    parties: JSON.stringify({ 1: "임대인", 2: "임차인" }),
+  }, `/t/law/admin/documents/${d.id}/fields`);
+  assert.deepEqual(await D.listDocParties(env.DB, d.id), { 1: "임대인", 2: "임차인" });
+
+  const fp = await (await get(env, j, `/t/law/admin/documents/${d.id}/fields`)).text();
+  assert.match(fp, /임대인/);
+  assert.ok(!/1번째 당사자/.test(fp.split("id=\"partyNames\"")[0]) || /임대인/.test(fp), "이름을 붙인 자리는 번호로 부르지 않는다");
+
+  const write = await (await get(env, j, `/t/law/admin/documents/write?doc=${d.id}`)).text();
+  assert.match(write, /wt-party-no">임대인/);
+  assert.match(write, /wt-party-no">임차인/);
+
+  const r = await post(env, j, `/t/law/admin/documents/${d.id}/publish`, { party_0: "", party_1: "" }, "/t/law/admin/documents/write?doc=" + d.id);
+  assert.match(decodeURIComponent(r.headers.get("Location") || ""), /임대인이 비어 있습니다/,
+    "조사까지 맞아야 사람이 쓴 글로 읽힌다 — '임대인가' 가 아니다");
+});
+
+test("쓰지 않는 자리의 이름은 남지 않는다 (지운 당사자가 되살아나면 안 된다)", async () => {
+  const { env, a, admin, j } = await seed();
+  const d = await draftOf(env, a, admin);
+  const save = (fields, parties) => post(env, j, `/t/law/admin/documents/${d.id}/fields`,
+    { fields: JSON.stringify(fields), parties: JSON.stringify(parties) }, `/t/law/admin/documents/${d.id}/fields`);
+  await save([
+    { kind: "sign", page: 0, x: 0.3, y: 0.8, w: 0.2, h: 0.05, assignee: "slot1", required: 1 },
+    { kind: "sign", page: 0, x: 0.3, y: 0.88, w: 0.2, h: 0.05, assignee: "slot2", required: 1 },
+  ], { 1: "임대인", 2: "임차인" });
+  // 두 번째 당사자 자리를 지우고 다시 저장
+  await save([{ kind: "sign", page: 0, x: 0.3, y: 0.8, w: 0.2, h: 0.05, assignee: "slot1", required: 1 }],
+    { 1: "임대인", 2: "임차인" });
+  assert.deepEqual(await D.listDocParties(env.DB, d.id), { 1: "임대인" });
+});
+
+test("이름이 없으면 지금까지처럼 'N번째 당사자' 로 부른다", async () => {
+  const { env, a, admin, j } = await seed();
+  const d = await draftOf(env, a, admin);
+  await placeSlots(env, j, d.id, [{ who: "slot1" }]);
+  const write = await (await get(env, j, `/t/law/admin/documents/write?doc=${d.id}`)).text();
+  assert.match(write, /wt-party-no">1번째 당사자/);
 });
 
 test("이미 보낸 계약서에는 '몇 번째 당사자' 로 놓을 수 없다 (아무도 못 채우는 칸이 된다)", async () => {
@@ -380,6 +440,35 @@ test("직인 날인은 증적에 '보내는 쪽이 찍은 것' 으로 남는다 
   const events = await D.listDocEvents(env.DB, d.id);
   assert.equal(events.filter((e) => e.kind === "sealed").length, 1);
   assert.equal((await D.listSignatures(env.DB, d.id)).length, 0, "직인은 전자서명이 아니다");
+});
+
+test("직인이 서명이 아님을 완성본·확인서·증적이 모두 말한다", async () => {
+  const { env, a, admin, member, j } = await seed();
+  await upSeal(env, j);
+  const d = await draftOf(env, a, admin);
+  await post(env, j, `/t/law/admin/documents/${d.id}/fields`, {
+    fields: JSON.stringify([sealField(d.id), { kind: "sign", page: 0, x: 0.3, y: 0.8, w: 0.2, h: 0.05, assignee: "slot1", required: 1 }]),
+  }, `/t/law/admin/documents/${d.id}/fields`);
+  await post(env, j, `/t/law/admin/documents/${d.id}/publish`, { party_0: String(member.id) }, "/t/law/admin/documents/write?doc=" + d.id);
+
+  // ① 완성본 — 도장을 서명으로 읽지 않게
+  const mj = jar();
+  await post(env, mj, "/login", { email: "m@law.kr", password: "pass1234" });
+  const paper = await (await get(env, mj, `/t/law/documents/${d.id}/paper`)).text();
+  assert.match(paper, /seal-note/);
+  assert.match(paper, /상대방의 전자서명이 아니며/);
+
+  // ② 증적 — 어느 도장이 발신자 것인지 기계도 읽을 수 있게
+  const { buildEvidence } = await import("../src/evidence.js");
+  const ev = await buildEvidence(env, env.DB, await D.getDocument(env.DB, d.id), await D.getAssociationBySlug(env.DB, "law"));
+  assert.ok(ev.count > 0);
+  const fileOf = (n) => String((ev.files.find((f) => f.name.includes(n)) || {}).data || "");
+  const rec = fileOf("증적.json");
+  assert.match(rec, /"채운주체": "발신자직인"/, "어느 도장이 발신자 것인지 기계도 읽을 수 있어야 한다");
+  assert.match(rec, /"채운주체": "서명자"/, "서명자 자리와 구분돼야 한다");
+  assert.match(fileOf("감사추적.csv"), /직인 날인 \(보내는 쪽\)/, "언제 찍혔는지 남아야 한다");
+  assert.match(fileOf("검증방법.txt"), /발신자직인[\s\S]*전자서명이 아닙니다/,
+    "받은 사람이 읽는 안내에도 '이 도장은 서명이 아니다' 가 있어야 한다");
 });
 
 test("직인은 관리자만 올린다 — 담당자(STAFF)는 못 올린다", async () => {

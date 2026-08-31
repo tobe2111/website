@@ -963,6 +963,32 @@ export async function resolveFieldSlots(db, documentId, refs) {
 // 이 문서에 실제로 쓰인 당사자 자리 번호들 (1,2,3…)
 export const usedSlots = async (db, documentId) =>
   (await all(db, "SELECT DISTINCT slot FROM doc_fields WHERE document_id=? AND slot>0 ORDER BY slot", documentId)).map((r) => r.slot);
+
+// 당사자 자리의 이름 (임대인·임차인·갑·을). { 1: "임대인", 2: "임차인" }
+export async function listDocParties(db, documentId) {
+  const out = {};
+  for (const r of await all(db, "SELECT slot, name FROM doc_parties WHERE document_id=? ORDER BY slot", documentId)) out[r.slot] = r.name;
+  return out;
+}
+export async function replaceDocParties(db, documentId, names) {
+  await run(db, "DELETE FROM doc_parties WHERE document_id=?", documentId);
+  for (const [slot, name] of Object.entries(names || {})) {
+    if (!name) continue;
+    await run(db, "INSERT INTO doc_parties (document_id, slot, name) VALUES (?,?,?)", documentId, Number(slot) | 0, name);
+  }
+}
+// 자리 이름이 있으면 그 이름, 없으면 'N번째 당사자'
+export const partyLabel = (names, slot) => (names && names[slot]) || `${slot}번째 당사자`;
+// 조사 붙이기 — "임대인가 비어 있습니다" 는 우리가 쓴 글이 아니라 기계가 쓴 글로 읽힌다.
+// 마지막 글자에 받침이 있으면 이/은/을, 없으면 가/는/를.
+export function withJosa(word, pair) {
+  const w = String(word || "");
+  const [withBatchim, without] = pair;
+  const c = w.charCodeAt(w.length - 1);
+  // 한글 음절이 아니면(숫자·영문) 판단하지 않고 받침 있는 쪽을 쓴다 — 더 자주 맞는다
+  const has = c >= 0xac00 && c <= 0xd7a3 ? (c - 0xac00) % 28 !== 0 : true;
+  return w + (has ? withBatchim : without);
+}
 // 이 사람이 채워야 할 필드 (본인 지정 + 지정 없는 공용 필드).
 // auto 자리(우리 직인)는 조직이 이미 찍은 자리라 서명자에게 요구하지 않는다.
 export const listFieldsFor = (db, documentId, uid) =>

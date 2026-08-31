@@ -396,6 +396,38 @@ test("올린 양식 계약서는 서식으로 저장되지 않는다 (지면이 
   assert.equal((await D.listTemplates(db, a.id)).filter((t) => t.title === "안 되는 서식").length, 0);
 });
 
+// 내장 서식은 '빈 화면 앞에 앉지 않게' 하는 장치다. 하나라도 지면 밖으로 나가거나
+// 서명란이 허공에 뜨면, 고른 사람이 그걸 고치느라 직접 쓰는 것보다 오래 걸린다.
+test("내장 서식은 모두 지면 안에서 조판되고 서명란이 본문 아래에 온다", async () => {
+  const { BUILTIN, normalizeTemplate, applyVars, resolveFieldPages } = await import("../src/templates.js");
+  assert.ok(BUILTIN.length >= 8, "표준 서식이 충분히 있어야 한다");
+  for (const t of BUILTIN) {
+    const n = normalizeTemplate(t);
+    const body = applyVars(t.body, {});           // 빈칸을 밑줄로 둔 최악의 길이
+    const pages = pageCount(body);
+    const placed = resolveFieldPages(n.fields, pages, body);
+    assert.ok(placed.length, `${t.id}: 서명 자리가 있어야 한다`);
+    for (const f of placed) {
+      assert.ok(f.page >= 0 && f.page < pages, `${t.id}: ${f.label} 이 없는 쪽에 있다 (${f.page}/${pages})`);
+      assert.ok(f.x + f.w <= 1.0001 && f.y + f.h <= 1.0001, `${t.id}: ${f.label} 이 지면 밖으로 나갔다`);
+    }
+    assert.ok(n.vars.length >= 3, `${t.id}: 계약마다 달라지는 값이 빈칸으로 있어야 한다`);
+    assert.match(body, /전자서명한다|동의합니다/, `${t.id}: 말미 문구가 있어야 한다`);
+  }
+});
+
+test("근로계약서는 근로기준법이 서면에 적으라고 한 것을 빠뜨리지 않는다", async () => {
+  const { BUILTIN } = await import("../src/templates.js");
+  // 제17조 명시사항: 임금(구성·계산·지급방법·지급일) · 소정근로시간 · 휴일 · 연차유급휴가
+  for (const id of ["b-employ", "b-employ-fixed"]) {
+    const t = BUILTIN.find((x) => x.id === id);
+    assert.ok(t, `${id} 서식이 있어야 한다`);
+    for (const must of ["임금", "소정근로시간", "휴일", "연차유급휴가"]) {
+      assert.match(t.body, new RegExp(must), `${id}: '${must}' 가 빠졌다`);
+    }
+  }
+});
+
 test("올린 양식은 백업에 함께 담긴다 — 없으면 복원해도 지면이 빈다", async () => {
   const { TABLES } = await import("../src/scheduled.js");
   assert.ok(TABLES.includes("doc_pages"),

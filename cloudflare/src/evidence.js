@@ -18,6 +18,7 @@ const b64 = (bytes) => {
 const EVENT_LABEL = {
   created: "문서 생성", viewed: "계약서 열람", otp_sent: "인증번호 발송", otp_ok: "휴대폰 본인확인 완료",
   signed: "전자서명 완료", declined: "서명 거절", reminded: "재알림 발송", notified: "알림 발송", edited: "문서 수정(서명 전)",
+  sealed: "직인 날인 (보내는 쪽)",
 };
 const LEVEL_LABEL = { password: "로그인(비밀번호)", otp: "휴대폰 본인확인(OTP)", identity: "신원확인" };
 
@@ -152,6 +153,9 @@ export async function buildEvidence(env, db, doc, assoc) {
       본문: doc.body },
     필드: fields.map((f) => ({ id: f.id, 종류: f.kind, 이름표: f.label, 쪽: f.page,
       좌표: { x: f.x, y: f.y, w: f.w, h: f.h }, 담당: f.assignee, 필수: !!f.required,
+      // 발신자가 미리 찍은 직인은 서명자의 전자서명이 아니다. 구분이 남아 있지 않으면
+      // 이 패키지를 받은 제3자는 그 도장을 상대방의 날인으로 읽는다.
+      채운주체: f.auto === "seal" ? "발신자직인" : "서명자",
       값: f.value || "", 이미지해시: f.image_hash || "", 입력시각: f.filled_at || null })),
     서명: sigs.map((s, i) => ({ 검증코드: s.verify_code, 서명자: s.signer_name, 구분: s.signer_kind, 이메일: s.signer_email,
       시각: s.signed_at, IP: s.ip, 기기: s.user_agent, 본인확인: s.verify_level,
@@ -207,7 +211,8 @@ export async function buildEvidence(env, db, doc, assoc) {
   }
 
   const zip = await makeZip(files, { at });
-  return { zip, filename: `증적_${safeName(doc.title)}_${stamp}.zip`, count: files.length };
+  // files 까지 돌려준다 — 압축된 zip 을 다시 풀지 않고도 "무엇이 담겼는지" 를 검사할 수 있다.
+  return { zip, filename: `증적_${safeName(doc.title)}_${stamp}.zip`, count: files.length, files };
 }
 
 const safeName = (s) => String(s || "문서").replace(/[\\/:*?"<>|\x00-\x1f]/g, "_").slice(0, 60).trim() || "문서";
@@ -255,6 +260,20 @@ function verifyGuide({ doc, assoc, sigs, verds, chain, jwk, fp, env, at }) {
   P("");
   P("⑤ 이미지가 교체되지 않았는가");
   P("   6_이미지/ 의 각 파일을 SHA-256 으로 해싱해 증적.json 의 이미지해시 와 비교합니다.");
+  P("");
+  P("[ 계약서에 찍힌 도장에 대하여 ]");
+  P("");
+  P("  계약서 위의 도장에는 두 가지가 있습니다.");
+  P("");
+  P("  ㆍ 서명자가 찍은 도장");
+  P("      증적.json 의 필드에서  채운주체 = \"서명자\"  인 것입니다.");
+  P("      그 서명자의 전자서명 봉인(위 ③)에 좌표·이미지해시까지 함께 들어가 있습니다.");
+  P("");
+  P("  ㆍ 발신자가 미리 찍은 직인");
+  P("      채운주체 = \"발신자직인\" 인 것입니다. 계약서를 **보낸 쪽**이 발송 전에 찍은 표시이며,");
+  P("      상대방의 전자서명이 아닙니다. 어느 서명자의 봉인에도 들어가지 않으므로,");
+  P("      이 도장을 근거로 상대방이 서명했다고 볼 수 없습니다.");
+  P("      언제 찍혔는지는 3_감사추적.csv 의 '직인 날인 (보내는 쪽)' 항목에 남아 있습니다.");
   P("");
   P("[ 공개키 ]");
   P(`  알고리즘  ${algorithm}`);

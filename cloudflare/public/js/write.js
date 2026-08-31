@@ -184,20 +184,27 @@
   }
   window.addEventListener("resize", fitPaper);
 
-  function changed() {
+  // byUser=false 는 화면을 처음 그릴 때다. 이때 dirty 를 세우면 안 된다 —
+  // 작성기를 열어 두고 자리를 뜨는 것만으로 빈 초안이 생긴다.
+  function changed(byUser) {
     if (count) {
       var lines = ta.value ? ta.value.split("\n").length : 0;
       count.textContent = ta.value.length.toLocaleString() + "자 · " + lines + "줄";
     }
-    dirty = true;
     clearTimeout(timer);
     timer = setTimeout(draw, 400);
+    if (byUser === false) return;
+    dirty = true;
+    // 타이핑이 멎으면 곧 저장한다. 예전에는 30초 간격이라 브라우저가 죽으면 최대 30초어치가
+    // 날아갔다 — 한 조(條)를 쓰는 시간이다.
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(function () { if (dirty) save(true); }, 3000);
   }
   ta.addEventListener("input", changed);
-  changed();
+  changed(false);   // 처음 그릴 때는 글자 수만 세고, 저장 대상으로 잡지 않는다
 
   // ---------- 임시저장 ----------
-  var dirty = false, savedId = docId;
+  var dirty = false, savedId = docId, saveTimer = null, saving = false;
   function say(msg, kind) {
     if (!savedLabel) return;
     savedLabel.textContent = msg;
@@ -205,6 +212,10 @@
   }
   function save(auto) {
     if (!dirty && auto) return Promise.resolve();
+    // 저장이 아직 돌고 있는데 또 보내면, 첫 저장이 끝나기 전이라 doc 번호가 없어
+    // **초안이 두 개** 만들어진다. 끝난 뒤에 이어서 한 번 더 한다.
+    if (saving) { clearTimeout(saveTimer); saveTimer = setTimeout(function () { if (dirty) save(true); }, 400); return Promise.resolve(); }
+    saving = true;
     var fd = new FormData();
     fd.set("_csrf", csrf);
     fd.set("title", (title && title.value) || "");
@@ -230,11 +241,16 @@
           if (fl) { fl.href = base + "/admin/documents/" + j.id + "/fields"; fl.hidden = false; }
         }
       })
-      .catch(function () { say("저장하지 못했습니다 — 연결을 확인해 주세요", "err"); });
+      .catch(function () { say("저장하지 못했습니다 — 연결을 확인해 주세요", "err"); })
+      .finally(function () { saving = false; });
   }
   if (saveBtn) saveBtn.addEventListener("click", function () { save(false); });
-  // 자동 임시저장 — 브라우저가 닫히거나 실수로 뒤로 가도 쓴 것이 남아야 한다
-  setInterval(function () { if (dirty) save(true); }, 30000);
+  // 제목만 고치고 본문은 안 건드리는 경우도 있다
+  if (title) title.addEventListener("input", changed);
+  // 화면을 벗어나거나(탭 전환·앱 전환) 오래 놔둘 때도 한 번 붙잡아 둔다.
+  // 휴대폰은 탭을 떠나는 순간 그대로 잠들 수 있어, 이때 저장하지 않으면 그대로 사라진다.
+  document.addEventListener("visibilitychange", function () { if (document.hidden && dirty) save(true); });
+  window.addEventListener("pagehide", function () { if (dirty) save(true); });
   // 보내기 전에는 반드시 지금 화면의 내용이 저장돼 있어야 한다 —
   // 안 그러면 방금 고친 문장이 빠진 채로 계약이 나간다.
   if (sendForm) {

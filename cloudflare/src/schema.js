@@ -361,6 +361,15 @@ CREATE TABLE IF NOT EXISTS doc_fields (
 );
 CREATE INDEX IF NOT EXISTS idx_docfield_doc ON doc_fields(document_id, page, sort);
 
+-- 당사자 자리의 이름. '1번째 당사자' 는 자리를 놓는 사람에게 아무것도 말해 주지 않는다 —
+-- 계약서는 임대인·임차인·갑·을 로 말한다. 지면 위 이름표도 그 말이어야 읽힌다.
+CREATE TABLE IF NOT EXISTS doc_parties (
+  document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+  slot        INTEGER NOT NULL,               -- 1 = 첫 번째 당사자 …
+  name        TEXT NOT NULL DEFAULT '',
+  PRIMARY KEY (document_id, slot)
+);
+
 -- 계약서 지면이 '올린 양식' 일 때의 쪽 그림.
 --
 -- 상대방이 보낸 PDF(표준근로계약서·정부 서식·회사 양식)를 옮겨 적지 않고 그대로 쓰려면
@@ -652,7 +661,7 @@ CREATE INDEX IF NOT EXISTS idx_landing_asset_assoc ON landing_assets(association
 // 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
 // 마이그레이션 세대 — migrateColumns 에 단계를 추가할 때마다 +1
 // 36 = 두 갈래(트렁크 33 · 모집형 35)를 합친 세대. 양쪽 DB 모두 다시 한 번 마이그레이션을 타게 한다.
-export const SCHEMA_VERSION = "44";
+export const SCHEMA_VERSION = "45";
 
 export async function ensureSchema(db) {
   const has = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='associations'").first();
@@ -908,6 +917,10 @@ async function migrateColumns(db) {
   if (fcols.length && !fcols.some((c) => c.name === "auto")) {
     await db.prepare("ALTER TABLE doc_fields ADD COLUMN auto TEXT NOT NULL DEFAULT ''").run();
   }
+  // 당사자 자리의 이름 (임대인·임차인·갑·을). 없어도 '1번째 당사자' 로 동작한다.
+  await db.prepare(`CREATE TABLE IF NOT EXISTS doc_parties (
+    document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    slot INTEGER NOT NULL, name TEXT NOT NULL DEFAULT '', PRIMARY KEY (document_id, slot))`).run();
   for (const [name, ddl, idx] of v17) {
     if (have.has(name)) continue;
     await db.prepare(ddl).run();

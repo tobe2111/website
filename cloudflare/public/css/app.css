@@ -58,6 +58,12 @@
   --shadow:var(--sh-2); --shadow-lg:var(--sh-3);
 }
 *{margin:0;padding:0;box-sizing:border-box}
+/* hidden 속성은 언제나 이긴다.
+   display:flex/grid/inline-flex 를 준 요소에 hidden 을 걸면 브라우저 기본값(display:none)이
+   덮여 **그대로 보인다**. 이 프로젝트에서만 다섯 번 같은 버그가 났다 — 빈칸 이름 입력줄,
+   외부 상대방 연락처 칸, 배치 화면 속성 막대, 지면 확대 단추… 여기서 한 번에 끝낸다.
+   (요소마다 따로 두던 `.xxx[hidden]{display:none}` 들은 이 줄로 대체해 지웠다) */
+[hidden]{display:none!important}
 html{scroll-behavior:smooth;scroll-padding-top:var(--header-h);-webkit-text-size-adjust:100%}
 /* 손가락으로 눌렀을 때: 파란 사각형 번쩍임 없이, 더블탭 확대 대기(약 300ms) 없이 즉시 반응 */
 a,button,label,summary,[role="button"],input[type="submit"]{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
@@ -517,7 +523,6 @@ a.bc-val:hover{text-decoration:underline}
 .party-row{display:flex;flex-direction:column;gap:8px;margin-bottom:14px}
 .party-ext{border-left:3px solid var(--brand);background:var(--bg-alt);border-radius:0 8px 8px 0;
   padding:12px 14px;display:flex;flex-direction:column;gap:10px}
-.party-ext[hidden]{display:none}
 .party-ext .panel-hint{margin:0}
 
 /* 서명 화면 — 필수 동의는 손가락으로 누르는 자리다(실측 13px 였다) */
@@ -1167,7 +1172,6 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 
 /* 승인 축하 배너 */
 .approve-banner{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:18px 20px;border-radius:var(--r-lg);border:1px solid color-mix(in oklab,var(--ok),transparent 62%);background:var(--ok-bg);box-shadow:var(--sh-1);margin-bottom:22px}
-.approve-banner[hidden]{display:none}
 .ab-text{flex:1;min-width:200px}
 .ab-text strong{font-size:1.05rem;color:var(--ok-fg)}
 .ab-text p{margin-top:3px;font-size:.9rem;color:var(--ink-soft)}
@@ -1636,9 +1640,16 @@ a.cc-val:hover{color:var(--brand-text)}
    아래 '우리 직인' 한 줄이면 무엇인지 충분하다. */
 .pf-edit.pf-seal .pf-tag{display:none}
 /* 등록된 직인 미리보기 */
+/* 발신자 직인 안내 — 계약서를 받은 제3자가 도장 둘을 다 서명으로 읽지 않게. 인쇄에도 남는다. */
+.seal-note{margin:0 0 14px;padding:11px 14px;border-left:3px solid #c0272d;background:#fdf5f5;
+  border-radius:0 var(--r-sm) var(--r-sm) 0;font-size:.86rem;line-height:1.7;color:var(--ink-soft)}
+.seal-note b{color:var(--ink)}
 .seal-now{display:flex;align-items:center;gap:14px;margin:10px 0 14px}
 .seal-now img{width:76px;height:76px;object-fit:contain;border:1px solid var(--line);border-radius:var(--r-sm);background:#fff;padding:5px}
 .pf-grip{position:absolute;right:0;bottom:0;width:12px;height:12px;background:#2563eb;cursor:nwse-resize;border-radius:2px 0 0 0}
+/* 손가락으로는 12px 를 못 잡는다. 배치 화면은 좁은 화면에서 배율 1.0 으로 시작하므로
+   여기서 키운 만큼이 화면에서도 그대로다. */
+@media (pointer:coarse){ .pf-grip{width:22px;height:22px} }
 .pf-sel .pf-grip{background:#dc2626}
 
 /* 배치 편집기 */
@@ -1651,8 +1662,8 @@ a.cc-val:hover{color:var(--brand-text)}
 .fp-props label{font-size:.8rem;font-weight:600;display:flex;flex-direction:column;gap:4px}
 .fp-props input[type=text],.fp-props select{padding:6px 10px;font-size:.86rem}
 .fp-props .check-inline{flex-direction:row;align-items:center;gap:6px}
-/* display:flex 가 [hidden] 을 이긴다 — 아무 필드도 안 골랐는데 속성 막대가 늘 떠 있었다 */
-.fp-props[hidden],.fp-props .check-inline[hidden]{display:none}
+.fp-partyname{display:grid;gap:4px;font-size:.8rem;font-weight:600;color:var(--ink-soft)}
+.fp-partyname input{min-width:120px}
 .fp-hint{color:var(--muted);font-size:.84rem;margin:0 0 12px}
 
 /* 채우기 진행 상황 */
@@ -1669,8 +1680,6 @@ a.cc-val:hover{color:var(--brand-text)}
 
 /* 입력 다이얼로그 */
 .fd-back{overscroll-behavior:contain;position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:200;display:grid;place-items:center;padding:16px}
-/* display 를 지정하면 hidden 속성이 무력화된다 — 닫힌 상태를 명시적으로 되돌려 준다 */
-.fd-back[hidden]{display:none}
 .fd-box{background:var(--surface);border-radius:var(--r-lg);padding:20px;max-width:640px;width:100%;box-shadow:var(--shadow-lg)}
 .fd-title{margin:0 0 14px;font-size:1.05rem;font-weight:800}
 .fd-input{width:100%;padding:10px 12px;font-size:1rem;border:1px solid var(--line);border-radius:var(--r-sm)}
@@ -2319,8 +2328,6 @@ input:not([type]),input[type="text"],input[type="email"],input[type="tel"],input
 .wt-send > label.check,.wt-send .form-two label.check{display:flex;align-items:center;gap:8px;font-weight:500}
 .wt-blankask{display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap;margin:0 0 10px;padding:10px 12px;
   border:1px solid var(--brand-500);border-radius:var(--r-sm);background:var(--brand-tint)}
-/* display:flex 가 [hidden] 의 display:none 을 이긴다 — 명시하지 않으면 늘 펴져 있다 */
-.wt-blankask[hidden]{display:none}
 .wt-blankask label{flex:1 1 180px;margin:0}
 .wt-bodylabel textarea{font-family:var(--mono);font-size:14px;line-height:1.85;tab-size:4;white-space:pre;overflow-x:auto}
 .wt-count{margin:6px 0 0;font-size:.8rem;color:var(--muted);font-variant-numeric:tabular-nums}
@@ -2342,12 +2349,10 @@ input:not([type]),input[type="text"],input[type="email"],input[type="tel"],input
    "몇 번째 당사자" 가 지면 위 이름표와 눈으로 이어진다. */
 .wt-parties{display:grid;gap:12px;margin:4px 0 14px}
 .wt-party{display:grid;grid-template-columns:104px minmax(0,1fr);gap:8px 12px;align-items:center}
-.wt-party-no{font-size:.84rem;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums}
+.wt-party-no{font-size:.84rem;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums;word-break:keep-all}
 .wt-party select{width:100%}
 .wt-ext{grid-column:2;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;
   padding:10px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--bg-alt)}
-/* display:grid 가 [hidden] 을 이긴다 — 명시하지 않으면 회원을 고른 자리에도 연락처 칸 넷이 붙는다 */
-.wt-ext[hidden]{display:none}
 @media (max-width:560px){
   .wt-party{grid-template-columns:minmax(0,1fr)}
   .wt-ext{grid-column:1;grid-template-columns:minmax(0,1fr)}

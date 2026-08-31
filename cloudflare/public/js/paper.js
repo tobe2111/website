@@ -43,6 +43,11 @@
     host.parentNode.insertBefore(bar, host);
   })();
 
+  // 배치 화면은 좁은 화면에서 **처음부터 크게** 시작한다.
+  // 0.42 배로 줄어든 지면에서는 서명 칸이 16px, 크기 손잡이가 5px 다 — 손가락으로는 못 잡는다.
+  // 가로로 미는 대신 실제 크기로 놓는 편이 낫다.
+  if (MODE === "edit" && window.matchMedia && window.matchMedia("(max-width:820px)").matches) zoomed = true;
+
   fit();
   window.addEventListener("resize", fit);
 
@@ -61,6 +66,22 @@
     var KINDS = JSON.parse(document.getElementById("fieldKinds").textContent);
     var out = document.getElementById("fieldsData");
     var form = document.getElementById("fieldsForm");
+    // 당사자 자리의 이름 — { "1": "임대인", … }. 계약서는 '1번째 당사자' 라고 말하지 않는다.
+    var partyOut = document.getElementById("partiesData");
+    var partyWrap = document.getElementById("fpPartyWrap");
+    var partyName = document.getElementById("fpPartyName");
+    var partyEl = document.getElementById("partyNames");
+    var PARTIES = partyEl ? JSON.parse(partyEl.textContent || "{}") : {};
+    var slotOf = function (v) { var m = /^slot(\d+)$/.exec(String(v || "")); return m ? m[1] : ""; };
+    function partyLabel(slot) { return PARTIES[slot] || (slot + "번째 당사자"); }
+    // 이름이 바뀌면 그 자리를 쓰는 칸의 이름표와 선택지가 모두 따라 바뀌어야 한다 —
+    // 한 군데만 고치면 화면 안에서 같은 자리를 두 이름으로 부르게 된다.
+    function refreshParty(slot) {
+      var label = partyLabel(slot);
+      var opt = document.querySelector('#fpAssignee option[value="slot' + slot + '"]');
+      if (opt) { opt.textContent = label; opt.dataset.name = label; }
+      stack.querySelectorAll('.pf[data-assignee="slot' + slot + '"] .pf-who').forEach(function (w) { w.textContent = label; });
+    }
     var picked = "sign";
     var sel = null;
 
@@ -90,6 +111,14 @@
         document.getElementById("fpSeal").checked = el.dataset.auto === "seal";
       }
       syncSeal(el);
+      syncPartyBox(el.dataset.assignee);
+    }
+    // 당사자 자리를 고른 칸에서만 이름 칸을 편다 — 사람이 정해진 칸에는 물을 것이 없다.
+    function syncPartyBox(v) {
+      if (!partyWrap) return;
+      var slot = slotOf(v);
+      partyWrap.hidden = !slot;
+      if (slot) partyName.value = PARTIES[slot] || "";
     }
     // 직인 자리는 사람이 채우지 않는다 — 담당자 선택을 잠가 둔다.
     function syncSeal(el) {
@@ -122,6 +151,14 @@
       var who = sel.querySelector(".pf-who");
       var name = this.options[this.selectedIndex].dataset.name || "";
       if (who) who.textContent = name;
+      syncPartyBox(this.value);
+    });
+    if (partyName) partyName.addEventListener("input", function () {
+      var slot = sel ? slotOf(sel.dataset.assignee) : "";
+      if (!slot) return;
+      var v = this.value.replace(/[\r\n\t]/g, " ").trim();
+      if (v) PARTIES[slot] = v; else delete PARTIES[slot];
+      refreshParty(slot);
     });
     document.getElementById("fpReq").addEventListener("change", function () {
       if (sel) sel.dataset.req = this.checked ? "1" : "0";
@@ -207,6 +244,7 @@
         });
       });
       out.value = JSON.stringify(list);
+      if (partyOut) partyOut.value = JSON.stringify(PARTIES);
     });
     return;
   }

@@ -1717,6 +1717,21 @@ export async function adminSaveFields(ctx) {
       page, x, y, w, h, assignee, slot, auto, required: f.required ? 1 : 0 });
   }
   const n = await D.replaceFields(db, d.id, fields);
+
+  // 당사자 자리의 이름 (임대인·임차인·갑·을). 쓰이지 않는 자리의 이름은 버린다 —
+  // 자리를 지웠는데 이름만 남아 다음 화면에서 없는 당사자가 되살아나면 안 된다.
+  let names = {};
+  try { names = JSON.parse(form.get("parties") || "{}") || {}; } catch { names = {}; }
+  const used = new Set(fields.map((f) => f.slot).filter(Boolean));
+  const keep = {};
+  for (const [k, v] of Object.entries(names)) {
+    const slot = Number(k) | 0;
+    if (slot < 1 || slot > MAX_SLOTS || !used.has(slot)) continue;
+    const name = cap(String(v || "").replace(/[\x00-\x1f\x7f]/g, " ").trim(), 20);
+    if (name) keep[slot] = name;
+  }
+  await D.replaceDocParties(db, d.id, keep);
+
   // 배치를 저장하면 필드가 통째로 새로 만들어지므로 찍어 둔 직인도 함께 사라진다 — 여기서 다시 찍는다.
   const sealed = await applySeal(ctx, d);
   const note = sealed > 0 ? ` 우리 직인 ${sealed}곳을 찍었습니다.`
@@ -2752,6 +2767,9 @@ export async function adminSaveDraft(ctx) {
     await D.saveDraft(db, id, { title, body, contentHash: hash });
     doc = await D.getDocument(db, id);
   } else {
+    // 아무것도 안 쓴 화면은 초안이 되지 않는다. 자동 저장이 3초마다 도는데 이 문이 없으면,
+    // 작성기를 열어 두기만 해도 '제목 없는 계약서' 가 목록에 쌓인다.
+    if (!body.trim() && !form.get("title")) return jsonOut({ ok: false, error: "아직 쓴 내용이 없습니다." }, 400);
     doc = await D.createDocument(db, { associationId: assoc.id, title, body, contentHash: hash, createdBy: user.id, draft: 1 });
   }
   return jsonOut({ ok: true, id: doc.id, at: new Date().toISOString(), to: `${base}/admin/documents/write?doc=${doc.id}` });
@@ -2814,6 +2832,8 @@ export async function adminPublishDraft(ctx) {
   }
   const valid = new Set((await D.listSignerCandidates(db, assoc.id, assoc.kind)).map((m) => m.id));
   const slots = await D.usedSlots(db, d.id);   // 서명 자리를 당사자별로 놓았는가
+  const pNames = await D.listDocParties(db, d.id);
+  const pLabel = (i) => D.partyLabel(pNames, i + 1);   // '임대인' 또는 '1번째 당사자'
 
   // ---- 당사자 정하기 ----
   // 자리를 놓아 둔 계약서는 '몇 번째 당사자' 가 누구인지부터 정해야 한다.
@@ -2830,7 +2850,7 @@ export async function adminPublishDraft(ctx) {
         const email = cap((form.get(`ext_email_${i}`) || "").toLowerCase().trim(), 120);
         const phone = D.normalizePhone(form.get(`ext_phone_${i}`) || "");
         const org = cap((form.get(`ext_org_${i}`) || "").trim(), 80);
-        if (!name) return back(to, `${i + 1}번째 당사자의 이름을 입력해 주세요.`, true);
+        if (!name) return back(to, `${pLabel(i)}의 이름을 입력해 주세요.`, true);
         if (email && !EMAIL_RE.test(email)) return back(to, `${name}님의 이메일 형식을 확인해 주세요.`, true);
         if (phone && !D.isValidPhone(phone)) return back(to, `${name}님의 휴대폰 번호 형식을 확인해 주세요.`, true);
         if (!email && !phone) return back(to, `${name}님께 서명 링크를 보낼 휴대폰 또는 이메일이 필요합니다.`, true);
@@ -2839,7 +2859,7 @@ export async function adminPublishDraft(ctx) {
         continue;
       }
       const id = Number(raw) || 0;
-      if (!id) return back(to, `${i + 1}번째 당사자가 비어 있습니다. 서명 자리를 그 사람 몫으로 놓아 두었습니다.`, true);
+      if (!id) return back(to, `${D.withJosa(pLabel(i), ["이", "가"])} 비어 있습니다. 서명 자리를 그 몫으로 놓아 두었습니다.`, true);
       if (!valid.has(id)) return back(to, "이 조직의 사람만 당사자로 지정할 수 있습니다.", true);
       if (parties.includes(id)) return back(to, "같은 사람을 두 당사자로 지정할 수 없습니다.", true);
       parties.push(id);
