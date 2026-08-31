@@ -235,6 +235,14 @@ document.addEventListener("click", (e) => {
 // 성공 안내는 떠오르는 알림으로 바꿔 보여 주고(3.5초 뒤 사라짐),
 // 오류는 그 자리에 남겨 둔다(읽고 고쳐야 하는 내용이라 사라지면 안 된다).
 (function () {
+  // ⚠️ 저장 결과일 때만 손댄다.
+  //    예전에는 화면의 첫 .flash 를 무조건 집어 들었는데, 안내문을 .flash 로 그려 둔 패널이
+  //    여럿 있다(운영사 콘솔의 알림톡 키 안내 등). 그 안내가 제자리에서 뜯겨 나와
+  //    화면 한가운데에 검은 상자로 떠 있었고, 성공 알림이 아니라 사라지지도 않았다.
+  //    저장·삭제의 결과는 언제나 ?msg= 로 돌아오므로, 그것만 알림으로 바꾼다.
+  var q;
+  try { q = new URL(location.href).searchParams; } catch (e) { return; }
+  if (!q.has("msg")) return;
   var box = document.querySelector("main .flash");
   if (!box) return;
   var msg = (box.textContent || "").trim();

@@ -204,3 +204,27 @@ test("상인회 홈에 같은 숫자를 두 번 쓰지 않는다", async () => {
   const seg = home.slice(from, home.indexOf('case "steps"', from));
   assert.ok(!/sc-stats/.test(seg), "통계 밴드가 남아 있습니다 — 첫 화면 패널과 같은 숫자입니다");
 });
+
+// 브라우저 기본 파일 단추는 'Choose File' 이라는 영어 글자가 박혀 있고 CSS 로 못 바꾼다.
+// 한국 사장님이 쓰는 화면에 영어 단추가 남으면 그 자리에서 멈칫한다.
+test("파일 고르기 단추가 우리말이다", async () => {
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(new URL("../src/pages.js", import.meta.url), "utf8");
+  const bare = [...src.matchAll(/<label class="file-inline">[\s\S]{0,300}?<\/label>/g)]
+    .map((m) => m[0]).filter((h) => !/class="fi-btn"/.test(h));
+  assert.deepEqual(bare, [], "우리말 단추를 안 씌운 파일 칸이 남아 있습니다");
+  const css = readFileSync(new URL("../public/css/app.css", import.meta.url), "utf8");
+  assert.match(css, /\.file-inline input\{position:absolute/, "기본 단추를 감춰야 우리말이 보인다");
+});
+
+// 사장님이 가장 많이 쓰는 화면인데 4,648px 한 장이었다 — 관리 화면은 탭으로 고쳤으면서.
+test("점주 대시보드가 하는 일별 탭으로 나뉜다", async () => {
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(new URL("../src/pages.js", import.meta.url), "utf8");
+  const from = src.indexOf("export async function dashboard(ctx)");
+  const seg = src.slice(from, src.indexOf("export async function", from + 10));
+  for (const t of ["s-shop", "s-photo", "s-sell", "s-tell"])
+    assert.match(seg, new RegExp(`id="${t}"`), `${t} 묶음이 있어야`);
+  assert.match(seg, /id="consoleNav"/, "탭이 붙을 자리가 있어야");
+  assert.match(seg, /super-tabs\.js/, "탭 장치를 실어야");
+});

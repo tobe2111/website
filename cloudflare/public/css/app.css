@@ -669,7 +669,13 @@ body[data-console="super"] .site-header .nav-logout .btn:hover{color:#fff;backgr
 .board-row .board-thumb img{width:100%;height:100%;object-fit:cover}
 .board-clip{font-size:.78rem;color:var(--muted);font-weight:600}
 .file-inline{display:block;font-size:.9rem;color:var(--muted)}
-.file-inline input{display:block;margin-top:6px}
+.file-inline input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.file-inline .fi-btn{display:inline-flex;align-items:center;gap:8px;margin-top:6px;padding:0 14px;min-height:38px;
+  border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface);color:var(--ink);
+  font-size:.9rem;font-weight:600;cursor:pointer}
+.file-inline:hover .fi-btn{border-color:var(--ink)}
+.file-inline input:focus-visible+.fi-btn{outline:2px solid var(--brand);outline-offset:2px}
+.file-inline .fi-name{margin-left:8px;font-weight:400;color:var(--muted)}
 .post-edited{color:var(--muted);font-size:.86rem}
 .post-gallery{margin:18px 0}
 .edit-images{padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--bg-alt)}

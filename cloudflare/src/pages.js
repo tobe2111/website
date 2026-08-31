@@ -952,11 +952,11 @@ export async function board(ctx) {
       <form method="post" action="${base}/board" class="stack-form compact" enctype="multipart/form-data">
         <input type="text" name="title" placeholder="제목" required maxlength="200" />
         <textarea name="body" rows="4" placeholder="내용" required></textarea>
-        <label class="file-inline">사진 첨부 (선택, 최대 6장)<input type="file" name="images" accept="image/*" multiple /></label>
+        <label class="file-inline">사진 첨부 <small>(선택 · 최대 6장)</small><input type="file" name="images" accept="image/*" multiple /><span class="fi-btn">사진 고르기<span class="fi-name"></span></span></label>
         <button class="btn btn-primary btn-sm">등록</button></form></section>
     <ul class="board-list">${rows}</ul>
     ${pager((i) => `${base}/board${qs({ q, page: i })}`, cur, pages)}</div></section>`;
-  return html(layout({ title: "회원 게시판", assoc, base, user, body, activeNav: `${base}/board`, csrf, scripts: `<script src="${assetUrl("/js/upload-resize.js")}" defer></script>` }));
+  return html(layout({ title: "회원 게시판", assoc, base, user, body, activeNav: `${base}/board`, csrf, scripts: `<script src="${assetUrl("/js/upload-resize.js")}" defer></script><script src="${assetUrl("/js/file-preview.js")}" defer></script>` }));
 }
 export async function postDetail(ctx) {
   const { db, assoc, base, user, params, query, csrf } = ctx;
@@ -1006,10 +1006,10 @@ export async function editPost(ctx) {
       <label>제목<input type="text" name="title" value="${esc(p.title)}" required maxlength="200" /></label>
       <label>내용<textarea name="body" rows="8" required>${esc(p.body)}</textarea></label>
       ${existing}
-      <label class="file-inline">사진 추가 (총 6장까지)<input type="file" name="images" accept="image/*" multiple /></label>
+      <label class="file-inline">사진 추가 <small>(총 6장까지)</small><input type="file" name="images" accept="image/*" multiple /><span class="fi-btn">사진 고르기<span class="fi-name"></span></span></label>
       <div class="post-actions"><button class="btn btn-primary">저장</button><a href="${base}/board/${p.id}" class="btn btn-ghost">취소</a></div>
     </form></div></section>`;
-  return html(layout({ title: "글 수정", assoc, base, user, body, activeNav: `${base}/board`, csrf, scripts: `<script src="${assetUrl("/js/upload-resize.js")}" defer></script>` }));
+  return html(layout({ title: "글 수정", assoc, base, user, body, activeNav: `${base}/board`, csrf, scripts: `<script src="${assetUrl("/js/upload-resize.js")}" defer></script><script src="${assetUrl("/js/file-preview.js")}" defer></script>` }));
 }
 
 // ================= 회원가입 =================
@@ -1143,18 +1143,18 @@ export async function dashboard(ctx) {
       <label class="file-drop"><input type="file" name="image" accept="image/*" /><span class="file-drop-text">제품 사진 (선택·최대 8MB)</span></label>
       <div class="form-two"><label>제품 이름<input name="name" required /></label><label>가격 <small>(선택)</small><input name="price" placeholder="예: 8,000원 · 시가 · 미표기" /></label></div>
       <label>한 줄 설명 <small>(선택)</small><input name="description" maxlength="300" /></label>
-      <button class="btn btn-primary btn-sm">제품 추가</button></form></section>
-    <section class="panel" id="d-updates"><h2 class="panel-title">가게 소식 <span class="badge badge-muted">${updates.length}</span></h2>
+      <button class="btn btn-primary btn-sm">제품 추가</button></form></section>`;
+  const updatePanel = `<section class="panel" id="d-updates"><h2 class="panel-title">가게 소식 <span class="badge badge-muted">${updates.length}</span></h2>
       <p class="panel-hint">"오늘 딸기 들어왔어요" 같은 한 줄 소식을 올리면 <strong>가게 페이지와 상인회 홈 첫 화면</strong>에 바로 노출됩니다. 자주 올릴수록 손님이 자주 봅니다.</p>
       <form method="post" action="${base}/dashboard/updates" enctype="multipart/form-data" class="stack-form compact">
         <label>오늘의 소식<input name="body" required maxlength="300" placeholder="예: 오늘 생딸기 크레페 한정 20개!" /></label>
-        <label class="file-inline">사진 1장 (선택)<input type="file" name="image" accept="image/*" /></label>
+        <label class="file-inline">사진 1장 <small>(선택)</small><input type="file" name="image" accept="image/*" /><span class="fi-btn">사진 고르기<span class="fi-name"></span></span></label>
         <button class="btn btn-primary btn-sm">소식 올리기</button></form>
       ${updates.length ? `<ul class="update-feed compact">${updates.map((u) => `<li class="update-item">
         ${u.image ? `<img class="update-img" src="${esc(mediaUrl(u.image))}" alt="" loading="lazy" />` : ""}
         <div class="update-body"><p>${esc(u.body)}</p><time>${esc(kstDate(u.created_at, "."))}</time></div>
-        <form method="post" action="${base}/dashboard/updates/${u.id}/delete" data-confirm="이 소식을 삭제할까요?"><button class="link-danger">삭제</button></form></li>`).join("")}</ul>` : ""}</section>
-    <section class="panel" id="d-coupons"><h2 class="panel-title">쿠폰·혜택 <span class="badge badge-muted">${coupons.length}/5</span></h2>
+        <form method="post" action="${base}/dashboard/updates/${u.id}/delete" data-confirm="이 소식을 삭제할까요?"><button class="link-danger">삭제</button></form></li>`).join("")}</ul>` : ""}</section>`;
+  const couponPanel = `<section class="panel" id="d-coupons"><h2 class="panel-title">쿠폰·혜택 <span class="badge badge-muted">${coupons.length}/5</span></h2>
       <p class="panel-hint">손님이 매장에서 <strong>이 화면을 보여주면</strong> 제공하는 혜택입니다. 결제·발급 기능이 없어 부담 없이 운영할 수 있어요. 기한이 지나면 자동으로 내려갑니다.</p>
       ${coupons.length ? `<ul class="coupon-admin-list">${coupons.map((c) => {
         const expired = c.valid_until && c.valid_until < new Date().toISOString().slice(0, 10);
@@ -1166,14 +1166,14 @@ export async function dashboard(ctx) {
         <label>혜택 내용<input name="title" required maxlength="80" placeholder="예: 어묵 1개 서비스" /></label>
         <div class="form-two"><label>조건 <small>(선택)</small><input name="terms" maxlength="120" placeholder="예: 2만원 이상 주문 시" /></label>
           <label>유효기한 <small>(선택·비우면 무기한)</small><input type="date" name="valid_until" /></label></div>
-        <button class="btn btn-primary btn-sm">쿠폰 등록</button></form></section>
-    <section class="panel urdeal-promo">
+        <button class="btn btn-primary btn-sm">쿠폰 등록</button></form></section>`;
+  const urdealPanel = `<section class="panel urdeal-promo">
       <span class="up-badge">운영사 서비스</span>
       <h2 class="panel-title">이용권·동네딜을 온라인으로 팔고 싶다면</h2>
       <p class="panel-hint">이곳의 쿠폰은 보여주기 혜택(결제 없음)입니다. 할인 이용권·기프티콘 교환권을 <strong>실제로 판매</strong>하려면 운영사의 커머스 <strong>유어딜</strong>과 함께하세요.</p>
       <span class="pill-row"><a class="btn btn-primary btn-sm" href="${base}/urdeal">연동 방법 보기</a>
-      <a class="btn btn-ghost btn-sm" href="https://live.ur-team.com/" target="_blank" rel="noopener">유어딜 바로가기 →</a></span></section>
-    <section class="panel"><h2 class="panel-title">가게 QR 코드</h2>
+      <a class="btn btn-ghost btn-sm" href="https://live.ur-team.com/" target="_blank" rel="noopener">유어딜 바로가기 →</a></span></section>`;
+  const qrPanel = `<section class="panel"><h2 class="panel-title">가게 QR 코드</h2>
       <p class="panel-hint">인쇄해서 계산대·출입문에 붙여보세요. 손님이 스캔하면 우리 가게 페이지가 열립니다.</p>
       <div id="qrWidget" class="qr-widget" data-url="${base}/business/${esc(b.slug)}" data-name="${esc(b.name)}">
         <div class="qr-img" aria-label="가게 QR 코드"></div>
@@ -1203,6 +1203,36 @@ export async function dashboard(ctx) {
       <span class="media-kind">${m.kind === "image" ? "사진" : (m.kind === "embed" ? "" + esc(providerLabel(m.provider)) : "🎬 영상")}</span>
       <form method="post" action="${base}/dashboard/media/${m.id}/delete" data-confirm="삭제?"><button class="link-danger">삭제</button></form></figcaption></figure>`).join("") : `<p class="empty">아직 등록한 사진·영상이 없습니다.</p>`;
   const naver = assoc.map_client_id || env.NAVER_MAP_CLIENT_ID; // 상인회 전용 지도 키 우선
+  const infoPanel = `  <section class="panel" id="d-info"><h2 class="panel-title">업체 정보</h2>
+    <form method="post" action="${base}/dashboard/business" class="stack-form">
+      <label>업체명<input type="text" name="name" value="${esc(b.name)}" required /></label>
+      <label>업종<select name="category">${opts}</select></label>
+      <label>소개<textarea name="description" rows="4">${esc(b.description)}</textarea></label>
+      <div class="form-two"><label>전화<input type="tel" name="phone" value="${esc(b.phone)}" /></label><label>영업시간<input type="text" name="hours" value="${esc(b.hours)}" /></label></div>
+      <label>주소<input type="text" name="address" value="${esc(b.address)}" /></label>
+      <div class="form-divider">SNS 링크 <small style="font-weight:400;color:var(--muted)">(선택 · 가게 페이지에 버튼으로 표시)</small></div>
+      <div class="form-two"><label>인스타그램<input type="url" name="sns_instagram" value="${esc(b.sns_instagram || "")}" placeholder="instagram.com/가게계정" /></label>
+        <label>유튜브<input type="url" name="sns_youtube" value="${esc(b.sns_youtube || "")}" placeholder="youtube.com/@채널" /></label></div>
+      <div class="form-two"><label>네이버 블로그<input type="url" name="sns_blog" value="${esc(b.sns_blog || "")}" placeholder="blog.naver.com/아이디" /></label>
+        <label>카카오톡 채널<input type="url" name="sns_kakao" value="${esc(b.sns_kakao || "")}" placeholder="pf.kakao.com/_채널" /></label></div>
+      <label>네이버 플레이스 <small>(내 가게 네이버 지도 페이지 — 리뷰·길찾기 연결)</small><input type="url" name="sns_naver" value="${esc(b.sns_naver || "")}" placeholder="naver.me/… 또는 map.naver.com/p/entry/place/…" /></label>
+      <div class="form-divider">지도 위치</div>
+      ${naver ? `<div class="geo-search"><input type="text" id="geoQuery" value="${esc(b.address)}" placeholder="도로명 주소 (예: 서초대로 123)" aria-label="주소로 좌표 찾기" /><button type="button" class="btn btn-ghost btn-sm" id="geoBtn">주소로 찾기</button></div>
+      <p class="geo-msg panel-hint" id="geoMsg" hidden></p>
+      <div id="pickMap" class="pick-map" data-center-lat="${b.lat ?? assoc.map_lat}" data-center-lng="${b.lng ?? assoc.map_lng}" data-zoom="16"></div><p class="panel-hint">주소로 찾거나, 지도를 직접 클릭하면 좌표가 입력됩니다.</p>` : `<p class="panel-hint">위도·경도를 입력하면 지도에 표시됩니다.</p>`}
+      <div class="form-two"><label>위도<input type="text" inputmode="decimal" name="lat" id="latInput" value="${b.lat != null ? esc(String(b.lat)) : ""}" /></label><label>경도<input type="text" inputmode="decimal" name="lng" id="lngInput" value="${b.lng != null ? esc(String(b.lng)) : ""}" /></label></div>
+      <button class="btn btn-primary">정보 저장</button></form></section>`;
+  const mediaPanel = `  <section class="panel" id="d-media"><h2 class="panel-title">사진 업로드</h2>
+    <form method="post" action="${base}/dashboard/media" enctype="multipart/form-data" class="upload-form">
+      <label class="file-drop"><input type="file" name="files" accept="image/*" multiple /><span class="file-drop-text">사진 선택 (최대 8MB)</span></label>
+      <input type="text" name="caption" placeholder="설명 (선택)" class="caption-input" />
+      <button class="btn btn-primary btn-block">업로드</button></form>
+    <h3 class="panel-subtitle">영상 링크 추가</h3>
+    <p class="panel-hint">유튜브·쇼츠·인스타 릴스·네이버TV 주소를 붙여넣으세요. <small>단축 주소(naver.me/…)는 안 됩니다 — 영상을 열어 주소창의 원래 주소를 복사해 주세요.</small></p>
+    <form method="post" action="${base}/dashboard/media/embed" class="stack-form compact">
+      <input type="url" name="url" placeholder="영상 주소(링크)" required /><input type="text" name="caption" placeholder="설명 (선택)" maxlength="200" />
+      <button class="btn btn-primary btn-sm">영상 링크 추가</button></form>
+    <h3 class="panel-subtitle">등록된 미디어 (${media.length})</h3><div class="media-grid">${grid}</div></section>`;
   const body = `<section class="dash"><div class="container">
     <div class="dash-head"><div><h1 class="dash-title">${esc(b.name)} ${statusBadge(b.status)}</h1>
       <p class="dash-sub">공개 주소: <a href="${base}/business/${esc(b.slug)}" target="_blank">${esc(prettyPath(base))}/business/${esc(b.slug)}</a></p></div>
@@ -1213,42 +1243,18 @@ export async function dashboard(ctx) {
     ${flashOf(query)}
     ${approveBanner}
     ${merchantOnboard}
-    <div class="dash-grid">
-      <section class="panel" id="d-info"><h2 class="panel-title">업체 정보</h2>
-        <form method="post" action="${base}/dashboard/business" class="stack-form">
-          <label>업체명<input type="text" name="name" value="${esc(b.name)}" required /></label>
-          <label>업종<select name="category">${opts}</select></label>
-          <label>소개<textarea name="description" rows="4">${esc(b.description)}</textarea></label>
-          <div class="form-two"><label>전화<input type="tel" name="phone" value="${esc(b.phone)}" /></label><label>영업시간<input type="text" name="hours" value="${esc(b.hours)}" /></label></div>
-          <label>주소<input type="text" name="address" value="${esc(b.address)}" /></label>
-          <div class="form-divider">SNS 링크 <small style="font-weight:400;color:var(--muted)">(선택 · 가게 페이지에 버튼으로 표시)</small></div>
-          <div class="form-two"><label>인스타그램<input type="url" name="sns_instagram" value="${esc(b.sns_instagram || "")}" placeholder="instagram.com/가게계정" /></label>
-            <label>유튜브<input type="url" name="sns_youtube" value="${esc(b.sns_youtube || "")}" placeholder="youtube.com/@채널" /></label></div>
-          <div class="form-two"><label>네이버 블로그<input type="url" name="sns_blog" value="${esc(b.sns_blog || "")}" placeholder="blog.naver.com/아이디" /></label>
-            <label>카카오톡 채널<input type="url" name="sns_kakao" value="${esc(b.sns_kakao || "")}" placeholder="pf.kakao.com/_채널" /></label></div>
-          <label>네이버 플레이스 <small>(내 가게 네이버 지도 페이지 — 리뷰·길찾기 연결)</small><input type="url" name="sns_naver" value="${esc(b.sns_naver || "")}" placeholder="naver.me/… 또는 map.naver.com/p/entry/place/…" /></label>
-          <div class="form-divider">지도 위치</div>
-          ${naver ? `<div class="geo-search"><input type="text" id="geoQuery" value="${esc(b.address)}" placeholder="도로명 주소 (예: 서초대로 123)" aria-label="주소로 좌표 찾기" /><button type="button" class="btn btn-ghost btn-sm" id="geoBtn">주소로 찾기</button></div>
-          <p class="geo-msg panel-hint" id="geoMsg" hidden></p>
-          <div id="pickMap" class="pick-map" data-center-lat="${b.lat ?? assoc.map_lat}" data-center-lng="${b.lng ?? assoc.map_lng}" data-zoom="16"></div><p class="panel-hint">주소로 찾거나, 지도를 직접 클릭하면 좌표가 입력됩니다.</p>` : `<p class="panel-hint">위도·경도를 입력하면 지도에 표시됩니다.</p>`}
-          <div class="form-two"><label>위도<input type="text" inputmode="decimal" name="lat" id="latInput" value="${b.lat != null ? esc(String(b.lat)) : ""}" /></label><label>경도<input type="text" inputmode="decimal" name="lng" id="lngInput" value="${b.lng != null ? esc(String(b.lng)) : ""}" /></label></div>
-          <button class="btn btn-primary">정보 저장</button></form></section>
-      <section class="panel" id="d-media"><h2 class="panel-title">사진 업로드</h2>
-        <form method="post" action="${base}/dashboard/media" enctype="multipart/form-data" class="upload-form">
-          <label class="file-drop"><input type="file" name="files" accept="image/*" multiple /><span class="file-drop-text">사진 선택 (최대 8MB)</span></label>
-          <input type="text" name="caption" placeholder="설명 (선택)" class="caption-input" />
-          <button class="btn btn-primary btn-block">업로드</button></form>
-        <h3 class="panel-subtitle">영상 링크 추가</h3>
-        <p class="panel-hint">유튜브·쇼츠·인스타 릴스·네이버TV 주소를 붙여넣으세요. <small>단축 주소(naver.me/…)는 안 됩니다 — 영상을 열어 주소창의 원래 주소를 복사해 주세요.</small></p>
-        <form method="post" action="${base}/dashboard/media/embed" class="stack-form compact">
-          <input type="url" name="url" placeholder="영상 주소(링크)" required /><input type="text" name="caption" placeholder="설명 (선택)" maxlength="200" />
-          <button class="btn btn-primary btn-sm">영상 링크 추가</button></form>
-        <h3 class="panel-subtitle">등록된 미디어 (${media.length})</h3><div class="media-grid">${grid}</div></section>
-    </div>
-    ${productPanel}
+    <div class="console-grid"><aside class="console-side"><nav id="consoleNav">
+      ${[["shop", "가게 정보"], ["photo", "사진·영상"], ["sell", "메뉴·쿠폰"], ["tell", "알리기"]]
+        .map(([id, label]) => `<a href="#s-${id}" data-tab="${id}">${label}</a>`).join("")}
+    </nav></aside><div class="console-main">
+      <div class="sgroup" id="s-shop" data-tab="shop">${infoPanel}</div>
+      <div class="sgroup" id="s-photo" data-tab="photo">${mediaPanel}</div>
+      <div class="sgroup" id="s-sell" data-tab="sell">${productPanel}${couponPanel}</div>
+      <div class="sgroup" id="s-tell" data-tab="tell">${updatePanel}${qrPanel}${urdealPanel}</div>
+    </div></div>
     </div></section>`;
   const picker = naver ? `<script src="https://oapi.map.naver.com/openapi/v3/maps.js?${esc(env.NAVER_MAP_PARAM || "ncpClientId")}=${esc(naver)}&submodules=geocoder"></script><script src="${assetUrl("/js/map.js")}" defer></script>` : "";
-  return html(layout({ title: "내 업체 관리", assoc, base, user, body, csrf, scripts: `<script src="${assetUrl("/js/viewer.js")}" defer></script><script src="${assetUrl("/js/upload-resize.js")}" defer></script><script src="${assetUrl("/js/qr.js")}" defer></script><script src="${assetUrl("/js/qr-widget.js")}" defer></script>${picker}` }));
+  return html(layout({ title: "내 업체 관리", assoc, base, user, body, csrf, scripts: `<script src="${assetUrl("/js/viewer.js")}" defer></script><script src="${assetUrl("/js/upload-resize.js")}" defer></script><script src="${assetUrl("/js/qr.js")}" defer></script><script src="${assetUrl("/js/qr-widget.js")}" defer></script><script src="${assetUrl("/js/super-tabs.js")}" defer></script><script src="${assetUrl("/js/file-preview.js")}" defer></script>${picker}` }));
 }
 
 const docBody = (b) => esc(b).replace(/\n/g, "<br />");

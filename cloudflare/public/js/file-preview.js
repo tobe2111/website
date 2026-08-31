@@ -53,3 +53,16 @@
     function (input) { input.addEventListener("change", function () { show(input); }); }
   );
 })();
+
+// 우리말 단추로 감싼 파일 칸 — 고른 파일 이름을 단추 옆에 적어 준다.
+// 기본 입력칸을 숨겼기 때문에, 안 적으면 골랐는지 아닌지 알 수 없다.
+(function () {
+  Array.prototype.forEach.call(document.querySelectorAll(".file-inline input[type=file]"), function (input) {
+    var name = input.parentNode.querySelector(".fi-name");
+    if (!name) return;
+    input.addEventListener("change", function () {
+      var n = input.files ? input.files.length : 0;
+      name.textContent = !n ? "" : n > 1 ? ` — ${n}장 고름` : ` — ${input.files[0].name}`;
+    });
+  });
+})();

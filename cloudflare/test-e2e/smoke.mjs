@@ -73,6 +73,18 @@ await grab("/t/seocho/map", "map.html");
 await grab("/login", "login.html");
 await grab("/t/seocho/dashboard", "dashboard.html", true);
 await grab(`/t/seocho/sign/${cdoc.id}`, "signfill.html", true);
+// 운영사 콘솔도 캡처 — 저장 알림이 안내문을 집어 들던 버그가 여기서만 보였다
+{
+  const sj = {};
+  const sch = () => Object.entries(sj).map(([k, v]) => `${k}=${v}`).join("; ");
+  const soak = (res) => { for (const c of res.headers.getSetCookie?.() || []) { const kv = c.split(";")[0]; const i = kv.indexOf("="); sj[kv.slice(0, i)] = kv.slice(i + 1); } };
+  let sr = await worker.fetch(new Request("http://localhost/login"), env); soak(sr);
+  const st = (/name="_csrf" value="([^"]+)"/.exec(await sr.text()) || [])[1];
+  sr = await worker.fetch(new Request("http://localhost/login", { method: "POST", headers: { cookie: sch(), "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ _csrf: st, email: "s@p.kr", password: "super1234" }).toString() }), env);
+  soak(sr);
+  const res = await worker.fetch(new Request("http://localhost/super", { headers: { cookie: sch() } }), env);
+  writeFileSync(path.join(DIR, "super.html"), (await res.text()).replace(/<link[^>]*jsdelivr[^>]*>/g, "").replace(/\?v=[a-z0-9]+/g, ""));
+}
 // 관리자 세션으로 배치 편집기도 캡처 (별도 쿠키)
 {
   const ajar = {};
@@ -130,6 +142,32 @@ const ok = (cond, name) => { if (cond) { pass++; console.log("  ✓", name); } e
   });
   ok(!moving, "첫 화면에 떠다니는 광원이 없다", moving);
   await p.close();
+}
+// 2-b) 저장 알림은 '저장 결과' 일 때만 뜬다.
+//     안내문을 .flash 로 그려 둔 패널이 여럿 있는데(운영사 콘솔의 알림톡 키 안내 등),
+//     예전에는 그것까지 집어 들어 제자리에서 뜯어내 화면 한가운데 검은 상자로 띄웠다.
+//     성공 알림이 아니라 사라지지도 않아, 콘솔의 절반을 영구히 가리고 있었다.
+{
+  const p = await browser.newPage();
+  await p.goto(`http://localhost:${PORT}/super.html`);
+  await p.waitForTimeout(600);
+  const floating = await p.evaluate(() => {
+    const out = [];
+    document.querySelectorAll("body *").forEach((el) => {
+      const cs = getComputedStyle(el);
+      if (cs.position !== "fixed") return;
+      const r = el.getBoundingClientRect();
+      if (r.width > 120 && r.height > 60) out.push(el.className || el.tagName);
+    });
+    return out;
+  });
+  ok(floating.length === 0, "저장하지 않았는데 화면을 가리는 알림이 없다", floating.join(", "));
+
+  const p2 = await browser.newPage();
+  await p2.goto(`http://localhost:${PORT}/super.html?msg=${encodeURIComponent("저장했습니다")}`);
+  await p2.waitForTimeout(400);
+  ok(await p2.evaluate(() => !!document.querySelector(".toast-save")), "저장하면 알림이 뜬다");
+  await p2.close(); await p.close();
 }
 // 3) 모바일 메뉴
 {
