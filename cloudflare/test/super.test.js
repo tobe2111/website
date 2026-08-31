@@ -459,7 +459,7 @@ test("공백만 든 값은 있는 것으로 세지 않는다", async () => {
 test("정기 작업이 한 번도 안 돌았으면 화면이 그렇게 말한다", async () => {
   const html = await superHtml();
   assert.match(html, /정기 작업/);
-  assert.match(html, /아직 한 번도 돌지 않음/);
+  assert.match(html, /한 번도 안 돌았습니다/);
   assert.match(html, /멈춰 있음/);
   for (const label of ["주간 백업·리포트", "일일 서명 리마인더", "웹훅 재전송"])
     assert.match(html, new RegExp(label), `${label} 줄이 있어야`);

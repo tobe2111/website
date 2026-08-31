@@ -153,3 +153,66 @@ test("점주 화면은 '못 채우면 무엇을 잃는지' 를 적는다", async
   assert.match(html, /지금 문 연 곳.*안 뜹니다/);
   assert.ok(html.indexOf("영업 시간 적기") < html.indexOf("가게 사진 3장"), "잃는 게 큰 것부터");
 });
+
+// ── 일하는 화면이 다시 카드 더미로 돌아가지 않게 잠급니다.
+//
+// 콘솔이 회색 바닥 위에 흰 라운드 카드를 쌓아 올린 모양이었습니다. 카드 안에 카드가 들어가고
+// (패널 > 고객사 카드 > 배지) 그림자가 세 겹 겹치면, "무엇이 중요한가" 가 아니라
+// "무엇이든 다 상자다" 라는 인상만 남습니다. 그래서 상자를 걷고 괘선으로 나눴습니다.
+// 테두리를 두르는 것은 화면에서 딱 하나 — 지금 손대야 하는 일(할 일 상자)뿐입니다.
+test("콘솔은 종이 한 장이다 — 구역이 다시 카드가 되면 안 된다", async () => {
+  const { readFileSync } = await import("node:fs");
+  const css = readFileSync(new URL("../public/css/app.css", import.meta.url), "utf8");
+  const block = css.slice(css.indexOf("일하는 화면 — 종이 한 장과 괘선"));
+  assert.ok(block, "콘솔 스타일 구역이 있어야 한다");
+
+  const rule = (sel) => {
+    const i = block.indexOf(sel + "{") >= 0 ? block.indexOf(sel + "{") : block.indexOf(sel + ",");
+    assert.ok(i >= 0, `${sel} 규칙이 있어야 한다`);
+    return block.slice(i, block.indexOf("}", i));
+  };
+  for (const sel of [".dash .panel", ".dash .console-side nav", ".dash .stat-card"]) {
+    const r = rule(sel);
+    assert.match(r, /border-radius:0/, `${sel} 는 모서리를 굴리지 않는다`);
+    assert.match(r, /box-shadow:none/, `${sel} 는 그림자를 지지 않는다`);
+  }
+  assert.match(rule(".dash .stat-card"), /background:none/, "숫자 칸은 흰 상자가 아니다");
+  assert.match(rule(".dash .org-card"), /background:none/, "고객사는 카드가 아니라 목록 행이다");
+  // 예외는 하나뿐 — 그것 하나만 상자여야 "여기부터" 라는 뜻이 된다
+  assert.match(block, /\.dash \.todo-box\{border-color:var\(--ink\)/, "할 일 상자만 테두리를 남긴다");
+});
+
+test("사이드바에 뜻 없는 아이콘이 다시 붙지 않는다", async () => {
+  const env = makeEnv();
+  const pw = await hashPassword("pass1234");
+  const a = await D.createAssociation(env.DB, { slug: "s", name: "서초구 상인회", kind: "merchant" });
+  await D.createUser(env.DB, { email: "ad@s.kr", passwordHash: pw.hash, salt: pw.salt, name: "회장", role: "ADMIN", associationId: a.id });
+  const j = await login(env, "ad@s.kr");
+  const html = await (await jget(env, j, "/t/s/admin")).text();
+  const nav = html.slice(html.indexOf('id="consoleNav"'), html.indexOf("</nav>", html.indexOf('id="consoleNav"')));
+  assert.ok(nav.length > 50, "사이드바를 찾아야 한다");
+  assert.ok(!nav.includes("<svg"), "열 칸 중 넷이 같은 그림이었다 — 구분해 주지 않는 아이콘은 장식일 뿐이다");
+  assert.match(nav, /현황/);
+  assert.match(nav, /계약서/);
+});
+
+test("점주 체크리스트는 끝난 것을 줄 그어 늘어놓지 않는다", async () => {
+  const env = makeEnv();
+  const pw = await hashPassword("pass1234");
+  const a = await D.createAssociation(env.DB, { slug: "s", name: "서초구 상인회", kind: "merchant" });
+  const u = await D.createUser(env.DB, { email: "m@s.kr", passwordHash: pw.hash, salt: pw.salt, name: "사장", role: "MERCHANT", associationId: a.id });
+  const b = await D.createBusiness(env.DB, { associationId: a.id, ownerId: u.id, name: "모둠분식", category: "음식점", description: "" });
+  await D.setBusinessStatus(env.DB, b.id, "approved");
+  await D.updateBusiness(env.DB, b.id, { name: "모둠분식", category: "음식점", description: "떡볶이집입니다", phone: "02-000-0000",
+    address: "서울 서초구 서초대로 1", hours: "10:00-20:00", lat: null, lng: null,
+    sns_instagram: "", sns_youtube: "", sns_blog: "", sns_kakao: "", sns_naver: "" });
+  const j = await login(env, "m@s.kr");
+  const html = await (await jget(env, j, "/t/s/dashboard")).text();
+
+  const box = html.slice(html.indexOf('class="panel onboard"'), html.indexOf("</section>", html.indexOf('class="panel onboard"')));
+  assert.ok(!box.includes("ob-check"), "끝난 항목에 초록 동그라미를 달지 않는다");
+  assert.ok(!box.includes('class="done"'), "취소선 목록은 '다 지워졌다' 로 읽혀 남은 하나를 묻는다");
+  assert.ok(!box.includes("영업 시간 적기"), "이미 채운 것은 목록에서 뺀다");
+  assert.match(box, /가게 사진 3장/, "남은 것은 남는다");
+  assert.match(box, /나머지 3가지는 이미 채우셨습니다/, "끝난 것은 숫자 한 줄로 센다");
+});

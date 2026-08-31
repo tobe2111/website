@@ -1077,14 +1077,13 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .nf-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
 /* 온보딩 체크리스트 */
 .onboard{border:1px solid var(--line);background:var(--surface)}
-.onboard-list{display:grid;gap:4px;list-style:none;margin:0;padding:0}
-.onboard-list li{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 11px;padding:9px 4px}
-.ob-why{flex:1 1 100%;padding-left:33px;font-size:.84rem;color:var(--muted);line-height:1.5}
+/* 남은 것만 적습니다 — 끝난 항목에 취소선을 긋고 초록 동그라미를 다는 목록은
+   '다 지워졌다' 로 읽혀, 정작 남은 하나가 묻힙니다. */
+.onboard-list{display:grid;gap:0;list-style:none;margin:0;padding:0;border-top:1px solid var(--line-soft)}
+.onboard-list li{padding:11px 4px;border-bottom:1px solid var(--line-soft)}
+.ob-why{display:block;margin-top:2px;font-size:.84rem;color:var(--muted);line-height:1.55}
 .onboard-list a{font-size:.95rem;font-weight:600;color:var(--ink)}
 .onboard-list a:hover{color:var(--brand-text)}
-.onboard-list li.done a{color:var(--muted);text-decoration:line-through;font-weight:500}
-.ob-check{flex:none;display:grid;place-items:center;width:24px;height:24px;border-radius:999px;border:1.5px solid var(--line);background:var(--surface);color:#fff;font-size:.8rem;font-weight:800}
-.onboard-list li.done .ob-check{background:var(--ok);border-color:var(--ok)}
 /* 공유 버튼 + 토스트 (디자인: 다크 pill 토스트) */
 .biz-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}
 /* 공유 버튼: 기본은 밝은 배경용, 어두운 히어로 안에서는 흰 반투명 */
@@ -1939,3 +1938,152 @@ input:not([type]),input[type="text"],input[type="email"],input[type="tel"],input
 .totp-login>summary::before{content:"＋ ";font-weight:700}
 .totp-login[open]>summary::before{content:"− "}
 .totp-login>summary:hover{color:var(--brand-text)}
+/* ==========================================================================
+   일하는 화면 — 종이 한 장과 괘선
+   --------------------------------------------------------------------------
+   콘솔이 회색 바닥 위에 흰 라운드 카드를 쌓아 올린 모양이었습니다.
+   카드 안에 카드가 들어가고(패널 > 고객사 카드 > 배지), 그림자가 세 겹 겹치면
+   "무엇이 중요한가" 가 아니라 "무엇이든 다 상자다" 라는 인상만 남습니다.
+   한 화면에 알약 배지가 열 개씩 떠 있던 것도 같은 이유였습니다.
+
+   그래서 상자를 걷었습니다. 콘솔은 서류 한 장이고, 구역은 괘선으로 나눕니다.
+   테두리를 두르는 것은 **화면에서 딱 하나** — 지금 손대야 하는 일(할 일 상자)뿐입니다.
+   그것 하나만 상자면, 상자라는 사실 자체가 "여기부터 보세요" 라는 뜻이 됩니다.
+
+   공개 화면(홈·가게 페이지)에는 손대지 않습니다 — .dash 안에서만 바뀝니다.
+   ========================================================================== */
+.dash{background:var(--surface)}
+
+/* 구역: 카드 → 괘선 위의 문단 */
+.dash .panel,
+.dash details.panel{
+  background:none;border:0;border-radius:0;box-shadow:none;
+  padding:20px 0 0;margin:0 0 30px;border-top:1px solid var(--line);
+}
+.dash .sgroup > .panel:first-child,
+.dash .sgroup > details.panel:first-child{border-top:0;padding-top:0}
+/* 구역을 나누는 선은 제목 위 하나면 됩니다 — 위아래로 두 줄이면 제목이 상자에 갇힙니다 */
+.dash .panel-title{font-size:1.02rem;font-weight:700;letter-spacing:-.02em;margin-bottom:14px;padding-bottom:0;border-bottom:0}
+.dash .panel-head{margin-bottom:14px}
+.dash .panel-head .panel-title{margin-bottom:0}
+.dash .panel-hint{margin-top:0;margin-bottom:16px;max-width:78ch}
+/* 접힌 구역도 카드가 아니라 한 줄입니다 — 펴기 전에는 제목 줄만 차지합니다 */
+.dash details.panel:not([open]){margin-bottom:0;padding-bottom:16px}
+.dash details.panel:not([open]) + details.panel{border-top:1px solid var(--line-soft)}
+.dash .panel-fold>summary{padding:2px 0}
+
+/* 왼쪽 차림표: 떠 있는 카드 → 괘선 한 줄 옆의 목록.
+   고른 항목은 알약 배경이 아니라 먹빛 세로 막대로 표시합니다 — 종이에 자를 대는 방식입니다. */
+/* 세로 괘선은 차림표가 아니라 본문 쪽에 붙입니다 — 차림표에 붙이면 항목이 끝나는 자리에서
+   선이 뚝 끊겨, 아래로 이어지는 본문 옆에 짧은 막대 하나가 떠 있는 모양이 됩니다. */
+.dash .console-grid{grid-template-columns:184px minmax(0,1fr);gap:0}
+.dash .console-main{border-left:1px solid var(--line-soft);padding-left:clamp(24px,3vw,40px)}
+.dash .console-side nav{
+  background:none;border:0;border-radius:0;
+  box-shadow:none;padding:0 20px 0 0;gap:0;
+}
+.dash .console-side a{
+  border-radius:0;padding:8px 0 8px 12px;font-size:13.5px;font-weight:500;
+  border-left:2px solid transparent;color:var(--ink-soft);
+}
+.dash .console-side a:hover{background:none;color:var(--ink);border-left-color:var(--line)}
+.dash .console-side a.on,
+.dash .console-side a[aria-current]{color:var(--ink);font-weight:700;border-left-color:var(--ink)}
+.dash .console-side .side-ext:first-of-type{border-top:1px solid var(--line-soft);margin-top:10px;padding-top:14px}
+.dash .console-side .side-badge{
+  background:none;color:var(--wait-fg);font-weight:700;font-variant-numeric:tabular-nums;padding:0;
+}
+@media (max-width:860px){
+  .dash .console-grid{grid-template-columns:minmax(0,1fr)}
+  .dash .console-main{border-left:0;padding-left:0;padding-top:18px}
+  .dash .console-side nav{border-bottom:1px solid var(--line-soft);flex-direction:row;
+    flex-wrap:wrap;gap:0 18px;padding:0 0 10px}
+  .dash .console-side a{border-left:0;border-bottom:2px solid transparent;padding:6px 0}
+  .dash .console-side a.on,.dash .console-side a[aria-current]{border-left:0;border-bottom-color:var(--ink)}
+}
+
+/* 숫자: 카드 다섯 장 → 제호(masthead) 한 줄.
+   같은 크기의 흰 상자 다섯 개는 다섯 개가 다 중요하다는 뜻이 되어, 아무것도 중요하지 않게 됩니다. */
+.dash .stat-cards{
+  display:flex;flex-wrap:wrap;gap:0;margin:0 0 30px;
+  border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+}
+.dash .stat-card{
+  flex:1 1 128px;background:none;border:0;border-radius:0;box-shadow:none;
+  padding:14px 20px 14px 0;margin-right:20px;
+}
+.dash .stat-card + .stat-card{border-left:1px solid var(--line-soft);padding-left:20px}
+.dash .stat-card.stat-alert{background:none}
+.dash .stat-num{font-size:1.6rem;font-weight:800}
+.dash .stat-label{font-size:.8rem;color:var(--muted)}
+/* 손대야 하는 숫자는 색으로만 말합니다 — 칸 전체를 노랗게 칠하면 옆 칸이 안 보입니다 */
+.dash .stat-alert .stat-num{color:var(--wait-fg)}
+.dash .stat-alert .stat-label{color:var(--wait-fg)}
+/* 좁은 화면에서 flex 줄바꿈에 맡기면 칸이 들쭉날쭉 어긋납니다 — 두 칸 격자로 못 박습니다 */
+@media (max-width:620px){
+  .dash .stat-cards{display:grid;grid-template-columns:1fr 1fr}
+  .dash .stat-card{padding:12px 14px 12px 0;margin-right:0;border-left:0}
+  .dash .stat-card + .stat-card{padding-left:0;border-left:0}
+  .dash .stat-card:nth-child(2n){padding-left:14px;border-left:1px solid var(--line-soft)}
+  .dash .stat-card:nth-child(n+3){border-top:1px solid var(--line-soft)}
+}
+
+/* 고객사: 카드 격자 → 이름 · 주소 · 상태의 한 줄짜리 목록.
+   고객사는 구경거리가 아니라 골라 들어가는 곳이라, 표처럼 훑는 편이 빠릅니다. */
+.dash .org-grid{display:block;margin:0;border-top:1px solid var(--line-soft)}
+.dash .org-card{
+  display:grid;grid-template-columns:minmax(0,1.5fr) 132px minmax(0,auto);align-items:baseline;
+  gap:3px 18px;padding:11px 4px;border:0;border-bottom:1px solid var(--line-soft);
+  border-radius:0;background:none;
+}
+/* 칸을 이름으로 못 박습니다. 자동 배치에 맡기면 '손볼 이유' 가 있는 행만 칸이 밀려
+   같은 값이 행마다 다른 자리에 놓입니다 — 표는 그 순간 표가 아니게 됩니다. */
+.dash .org-top{grid-area:1/1}
+.dash .org-meta{grid-area:1/2}
+.dash .org-foot{grid-area:1/3;text-align:right;white-space:nowrap}
+.dash .org-why{grid-area:2/1/auto/-1}
+.dash .org-card:hover{background:var(--surface-2)}
+.dash .org-card.needs{background:none}
+.dash .org-card.needs .org-top b{color:var(--no-fg)}
+@media (max-width:640px){
+  .dash .org-card{grid-template-columns:minmax(0,1fr)}
+  .dash .org-top{grid-area:auto}
+  .dash .org-meta{grid-area:auto}
+  .dash .org-foot{grid-area:auto;text-align:left}
+  .dash .org-why{grid-area:auto}
+}
+
+/* 할 일 상자 — 화면에서 유일하게 테두리를 두르는 것.
+   나머지가 전부 평평하므로, 상자라는 것 자체가 "여기부터" 라는 표시가 됩니다. */
+.dash .todo-box{border-color:var(--ink);border-radius:var(--r-md);box-shadow:none;margin-bottom:30px}
+.dash .todo-head{background:none;color:var(--ink);border-bottom:1px solid var(--line);font-size:.82rem;letter-spacing:.02em}
+.dash .todo-clear,
+.super-todo.is-clear{
+  background:none;border:0;border-bottom:1px solid var(--line-soft);border-radius:0;
+  padding:0 0 14px;margin:0 0 26px;color:var(--muted);font-weight:500;font-size:.9rem;
+}
+.super-todo{gap:0;border-top:1px solid var(--ink);border-bottom:1px solid var(--ink);
+  border-radius:var(--r-md);border-left:1px solid var(--ink);border-right:1px solid var(--ink);margin-bottom:26px}
+.super-todo-item{flex:1 1 200px;background:none;color:var(--ink);border-radius:0;padding:13px 18px}
+.super-todo-item + .super-todo-item{border-left:1px solid var(--line-soft)}
+.super-todo-item:hover{filter:none;background:var(--surface-2)}
+.super-todo-item b{color:var(--wait-fg);font-variant-numeric:tabular-nums}
+
+/* 배지: 제목 옆의 개수는 알약이 아니라 그냥 숫자입니다.
+   알약은 표 안의 상태(승인 대기·반려처럼 값이 바뀌는 것)에만 남깁니다. */
+.dash .panel-title .badge{background:none;padding:0;font-size:.86rem;font-weight:700}
+.dash .panel-title .badge-muted{color:var(--muted);font-weight:500}
+.dash .panel-title .badge-ok{color:var(--ok-fg)}
+.dash .panel-title .badge-wait{color:var(--wait-fg)}
+.dash .panel-title .badge-no{color:var(--no-fg)}
+/* 손대야 하는 구역은 칸을 칠하는 대신 왼쪽에 자국을 냅니다 —
+   면을 칠하면 그 구역의 글자가 읽기 어려워지고, 옆 구역까지 덩달아 죽습니다. */
+.dash .panel-warn{border-left:3px solid var(--wait);padding-left:16px;background:none}
+.dash .panel-accent{border-left:3px solid var(--brand);padding-left:16px;background:none}
+
+/* 알림함 — 줄마다 초록 알약을 깔면 여섯 줄이 전부 "잘 됐습니다" 로 읽힙니다.
+   안 읽었다는 사실은 왼쪽 점 하나로 충분하고, 나머지는 다른 목록과 같은 괘선입니다. */
+.dash .notif-list{gap:0;margin-top:4px;border-top:1px solid var(--line-soft)}
+.dash .notif-list li{border-radius:0;padding:11px 4px;border-bottom:1px solid var(--line-soft);background:none}
+.dash .notif-list li.unread{background:none}
+.dash .notif-list li:hover{background:var(--surface-2)}

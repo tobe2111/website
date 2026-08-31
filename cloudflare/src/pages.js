@@ -47,20 +47,6 @@ const CAT_SVG = {
   "전체": _ic('<circle cx="5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.4" fill="currentColor" stroke="none"/>'),
 };
 const catIcon = (cat) => CAT_SVG[cat] || CAT_SVG["기타"];
-// 관리자 사이드바 아이콘 (18px 라인)
-const _si = (inner) => `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${inner}</svg>`;
-const SIDE_SVG = {
-  stats: _si('<path d="M4 20V10M10 20V4M16 20v-7M21 20H3"/>'),
-  bell: _si('<path d="M18 8a6 6 0 0 0-12 0c0 7-3 8-3 8h18s-3-1-3-8"/><path d="M13.7 20a2 2 0 0 1-3.4 0"/>'),
-  users: _si('<circle cx="9" cy="8" r="3.5"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M21 20c0-2.6-1.6-4.8-4-5.7"/>'),
-  store: _si('<path d="M4 9l1.2-4.2A1 1 0 0 1 6.2 4h11.6a1 1 0 0 1 1 .8L20 9"/><path d="M4 9v10a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9"/><path d="M9 20v-5h6v5"/>'),
-  tag: _si('<path d="M20.6 13.4 12 22 2 12V2h10l8.6 8.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.4"/>'),
-  home: _si('<path d="M3 11l9-8 9 8"/><path d="M5 9.5V21h14V9.5"/><path d="M10 21v-6h4v6"/>'),
-  palette: _si('<path d="M12 21a9 9 0 1 1 9-9c0 2-1.5 3-3 3h-2a2 2 0 0 0-1.5 3.3c.6.7.2 2.7-2.5 2.7z"/><circle cx="7.5" cy="10.5" r="1"/><circle cx="12" cy="7.5" r="1"/><circle cx="16.5" cy="10.5" r="1"/>'),
-  mega: _si('<path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1z"/><path d="M14 8a4 4 0 0 1 0 8M17 5a8 8 0 0 1 0 14"/>'),
-  sign: _si('<path d="M4 20h4L19 9a2 2 0 0 0-3-3L5 17l-1 3z"/><path d="M14.5 6.5l3 3"/>'),
-  ext: _si('<path d="M14 4h6v6M20 4l-9 9"/><path d="M20 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h5"/>'),
-};
 const PIN_SVG = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="2.6"/></svg>';
 const PHONE_SVG = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2 4.2 2 2 0 0 1 4 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8.1 9.7a16 16 0 0 0 6 6l1.2-1.1a2 2 0 0 1 2.1-.5c.9.3 1.8.6 2.7.7A2 2 0 0 1 22 16.9z"/></svg>';
 const CLOCK_SVG = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
@@ -1232,10 +1218,14 @@ export async function dashboard(ctx) {
     { done: products.length >= 1, label: "제품·메뉴 1개 올리기", why: "가격을 보고 오는 손님이 가장 많습니다", href: "#d-products" },
     { done: b.lat != null && b.lng != null, label: "지도에 위치 찍기", why: "점포 지도에 우리 가게가 표시됩니다", href: "#d-info" },
   ];
-  const mRemain = mSteps.filter((x) => !x.done).length;
-  const merchantOnboard = mRemain ? `<section class="panel onboard"><div class="panel-head"><h2 class="panel-title">아직 덜 채운 것 <span class="badge badge-wait">${mSteps.length - mRemain}/${mSteps.length}</span></h2></div>
-    <p class="panel-hint">여섯 가지를 채우면 손님이 보는 가게 페이지가 완성됩니다. 못 채우면 무엇을 잃는지 옆에 적었습니다.</p>
-    <ul class="onboard-list">${mSteps.map((x) => `<li class="${x.done ? "done" : ""}"><span class="ob-check">${x.done ? "✓" : ""}</span><a href="${x.href}">${x.label}</a>${x.done ? "" : `<span class="ob-why">${x.why}</span>`}</li>`).join("")}</ul></section>` : "";
+  // 끝난 항목까지 줄줄이 늘어놓고 취소선을 그으면 '다 지워진 목록' 처럼 보여
+  // 정작 남은 하나가 묻힙니다. 남은 것만 적고, 끝난 것은 숫자 한 줄로 셉니다.
+  const mLeft = mSteps.filter((x) => !x.done);
+  const mDone = mSteps.length - mLeft.length;
+  const merchantOnboard = mLeft.length ? `<section class="panel onboard"><h2 class="panel-title">아직 덜 채운 것 <span class="badge badge-wait">${mLeft.length}가지</span></h2>
+    <p class="panel-hint">채우면 손님이 보는 가게 페이지가 완성됩니다. 못 채우면 무엇을 잃는지 옆에 적었습니다.${
+      mDone ? ` 나머지 ${mDone}가지는 이미 채우셨습니다.` : ""}</p>
+    <ul class="onboard-list">${mLeft.map((x) => `<li><a href="${x.href}">${x.label}</a><span class="ob-why">${x.why}</span></li>`).join("")}</ul></section>` : "";
   const approveBanner = b.status === "approved" ? `<div class="approve-banner" data-dismiss-key="approved-${b.id}" hidden>
     <div class="ab-text"><strong>가게가 공개되었습니다!</strong><p>아래 QR을 인쇄해 계산대에 붙이고, 가게 페이지의 공유 버튼으로 카톡방에 알려보세요.</p></div>
     <span class="ab-actions"><a class="btn btn-sm btn-primary" href="${base}/business/${esc(b.slug)}" target="_blank">내 가게 보기</a><button type="button" class="btn btn-sm btn-ghost" data-dismiss>닫기</button></span>
@@ -1503,11 +1493,11 @@ export async function admin(ctx) {
   // 한 화면에 열두 덩어리가 쏟아지던 것을 하는 일별로 묶는다.
   // 처음 보는 사람이 "여기서 뭘 해야 하나"를 훑지 않고 고를 수 있어야 한다.
   const ADMIN_TABS = [
-    ["home", "현황", SIDE_SVG.stats, unread || 0],
-    [isEsign ? "people" : "people", isEsign ? "담당자" : "회원·점포", SIDE_SVG.users, isEsign ? 0 : (s.pending || 0)],
-    ...(isEsign ? [] : [["content", isFranchise ? "가맹점·콘텐츠" : "콘텐츠", SIDE_SVG.mega, 0]]),
-    ["notify", "알림톡", SIDE_SVG.bell, 0],
-    ["settings", "설정", SIDE_SVG.palette, 0],
+    ["home", "현황", "", unread || 0],
+    [isEsign ? "people" : "people", isEsign ? "담당자" : "회원·점포", "", isEsign ? 0 : (s.pending || 0)],
+    ...(isEsign ? [] : [["content", isFranchise ? "가맹점·콘텐츠" : "콘텐츠", "", 0]]),
+    ["notify", "알림톡", "", 0],
+    ["settings", "설정", "", 0],
   ];
 
   // ── 오늘 처리할 일 —— 일하는 화면은 읽는 화면이 아니라 훑고 처리하는 화면이다.
@@ -1568,13 +1558,13 @@ export async function admin(ctx) {
       ${ADMIN_TABS.map(([id, label, ico, badge]) =>
         `<a href="#s-${id}" data-tab="${id}">${ico} ${esc(label)}${badge ? ` <span class="side-badge">${badge}</span>` : ""}</a>`).join("")}
       <span class="side-sep"></span>
-      ${isFranchise ? `<a href="${base}/admin/leads" class="side-ext">${SIDE_SVG.users} 상담 DB${leads.fresh ? ` <span class="side-badge">${leads.fresh}</span>` : ""}</a>
-      <a href="${base}/admin/landing" class="side-ext">${SIDE_SVG.home} 랜딩페이지</a>` : ""}
-      ${isEsign || isFranchise ? "" : `<a href="${base}/polls" class="side-ext">${SIDE_SVG.bell} 안건 투표</a>`}
-      <a href="${base}/admin/documents" class="side-ext">${SIDE_SVG.sign} 계약서</a>
-      <a href="${base}/admin/templates" class="side-ext">${SIDE_SVG.sign} 서식</a>
-      <a href="${base}/admin/api" class="side-ext">${SIDE_SVG.ext} API 연동</a>
-      <a href="${base}" target="_blank" class="side-ext">${SIDE_SVG.ext} 사이트 보기</a>
+      ${isFranchise ? `<a href="${base}/admin/leads" class="side-ext">상담 DB${leads.fresh ? ` <span class="side-badge">${leads.fresh}</span>` : ""}</a>
+      <a href="${base}/admin/landing" class="side-ext">랜딩페이지</a>` : ""}
+      ${isEsign || isFranchise ? "" : `<a href="${base}/polls" class="side-ext">안건 투표</a>`}
+      <a href="${base}/admin/documents" class="side-ext">계약서</a>
+      <a href="${base}/admin/templates" class="side-ext">서식</a>
+      <a href="${base}/admin/api" class="side-ext">API 연동</a>
+      <a href="${base}" target="_blank" class="side-ext">사이트 보기 ↗</a>
     </nav></aside>
     <div class="console-main">
     <div class="sgroup" id="s-home" data-tab="home">
@@ -1586,7 +1576,7 @@ export async function admin(ctx) {
       <div class="stat-card${over.length ? " stat-alert" : ""}"><span class="stat-num">${over.length}</span><span class="stat-label">기한 지남</span></div>
       <div class="stat-card"><span class="stat-num">${docCount - o.length}</span><span class="stat-label">체결 완료</span></div>
       <div class="stat-card"><span class="stat-num">${members.length}</span><span class="stat-label">담당자</span></div>`; })()
-      : `<div class="stat-card"><span class="stat-num">${s.businesses}${newBiz30 ? `<u class="stat-delta" title="최근 30일에 새로 승인된 ${newBiz30}곳">+${newBiz30}</u>` : ""}</span><span class="stat-label">승인 업체${newBiz30 ? " · 최근 30일 새로" : ""}</span></div>
+      : `<div class="stat-card"><span class="stat-num">${s.businesses}${newBiz30 ? `<u class="stat-delta" title="최근 30일에 새로 승인된 ${newBiz30}곳" aria-label="최근 30일에 ${newBiz30}곳 늘었습니다">+${newBiz30}</u>` : ""}</span><span class="stat-label">승인 업체</span></div>
       <div class="stat-card${s.pending ? " stat-alert" : ""}"><span class="stat-num">${s.pending}</span><span class="stat-label">승인 대기</span></div>
       <div class="stat-card"><span class="stat-num">${s.notices}</span><span class="stat-label">공지</span></div>
       <div class="stat-card"><span class="stat-num">${s.events}</span><span class="stat-label">행사</span></div>`}
@@ -3136,7 +3126,7 @@ export async function superConsole(ctx) {
       return `<tr><th>${esc(label)}</th><td>${r
         ? `${agoText(r.at)} <small class="muted">(${esc(String(r.at).replace("T", " ").slice(0, 16))} UTC)</small>${
             r.error ? ` <span class="badge badge-no">오류</span> <code>${esc(r.error)}</code>` : ""}`
-        : '<span class="badge badge-no">아직 한 번도 돌지 않음</span>'}</td></tr>`;
+        : '<span class="txt-warn">한 번도 안 돌았습니다</span>'}</td></tr>`;
     }).join("")}</table>
     <p class="panel-hint">주간 작업은 월요일 새벽 3시(KST)에 백업을 만듭니다. 일일 작업은 매일 아침 9시에
       기한이 다가온 계약의 미서명자에게 재알림을 보냅니다. 웹훅은 5분마다 밀린 전송을 재시도합니다.</p>
@@ -3461,11 +3451,11 @@ export async function superConsole(ctx) {
   }).join("");
   const orgPanel = `<section class="panel"><div class="panel-head"><h2 class="panel-title">고객사 <span class="badge badge-muted">${list.length}곳</span>${
       needAttention ? `<span class="badge badge-no">손볼 곳 ${needAttention}</span>` : ""}</h2>
-      <span class="pill-row"><a class="btn btn-xs btn-ghost" href="#new-assoc">＋ 새 조직</a></span></div>
-    ${list.length ? `<div class="org-grid">${orgCards}</div>
-      <p class="panel-hint">${needAttention
+      </div>
+    ${list.length ? `<p class="panel-hint">${needAttention
         ? "<b>손볼 곳이 위에 옵니다</b> — 화면이 닫힌 곳, 잔액이 없어 안내가 못 나가는 곳, 한 달 넘게 조용한 곳 순입니다."
-        : "모두 정상입니다. 최근 움직인 순서로 보여 드립니다."} 한 곳을 누르면 주소·유형·요금제·알림톡·관리자 계정이 <b>한 화면에</b> 모여 있습니다.</p>`
+        : "모두 정상입니다. 최근 움직인 순서로 보여 드립니다."} 한 곳을 누르면 주소·유형·요금제·알림톡·관리자 계정이 <b>한 화면에</b> 모여 있습니다.</p>
+      <div class="org-grid">${orgCards}</div>`
       : `<p class="panel-hint">아직 고객사가 없습니다. <a href="#new-assoc">첫 조직 만들기 →</a></p>`}
   </section>`;
 
@@ -3491,7 +3481,7 @@ export async function superConsole(ctx) {
   const kindCounts = KIND_KEYS.map((k) => [k, KINDS[k].label, list.filter((a) => (a.kind || "merchant") === k).length])
     .filter(([, , n]) => n > 0);
   const body = `<section class="dash"><div class="container">
-    <div class="dash-head"><div><p class="section-eyebrow">리스터코퍼레이션 · 운영사</p><h1 class="dash-title">운영사 콘솔</h1>
+    <div class="dash-head"><div><h1 class="dash-title">운영사 콘솔</h1>
       <p class="dash-sub">고객사 ${ps.associations}곳 · 사용자 ${ps.users}명 — ${kindCounts.map(([, label, n]) => `${esc(label)} ${n}`).join(" · ")}</p></div>
       <div class="dash-head-actions"><a href="#new-assoc" class="btn btn-primary btn-sm" data-goto="home">＋ 새 조직</a></div></div>${flashOf(query)}
     ${loadWarnings.length ? `<div class="flash flash-err"><b>일부 정보를 불러오지 못했습니다.</b> 나머지 기능은 그대로 쓰실 수 있습니다.<br />${loadWarnings.map((w) => esc(w)).join("<br />")}</div>` : ""}
