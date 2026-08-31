@@ -9,7 +9,8 @@ import { countable, countHomeGoal } from "./traffic.js";
 import { parseEmbed } from "./embed.js";
 import { cap, sniffImage, EMAIL_RE, MAX_IMAGE_BYTES, slugify, esc, safeNext } from "./util.js";
 import { contentHash, sealRecord, newVerifyCode, SEAL_VER, fieldsHashOf, keyStorage, verifyChain } from "./esign.js";
-import { isFieldKind, round4, FIELD_KINDS, pageCount } from "./paper.js";
+import { isFieldKind, round4, FIELD_KINDS, pageCount, remapFields } from "./paper.js";
+import { parseTable, toCsv, decodeUtf8, headerRole } from "./csv.js";
 import { builtinById, isBuiltinId, normalizeTemplate, extractVars, applyVars, fillVars, resolveFieldPages } from "./templates.js";
 import { resolveExtToken, makeExtToken, extSignUrl, sendSignLink, remindExternals, originFor, rememberOrigin } from "./extsign.js";
 import { enqueueDocEvent, newApiKey, hashApiKey, KEY_PREFIX, checkWebhookUrl } from "./apiv1.js";
@@ -2942,4 +2943,253 @@ export async function adminDeleteDraft(ctx) {
   if (!d || d.association_id !== assoc.id || !d.draft) return back(base + "/admin/documents", "작성 중인 계약서를 찾을 수 없습니다.", true);
   await D.deleteDraft(db, d.id, assoc.id);
   return back(base + "/admin/documents", `'${d.title}' 초안을 지웠습니다.`);
+}
+
+// ---------- 대량 발송 ----------
+//
+// "같은 계약서를 100명에게, 사람마다 값만 다르게." 한국의 계약 실무 대부분이 이 모양이다 —
+// 입점 계약, 위탁 계약, 연간 재계약. 한 건씩 만들면 100번 같은 화면을 반복해야 한다.
+//
+// 두 가지가 어렵고, 둘 다 여기서 푼다.
+//   1. 사람마다 {{보증금}} 이 다르면 글자 수가 달라져 **지면의 줄이 밀린다.**
+//      → paper.js 의 remapFields 가 서명 자리를 '몇 번째 문단의 몇 번째 줄' 로 따라 옮긴다.
+//   2. 100건을 한 요청에 보낼 수 없다(워커의 시간·바깥 요청 한도).
+//      → 명단을 표에 적어 두고 몇 명씩 나눠 보낸다. 브라우저를 닫아도 남은 사람이 남는다.
+export const BULK_MAX = 300;    // 한 명단의 최대 인원
+export const BULK_CHUNK = 5;    // 한 번의 요청에서 보내는 인원
+
+// 올린 표 → 보낼 사람들. 틀린 줄은 버리지 않고 '왜 못 보내는지'를 달아 그대로 남긴다 —
+// 한 줄 오타 때문에 나머지 99명이 멈추면 안 되고, 그 한 줄이 조용히 사라져도 안 된다.
+export function parseRoster(text, blanks = []) {
+  const table = parseTable(text);
+  if (table.length < 2) return { error: "첫 줄에 머리글(이름·휴대폰 …), 그 아래로 사람을 한 줄씩 적어 주세요." };
+  const head = table[0];
+  const roles = head.map(headerRole);
+  const idx = { name: -1, phone: -1, email: -1, org: -1 };
+  for (let i = 0; i < roles.length; i++) if (roles[i] && idx[roles[i]] < 0) idx[roles[i]] = i;
+  if (idx.name < 0) return { error: "머리글에 '이름' 칸이 없습니다. 첫 줄을 이름·휴대폰·이메일 … 로 적어 주세요." };
+  if (idx.phone < 0 && idx.email < 0) return { error: "머리글에 '휴대폰' 또는 '이메일' 칸이 필요합니다 — 서명 링크를 보낼 곳이 없습니다." };
+  // 사람 정보가 아닌 머리글은 계약서의 빈칸 이름으로 읽는다
+  const varAt = {};
+  for (let i = 0; i < head.length; i++) {
+    const n = head[i].trim();
+    if (roles[i] || !n) continue;
+    if (blanks.includes(n) && varAt[n] === undefined) varAt[n] = i;
+  }
+  const missing = blanks.filter((b) => varAt[b] === undefined);
+  if (missing.length)
+    return { error: `계약서의 빈칸 ${missing.map((m) => `'${m}'`).join(" · ")} 에 해당하는 칸이 명단에 없습니다. 머리글에 그 이름 그대로 넣어 주세요.` };
+  if (table.length - 1 > BULK_MAX)
+    return { error: `한 명단에 ${BULK_MAX}명까지 담을 수 있습니다. (올린 명단 ${table.length - 1}명) 나눠서 올려 주세요.` };
+  const rows = [];
+  const seen = new Set();
+  for (let r = 1; r < table.length; r++) {
+    const c = table[r];
+    const g = (i) => (i >= 0 ? cap(String(c[i] ?? "").replace(/[\x00-\x1f\x7f]/g, " ").trim(), 200) : "");
+    const name = cap(g(idx.name), 60);
+    const org = cap(g(idx.org), 80);
+    const email = g(idx.email).toLowerCase();
+    const phone = D.normalizePhone(g(idx.phone));
+    const vars = {};
+    for (const b of blanks) vars[b] = g(varAt[b]);
+    const empty = blanks.filter((b) => !vars[b]);
+    const key = phone || email;
+    let note = "";
+    if (!name) note = "이름이 비어 있습니다";
+    else if (!phone && !email) note = "휴대폰·이메일이 둘 다 비어 있습니다";
+    else if (phone && !D.isValidPhone(phone)) note = "휴대폰 번호 형식을 확인해 주세요";
+    else if (email && !EMAIL_RE.test(email)) note = "이메일 형식을 확인해 주세요";
+    // 같은 사람이 두 줄에 있으면 계약서가 두 부 간다. 명단을 붙여 만들다 보면 흔한 일이라 여기서 잡는다.
+    else if (seen.has(key)) note = "위에 같은 연락처가 이미 있습니다";
+    else if (empty.length) note = `빈칸이 비었습니다: ${empty.join(" · ")}`;
+    if (!note) seen.add(key);
+    rows.push({ seq: r, name, phone, email, org, vars, status: note ? "failed" : "pending", note });
+  }
+  return { rows };
+}
+
+// 명단 양식 내려받기 — 머리글은 이 계약서의 빈칸 이름 그대로다. 사람이 이름을 맞출 필요가 없다.
+export async function adminBulkSample(ctx) {
+  const { db, assoc, params } = ctx;
+  const d = await D.getDocument(db, Number(params.id));
+  if (!d || d.association_id !== assoc.id) return new Response("문서를 찾을 수 없습니다.", { status: 404 });
+  const blanks = extractVars(d.body);
+  const csv = toCsv([
+    ["이름", "휴대폰", "이메일", "상호", ...blanks],
+    ["홍길동", "010-1234-5678", "hong@example.com", "길동상회", ...blanks.map((b) => `${b} 값`)],
+  ]);
+  return new Response(csv, { headers: {
+    "content-type": "text/csv; charset=utf-8",
+    "content-disposition": `attachment; filename="roster.csv"; filename*=UTF-8''${encodeURIComponent(`${d.title} 명단.csv`)}`,
+    "cache-control": "no-store",
+  } });
+}
+
+// 명단 올리기 → 보낼 준비가 된 '명단' 하나를 만든다. 아직 아무것도 나가지 않는다.
+export async function adminBulkPrepare(ctx) {
+  const { db, form, base, assoc, user, params } = ctx;
+  const d = await D.getDocument(db, Number(params.id));
+  const to = `${base}/admin/documents/${params.id}/bulk`;
+  if (!d || d.association_id !== assoc.id) return back(base + "/admin/documents", "문서를 찾을 수 없습니다.", true);
+  // 초안에서만 시작한다 — 이미 보낸 계약서를 복제하면 그 계약의 서명·증적까지 함께 복사할 뻔한다.
+  if (!d.draft) return back(`${base}/admin/documents/${d.id}`, "작성 중인 계약서에서만 대량 발송을 시작할 수 있습니다.", true);
+  if (!String(d.body || "").trim() && !(await D.countDocPages(db, d.id)))
+    return back(to, "본문이 비어 있습니다. 내용을 쓰고 다시 시도해 주세요.", true);
+
+  let text = "";
+  const f = form.get("roster");
+  if (f && typeof f.arrayBuffer === "function" && f.size) {
+    if (f.size > 2 * 1024 * 1024) return back(to, "명단 파일이 너무 큽니다. (최대 2MB)", true);
+    const r = decodeUtf8(new Uint8Array(await f.arrayBuffer()));
+    if (!r.ok) return back(to, r.error, true);
+    text = r.text;
+  } else {
+    text = String(form.get("paste") || "");
+  }
+  if (!text.trim()) return back(to, "명단을 올리거나 붙여넣어 주세요.", true);
+
+  const blanks = extractVars(d.body);
+  const parsed = parseRoster(text, blanks);
+  if (parsed.error) return back(to, parsed.error, true);
+  if (!parsed.rows.some((r) => r.status === "pending"))
+    return back(to, "보낼 수 있는 줄이 하나도 없습니다. 명단을 고쳐 다시 올려 주세요.", true);
+
+  // 당사자 자리 — 명단의 사람이 앉을 자리 하나를 고르고, 나머지는 우리 쪽 사람으로 고정한다.
+  const slots = await D.usedSlots(db, d.id);
+  const fixed = [];
+  let slot = 0;
+  if (slots.length) {
+    const need = Math.max(...slots);
+    slot = Number(form.get("to_slot")) || 0;
+    if (!slot || slot > need) return back(to, "명단의 사람이 앉을 당사자 자리를 골라 주세요.", true);
+    const valid = new Set((await D.listSignerCandidates(db, assoc.id, assoc.kind)).map((m) => m.id));
+    const pNames = await D.listDocParties(db, d.id);
+    for (let i = 1; i <= need; i++) {
+      if (i === slot) { fixed.push(0); continue; }
+      const id = Number(form.get(`party_${i}`)) || 0;
+      if (!valid.has(id))
+        return back(to, `${D.withJosa(D.partyLabel(pNames, i), ["은", "는"])} 모든 계약서에서 같은 사람이 됩니다. 우리 쪽 사람을 골라 주세요.`, true);
+      fixed.push(id);
+    }
+  }
+  let dueDate = "";
+  const rawDue = (form.get("due_date") || "").trim();
+  if (rawDue) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(rawDue)) return back(to, "기한 형식(YYYY-MM-DD)을 확인하세요.", true);
+    if (rawDue < new Date().toISOString().slice(0, 10)) return back(to, "기한은 오늘 이후여야 합니다.", true);
+    dueDate = rawDue;
+  }
+  const ordered = form.get("ordered") === "1" ? 1 : 0;
+  const title = cap((form.get("title") || "").trim(), 200) || d.title;
+  const batch = await D.createBatch(db, { associationId: assoc.id, sourceId: d.id, title, ordered, dueDate, slot, fixed, createdBy: user.id });
+  for (const r of parsed.rows) await D.addBatchRow(db, batch.id, r);
+  // 정기 작업이 쓸 절대 주소를 확보해 둔다(크론에는 요청이 없다)
+  await rememberOrigin(db, new URL(ctx.request.url).origin);
+  await audit(ctx, "대량발송준비", `${title} · ${parsed.rows.length}명`);
+  return redirect(`${base}/admin/bulk/${batch.id}`);
+}
+
+// 명단 한 줄 → 계약서 한 부. 만들고, 봉인 대상 값을 채우고, 링크를 보낸다.
+async function sendBatchRow(ctx, { batch, src, row, srcFields, srcParties, srcPages, origin, perDoc }) {
+  const { db, assoc } = ctx;
+  const vars = JSON.parse(row.vars || "{}");
+  const body = cap(fillVars(src.body, vars), 20000);
+  const left = extractVars(body);
+  if (left.length) throw new Error(`빈칸이 남았습니다: ${left.slice(0, 3).join(" · ")}`);
+  // 제목에도 {{이름}} 을 쓸 수 있다 — "2026 입점계약서 (길동상회)" 처럼 목록에서 구분되어야 한다.
+  const title = cap(fillVars(batch.title || src.title, { ...vars, 이름: row.name, 상호: row.org }).trim(), 200) || src.title;
+  const hash = src.attachment_hash
+    ? await contentHash(`${body}\n--attachment--\n${src.attachment_hash}`)
+    : await contentHash(body);
+  // 초안으로 만들었다가 과금이 끝난 뒤에 계약으로 바꾼다 — 잔액이 모자라면 아무것도 남지 않아야 한다.
+  const doc = await D.createDocument(db, { associationId: assoc.id, title, body, contentHash: hash,
+    createdBy: batch.created_by, ordered: batch.ordered, dueDate: batch.due_date, draft: 1 });
+  if (src.attachment) await D.setDocumentAttachment(db, doc.id, src.attachment, src.attachment_name, src.attachment_hash);
+  if (srcPages.length) await D.replaceDocPages(db, doc.id, srcPages);
+  if (Object.keys(srcParties).length) await D.replaceDocParties(db, doc.id, srcParties);
+  if (srcFields.length) {
+    // 올린 양식(쪽 그림)은 지면이 글이 아니라 그림이라 줄이 밀리지 않는다 — 그대로 둔다.
+    const moved = srcPages.length ? srcFields : remapFields(src.body, body, srcFields);
+    await D.replaceFields(db, doc.id, moved);
+  }
+  await applySeal(ctx, doc);
+  if (perDoc) {
+    const paid = await chargeContract(db, assoc, { documentId: doc.id, title });
+    if (!paid.ok) { await D.deleteDraft(db, doc.id, assoc.id); throw new Error(paid.error || "크레딧 잔액이 부족합니다"); }
+  }
+  await D.publishDraft(db, doc.id, { ordered: batch.ordered, dueDate: batch.due_date });
+
+  let signer = null;
+  if (batch.slot > 0) {
+    const fixed = JSON.parse(batch.fixed || "[]");
+    const refs = [];
+    for (let i = 1; i <= fixed.length; i++) {
+      if (i === batch.slot) {
+        signer = await D.addExternalSigner(db, { documentId: doc.id, name: row.name, email: row.email, phone: row.phone, org: row.org, signOrder: i });
+        refs.push(-signer.id);
+      } else {
+        await D.addSignatureRequestAt(db, doc.id, fixed[i - 1], i);
+        refs.push(fixed[i - 1]);
+      }
+    }
+    await D.resolveFieldSlots(db, doc.id, refs);
+  } else {
+    signer = await D.addExternalSigner(db, { documentId: doc.id, name: row.name, email: row.email, phone: row.phone, org: row.org, signOrder: 1 });
+  }
+  await D.logDocEvent(db, { documentId: doc.id, userId: batch.created_by || 0, actorName: ctx.user?.name || "",
+    kind: "created", detail: `대량 발송 · 명단 ${row.seq}번째 줄`, ip: ctx.ip || "", userAgent: uaOf(ctx) });
+  const via = await sendSignLink(ctx.env, db, { assoc, doc, signer, origin }).catch(() => "");
+  return { docId: doc.id, note: via === "alimtalk" ? "알림톡으로 보냈습니다"
+    : via === "email" ? "이메일로 보냈습니다"
+    : "보낼 수단이 없습니다 — 링크를 복사해 전달해 주세요" };
+}
+
+// 명단에서 몇 사람씩 보낸다. 화면이 다 될 때까지 반복해서 부른다.
+export async function adminBulkRun(ctx) {
+  const { db, base, assoc, params } = ctx;
+  const b = await D.getBatch(db, Number(params.bid));
+  if (!b || b.association_id !== assoc.id) return jsonOut({ ok: false, error: "명단을 찾을 수 없습니다." }, 404);
+  const src = await D.getDocument(db, b.source_id);
+  if (!src || src.association_id !== assoc.id)
+    return jsonOut({ ok: false, error: "원본 계약서가 없습니다. 초안이 지워진 것 같습니다." }, 409);
+  const rows = await D.nextBatchRows(db, b.id, BULK_CHUNK);
+  const origin = new URL(ctx.request.url).origin;
+  const perDoc = (await billingMode(db)) === "per_doc";
+  const price = perDoc ? await priceOf(db, "alimtalk", assoc.id) : 0;
+  const srcFields = await D.listFields(db, src.id);
+  const srcParties = await D.listDocParties(db, src.id);
+  const srcPages = await D.listDocPages(db, src.id);
+  let stopped = "";
+  for (const row of rows) {
+    // 잔액이 바닥나면 **여기서 멈춘다.** 남은 사람은 pending 그대로라, 충전하고 다시 누르면 이어진다.
+    if (perDoc && price > 0 && (await D.getBalance(db, assoc.id)) < price) {
+      stopped = "크레딧 잔액이 부족해 여기서 멈췄습니다. 충전하시면 남은 사람부터 이어서 보냅니다.";
+      break;
+    }
+    try {
+      const out = await sendBatchRow(ctx, { batch: b, src, row, srcFields, srcParties, srcPages, origin, perDoc });
+      await D.setBatchRow(db, row.id, { status: "sent", documentId: out.docId, note: out.note });
+    } catch (e) {
+      await D.setBatchRow(db, row.id, { status: "failed", note: String((e && e.message) || e).slice(0, 200) });
+    }
+  }
+  const c = await D.batchCounts(db, b.id);
+  // 다 끝나면 알림 **한 줄**. 100건이면 알림도 100개가 되는 것이 가장 흔한 사고다.
+  if (rows.length && !c.pending) {
+    await D.createNotification(db, { associationId: assoc.id, kind: "document",
+      message: `대량 발송 '${b.title}' 을 마쳤습니다 — 보냄 ${c.sent}건${c.failed ? ` · 실패 ${c.failed}건` : ""}`,
+      link: `${base}/admin/bulk/${b.id}` });
+    await audit(ctx, "대량발송완료", `${b.title} · 보냄 ${c.sent} · 실패 ${c.failed}`);
+  }
+  return jsonOut({ ok: true, ran: rows.length, total: c.total, sent: c.sent, failed: c.failed, pending: c.pending, stopped });
+}
+
+export async function adminBulkDelete(ctx) {
+  const { db, base, assoc, params } = ctx;
+  const b = await D.getBatch(db, Number(params.bid));
+  if (!b || b.association_id !== assoc.id) return back(base + "/admin/documents", "명단을 찾을 수 없습니다.", true);
+  const c = await D.batchCounts(db, b.id);
+  // 이미 나간 계약서는 지우지 않는다 — 여기서 지우는 건 '명단' 이지 계약이 아니다.
+  await D.deleteBatch(db, b.id, assoc.id);
+  return back(base + "/admin/documents", `명단 '${b.title}' 을 목록에서 지웠습니다.${c.sent ? ` 이미 보낸 계약 ${c.sent}건은 그대로 남아 있습니다.` : ""}`);
 }

@@ -2388,3 +2388,33 @@ input:not([type]),input[type="text"],input[type="email"],input[type="tel"],input
   .wt-party{grid-template-columns:minmax(0,1fr)}
   .wt-ext{grid-column:1;grid-template-columns:minmax(0,1fr)}
 }
+
+/* ── 대량 발송 ── */
+.bulk-form > label,.bulk-form .form-two label{display:grid;gap:7px;font-weight:600;font-size:.92rem;margin:10px 0}
+/* 체크박스 줄은 격자가 아니다 — 격자로 두면 네모와 글자가 위아래로 갈라진다 */
+.bulk-form > label.check,.bulk-form .form-two label.check{display:flex;align-items:center;gap:8px;font-weight:500}
+.bulk-form textarea{font-family:var(--mono);font-size:13px;line-height:1.7;white-space:pre;overflow-x:auto}
+.bulk-form .panel-title+.panel-hint{margin-top:0}
+.bulk-form .panel-title:not(:first-of-type){margin-top:26px;padding-top:20px;border-top:1px solid var(--line)}
+/* 명단의 사람이 앉는 자리와 우리 쪽 사람을 한 줄에서 고른다 */
+.bulk-party{grid-template-columns:104px auto minmax(0,1fr)}
+.bulk-party select:disabled{opacity:.45}
+/* 진행률 — 숫자만으로는 100건 중 어디쯤인지 몸으로 안 읽힌다 */
+.bulk-bar{height:8px;border-radius:4px;background:var(--neutral-bg);overflow:hidden;margin:2px 0 10px}
+.bulk-bar i{display:block;height:100%;background:var(--brand);transition:width .25s ease}
+.bulk-count{margin:0 0 12px;font-size:.9rem;color:var(--ink-soft);font-variant-numeric:tabular-nums}
+.bulk-msg{margin:10px 0 0;font-size:.88rem;color:var(--muted);min-height:1.2em}
+.bulk-msg.is-err{color:var(--no-fg)}
+.bulk-msg.is-ok{color:var(--ok-fg)}
+.bulk-table td{vertical-align:top}
+.bulk-seq{color:var(--muted);font-variant-numeric:tabular-nums;width:3em}
+.bulk-note{color:var(--muted)}
+.bulk-row.is-failed{background:var(--no-bg)}
+@media (max-width:560px){
+  .bulk-party{grid-template-columns:minmax(0,1fr)}
+}
+/* 제목 안의 '사람마다 채워지는 자리' — {{상호}} 를 날것으로 두면 고장으로 읽힌다 */
+.bulk-slot{font-style:normal;padding:1px 7px;border-radius:var(--r-sm);background:var(--brand-tint);color:var(--brand-text);font-size:.82em}
+.bulk-to{white-space:nowrap}
+/* 비고와 링크가 한 줄에 붙으면 "…전달해 주세요 계약서 →" 로 한 문장처럼 읽힌다 */
+.bulk-note a{display:block;margin-top:4px;font-size:.86rem;white-space:nowrap}

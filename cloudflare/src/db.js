@@ -1051,6 +1051,44 @@ export async function replaceDocParties(db, documentId, names) {
 }
 // 자리 이름이 있으면 그 이름, 없으면 'N번째 당사자'
 export const partyLabel = (names, slot) => (names && names[slot]) || `${slot}번째 당사자`;
+
+// ----- 대량 발송 명단 -----
+// 한 번의 요청으로 100건을 보낼 수는 없다(워커의 시간·바깥 요청 한도). 받는 사람을 먼저
+// 여기 적어 두고 조금씩 보낸다 — 브라우저를 닫아도 남은 사람이 남고, 보낸 사람에게 두 번 가지 않는다.
+export async function createBatch(db, b) {
+  await run(db, `INSERT INTO doc_batches (association_id, source_id, title, ordered, due_date, slot, fixed, created_by)
+    VALUES (?,?,?,?,?,?,?,?)`, b.associationId, b.sourceId, b.title || "", b.ordered ? 1 : 0,
+    b.dueDate || "", b.slot | 0, JSON.stringify(b.fixed || []), b.createdBy || null);
+  return getBatch(db, await lastId(db));
+}
+export const getBatch = (db, id) => first(db, "SELECT * FROM doc_batches WHERE id=?", id);
+export const listBatches = (db, aid, limit = 20) =>
+  all(db, `SELECT b.*,
+      (SELECT COUNT(*) FROM doc_batch_rows r WHERE r.batch_id=b.id) AS total,
+      (SELECT COUNT(*) FROM doc_batch_rows r WHERE r.batch_id=b.id AND r.status='sent') AS sent,
+      (SELECT COUNT(*) FROM doc_batch_rows r WHERE r.batch_id=b.id AND r.status='failed') AS failed
+    FROM doc_batches b WHERE b.association_id=? ORDER BY b.id DESC LIMIT ?`, aid, limit);
+export const deleteBatch = (db, id, aid) =>
+  run(db, "DELETE FROM doc_batches WHERE id=? AND association_id=?", id, aid);
+
+export async function addBatchRow(db, batchId, r) {
+  await run(db, `INSERT INTO doc_batch_rows (batch_id, seq, name, phone, email, org, vars, status, note)
+    VALUES (?,?,?,?,?,?,?,?,?)`, batchId, r.seq | 0, r.name || "", normalizePhone(r.phone || ""),
+    r.email || "", r.org || "", JSON.stringify(r.vars || {}), r.status || "pending", r.note || "");
+}
+export const listBatchRows = (db, batchId) =>
+  all(db, "SELECT * FROM doc_batch_rows WHERE batch_id=? ORDER BY seq, id", batchId);
+// 다음에 보낼 몇 사람. 상태로 고르므로 같은 사람을 두 번 집지 않는다.
+export const nextBatchRows = (db, batchId, limit) =>
+  all(db, "SELECT * FROM doc_batch_rows WHERE batch_id=? AND status='pending' ORDER BY seq, id LIMIT ?", batchId, limit);
+export const setBatchRow = (db, id, { status, documentId = 0, note = "" }) =>
+  run(db, "UPDATE doc_batch_rows SET status=?, document_id=?, note=? WHERE id=?", status, documentId | 0, note, id);
+export const batchCounts = (db, batchId) =>
+  first(db, `SELECT COUNT(*) AS total,
+      SUM(CASE WHEN status='sent' THEN 1 ELSE 0 END) AS sent,
+      SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END) AS failed,
+      SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) AS pending
+    FROM doc_batch_rows WHERE batch_id=?`, batchId);
 // 조사 붙이기 — "임대인가 비어 있습니다" 는 우리가 쓴 글이 아니라 기계가 쓴 글로 읽힌다.
 // 마지막 글자에 받침이 있으면 이/은/을, 없으면 가/는/를.
 export function withJosa(word, pair) {

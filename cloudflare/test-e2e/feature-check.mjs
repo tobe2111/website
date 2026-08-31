@@ -10,6 +10,7 @@ import { makeEnv } from "../test/shim.js";
 import * as D from "../src/db.js";
 import { hashPassword } from "../src/crypto.js";
 import { contentHash, verifySignature } from "../src/esign.js";
+import { paginate, PAGE, LINE_H, LINES_PER_PAGE } from "../src/paper.js";
 
 const B = "http://localhost";
 let ipN = 0, ok = 0, bad = 0;
@@ -211,6 +212,56 @@ const A = "전자계약";
       !!s2 && (await verifySignature(env, s2, await D.getDocument(env.DB, fd2.id))).valid === true
         && await (async () => { await env.DB.prepare("UPDATE doc_field_values SET image_hash='x' WHERE field_id=?").bind(got.id).run();
           return (await verifySignature(env, s2, await D.getDocument(env.DB, fd2.id))).valid === false; })());
+  }
+
+  // 대량 발송 — 같은 계약서를 명단대로 각각 한 부씩
+  {
+    const bb = "위탁 계약서\n제1조 (대금) 대금은 {{대금}} 으로 한다.\n본 계약을 증명하기 위하여 2부를 작성한다.";
+    const bd = await D.createDocument(env.DB, { associationId: law.id, title: "위탁 계약서",
+      body: bb, contentHash: await contentHash(bb), createdBy: null, draft: 1 });
+    await D.replaceFields(env.DB, bd.id, [{ kind: "sign", label: "서명", page: 0,
+      x: 0.36, y: 0.62, w: 0.22, h: 0.05, slot: 1, required: 1 }]);
+    const setup = await (await f(`/t/law/admin/documents/${bd.id}/bulk`, { headers: { cookie: lawJar } })).text();
+    chk(A, "명단 하나로 여러 명에게 각각 보내는 화면이 있다", /명단/.test(setup) && /대금/.test(setup));
+
+    const roster = ["이름\t휴대폰\t상호\t대금",
+      "홍길동\t010-1111-2222\t길동상회\t삼백만원",
+      "김철수\t010-3333-4444\t철수마트\t" + "오".repeat(400),   // 글자 수를 크게 다르게
+      "\t010-5555-6666\t이름없음\t오백만원"].join("\n");                 // 일부러 틀린 줄
+    const bf = new URLSearchParams({ _csrf: csrfIn(setup), paste: roster, to_slot: "1", title: "위탁 계약서 ({{상호}})" });
+    const br = await f(`/t/law/admin/documents/${bd.id}/bulk`, { method: "POST",
+      headers: { cookie: lawJar, origin: B, "content-type": "application/x-www-form-urlencoded" }, body: bf.toString() });
+    const bid = Number(/\/bulk\/(\d+)/.exec(br.headers.get("location") || "")[1]);
+    const before = (await D.listDocuments(env.DB, law.id)).length;
+    chk(A, "명단을 올려도 확인 전에는 아무것도 나가지 않는다", (await D.batchCounts(env.DB, bid)).pending === 2);
+
+    const bview = await (await f(`/t/law/admin/bulk/${bid}`, { headers: { cookie: lawJar } })).text();
+    chk(A, "틀린 줄은 버리지 않고 왜 못 보내는지 보여 준다", /이름이 비어/.test(bview));
+    const run = await (await f(`/t/law/admin/bulk/${bid}/run`, { method: "POST",
+      headers: { cookie: lawJar, origin: B, "content-type": "application/x-www-form-urlencoded" },
+      body: `_csrf=${encodeURIComponent(csrfIn(bview))}` })).json();
+    chk(A, "명단대로 사람마다 자기 값이 든 계약서가 한 부씩 만들어진다",
+      run.sent === 2 && run.failed === 1 && (await D.listDocuments(env.DB, law.id)).length === before + 2,
+      `보냄 ${run.sent} · 실패 ${run.failed}`);
+
+    // 본문 길이가 달라져 줄이 밀려도 서명 자리가 본문 아래에 남아야 한다
+    const made = await Promise.all((await D.listBatchRows(env.DB, bid))
+      .filter((r) => r.document_id).map(async (r) => {
+        const doc = await D.getDocument(env.DB, r.document_id);
+        const fld = (await D.listFields(env.DB, doc.id))[0];
+        return { doc, fld, lines: paginate(doc.body).flat().length };
+      }));
+    const lineOf = (f) => f.page * LINES_PER_PAGE + Math.round((f.y * PAGE.h - PAGE.pad) / LINE_H);
+    chk(A, "사람마다 본문 길이가 달라져도 서명 자리가 본문을 덮지 않는다",
+      made.length === 2 && made.every((m) => lineOf(m.fld) >= m.lines - 1 && !/\{\{/.test(m.doc.body))
+        && lineOf(made[0].fld) !== lineOf(made[1].fld),
+      made.map((m) => `${m.lines}줄→${lineOf(m.fld)}줄`).join(" · "));
+
+    const again = await (await f(`/t/law/admin/bulk/${bid}/run`, { method: "POST",
+      headers: { cookie: lawJar, origin: B, "content-type": "application/x-www-form-urlencoded" },
+      body: `_csrf=${encodeURIComponent(csrfIn(bview))}` })).json();
+    chk(A, "다시 보내도 같은 사람에게 두 번 가지 않는다",
+      again.sent === 2 && (await D.listDocuments(env.DB, law.id)).length === before + 2);
   }
 
   // 문서 수정 잠금

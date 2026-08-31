@@ -2,7 +2,7 @@
 import * as D from "./db.js";
 import { esc, cap, clip, openBadge, openNow, hoursLine, dongOf, fmtBytes, kstStamp, kstDate, prettyPath, safeNext, parseCookies } from "./util.js";
 import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG, ORIGIN, assetUrl } from "./render.js";
-import { verifyInviteToken, SALES_STAGES, otpRequired, selfSignupOn, MAX_SLOTS } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
+import { verifyInviteToken, SALES_STAGES, otpRequired, selfSignupOn, MAX_SLOTS, BULK_MAX, BULK_CHUNK } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
 import { html, notFoundResponse, back, redirect } from "./http.js";
 import { countable, countHomeGoal, homeVariantCookie } from "./traffic.js";
 import { galleryItem } from "./media-render.js";
@@ -4155,10 +4155,162 @@ export async function adminDocumentWrite(ctx) {
         <label class="check"><input type="radio" name="target" value="select" /> 특정 회원</label>
         <div class="member-picker">${memberChecks}</div>`}
       <button class="btn btn-primary" id="wtSend"${doc ? "" : " disabled"}>계약서 보내기</button>
+      ${doc ? `<a class="btn btn-ghost btn-sm" href="${base}/admin/documents/${doc.id}/bulk">여러 명에게 한꺼번에 →</a>` : ""}
       ${doc ? `<button type="submit" class="btn btn-ghost btn-sm" formaction="${base}/admin/documents/${doc.id}/draft-delete" formnovalidate data-confirm="작성 중인 이 계약서를 지울까요? 되돌릴 수 없습니다.">초안 지우기</button>` : ""}
       ${doc ? "" : `<p class="panel-hint">먼저 <b>임시저장</b>을 눌러 주세요. 저장해야 보낼 수 있습니다.</p>`}
     </form>
     </div></section>`;
   return html(layout({ title: "계약서 쓰기", assoc, base, user, body, csrf,
     scripts: `<script src="${assetUrl("/js/write.js")}" defer></script>` }));
+}
+
+// ---------- 대량 발송 ----------
+// 같은 계약서를 명단대로 각각 한 부씩. 여기서는 **아직 아무것도 나가지 않는다** —
+// 명단을 읽고, 틀린 줄을 보여 주고, 누가 어느 자리에 앉는지만 정한다.
+export async function adminDocBulk(ctx) {
+  const { db, assoc, base, user, params, query, csrf } = ctx;
+  const d = await D.getDocument(db, Number(params.id));
+  if (!d || d.association_id !== assoc.id) return notFoundResponse(ctx);
+  if (!d.draft) return redirect(`${base}/admin/documents/${d.id}`);
+  const blanks = extractVars(d.body);
+  const slots = await D.usedSlots(db, d.id);
+  const partyNames = await D.listDocParties(db, d.id);
+  const members = await D.listSignerCandidates(db, assoc.id, assoc.kind);
+  const fieldN = await D.countFields(db, d.id);
+  const memberOpts = members.map((m) => `<option value="${m.id}">${esc(m.name)}${m.email ? ` (${esc(m.email)})` : ""}</option>`).join("");
+  const need = slots.length ? Math.max(...slots) : 0;
+
+  // 당사자 자리가 있으면 '명단의 사람은 어느 자리인가' 를 반드시 정해야 한다.
+  const partyRows = need
+    ? Array.from({ length: need }, (_, i) => {
+        const n = i + 1;
+        return `<div class="wt-party bulk-party">
+          <div class="wt-party-no">${esc(D.partyLabel(partyNames, n))}</div>
+          <label class="check check-inline"><input type="radio" name="to_slot" value="${n}"${n === need ? " checked" : ""} /> 명단의 사람</label>
+          <select name="party_${n}" data-fixed="${n}">
+            <option value="">— 우리 쪽 사람 —</option>${memberOpts}
+          </select></div>`;
+      }).join("")
+    : "";
+
+  const blankList = blanks.length
+    ? `<p class="panel-hint">이 계약서의 빈칸은 <b>${blanks.map((b) => esc(b)).join("</b> · <b>")}</b> 입니다.
+       명단 머리글에 이 이름을 그대로 쓰면 사람마다 다른 값이 들어갑니다.</p>`
+    : `<p class="panel-hint">이 계약서에는 사람마다 달라지는 빈칸이 없습니다 — 모두 같은 내용으로 나갑니다.</p>`;
+
+  const batches = (await D.listBatches(db, assoc.id, 10)).filter((b) => b.source_id === d.id);
+  const history = batches.length
+    ? `<section class="panel"><h2 class="panel-title">지난 명단</h2>
+       <div class="table-scroll"><table class="admin-table"><thead><tr><th>이름</th><th>진행</th><th>만든 날</th><th></th></tr></thead><tbody>
+       ${batches.map((b) => `<tr><td>${titleWithSlots(b.title)}</td>
+         <td>${b.sent}/${b.total} 보냄${b.failed ? ` · <span class="txt-warn">실패 ${b.failed}</span>` : ""}</td>
+         <td>${esc(kstStamp(b.created_at, { year: false }))}</td>
+         <td><a class="btn btn-ghost btn-sm" href="${base}/admin/bulk/${b.id}">열기</a></td></tr>`).join("")}
+       </tbody></table></div></section>`
+    : "";
+
+  const body = `<section class="dash"><div class="container">
+    <div class="dash-head"><div><h1 class="dash-title">여러 명에게 한꺼번에 보내기</h1>
+      <p class="dash-sub"><a href="${base}/admin/documents/write?doc=${d.id}">← ${esc(d.title)}</a></p></div></div>
+    ${flashOf(query)}
+    ${fieldN ? "" : `<div class="flash flash-warn">서명 자리를 아직 놓지 않았습니다.
+      <a href="${base}/admin/documents/${d.id}/fields">먼저 놓아 두시면</a> 받는 사람마다 자기 자리에서 바로 서명합니다.</div>`}
+    <form method="post" action="${base}/admin/documents/${d.id}/bulk" enctype="multipart/form-data" class="panel bulk-form">
+      <h2 class="panel-title">1. 명단</h2>
+      ${blankList}
+      <p class="panel-hint">첫 줄은 머리글입니다 — <b>이름 · 휴대폰 · 이메일 · 상호</b>${blanks.length ? ` · <b>${blanks.map((b) => esc(b)).join("</b> · <b>")}</b>` : ""}.
+        휴대폰과 이메일은 <b>둘 중 하나만 있어도</b> 됩니다. 한 번에 ${BULK_MAX}명까지.</p>
+      <p><a class="btn btn-ghost btn-sm" href="${base}/admin/documents/${d.id}/bulk/sample">명단 양식 내려받기 (CSV)</a></p>
+      <label class="bulk-file">명단 파일 (CSV)<input type="file" name="roster" accept=".csv,text/csv,text/plain" /></label>
+      <p class="panel-hint">엑셀의 기본 '.csv' 는 한글이 깨집니다 — <b>[다른 이름으로 저장 → CSV UTF-8]</b> 로 저장하시거나,
+        엑셀에서 칸을 <b>복사해 아래에 붙여넣기</b> 하세요. 붙여넣기가 가장 확실합니다.</p>
+      <label>붙여넣기<textarea name="paste" rows="8" spellcheck="false" placeholder="이름&#9;휴대폰&#9;이메일${blanks.length ? `&#9;${blanks.join("&#9;")}` : ""}&#10;홍길동&#9;010-1234-5678&#9;hong@example.com"></textarea></label>
+
+      <h2 class="panel-title">2. 누가 어느 자리에 앉나</h2>
+      ${need ? `<p class="panel-hint">서명 자리를 <b>${need}명 몫</b>으로 놓아 두었습니다.
+          명단의 사람이 앉을 자리 하나를 고르고, 나머지 자리는 <b>모든 계약서에서 같은 사람</b>이 맡습니다.</p>
+        <div class="wt-parties">${partyRows}</div>`
+        : `<p class="panel-hint">당사자 자리를 나누지 않았습니다 — 명단의 사람이 그대로 서명자가 됩니다.</p>`}
+
+      <h2 class="panel-title">3. 보내기 조건</h2>
+      <div class="form-two">
+        <label>계약서 제목<input type="text" name="title" maxlength="200" value="${esc(d.title)}" autocomplete="off" /></label>
+        <label>서명 기한 (선택)<input type="date" name="due_date" /></label>
+      </div>
+      <p class="panel-hint">제목에 <b>{{이름}}</b> 또는 <b>{{상호}}</b> 를 쓰면 받는 사람마다 채워집니다 — 목록에서 구분하기 쉬워집니다.</p>
+      ${need > 1 ? `<label class="check check-inline"><input type="checkbox" name="ordered" value="1" /> 순차 서명 (앞 사람이 서명해야 다음 사람 차례)</label>` : ""}
+      <button class="btn btn-primary">명단 확인하기</button>
+      <p class="panel-hint">여기서는 아직 아무것도 나가지 않습니다. 다음 화면에서 명단을 보고 보내기를 누릅니다.</p>
+    </form>
+    ${history}
+    </div></section>`;
+  return html(layout({ title: "여러 명에게 보내기", assoc, base, user, body, csrf,
+    scripts: `<script src="${assetUrl("/js/bulk.js")}" defer></script>` }));
+}
+
+const BULK_ROW_LABEL = { pending: "대기", sent: "보냄", failed: "실패" };
+// 010-1234-5678. 붙여 쓴 열한 자리는 눈으로 훑어 대조하기 어렵다.
+const phoneText = (v) => String(v || "").replace(/^(\d{3})(\d{3,4})(\d{4})$/, "$1-$2-$3");
+// 제목의 {{상호}} 는 사람마다 채워지는 자리다. 날것으로 두면 '고장난 화면' 으로 읽히므로
+// 괄호를 벗기고 자리인 것이 보이게 칠한다.
+const titleWithSlots = (t) =>
+  esc(String(t || "")).replace(/\{\{([^}]+)\}\}/g, (_, n) => `<i class="bulk-slot">${n}</i>`);
+
+// 명단 한 장 — 여기서 실제로 보낸다. 몇 명씩 나눠 보내므로 진행률이 함께 움직인다.
+export async function adminBulkView(ctx) {
+  const { db, assoc, base, user, params, query, csrf } = ctx;
+  const b = await D.getBatch(db, Number(params.bid));
+  if (!b || b.association_id !== assoc.id) return notFoundResponse(ctx);
+  const rows = await D.listBatchRows(db, b.id);
+  const c = await D.batchCounts(db, b.id);
+  const src = await D.getDocument(db, b.source_id);
+  const partyNames = src ? await D.listDocParties(db, b.source_id) : {};
+  const done = c.sent + c.failed;
+  const pct = c.total ? Math.round((done / c.total) * 100) : 0;
+  const started = done > 0;
+
+  const rowHtml = rows.map((r) => {
+    const vars = (() => { try { return JSON.parse(r.vars || "{}"); } catch { return {}; } })();
+    const varTxt = Object.entries(vars).map(([k, v]) => `${k}: ${v}`).join(" · ");
+    return `<tr data-row="${r.id}" class="bulk-row is-${esc(r.status)}">
+      <td class="bulk-seq">${r.seq}</td>
+      <td>${esc(r.name)}${r.org ? `<br /><small>${esc(r.org)}</small>` : ""}</td>
+      <td class="bulk-to"><small>${esc(phoneText(r.phone) || r.email || "—")}</small></td>
+      <td><small>${esc(varTxt)}</small></td>
+      <td class="bulk-stat"><span class="badge badge-${r.status === "sent" ? "ok" : r.status === "failed" ? "no" : "wait"}">${BULK_ROW_LABEL[r.status] || r.status}</span></td>
+      <td class="bulk-note"><small>${esc(r.note)}</small>${r.document_id ? `<a href="${base}/admin/documents/${r.document_id}">계약서 열기 →</a>` : ""}</td>
+    </tr>`;
+  }).join("");
+
+  const body = `<section class="dash"><div class="container">
+    <div class="dash-head"><div><h1 class="dash-title">${titleWithSlots(b.title)}</h1>
+      <p class="dash-sub"><a href="${base}/admin/documents">← 문서 목록</a> · 명단 ${c.total}명${b.due_date ? ` · 기한 ${esc(b.due_date)}` : ""}${b.ordered ? " · 순차 서명" : ""}</p></div></div>
+    ${flashOf(query)}
+    ${src ? "" : `<div class="flash flash-warn">원본 계약서(초안)가 지워졌습니다. 남은 사람에게는 보낼 수 없습니다.</div>`}
+    <section class="panel bulk-run" id="bulkRun"
+      data-run="${base}/admin/bulk/${b.id}/run" data-csrf="${esc(csrf)}" data-chunk="${BULK_CHUNK}">
+      <h2 class="panel-title">보내기</h2>
+      <div class="bulk-bar"><i style="width:${pct}%"></i></div>
+      <p class="bulk-count" id="bulkCount" aria-live="polite">
+        보냄 <b>${c.sent}</b> · 실패 <b>${c.failed}</b> · 남음 <b>${c.pending}</b> / 전체 ${c.total}</p>
+      ${c.pending && src ? `<button class="btn btn-primary" id="bulkGo">${started ? "이어서 보내기" : `${c.pending}명에게 보내기`}</button>
+        <p class="panel-hint">한 번에 ${BULK_CHUNK}명씩 보냅니다 — 창을 열어 두시면 끝까지 이어집니다.
+          중간에 닫아도 <b>보낸 사람에게 다시 가지 않습니다.</b> 다시 들어와 이어서 보내세요.</p>`
+        : c.pending ? "" : `<p class="panel-hint">이 명단은 다 보냈습니다.</p>`}
+      <p class="bulk-msg" id="bulkMsg" role="status"></p>
+    </section>
+    <section class="panel">
+      <h2 class="panel-title">명단</h2>
+      ${b.slot ? `<p class="panel-hint">명단의 사람은 <b>${esc(D.partyLabel(partyNames, b.slot))}</b> 자리에 앉습니다.</p>` : ""}
+      <div class="table-scroll"><table class="admin-table bulk-table"><thead><tr>
+        <th>줄</th><th>이름</th><th>연락처</th><th>빈칸</th><th>상태</th><th>비고</th></tr></thead>
+        <tbody id="bulkRows">${rowHtml}</tbody></table></div>
+    </section>
+    <form method="post" action="${base}/admin/bulk/${b.id}/delete">
+      <button class="btn btn-ghost btn-sm" data-confirm="이 명단을 목록에서 지울까요? 이미 보낸 계약서는 그대로 남습니다.">명단 지우기</button>
+    </form>
+    </div></section>`;
+  // 브라우저 탭 제목에는 {{ }} 를 벗겨서 — 탭 이름에 괄호가 박히면 무엇인지 알 수 없다
+  return html(layout({ title: b.title.replace(/\{\{([^}]+)\}\}/g, "$1"), assoc, base, user, body, csrf,
+    scripts: `<script src="${assetUrl("/js/bulk.js")}" defer></script>` }));
 }

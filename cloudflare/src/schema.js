@@ -401,6 +401,41 @@ CREATE TABLE IF NOT EXISTS doc_field_values (
 );
 CREATE INDEX IF NOT EXISTS idx_docfieldval_doc ON doc_field_values(document_id);
 
+-- 대량 발송 — 같은 계약서를 여러 사람에게 각각 한 부씩.
+--
+-- 왜 표로 남기는가: 100명에게 보내는 일은 한 번의 요청으로 끝나지 않는다(워커의 시간·요청 한도).
+-- 그래서 받는 사람을 먼저 여기 적어 두고 조금씩 나눠 보낸다. 브라우저를 닫아도 남은 사람이
+-- 그대로 남아 있고, 이미 보낸 사람에게 두 번 가지 않는다.
+CREATE TABLE IF NOT EXISTS doc_batches (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
+  source_id      INTEGER NOT NULL,               -- 원본 초안. 초안이 지워져도 보낸 기록은 남아야 하므로 FK 를 걸지 않는다
+  title          TEXT NOT NULL DEFAULT '',
+  ordered        INTEGER NOT NULL DEFAULT 0,
+  due_date       TEXT NOT NULL DEFAULT '',
+  slot           INTEGER NOT NULL DEFAULT 0,     -- 받는 사람이 앉을 당사자 자리 (0 = 자리 없음)
+  fixed          TEXT NOT NULL DEFAULT '[]',     -- 나머지 자리에 고정으로 앉는 회원 id JSON
+  created_by     INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_docbatch_assoc ON doc_batches(association_id, id);
+
+CREATE TABLE IF NOT EXISTS doc_batch_rows (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  batch_id    INTEGER NOT NULL REFERENCES doc_batches(id) ON DELETE CASCADE,
+  seq         INTEGER NOT NULL DEFAULT 0,        -- 올린 표에서의 줄 번호 (사람이 고칠 때 찾는 번호)
+  name        TEXT NOT NULL DEFAULT '',
+  phone       TEXT NOT NULL DEFAULT '',
+  email       TEXT NOT NULL DEFAULT '',
+  org         TEXT NOT NULL DEFAULT '',
+  vars        TEXT NOT NULL DEFAULT '{}',        -- 이 사람 몫의 빈칸 값 JSON
+  status      TEXT NOT NULL DEFAULT 'pending',   -- pending|sent|failed
+  document_id INTEGER NOT NULL DEFAULT 0,        -- 만들어진 계약서
+  note        TEXT NOT NULL DEFAULT '',          -- 실패 이유 · 보낸 수단
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_docbatchrow ON doc_batch_rows(batch_id, status, seq);
+
 -- 계약서 서식 — 본문 + 필드 배치를 한 벌로 저장해 재사용한다.
 -- 본문의 {{변수}} 는 문서를 만들 때 값만 채운다. association_id=0 이면 플랫폼 공용.
 CREATE TABLE IF NOT EXISTS doc_templates (
@@ -661,7 +696,7 @@ CREATE INDEX IF NOT EXISTS idx_landing_asset_assoc ON landing_assets(association
 // 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
 // 마이그레이션 세대 — migrateColumns 에 단계를 추가할 때마다 +1
 // 36 = 두 갈래(트렁크 33 · 모집형 35)를 합친 세대. 양쪽 DB 모두 다시 한 번 마이그레이션을 타게 한다.
-export const SCHEMA_VERSION = "45";
+export const SCHEMA_VERSION = "46";
 
 export async function ensureSchema(db) {
   const has = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='associations'").first();
@@ -921,6 +956,25 @@ async function migrateColumns(db) {
   await db.prepare(`CREATE TABLE IF NOT EXISTS doc_parties (
     document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
     slot INTEGER NOT NULL, name TEXT NOT NULL DEFAULT '', PRIMARY KEY (document_id, slot))`).run();
+  // v46: 대량 발송 명단. 한 요청으로 다 못 보내므로 받는 사람을 적어 두고 나눠 보낸다.
+  await db.prepare(`CREATE TABLE IF NOT EXISTS doc_batches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
+    source_id INTEGER NOT NULL, title TEXT NOT NULL DEFAULT '',
+    ordered INTEGER NOT NULL DEFAULT 0, due_date TEXT NOT NULL DEFAULT '',
+    slot INTEGER NOT NULL DEFAULT 0, fixed TEXT NOT NULL DEFAULT '[]',
+    created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')))`).run();
+  await db.prepare("CREATE INDEX IF NOT EXISTS idx_docbatch_assoc ON doc_batches(association_id, id)").run();
+  await db.prepare(`CREATE TABLE IF NOT EXISTS doc_batch_rows (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    batch_id INTEGER NOT NULL REFERENCES doc_batches(id) ON DELETE CASCADE,
+    seq INTEGER NOT NULL DEFAULT 0, name TEXT NOT NULL DEFAULT '',
+    phone TEXT NOT NULL DEFAULT '', email TEXT NOT NULL DEFAULT '', org TEXT NOT NULL DEFAULT '',
+    vars TEXT NOT NULL DEFAULT '{}', status TEXT NOT NULL DEFAULT 'pending',
+    document_id INTEGER NOT NULL DEFAULT 0, note TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')))`).run();
+  await db.prepare("CREATE INDEX IF NOT EXISTS idx_docbatchrow ON doc_batch_rows(batch_id, status, seq)").run();
   for (const [name, ddl, idx] of v17) {
     if (have.has(name)) continue;
     await db.prepare(ddl).run();

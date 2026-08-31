@@ -202,6 +202,13 @@ const TENANT = [
   ["POST", "/admin/documents/:id/fill", api.adminFillBlanks, "STAFF"],
   ["POST", "/admin/documents/:id/publish", api.adminPublishDraft, "STAFF"],
   ["POST", "/admin/documents/:id/draft-delete", api.adminDeleteDraft, "STAFF"],
+  // 대량 발송 — 명단 한 장으로 사람마다 한 부씩. 실제 발송은 /admin/bulk/:bid 에서 나눠 돈다.
+  ["GET",  "/admin/documents/:id/bulk", pages.adminDocBulk, "STAFF"],
+  ["POST", "/admin/documents/:id/bulk", api.adminBulkPrepare, "STAFF"],
+  ["GET",  "/admin/documents/:id/bulk/sample", api.adminBulkSample, "STAFF"],
+  ["GET",  "/admin/bulk/:bid", pages.adminBulkView, "STAFF"],
+  ["POST", "/admin/bulk/:bid/run", api.adminBulkRun, "STAFF"],
+  ["POST", "/admin/bulk/:bid/delete", api.adminBulkDelete, "STAFF"],
   ["GET", "/admin/documents/:id", pages.adminDocumentDetail, "STAFF"],
   ["POST", "/admin/documents/:id/edit", api.adminEditDocument, "STAFF"],
   ["POST", "/admin/documents/:id/close", api.adminCloseDocument, "STAFF"],

@@ -106,6 +106,57 @@ export function paginate(body) {
   return pages.length ? pages : [[{ t: "", role: "blank", cont: false }]];
 }
 
+// ---------- 본문이 바뀌면 놓아 둔 자리를 따라 옮긴다 ----------
+//
+// 원칙은 여전히 "본문이 확정된 뒤에 서명 자리를 놓는다" 이다. 딱 한 곳만 예외다 —
+// **대량 발송**. 같은 계약서를 100명에게 보내면서 {{보증금}} 만 사람마다 다르게 넣으면,
+// 글자 수가 달라져 줄이 밀리고 그 위의 서명 자리가 통째로 어긋난다.
+//
+// 그래서 자리를 '몇 쪽의 y' 가 아니라 **'몇 번째 문단의 몇 번째 줄'** 로 되돌린 다음,
+// 바뀐 본문에서 그 문단이 간 자리로 다시 깐다. 빈칸을 채워도 문단 수는 그대로이므로
+// (fillVars 는 줄바꿈을 넣지 않는다) 문단 번호는 변하지 않는다.
+const paraMap = (body) => {
+  const paras = [];
+  let n = 0;
+  for (const para of String(body ?? "").split("\n")) {
+    const c = wrapLine(para).length;
+    paras.push({ at: n, n: c });
+    n += c;
+  }
+  return { paras, total: n };
+};
+export function remapFields(fromBody, toBody, fields) {
+  const A = paraMap(fromBody), B = paraMap(toBody);
+  const rows = (fields || []).map((f) => ({ ...f }));
+  if (A.total === B.total) return rows;          // 줄 수가 같으면 옮길 것이 없다
+  const maxPage = Math.max(0, paginate(toBody).length - 1);
+  return rows.map((f) => {
+    const h = Number(f.h) || 0.04;
+    const abs = (f.page | 0) * LINES_PER_PAGE + (clamp01(f.y) * PAGE.h - PAGE.pad) / LINE_H;
+    const L = Math.floor(abs), frac = abs - L;    // 줄 안에서의 미세한 위치는 그대로 지킨다
+    let L2;
+    if (L < 0) L2 = L;
+    else if (L >= A.total) {
+      // 본문이 끝난 아래 — 서명란이 여기 온다. 끝에서부터의 거리를 지켜야 서명란이 본문을 덮지 않는다.
+      L2 = B.total + (L - A.total);
+    } else {
+      let k = 0;
+      while (k + 1 < A.paras.length && A.paras[k + 1].at <= L) k++;
+      const j = L - A.paras[k].at;
+      const b = B.paras[k] || B.paras[B.paras.length - 1];
+      L2 = b.at + Math.min(j, Math.max(0, b.n - 1));
+    }
+    let page = Math.floor(L2 / LINES_PER_PAGE);
+    let row = L2 - page * LINES_PER_PAGE;
+    // 새 본문이 더 짧아 그 쪽이 아예 없으면 마지막 쪽 안으로 끌어온다 —
+    // 없는 쪽에 놓인 자리는 화면에 나오지 않고, 그러면 아무도 서명하지 못한다.
+    if (page > maxPage) { row += (page - maxPage) * LINES_PER_PAGE; page = maxPage; }
+    if (page < 0) { page = 0; row = 0; }
+    const y = Math.min(1 - h - 0.005, Math.max(0, (PAGE.pad + (row + frac) * LINE_H) / PAGE.h));
+    return { ...f, page, y: round4(y) };
+  });
+}
+
 // 한 줄을 HTML 로. 이름표+값 줄만 두 칸으로 갈라 세로줄을 맞춘다 —
 // 공백으로 맞춘 칸은 비례 글꼴에서 어긋나 표로 읽히지 않는다.
 function lineHtml(ln) {
