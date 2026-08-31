@@ -2251,3 +2251,18 @@ input:not([type]),input[type="text"],input[type="email"],input[type="tel"],input
 .paper .pf-stamp.pf-empty:not(.pf-edit) .pf-tag{font-size:11px;font-weight:500;color:rgba(22,24,29,.45)}
 .paper .pf-stamp.pf-mine.pf-empty:not(.pf-edit){border-color:var(--brand);border-style:solid;background:rgba(11,138,70,.09)}
 .paper .pf-filled:not(.pf-edit) .pf-tag{display:none}
+
+/* 올린 양식(PDF 를 쪽 그림으로 구운 것)이 지면일 때. 좌표계는 텍스트 지면과 같습니다. */
+.paper-scan{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#fff;user-select:none}
+.paper-stack.is-scan .paper{background:#fff}
+
+/* 받은 PDF 양식을 지면으로 만드는 자리 */
+.pdf-status{margin:8px 0 0;font-size:.88rem;color:var(--muted);line-height:1.6}
+.pdf-status.is-ok{color:var(--ok-fg);font-weight:600}
+.pdf-status.is-warn{color:var(--wait-fg);font-weight:600}
+.pdf-status.is-err{color:var(--no-fg);font-weight:600}
+.pdf-preview{display:flex;gap:10px;overflow-x:auto;padding:12px 0 4px;-webkit-overflow-scrolling:touch}
+.pdf-preview:empty{display:none}
+.pdf-thumb{flex:none;margin:0;width:104px}
+.pdf-thumb img{width:100%;border:1px solid var(--line);background:#fff;display:block}
+.pdf-thumb figcaption{margin-top:4px;font-size:.74rem;color:var(--muted);text-align:center;font-variant-numeric:tabular-nums}

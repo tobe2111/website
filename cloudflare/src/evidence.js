@@ -79,6 +79,11 @@ export async function buildEvidence(env, db, doc, assoc) {
   // 필드 이미지를 미리 data: URI 로 바꿔 둔다 (완성본 HTML 이 혼자 열리도록)
   const uriOf = new Map();
   for (const f of fields) if (f.image) uriOf.set(f.image, await dataUri(env, f.image));
+  // 올린 양식이 지면인 계약서는 쪽 그림도 함께 심는다 — 안 그러면 증적의 완성본이
+  // 빈 종이에 서명만 떠 있는 문서가 된다. (법적 원문인 원본 PDF 는 ⑦ 첨부에 따로 담긴다)
+  const scans = await D.listDocPages(db, doc.id);
+  const scanUri = new Map();
+  for (const p of scans) scanUri.set(p.media, await dataUri(env, p.media));
 
   // ① 계약서 완성본
   // 필드 담당자는 회원(양수)·외부 서명자(음수) 두 갈래다 — 한쪽만 보면 이름이 비어 나온다
@@ -88,6 +93,7 @@ export async function buildEvidence(env, db, doc, assoc) {
   };
   const done = counts.total > 0 && counts.signed === counts.total;
   const paper = renderPaper(doc.body, {
+    scans, mediaUrl: (k) => scanUri.get(k) || "",
     watermark: done ? "" : "미완성",
     fieldsFor: (page) => fields.filter((f) => f.page === page).map((f) =>
       fieldBox(f, { mode: "view", assigneeName: nameOf(f.assignee),

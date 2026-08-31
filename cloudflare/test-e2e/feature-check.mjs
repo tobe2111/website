@@ -63,6 +63,24 @@ const A = "전자계약";
   chk(A, "관리자가 계약서를 만든다", r.status === 303 && /documents\/\d+/.test(loc));
   const docId = Number((loc.match(/documents\/(\d+)/) || [])[1]);
 
+  // 받은 PDF 양식을 그대로 지면으로 — 옮겨 적지 않아도 되는가
+  {
+    const lp = await (await f("/t/law/admin/documents", { headers: { cookie: lawJar } })).text();
+    const fd = new FormData();
+    fd.set("_csrf", csrfIn(lp)); fd.set("title", "표준근로계약서"); fd.set("target", "none");
+    fd.set("attachment", new Blob([new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x37])], { type: "application/pdf" }), "form.pdf");
+    fd.append("scan_0", new Blob([new Uint8Array(1024).fill(9)], { type: "image/jpeg" }), "p1.jpg");
+    fd.append("scan_size_0", "1240x1754");
+    const rr = await f("/t/law/admin/documents", { method: "POST", headers: { cookie: lawJar, origin: B }, body: fd });
+    const id = Number((decodeURIComponent(rr.headers.get("location") || "").match(/documents\/(\d+)/) || [])[1]);
+    const made = id ? await D.getDocument(env.DB, id) : null;
+    const pgs = id ? await D.listDocPages(env.DB, id) : [];
+    chk(A, "받은 PDF 양식을 옮겨 적지 않고 그대로 계약서로 쓴다", !!made && made.body === "" && pgs.length === 1);
+    chk(A, "그 계약의 원문 해시는 올린 PDF 파일의 것이다", !!made && !!made.attachment_hash);
+    const edit = id ? await (await f(`/t/law/admin/documents/${id}/fields`, { headers: { cookie: lawJar } })).text() : "";
+    chk(A, "올린 양식 위에 서명 자리를 놓을 수 있다", /paper-stack is-scan/.test(edit) && /class="paper-scan"/.test(edit));
+  }
+
   // 외부 상대방 추가 (연락처 없이 = 링크를 손으로 보내는 길)
   const pg = await f(`/t/law/admin/documents/${docId}`, { headers: { cookie: lawJar } });
   const html = await pg.text();

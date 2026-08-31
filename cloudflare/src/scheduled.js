@@ -32,7 +32,9 @@ export const TABLES = [
   "documents", "signatures", "signature_requests",
   // 전자계약 — 필드 배치·채운 값·서식·감사 추적·외부 서명자까지 있어야 계약이 복원된다.
   // (서명 봉인만 남고 '무엇을 어디에 채웠는지'가 없으면 계약서를 다시 그릴 수 없다)
-  "doc_fields", "doc_field_values", "doc_templates", "doc_events", "external_signers",
+  // doc_pages: 올린 양식(PDF)을 구운 쪽 그림의 R2 키. 이게 없으면 복원 후 지면이 통째로 빈다 —
+  // 원본 PDF 는 첨부로 남아 있어도, 서명 자리가 놓인 '그 지면' 은 다시 못 그린다.
+  "doc_fields", "doc_field_values", "doc_pages", "doc_templates", "doc_events", "external_signers",
   "notify_wallet", "credit_ledger", "credit_orders", "message_log", "chain_anchor", "api_keys",
   "notifications", "applications", "application_notes", "audit_log", "settings",
   // 옛 주소 — 빠뜨리면 복원 후 이미 나간 링크(알림톡 버튼·명함·검색결과)가 전부 죽는다

@@ -266,3 +266,63 @@ test("필드 배치 도구는 스크롤해도 따라온다", async () => {
   assert.match(src, /class="fp-dock"/);
   assert.match(src, /id="fieldsForm" class="fp-save"/, "저장 폼이 도구 막대 안에 있어야 한다");
 });
+
+// ── 받은 PDF 양식으로 계약서 만들기 (경로 전체)
+test("PDF 양식으로 만든 계약서는 배치·서명·완성본 모두 그 지면 위에서 돈다", async () => {
+  const env = makeEnv();
+  const pw = await hashPassword("pass1234");
+  const a = await D.createAssociation(env.DB, { slug: "law", name: "한빛법무법인", kind: "esign" });
+  await D.createUser(env.DB, { email: "ad@law.kr", passwordHash: pw.hash, salt: pw.salt, name: "담당", role: "ADMIN", associationId: a.id });
+  const u = await D.createUser(env.DB, { email: "m@law.kr", passwordHash: pw.hash, salt: pw.salt, name: "서명자", role: "MERCHANT", associationId: a.id });
+  const j = await login(env, "ad@law.kr");
+
+  // 관리자 브라우저가 보내는 것과 같은 모양: 원본 PDF + 쪽 그림 2장
+  const page = await (await jget(env, j, "/t/law/admin/documents")).text();
+  const csrf = (/name="_csrf" value="([^"]+)"/.exec(page) || [])[1];
+  const pdf = new Blob([new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x37, 10, 37, 37, 69, 79, 70])], { type: "application/pdf" });
+  const jpg = () => new Blob([new Uint8Array(2048).fill(7)], { type: "image/jpeg" });
+  const fd = new FormData();
+  fd.set("_csrf", csrf); fd.set("title", "2026년 표준근로계약서");
+  fd.set("target", "select"); fd.set("member", String(u.id));
+  fd.set("attachment", pdf, "표준근로계약서.pdf");
+  fd.append("scan_0", jpg(), "page-1.jpg"); fd.append("scan_size_0", "1240x1754");
+  fd.append("scan_1", jpg(), "page-2.jpg"); fd.append("scan_size_1", "1240x1754");
+  const r = await worker.fetch(new Request(B + "/t/law/admin/documents", { method: "POST", headers: { cookie: ch(j) }, body: fd }), env,
+    { waitUntil() {}, passThroughOnException() {} });
+  assert.equal(r.status, 303, "본문 없이도 만들어져야 한다 — 지면이 그림이기 때문");
+
+  const docs = await D.listDocuments(env.DB, a.id);
+  assert.equal(docs.length, 1);
+  const d = docs[0];
+  assert.equal(d.body, "", "옮겨 적지 않는다");
+  assert.ok(d.attachment_hash, "법적 원문인 원본 PDF 의 해시가 남아야 한다");
+  const pages = await D.listDocPages(env.DB, d.id);
+  assert.equal(pages.length, 2, "쪽 그림 두 장이 지면으로 저장된다");
+  assert.equal(pages[0].w, 1240);
+
+  // 배치 화면 · 서명 화면 · 완성본이 모두 그 그림을 지면으로 그린다
+  for (const [path, what] of [[`/t/law/admin/documents/${d.id}/fields`, "배치"], [`/t/law/documents/${d.id}/paper`, "완성본"]]) {
+    const html = await (await jget(env, j, path)).text();
+    assert.match(html, /paper-stack is-scan/, `${what} 화면이 그림 지면이어야 한다`);
+    assert.match(html, /class="paper-scan"/, `${what} 화면에 쪽 그림이 있어야 한다`);
+  }
+});
+
+test("쪽 그림만 보내고 원본 PDF 를 빠뜨리면 만들지 않는다", async () => {
+  const env = makeEnv();
+  const pw = await hashPassword("pass1234");
+  const a = await D.createAssociation(env.DB, { slug: "law", name: "한빛법무법인", kind: "esign" });
+  await D.createUser(env.DB, { email: "ad@law.kr", passwordHash: pw.hash, salt: pw.salt, name: "담당", role: "ADMIN", associationId: a.id });
+  const u = await D.createUser(env.DB, { email: "m@law.kr", passwordHash: pw.hash, salt: pw.salt, name: "서명자", role: "MERCHANT", associationId: a.id });
+  const j = await login(env, "ad@law.kr");
+  const csrf = (/name="_csrf" value="([^"]+)"/.exec(await (await jget(env, j, "/t/law/admin/documents")).text()) || [])[1];
+  const fd = new FormData();
+  fd.set("_csrf", csrf); fd.set("title", "원본 없는 양식"); fd.set("target", "select"); fd.set("member", String(u.id));
+  fd.append("scan_0", new Blob([new Uint8Array(512)], { type: "image/jpeg" }), "p.jpg");
+  fd.append("scan_size_0", "1240x1754");
+  const r = await worker.fetch(new Request(B + "/t/law/admin/documents", { method: "POST", headers: { cookie: ch(j) }, body: fd }), env,
+    { waitUntil() {}, passThroughOnException() {} });
+  const to = decodeURIComponent(r.headers.get("location") || "");
+  assert.match(to, /원본 PDF/, "그림만 남기면 '그 그림이 원본과 같다'를 증명할 방법이 없다");
+  assert.equal((await D.listDocuments(env.DB, a.id)).length, 0);
+});

@@ -323,3 +323,47 @@ test("서명란 이름표는 계약서가 쓰는 말이다 — '당사자1' 이 
   assert.match(labels, /임차인\(을\) 성명/);
   assert.ok(!labels.includes("당사자1"), "서명하는 사람이 자기 자리를 찾을 수 있어야 한다");
 });
+
+// ---------- 받은 PDF 양식을 지면으로 ----------
+// 상대방이 보낸 표준근로계약서·정부 서식을 옮겨 적지 않고 그대로 쓰기 위한 길.
+// 법적 원문은 여전히 원본 PDF 이고, 쪽 그림은 '보는 지면' 이다.
+test("올린 양식이 있으면 그 그림이 지면이 된다 — 좌표계는 그대로", async () => {
+  const { renderPaper, scanPageSize } = await import("../src/paper.js");
+  const scans = [{ page: 0, media: "k/1.jpg", w: 1240, h: 1754 }, { page: 1, media: "k/2.jpg", w: 1240, h: 1754 }];
+  const html = renderPaper("본문은 비어 있다", { scans, mediaUrl: (k) => "/m/" + k,
+    fieldsFor: (i) => `<i data-p="${i}"></i>` });
+  assert.match(html, /class="paper-stack is-scan"/);
+  assert.match(html, /src="\/m\/k\/1\.jpg"/);
+  assert.match(html, /src="\/m\/k\/2\.jpg"/);
+  assert.ok(!html.includes("본문은 비어 있다"), "양식이 지면이면 본문 텍스트는 그리지 않는다");
+  assert.match(html, /data-p="0"/, "필드 레이어는 그대로 얹힌다");
+  assert.match(html, /data-p="1"/);
+  // 지면 가로는 A4 폭 고정, 세로만 그림 비율 — 필드가 비율 좌표라 이 한 쌍이면 충분하다
+  const size = scanPageSize(scans);
+  assert.equal(size.w, 794);
+  assert.equal(size.h, Math.round(794 * (1754 / 1240)));
+  assert.match(html, new RegExp(`data-pw="794" data-ph="${size.h}"`));
+});
+
+test("쪽마다 크기가 달라도 지면은 하나로 정해진다 (첫 쪽 기준)", async () => {
+  const { scanPageSize } = await import("../src/paper.js");
+  const s = scanPageSize([{ w: 1754, h: 1240 }, { w: 1240, h: 1754 }]);   // 가로쪽 + 세로쪽
+  assert.equal(s.w, 794);
+  assert.ok(s.h < 794, "첫 쪽이 가로면 지면도 가로");
+  // 말도 안 되는 비율은 막는다 — 화면 배율 계산이 한 값이라 지면이 무한정 길어지면 안 된다
+  assert.ok(scanPageSize([{ w: 10, h: 100000 }]).h <= 794 * 3);
+  assert.ok(scanPageSize([{ w: 100000, h: 10 }]).h >= Math.round(794 * 0.3));
+});
+
+test("양식 없는 계약서는 지금까지와 똑같이 글자 지면으로 나온다", async () => {
+  const { renderPaper } = await import("../src/paper.js");
+  const html = renderPaper("제1조 (목적)\n  ① 성실히 이행한다.", { scans: [], fieldsFor: () => "" });
+  assert.ok(!html.includes("is-scan"));
+  assert.match(html, /pl-article/);
+});
+
+test("올린 양식은 백업에 함께 담긴다 — 없으면 복원해도 지면이 빈다", async () => {
+  const { TABLES } = await import("../src/scheduled.js");
+  assert.ok(TABLES.includes("doc_pages"),
+    "원본 PDF 는 첨부로 남아도, 서명 자리가 놓인 '그 지면' 은 doc_pages 없이는 못 그린다");
+});

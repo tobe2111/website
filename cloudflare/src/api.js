@@ -989,7 +989,16 @@ export async function adminCreateDocument(ctx) {
     if (!partyMap.some(Boolean) && !externalParties.length) return back(to, "당사자를 한 명 이상 지정해 주세요.", true);
   }
   const body = tpl ? cap(tplBody, 20000) : cap((form.get("body") || "").trim(), 20000);
-  if (!title || !body) return back(base + "/admin/documents", "제목과 본문을 입력하세요.", true);
+  // 올린 양식(PDF 를 쪽 그림으로 구운 것)이 함께 왔는가. 그 경우 지면은 그림이므로 본문은 없어도 된다.
+  const scanFiles = [];
+  for (let i = 0; i < 30; i++) {
+    const f = form.get(`scan_${i}`);
+    if (!f || typeof f !== "object" || !f.size) break;
+    const [sw, sh] = String(form.get(`scan_size_${i}`) || "").split("x").map((v) => parseInt(v, 10) || 0);
+    scanFiles.push({ file: f, w: sw, h: sh });
+  }
+  if (!title) return back(base + "/admin/documents", "제목을 입력하세요.", true);
+  if (!body && !scanFiles.length) return back(base + "/admin/documents", "본문을 입력하거나 PDF 양식을 올려 주세요.", true);
   const ordered = form.get("ordered") === "1" ? 1 : 0;
   let dueDate = ""; const rawDue = (form.get("due_date") || "").trim();
   if (rawDue) { if (!/^\d{4}-\d{2}-\d{2}$/.test(rawDue)) return back(base + "/admin/documents", "기한 형식(YYYY-MM-DD)을 확인하세요.", true);
@@ -1008,6 +1017,9 @@ export async function adminCreateDocument(ctx) {
     attKey = await storage.save(ctx.env, buf, "application/pdf");
     attName = cap(String(file.name || "계약서.pdf").replace(/[\\/\x00-\x1f]/g, ""), 120);
   }
+  // 올린 양식으로 만드는 계약은 **원본 PDF 가 곧 계약 원문**이다. 그림만 남기면
+  // 나중에 "그 그림이 원본과 같다"를 증명할 방법이 없다 — 그래서 원본 없이는 만들지 않는다.
+  if (scanFiles.length && !attHash) return back(base + "/admin/documents", "PDF 양식으로 만들 때는 원본 PDF 가 함께 올라와야 합니다. 다시 시도해 주세요.", true);
   const docHash = attHash ? await contentHash(`${body}\n--attachment--\n${attHash}`) : await contentHash(body);
   // 계약당 과금이면 문서를 만드는 시점에 한 번 청구한다. 잔액이 없으면 아예 만들지 않는다 —
   // 만들어 두고 발송이 안 되면 상대방은 링크를 못 받고 관리자만 헛일을 한다.
@@ -1021,6 +1033,14 @@ export async function adminCreateDocument(ctx) {
   const doc = await D.createDocument(db, { associationId: assoc.id, title, body, contentHash: docHash, createdBy: user.id, ordered, dueDate });
   if ((await billingMode(db)) === "per_doc") await chargeContract(db, assoc, { documentId: doc.id, title });
   if (attKey) await D.setDocumentAttachment(db, doc.id, attKey, attName, attHash);
+  if (scanFiles.length) {
+    const saved = [];
+    for (const s of scanFiles) {
+      const bytes = new Uint8Array(await s.file.arrayBuffer());
+      saved.push({ media: await storage.save(ctx.env, bytes, "image/jpeg"), w: s.w, h: s.h });
+    }
+    await D.replaceDocPages(db, doc.id, saved);
+  }
   // 서식이면 당사자 지정 순서가 곧 서명 순서이고, 배치는 당사자 → 실제 회원으로 옮겨 붙인다
   if (tpl) {
     // 외부 상대방을 실제 서명자로 등록한다. 필드의 담당자는 음수 id 로 가리킨다(내부 회원과 구분).

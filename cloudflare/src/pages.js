@@ -1848,6 +1848,7 @@ export async function signForm(ctx) {
   await D.logDocEvent(db, { documentId: d.id, userId: user.id, actorName: user.name, kind: "viewed",
     ip: ctx.ip || "", userAgent: ctx.request.headers.get("user-agent") || "", dedupeMin: 10 });
   // 지면에 배치된 필드가 있으면 "계약서 위에서 직접 채우는" 방식으로, 없으면 종래의 단일 서명란으로.
+  const scans = await D.listDocPages(db, d.id);   // 올린 양식이면 이 그림들이 지면이다
   const fields = await D.listFieldsWithValues(db, d.id);
   const reqs = fields.length ? await D.listRequestStatus(db, d.id) : [];
   const extNames2 = fields.length ? await D.listExternalSigners(db, d.id) : [];
@@ -1856,7 +1857,7 @@ export async function signForm(ctx) {
   const myFields = fields.filter((f) => !f.value && !f.image && (f.assignee === user.id || f.assignee === 0));
   const hasSignField = myFields.some((f) => f.kind === "sign");
   const docView = fields.length
-    ? `<div class="paper-wrap">${renderPaper(d.body, { mode: otpDone ? "fill" : "view", fieldsFor: fieldsRenderer(fields, { mode: otpDone ? "fill" : "view", myId: user.id, nameOf }) })}</div>`
+    ? `<div class="paper-wrap">${renderPaper(d.body, { scans, mediaUrl, mode: otpDone ? "fill" : "view", fieldsFor: fieldsRenderer(fields, { mode: otpDone ? "fill" : "view", myId: user.id, nameOf }) })}</div>`
     : `<div class="doc-body">${docBody(d.body)}</div>`;
   const fillBar = fields.length && otpDone ? `<div class="field-progress" id="fieldProgress"></div>
     <button type="button" class="btn btn-ghost btn-sm field-jump" id="fieldJump" hidden>다음 항목으로 이동 ↓</button>` : "";
@@ -1925,7 +1926,29 @@ export async function adminDocuments(ctx) {
       <div class="tpl-grid">${tplCards}</div>
       ${myTpls.length ? `<div class="form-divider">${assoc.kind === "esign" ? "우리 서식" : "우리 상인회 서식"}</div><div class="tpl-grid">${myCards}</div>` : ""}
     </section>
+    <details class="panel" id="pdfPanel"><summary class="panel-title">받은 PDF 양식으로 만들기</summary>
+      <p class="panel-hint">상대방이 보낸 <b>표준근로계약서·정부 서식·회사 양식</b>을 옮겨 적지 않고 그대로 씁니다.
+        PDF 를 고르면 이 화면에서 쪽마다 지면으로 만들고, 그 위에 서명·도장 자리를 놓습니다.
+        <b>계약 원문은 올리신 PDF 그대로</b>이며, 그 파일의 해시가 봉인에 들어갑니다.</p>
+      <form method="post" action="${base}/admin/documents" class="stack-form" enctype="multipart/form-data">
+        <div id="pdfForm">
+          <label class="mini-label">PDF 양식 <small>(10MB · 30쪽 이하)</small>
+            <input type="file" id="pdfPick" accept="application/pdf" /></label>
+          <input type="hidden" name="scan_pages" id="pdfPages" value="" />
+          <p class="pdf-status" id="pdfStatus">PDF 를 고르면 여기서 지면으로 만듭니다. 파일은 고르기 전까지 어디에도 올라가지 않습니다.</p>
+          <div class="pdf-preview" id="pdfPreview"></div>
+        </div>
+        <label>제목<input type="text" name="title" required placeholder="예: 2026년 표준근로계약서" autocomplete="off" /></label>
+        <div class="form-two"><label>서명 기한 (선택)<input type="date" name="due_date" /></label><label class="check check-inline"><input type="checkbox" name="ordered" value="1" /> 순차 서명</label></div>
+        <div class="form-divider">서명 대상</div>
+        <label class="check"><input type="radio" name="target" value="all" checked /> 전체 회원</label>
+        <label class="check"><input type="radio" name="target" value="select" /> 특정 회원</label>
+        <div class="member-picker">${checks}</div>
+        <p class="panel-hint">만든 뒤 <b>서명 자리 배치</b> 화면에서 서명·도장 자리를 놓습니다. 놓기 전에는 아무도 서명할 수 없습니다.</p>
+        <button class="btn btn-primary" id="pdfSubmit" disabled>이 양식으로 계약서 만들기</button></form></details>
     <details class="panel"><summary class="panel-title">직접 입력해서 만들기</summary>
+      <p class="panel-hint">본문을 붙여넣거나 직접 씁니다. <b>제N조</b>·<b>①</b>·<b>1.</b> 로 시작하는 줄은 계약서 조판으로 자동 정리되고,
+        그 규칙을 안 따르는 글은 그대로 문단으로 나옵니다.</p>
       <form method="post" action="${base}/admin/documents" class="stack-form" enctype="multipart/form-data">
         <label>제목<input type="text" name="title" required placeholder="예: 2026 가입 동의서" /></label>
         <label>본문<textarea name="body" rows="8" required></textarea></label>
@@ -1939,7 +1962,8 @@ export async function adminDocuments(ctx) {
         <button class="btn btn-primary">문서 생성 및 서명 요청</button></form></details>
     <section class="panel"><h2 class="panel-title">문서 목록</h2><div class="table-scroll"><table class="admin-table">
       <thead><tr><th>문서</th><th>서명 · 만든 사람</th><th>상태</th><th>관리</th></tr></thead><tbody>${rows}</tbody></table></div></section></div></section>`;
-  return html(layout({ title: "전자서명 문서", assoc, base, user, body, csrf }));
+  return html(layout({ title: "전자서명 문서", assoc, base, user, body, csrf,
+    scripts: `<script src="${assetUrl("/js/pdf-form.js")}" defer></script>` }));
 }
 export async function adminDocumentDetail(ctx) {
   const { db, env, assoc, base, user, params, csrf, query } = ctx;
@@ -2570,7 +2594,7 @@ export async function extSignForm(ctx) {
   if (D.isPastDue(d)) return shellPage(`<div class="flash flash-warn">서명 기한(${esc(d.due_date)})이 지났습니다. 요청하신 분께 문의해 주세요.</div>`, d.title);
   if (!(await D.canSignNowAny(db, d, { externalId: signer.id })))
     return shellPage(`<div class="flash flash-warn">순차 서명 문서입니다. 앞 순번의 서명이 끝나면 다시 이 링크로 들어와 주세요.</div>
-      <div class="paper-wrap">${renderPaper(d.body, { fieldsFor: () => "" })}</div>`, d.title);
+      <div class="paper-wrap">${renderPaper(d.body, { scans, mediaUrl, fieldsFor: () => "" })}</div>`, d.title);
 
   // 본인확인 — 연락처가 있으면 그쪽으로만 보낸다(링크가 유출돼도 서명은 완성되지 않는다)
   const needOtp = await otpRequired(db);
@@ -2586,6 +2610,7 @@ export async function extSignForm(ctx) {
           <button class="btn btn-primary btn-sm">확인</button></form></div>`
       : `<div class="flash flash-warn">연락처가 등록되어 있지 않아 본인확인을 할 수 없습니다. 요청하신 분께 문의해 주세요.</div>`}</section>`;
 
+  const scans = await D.listDocPages(db, d.id);   // 올린 양식이면 이 그림들이 지면이다
   const fields = await D.listFieldsWithValues(db, d.id);
   const reqs = await D.listRequestStatus(db, d.id);
   const exts = await D.listExternalSigners(db, d.id);
@@ -2595,7 +2620,7 @@ export async function extSignForm(ctx) {
   const myFields = fields.filter((f) => !f.value && !f.image && (f.assignee === myRef || f.assignee === 0));
   const hasSignField = myFields.some((f) => f.kind === "sign");
   const docView = fields.length
-    ? `<div class="paper-wrap">${renderPaper(d.body, { mode: otpDone ? "fill" : "view",
+    ? `<div class="paper-wrap">${renderPaper(d.body, { scans, mediaUrl, mode: otpDone ? "fill" : "view",
         fieldsFor: fieldsRenderer(fields, { mode: otpDone ? "fill" : "view", myId: myRef, nameOf }) })}</div>`
     : `<div class="doc-body">${docBody(d.body)}</div>`;
   const inner = `${flashOf(query)}${otpBlock}
@@ -2649,6 +2674,7 @@ export async function extPaper(ctx) {
   const c = await extDocContext(ctx);
   if (!c) return notFoundResponse(ctx);
   const { doc: d, assoc } = c;
+  const scans = await D.listDocPages(ctx.db, d.id);   // 올린 양식이면 이 그림들이 지면이다
   const fields = await D.listFieldsWithValues(ctx.db, d.id);
   const reqs = await D.listRequestStatus(ctx.db, d.id);
   const exts = await D.listExternalSigners(ctx.db, d.id);
@@ -2661,7 +2687,7 @@ export async function extPaper(ctx) {
       <p class="dash-sub"><a href="/esign/${esc(ctx.params.token)}">← 돌아가기</a> · 서명 ${rc.signed}/${rc.total}${done ? " · 체결 완료" : " · 진행 중"}</p></div>
       <div class="dash-head-actions"><button type="button" class="btn btn-primary btn-sm" data-print>인쇄 · PDF로 저장</button>
         ${done ? `<a href="/esign/${esc(ctx.params.token)}/evidence" class="btn btn-ghost btn-sm">증적 패키지</a>` : ""}</div></div>
-    <div class="paper-wrap">${renderPaper(d.body, {
+    <div class="paper-wrap">${renderPaper(d.body, { scans, mediaUrl,
       fieldsFor: fieldsRenderer(fields, { mode: "view", nameOf }), watermark: done ? "" : "미완성" })}</div></div></section>
     <style>@media print{@page{size:A4;margin:0}body{background:#fff}}</style>`;
   return html(layout({ title: `${d.title} — 완성본`, assoc, base: "", user: null, body, csrf: ctx.csrf,
@@ -2710,19 +2736,20 @@ export async function adminDocFields(ctx) {
   if (!d || d.association_id !== assoc.id) return notFoundResponse(ctx);
   const sigs = await D.requestCounts(db, d.id);
   const signedAny = (await D.listSignatures(db, d.id)).length > 0;
+  const scans = await D.listDocPages(db, d.id);   // 올린 양식이면 이 그림들이 지면이다
   const reqs = await D.listRequestStatus(db, d.id);
   const fields = await D.listFields(db, d.id);
   const extForName = await D.listExternalSigners(db, d.id);
   const nameOf = (ref) => { if (ref < 0) { const e = extForName.find((x) => x.id === -ref); return e ? e.name : ""; }
     const u = reqs.find((r) => r.id === ref); return u ? u.name : ""; };
-  const paper = renderPaper(d.body, { mode: "edit", fieldsFor: fieldsRenderer(fields, { mode: "edit", nameOf }) });
+  const paper = renderPaper(d.body, { scans, mediaUrl, mode: "edit", fieldsFor: fieldsRenderer(fields, { mode: "edit", nameOf }) });
   // 이미 서명이 시작된 문서는 지면을 바꿀 수 없다 — 서명자가 본 화면과 달라지면 봉인의 의미가 사라진다
   if (signedAny) {
     const b = `<section class="dash"><div class="container">
       <div class="dash-head"><div><h1 class="dash-title">필드 배치 — ${esc(d.title)}</h1></div></div>
       <div class="flash flash-warn">이미 서명이 시작된 문서입니다. 서명자가 확인한 지면이 바뀌면 안 되므로 배치를 수정할 수 없습니다.</div>
       <p><a href="${base}/admin/documents/${d.id}" class="btn btn-ghost btn-sm">← 문서로</a></p>
-      <div class="paper-wrap">${renderPaper(d.body, { fieldsFor: fieldsRenderer(fields, { mode: "view", nameOf }) })}</div></div></section>`;
+      <div class="paper-wrap">${renderPaper(d.body, { scans, mediaUrl, fieldsFor: fieldsRenderer(fields, { mode: "view", nameOf }) })}</div></div></section>`;
     return html(layout({ title: "필드 배치", assoc, base, user, body: b, csrf, scripts: `<script src="${assetUrl("/js/paper.js")}" defer></script>` }));
   }
   const palette = Object.entries(FIELD_KINDS).map(([k, v], i) =>
@@ -2767,6 +2794,7 @@ export async function documentPaper(ctx) {
   // 역할 목록에 값을 하나 더했다고 권한이 조용히 늘어나면 안 된다 — 허용 역할을 명시한다
   const isAdmin = user.role === "ADMIN" || user.role === "STAFF" || user.role === "SUPERADMIN";
   if (!isAdmin && !(await D.canReceiveSign(db, d.id, user.id, user.role))) return notFoundResponse(ctx);
+  const scans = await D.listDocPages(db, d.id);   // 올린 양식이면 이 그림들이 지면이다
   const fields = await D.listFieldsWithValues(db, d.id);
   const reqs = await D.listRequestStatus(db, d.id);
   const rc = await D.requestCounts(db, d.id);
@@ -2774,7 +2802,7 @@ export async function documentPaper(ctx) {
   const extNames = await D.listExternalSigners(db, d.id);
   const nameOf = (ref) => { if (ref < 0) { const e = extNames.find((x) => x.id === -ref); return e ? e.name : ""; }
     const u = reqs.find((r) => r.id === ref); return u ? u.name : ""; };
-  const paper = renderPaper(d.body, {
+  const paper = renderPaper(d.body, { scans, mediaUrl,
     fieldsFor: fieldsRenderer(fields, { mode: "view", nameOf }),
     watermark: done ? "" : "미완성",
   });

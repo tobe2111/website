@@ -355,6 +355,23 @@ CREATE TABLE IF NOT EXISTS doc_fields (
 );
 CREATE INDEX IF NOT EXISTS idx_docfield_doc ON doc_fields(document_id, page, sort);
 
+-- 계약서 지면이 '올린 양식' 일 때의 쪽 그림.
+--
+-- 상대방이 보낸 PDF(표준근로계약서·정부 서식·회사 양식)를 옮겨 적지 않고 그대로 쓰려면
+-- 그 쪽들이 지면이어야 한다. 관리자 브라우저에서 PDF 를 쪽별 그림으로 구워 여기에 남긴다.
+--
+-- ⚠️ 법적 원문은 여전히 **원본 PDF 파일**(documents.attachment)이고, 그 해시가 봉인에 들어간다.
+--    여기 그림은 '보기·서명 자리 배치용 지면' 이다. 브라우저 렌더링 결과라 원본과 한 픽셀까지
+--    같다고 보장할 수 없으므로, 증적 패키지에는 반드시 원본 PDF 가 함께 담긴다.
+CREATE TABLE IF NOT EXISTS doc_pages (
+  document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+  page        INTEGER NOT NULL,               -- 0부터
+  media       TEXT NOT NULL,                  -- R2 키 (쪽 그림)
+  w           INTEGER NOT NULL DEFAULT 0,     -- 그림 원래 가로 픽셀 (지면 비율 계산용)
+  h           INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (document_id, page)
+);
+
 -- 채워진 값. 이미지(서명 그림·도장)는 R2 키와 함께 바이트 해시를 남겨 사후 교체를 탐지한다.
 CREATE TABLE IF NOT EXISTS doc_field_values (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -629,7 +646,7 @@ CREATE INDEX IF NOT EXISTS idx_landing_asset_assoc ON landing_assets(association
 // 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
 // 마이그레이션 세대 — migrateColumns 에 단계를 추가할 때마다 +1
 // 36 = 두 갈래(트렁크 33 · 모집형 35)를 합친 세대. 양쪽 DB 모두 다시 한 번 마이그레이션을 타게 한다.
-export const SCHEMA_VERSION = "41";
+export const SCHEMA_VERSION = "42";
 
 export async function ensureSchema(db) {
   const has = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='associations'").first();

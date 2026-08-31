@@ -665,6 +665,22 @@ export async function createDocument(db, { associationId, title, body, contentHa
 export const getDocument = (db, id) => first(db, "SELECT * FROM documents WHERE id=?", id);
 // 만든 사람을 함께 가져온다 — 담당자가 여러 명이면 "누가 보낸 계약인가"가 가장 먼저 필요해진다.
 // created_by 는 ON DELETE SET NULL 이라 계정이 지워져도 목록이 깨지지 않는다(LEFT JOIN).
+// ----- 올린 양식의 쪽 그림 -----
+// 법적 원문은 원본 PDF(documents.attachment)이고, 이건 '보는 지면' 이다.
+export const listDocPages = (db, documentId) =>
+  all(db, "SELECT page, media, w, h FROM doc_pages WHERE document_id=? ORDER BY page", documentId);
+export async function replaceDocPages(db, documentId, pages) {
+  await run(db, "DELETE FROM doc_pages WHERE document_id=?", documentId);
+  let i = 0;
+  for (const p of pages) {
+    await run(db, "INSERT INTO doc_pages (document_id, page, media, w, h) VALUES (?,?,?,?,?)",
+      documentId, i++, p.media, p.w | 0, p.h | 0);
+  }
+  return i;
+}
+export const countDocPages = async (db, documentId) =>
+  (await first(db, "SELECT COUNT(*) AS n FROM doc_pages WHERE document_id=?", documentId)).n;
+
 export const listDocuments = (db, aid) =>
   // "0명 서명" 만으로는 다 된 건지 아무도 안 한 건지 알 수 없다 — 몇 명 중 몇 명인지가 필요하다.
   all(db, `SELECT d.*, u.name AS author_name,

@@ -150,13 +150,36 @@ const pageNoHtml = (i, n) => `<div class="paper-no">${i + 1} / ${n}</div>`;
 
 // mode: "view"(읽기) | "edit"(관리자 배치) | "fill"(서명자 입력)
 // fieldsFor(pageIndex) → 그 페이지에 놓을 필드 박스 HTML
-export function renderPaper(body, { mode = "view", fieldsFor = () => "", watermark = "" } = {}) {
+export function renderPaper(body, { mode = "view", fieldsFor = () => "", watermark = "", scans = null, mediaUrl = (k) => k } = {}) {
+  // 올린 양식(PDF 를 쪽 그림으로 구운 것)이 있으면 그것이 지면이다.
+  // 좌표계는 그대로다 — 필드는 여전히 '몇 쪽의 x·y 비율' 이라, 배치·서명·증적이 전부 그대로 동작한다.
+  if (scans && scans.length) return renderScanPaper(scans, { mode, fieldsFor, watermark, mediaUrl });
   const pages = paginate(body);
   const n = pages.length;
   return `<div class="paper-stack" data-mode="${esc(mode)}" data-pw="${PAGE.w}" data-ph="${PAGE.h}">${pages
     .map((lines, i) => `<div class="paper" data-page="${i}" style="width:${PAGE.w}px;height:${PAGE.h}px">
       ${watermark ? `<div class="paper-wm">${esc(watermark)}</div>` : ""}
       <div class="paper-text" style="padding:${PAGE.pad}px;font-size:${FONT_PX}px;line-height:${LINE_H}px">${lines.map(lineHtml).join("")}</div>
+      <div class="paper-layer">${fieldsFor(i)}</div>
+      ${pageNoHtml(i, n)}
+    </div>`).join("")}</div>`;
+}
+
+// 지면 가로는 A4 폭(794)으로 고정하고 세로만 그림 비율로 정한다.
+// 쪽마다 크기가 다른 PDF 도 있지만(가로쪽 섞임), 화면 축소 배율은 한 값이어야 하므로
+// **첫 쪽 비율**을 문서 전체의 지면으로 삼고, 나머지 쪽 그림은 그 안에 맞춰 넣는다.
+export const scanPageSize = (scans) => {
+  const f = scans[0] || {};
+  const ratio = f.w > 0 && f.h > 0 ? f.h / f.w : PAGE.h / PAGE.w;
+  return { w: PAGE.w, h: Math.round(PAGE.w * Math.min(3, Math.max(0.3, ratio))) };
+};
+function renderScanPaper(scans, { mode, fieldsFor, watermark, mediaUrl }) {
+  const { w, h } = scanPageSize(scans);
+  const n = scans.length;
+  return `<div class="paper-stack is-scan" data-mode="${esc(mode)}" data-pw="${w}" data-ph="${h}">${scans
+    .map((p, i) => `<div class="paper" data-page="${i}" style="width:${w}px;height:${h}px">
+      <img class="paper-scan" src="${esc(mediaUrl(p.media))}" alt="계약서 ${i + 1}쪽" loading="${i < 2 ? "eager" : "lazy"}" draggable="false" />
+      ${watermark ? `<div class="paper-wm">${esc(watermark)}</div>` : ""}
       <div class="paper-layer">${fieldsFor(i)}</div>
       ${pageNoHtml(i, n)}
     </div>`).join("")}</div>`;

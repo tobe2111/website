@@ -59,9 +59,13 @@ export function makeAssets() {
       const fp = path.join(ROOT, "public", url.pathname);
       if (!fp.startsWith(path.join(ROOT, "public")) || !fs.existsSync(fp)) return new Response("Not Found", { status: 404 });
       const ext = path.extname(fp);
-      const type = { ".css": "text/css", ".js": "text/javascript", ".svg": "image/svg+xml", ".png": "image/png",
+      // MIME 을 빠뜨리면 브라우저가 모듈 스크립트를 거부한다("Strict MIME type checking").
+      // 실제 Cloudflare Assets 는 .mjs 를 알지만, 여기서 빠지면 브라우저 검증만 조용히 깨진다.
+      const type = { ".css": "text/css", ".js": "text/javascript", ".mjs": "text/javascript",
+        ".svg": "image/svg+xml", ".png": "image/png",
         ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".json": "application/json",
-        ".webmanifest": "application/manifest+json" }[ext] || "application/octet-stream";
+        ".webmanifest": "application/manifest+json", ".ttf": "font/ttf", ".woff2": "font/woff2",
+        ".bcmap": "application/octet-stream", ".pfb": "application/octet-stream" }[ext] || "application/octet-stream";
       return new Response(fs.readFileSync(fp), { headers: { "content-type": type } });
     },
   };
