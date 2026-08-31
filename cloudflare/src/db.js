@@ -364,6 +364,10 @@ export const listSameCategory = (db, aid, category, exceptId, limit = 3) =>
 // 홈 검색 자동완성(datalist)용 — 이름만 가볍게
 export const listBusinessNames = (db, aid, limit = 300) =>
   all(db, "SELECT name FROM businesses WHERE association_id=? AND status='approved' ORDER BY name LIMIT ?", aid, limit);
+// "지금 문 연 곳 24곳" 을 세려면 영업시간 문자열을 코드에서 읽어야 한다 (SQL 로는 못 푼다).
+// 이름·주소 없이 판단에 필요한 두 칸만 가져온다 — 홈에서 매번 도는 질의라 가볍게.
+export const listBusinessHours = (db, aid, limit = 1000) =>
+  all(db, "SELECT hours, day_off_date FROM businesses WHERE association_id=? AND status='approved' LIMIT ?", aid, limit);
 export const listAllBusinesses = (db, aid) =>
   all(db, `SELECT b.*, u.email AS owner_email, u.name AS owner_name FROM businesses b JOIN users u ON u.id=b.owner_id
            WHERE b.association_id=? ORDER BY CASE b.status WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END, b.created_at DESC`, aid);

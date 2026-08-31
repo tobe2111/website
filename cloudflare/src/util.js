@@ -137,6 +137,37 @@ export function openBadge(hours) {
   return st ? '<span class="badge badge-open">영업중</span>' : '<span class="badge badge-muted">영업종료</span>';
 }
 
+// 카드에 적을 한 줄. "영업중"만으로는 손님이 지금 나가도 되는지 알 수 없다 —
+// 열려 있으면 몇 시에 닫는지, 닫혀 있으면 몇 시에 여는지가 실제로 필요한 정보다.
+export function hoursLine(hours, nowMs = Date.now()) {
+  const s = String(hours || "");
+  const st = openNow(s, nowMs);
+  if (st === null) return { state: "", label: "" };
+  const m = /(\d{1,2}):(\d{2})\s*[-~–—]\s*(\d{1,2}):(\d{2})/.exec(s);
+  const pad = (h, mi) => `${String(+h).padStart(2, "0")}:${mi}`;
+  if (!m) return { state: st ? "open" : "shut", label: st ? "영업중" : "영업종료" };
+  return st
+    ? { state: "open", label: `${pad(m[3], m[4])} 마감` }
+    : { state: "shut", label: `${pad(m[1], m[2])} 오픈` };
+}
+
+// 주소에서 동네 이름만. 카드에 전체 주소를 넣으면 한가운데서 잘려
+// 정보도 장식도 아닌 것이 남는다 — 손님이 카드에서 알고 싶은 건 "어느 동네냐" 하나다.
+// 전체 주소는 가게 상세에서 그대로 보여준다.
+export function dongOf(address) {
+  const s = String(address || "").trim();
+  if (!s) return "";
+  const m = /([가-힣A-Za-z0-9]+(?:동|가|읍|면|리))(?=\s|$|\d)/.exec(s);
+  if (m) return m[1];
+  // 동 이름이 없는 도로명 주소면 길 이름을 쓴다. 한 상권 안에서는 구 이름이 모두 같아
+  // "서초구"만 적으면 카드마다 같은 글자가 스물아홉 번 반복될 뿐 아무것도 알려주지 않는다.
+  const r = /([가-힣A-Za-z0-9]+(?:대로|로|길))(?=\s|$|\d)/.exec(s);
+  if (r) return r[1];
+  // 시·군·구가 여럿이면 가장 좁은 쪽(뒤에 나온 것)을 쓴다 — "경기 성남시 분당구" 는 분당구다.
+  const g = [...s.matchAll(/([가-힣]+(?:시|군|구))(?=\s|$)/g)];
+  return g.length ? g[g.length - 1][1] : "";
+}
+
 // 이메일 마스킹 — 로그·화면에 원문을 남기지 않는다
 export function maskEmail(e) {
   const [a, b] = String(e || "").split("@");

@@ -232,7 +232,9 @@ function navHtml(base, user, active, kind = "merchant", preset = "") {
   } else {
     items.push(link(`/login`, "로그인"));
     if (franchise) items.push(`<a href="${base}/#apply" class="btn btn-primary btn-sm">${esc(T.consult)}</a>`);
-    else if (!esign) items.push(`<a href="${base}/register" class="btn btn-primary btn-sm">가입</a>`);
+    // "가입" 만으로는 회원가입인지 입점인지 알 수 없다. 이 버튼이 하는 일을 그대로 적는다 —
+    // 상인회 홈이 이루려는 첫째 목표라, 어느 화면에서든 머리말에 늘 보여야 한다.
+    else if (!esign) items.push(`<a href="${base}/register" class="btn btn-primary btn-sm">우리 가게 등록</a>`);
   }
   return items.join("");
 }

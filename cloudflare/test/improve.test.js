@@ -121,9 +121,11 @@ test("플로우: 승인 순간 → 사장님 메일 + 대시보드 축하 배너
   const jm = jar();
   await post(env, jm, "/t/s2/register", { name: "김사장", email: "kim2@s.kr", password: "merchant1234", business_name: "김분식", category: "음식점", agree: "1" }, "/t/s2/register");
   const biz = await D.getBusinessByOwner(env.DB, (await D.getUserByEmail(env.DB, "kim2@s.kr")).id);
-  // 대시보드: 채우기 체크리스트 노출 (0/4)
+  // 대시보드: 덜 채운 것 체크리스트 노출 — 못 채우면 무엇을 잃는지까지 적힌다
   let dash = await (await get(env, jm, "/t/s2/dashboard")).text();
-  assert.match(dash, /우리 가게 채우기/);
+  assert.match(dash, /아직 덜 채운 것/);
+  assert.match(dash, /영업 시간 적기/);
+  assert.match(dash, /지금 문 연 곳.*안 뜹니다/, "영업 시간을 비워 두면 무엇을 잃는지 적혀 있어야 한다");
   assert.ok(!dash.includes("approve-banner"), "승인 전엔 배너 없음");
   // 관리자 승인 → 메일 발송
   outbox.length = 0;

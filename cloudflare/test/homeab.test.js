@@ -111,7 +111,10 @@ test("관리 화면에 비교표가 있고, 표본이 얇으면 그렇게 말해
   assert.match(html, /가게 먼저/, "만들어 둔 사본이 표에 있어야");
   assert.match(html, /입점 신청<\/th>/);
   assert.match(html, /표본 부족/, "방문 100회 전에는 비교하지 말라고 해야");
-  assert.match(html, /지금 홈을 복사해 사본 만들기/);
+  assert.match(html, /사본 만들기/);
+  // 두 갈래 프리셋 — 첫 화면이 무엇을 앞세우는지만 다르게 해서 복사한다
+  assert.match(html, /가게가 먼저/);
+  assert.match(html, /찾는 게 먼저/);
 });
 
 // 전자계약 조직은 홈에 비교할 구성이 없다 — 없는 기능을 화면에 띄우지 않는다.

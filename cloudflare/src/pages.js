@@ -1,6 +1,6 @@
 // 공개/인증 페이지 핸들러 (async). ctx = { env, db, assoc, base, user, url, query, csrf, params }
 import * as D from "./db.js";
-import { esc, cap, clip, openBadge, openNow, fmtBytes, kstStamp, kstDate, prettyPath, safeNext, parseCookies } from "./util.js";
+import { esc, cap, clip, openBadge, openNow, hoursLine, dongOf, fmtBytes, kstStamp, kstDate, prettyPath, safeNext, parseCookies } from "./util.js";
 import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG, ORIGIN, assetUrl } from "./render.js";
 import { verifyInviteToken, SALES_STAGES, otpRequired, selfSignupOn } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
 import { html, notFoundResponse, back, redirect } from "./http.js";
@@ -15,7 +15,7 @@ import { buildEvidence } from "./evidence.js";
 import { resolveExtToken, makeExtToken, extSignUrl } from "./extsign.js";
 import { KEY_PREFIX } from "./apiv1.js";
 import { text } from "./http.js";
-import { parseLayout, renderHome, SECTION_CATALOG } from "./homeLayout.js";
+import { parseLayout, renderHome, SECTION_CATALOG, HOME_PRESETS } from "./homeLayout.js";
 import { parseLandingLayout, renderLanding, LANDING_CATALOG, safeSrc } from "./franchise.js";
 import { KINDS, KIND_KEYS, PRESETS, PRESET_KEYS, kindOf, kindById, assocTerms } from "./kinds.js";
 import { turnstileWidget, turnstileScript } from "./turnstile.js";
@@ -84,13 +84,21 @@ function bizStatusBadge(b) {
   if (D.isDayOff(b)) return '<span class="badge badge-dayoff">오늘 휴무</span>';
   return openBadge(b.hours);
 }
-// 업체 카드 (시안: 영업중 dot pill 좌상단 · 본문 = 카테고리 라벨/이름/한 줄 메타)
+// 카드 아래 두 줄. 한 줄에 주소와 영업시간을 이어 붙이면 좁은 칸에서 한가운데가 잘린다.
+// 첫 줄은 "지금 갈 수 있나"(닫는 시각 / 여는 시각), 둘째 줄은 "어느 동네냐".
+function bizLines(b) {
+  // 오늘 임시휴무면 좌상단 배지가 이미 "오늘 휴무" 라고 말한다 — 바로 아래 같은 말을 또 쓰지 않는다.
+  const dayOff = D.isDayOff(b);
+  const h = dayOff ? { state: "", label: "" } : hoursLine(b.hours);
+  return { h, dong: dongOf(b.address), dayOff };
+}
+// 업체 카드 (시안: 영업중 dot pill 좌상단 · 본문 = 카테고리 라벨/이름/두 줄 메타)
 function businessCard(base, b, cover) {
   const thumb = cover
     ? `<img src="${esc(mediaUrl(cover.thumb || cover.filename))}" alt="" loading="lazy" />`
     : `<span class="thumb-ico" aria-hidden="true">${catIcon(b.category)}</span>`;
   const open = bizStatusBadge(b);
-  const meta = [b.address, b.hours].filter(Boolean).join(" · ");
+  const { h, dong } = bizLines(b);
   return `<article class="market-card" data-slug="${esc(b.slug)}">
     <button type="button" class="fav-btn" data-fav="${esc(b.slug)}" aria-label="찜하기" hidden>♥</button>
     <a href="${base}/business/${esc(b.slug)}" class="market-thumb${cover ? " has-img" : ""}">
@@ -100,8 +108,22 @@ function businessCard(base, b, cover) {
     <div class="market-body">
       <span class="mc-cat">${esc(b.category)}</span>
       <h3><a href="${base}/business/${esc(b.slug)}">${esc(b.name)}</a></h3>
-      ${meta ? `<p class="mc-meta">${PIN_SVG}<span>${esc(meta)}</span></p>` : ""}
+      ${h.label ? `<p class="mc-when mc-${h.state}">${esc(h.label)}</p>` : ""}
+      ${dong ? `<p class="mc-meta">${PIN_SVG}<span>${esc(dong)}</span></p>` : ""}
     </div></article>`;
+}
+
+// 한 줄 목록 (시안 B — 사진 없이 한 화면에 더 많이). 같은 데이터를 카드 대신 행으로 그린다.
+function businessRow(base, b) {
+  // 카드와 달리 이 줄에는 배지가 없다 — 휴무도 여기서 말해야 한다.
+  const { h, dong, dayOff } = bizLines(b);
+  const when = dayOff ? { state: "shut", label: "오늘 휴무" } : h;
+  const sub = [b.category, dong].filter(Boolean).join(" · ");
+  return `<li class="biz-row">
+    <a href="${base}/business/${esc(b.slug)}">
+      <span class="br-main"><strong>${esc(b.name)}</strong>${sub ? `<span class="br-sub">${esc(sub)}</span>` : ""}</span>
+      ${when.label ? `<span class="br-when mc-${when.state}">${esc(when.label)}</span>` : ""}
+    </a></li>`;
 }
 
 // D-day 계산 (KST 기준): 오늘=D-DAY, 미래=D-n, 과거=null(공개 홈은 예정 행사만 노출)
@@ -167,25 +189,39 @@ export async function home(ctx, opts = {}) {
   // 개인을 식별하는 값이 아니라 사본 이름 한 조각이고, 30분 뒤 스스로 사라진다.
   if (ctx.addCookie) ctx.addCookie(homeVariantCookie(variant, base, ctx.isProd));
   // 독립 쿼리는 병렬로 — D1 은 쿼리마다 네트워크 왕복이라 직렬 대기가 TTFB 로 직결됨
-  const [{ items }, notices, events, stats, cats, names, recentUpdates] = await Promise.all([
-    D.listBusinessesPaged(db, assoc.id, { perPage: 8 }), // 4열 그리드에 맞춰 2줄이 꽉 차게 (6개는 마지막 줄이 비어 보임)
+  // 한 줄 목록 구성은 한 화면에 12곳을 담는다. 12곳을 받아 두고 사진 카드 구성에서만 8곳으로 자른다
+  // (4열 그리드는 8이라야 마지막 줄이 꽉 찬다).
+  const [{ items }, notices, events, stats, cats, names, recentUpdates, hourRows] = await Promise.all([
+    D.listBusinessesPaged(db, assoc.id, { perPage: 12 }),
     D.listNotices(db, assoc.id, 5),
     D.listEvents(db, assoc.id, true),
     D.stats(db, assoc.id),
     D.distinctCategories(db, assoc.id),
     D.listBusinessNames(db, assoc.id),
     D.listAssocUpdates(db, assoc.id, 6),
+    D.listBusinessHours(db, assoc.id),
   ]);
-  const covers = await D.coverImagesFor(db, items.map((b) => b.id));
-  const businessesHtml = items.map((b) => businessCard(base, b, covers.get(b.id))).join("");
-  const catTiles = cats.length ? `<div class="cat-grid">${cats.map((c) => `<a class="cat-tile" href="${base}/businesses?category=${encodeURIComponent(c.category)}"><span class="cat-ico">${catIcon(c.category)}</span><span class="cat-name">${esc(c.category)}</span></a>`).join("")}<a class="cat-tile cat-all" href="${base}/businesses"><span class="cat-ico">${catIcon("전체")}</span><span class="cat-name">전체보기</span></a></div>` : "";
+  const cardItems = items.slice(0, 8);
+  const covers = await D.coverImagesFor(db, cardItems.map((b) => b.id));
+  const businessesHtml = cardItems.map((b) => businessCard(base, b, covers.get(b.id))).join("");
+  const businessRowsHtml = items.map((b) => businessRow(base, b)).join("");
+  // "지금 문 연 곳 24곳" — 영업시간은 자유 입력 문자열이라 SQL 로는 못 세고 여기서 센다.
+  const openCount = hourRows.filter((r) => openNow(r.hours) === true && !D.isDayOff(r)).length;
+  // 업종 줄 — 아이콘 아홉 개가 붙으면 도구모음처럼 보인다. 여기는 사실상 이 사이트의 주 메뉴이므로
+  // 글자만 남기고, 맨 앞에 손님이 가장 자주 쓸 "지금 문 연 곳"을 둔다.
+  const catTiles = cats.length ? `<nav class="cat-tabs" aria-label="업종별 보기">
+    ${openCount > 0 ? `<a class="cat-tab cat-tab-open" href="${base}/businesses?open=1">지금 문 연 곳 ${openCount}</a>` : ""}
+    ${cats.map((c) => `<a class="cat-tab" href="${base}/businesses?category=${encodeURIComponent(c.category)}">${esc(c.category)}</a>`).join("")}
+    <a class="cat-tab cat-tab-all" href="${base}/businesses">전체 ${Number(stats.businesses) || 0}곳</a>
+  </nav>` : "";
   const eventsHtml = events.map((e) => eventCard(base, e)).join("");
   const body = renderHome(lay, {
-    assoc, base, stats, businessesHtml, catTiles, eventsHtml, loggedIn: !!user,
+    assoc, base, stats, businessesHtml, businessRowsHtml, openCount, catTiles, eventsHtml, loggedIn: !!user,
     heroImage: assoc.hero_image ? mediaUrl(assoc.hero_image) : "",
     heroVideo: assoc.hero_video ? mediaUrl(assoc.hero_video) : "",
     noticesHtml: notices.length ? noticeRows(base, notices) : "",
     counts: { businesses: items.length, notices: notices.length, events: events.length },
+    // 사진 카드 구성은 8곳, 한 줄 목록 구성은 12곳을 보여준다
     suggestNames: names.map((r) => r.name),
     updatesHtml: recentUpdates.map((u) => `<a class="update-card" href="${base}/business/${esc(u.biz_slug)}">
       ${u.image ? `<span class="uc-img"><img src="${esc(mediaUrl(u.image))}" alt="" loading="lazy" /></span>` : ""}
@@ -577,11 +613,11 @@ export async function businesses(ctx) {
   if (openOnly) { items = items.filter((b) => openNow(b.hours) === true && !D.isDayOff(b)); total = items.length; cur = 1; pages = 1; }
   const cats = await D.distinctCategories(db, assoc.id);
   const chips = `<a href="${base}/businesses${qs({ q })}" class="chip-filter${!cat && !openOnly ? " active" : ""}">전체</a>` +
-    `<a href="${base}/businesses${qs({ q, open: "1" })}" class="chip-filter chip-open${openOnly ? " active" : ""}">지금 영업중</a>` +
+    `<a href="${base}/businesses${qs({ q, open: "1" })}" class="chip-filter chip-open${openOnly ? " active" : ""}">지금 문 연 곳</a>` +
     `<button type="button" class="chip-filter chip-fav" id="favFilter" hidden>찜한 가게</button>` +
     cats.map((c) => `<a href="${base}/businesses${qs({ category: c.category, q })}" class="chip-filter${cat === c.category ? " active" : ""}">${esc(c.category)} <em>${c.n}</em></a>`).join("");
   const covers = await D.coverImagesFor(db, items.map((b) => b.id));
-  const cards = items.map((b) => businessCard(base, b, covers.get(b.id))).join("") || `<p class="empty">${openOnly ? "지금 영업 중인 가게가 없습니다." : q ? "검색 결과가 없습니다." : "등록된 점포가 없습니다."}</p>`;
+  const cards = items.map((b) => businessCard(base, b, covers.get(b.id))).join("") || `<p class="empty">${openOnly ? "지금 문 연 가게가 없습니다." : q ? "검색 결과가 없습니다." : "등록된 점포가 없습니다."}</p>`;
   const body = `<section class="section page-top"><div class="container">
     <div class="section-head"><h2 class="section-title">가입 점포 안내</h2><p class="section-lead">총 ${total}곳</p></div>
     <form method="get" action="${base}/businesses" class="board-search"><input type="search" name="q" value="${esc(q)}" placeholder="점포·업종 검색" /><button class="btn btn-ghost btn-sm">검색</button></form>
@@ -1185,16 +1221,21 @@ export async function dashboard(ctx) {
       </div></section>`;
   // 사장님 온보딩 체크리스트 (콘텐츠 채움 유도 — 셀프 등록률 핵심 장치)
   const imgCount = media.filter((m) => m.kind === "image").length;
+  // 영업 시간이 맨 앞이다. 상인회 홈 첫 화면이 "지금 문 연 곳"으로 가게를 고르는데,
+  // 영업 시간이 비어 있으면 우리 가게는 그 목록에 아예 뜨지 않는다 —
+  // 사진을 아무리 올려도 손님이 도달하지 못한다. 그래서 무엇을 잃는지까지 적는다.
   const mSteps = [
-    { done: !!(b.description || "").trim(), label: "가게 소개 쓰기", href: "#d-info" },
-    { done: imgCount >= 3, label: `가게 사진 3장 올리기 (${Math.min(imgCount, 3)}/3)`, href: "#d-media" },
-    { done: products.length >= 1, label: "제품·메뉴 1개 올리기", href: "#d-products" },
-    { done: b.lat != null && b.lng != null, label: "지도에 위치 찍기", href: "#d-info" },
+    { done: !!(b.hours || "").trim(), label: "영업 시간 적기", why: "비어 있으면 홈의 '지금 문 연 곳'에 우리 가게가 안 뜹니다", href: "#d-info" },
+    { done: !!(b.phone || "").trim(), label: "전화번호 적기", why: "손님이 가게 페이지에서 바로 걸 수 있습니다", href: "#d-info" },
+    { done: !!(b.description || "").trim(), label: "가게 소개 쓰기", why: "검색 결과에 이 문장이 함께 나옵니다", href: "#d-info" },
+    { done: imgCount >= 3, label: `가게 사진 3장 올리기 (${Math.min(imgCount, 3)}/3)`, why: "사진이 없으면 카드가 회색으로 나옵니다", href: "#d-media" },
+    { done: products.length >= 1, label: "제품·메뉴 1개 올리기", why: "가격을 보고 오는 손님이 가장 많습니다", href: "#d-products" },
+    { done: b.lat != null && b.lng != null, label: "지도에 위치 찍기", why: "점포 지도에 우리 가게가 표시됩니다", href: "#d-info" },
   ];
   const mRemain = mSteps.filter((x) => !x.done).length;
-  const merchantOnboard = mRemain ? `<section class="panel onboard"><div class="panel-head"><h2 class="panel-title">우리 가게 채우기 <span class="badge badge-wait">${mSteps.length - mRemain}/${mSteps.length}</span></h2></div>
-    <p class="panel-hint">4가지만 채우면 손님이 보는 가게 페이지가 완성됩니다.</p>
-    <ul class="onboard-list">${mSteps.map((x) => `<li class="${x.done ? "done" : ""}"><span class="ob-check">${x.done ? "✓" : ""}</span><a href="${x.href}">${x.label}</a></li>`).join("")}</ul></section>` : "";
+  const merchantOnboard = mRemain ? `<section class="panel onboard"><div class="panel-head"><h2 class="panel-title">아직 덜 채운 것 <span class="badge badge-wait">${mSteps.length - mRemain}/${mSteps.length}</span></h2></div>
+    <p class="panel-hint">여섯 가지를 채우면 손님이 보는 가게 페이지가 완성됩니다. 못 채우면 무엇을 잃는지 옆에 적었습니다.</p>
+    <ul class="onboard-list">${mSteps.map((x) => `<li class="${x.done ? "done" : ""}"><span class="ob-check">${x.done ? "✓" : ""}</span><a href="${x.href}">${x.label}</a>${x.done ? "" : `<span class="ob-why">${x.why}</span>`}</li>`).join("")}</ul></section>` : "";
   const approveBanner = b.status === "approved" ? `<div class="approve-banner" data-dismiss-key="approved-${b.id}" hidden>
     <div class="ab-text"><strong>가게가 공개되었습니다!</strong><p>아래 QR을 인쇄해 계산대에 붙이고, 가게 페이지의 공유 버튼으로 카톡방에 알려보세요.</p></div>
     <span class="ab-actions"><a class="btn btn-sm btn-primary" href="${base}/business/${esc(b.slug)}" target="_blank">내 가게 보기</a><button type="button" class="btn btn-sm btn-ghost" data-dismiss>닫기</button></span>
@@ -1331,7 +1372,12 @@ export async function admin(ctx) {
           <label>주소 <small>(영문 소문자·숫자·하이픈)</small>
             <span class="slug-row"><span class="slug-pre">${esc(prettyPath(base + "/l/"))}</span>
             <input type="text" name="slug" required maxlength="40" pattern="[a-z0-9\-]+" placeholder="b" /></span></label></div>
-        <button class="btn btn-primary btn-sm">지금 홈을 복사해 사본 만들기</button></form>
+        <label>첫 화면 구성 <small>(나머지 구역은 지금 홈 그대로 복사됩니다)</small>
+          <select name="preset">
+            <option value="">지금 홈을 그대로 복사</option>
+            ${Object.entries(HOME_PRESETS).map(([k, p]) => `<option value="${esc(k)}">${esc(p.label)}</option>`).join("")}
+          </select></label>
+        <button class="btn btn-primary btn-sm">사본 만들기</button></form>
     </details>`;
   })();
   // 핵심 가설 계측: "회원이 스스로 채운다"가 성립하는가. 셀프 등록률 30% 이상이면 성립 신호.
@@ -1463,6 +1509,53 @@ export async function admin(ctx) {
     ["notify", "알림톡", SIDE_SVG.bell, 0],
     ["settings", "설정", SIDE_SVG.palette, 0],
   ];
+
+  // ── 오늘 처리할 일 —— 일하는 화면은 읽는 화면이 아니라 훑고 처리하는 화면이다.
+  // 예전에는 숫자 카드 다섯 개가 맨 위에 있었는데, "승인 대기 3" 을 보고도
+  // 그게 오늘 온 것인지 일주일 묵은 것인지 알 수 없어 결국 표를 열어 봐야 했다.
+  // 여기서는 몇 건인지가 아니라 **얼마나 기다렸는지**와 **어디를 눌러야 하는지**를 말한다.
+  const daysSince = (v) => {
+    const t = Date.parse(String(v || "").replace(" ", "T") + "Z");
+    return isNaN(t) ? 0 : Math.max(0, Math.floor((Date.now() - t) / 86400000));
+  };
+  const pendingBiz = all.filter((b) => b.status === "pending");
+  // 29 라는 숫자만으로는 좋은지 나쁜지 알 수 없다. 늘고 있는지가 실제로 궁금한 것이다.
+  // 다만 없는 변화를 지어내지 않는다 — 0 이면 아예 표시하지 않는다.
+  const newBiz30 = all.filter((b) => b.status === "approved" && daysSince(b.created_at) <= 30).length;
+  const openDocs = docs.filter((d) => !d.closed);
+  const lateDocs = openDocs.filter((d) => isOverdue(d));
+  const todos = [
+    pendingBiz.length ? {
+      label: `${isEsign ? "가입" : "입점"} 신청 ${pendingBiz.length}건`,
+      why: (() => {
+        const oldest = Math.max(...pendingBiz.map((b) => daysSince(b.created_at)));
+        const names = pendingBiz.slice(0, 2).map((b) => b.name).join(" · ");
+        return `${names}${pendingBiz.length > 2 ? ` 외 ${pendingBiz.length - 2}곳` : ""}${oldest > 0 ? `, 가장 오래 기다린 곳 ${oldest}일째` : ""}`;
+      })(),
+      href: "#s-people", cta: "검토하기", warn: pendingBiz.some((b) => daysSince(b.created_at) >= 3),
+    } : null,
+    lateDocs.length ? {
+      label: `기한 지난 계약 ${lateDocs.length}건`,
+      why: `${lateDocs.slice(0, 2).map((d) => d.title).join(" · ")}${lateDocs.length > 2 ? ` 외 ${lateDocs.length - 2}건` : ""} — 서명이 아직 안 끝났습니다`,
+      href: `${base}/admin/documents`, cta: "링크 다시 보내기", warn: true,
+    } : null,
+    !lateDocs.length && openDocs.length ? {
+      label: `서명 대기 ${openDocs.length}건`,
+      why: `${openDocs.slice(0, 2).map((d) => d.title).join(" · ")}${openDocs.length > 2 ? ` 외 ${openDocs.length - 2}건` : ""}`,
+      href: `${base}/admin/documents`, cta: "진행 보기", warn: false,
+    } : null,
+    unread ? { label: `안 읽은 알림 ${unread}건`, why: "회원 신청·서명 완료 같은 소식이 쌓여 있습니다", href: "#s-home", cta: "알림함 열기", warn: false } : null,
+  ].filter(Boolean);
+  const todoBox = todos.length
+    ? `<section class="todo-box" id="p-todo">
+        <h2 class="todo-head">오늘 처리할 일 · ${todos.length}건</h2>
+        <ul class="todo-list">${todos.map((t) => `<li class="todo-item${t.warn ? " is-warn" : ""}">
+          <span class="todo-txt"><b>${esc(t.label)}</b><span>${esc(t.why)}</span></span>
+          <a class="todo-go" href="${t.href}">${esc(t.cta)} <span aria-hidden="true">→</span></a></li>`).join("")}</ul>
+      </section>`
+    // 빈 상자는 고장처럼 보인다 — 아무것도 없을 때는 아무것도 없다고 말한다.
+    : `<p class="todo-clear" id="p-todo">지금 처리할 일이 없습니다.</p>`;
+
   const body = `<section class="dash"><div class="container">
     <div class="dash-head"><div><p class="section-eyebrow">조직 관리 · ${esc(assoc.name)}</p><h1 class="dash-title">${isEsign ? "전자계약 관리" : isFranchise ? "가맹 모집 관리" : "관리자 대시보드"}</h1>
       <p class="dash-sub">${isEsign ? "계약 창구" : isFranchise ? "랜딩페이지" : "홈페이지"}: <a href="${base}" target="_blank">${esc(prettyPath(base))}</a></p></div>
@@ -1485,6 +1578,7 @@ export async function admin(ctx) {
     </nav></aside>
     <div class="console-main">
     <div class="sgroup" id="s-home" data-tab="home">
+    ${todoBox}
     ${isEsign ? inFlightPanel(base, docs) : ""}
     <div class="stat-cards" id="p-stats">
       ${isEsign ? (() => { const o = docs.filter((d) => !d.closed); const over = o.filter((d) => isOverdue(d));
@@ -1492,7 +1586,7 @@ export async function admin(ctx) {
       <div class="stat-card${over.length ? " stat-alert" : ""}"><span class="stat-num">${over.length}</span><span class="stat-label">기한 지남</span></div>
       <div class="stat-card"><span class="stat-num">${docCount - o.length}</span><span class="stat-label">체결 완료</span></div>
       <div class="stat-card"><span class="stat-num">${members.length}</span><span class="stat-label">담당자</span></div>`; })()
-      : `<div class="stat-card"><span class="stat-num">${s.businesses}</span><span class="stat-label">승인 업체</span></div>
+      : `<div class="stat-card"><span class="stat-num">${s.businesses}${newBiz30 ? `<u class="stat-delta" title="최근 30일에 새로 승인된 ${newBiz30}곳">+${newBiz30}</u>` : ""}</span><span class="stat-label">승인 업체${newBiz30 ? " · 최근 30일 새로" : ""}</span></div>
       <div class="stat-card${s.pending ? " stat-alert" : ""}"><span class="stat-num">${s.pending}</span><span class="stat-label">승인 대기</span></div>
       <div class="stat-card"><span class="stat-num">${s.notices}</span><span class="stat-label">공지</span></div>
       <div class="stat-card"><span class="stat-num">${s.events}</span><span class="stat-label">행사</span></div>`}
@@ -1588,7 +1682,7 @@ ${abPanel}`}
         <div class="form-two"><label>대표 전화<input type="text" name="phone" value="${esc(assoc.phone)}" autocomplete="tel" /></label><label>이메일<input type="email" name="email" value="${esc(assoc.email)}" autocomplete="email" /></label></div>
         <label>주소<input type="text" name="address" value="${esc(assoc.address)}" autocomplete="street-address" /></label>
         <label class="mini-label">로고 <small>(선택·이미지)</small><input type="file" name="logo" accept="image/*" /></label>
-        <label class="mini-label">홈 히어로 배경 사진 <small>(선택·가로 이미지 권장·비우면 프리미엄 그라데이션 유지)</small><input type="file" name="hero_image" accept="image/*" /></label>
+        <label class="mini-label">홈 첫 화면 배경 사진 <small>(가로 사진 권장 · 비우면 먹빛 바탕만 남습니다)</small><input type="file" name="hero_image" accept="image/*" /></label>
         <label class="mini-label">홈 히어로 배경 영상 <small>(선택·MP4 또는 WebM·8MB 이하)</small><input type="file" name="hero_video" accept="video/mp4,video/webm" /></label>
         <p class="panel-hint"><b>영상을 넣으실 거면 배경 사진도 함께 올려 주세요.</b> 그 사진이 영상이 뜨기 전 화면이 되고,
           데이터를 아끼거나 움직임을 꺼 둔 방문자에게는 사진만 보입니다. 소리는 나가지 않습니다(무음 자동재생).

@@ -140,6 +140,20 @@ img,video{max-width:100%;display:block}
 .section{padding:clamp(40px,5vw,60px) 0}
 .section.page-top{padding-top:clamp(40px,6vw,64px)}
 .section-alt{background:var(--bg-alt)}
+/* 구역 리듬 — 예전에는 일곱 구역이 모두 같은 무게였습니다. 화면이 아무것도 강조하지 못합니다.
+   가게(주인공) › 소식·행사(부차) › 상인회 안내(각주) 순으로 글자와 여백을 실제로 다르게 줍니다. */
+.section-sub{padding-block:clamp(30px,4vw,44px)}
+.section-sub .section-title{font-size:clamp(1.1rem,1.9vw,1.32rem)}
+.section-note{padding-block:clamp(24px,3vw,34px)}
+.section-note .section-title{font-size:1.02rem;color:var(--ink-soft);font-weight:600;letter-spacing:-.02em}
+/* 접어 두는 안내 — 가게를 찾으러 온 손님에게는 필요 없고, 가입을 재는 사장님에게만 필요합니다.
+   늘 펼쳐 두면 홈이 그만큼 길어집니다. */
+.fold>summary{cursor:pointer;display:inline-block;font-size:.9rem;font-weight:600;color:var(--brand-text);padding:7px 13px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface);list-style:none}
+.fold>summary::-webkit-details-marker{display:none}
+.fold>summary::after{content:" ▾";color:var(--muted)}
+.fold[open]>summary::after{content:" ▴"}
+.fold>summary:hover{border-color:var(--brand-500);background:var(--brand-tint)}
+.fold[open]>summary{margin-bottom:16px}
 .section-dark{background:var(--ink-deep);color:#fff}
 /* 페이지 헤더 — 홈의 섹션 헤더와 같은 규칙(좌측 정렬 + 밑줄)으로 통일.
    가운데 정렬 + 초록 eyebrow + 900 굵기 조합은 홈만 고치고 나니 혼자 튀었습니다. */
@@ -372,6 +386,25 @@ a.bc-val:hover{text-decoration:underline}
 .stat-card.stat-alert{border-color:var(--wait);background:var(--wait-bg)}
 .stat-num{font-variant-numeric:tabular-nums;display:block;font-size:1.9rem;font-weight:800;color:var(--ink);line-height:1;letter-spacing:-.02em}
 .stat-alert .stat-num{color:var(--wait-fg)}
+/* 29 라는 숫자만으로는 좋은지 나쁜지 알 수 없습니다 — 늘고 있는지가 실제로 궁금한 것입니다 */
+.stat-delta{text-decoration:none;font-size:.5em;font-weight:700;color:var(--ok-fg);margin-left:5px;letter-spacing:0}
+
+/* ---------- 오늘 처리할 일 ----------
+   일하는 화면은 읽는 화면이 아니라 훑고 처리하는 화면입니다. 예전에는 숫자 카드가 맨 위였는데,
+   "승인 대기 3" 을 보고도 오늘 온 것인지 일주일 묵은 것인지 알 수 없어 결국 표를 열어 봐야 했습니다.
+   여기서는 몇 건인지가 아니라 얼마나 기다렸는지와 어디를 눌러야 하는지를 말합니다. */
+.todo-box{border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden;background:var(--surface);margin-bottom:22px;box-shadow:var(--sh-1)}
+.todo-head{font-size:.88rem;font-weight:700;color:var(--wait-fg);background:var(--wait-bg);padding:9px 16px;border-bottom:1px solid var(--line-soft);margin:0}
+.todo-list{list-style:none;margin:0;padding:0}
+.todo-item{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;padding:12px 16px;border-bottom:1px solid var(--line-soft)}
+.todo-item:last-child{border-bottom:0}
+.todo-txt{min-width:0}
+.todo-txt b{display:block;font-size:.96rem;font-weight:600;color:var(--ink);letter-spacing:-.02em}
+.todo-txt span{display:block;margin-top:2px;font-size:.86rem;color:var(--muted);line-height:1.55}
+.todo-item.is-warn .todo-txt b{color:var(--wait-fg)}
+.todo-go{flex:none;font-size:.88rem;font-weight:600;color:var(--brand-text);white-space:nowrap}
+.todo-go:hover{text-decoration:underline}
+.todo-clear{margin:0 0 22px;padding:12px 16px;border:1px solid var(--line-soft);border-radius:var(--r-lg);background:var(--ok-bg);color:var(--ok-fg);font-size:.92rem;font-weight:600}
 .stat-label{font-size:.82rem;color:var(--muted);margin-top:8px;display:block}
 .table-scroll{overflow-x:auto}
 .admin-table{font-variant-numeric:tabular-nums;width:100%;border-collapse:collapse;min-width:520px}
@@ -885,7 +918,7 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .chip-open{color:var(--brand-text)}
 /* 찜 하트 */
 .market-card{position:relative}
-.fav-btn{position:absolute;top:10px;right:10px;z-index:5;width:34px;height:34px;border-radius:50%;border:0;background:rgba(255,255,255,.88);color:#c6cfc9;font-size:1.05rem;cursor:pointer;box-shadow:var(--sh-1);transition:transform .15s,color .15s}
+.fav-btn{position:absolute;top:10px;right:10px;z-index:5;width:34px;height:34px;border-radius:50%;border:0;background:rgba(255,255,255,.88);color:#6f7b75;font-size:1.05rem;cursor:pointer;box-shadow:var(--sh-1);transition:transform .15s,color .15s}
 .fav-btn:hover{transform:scale(1.1)}
 .fav-btn.is-on{color:#e0245e}
 .chip-fav.active{background:#e0245e;border-color:#e0245e;color:#fff}
@@ -1022,15 +1055,18 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .hero-search input[type="search"]:focus{outline:none;border-color:var(--brand-600);box-shadow:0 0 0 4px var(--brand-ring)}
 .hero-search .btn-primary{background:var(--brand-700);color:var(--on-brand);min-height:54px}
 .hero-search .btn-primary:hover{background:var(--brand-600)}
-/* 업종 필터 — 큼직한 파스텔 타일 대신 가로로 훑는 칩 줄 */
-.cat-grid{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:24px}
-.cat-tile{display:inline-flex;flex-direction:row;align-items:center;gap:7px;padding:8px 14px 8px 10px;border-radius:6px;background:var(--surface);border:1px solid var(--line-soft);text-align:left;transition:border-color .18s,background .18s}
-.cat-tile:hover{transform:none;box-shadow:none;border-color:var(--brand-500);background:var(--brand-tint)}
-.cat-ico{display:grid;place-items:center;width:22px;height:22px;border-radius:0;background:none;color:var(--brand-text)}
-.cat-ico svg{width:17px;height:17px}
-.cat-all .cat-ico{background:none;color:var(--muted)}
-.cat-name{font-size:13.5px;font-weight:600;color:var(--ink-soft)}
-.cat-count{font-size:11.5px;font-weight:700;color:var(--brand-text);background:var(--brand-tint);border-radius:4px;padding:1px 8px}
+/* 업종 줄 — 아이콘 아홉 개가 붙은 칩 줄은 '설정 버튼'처럼 읽혔습니다.
+   여기는 사실상 이 사이트의 주 메뉴라, 글자만 남겨 무엇을 고르는 자리인지 분명히 합니다. */
+.cat-tabs{display:flex;flex-wrap:wrap;align-items:center;gap:4px 20px;margin-bottom:20px;padding-bottom:2px;border-bottom:1px solid var(--line-soft)}
+.cat-tab{padding:0 0 10px;font-size:.92rem;font-weight:500;color:var(--muted);white-space:nowrap;border-bottom:2px solid transparent;margin-bottom:-1px}
+.cat-tab:hover{color:var(--ink);border-bottom-color:var(--line)}
+.cat-tab-open{font-weight:700;color:var(--ink);border-bottom-color:var(--brand-700)}
+.cat-tab-all{margin-left:auto;font-variant-numeric:tabular-nums}
+@media (max-width:640px){
+  .cat-tabs{flex-wrap:nowrap;overflow-x:auto;gap:0 18px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+  .cat-tabs::-webkit-scrollbar{display:none}
+  .cat-tab-all{margin-left:0}
+}
 .row-toggle{display:flex;align-items:center;gap:10px}
 /* 404 (디자인: 그라디언트 숫자 + 브랜드 글로우) */
 .nf-wrap{position:relative;min-height:66vh;display:grid;place-items:center;padding:60px 20px;overflow:hidden}
@@ -1042,7 +1078,8 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 /* 온보딩 체크리스트 */
 .onboard{border:1px solid var(--line);background:var(--surface)}
 .onboard-list{display:grid;gap:4px;list-style:none;margin:0;padding:0}
-.onboard-list li{display:flex;align-items:center;gap:11px;padding:9px 4px}
+.onboard-list li{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 11px;padding:9px 4px}
+.ob-why{flex:1 1 100%;padding-left:33px;font-size:.84rem;color:var(--muted);line-height:1.5}
 .onboard-list a{font-size:.95rem;font-weight:600;color:var(--ink)}
 .onboard-list a:hover{color:var(--brand-text)}
 .onboard-list li.done a{color:var(--muted);text-decoration:line-through;font-weight:500}
@@ -1182,9 +1219,25 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .mc-cat{display:block;font-size:.76rem;font-weight:600;color:var(--brand-text);margin-bottom:3px}
 /* `.market-body p` (클래스+요소) 가 `.mc-meta` 보다 우선순위가 높아 -webkit-box 가 살아남았고,
    그 결과 핀 아이콘이 주소 위에 따로 한 줄을 차지하고 있었습니다. 선택자를 맞춰 되돌립니다. */
-.market-body p.mc-meta{display:flex;align-items:center;gap:6px;margin-top:7px;font-size:.82rem;color:var(--muted);overflow:hidden;-webkit-line-clamp:none;line-clamp:none}
+.market-body p.mc-meta{display:flex;align-items:center;gap:6px;margin-top:4px;font-size:.82rem;color:var(--muted);overflow:hidden;-webkit-line-clamp:none;line-clamp:none}
 .mc-meta svg{flex:none;color:var(--muted)}
 .mc-meta span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+/* 카드 첫 줄 — "영업중"만으로는 지금 나가도 되는지 알 수 없습니다.
+   열려 있으면 몇 시에 닫는지, 닫혀 있으면 몇 시에 여는지를 적습니다. */
+.market-body p.mc-when{margin-top:7px;font-size:.82rem;font-weight:500;-webkit-line-clamp:none;line-clamp:none;font-variant-numeric:tabular-nums}
+.mc-open{color:var(--ok-fg)}
+.mc-shut{color:var(--muted);font-weight:500}
+
+/* 한 줄 목록 — 사진 없이 한 화면에 12곳 (A/B 사본 B) */
+.biz-rows{margin:0;padding:0;list-style:none;border-top:1px solid var(--line-soft)}
+.biz-row{border-bottom:1px solid var(--line-soft)}
+/* 행 높이가 이 구성의 전부다 — 여기서 한 줄이 두꺼워지면 "한 화면에 12곳" 이 거짓말이 된다 */
+.biz-row>a{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:9px 6px;color:inherit}
+.biz-row>a:hover{background:var(--surface-2);text-decoration:none}
+.br-main{min-width:0}
+.br-main strong{display:block;font-size:.95rem;font-weight:600;line-height:1.4;letter-spacing:-.02em;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.br-sub{display:block;font-size:.8rem;line-height:1.4;color:var(--muted)}
+.br-when{flex:none;font-size:.82rem;font-weight:600;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
 .market-open{position:absolute;top:10px;left:10px;right:auto}
 .market-open .badge::before{content:"";width:7px;height:7px;border-radius:999px;background:var(--ok);display:inline-block}
 .notice-ico.is-recruit{background:#fdf0e3;color:#c2680f}
@@ -1215,7 +1268,9 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .hi-eyebrow{font-weight:700;font-size:clamp(12px,1.4vw,15px);letter-spacing:.06em;color:var(--brand-900)}
 .hi-title{font-weight:800;font-size:clamp(20px,4.2vw,42px);color:var(--brand-900);letter-spacing:-.02em;margin-top:6px;text-shadow:0 2px 12px rgba(255,255,255,.5)}
 /* 겹치는 카드 밴드 */
-.feat-band{position:relative;z-index:3;margin-top:clamp(-96px,-7vw,-56px);margin-bottom:8px}
+/* 바로가기 카드를 켠 상인회에서는 히어로 아래 여백에 겹쳐 올라온다.
+   히어로 아래 여백을 이 겹침 몫만큼 두던 시절이 있었는데, 카드를 끄면 그만큼이 빈 검정으로 남았다. */
+.feat-band{position:relative;z-index:3;margin-top:clamp(-52px,-4vw,-34px);margin-bottom:8px}
 .feat-inner{display:grid;grid-template-columns:1fr 1.12fr;gap:30px;align-items:end}
 .feat-intro{padding-bottom:6px}
 .feat-intro h2{font-size:clamp(1.4rem,2.6vw,2rem);font-weight:800;letter-spacing:-.02em;margin-bottom:10px;color:var(--ink)}
@@ -1343,32 +1398,44 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .hero-pro{position:relative;overflow:hidden;isolation:isolate;color:#fff;background:var(--ink-deep)}
 .hero-pro-bg{position:absolute;inset:0;z-index:0}
 .hp-skyline{display:none} /* 스카이라인 실루엣 폐기 */
-/* 좌우 2단 — 왼쪽 문구·검색 / 오른쪽 실제 정보 패널.
-   상호와 검색창만 놓여 비어 보이던 대문을 정보로 채웁니다.
+/* 한 단 — 문구·검색·숫자 한 줄·가입 버튼.
+   예전에는 오른쪽에 주소·전화·이메일·가입점포·오늘신청·처리대기를 한 표에 담은 안내 카드가 있었습니다.
+   여섯 줄이 모두 같은 크기라 정작 중요한 '가입 점포 29곳'이 전화번호와 구분되지 않았고,
+   '오늘 신청 6건'은 손님이 아니라 회장님이 볼 숫자였습니다. 연락처는 페이지 끝으로,
+   운영 숫자는 관리자 화면으로 옮기고 첫 화면에는 손님에게 쓸모 있는 두 숫자만 남겼습니다.
    ※ padding 단축 표기는 .container 의 좌우 여백을 0 으로 덮어쓰므로 padding-block 을 씁니다. */
-.hp-inner{position:relative;z-index:2;display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:clamp(28px,4vw,56px);align-items:center;text-align:left;padding-block:clamp(52px,7vw,84px) clamp(92px,10vw,124px)}
-.hp-lead{min-width:0}
-/* 히어로 정보 패널 */
-.hp-panel{background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.13);border-radius:var(--r-lg);padding:20px 22px 22px;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
-.hp-panel-title{font-size:.82rem;font-weight:600;letter-spacing:.04em;color:rgba(255,255,255,.5);padding-bottom:13px;border-bottom:1px solid rgba(255,255,255,.1)}
-.hp-facts{display:grid;gap:1px;margin:0}
-.hp-facts li{display:grid;grid-template-columns:20px 58px minmax(0,1fr);align-items:start;gap:9px;padding:11px 0;border-bottom:1px solid rgba(255,255,255,.07)}
-.hf-ico{display:grid;place-items:center;color:rgba(255,255,255,.4);margin-top:1px}
-.hf-ico svg{width:15px;height:15px}
-.hf-label{font-size:.8rem;color:rgba(255,255,255,.42)}
-.hf-val{font-size:.86rem;line-height:1.55;color:rgba(255,255,255,.88);min-width:0;overflow-wrap:anywhere}
-a.hf-val:hover{text-decoration:underline}
-/* 숫자도 정보 행으로 — 타일로 만들면 바로 아래 버튼과 헷갈립니다 */
-.hp-counts{display:grid;gap:1px;margin:0 0 18px}
-.hp-counts div{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:11px 0;border-bottom:1px solid rgba(255,255,255,.07)}
-.hp-counts dt{font-size:.8rem;color:rgba(255,255,255,.42)}
-.hp-counts dd{font-size:.92rem;font-weight:600;letter-spacing:-.02em;color:#fff}
-.hp-panel .btn-primary{margin-top:4px;background:#fff;color:var(--ink-deep)}
-.hp-panel .btn-primary:hover{background:rgba(255,255,255,.86)}
+.hp-inner{position:relative;z-index:2;display:block;text-align:left;padding-block:clamp(48px,6vw,76px) clamp(44px,5vw,66px)}
+.hp-lead{min-width:0;max-width:720px}
+.hp-actions{display:flex;flex-wrap:wrap;align-items:center;gap:14px 22px;margin-top:22px}
+.hp-facts-line{display:flex;flex-wrap:wrap;gap:6px 20px;margin:0;font-size:.9rem}
+.hp-facts-line a,.hp-facts-line span{color:rgba(255,255,255,.62)}
+.hp-facts-line b{font-weight:700;color:#fff;margin-left:3px;font-variant-numeric:tabular-nums}
+.hp-facts-line a:hover{color:#fff;text-decoration:underline}
+.hp-join{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.34)}
+.hp-join:hover{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.62)}
 @media (max-width:940px){
-  .hp-inner{grid-template-columns:1fr;text-align:left;gap:30px;padding-block:clamp(48px,8vw,72px) clamp(80px,10vw,104px)}
-  .hp-panel{text-align:left;max-width:420px;width:100%}
+  .hp-inner{padding-block:clamp(40px,7vw,60px) clamp(36px,5vw,52px)}
+  .hp-actions{gap:12px 16px}
 }
+
+/* ---------- 찾기 앞세우기 구성 (A/B 사본 B) ----------
+   사진을 아예 쓰지 않고 검색창이 첫 화면의 주인공. 사진 품질이 들쭉날쭉한 상권에서
+   오히려 화면이 단정하고, 무엇보다 가장 빨리 뜹니다. */
+.hero-find{background:var(--surface);border-bottom:1px solid var(--line-soft);padding:clamp(38px,6vw,64px) 0 clamp(30px,4vw,44px)}
+.hf-eyebrow{font-size:.86rem;font-weight:600;color:var(--brand-text);margin:0 0 9px}
+.hf-title{font-size:clamp(1.6rem,3.6vw,2.3rem);font-weight:800;letter-spacing:-.035em;line-height:1.2;color:var(--ink);margin:0 0 20px;text-wrap:balance}
+.hero-find .hp-search{max-width:560px;margin:0}
+.hero-find .hp-search input{background:var(--surface);border:1px solid var(--line);color:var(--ink);box-shadow:var(--sh-1)}
+.hero-find .hp-search input::placeholder{color:var(--muted)}
+.hero-find .hp-search input:focus{border-color:var(--brand-600);box-shadow:0 0 0 4px var(--brand-ring);background:var(--surface)}
+.hero-find .hp-search .btn-primary{background:var(--brand-700);color:var(--on-brand)}
+.hf-quick{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:16px 0 0}
+.hf-quick a{font-size:.86rem;font-weight:600;color:var(--ink-soft);background:var(--surface-2);border:1px solid var(--line-soft);border-radius:var(--r-md);padding:7px 12px}
+.hf-quick a:hover{border-color:var(--brand-500);background:var(--brand-tint);color:var(--brand-text)}
+.hf-quick a.btn{margin-left:auto}
+.hero-find .hp-join{color:var(--ink);border-color:var(--line);background:var(--surface)}
+.hero-find .hp-join:hover{background:var(--surface-2);border-color:var(--ink)}
+@media (max-width:640px){.hf-quick a.btn{margin-left:0;width:100%;text-align:center}}
 /* 한글에는 넓은 자간이 어울리지 않습니다 (자간 .2em 이면 '함 께  만 드 는' 처럼 흩어짐) */
 .hp-eyebrow{font-weight:600;font-size:clamp(11.5px,1.1vw,13px);letter-spacing:.08em;color:rgba(255,255,255,.52)}
 .hp-title{font-weight:700;font-size:clamp(1.85rem,4.2vw,2.85rem);letter-spacing:-.035em;line-height:1.14;margin-top:14px}

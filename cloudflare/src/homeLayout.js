@@ -52,10 +52,15 @@ export const SECTION_CATALOG = {
   hero: {
     label: "히어로 (상단 대문)",
     fields: [
+      { key: "layout", label: "첫 화면 구성", type: "select", options: [
+        ["photo", "사진 앞세우기 — 배경 사진 위에 상호와 검색"],
+        ["search", "찾기 앞세우기 — 사진 없이 검색창이 주인공"],
+      ] },
       { key: "eyebrow", label: "상단 문구", type: "text" },
       { key: "title", label: "제목", type: "text" },
       { key: "highlight", label: "강조 단어 (제목 중 색상 강조)", type: "text" },
       { key: "subtitle", label: "설명", type: "textarea" },
+      { key: "findTitle", label: "찾기 구성일 때 큰 문구", type: "text" },
       { key: "primaryLabel", label: "주요 버튼 문구", type: "text" },
       { key: "showStats", label: "통계 표시", type: "bool" },
     ],
@@ -65,6 +70,10 @@ export const SECTION_CATALOG = {
     fields: [
       { key: "title", label: "제목", type: "text" },
       { key: "lead", label: "설명", type: "textarea" },
+      { key: "style", label: "보여주는 방식", type: "select", options: [
+        ["grid", "사진 카드 — 한 화면에 8곳"],
+        ["list", "한 줄 목록 — 사진 없이 한 화면에 12곳"],
+      ] },
     ],
   },
   notices: {
@@ -145,14 +154,20 @@ export const SECTION_CATALOG = {
 // 기본 홈 구성
 export function defaultLayout(assocName = "우리 상인회") {
   return [
-    { type: "hero", enabled: true, eyebrow: "함께 만드는 우리 동네", title: "", highlight: "", subtitle: "", primaryLabel: "", showStats: false },
-    { type: "featurecards", enabled: true, title: "", lead: "" },
-    { type: "businesses", enabled: true, title: "지금 문 연 가게", lead: "" },
+    { type: "hero", enabled: true, layout: "photo", eyebrow: "함께 만드는 우리 동네", title: "", highlight: "", subtitle: "", findTitle: "", primaryLabel: "", showStats: false },
+    // 바로가기 카드(가입 점포·점포 지도·공지·소식)는 기본에서 끕니다 — 셋 다 이미 머리말 메뉴에 있고,
+    // 히어로 숫자 줄과도 겹칩니다. 같은 말을 세 번 하면 화면이 아무것도 강조하지 못합니다.
+    { type: "featurecards", enabled: false, title: "", lead: "" },
+    // 제목이 "지금 문 연 가게" 인데 목록에는 문 닫은 가게도 섞여 있었습니다.
+    // 문 연 곳만 보는 것은 바로 위 업종 줄의 첫 칸이 합니다.
+    { type: "businesses", enabled: true, title: "우리 동네 가게", lead: "", style: "grid" },
     { type: "updates", enabled: true, title: "가게가 전하는 소식" },
     { type: "mapbanner", enabled: true, title: "우리 동네 점포 지도", subtitle: "" },
     { type: "notices", enabled: true, title: "상인회 공지" },
     { type: "events", enabled: true, title: "다가오는 행사" },
-    { type: "showcase", enabled: true, title: "", lead: "" },
+    // 쇼케이스(검은 인용 띠)는 기본에서 끕니다 — 새 정보를 주지 않으면서 화면 한가운데를 끊습니다.
+    // 쓰고 싶은 상인회는 홈 구성에서 켤 수 있습니다.
+    { type: "showcase", enabled: false, title: "", lead: "" },
     { type: "steps", enabled: true, title: "입점은 이렇게 진행됩니다", lead: "" },
     { type: "benefits", enabled: true, title: "입점하면 생기는 것", lead: "" },
     { type: "faq", enabled: true, title: "자주 묻는 질문" },
@@ -176,12 +191,12 @@ export function parseLayout(json, assocName) {
     // 개편 업그레이드: 바로가기 카드가 없으면 히어로 뒤에 주입
     if (!out.some((s) => s.type === "featurecards")) {
       const h = out.findIndex((s) => s.type === "hero");
-      out.splice(h >= 0 ? h + 1 : 0, 0, { type: "featurecards", enabled: true, title: "", lead: "" });
+      out.splice(h >= 0 ? h + 1 : 0, 0, { type: "featurecards", enabled: false, title: "", lead: "" });
     }
     // 개편 업그레이드: 쇼케이스가 없으면 행사 뒤에 주입
     if (!out.some((s) => s.type === "showcase")) {
       const e = out.findIndex((s) => s.type === "events");
-      out.splice(e >= 0 ? e + 1 : out.length, 0, { type: "showcase", enabled: true, title: "", lead: "" });
+      out.splice(e >= 0 ? e + 1 : out.length, 0, { type: "showcase", enabled: false, title: "", lead: "" });
     }
     // 구버전 업그레이드: 동네 새소식 섹션이 없으면 업체 섹션 뒤에 추가
     if (!out.some((s) => s.type === "updates")) {
@@ -210,6 +225,25 @@ export function serializeLayout(arr) {
   return JSON.stringify(arr);
 }
 
+// A/B 사본을 만들 때 쓰는 두 갈래.
+// 두 안은 장식이 다른 게 아니라 **첫 화면이 무엇을 앞세우는지**가 다릅니다.
+//   photo — 가게가 먼저: 배경 사진 위에 상호와 검색, 사진 카드로 8곳
+//   find  — 찾는 게 먼저: 사진 없이 검색창이 주인공, 한 줄 목록으로 12곳
+// 나머지 구역(공지·행사·연락처…)은 건드리지 않습니다. 한 번에 여러 가지를 바꾸면
+// 무엇이 통했는지 영원히 알 수 없습니다.
+export const HOME_PRESETS = {
+  photo: { label: "가게가 먼저 — 사진 카드", hero: "photo", biz: "grid" },
+  find: { label: "찾는 게 먼저 — 검색과 한 줄 목록", hero: "search", biz: "list" },
+};
+export function applyHomePreset(arr, preset) {
+  const p = HOME_PRESETS[preset];
+  if (!p) return arr;
+  return arr.map((s) =>
+    s.type === "hero" ? { ...s, layout: p.hero }
+      : s.type === "businesses" ? { ...s, style: p.biz, enabled: true }
+      : s);
+}
+
 // ----- 렌더링 -----
 // deps: { assoc, base, stats, businessesHtml, noticesHtml, eventsHtml, loggedIn }
 export function renderHome(layout, deps) {
@@ -233,17 +267,21 @@ function renderSection(s, deps) {
             <p>지금 등록하면 홈 첫 화면에 우리 가게가 가장 먼저 소개됩니다.<br />사진·메뉴·위치까지 5분이면 등록 완료.</p>
             <a href="${deps.base}/register" class="btn btn-primary btn-lg">무료로 우리 가게 올리기</a>
           </div>`);
+      // 사진 카드 / 한 줄 목록 — 같은 데이터를 두 방식으로 그린다. 어느 쪽이 나은지는
+      // 상권마다 다르므로(사진을 열심히 올리는 곳도, 하나도 없는 곳도 있다) A/B 로 재서 정한다.
       return sectionWrap(
         "",
         s.title,
         s.lead,
-        `${deps.catTiles || ""}<div class="market-grid">${deps.businessesHtml}</div>`,
+        (s.style || "grid") === "list"
+          ? `${deps.catTiles || ""}<ul class="biz-rows">${deps.businessRowsHtml || deps.businessesHtml}</ul>`
+          : `${deps.catTiles || ""}<div class="market-grid">${deps.businessesHtml}</div>`,
         { href: `${deps.base}/businesses`, label: "더보기" }
       );
     case "notices":
       if (!deps.noticesHtml) return ""; // 공지 없으면 공개 홈에서 섹션 자체 숨김
       return sectionWrap(
-        "section-alt",
+        "section-alt section-sub",
         s.title,
         "",
         `<ul class="notice-list">${deps.noticesHtml}</ul>`,
@@ -251,7 +289,7 @@ function renderSection(s, deps) {
       );
     case "events":
       if (!deps.eventsHtml) return ""; // 행사 없으면 섹션 숨김
-      return sectionWrap("", s.title, "", `<div class="event-grid">${deps.eventsHtml}</div>`, { href: `${deps.base}/events`, label: "전체보기" });
+      return sectionWrap("section-sub", s.title, "", `<div class="event-grid">${deps.eventsHtml}</div>`, { href: `${deps.base}/events`, label: "전체보기" });
     case "text":
       return sectionWrap(
         "section-alt",
@@ -263,7 +301,7 @@ function renderSection(s, deps) {
       return featureCardsSection(s, deps);
     case "updates":
       if (!deps.updatesHtml) return ""; // 소식 없으면 섹션 숨김
-      return sectionWrap("", s.title || "가게가 전하는 소식", "", `<div class="update-grid">${deps.updatesHtml}</div>`);
+      return sectionWrap("section-sub", s.title || "가게가 전하는 소식", "", `<div class="update-grid">${deps.updatesHtml}</div>`);
     case "mapbanner": {
       const n = deps.stats ? deps.stats.businesses : 0; // counts.businesses 는 페이지당 카드 수 — 전체 수는 stats
       if (!n) return ""; // 점포가 0곳이면 빈 지도로 보내는 배너일 뿐이라 숨깁니다
@@ -297,7 +335,7 @@ function renderSection(s, deps) {
         <span class="step-num">${i + 1}</span>
         <div class="step-body"><strong>${t}</strong><p>${d}</p></div>
       </li>`).join("");
-      return sectionWrap("section-alt", s.title || "입점은 이렇게 진행됩니다", s.lead || "",
+      return sectionWrap("section-alt section-note", s.title || "입점은 이렇게 진행됩니다", s.lead || "",
         `<ol class="step-list">${rows}</ol>
          <div class="step-cta"><a href="${deps.base}/register" class="btn btn-primary">가입 신청하기</a>
          <span>가입비·이용료 없음 · 사진은 나중에 올려도 됩니다</span></div>`);
@@ -306,12 +344,15 @@ function renderSection(s, deps) {
       // 여섯 칸 카드 격자였다. '제목 한 줄 + 설명 한 줄' 이 여섯 번 반복되는 것은
       // 카드가 아니라 목록이다 — 카드로 만들면 읽는 품만 늘고 아무것도 더 말해 주지 않는다.
       // 이 화면에서 카드 모양은 '사진이 있는 가게' 하나만 쓴다. 그래야 카드가 뜻을 갖는다.
+      // 이 여섯 줄은 '가게를 찾으러 온 손님'에게는 필요 없고, '가입을 재는 사장님'에게만 필요하다.
+      // 늘 펼쳐 두면 홈이 그만큼 길어지므로 접어 두고, 필요한 사람만 펼치게 한다.
       const rows = DEFAULT_BENEFITS.map(([, t, d]) => `<li><b>${t}</b><span>${d}</span></li>`).join("");
-      return sectionWrap("", s.title || "입점하면 생기는 것", s.lead || "", `<ul class="plain-list">${rows}</ul>`);
+      return sectionWrap("section-note", s.title || "입점하면 생기는 것", s.lead || "",
+        `<details class="fold"><summary>여섯 가지를 펼쳐 보기</summary><ul class="plain-list">${rows}</ul></details>`);
     }
     case "faq": {
       const items = DEFAULT_FAQ.map(([q, a]) => `<details class="faq-item"><summary>${q}</summary><p>${a}</p></details>`).join("");
-      return sectionWrap("section-alt", s.title || "자주 묻는 질문", "", `<div class="faq-grid">${items}</div>`);
+      return sectionWrap("section-alt section-note", s.title || "자주 묻는 질문", "", `<div class="faq-grid">${items}</div>`);
     }
     case "contact": {
       const a = deps.assoc || {};
@@ -327,7 +368,7 @@ function renderSection(s, deps) {
         <a class="cc-val" href="${href}">${val}</a>
       </li>`).join("");
       const hours = esc(s.hours || "");
-      return sectionWrap("", s.title || "연락처·오시는 길", "",
+      return sectionWrap("section-note", s.title || "연락처·오시는 길", "",
         `<ul class="contact-grid">${cards}</ul>${hours ? `<p class="contact-hours">${hours}</p>` : ""}`);
     }
     case "cta":
@@ -366,34 +407,46 @@ function heroSection(s, deps) {
     : photo
       ? `<div class="hp-photo" style="background-image:url('${clean(photo)}')"></div><div class="hp-photo-veil"></div>`
       : ""; // 배경 사진·영상이 없으면 먹빛 바탕 그대로 — 떠다니는 흐린 광원은 걷어냈다
-  // 우측 정보 패널 — 상호와 검색창만 놓인 텅 빈 대문 대신, 실제 정보로 첫 화면을 채웁니다.
-  // 점포가 0곳인 상권에서는 숫자 대신 '모집 중' 상태를 보여 빈 칸을 만들지 않습니다.
-  const a = deps.assoc || {};
   const st = deps.stats || {};
-  const facts = [
-    a.address ? ["pin", "주소", esc(a.address), ""] : null,
-    a.phone ? ["phone", "문의", esc(a.phone), `tel:${esc(a.phone)}`] : null,
-    a.email ? ["mail", "이메일", esc(a.email), `mailto:${esc(a.email)}`] : null,
-  ].filter(Boolean);
-  const factRows = facts.map(([k, label, val, href]) => `<li>
-    <span class="hf-ico" aria-hidden="true">${BENEFIT_ICONS[k]}</span>
-    <span class="hf-label">${label}</span>
-    ${href ? `<a class="hf-val" href="${href}">${val}</a>` : `<span class="hf-val">${val}</span>`}
-  </li>`).join("");
-  // 0 은 표시하지 않습니다 — "0건"이 늘어선 패널은 채운 게 아니라 비어 보입니다.
   const nBiz = Number(st.businesses) || 0;
-  const counts = [
-    ["가입 점포", nBiz > 0 ? `${nBiz.toLocaleString("ko-KR")}곳` : "모집 중"],
-    ...(Number(st.notices) > 0 ? [["공지·소식", `${Number(st.notices).toLocaleString("ko-KR")}건`]] : []),
-    ...(Number(st.events) > 0 ? [["다가오는 행사", `${Number(st.events).toLocaleString("ko-KR")}건`]] : []),
-  ];
-  const countRows = counts.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join("");
-  const panel = `<aside class="hp-panel">
-    <p class="hp-panel-title">${esc(name)} 안내</p>
-    ${factRows ? `<ul class="hp-facts">${factRows}</ul>` : ""}
-    <dl class="hp-counts">${countRows}</dl>
-    <a class="btn btn-primary btn-block" href="${base}/register">우리 가게 입점 신청</a>
-  </aside>`;
+  const nOpen = Number(deps.openCount) || 0;
+  // 예전에는 여기 오른쪽에 주소·전화·이메일·가입점포·오늘신청·처리대기를 한 표에 담은 안내 카드가 있었다.
+  // 여섯 줄이 모두 같은 크기라 정작 중요한 '가입 점포 29곳'이 전화번호와 구분되지 않았고,
+  // '오늘 신청 6건'은 손님이 아니라 회장님이 볼 숫자인데 공개 홈 첫 화면에 있었다.
+  // 연락처는 페이지 끝 연락처 구역으로, 운영 숫자는 관리자 화면으로 옮기고
+  // 첫 화면에는 손님에게 쓸모 있는 두 숫자만 한 줄로 남긴다.
+  const facts = [
+    nBiz > 0 ? `<a href="${base}/businesses">가입 점포 <b>${nBiz.toLocaleString("ko-KR")}곳</b></a>` : `<span>점포 모집 중</span>`,
+    nOpen > 0 ? `<a href="${base}/businesses?open=1">지금 문 연 곳 <b>${nOpen.toLocaleString("ko-KR")}곳</b></a>` : "",
+  ].filter(Boolean).join("");
+  const factLine = `<p class="hp-facts-line">${facts}</p>`;
+  // 가입하기 버튼은 첫 화면에 그대로 둔다 — 상인회가 이 홈으로 이루려는 첫째 목표이고,
+  // 예전처럼 5,800px 아래에만 있으면 아무도 누르지 않는다.
+  const joinBtn = `<a class="btn btn-ghost hp-join" href="${base}/register">우리 가게 등록하기</a>`;
+  const searchForm = `<form class="feat-search hp-search" method="get" action="${base}/businesses" role="search">
+      <input type="search" name="q" placeholder="가게 이름·업종 검색" aria-label="점포 검색"${sug ? ' list="storeSuggest"' : ""} />
+      <button class="btn btn-primary" type="submit" aria-label="검색"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg></button>
+      ${sug ? `<datalist id="storeSuggest">${deps.suggestNames.map((n) => `<option value="${esc(n)}"></option>`).join("")}</datalist>` : ""}
+    </form>`;
+
+  // 'search' 구성은 사진을 아예 쓰지 않고 검색창을 첫 화면의 주인공으로 둔다.
+  // 사진이 없거나 품질이 들쭉날쭉한 상권에서 오히려 화면이 단정해진다.
+  if ((s.layout || "photo") === "search") {
+    return `<section class="hero-find">
+      <div class="container">
+        <p class="hf-eyebrow">${eyebrow}${nBiz > 0 ? ` · 가입 점포 ${nBiz.toLocaleString("ko-KR")}곳` : ""}</p>
+        <h1 class="hf-title">${esc(s.findTitle || "어느 가게를 찾으세요?")}</h1>
+        ${searchForm}
+        <p class="hf-quick">
+          <a href="${base}/businesses?open=1">지금 문 연 곳${nOpen > 0 ? ` ${nOpen}` : ""}</a>
+          <a href="${base}/map">지도에서 보기</a>
+          <a href="${base}/businesses">전체 보기</a>
+          ${joinBtn}
+        </p>
+      </div>
+    </section>`;
+  }
+
   return `<section class="hero-pro${photo || video ? " has-photo" : ""}${video ? " has-video" : ""}">
     <div class="hero-pro-bg" aria-hidden="true">${bg}</div>
     <div class="container hp-inner">
@@ -401,13 +454,9 @@ function heroSection(s, deps) {
         <p class="hp-eyebrow">${eyebrow}</p>
         <h1 class="hp-title">${title}</h1>
         <p class="hp-sub">${sub}</p>
-        <form class="feat-search hp-search" method="get" action="${base}/businesses" role="search">
-          <input type="search" name="q" placeholder="가게 이름·업종 검색" aria-label="점포 검색"${sug ? ' list="storeSuggest"' : ""} />
-          <button class="btn btn-primary" type="submit" aria-label="검색"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg></button>
-          ${sug ? `<datalist id="storeSuggest">${deps.suggestNames.map((n) => `<option value="${esc(n)}"></option>`).join("")}</datalist>` : ""}
-        </form>
+        ${searchForm}
+        <div class="hp-actions">${factLine}${joinBtn}</div>
       </div>
-      ${panel}
     </div>
   </section>`;
 }

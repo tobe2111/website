@@ -2013,8 +2013,15 @@ export async function adminCreateHomeVariant(ctx) {
   if (await D.getLandingVariant(db, assoc.id, slug)) return back(to, "이미 쓰고 있는 주소입니다.", true);
   if ((await D.listLandingVariants(db, assoc.id)).length >= 5)
     return back(to, "사본은 5개까지입니다. 비교 대상이 많아지면 어느 것도 표본이 차지 않습니다.", true);
-  await D.createLandingVariant(db, { associationId: assoc.id, slug, name, layout: assoc.home_layout || null });
-  await audit(ctx, "홈사본생성", `${name} (/l/${slug})`);
+  // 사본은 기본적으로 지금 홈을 그대로 복사한다. 두 갈래 프리셋을 고르면 첫 화면 구성만 바꿔서 복사한다 —
+  // 나머지 구역은 그대로 두어야 무엇이 통했는지 알 수 있다.
+  const { parseLayout, applyHomePreset, serializeLayout, HOME_PRESETS } = await import("./homeLayout.js");
+  const preset = String(form.get("preset") || "");
+  const layout = HOME_PRESETS[preset]
+    ? serializeLayout(applyHomePreset(parseLayout(assoc.home_layout, assoc.name), preset))
+    : assoc.home_layout || null;
+  await D.createLandingVariant(db, { associationId: assoc.id, slug, name, layout });
+  await audit(ctx, "홈사본생성", `${name} (/l/${slug})${HOME_PRESETS[preset] ? ` · ${HOME_PRESETS[preset].label}` : ""}`);
   return back(to, `'${name}' 사본을 만들었습니다. 주소: ${base}/l/${slug} — 이 주소를 전단 QR·카톡에 뿌리고 비교해 보세요.`);
 }
 export async function adminDeleteHomeVariant(ctx) {
