@@ -20,6 +20,15 @@ export function extractVars(body) {
   return out;
 }
 
+// 채운 것만 바꾸고 나머지는 {{그대로}} 둔다 — 작성기에서 빈칸을 한 번에 다 채우지 못할 때,
+// 못 채운 칸이 밑줄로 뭉개져 이름이 사라지면 다음에 무엇을 채워야 할지 알 수 없다.
+export function fillVars(body, values = {}) {
+  return String(body || "").replace(/\{\{\s*([^}\n]{1,30}?)\s*\}\}/g, (whole, name) => {
+    const v = values[name.trim()];
+    return v === undefined || String(v).trim() === "" ? whole : String(v);
+  });
+}
+
 // 변수 치환. 값이 없으면 밑줄로 남겨 "빈칸"임이 종이에서도 보이게 한다.
 export function applyVars(body, values = {}) {
   return String(body || "").replace(/\{\{\s*([^}\n]{1,30}?)\s*\}\}/g, (_, name) => {

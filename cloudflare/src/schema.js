@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS associations (
   address     TEXT NOT NULL DEFAULT '',
   email       TEXT NOT NULL DEFAULT '',
   logo        TEXT NOT NULL DEFAULT '',
+  seal_media  TEXT NOT NULL DEFAULT '',    -- 이 조직의 직인(법인 인감) 그림. 계약서의 '우리 도장' 자리에 자동으로 찍힌다
   hero_image  TEXT NOT NULL DEFAULT '',    -- 홈 히어로 배경 사진(R2 키). 비우면 프리미엄 그라데이션 히어로
   hero_video  TEXT NOT NULL DEFAULT '',    -- 홈 히어로 배경 영상(R2 키·선택). 사진이 poster 가 된다
   notify_auto INTEGER NOT NULL DEFAULT 0,  -- 알림 자동화. 0 이면 이 조직은 알림톡을 한 통도 자동으로 보내지 않고,
@@ -351,7 +352,9 @@ CREATE TABLE IF NOT EXISTS doc_fields (
   y           REAL NOT NULL DEFAULT 0,
   w           REAL NOT NULL DEFAULT 0.2,
   h           REAL NOT NULL DEFAULT 0.04,
-  assignee    INTEGER NOT NULL DEFAULT 0,     -- 서명자 user_id (0 = 서명하는 사람 누구나)
+  assignee    INTEGER NOT NULL DEFAULT 0,     -- 서명자 ref (0 = 누구나 · 양수 = 회원 user_id · 음수 = -외부서명자 id)
+  slot        INTEGER NOT NULL DEFAULT 0,     -- 당사자 자리 (0 = 지정 없음 · 1 = 첫 번째 당사자 …). 보낼 때 assignee 로 확정된다
+  auto        TEXT NOT NULL DEFAULT '',       -- 사람이 아니라 우리가 채우는 자리. 'seal' = 조직 직인 자동 날인
   required    INTEGER NOT NULL DEFAULT 1,
   sort        INTEGER NOT NULL DEFAULT 0,
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
@@ -649,7 +652,7 @@ CREATE INDEX IF NOT EXISTS idx_landing_asset_assoc ON landing_assets(association
 // 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
 // 마이그레이션 세대 — migrateColumns 에 단계를 추가할 때마다 +1
 // 36 = 두 갈래(트렁크 33 · 모집형 35)를 합친 세대. 양쪽 DB 모두 다시 한 번 마이그레이션을 타게 한다.
-export const SCHEMA_VERSION = "43";
+export const SCHEMA_VERSION = "44";
 
 export async function ensureSchema(db) {
   const has = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='associations'").first();
@@ -687,6 +690,10 @@ async function migrateColumns(db) {
   if (!cols.some((c) => c.name === "naver_verification")) {
     await db.prepare("ALTER TABLE associations ADD COLUMN naver_verification TEXT NOT NULL DEFAULT ''").run();
     await db.prepare("ALTER TABLE associations ADD COLUMN google_verification TEXT NOT NULL DEFAULT ''").run();
+  }
+  // 우리 직인(법인 인감) 그림
+  if (!cols.some((c) => c.name === "seal_media")) {
+    await db.prepare("ALTER TABLE associations ADD COLUMN seal_media TEXT NOT NULL DEFAULT ''").run();
   }
   // businesses 계측 컬럼 (기존 배포 업그레이드): 등록 경로·갱신 시각
   const bizTbl = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='businesses'").first();
@@ -843,7 +850,7 @@ async function migrateColumns(db) {
   // v26: 계약서 필드 배치(서명·도장·입력 자리) + 채워진 값
   const fTbl = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='doc_fields'").first();
   if (!fTbl) {
-    await db.prepare(`CREATE TABLE doc_fields (id INTEGER PRIMARY KEY AUTOINCREMENT, document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE, kind TEXT NOT NULL, label TEXT NOT NULL DEFAULT '', page INTEGER NOT NULL DEFAULT 0, x REAL NOT NULL DEFAULT 0, y REAL NOT NULL DEFAULT 0, w REAL NOT NULL DEFAULT 0.2, h REAL NOT NULL DEFAULT 0.04, assignee INTEGER NOT NULL DEFAULT 0, required INTEGER NOT NULL DEFAULT 1, sort INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (datetime('now')))`).run();
+    await db.prepare(`CREATE TABLE doc_fields (id INTEGER PRIMARY KEY AUTOINCREMENT, document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE, kind TEXT NOT NULL, label TEXT NOT NULL DEFAULT '', page INTEGER NOT NULL DEFAULT 0, x REAL NOT NULL DEFAULT 0, y REAL NOT NULL DEFAULT 0, w REAL NOT NULL DEFAULT 0.2, h REAL NOT NULL DEFAULT 0.04, assignee INTEGER NOT NULL DEFAULT 0, slot INTEGER NOT NULL DEFAULT 0, auto TEXT NOT NULL DEFAULT '', required INTEGER NOT NULL DEFAULT 1, sort INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (datetime('now')))`).run();
     await db.prepare("CREATE INDEX IF NOT EXISTS idx_docfield_doc ON doc_fields(document_id, page, sort)").run();
     await db.prepare(`CREATE TABLE doc_field_values (id INTEGER PRIMARY KEY AUTOINCREMENT, field_id INTEGER NOT NULL REFERENCES doc_fields(id) ON DELETE CASCADE, document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE, user_id INTEGER NOT NULL DEFAULT 0, value TEXT NOT NULL DEFAULT '', image TEXT NOT NULL DEFAULT '', image_hash TEXT NOT NULL DEFAULT '', filled_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE (field_id))`).run();
     await db.prepare("CREATE INDEX IF NOT EXISTS idx_docfieldval_doc ON doc_field_values(document_id)").run();
@@ -889,6 +896,17 @@ async function migrateColumns(db) {
   // 작성 중(초안). 옛 문서는 전부 0 — 이미 발송된 계약이므로 초안일 수 없다.
   if (dcols.length && !dcols.some((c) => c.name === "draft")) {
     await db.prepare("ALTER TABLE documents ADD COLUMN draft INTEGER NOT NULL DEFAULT 0").run();
+  }
+  // 당사자 자리(1 = 첫 번째 당사자…). 보내기 전에는 서명자가 아직 정해지지 않아
+  // 사람 대신 '몇 번째 당사자' 로만 놓아 둔다. 보낼 때 실제 사람으로 확정된다.
+  const fcols = (await db.prepare("PRAGMA table_info(doc_fields)").all()).results || [];
+  if (fcols.length && !fcols.some((c) => c.name === "slot")) {
+    await db.prepare("ALTER TABLE doc_fields ADD COLUMN slot INTEGER NOT NULL DEFAULT 0").run();
+  }
+  // 사람이 아니라 우리가 채우는 자리 ('seal' = 조직 직인). 회사는 계약마다 서명하지 않는다 —
+  // 직인이 이미 찍힌 계약서를 보낸다.
+  if (fcols.length && !fcols.some((c) => c.name === "auto")) {
+    await db.prepare("ALTER TABLE doc_fields ADD COLUMN auto TEXT NOT NULL DEFAULT ''").run();
   }
   for (const [name, ddl, idx] of v17) {
     if (have.has(name)) continue;

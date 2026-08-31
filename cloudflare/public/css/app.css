@@ -1615,6 +1615,20 @@ a.cc-val:hover{color:var(--brand-text)}
 /* 배치 모드 */
 .pf-edit{cursor:move;border:1.5px solid #2563eb;background:rgba(37,99,235,.10);color:#1d4ed8;user-select:none;touch-action:none}
 .pf-edit.pf-sel{border-color:#dc2626;background:rgba(220,38,38,.12);color:#b91c1c;z-index:5}
+/* 우리 직인 자리는 사람이 채우는 자리와 눈으로 구분돼야 한다 — 한 화면에 섞여 있으면
+   "이 도장도 상대방이 찍는 것" 으로 읽힌다. 인주 색으로 표시한다. */
+.pf-edit.pf-seal{border-color:#c0272d;border-style:dashed;background:rgba(192,39,45,.08);color:#a11f24}
+.pf-edit.pf-seal .pf-who{color:#a11f24;font-weight:700}
+/* 배치 화면에서 이미 찍힌 그림은 뒤에 옅게 깔고, 손잡이·이름표가 그 위에 온다 */
+.pf-edit .pf-bg{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;opacity:.5;pointer-events:none}
+/* 오른쪽 아래 손잡이가 이름표를 덮어 "1번째 당사…" 로 잘렸다 — 손잡이만큼 비켜 준다 */
+.pf-edit .pf-who{right:15px}
+/* 직인 자리는 '도장' 이라고 또 쓰지 않는다 — 찍힌 인장 위에 파란 글자가 겹쳐 둘 다 안 읽힌다.
+   아래 '우리 직인' 한 줄이면 무엇인지 충분하다. */
+.pf-edit.pf-seal .pf-tag{display:none}
+/* 등록된 직인 미리보기 */
+.seal-now{display:flex;align-items:center;gap:14px;margin:10px 0 14px}
+.seal-now img{width:76px;height:76px;object-fit:contain;border:1px solid var(--line);border-radius:var(--r-sm);background:#fff;padding:5px}
 .pf-grip{position:absolute;right:0;bottom:0;width:12px;height:12px;background:#2563eb;cursor:nwse-resize;border-radius:2px 0 0 0}
 .pf-sel .pf-grip{background:#dc2626}
 
@@ -1628,6 +1642,8 @@ a.cc-val:hover{color:var(--brand-text)}
 .fp-props label{font-size:.8rem;font-weight:600;display:flex;flex-direction:column;gap:4px}
 .fp-props input[type=text],.fp-props select{padding:6px 10px;font-size:.86rem}
 .fp-props .check-inline{flex-direction:row;align-items:center;gap:6px}
+/* display:flex 가 [hidden] 을 이긴다 — 아무 필드도 안 골랐는데 속성 막대가 늘 떠 있었다 */
+.fp-props[hidden],.fp-props .check-inline[hidden]{display:none}
 .fp-hint{color:var(--muted);font-size:.84rem;margin:0 0 12px}
 
 /* 채우기 진행 상황 */
@@ -2285,6 +2301,16 @@ input:not([type]),input[type="text"],input[type="email"],input[type="tel"],input
 .wt-btn:hover{border-color:var(--brand-500);background:var(--brand-tint)}
 .wt-btn:active{transform:translateY(1px)}
 .wt-hint{margin:0 0 10px;font-size:.84rem;color:var(--muted);line-height:1.6}
+/* 이 화면의 폼들은 .stack-form 이 아니다. 그 규칙이 안 닿으면 라벨과 입력칸이 한 줄에 붙어
+   "제목상가건물…" 이 되고, textarea 는 기본 폭(약 260px)으로 쪼그라든다. */
+.write-left label,.blank-grid label,.wt-send > label,.wt-send .form-two label,.wt-party > select{
+  display:grid;gap:7px;font-weight:600;font-size:.92rem}
+.wt-send > label.check,.wt-send .form-two label.check{display:flex;align-items:center;gap:8px;font-weight:500}
+.wt-blankask{display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap;margin:0 0 10px;padding:10px 12px;
+  border:1px solid var(--brand-500);border-radius:var(--r-sm);background:var(--brand-tint)}
+/* display:flex 가 [hidden] 의 display:none 을 이긴다 — 명시하지 않으면 늘 펴져 있다 */
+.wt-blankask[hidden]{display:none}
+.wt-blankask label{flex:1 1 180px;margin:0}
 .wt-bodylabel textarea{font-family:var(--mono);font-size:14px;line-height:1.85;tab-size:4;white-space:pre;overflow-x:auto}
 .wt-count{margin:6px 0 0;font-size:.8rem;color:var(--muted);font-variant-numeric:tabular-nums}
 .wt-previewhead{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:10px;
@@ -2295,3 +2321,23 @@ input:not([type]),input[type="text"],input[type="email"],input[type="tel"],input
 .wt-saved.is-ok{color:var(--ok-fg);font-weight:600}
 .wt-saved.is-err{color:var(--no-fg);font-weight:600}
 .wt-send{max-width:640px}
+.wt-fields{margin-top:12px}
+/* 빈칸은 한 화면에서 다 보이고 다 채워져야 한다 — 한 줄에 하나씩 세우면 스무 개짜리 계약서에서
+   아래로 두 화면이 되고, 그러면 아무도 끝까지 안 채운다. */
+.wt-blanks{max-width:840px}
+.blank-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px 16px;align-items:end}
+.blank-grid button{grid-column:1/-1;justify-self:start}
+/* 당사자 한 줄 = 번호 · 사람 · (외부면) 연락처. 번호를 왼쪽 기둥에 세워야
+   "몇 번째 당사자" 가 지면 위 이름표와 눈으로 이어진다. */
+.wt-parties{display:grid;gap:12px;margin:4px 0 14px}
+.wt-party{display:grid;grid-template-columns:104px minmax(0,1fr);gap:8px 12px;align-items:center}
+.wt-party-no{font-size:.84rem;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums}
+.wt-party select{width:100%}
+.wt-ext{grid-column:2;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;
+  padding:10px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--bg-alt)}
+/* display:grid 가 [hidden] 을 이긴다 — 명시하지 않으면 회원을 고른 자리에도 연락처 칸 넷이 붙는다 */
+.wt-ext[hidden]{display:none}
+@media (max-width:560px){
+  .wt-party{grid-template-columns:minmax(0,1fr)}
+  .wt-ext{grid-column:1;grid-template-columns:minmax(0,1fr)}
+}

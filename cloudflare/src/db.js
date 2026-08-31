@@ -81,6 +81,8 @@ export const setAssociationActive = (db, id, a) => run(db, "UPDATE associations 
 export const getAssociationByDomain = (db, host) => first(db, "SELECT * FROM associations WHERE custom_domain = ? AND custom_domain != ''", String(host || "").toLowerCase());
 export const setAssociationDomain = (db, id, domain) => run(db, "UPDATE associations SET custom_domain=? WHERE id=?", domain || "", id);
 export const setAssociationMapKey = (db, id, key) => run(db, "UPDATE associations SET map_client_id=? WHERE id=?", key || "", id);
+// 우리 직인(법인 인감). 계약서의 '우리 도장' 자리에 자동으로 찍힌다.
+export const setAssociationSeal = (db, id, key) => run(db, "UPDATE associations SET seal_media=? WHERE id=?", key || "", id);
 export const setAssociationPlan = (db, id, plan) => run(db, "UPDATE associations SET plan=? WHERE id=?", plan, id);
 // 알림 자동화 스위치. 꺼져 있으면 이 조직 이름으로는 자동 발송이 한 통도 나가지 않는다.
 export const setNotifyAuto = (db, id, on) => run(db, "UPDATE associations SET notify_auto=? WHERE id=?", on ? 1 : 0, id);
@@ -769,6 +771,10 @@ export function isPastDue(doc) {
 export async function createSignatureRequests(db, documentId, userIds) {
   let i = 0; for (const uid of userIds) { i++; await run(db, "INSERT OR IGNORE INTO signature_requests (document_id, user_id, sign_order) VALUES (?,?,?)", documentId, uid, i); }
 }
+// 순번을 직접 정해 한 명만 넣는다 — 회원과 외부 상대방이 섞인 계약에서, 순차 서명 차례는
+// '몇 번째 당사자' 순서여야 한다. 회원을 먼저 다 넣고 외부를 뒤에 붙이면 순서가 뒤바뀐다.
+export const addSignatureRequestAt = (db, documentId, userId, order) =>
+  run(db, "INSERT OR IGNORE INTO signature_requests (document_id, user_id, sign_order) VALUES (?,?,?)", documentId, userId, order);
 export const listRequestStatus = (db, documentId) =>
   all(db, `SELECT u.id, u.name, u.email, u.phone, r.sign_order, r.declined_at, r.decline_reason,
     EXISTS (SELECT 1 FROM signatures s WHERE s.document_id=r.document_id AND s.user_id=u.id) AS signed
@@ -931,15 +937,36 @@ export async function replaceFields(db, documentId, fields) {
   let i = 0;
   for (const f of fields) {
     i++;
-    await run(db, `INSERT INTO doc_fields (document_id, kind, label, page, x, y, w, h, assignee, required, sort)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?)`, documentId, f.kind, f.label || "", f.page | 0,
-      f.x, f.y, f.w, f.h, f.assignee | 0, f.required ? 1 : 0, i);
+    await run(db, `INSERT INTO doc_fields (document_id, kind, label, page, x, y, w, h, assignee, slot, auto, required, sort)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`, documentId, f.kind, f.label || "", f.page | 0,
+      f.x, f.y, f.w, f.h, f.assignee | 0, f.slot | 0, f.auto || "", f.required ? 1 : 0, i);
   }
   return i;
 }
-// 이 사람이 채워야 할 필드 (본인 지정 + 지정 없는 공용 필드)
+// 우리가 채우는 자리 (사람이 아니라 조직이 채운다)
+export const listAutoFields = (db, documentId, auto) =>
+  all(db, "SELECT * FROM doc_fields WHERE document_id=? AND auto=? ORDER BY page, sort, id", documentId, auto);
+// 보낼 때 '몇 번째 당사자' 를 실제 사람으로 바꾼다.
+// refs[0] 이 첫 번째 당사자(slot 1). 회원은 양수 user_id, 외부 서명자는 음수(-id).
+// 사람이 정해지지 않은 자리는 0(누구나)으로 남는다 — 없는 사람을 가리키는 것보다 낫다.
+export async function resolveFieldSlots(db, documentId, refs) {
+  let n = 0;
+  for (let i = 0; i < refs.length; i++) {
+    if (!refs[i]) continue;
+    // meta.changes 는 D1 구현마다 다르게 온다 — 세어서 쓴다
+    const c = await first(db, "SELECT COUNT(*) AS n FROM doc_fields WHERE document_id=? AND slot=?", documentId, i + 1);
+    await run(db, "UPDATE doc_fields SET assignee=? WHERE document_id=? AND slot=?", refs[i], documentId, i + 1);
+    n += c.n;
+  }
+  return n;
+}
+// 이 문서에 실제로 쓰인 당사자 자리 번호들 (1,2,3…)
+export const usedSlots = async (db, documentId) =>
+  (await all(db, "SELECT DISTINCT slot FROM doc_fields WHERE document_id=? AND slot>0 ORDER BY slot", documentId)).map((r) => r.slot);
+// 이 사람이 채워야 할 필드 (본인 지정 + 지정 없는 공용 필드).
+// auto 자리(우리 직인)는 조직이 이미 찍은 자리라 서명자에게 요구하지 않는다.
 export const listFieldsFor = (db, documentId, uid) =>
-  all(db, "SELECT * FROM doc_fields WHERE document_id=? AND (assignee=? OR assignee=0) ORDER BY page, sort, id", documentId, uid);
+  all(db, "SELECT * FROM doc_fields WHERE document_id=? AND auto='' AND (assignee=? OR assignee=0) ORDER BY page, sort, id", documentId, uid);
 export async function setFieldValue(db, { fieldId, documentId, userId, value = "", image = "", imageHash = "" }) {
   await run(db, `INSERT INTO doc_field_values (field_id, document_id, user_id, value, image, image_hash)
     VALUES (?,?,?,?,?,?)

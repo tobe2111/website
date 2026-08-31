@@ -50,7 +50,34 @@
       document.getElementById("fpLabel").value = el.dataset.label || "";
       document.getElementById("fpAssignee").value = el.dataset.assignee || "0";
       document.getElementById("fpReq").checked = el.dataset.req === "1";
+      // 우리 직인은 도장 자리에만 있는 개념이다
+      var sw = document.getElementById("fpSealWrap");
+      if (sw) {
+        sw.hidden = el.dataset.kind !== "stamp";
+        document.getElementById("fpSeal").checked = el.dataset.auto === "seal";
+      }
+      syncSeal(el);
     }
+    // 직인 자리는 사람이 채우지 않는다 — 담당자 선택을 잠가 둔다.
+    function syncSeal(el) {
+      var isSeal = el && el.dataset.auto === "seal";
+      var as = document.getElementById("fpAssignee");
+      if (as) as.disabled = !!isSeal;
+      if (el) {
+        el.classList.toggle("pf-seal", !!isSeal);
+        var who = el.querySelector(".pf-who");
+        if (who && isSeal) who.textContent = "우리 직인";
+      }
+    }
+    var sealBox = document.getElementById("fpSeal");
+    if (sealBox) sealBox.addEventListener("change", function () {
+      if (!sel) return;
+      sel.dataset.auto = this.checked ? "seal" : "";
+      if (this.checked) sel.dataset.assignee = "0";
+      var who = sel.querySelector(".pf-who");
+      if (who && !this.checked) who.textContent = "";
+      syncSeal(sel);
+    });
     document.getElementById("fpLabel").addEventListener("input", function () {
       if (!sel) return;
       sel.dataset.label = this.value;
@@ -75,7 +102,7 @@
       var k = KINDS[kind];
       var el = document.createElement("div");
       el.className = "pf pf-" + kind + " pf-empty pf-edit";
-      el.dataset.kind = kind; el.dataset.req = "1"; el.dataset.assignee = "0"; el.dataset.label = "";
+      el.dataset.kind = kind; el.dataset.req = "1"; el.dataset.assignee = "0"; el.dataset.label = ""; el.dataset.auto = "";
       el.style.left = (round4(x) * 100) + "%";
       el.style.top = (round4(y) * 100) + "%";
       el.style.width = (k.w * 100) + "%";
@@ -139,7 +166,10 @@
             kind: el.dataset.kind, label: el.dataset.label || "", page: pg,
             x: round4(parseFloat(el.style.left) / 100), y: round4(parseFloat(el.style.top) / 100),
             w: round4(parseFloat(el.style.width) / 100), h: round4(parseFloat(el.style.height) / 100),
-            assignee: +el.dataset.assignee || 0, required: el.dataset.req === "1" ? 1 : 0,
+            // 문자열 그대로 보낸다 — 보내기 전 초안에서는 "slot1"(첫 번째 당사자)처럼
+            // 사람이 아니라 자리를 가리킨다. 숫자로 바꿔 버리면 그 자리가 통째로 사라진다.
+            assignee: String(el.dataset.assignee || "0"), auto: el.dataset.auto || "",
+            required: el.dataset.req === "1" ? 1 : 0,
           });
         });
       });

@@ -10,7 +10,7 @@ import { parseEmbed } from "./embed.js";
 import { cap, sniffImage, EMAIL_RE, MAX_IMAGE_BYTES, slugify, esc, safeNext } from "./util.js";
 import { contentHash, sealRecord, newVerifyCode, SEAL_VER, fieldsHashOf, keyStorage, verifyChain } from "./esign.js";
 import { isFieldKind, round4, FIELD_KINDS, pageCount } from "./paper.js";
-import { builtinById, isBuiltinId, normalizeTemplate, extractVars, applyVars, resolveFieldPages } from "./templates.js";
+import { builtinById, isBuiltinId, normalizeTemplate, extractVars, applyVars, fillVars, resolveFieldPages } from "./templates.js";
 import { resolveExtToken, makeExtToken, extSignUrl, sendSignLink, remindExternals, originFor, rememberOrigin } from "./extsign.js";
 import { enqueueDocEvent, newApiKey, hashApiKey, KEY_PREFIX, checkWebhookUrl } from "./apiv1.js";
 import { turnstileVerify } from "./turnstile.js";
@@ -762,6 +762,58 @@ export async function adminSettings(ctx) {
   await audit(ctx, "브랜딩수정", "");
   return back(base + "/admin", "상인회 정보가 저장되었습니다.");
 }
+// ---------- 우리 직인(법인 인감) ----------
+//
+// 회사는 계약마다 서명하지 않는다. 직인이 이미 찍힌 계약서를 보내고, 상대방만 서명한다.
+// 그래서 직인은 '서명' 이 아니라 **보내는 쪽이 미리 찍어 두는 표시** 다 —
+// 서명자의 전자서명(개인키로 봉인되는 그것)과 같은 것으로 취급하지 않는다.
+export async function adminSaveSeal(ctx) {
+  const { db, env, form, base, assoc } = ctx;
+  const to = base + "/admin/documents";
+  const up = await saveImages(env, form.getAll("seal"), 1);
+  if (up.error) return back(to, up.error, true);
+  if (!up.images[0]) return back(to, "직인 이미지를 골라 주세요.", true);
+  const old = assoc.seal_media;
+  await D.setAssociationSeal(db, assoc.id, up.images[0].filename);
+  // 옛 직인 그림은 지운다. 이미 찍힌 계약서는 **각자 자기 사본**을 가지고 있으므로
+  // (찍을 때 복사해 둔다) 지난 계약서의 도장이 사라지지 않는다.
+  if (old) await storage.remove(env, old);
+  await audit(ctx, "직인등록", "");
+  return back(to, "직인을 등록했습니다. 도장 자리를 '우리 직인' 으로 지정하면 자동으로 찍힙니다.");
+}
+export async function adminDeleteSeal(ctx) {
+  const { db, env, base, assoc } = ctx;
+  if (assoc.seal_media) await storage.remove(env, assoc.seal_media);
+  await D.setAssociationSeal(db, assoc.id, "");
+  await audit(ctx, "직인삭제", "");
+  return back(base + "/admin/documents", "직인을 지웠습니다. 이미 보낸 계약서의 도장은 그대로 남습니다.");
+}
+
+// 도장 자리에 우리 직인을 찍는다. 배치를 저장할 때마다 다시 찍는다(배치 저장은 필드를 통째로
+// 갈아끼우므로 값도 함께 사라진다). 찍을 때 **그림을 복사**하는 이유: 나중에 직인을 바꿔도
+// 이미 나간 계약서의 도장이 따라 바뀌면 안 되기 때문이다.
+async function applySeal(ctx, doc) {
+  const { db, env, assoc } = ctx;
+  const rows = await D.listAutoFields(db, doc.id, "seal");
+  if (!rows.length) return 0;
+  if (!assoc.seal_media) return -1;                 // 등록된 직인이 없다 — 호출부가 안내한다
+  const src = await storage.get(env, assoc.seal_media);
+  if (!src) return -1;
+  const bytes = new Uint8Array(await src.arrayBuffer());
+  const type = sniffImage(bytes);
+  if (!type) return -1;
+  const key = await storage.save(env, bytes, type);
+  const hash = await sha256HexBytes(bytes);
+  for (const f of rows) {
+    await D.setFieldValue(db, { fieldId: f.id, documentId: doc.id, userId: 0, value: "", image: key, imageHash: hash });
+  }
+  // 증적에 남긴다. 이건 서명자의 전자서명이 아니라 **보내는 쪽이 찍은 도장** 이고,
+  // 그래서 서명자의 봉인(개인키로 잠그는 그것)에는 들어가지 않는다. 기록만 남긴다.
+  await D.logDocEvent(db, { documentId: doc.id, userId: ctx.user?.id || 0, actorName: ctx.user?.name || "",
+    kind: "sealed", detail: `우리 직인 ${rows.length}곳 · 해시 ${hash.slice(0, 12)}`, ip: ctx.ip || "", userAgent: uaOf(ctx) });
+  return rows.length;
+}
+
 export async function adminReadNotifications(ctx) {
   await D.markAllNotificationsRead(ctx.db, ctx.assoc.id);
   return back(ctx.base + "/admin", "알림을 모두 읽음 처리했습니다.");
@@ -1507,11 +1559,12 @@ export async function adminEditDocument(ctx) {
     : await contentHash(body);
   await D.updateDocument(db, d.id, { title, body, contentHash: hash, dueDate, ordered });
 
-  // 본문이 짧아져 쪽수가 줄면 배치해 둔 필드가 없는 쪽에 남는다 — 마지막 쪽으로 끌어온다
+  // 본문이 짧아져 쪽수가 줄면 배치해 둔 필드가 없는 쪽에 남는다 — 마지막 쪽으로 끌어온다.
+  // 올린 양식 문서는 본문을 아무리 고쳐도 지면(그림) 쪽 수가 그대로이므로 끌어오지 않는다.
   let moved = 0;
   const fieldN = await D.countFields(db, d.id);
   if (fieldN) {
-    const last = pageCount(body) - 1;
+    const last = (await docPageCount(db, d)) - 1;
     const rows = await D.listFields(db, d.id);
     moved = rows.filter((f) => f.page > last).length;
     if (moved) await D.clampFieldPages(db, d.id, last);
@@ -1573,6 +1626,12 @@ export async function adminSaveTemplate(ctx) {
   if (!title) return back(to, "서식 이름을 입력하세요.", true);
   if (!d || d.association_id !== assoc.id) return back(to, "원본 문서를 찾을 수 없습니다.", true);
   if (await D.countTemplates(db, assoc.id) >= 50) return back(to, "서식은 최대 50개까지 저장할 수 있습니다.", true);
+  // 올린 양식(PDF 를 구운 그림이 지면인 문서)은 서식으로 못 만든다 — 서식은 본문 글을 다시 조판해
+  // 지면을 만드는데, 이 문서의 지면은 그림이라 본문이 비어 있다. 저장해 두면 다음번에
+  // 서명 자리만 떠 있는 빈 종이가 나온다. 되는 척하느니 여기서 막는 게 낫다.
+  if (await D.countDocPages(db, d.id)) {
+    return back(to, "올린 양식으로 만든 계약서는 서식으로 저장할 수 없습니다. 같은 양식을 또 쓰시려면 그 PDF 를 다시 올려 주세요.", true);
+  }
   // 담당자(회원 id)는 서식에 남기지 않는다 — 다음 계약은 다른 사람이 서명한다.
   // 대신 '몇 번째 당사자' 인지만 남겨 두고, 문서를 만들 때 실제 사람을 연결한다.
   const rows = await D.listFields(db, d.id);
@@ -1602,9 +1661,19 @@ export async function adminDeleteTemplate(ctx) {
   return back(base + "/admin/templates", "서식을 삭제했습니다.");
 }
 
+// 이 문서의 지면이 몇 쪽인가.
+//
+// ⚠️ 본문 길이로만 재면 안 된다. 올린 양식(PDF 를 쪽 그림으로 구운 문서)은 본문이 비어 있어
+//    pageCount("") = 1 이 나오고, 그러면 2쪽 이후에 놓은 서명 자리가 통째로 '지면 밖' 으로
+//    거부된다. 그림이 지면인 문서는 그림 쪽 수가 진짜 쪽 수다.
+const docPageCount = async (db, doc) => (await D.countDocPages(db, doc.id)) || pageCount(doc.body);
+
 // 계약서 필드 배치 저장 — 편집기가 보낸 좌표 묶음을 통째로 교체한다.
 // 서명이 하나라도 시작되면 잠근다: 서명자가 확인한 지면이 사후에 바뀌면 봉인의 의미가 사라진다.
 const MAX_FIELDS = 200;
+// 한 계약서의 당사자 수 상한. 서명자 20명까지 받지만, '몇 번째 당사자' 로 눈으로 배치하는 건
+// 이 정도가 한계다 — 그 이상은 보낸 뒤 사람 이름으로 지정하는 편이 헷갈리지 않는다.
+export const MAX_SLOTS = 8;
 export async function adminSaveFields(ctx) {
   const { db, form, base, assoc, params } = ctx;
   const d = await D.getDocument(db, Number(params.id));
@@ -1615,7 +1684,7 @@ export async function adminSaveFields(ctx) {
   try { raw = JSON.parse(form.get("fields") || "[]"); } catch { return back(to, "배치 데이터를 읽을 수 없습니다.", true); }
   if (!Array.isArray(raw)) return back(to, "배치 데이터 형식이 올바르지 않습니다.", true);
   if (raw.length > MAX_FIELDS) return back(to, `필드는 최대 ${MAX_FIELDS}개까지 놓을 수 있습니다.`, true);
-  const pages = pageCount(d.body);
+  const pages = await docPageCount(db, d);
   // 담당자로 지정할 수 있는 사람은 이 문서의 서명 대상뿐 (엉뚱한 회원을 지정해 지면을 오염시키는 것 차단)
   const allowed = new Set((await D.listRequestStatus(db, d.id)).map((r) => r.id));
   for (const e of await D.listExternalSigners(db, d.id)) allowed.add(-e.id); // 외부 서명자는 음수
@@ -1624,16 +1693,35 @@ export async function adminSaveFields(ctx) {
     if (!f || !isFieldKind(f.kind)) return back(to, "알 수 없는 필드 종류가 있습니다.", true);
     const page = Number(f.page) | 0;
     if (page < 0 || page >= pages) return back(to, "필드가 문서 범위를 벗어났습니다.", true);
-    const assignee = Number(f.assignee) | 0;
-    if (assignee && !allowed.has(assignee)) return back(to, "서명 대상이 아닌 담당자가 지정되었습니다.", true);
+    // 담당자는 사람(숫자) 이거나 자리(slotN) 다. 자리는 보내기 전 초안에서만 쓸 수 있다 —
+    // 이미 보낸 계약서에 자리를 넣으면 아무도 채울 수 없는 칸이 남는다.
+    // 우리 직인 자리는 사람이 채우지 않는다 — 도장 자리에만 지정할 수 있다.
+    const auto = f.auto === "seal" ? "seal" : "";
+    if (auto && f.kind !== "stamp") return back(to, "직인은 도장 자리에만 찍을 수 있습니다.", true);
+    const slotM = /^slot([1-9]\d?)$/.exec(String(f.assignee ?? ""));
+    let assignee = 0, slot = 0;
+    if (auto) {
+      // 직인 자리는 담당자가 없다 — 이미 우리가 찍은 자리다
+    } else if (slotM) {
+      if (!d.draft) return back(to, "이미 보낸 계약서에는 '몇 번째 당사자' 로 지정할 수 없습니다. 사람을 직접 고르세요.", true);
+      slot = Number(slotM[1]);
+      if (slot > MAX_SLOTS) return back(to, `당사자는 ${MAX_SLOTS}명까지 지정할 수 있습니다.`, true);
+    } else {
+      assignee = Number(f.assignee) | 0;
+      if (assignee && !allowed.has(assignee)) return back(to, "서명 대상이 아닌 담당자가 지정되었습니다.", true);
+    }
     const x = round4(f.x), y = round4(f.y);
     const w = Math.max(0.01, round4(f.w)), h = Math.max(0.008, round4(f.h));
     if (x + w > 1.0001 || y + h > 1.0001) return back(to, "필드가 지면 밖으로 나갔습니다. 위치를 조정해 주세요.", true);
     fields.push({ kind: f.kind, label: cap(String(f.label || "").replace(/[\x00-\x1f\x7f]/g, " ").trim(), 20),
-      page, x, y, w, h, assignee, required: f.required ? 1 : 0 });
+      page, x, y, w, h, assignee, slot, auto, required: f.required ? 1 : 0 });
   }
   const n = await D.replaceFields(db, d.id, fields);
-  return back(to, n ? `${n}개 필드를 배치했습니다.` : "배치를 모두 지웠습니다.");
+  // 배치를 저장하면 필드가 통째로 새로 만들어지므로 찍어 둔 직인도 함께 사라진다 — 여기서 다시 찍는다.
+  const sealed = await applySeal(ctx, d);
+  const note = sealed > 0 ? ` 우리 직인 ${sealed}곳을 찍었습니다.`
+    : sealed < 0 ? " 직인 자리를 놓았지만 등록된 직인이 없습니다 — 문서 목록 화면에서 직인을 올려 주세요." : "";
+  return back(to, (n ? `${n}개 필드를 배치했습니다.` : "배치를 모두 지웠습니다.") + note, sealed < 0);
 }
 
 // data:image/png;base64 → 바이트. 형식·크기·실제 시그니처까지 확인한다.
@@ -2668,6 +2756,33 @@ export async function adminSaveDraft(ctx) {
   }
   return jsonOut({ ok: true, id: doc.id, at: new Date().toISOString(), to: `${base}/admin/documents/write?doc=${doc.id}` });
 }
+// 빈칸 채우기 — {{보증금}} 같은 자리를 실제 값으로 바꾼다.
+//
+// ⚠️ 왜 보낼 때가 아니라 여기서 바꾸는가.
+//    본문 글자 수가 달라지면 지면 줄바꿈이 달라지고, 그 위에 놓아 둔 서명 자리가 어긋난다.
+//    그래서 **서명 자리를 놓기 전에** 본문을 확정한다. 보낼 때는 이미 채워져 있어야 한다.
+export async function adminFillBlanks(ctx) {
+  const { db, form, base, assoc, params } = ctx;
+  const d = await D.getDocument(db, Number(params.id));
+  const to = `${base}/admin/documents/write?doc=${params.id}`;
+  if (!d || d.association_id !== assoc.id) return back(base + "/admin/documents", "문서를 찾을 수 없습니다.", true);
+  if (!d.draft) return back(`${base}/admin/documents/${d.id}`, "이미 보낸 계약서는 고칠 수 없습니다.", true);
+  const names = extractVars(d.body);
+  if (!names.length) return back(to, "채울 빈칸이 없습니다.", true);
+  const values = {};
+  for (const n of names) {
+    const v = cap((form.get("var_" + n) || "").replace(/[\x00-\x1f\x7f]/g, " ").trim(), 200);
+    if (v) values[n] = v;
+  }
+  if (!Object.keys(values).length) return back(to, "채운 빈칸이 없습니다.", true);
+  const body = cap(fillVars(d.body, values), 20000);
+  await D.saveDraft(db, d.id, { title: d.title, body, contentHash: await contentHash(body) });
+  const left = extractVars(body).length;
+  return back(to, left
+    ? `빈칸 ${Object.keys(values).length}개를 채웠습니다. ${left}개가 남았습니다.`
+    : `빈칸을 모두 채웠습니다. 이제 서명 자리를 놓고 보내면 됩니다.`);
+}
+
 const jsonOut = (obj, status = 200) =>
   new Response(JSON.stringify(obj), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
 
@@ -2679,6 +2794,9 @@ export async function adminPublishDraft(ctx) {
   if (!d || d.association_id !== assoc.id) return back(base + "/admin/documents", "문서를 찾을 수 없습니다.", true);
   if (!d.draft) return back(`${base}/admin/documents/${d.id}`, "이미 보낸 계약서입니다.", true);
   if (!String(d.body || "").trim()) return back(to, "본문이 비어 있습니다. 내용을 쓰고 보내 주세요.", true);
+  // {{보증금}} 이 그대로 박힌 계약서가 나가면 안 된다 — 상대방이 그 화면에서 서명한다.
+  const blanks = extractVars(d.body);
+  if (blanks.length) return back(to, `아직 채우지 않은 빈칸이 ${blanks.length}개 있습니다: ${blanks.slice(0, 5).join(" · ")}${blanks.length > 5 ? " …" : ""}`, true);
 
   let dueDate = ""; const rawDue = (form.get("due_date") || "").trim();
   if (rawDue) {
@@ -2694,21 +2812,85 @@ export async function adminPublishDraft(ctx) {
     const price = await priceOf(db, "alimtalk", assoc.id);
     if (bal < price) return back(to, `크레딧 잔액이 부족합니다. (계약 1건 ${price.toLocaleString()}원 · 잔액 ${bal.toLocaleString()}원)`, true);
   }
-  const target = form.get("target") || "all";
-  let signers = [];
-  if (target === "select") {
+  const valid = new Set((await D.listSignerCandidates(db, assoc.id, assoc.kind)).map((m) => m.id));
+  const slots = await D.usedSlots(db, d.id);   // 서명 자리를 당사자별로 놓았는가
+
+  // ---- 당사자 정하기 ----
+  // 자리를 놓아 둔 계약서는 '몇 번째 당사자' 가 누구인지부터 정해야 한다.
+  // 그렇지 않은 계약서는 지금까지와 같이 전체/특정 회원으로 보낸다.
+  let signers = [];                 // 서명 요청을 만들 회원 id
+  const parties = [];               // 자리 순서대로의 ref (회원 id · 나중에 채울 외부는 null)
+  const externals = [];             // { at, name, email, phone, org }
+  if (slots.length) {
+    const need = Math.max(...slots);
+    for (let i = 0; i < need; i++) {
+      const raw = String(form.get(`party_${i}`) || "").trim();
+      if (raw === "ext") {
+        const name = cap((form.get(`ext_name_${i}`) || "").replace(/[\x00-\x1f\x7f]/g, " ").trim(), 60);
+        const email = cap((form.get(`ext_email_${i}`) || "").toLowerCase().trim(), 120);
+        const phone = D.normalizePhone(form.get(`ext_phone_${i}`) || "");
+        const org = cap((form.get(`ext_org_${i}`) || "").trim(), 80);
+        if (!name) return back(to, `${i + 1}번째 당사자의 이름을 입력해 주세요.`, true);
+        if (email && !EMAIL_RE.test(email)) return back(to, `${name}님의 이메일 형식을 확인해 주세요.`, true);
+        if (phone && !D.isValidPhone(phone)) return back(to, `${name}님의 휴대폰 번호 형식을 확인해 주세요.`, true);
+        if (!email && !phone) return back(to, `${name}님께 서명 링크를 보낼 휴대폰 또는 이메일이 필요합니다.`, true);
+        externals.push({ at: i, name, email, phone, org });
+        parties.push(null);
+        continue;
+      }
+      const id = Number(raw) || 0;
+      if (!id) return back(to, `${i + 1}번째 당사자가 비어 있습니다. 서명 자리를 그 사람 몫으로 놓아 두었습니다.`, true);
+      if (!valid.has(id)) return back(to, "이 조직의 사람만 당사자로 지정할 수 있습니다.", true);
+      if (parties.includes(id)) return back(to, "같은 사람을 두 당사자로 지정할 수 없습니다.", true);
+      parties.push(id);
+      signers.push(id);
+    }
+  } else if ((form.get("target") || "all") === "select") {
     const ids = form.getAll("members").map((v) => Number(v)).filter(Boolean);
-    const valid = new Set((await D.listSignerCandidates(db, assoc.id, assoc.kind)).map((m) => m.id));
     signers = ids.filter((id) => valid.has(id));
     if (!signers.length) return back(to, "서명할 회원을 한 명 이상 골라 주세요.", true);
   }
+
   await D.publishDraft(db, d.id, { ordered, dueDate });
-  if (signers.length) await D.createSignatureRequests(db, d.id, signers);
+
+  // 외부 상대방은 계약이 된 뒤에 등록한다 — 초안 단계에서 만들면 아직 쓰다 만 계약서로
+  // 서명 링크가 나가 버린다.
+  //
+  // 자리를 놓은 계약서는 회원·외부를 **당사자 순서 그대로** 넣는다. 회원을 먼저 다 넣고
+  // 외부를 뒤에 붙이면, 순차 서명에서 2번째 당사자가 1번보다 먼저 차례를 받는다.
+  const extLinks = [];
+  const addExt = async (e, signOrder) => {
+    const signer = await D.addExternalSigner(db, { documentId: d.id, name: e.name, email: e.email, phone: e.phone, org: e.org, signOrder });
+    parties[e.at] = -signer.id;
+    const token = await makeExtToken(ctx.env.SESSION_SECRET, signer.id, d.id);
+    const via = await sendSignLink(ctx.env, db, { assoc, doc: d, signer, origin: new URL(ctx.request.url).origin }).catch(() => "");
+    extLinks.push({ name: e.name, token, via });
+  };
+  if (parties.length) {
+    for (let i = 0; i < parties.length; i++) {
+      const e = externals.find((x) => x.at === i);
+      if (e) await addExt(e, i + 1);
+      else await D.addSignatureRequestAt(db, d.id, parties[i], i + 1);
+    }
+  } else {
+    if (signers.length) await D.createSignatureRequests(db, d.id, signers);
+    for (const e of externals) await addExt(e, await D.nextSignOrder(db, d.id));
+  }
+  // '몇 번째 당사자' 를 실제 사람으로 확정 — 여기서부터 각자 자기 자리만 채운다
+  const placed = parties.length ? await D.resolveFieldSlots(db, d.id, parties) : 0;
+
   if ((await billingMode(db)) === "per_doc") await chargeContract(db, assoc, { documentId: d.id, title: d.title });
   await rememberOrigin(db, new URL(ctx.request.url).origin);
   await audit(ctx, "계약서발송", d.title);
-  return back(`${base}/admin/documents/${d.id}`,
-    "계약서를 보냈습니다. 서명 자리를 아직 안 놓았다면 [서명 자리 배치] 에서 놓아 주세요.");
+
+  const notSent = extLinks.filter((x) => !x.via);
+  const msg = placed
+    ? `계약서를 보냈습니다. 서명 자리 ${placed}칸을 당사자에게 배정했습니다.`
+    : "계약서를 보냈습니다. 서명 자리를 아직 안 놓았다면 [서명 자리 배치] 에서 놓아 주세요.";
+  const tail = !extLinks.length ? ""
+    : notSent.length ? ` 외부 상대방 ${notSent.length}명은 링크가 자동으로 나가지 않았습니다 — 문서 화면에서 링크를 복사해 전달해 주세요.`
+      : ` 외부 상대방 ${extLinks.length}명에게 서명 링크를 보냈습니다.`;
+  return back(`${base}/admin/documents/${d.id}`, msg + tail);
 }
 
 export async function adminDeleteDraft(ctx) {

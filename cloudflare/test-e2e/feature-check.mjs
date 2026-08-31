@@ -81,6 +81,53 @@ const A = "전자계약";
     chk(A, "올린 양식 위에 서명 자리를 놓을 수 있다", /paper-stack is-scan/.test(edit) && /class="paper-scan"/.test(edit));
   }
 
+  // 안에서 직접 쓰고, 보내기 전에 서명 자리를 놓는다
+  {
+    const wp = await (await f("/t/law/admin/documents/write", { headers: { cookie: lawJar } })).text();
+    const wc = csrfIn(wp);
+    const body = "위탁 계약서\n\n제1조 (대금)\n  ① 대금은 금 {{대금}} 원으로 한다.";
+    const sv = await post("/t/law/admin/documents/draft", lawJar, { _csrf: wc, title: "위탁 계약서", body });
+    const j = sv.ok ? await sv.json() : {};
+    chk(A, "계약서를 밖에서 쓰지 않고 안에서 직접 쓴다 (임시저장)", !!j.id);
+    const did = j.id || 0;
+    chk(A, "초안은 아무에게도 서명 대상으로 열리지 않는다",
+      did ? (await D.listDrafts(env.DB, law.id)).length > 0 && !(await D.listDocuments(env.DB, law.id)).some((d) => d.id === did) : false);
+
+    // 빈칸이 남은 채로는 못 나간다
+    const early = did ? await post(`/t/law/admin/documents/${did}/publish`, lawJar, { _csrf: wc, target: "all" }) : {};
+    chk(A, "'{{빈칸}}' 이 남은 계약서는 나가지 않는다", /err=1/.test(early.headers?.get("location") || ""));
+    if (did) await post(`/t/law/admin/documents/${did}/fill`, lawJar, { _csrf: wc, var_대금: "천만" });
+    chk(A, "계약마다 달라지는 값을 빈칸으로 두고 한꺼번에 채운다",
+      did ? /천만/.test((await D.getDocument(env.DB, did)).body) : false);
+
+    // 우리 직인을 한 번 등록해 두면 도장 자리에 자동으로 찍힌다
+    {
+      const sf = new FormData();
+      sf.set("_csrf", wc);
+      sf.set("seal", new Blob([Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="), (c) => c.charCodeAt(0))], { type: "image/png" }), "seal.png");
+      await f("/t/law/admin/seal", { method: "POST", headers: { cookie: lawJar, origin: B }, body: sf });
+      chk(A, "우리 직인(법인 인감)을 한 번 등록해 둔다", !!(await D.getAssociationBySlug(env.DB, "law")).seal_media);
+    }
+
+    // 보내기 전에 '몇 번째 당사자' 로 서명 자리를 놓는다
+    const fp = did ? await (await f(`/t/law/admin/documents/${did}/fields`, { headers: { cookie: lawJar } })).text() : "";
+    chk(A, "보내기 전에 서명 자리를 놓는다 (사람은 보낼 때 정한다)", /1번째 당사자/.test(fp));
+    if (did) {
+      await post(`/t/law/admin/documents/${did}/fields`, lawJar, { _csrf: csrfIn(fp), fields: JSON.stringify([
+        { kind: "sign", page: 0, x: 0.3, y: 0.8, w: 0.22, h: 0.05, assignee: "slot1", required: 1 },
+        { kind: "stamp", page: 0, x: 0.6, y: 0.79, w: 0.09, h: 0.064, assignee: "0", auto: "seal", required: 1 },
+      ]) });
+    }
+    const sealed = did ? (await D.listFieldsWithValues(env.DB, did)).find((x) => x.auto === "seal") : null;
+    chk(A, "우리 직인이 계약서에 미리 찍혀 나간다 (회사는 매번 서명하지 않는다)", !!(sealed && sealed.image));
+
+    const pub = did ? await post(`/t/law/admin/documents/${did}/publish`, lawJar, { _csrf: wc,
+      party_0: "ext", ext_name_0: "박상대", ext_email_0: "park@x.kr" }) : {};
+    chk(A, "보낼 때 '몇 번째 당사자' 가 실제 사람으로 확정된다",
+      !/err=1/.test(pub.headers?.get("location") || "")
+      && did ? (await D.listFields(env.DB, did)).some((x) => x.slot === 1 && x.assignee < 0) : false);
+  }
+
   // 외부 상대방 추가 (연락처 없이 = 링크를 손으로 보내는 길)
   const pg = await f(`/t/law/admin/documents/${docId}`, { headers: { cookie: lawJar } });
   const html = await pg.text();

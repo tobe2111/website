@@ -362,6 +362,40 @@ test("양식 없는 계약서는 지금까지와 똑같이 글자 지면으로 �
   assert.match(html, /pl-article/);
 });
 
+// 올린 양식 문서는 본문이 비어 있다. 쪽 수를 본문으로만 재면 늘 1쪽이 나오고,
+// 5쪽짜리 표준근로계약서를 올려도 2쪽부터는 서명 자리를 못 놓게 된다.
+test("올린 양식의 뒷장에도 서명 자리를 놓을 수 있다 (본문이 아니라 그림 쪽 수로 잰다)", async () => {
+  const jar = await loginAs("ad@x.kr", "admin1234");
+  const scanDoc = await D.createDocument(db, { associationId: a.id, title: "표준근로계약서", body: "",
+    contentHash: await contentHash(""), createdBy: admin.id, ordered: 0, dueDate: "" });
+  await D.createSignatureRequests(db, scanDoc.id, [u1.id]);
+  await D.replaceDocPages(db, scanDoc.id, [0, 1, 2, 3, 4].map((i) => ({ media: `k/${i}.jpg`, w: 1240, h: 1754 })));
+
+  const path = `/t/s/admin/documents/${scanDoc.id}/fields`;
+  const csrf = await csrfFrom(jar, path);
+  const send = (page) => req("POST", path, { cookie: jar, body: { _csrf: csrf,
+    fields: JSON.stringify([{ kind: "sign", page, x: 0.5, y: 0.8, w: 0.22, h: 0.05, assignee: u1.id, required: 1 }]) } });
+
+  const last = await send(4);
+  assert.ok(!/err=1/.test(last.headers.get("location") || ""), "5쪽짜리 양식의 마지막 쪽에 놓을 수 있어야 한다");
+  assert.equal(await D.countFields(db, scanDoc.id), 1);
+
+  const beyond = await send(5);
+  assert.match(beyond.headers.get("location") || "", /err=1/, "그림이 없는 쪽은 여전히 거부");
+});
+
+test("올린 양식 계약서는 서식으로 저장되지 않는다 (지면이 그림이라 다시 못 그린다)", async () => {
+  const jar = await loginAs("ad@x.kr", "admin1234");
+  const scanDoc = await D.createDocument(db, { associationId: a.id, title: "양식문서", body: "",
+    contentHash: await contentHash(""), createdBy: admin.id, ordered: 0, dueDate: "" });
+  await D.replaceDocPages(db, scanDoc.id, [{ media: "k/a.jpg", w: 1240, h: 1754 }]);
+  const csrf = await csrfFrom(jar, "/t/s/admin/templates");
+  const r = await req("POST", "/t/s/admin/templates", { cookie: jar,
+    body: { _csrf: csrf, title: "안 되는 서식", document: String(scanDoc.id) } });
+  assert.match(r.headers.get("location") || "", /err=1/);
+  assert.equal((await D.listTemplates(db, a.id)).filter((t) => t.title === "안 되는 서식").length, 0);
+});
+
 test("올린 양식은 백업에 함께 담긴다 — 없으면 복원해도 지면이 빈다", async () => {
   const { TABLES } = await import("../src/scheduled.js");
   assert.ok(TABLES.includes("doc_pages"),

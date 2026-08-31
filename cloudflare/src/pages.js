@@ -2,7 +2,7 @@
 import * as D from "./db.js";
 import { esc, cap, clip, openBadge, openNow, hoursLine, dongOf, fmtBytes, kstStamp, kstDate, prettyPath, safeNext, parseCookies } from "./util.js";
 import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG, ORIGIN, assetUrl } from "./render.js";
-import { verifyInviteToken, SALES_STAGES, otpRequired, selfSignupOn } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
+import { verifyInviteToken, SALES_STAGES, otpRequired, selfSignupOn, MAX_SLOTS } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
 import { html, notFoundResponse, back, redirect } from "./http.js";
 import { countable, countHomeGoal, homeVariantCookie } from "./traffic.js";
 import { galleryItem } from "./media-render.js";
@@ -24,7 +24,7 @@ import { PLANS, PLAN_KEYS, planPrices } from "./plans.js";
 import { emailEnabled as emailOn } from "./email.js";
 import { CRON, CRON_JOBS, cronRunKey } from "./scheduled.js";
 
-const DOC_EVENT_LABEL = { created: "문서 생성", viewed: "계약서 열람", otp_sent: "인증번호 발송", otp_ok: "휴대폰 본인확인", signed: "전자서명 완료", declined: "서명 거절", reminded: "재알림 발송", notified: "알림 발송", edited: "문서 수정" };
+const DOC_EVENT_LABEL = { created: "문서 생성", viewed: "계약서 열람", otp_sent: "인증번호 발송", otp_ok: "휴대폰 본인확인", signed: "전자서명 완료", declined: "서명 거절", reminded: "재알림 발송", notified: "알림 발송", edited: "문서 수정", sealed: "직인 날인 (보내는 쪽)" };
 const CATEGORIES = ["음식점", "카페·디저트", "생활·서비스", "패션·잡화", "농수축산", "교육·문화", "기타"];
 const NOTICE_CATEGORIES = ["안내", "공지", "소식", "행사", "혜택", "긴급"];
 const qs = (o) => { const p = new URLSearchParams(); for (const [k, v] of Object.entries(o)) if (v != null && v !== "" && !(k === "page" && v === 1)) p.set(k, v); const s = p.toString(); return s ? "?" + s : ""; };
@@ -1937,6 +1937,17 @@ export async function adminDocuments(ctx) {
       <p class="panel-hint">조·항·호를 버튼으로 넣고 오른쪽에서 <b>실제 지면</b>을 보며 씁니다.
         쓰다 말면 <b>임시저장</b>해 두고 다음에 이어 쓰면 됩니다 — 보내기 전에는 서명 요청도 과금도 없습니다.</p>
       ${draftRows}</section>
+    ${canAdmin ? `<details class="panel"${assoc.seal_media ? "" : " open"}><summary class="panel-title">우리 직인 ${assoc.seal_media ? "<span class=\"badge badge-ok\">등록됨</span>" : "<span class=\"badge badge-wait\">없음</span>"}</summary>
+      <p class="panel-hint">회사는 계약마다 서명하지 않습니다 — <b>직인이 이미 찍힌 계약서</b>를 보내고 상대방만 서명합니다.
+        여기에 한 번 올려 두면, 도장 자리를 <b>우리 직인</b>으로 지정할 때마다 자동으로 찍힙니다.
+        직인은 서명이 아니라 <b>보내는 쪽이 미리 찍는 표시</b>입니다 — 상대방의 전자서명과 같은 것으로 취급하지 않습니다.</p>
+      ${assoc.seal_media ? `<div class="seal-now"><img src="${esc(mediaUrl(assoc.seal_media))}" alt="등록된 직인" />
+        <form method="post" action="${base}/admin/seal/delete" data-confirm="직인을 지울까요? 이미 보낸 계약서의 도장은 그대로 남습니다.">
+          <button class="btn btn-ghost btn-sm">직인 지우기</button></form></div>` : ""}
+      <form method="post" action="${base}/admin/seal" class="stack-form" enctype="multipart/form-data">
+        <label class="mini-label">직인 이미지 <small>(PNG 권장 · 배경이 투명하면 글자를 가리지 않습니다 · 8MB 이하)</small>
+          <input type="file" name="seal" accept="image/*" required /></label>
+        <button class="btn btn-primary btn-sm">${assoc.seal_media ? "직인 바꾸기" : "직인 등록"}</button></form></details>` : ""}
     <details class="panel" id="pdfPanel"><summary class="panel-title">받은 PDF 양식으로 만들기</summary>
       <p class="panel-hint">상대방이 보낸 <b>표준근로계약서·정부 서식·회사 양식</b>을 옮겨 적지 않고 그대로 씁니다.
         PDF 를 고르면 이 화면에서 쪽마다 지면으로 만들고, 그 위에 서명·도장 자리를 놓습니다.
@@ -2736,7 +2747,11 @@ export async function documentEvidence(ctx) {
 function fieldsRenderer(fields, { mode, myId = 0, nameOf = () => "" }) {
   return (page) => fields.filter((f) => f.page === page).map((f) => {
     const val = f.value || f.image ? { value: f.value || "", imageUrl: f.image ? mediaUrl(f.image) : "" } : null;
-    return fieldBox(f, { mode, val, mine: mode === "fill" && !val && (f.assignee === myId || f.assignee === 0), assigneeName: nameOf(f.assignee) });
+    // 아직 사람이 정해지지 않은 자리는 '1번째 당사자' 라고 보여 준다 — 빈칸으로 두면
+    // 배치해 놓고도 누구 몫인지 알 수 없다.
+    const who = f.auto === "seal" ? "우리 직인"
+      : f.assignee ? nameOf(f.assignee) : f.slot > 0 ? `${f.slot}번째 당사자` : "";
+    return fieldBox(f, { mode, val, mine: mode === "fill" && !val && (f.assignee === myId || f.assignee === 0), assigneeName: who });
   }).join("");
 }
 
@@ -2749,7 +2764,9 @@ export async function adminDocFields(ctx) {
   const signedAny = (await D.listSignatures(db, d.id)).length > 0;
   const scans = await D.listDocPages(db, d.id);   // 올린 양식이면 이 그림들이 지면이다
   const reqs = await D.listRequestStatus(db, d.id);
-  const fields = await D.listFields(db, d.id);
+  // 값까지 함께 읽는다 — 우리 직인은 놓는 즉시 찍히므로, 값을 안 읽으면 배치 화면에서
+  // 도장이 안 보여 "안 찍혔나" 싶어진다.
+  const fields = await D.listFieldsWithValues(db, d.id);
   const extForName = await D.listExternalSigners(db, d.id);
   const nameOf = (ref) => { if (ref < 0) { const e = extForName.find((x) => x.id === -ref); return e ? e.name : ""; }
     const u = reqs.find((r) => r.id === ref); return u ? u.name : ""; };
@@ -2767,15 +2784,26 @@ export async function adminDocFields(ctx) {
     `<button type="button" class="fp-item${i === 0 ? " on" : ""}" data-kind="${esc(k)}">${esc(v.label)}</button>`).join("");
   // 외부 서명자는 음수(-id)로 구분한다 — 회원 id 와 겹치지 않는 이름공간
   const extList = await D.listExternalSigners(db, d.id);
-  const assigneeOpts = `<option value="0" data-name="">누구나(먼저 서명하는 사람)</option>` +
-    reqs.map((r) => `<option value="${r.id}" data-name="${esc(r.name)}">${esc(r.name)}</option>`).join("") +
-    extList.map((e) => `<option value="${-e.id}" data-name="${esc(e.name)}">${esc(e.name)} (외부)</option>`).join("");
+  // 보내기 전 초안에는 서명자가 아직 없다. 그래서 사람이 아니라 **자리**로 놓는다 —
+  // '첫 번째 당사자의 서명', '두 번째 당사자의 도장'. 누가 그 자리인지는 보내기 화면에서 정한다.
+  const assigneeOpts = d.draft
+    ? `<option value="0" data-name="">누구나(먼저 서명하는 사람)</option>` +
+      Array.from({ length: MAX_SLOTS }, (_, i) =>
+        `<option value="slot${i + 1}" data-name="${i + 1}번째 당사자">${i + 1}번째 당사자</option>`).join("")
+    : `<option value="0" data-name="">누구나(먼저 서명하는 사람)</option>` +
+      reqs.map((r) => `<option value="${r.id}" data-name="${esc(r.name)}">${esc(r.name)}</option>`).join("") +
+      extList.map((e) => `<option value="${-e.id}" data-name="${esc(e.name)}">${esc(e.name)} (외부)</option>`).join("");
   const body = `<section class="dash"><div class="container">
-    <div class="dash-head"><div><p class="section-eyebrow">전자계약 · 필드 배치</p><h1 class="dash-title">${esc(d.title)}</h1>
-      <p class="dash-sub"><a href="${base}/admin/documents/${d.id}">← 문서로</a> · 서명 대상 ${sigs.total}명</p></div></div>
+    <div class="dash-head"><div><p class="section-eyebrow">전자계약 · ${d.draft ? "서명 자리 놓기" : "필드 배치"}</p><h1 class="dash-title">${esc(d.title)}</h1>
+      <p class="dash-sub">${d.draft
+        ? `<a href="${base}/admin/documents/write?doc=${d.id}">← 계속 쓰기</a> · 아직 보내지 않은 계약서`
+        : `<a href="${base}/admin/documents/${d.id}">← 문서로</a> · 서명 대상 ${sigs.total}명`}</p></div></div>
     ${flashOf(query)}
     <p class="fp-hint">놓을 종류를 고른 뒤 <b>계약서 위를 클릭</b>하면 그 자리에 필드가 생깁니다. 드래그로 옮기고, 오른쪽 아래 손잡이로 크기를 조절하세요.
-      각 필드는 <b>누가 채울지</b> 지정할 수 있습니다.</p>
+      ${d.draft
+        ? "아직 보내기 전이라 서명자가 정해지지 않았습니다. 그래서 사람 대신 <b>몇 번째 당사자</b>로 놓아 둡니다 — 누가 그 자리인지는 보내기 화면에서 정합니다."
+        : "각 필드는 <b>누가 채울지</b> 지정할 수 있습니다."}
+      도장 자리는 <b>우리 직인</b>으로 지정하면 ${assoc.seal_media ? "저장할 때 바로 찍힙니다" : "자동으로 찍힙니다 — 다만 아직 등록된 직인이 없습니다"}.</p>
     <!-- 계약서가 세 화면 넘게 길다. 도구와 저장 단추가 맨 위에 고정돼 있지 않으면,
          두 번째 장에 필드를 놓은 뒤 저장하려고 다시 맨 위까지 올라가야 한다. -->
     <div class="fp-dock">
@@ -2783,8 +2811,10 @@ export async function adminDocFields(ctx) {
       <div class="fp-props" id="fieldProps" hidden>
         <span class="badge badge-info" id="fpKind"></span>
         <label>이름표<input type="text" id="fpLabel" maxlength="20" placeholder="예: 임차인 서명" /></label>
-        <label>담당 서명자<select id="fpAssignee">${assigneeOpts}</select></label>
+        <label>${d.draft ? "누구 자리" : "담당 서명자"}<select id="fpAssignee">${assigneeOpts}</select></label>
         <label class="check-inline"><input type="checkbox" id="fpReq" checked /> 필수</label>
+        <!-- 도장 자리에만 뜬다. 회사는 계약마다 서명하지 않는다 — 직인이 이미 찍힌 계약서를 보낸다. -->
+        <label class="check-inline fp-seal" id="fpSealWrap" hidden><input type="checkbox" id="fpSeal" /> 우리 직인</label>
         <button type="button" class="btn btn-ghost btn-sm" id="fpDel">삭제</button>
       </div>
       <form method="post" action="${base}/admin/documents/${d.id}/fields" id="fieldsForm" class="fp-save">
@@ -3944,7 +3974,36 @@ export async function adminDocumentWrite(ctx) {
   const members = await D.listSignerCandidates(db, assoc.id, assoc.kind);
   const memberChecks = members.length
     ? members.map((m) => `<label class="check member-check"><input type="checkbox" name="members" value="${m.id}" /> ${esc(m.name)} <small>${esc(m.email)}</small></label>`).join("")
-    : `<p class="empty">사내 회원이 없습니다. 보낸 뒤 계약서 화면에서 <b>외부 상대방</b>을 넣어 주세요.</p>`;
+    : `<p class="empty">사내 회원이 없습니다. 아래에서 <b>외부 상대방</b>으로 보내 주세요.</p>`;
+
+  // 아직 채우지 않은 빈칸. 서명 자리를 놓기 **전에** 채워야 한다 — 글자 수가 달라지면
+  // 지면 줄바꿈이 달라지고, 그 위에 놓은 서명 자리가 어긋난다.
+  const blanks = doc ? extractVars(doc.body) : [];
+  const blankPanel = blanks.length ? `<section class="panel wt-blanks"><h2 class="panel-title">빈칸 채우기 <span class="badge badge-wait">${blanks.length}개</span></h2>
+      <p class="panel-hint">계약마다 달라지는 값입니다. <b>서명 자리를 놓기 전에</b> 채워 주세요 —
+        글자 수가 달라지면 지면의 줄이 밀리고, 그 위에 놓아 둔 서명 자리가 어긋납니다.
+        빈칸이 남아 있으면 계약서를 보낼 수 없습니다.</p>
+      <form method="post" action="${base}/admin/documents/${doc.id}/fill" class="blank-grid">
+        ${blanks.map((n) => `<label>${esc(n)}<input type="text" name="var_${esc(n)}" maxlength="200" autocomplete="off" /></label>`).join("")}
+        <button class="btn btn-primary btn-sm">빈칸 채우기</button></form></section>` : "";
+
+  // 서명 자리를 당사자별로 놓아 두었는가. 놓았다면 보내기 화면은 '누가 몇 번째 당사자인가' 를 묻는다.
+  const slots = doc ? await D.usedSlots(db, doc.id) : [];
+  const fieldN = doc ? await D.countFields(db, doc.id) : 0;
+  const memberOpts = members.map((m) => `<option value="${m.id}">${esc(m.name)}${m.email ? ` (${esc(m.email)})` : ""}</option>`).join("");
+  const partyRows = slots.length
+    ? Array.from({ length: Math.max(...slots) }, (_, i) => `<div class="wt-party">
+        <div class="wt-party-no">${i + 1}번째 당사자</div>
+        <select name="party_${i}" data-party="${i}" required>
+          <option value="">— 고르세요 —</option>${memberOpts}
+          <option value="ext">외부 상대방 (회원이 아닌 사람)</option></select>
+        <div class="wt-ext" data-ext="${i}" hidden>
+          <input type="text" name="ext_name_${i}" maxlength="60" placeholder="이름" autocomplete="off" />
+          <input type="text" name="ext_org_${i}" maxlength="80" placeholder="상호 (선택)" autocomplete="off" />
+          <input type="email" name="ext_email_${i}" maxlength="120" placeholder="이메일" autocomplete="off" />
+          <input type="tel" name="ext_phone_${i}" maxlength="20" placeholder="휴대폰" autocomplete="off" />
+        </div></div>`).join("")
+    : "";
 
   // 버튼 하나가 무엇을 써 넣는지. 규칙은 paper.js 의 조판이 읽는 것과 같아야 한다.
   const TOOLS = [
@@ -3954,6 +4013,7 @@ export async function adminDocumentWrite(ctx) {
     ["label", "표 줄", "소재지   서울…", "목적물 표시처럼 이름표와 값을 한 줄에."],
     ["para", "문단", "그냥 줄", "번호 없는 문단입니다."],
     ["closing", "말미", "본 계약을 증명하기…", "계약서 맨 끝의 문구와 서명란 안내입니다."],
+    ["blank", "빈칸", "{{보증금}}", "계약마다 달라지는 값입니다. 아래에서 한꺼번에 채웁니다."],
   ];
   const toolBtns = TOOLS.map(([k, label, sample, hint]) =>
     `<button type="button" class="wt-btn" data-ins="${k}" title="${esc(hint)}"><b>${esc(label)}</b><span>${esc(sample)}</span></button>`).join("");
@@ -3969,6 +4029,13 @@ export async function adminDocumentWrite(ctx) {
       <div class="write-left">
         <label>제목<input type="text" id="wtTitle" maxlength="200" value="${esc(doc ? doc.title : "")}" placeholder="예: 상가건물 임대차계약서" autocomplete="off" /></label>
         <div class="wt-tools">${toolBtns}</div>
+        <!-- 빈칸만 이름을 먼저 묻는다. 본문에 {{이름}} 을 넣고 그걸 고쳐 쓰게 하면,
+             이어서 친 글자가 괄호 **안쪽**에 들어가 "{{보증금 원으로 한다.}}" 가 된다. -->
+        <div class="wt-blankask" id="wtBlankAsk" hidden>
+          <label>빈칸 이름<input type="text" id="wtBlankName" maxlength="30" placeholder="예: 보증금" autocomplete="off" /></label>
+          <button type="button" class="btn btn-primary btn-sm" id="wtBlankAdd">넣기</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="wtBlankCancel">취소</button>
+        </div>
         <p class="wt-hint">커서가 있는 자리에 넣습니다. <b>조</b>와 <b>항</b>은 앞의 번호를 보고 다음 번호를 스스로 붙입니다.</p>
         <label class="wt-bodylabel">본문<textarea id="wtBody" rows="24" spellcheck="false" placeholder="맨 윗줄에 계약서 이름을 쓰면 표제가 됩니다.&#10;예) 상가건물 임대차계약서">${esc(startBody)}</textarea></label>
         <p class="wt-count" id="wtCount"></p>
@@ -3977,18 +4044,30 @@ export async function adminDocumentWrite(ctx) {
         <div class="wt-previewhead"><b>지면 미리보기</b><span id="wtPages"></span></div>
         <div class="paper-wrap" id="wtPreview"></div>
         <p class="wt-hint">실제 계약서와 <b>같은 자리에서 줄이 끊깁니다</b> — 서명 자리는 이 지면 위에 놓입니다.</p>
+        <!-- 링크는 늘 있고, 저장 전에만 숨긴다. 처음 저장한 순간 스크립트가 켠다 —
+             화면을 새로 고쳐야만 나타나면 아무도 못 찾는다. -->
+        <a class="btn btn-ghost btn-sm wt-fields" id="wtFields"
+           href="${doc ? `${base}/admin/documents/${doc.id}/fields` : "#"}"${doc ? "" : " hidden"}>서명 자리 놓기${fieldN ? ` (${fieldN}칸)` : ""} →</a>
+        <p class="wt-hint">${!doc ? "서명 자리는 <b>임시저장</b> 후에 놓을 수 있습니다."
+          : blanks.length ? `아래 <b>빈칸 ${blanks.length}개</b>를 먼저 채우세요. 나중에 채우면 글자 수가 달라져 지면의 줄이 밀리고, 놓아 둔 서명 자리가 어긋납니다.`
+          : "서명·도장·날짜 자리를 지면 위에 직접 놓습니다. <b>보내기 전에</b> 놓아 두면 각자 자기 자리만 채웁니다."}</p>
       </div>
     </div>
+    ${blankPanel}
     <form method="post" action="${base}/admin/documents/${doc ? doc.id : 0}/publish" class="panel wt-send" id="wtSendForm">
       <h2 class="panel-title">보내기</h2>
       <p class="panel-hint">보내면 계약이 됩니다 — 서명 요청이 나가고, 계약당 과금이면 이때 한 번 청구됩니다.
         <b>보내기 전에는 몇 번을 고쳐도 아무 일도 일어나지 않습니다.</b></p>
       <div class="form-two"><label>서명 기한 (선택)<input type="date" name="due_date" /></label>
         <label class="check check-inline"><input type="checkbox" name="ordered" value="1" /> 순차 서명</label></div>
-      <div class="form-divider">서명 대상</div>
-      <label class="check"><input type="radio" name="target" value="all" checked /> 전체 회원</label>
-      <label class="check"><input type="radio" name="target" value="select" /> 특정 회원</label>
-      <div class="member-picker">${memberChecks}</div>
+      ${slots.length ? `<div class="form-divider">당사자</div>
+        <p class="panel-hint">서명 자리를 <b>${Math.max(...slots)}명 몫</b>으로 놓아 두었습니다. 그 자리가 각각 누구인지 정해 주세요.
+          외부 상대방에게는 보내는 즉시 서명 링크가 나갑니다.</p>
+        <div class="wt-parties">${partyRows}</div>`
+      : `<div class="form-divider">서명 대상</div>
+        <label class="check"><input type="radio" name="target" value="all" checked /> 전체 회원</label>
+        <label class="check"><input type="radio" name="target" value="select" /> 특정 회원</label>
+        <div class="member-picker">${memberChecks}</div>`}
       <button class="btn btn-primary" id="wtSend"${doc ? "" : " disabled"}>계약서 보내기</button>
       ${doc ? `<button type="submit" class="btn btn-ghost btn-sm" formaction="${base}/admin/documents/${doc.id}/draft-delete" formnovalidate data-confirm="작성 중인 이 계약서를 지울까요? 되돌릴 수 없습니다.">초안 지우기</button>` : ""}
       ${doc ? "" : `<p class="panel-hint">먼저 <b>임시저장</b>을 눌러 주세요. 저장해야 보낼 수 있습니다.</p>`}

@@ -190,14 +190,18 @@ export function fieldBox(f, { mode = "view", val = null, mine = false, assigneeN
   const k = FIELD_KINDS[f.kind] || FIELD_KINDS.text;
   const style = `left:${round4(f.x) * 100}%;top:${round4(f.y) * 100}%;width:${round4(f.w) * 100}%;height:${round4(f.h) * 100}%`;
   const filled = !!(val && (val.value || val.imageUrl));
-  const cls = ["pf", `pf-${esc(f.kind)}`, filled ? "pf-filled" : "pf-empty", mine ? "pf-mine" : "", mode === "edit" ? "pf-edit" : ""].filter(Boolean).join(" ");
+  const cls = ["pf", `pf-${esc(f.kind)}`, filled ? "pf-filled" : "pf-empty", mine ? "pf-mine" : "",
+    mode === "edit" ? "pf-edit" : "", f.auto === "seal" ? "pf-seal" : ""].filter(Boolean).join(" ");
   let inner = "";
-  if (filled) {
+  // 배치 화면에서는 채워져 있어도 **편집 손잡이가 먼저**다. 우리 직인은 놓는 즉시 찍히는데,
+  // 그림만 그려 버리면 그 자리를 다시 옮기거나 크기를 고칠 방법이 사라진다.
+  if (mode === "edit") {
+    const bg = val && val.imageUrl ? `<img class="pf-bg" src="${esc(val.imageUrl)}" alt="" />` : "";
+    inner = `${bg}<span class="pf-tag">${esc(f.label || k.label)}</span>${assigneeName ? `<span class="pf-who">${esc(assigneeName)}</span>` : ""}<i class="pf-grip"></i>`;
+  } else if (filled) {
     inner = val.imageUrl
       ? `<img src="${esc(val.imageUrl)}" alt="${esc(k.label)}" />`
       : f.kind === "check" ? `<span class="pf-check">✔</span>` : `<span class="pf-val">${esc(val.value)}</span>`;
-  } else if (mode === "edit") {
-    inner = `<span class="pf-tag">${esc(f.label || k.label)}</span>${assigneeName ? `<span class="pf-who">${esc(assigneeName)}</span>` : ""}<i class="pf-grip"></i>`;
   } else if (f.kind === "stamp") {
     // 계약서에서 도장 자리는 "도장" 이라고 쓰지 않는다 — (인) 이다.
     inner = `<span class="pf-tag${mine ? "" : " pf-other"}">(인)</span>`;
@@ -206,6 +210,10 @@ export function fieldBox(f, { mode = "view", val = null, mine = false, assigneeN
   } else {
     inner = `<span class="pf-tag pf-other">${esc(f.label || assigneeName || k.label)}</span>`;
   }
-  const attrs = `data-id="${f.id}" data-kind="${esc(f.kind)}" data-req="${f.required ? 1 : 0}" data-assignee="${f.assignee || 0}"`;
+  // 담당자 값은 문자열이다. 사람이 정해진 뒤에는 숫자(회원 id / -외부 id)지만,
+  // 보내기 전 초안에서는 아직 사람이 없어 'slot1'(첫 번째 당사자)처럼 자리만 가리킨다.
+  // 사람이 정해지면 그 사람이 이긴다 — 보낸 뒤에도 slot 값은 기록으로 남기 때문이다.
+  const who = f.assignee ? String(f.assignee) : f.slot > 0 ? `slot${f.slot}` : "0";
+  const attrs = `data-id="${f.id}" data-kind="${esc(f.kind)}" data-req="${f.required ? 1 : 0}" data-assignee="${esc(who)}" data-auto="${esc(f.auto || "")}"`;
   return `<div class="${cls}" ${attrs} style="${style}">${inner}</div>`;
 }

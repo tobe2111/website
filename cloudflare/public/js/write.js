@@ -97,7 +97,59 @@
     changed();
   }
   document.querySelectorAll(".wt-btn").forEach(function (b) {
-    b.addEventListener("click", function () { insert(b.dataset.ins); });
+    b.addEventListener("click", function () {
+      if (b.dataset.ins === "blank") askBlank();
+      else insert(b.dataset.ins);
+    });
+  });
+
+  // ---------- 빈칸 ----------
+  // 빈칸은 문장 한가운데 들어간다 — "보증금은 금 {{보증금}} 원으로 한다."
+  // 그래서 이름을 **먼저** 묻는다. 본문에 자리표시어를 넣고 고쳐 쓰게 하면 이어서 친 글자가
+  // 괄호 안쪽으로 들어가 "{{보증금 원으로 한다.}}" 같은 이름의 빈칸이 생긴다.
+  var askBox = document.getElementById("wtBlankAsk");
+  var askName = document.getElementById("wtBlankName");
+  var blankAt = 0;
+  function askBlank() {
+    if (!askBox) return;
+    blankAt = ta.selectionStart;
+    askBox.hidden = false;
+    askName.value = "";
+    askName.focus();
+  }
+  function closeAsk() { if (askBox) askBox.hidden = true; ta.focus(); }
+  function addBlank() {
+    var name = (askName.value || "").replace(/[{}\n\r|]/g, "").trim();
+    if (!name) { askName.focus(); return; }
+    var txt = "{{" + name + "}}";
+    ta.setRangeText(txt, blankAt, blankAt, "end");   // 커서는 닫는 괄호 **뒤**에 선다
+    askBox.hidden = true;
+    ta.focus();
+    changed();
+  }
+  if (askBox) {
+    document.getElementById("wtBlankAdd").addEventListener("click", addBlank);
+    document.getElementById("wtBlankCancel").addEventListener("click", closeAsk);
+    askName.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") { e.preventDefault(); addBlank(); }
+      else if (e.key === "Escape") { e.preventDefault(); closeAsk(); }
+    });
+  }
+
+  // ---------- 당사자 고르기 ----------
+  // '외부 상대방' 을 고른 자리에만 이름·연락처 칸을 편다. 늘 펴 두면 회원을 고른 자리에도
+  // 빈 칸이 네 개씩 붙어 화면이 무슨 양식인지 알아볼 수 없다.
+  document.querySelectorAll("[data-party]").forEach(function (sel) {
+    var ext = document.querySelector('[data-ext="' + sel.dataset.party + '"]');
+    if (!ext) return;
+    var boxes = ext.querySelectorAll("input");
+    function sync() {
+      var on = sel.value === "ext";
+      ext.hidden = !on;
+      // 숨긴 칸에 required 가 남아 있으면 브라우저가 "보이지 않는 칸이 비었다" 며 제출을 막는다
+      boxes.forEach(function (b) { if (b.name.indexOf("ext_name_") === 0) b.required = on; });
+    }
+    sel.addEventListener("change", sync); sync();
   });
 
   // ---------- 미리보기 ----------
@@ -173,6 +225,9 @@
           if (sendForm) sendForm.action = base + "/admin/documents/" + j.id + "/publish";
           var send = document.getElementById("wtSend");
           if (send) send.disabled = false;
+          // 서명 자리 놓기 — 저장 전에는 놓을 문서가 없어 숨겨 두었다
+          var fl = document.getElementById("wtFields");
+          if (fl) { fl.href = base + "/admin/documents/" + j.id + "/fields"; fl.hidden = false; }
         }
       })
       .catch(function () { say("저장하지 못했습니다 — 연결을 확인해 주세요", "err"); });

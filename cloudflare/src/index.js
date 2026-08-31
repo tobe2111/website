@@ -199,6 +199,7 @@ const TENANT = [
   ["GET",  "/admin/documents/write", pages.adminDocumentWrite, "STAFF"],
   ["POST", "/admin/documents/preview", api.adminPreviewPaper, "STAFF"],
   ["POST", "/admin/documents/draft", api.adminSaveDraft, "STAFF"],
+  ["POST", "/admin/documents/:id/fill", api.adminFillBlanks, "STAFF"],
   ["POST", "/admin/documents/:id/publish", api.adminPublishDraft, "STAFF"],
   ["POST", "/admin/documents/:id/draft-delete", api.adminDeleteDraft, "STAFF"],
   ["GET", "/admin/documents/:id", pages.adminDocumentDetail, "STAFF"],
@@ -214,6 +215,9 @@ const TENANT = [
   ["POST", "/admin/templates/:id/delete", api.adminDeleteTemplate, "STAFF"],
   ["GET",  "/admin/documents/:id/fields", pages.adminDocFields, "STAFF"],
   ["POST", "/admin/documents/:id/fields", api.adminSaveFields, "STAFF"],
+  // 우리 직인(법인 인감) — 회사 도장이라 담당자가 아니라 관리자만 올리고 지운다
+  ["POST", "/admin/seal", api.adminSaveSeal, "ADMIN"],
+  ["POST", "/admin/seal/delete", api.adminDeleteSeal, "ADMIN"],
   ["POST", "/admin/documents/:id/external", api.adminAddExternalSigner, "STAFF"],
   ["POST", "/admin/documents/:id/external/:sid/delete", api.adminRemoveExternalSigner, "STAFF"],
   ["GET",  "/documents/:id/paper", pages.documentPaper, "MEMBER"],
