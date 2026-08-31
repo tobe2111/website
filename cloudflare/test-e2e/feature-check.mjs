@@ -264,6 +264,36 @@ const A = "전자계약";
       again.sent === 2 && (await D.listDocuments(env.DB, law.id)).length === before + 2);
   }
 
+  // 부서 경계 — 인사팀의 근로계약서가 영업팀 화면에 뜨지 않는가
+  {
+    const t1 = await D.createTeam(env.DB, law.id, "인사팀");
+    const t2 = await D.createTeam(env.DB, law.id, "영업팀");
+    const hrU = await mk("hr@law.kr", "인사담당", "STAFF", law.id);
+    const saU = await mk("sa@law.kr", "영업담당", "STAFF", law.id);
+    await D.setUserTeam(env.DB, hrU.id, law.id, t1.id);
+    await D.setUserTeam(env.DB, saU.id, law.id, t2.id);
+    const tb = "인사팀 전용 문서\n제1조 (목적)";
+    const td = await D.createDocument(env.DB, { associationId: law.id, title: "인사팀 전용 문서",
+      body: tb, contentHash: await contentHash(tb), createdBy: hrU.id, teamId: t1.id });
+    const saJar = await login("sa@law.kr", "pass1234");
+
+    // 켜기 전 — 지금까지처럼 다 보인다
+    const before = await (await f("/t/law/admin/documents", { headers: { cookie: saJar } })).text();
+    chk(A, "부서를 켜기 전에는 아무것도 달라지지 않는다", /인사팀 전용 문서/.test(before));
+
+    await D.setTeamScope(env.DB, law.id, 1);
+    const after2 = await (await f("/t/law/admin/documents", { headers: { cookie: saJar } })).text();
+    chk(A, "부서를 켜면 남의 부서 계약이 목록에서 사라진다", !/인사팀 전용 문서/.test(after2));
+    const codes = [];
+    for (const u of [`/t/law/admin/documents/${td.id}`, `/t/law/admin/documents/${td.id}/fields`,
+                     `/t/law/documents/${td.id}/paper`, `/t/law/documents/${td.id}/evidence`])
+      codes.push((await f(u, { headers: { cookie: saJar } })).status);
+    chk(A, "주소를 직접 쳐도 남의 부서 계약은 열리지 않는다", codes.every((c) => c === 404), codes.join("·"));
+    const adminSees = await (await f("/t/law/admin/documents", { headers: { cookie: lawJar } })).text();
+    chk(A, "관리자는 부서와 무관하게 전부 본다", /인사팀 전용 문서/.test(adminSees));
+    await D.setTeamScope(env.DB, law.id, 0);   // 뒤 항목들에 영향을 주지 않게 되돌린다
+  }
+
   // 문서 수정 잠금
   const after = await (await f(`/t/law/admin/documents/${docId}`, { headers: { cookie: lawJar } })).text();
   chk(A, "서명이 시작되면 계약서 본문이 잠긴다", !/문서 수정<\/summary>|panel-title">문서 수정/.test(after));

@@ -39,6 +39,8 @@ export const TABLES = [
   // 같은 사람에게 계약서가 두 번 간다.
   "doc_fields", "doc_field_values", "doc_pages", "doc_parties", "doc_templates", "doc_events", "external_signers",
   "doc_batches", "doc_batch_rows",
+  // teams: 부서. 없으면 복원 후 모든 담당자가 '부서 없음' 이 되어 경계가 통째로 사라진다.
+  "teams",
   "notify_wallet", "credit_ledger", "credit_orders", "message_log", "chain_anchor", "api_keys",
   "notifications", "applications", "application_notes", "audit_log", "settings",
   // 옛 주소 — 빠뜨리면 복원 후 이미 나간 링크(알림톡 버튼·명함·검색결과)가 전부 죽는다

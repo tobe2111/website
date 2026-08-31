@@ -2,7 +2,7 @@
 import * as D from "./db.js";
 import { esc, cap, clip, openBadge, openNow, hoursLine, dongOf, fmtBytes, kstStamp, kstDate, prettyPath, safeNext, parseCookies } from "./util.js";
 import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG, ORIGIN, assetUrl } from "./render.js";
-import { verifyInviteToken, SALES_STAGES, otpRequired, selfSignupOn, MAX_SLOTS, BULK_MAX, BULK_CHUNK } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
+import { verifyInviteToken, SALES_STAGES, otpRequired, selfSignupOn, MAX_SLOTS, BULK_MAX, BULK_CHUNK, docOf } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
 import { html, notFoundResponse, back, redirect } from "./http.js";
 import { countable, countHomeGoal, homeVariantCookie } from "./traffic.js";
 import { galleryItem } from "./media-render.js";
@@ -1403,13 +1403,56 @@ export async function admin(ctx) {
   // 한 번 발급한 계정을 회수할 방법이 없으면 퇴사자가 계약을 계속 만들 수 있다.
   const staffList = [...admins, ...(await D.listUsersByAssociation(db, assoc.id, "STAFF"))];
   const roleLabel = (r) => (r === "ADMIN" ? '<span class="badge badge-brand">관리자</span>' : '<span class="badge badge-info">담당자</span>');
+  // 부서 — 만들어 두면 담당자 표에 배정 칸이 생긴다. 하나도 없으면 칸 자체를 그리지 않는다.
+  const teams = await D.listTeams(db, assoc.id);
+  const teamOf = (id) => (teams.find((t) => t.id === id) || {}).name || "";
+  const teamCell = (m) => !teams.length ? "" : `<td class="team-cell">${m.role === "ADMIN"
+    ? '<small class="txt-muted">전부 봅니다</small>'
+    : `<form method="post" action="${base}/admin/user/${m.id}/team" class="inline-form"><select name="team">
+        <option value="0"${m.team_id ? "" : " selected"}>— 부서 없음 —</option>
+        ${teams.map((t) => `<option value="${t.id}"${m.team_id === t.id ? " selected" : ""}>${esc(t.name)}</option>`).join("")}
+      </select><button class="btn btn-xs btn-ghost">저장</button></form>`}</td>`;
   const staffRows = staffList.length ? staffList.map((m) => `<tr><td>${esc(m.name)}<br /><small>${esc(m.email)}</small></td>
     <td>${roleLabel(m.role)}<br /><small>${m.role === "ADMIN" ? "설정·API·과금 포함" : "계약서 작성·발송"}</small></td>
+    ${teamCell(m)}
     <td class="actions-cell">
       ${m.id === user.id ? '<small class="txt-muted">본인</small>' : `
       <form method="post" action="${base}/admin/user/${m.id}/reset-password" class="inline-form" data-confirm="${esc(m.name)}님의 임시 비밀번호를 발급할까요?&#10;기존 비밀번호는 즉시 무효가 됩니다."><button class="btn btn-xs btn-ghost">임시 비밀번호</button></form>
       <form method="post" action="${base}/admin/user/${m.id}/revoke" class="inline-form" data-confirm="${esc(m.name)}님의 권한을 회수할까요?&#10;계정과 서명 이력은 그대로 남고, 계약을 만들 수 없게 됩니다."><button class="btn btn-xs btn-ghost">권한 회수</button></form>`}
-    </td></tr>`).join("") : `<tr><td colspan="3" class="empty">담당자가 없습니다.</td></tr>`;
+    </td></tr>`).join("") : `<tr><td colspan="${teams.length ? 4 : 3}" class="empty">담당자가 없습니다.</td></tr>`;
+  // ---- 부서 패널 ----
+  // 왜 '켜기' 를 따로 두는가: 부서를 만들자마자 화면이 나뉘면, 시험 삼아 하나 만들어 본
+  // 관리자가 담당자들의 계약 목록을 통째로 비워 버린다. 만드는 것과 켜는 것을 갈라 둔다.
+  const teamCount = await D.teamCounts(db, assoc.id);
+  const unassigned = staffList.filter((m) => m.role !== "ADMIN" && !m.team_id).length;
+  const teamRows = teams.length ? teams.map((t) => `<tr>
+      <td><form method="post" action="${base}/admin/teams/${t.id}/rename" class="inline-form team-rename">
+        <input type="text" name="team_name" value="${esc(t.name)}" maxlength="40" aria-label="부서 이름" autocomplete="off" />
+        <button class="btn btn-xs btn-ghost">이름 바꾸기</button></form></td>
+      <td>${teamCount[t.id] || 0}명</td>
+      <td class="actions-cell"><form method="post" action="${base}/admin/teams/${t.id}/delete" class="inline-form"
+        data-confirm="'${esc(t.name)}' 부서를 없앨까요?&#10;그 부서의 계약과 담당자는 '부서 없음' 이 되어 조직 전체가 다시 봅니다.&#10;계약이 지워지지는 않습니다."><button class="btn btn-xs btn-ghost">없애기</button></form></td>
+    </tr>`).join("") : `<tr><td colspan="3" class="empty">부서가 없습니다.</td></tr>`;
+  const teamsPanel = `<section class="panel" id="p-teams"><div class="panel-head">
+      <h2 class="panel-title">부서 <span class="badge badge-${assoc.team_scope ? "ok" : "muted"}">${assoc.team_scope ? "나눠 보는 중" : "아직 안 나눔"}</span></h2></div>
+    <p class="panel-hint">인사팀의 근로계약서가 영업팀 화면에 그대로 뜨는 것을 막습니다.
+      <b>지금은 ${assoc.team_scope ? "부서별로 나눠 봅니다" : "담당자가 조직의 계약을 모두 봅니다"}.</b></p>
+    <div class="table-scroll"><table class="admin-table"><thead><tr><th>부서</th><th>담당자</th><th>관리</th></tr></thead><tbody>${teamRows}</tbody></table></div>
+    <form method="post" action="${base}/admin/teams/add" class="inline-form team-add">
+      <input type="text" name="team_name" maxlength="40" placeholder="예: 인사팀" aria-label="새 부서 이름" autocomplete="off" required />
+      <button class="btn btn-primary btn-sm">부서 추가</button></form>
+    <div class="form-divider">부서별로 나눠 보기</div>
+    <p class="panel-hint">켜면 담당자는 <b>자기 부서의 계약</b>과 <b>자기가 만든 계약</b>만 봅니다.
+      관리자는 늘 전부 봅니다. <b>부서를 정하지 않은 계약(지난 계약 포함)은 그대로 모두가 봅니다</b> —
+      켠다고 지난 계약이 사라지지 않습니다.</p>
+    ${assoc.team_scope && unassigned ? `<div class="flash flash-warn">부서를 정하지 않은 담당자가 ${unassigned}명 있습니다.
+      이분들은 자기가 만든 계약만 보게 됩니다.</div>` : ""}
+    <form method="post" action="${base}/admin/teams/scope">
+      <input type="hidden" name="on" value="${assoc.team_scope ? "0" : "1"}" />
+      <button class="btn btn-${assoc.team_scope ? "ghost" : "primary"} btn-sm"${teams.length ? "" : " disabled"}
+        ${assoc.team_scope ? 'data-confirm="부서 경계를 끌까요?&#10;담당자가 조직의 계약을 다시 모두 보게 됩니다."' : ""}>${assoc.team_scope ? "끄기" : "켜기"}</button>
+      ${teams.length ? "" : `<small class="txt-muted">부서를 먼저 하나 만들어 주세요.</small>`}</form></section>`;
+
   const memberRows = members.length ? members.map((m) => `<tr><td>${esc(m.name)}<br /><small>${esc(m.email)}</small></td><td>${esc(m.business_name || "-")}</td>
     <td class="actions-cell"><form method="post" action="${base}/admin/user/${m.id}/reset-password" data-confirm="임시 비밀번호를 발급할까요?"><button class="btn btn-xs btn-ghost">임시 비밀번호</button></form></td></tr>`).join("") : `<tr><td colspan="3" class="empty">회원이 없습니다.</td></tr>`;
   const noticeRows2 = notices.map((n) => `<li><span class="notice-tag${n.pinned ? " tag-important" : ""}">${esc(n.tag)}</span><span class="notice-title">${esc(n.title)}</span>
@@ -1624,7 +1667,7 @@ export async function admin(ctx) {
       <span class="pill-row">${members.length && !isEsign ? `<a class="btn btn-xs btn-ghost" href="${base}/admin/members.csv">명단 CSV</a>` : ""}<a class="btn btn-xs btn-ghost" href="${base}/admin/export.json">전체 백업(JSON)</a></span></div>
       ${isEsign ? `<p class="panel-hint">계약서를 만들고 보내는 사람들입니다. <b>담당자</b>는 계약 업무만 하고 설정·API 키·과금은 볼 수 없습니다.
         권한을 회수해도 계정과 서명 이력은 남습니다 — 지우면 증거가 사라지기 때문입니다.</p>
-      <div class="table-scroll"><table class="admin-table"><thead><tr><th>이름</th><th>권한</th><th>관리</th></tr></thead><tbody>${staffRows}</tbody></table></div>
+      <div class="table-scroll"><table class="admin-table"><thead><tr><th>이름</th><th>권한</th>${teams.length ? "<th>부서</th>" : ""}<th>관리</th></tr></thead><tbody>${staffRows}</tbody></table></div>
       ${members.length ? `<div class="form-divider">내부 서명자 <span class="badge badge-muted">${members.length}명</span></div>
         <p class="panel-hint">사내에서 로그인해 서명하는 분들입니다(계약을 만들지는 않습니다).</p>
         <div class="table-scroll"><table class="admin-table"><thead><tr><th>이름</th><th>비밀번호</th></tr></thead><tbody>${members.map((m) => `<tr><td>${esc(m.name)}<br /><small>${esc(m.email)}</small></td>
@@ -1662,6 +1705,7 @@ export async function admin(ctx) {
           <div class="form-two"><label>사장님 성함<input type="text" name="name" required autocomplete="name" /></label><label>이메일<input type="email" name="email" required autocomplete="email" /></label></div>
           <div class="form-two"><label>업체명<input type="text" name="business_name" required autocomplete="organization" /></label><label>업종<input type="text" name="category" placeholder="예: 음식점" /></label></div>
           <button class="btn btn-primary btn-sm">대행 등록 + 임시 비번 발급</button></form></div></details>`}</section>
+    ${isEsign ? teamsPanel : ""}
     ${isEsign || isFranchise ? "" : duesPanel}
     ${isEsign ? "" : `<section class="panel" id="p-biz"><h2 class="panel-title">${isFranchise ? "가맹점" : "업체"} 관리</h2><div class="table-scroll"><table class="admin-table">
       <thead><tr><th>업체</th><th>사장님</th><th>상태</th><th>관리</th></tr></thead><tbody>${bizRows}</tbody></table></div></section>`}
@@ -1913,8 +1957,8 @@ export async function adminDocuments(ctx) {
   const stat = D.DOC_STATUSES.includes(query.get("stat") || "") ? query.get("stat") : "";
   const page = Math.max(1, Number(query.get("p") || 1) | 0);
   const PER = 20;
-  const counts = await D.documentCounts(db, assoc.id, q);
-  const docs = await D.listDocumentsPage(db, assoc.id, { q, status: stat, limit: PER, offset: (page - 1) * PER });
+  const counts = await D.documentCounts(db, assoc.id, q, { assoc, user });
+  const docs = await D.listDocumentsPage(db, assoc.id, { q, status: stat, limit: PER, offset: (page - 1) * PER, assoc, user });
   const shown = stat ? counts[stat] : counts.all;
   const pages = Math.max(1, Math.ceil(shown / PER));
   const qs = (over = {}) => {
@@ -1952,7 +1996,7 @@ export async function adminDocuments(ctx) {
   const members = await D.listSignerCandidates(db, assoc.id, assoc.kind);
   const checks = members.length ? members.map((m) => `<label class="check member-check"><input type="checkbox" name="members" value="${m.id}" /> ${esc(m.name)} <small>${esc(m.email)}</small></label>`).join("") : `<p class="empty">회원이 없습니다.</p>`;
   // 작성 중(초안) — 아직 계약이 아니다. 보내는 순간 비로소 계약이 된다.
-  const drafts = await D.listDrafts(db, assoc.id);
+  const drafts = await D.listDrafts(db, assoc.id, { assoc, user });
   const draftRows = drafts.length ? `<ul class="queue-list">${drafts.map((d) => `<li class="queue-item">
       <a class="q-main" href="${base}/admin/documents/write?doc=${d.id}"><b>${esc(d.title)}</b>
         <span>작성 중 · ${d.body ? `${String(d.body).length.toLocaleString()}자` : "아직 비어 있음"}</span></a>
@@ -2041,7 +2085,7 @@ export async function adminDocumentDetail(ctx) {
   const { db, env, assoc, base, user, params, csrf, query } = ctx;
   // 상담 DB 에서 이어진 계약이면 신청자를 외부 서명자 폼에 미리 채운다 (이름·번호를 다시 옮겨 적지 않게)
   const lead = Number(query.get("lead")) ? await D.getLead(db, Number(query.get("lead")), assoc.id) : null;
-  const d = await D.getDocument(db, Number(params.id));
+  const d = await docOf(ctx, params.id);
   if (!d || d.association_id !== assoc.id) return notFoundResponse(ctx);
   const sigs = await D.listSignatures(db, d.id);
   const verds = await Promise.all(sigs.map((sig) => verifySignature(env, sig, d)));
@@ -2785,8 +2829,11 @@ export async function documentEvidence(ctx) {
   const { db, env, assoc, user, params } = ctx;
   const d = await D.getDocument(db, Number(params.id));
   if (!d || d.association_id !== assoc.id) return notFoundResponse(ctx);
-  // 역할 목록에 값을 하나 더했다고 권한이 조용히 늘어나면 안 된다 — 허용 역할을 명시한다
-  const isAdmin = user.role === "ADMIN" || user.role === "STAFF" || user.role === "SUPERADMIN";
+  // 역할 목록에 값을 하나 더했다고 권한이 조용히 늘어나면 안 된다 — 허용 역할을 명시한다.
+  // 부서를 켠 조직에서는 '담당자라서 본다' 가 자기 부서 안에서만 성립한다.
+  // 서명자는 그대로다 — 남의 부서 계약이어도 자기가 서명할 계약은 봐야 한다.
+  const isAdmin = (user.role === "ADMIN" || user.role === "STAFF" || user.role === "SUPERADMIN")
+    && D.canSeeDoc(assoc, user, d);
   if (!isAdmin && !(await D.canReceiveSign(db, d.id, user.id, user.role))) return notFoundResponse(ctx);
   const { zip, filename } = await buildEvidence(env, db, d, assoc);
   return new Response(zip, { headers: {
@@ -2827,7 +2874,7 @@ function fieldsRenderer(fields, { mode, myId = 0, nameOf = () => "", parties = {
 // 필드 배치 편집기 — "여기에 서명, 여기에 도장" 을 관리자가 직접 지면 위에 놓는다.
 export async function adminDocFields(ctx) {
   const { db, assoc, base, user, params, query, csrf } = ctx;
-  const d = await D.getDocument(db, Number(params.id));
+  const d = await docOf(ctx, params.id);
   if (!d || d.association_id !== assoc.id) return notFoundResponse(ctx);
   const sigs = await D.requestCounts(db, d.id);
   const signedAny = (await D.listSignatures(db, d.id)).length > 0;
@@ -2910,8 +2957,11 @@ export async function documentPaper(ctx) {
   const { db, assoc, base, user, params, csrf } = ctx;
   const d = await D.getDocument(db, Number(params.id));
   if (!d || d.association_id !== assoc.id) return notFoundResponse(ctx);
-  // 역할 목록에 값을 하나 더했다고 권한이 조용히 늘어나면 안 된다 — 허용 역할을 명시한다
-  const isAdmin = user.role === "ADMIN" || user.role === "STAFF" || user.role === "SUPERADMIN";
+  // 역할 목록에 값을 하나 더했다고 권한이 조용히 늘어나면 안 된다 — 허용 역할을 명시한다.
+  // 부서를 켠 조직에서는 '담당자라서 본다' 가 자기 부서 안에서만 성립한다.
+  // 서명자는 그대로다 — 남의 부서 계약이어도 자기가 서명할 계약은 봐야 한다.
+  const isAdmin = (user.role === "ADMIN" || user.role === "STAFF" || user.role === "SUPERADMIN")
+    && D.canSeeDoc(assoc, user, d);
   if (!isAdmin && !(await D.canReceiveSign(db, d.id, user.id, user.role))) return notFoundResponse(ctx);
   const scans = await D.listDocPages(db, d.id);   // 올린 양식이면 이 그림들이 지면이다
   const fields = await D.listFieldsWithValues(db, d.id);
@@ -4053,7 +4103,7 @@ export function robots(ctx) {
 export async function adminDocumentWrite(ctx) {
   const { db, assoc, base, user, query, csrf } = ctx;
   const id = Number(query.get("doc") || 0);
-  const doc = id ? await D.getDocument(db, id) : null;
+  const doc = id ? await docOf(ctx, id) : null;
   if (id && (!doc || doc.association_id !== assoc.id)) return notFoundResponse(ctx);
   if (doc && !doc.draft) return redirect(`${base}/admin/documents/${doc.id}`);
   const members = await D.listSignerCandidates(db, assoc.id, assoc.kind);
@@ -4169,7 +4219,7 @@ export async function adminDocumentWrite(ctx) {
 // 명단을 읽고, 틀린 줄을 보여 주고, 누가 어느 자리에 앉는지만 정한다.
 export async function adminDocBulk(ctx) {
   const { db, assoc, base, user, params, query, csrf } = ctx;
-  const d = await D.getDocument(db, Number(params.id));
+  const d = await docOf(ctx, params.id);
   if (!d || d.association_id !== assoc.id) return notFoundResponse(ctx);
   if (!d.draft) return redirect(`${base}/admin/documents/${d.id}`);
   const blanks = extractVars(d.body);
@@ -4198,7 +4248,7 @@ export async function adminDocBulk(ctx) {
        명단 머리글에 이 이름을 그대로 쓰면 사람마다 다른 값이 들어갑니다.</p>`
     : `<p class="panel-hint">이 계약서에는 사람마다 달라지는 빈칸이 없습니다 — 모두 같은 내용으로 나갑니다.</p>`;
 
-  const batches = (await D.listBatches(db, assoc.id, 10)).filter((b) => b.source_id === d.id);
+  const batches = (await D.listBatches(db, assoc.id, 10, { assoc, user })).filter((b) => b.source_id === d.id);
   const history = batches.length
     ? `<section class="panel"><h2 class="panel-title">지난 명단</h2>
        <div class="table-scroll"><table class="admin-table"><thead><tr><th>이름</th><th>진행</th><th>만든 날</th><th></th></tr></thead><tbody>
@@ -4260,7 +4310,7 @@ const titleWithSlots = (t) =>
 export async function adminBulkView(ctx) {
   const { db, assoc, base, user, params, query, csrf } = ctx;
   const b = await D.getBatch(db, Number(params.bid));
-  if (!b || b.association_id !== assoc.id) return notFoundResponse(ctx);
+  if (!D.canSeeBatch(assoc, user, b)) return notFoundResponse(ctx);
   const rows = await D.listBatchRows(db, b.id);
   const c = await D.batchCounts(db, b.id);
   const src = await D.getDocument(db, b.source_id);

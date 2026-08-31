@@ -165,6 +165,12 @@ const TENANT = [
   ["POST", "/admin/invite", api.adminCreateInvite, "ADMIN"],
   ["POST", "/admin/admins/add", api.adminAddAdmin, "ADMIN"],
   ["POST", "/admin/user/:id/revoke", api.adminRevokeRole, "ADMIN"],
+  // 부서 — 인사팀의 근로계약서가 영업팀 화면에 뜨지 않게 하는 경계. 조직의 주인만 손댄다.
+  ["POST", "/admin/teams/add", api.adminAddTeam, "ADMIN"],
+  ["POST", "/admin/teams/:id/rename", api.adminRenameTeam, "ADMIN"],
+  ["POST", "/admin/teams/:id/delete", api.adminDeleteTeam, "ADMIN"],
+  ["POST", "/admin/teams/scope", api.adminTeamScope, "ADMIN"],
+  ["POST", "/admin/user/:id/team", api.adminSetUserTeam, "ADMIN"],
   ["POST", "/admin/polls", api.adminCreatePoll, "ADMIN"],
   ["POST", "/admin/polls/:id/close", api.adminClosePoll, "ADMIN"],
   ["POST", "/admin/dues", api.adminDueToggle, "ADMIN"],

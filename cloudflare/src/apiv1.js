@@ -93,6 +93,11 @@ export async function handle(ctx) {
         variables: t.vars, parties: t.parties, fields: t.fields.length })) });
     }
 
+    // ⚠️ 부서 경계는 여기에 걸지 않는다 — 일부러다.
+    //    API 키는 사람이 아니라 **조직**에 발급되고, 관리자만 발급한다(/admin/api 는 ADMIN 전용).
+    //    즉 키를 가진 쪽은 이미 조직 전체를 볼 수 있는 사람이다. 여기에 부서를 끼워 넣으면
+    //    '어느 부서의 키인가' 라는 개념을 새로 만들어야 하는데, 그건 지금 필요가 확인되지 않았다.
+    //    키를 부서별로 나눠야 할 때가 오면 api_keys 에 team_id 를 두는 것이 맞는 자리다.
     if (path === "/documents" && method === "GET") {
       const docs = await D.listDocuments(db, assoc.id);
       return J({ documents: docs.map((d) => docJson(d)) });

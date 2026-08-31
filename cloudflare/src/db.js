@@ -325,7 +325,7 @@ export const listSignerCandidates = (db, associationId, kind) =>
         ORDER BY CASE u.role WHEN 'ADMIN' THEN 0 WHEN 'STAFF' THEN 1 ELSE 2 END, u.name`, associationId)
     : listUsersByAssociation(db, associationId, "MERCHANT");
 export function listUsersByAssociation(db, associationId, role = null) {
-  const sql = `SELECT u.id, u.email, u.name, u.role, u.phone, b.name AS business_name
+  const sql = `SELECT u.id, u.email, u.name, u.role, u.phone, u.team_id, b.name AS business_name
     FROM users u LEFT JOIN businesses b ON b.owner_id = u.id
     WHERE u.association_id = ?` + (role ? " AND u.role = ?" : "") + " ORDER BY u.role, u.created_at DESC";
   return role ? all(db, sql, associationId, role) : all(db, sql, associationId);
@@ -659,9 +659,9 @@ export const unreadCount = async (db, aid) => (await first(db, "SELECT COUNT(*) 
 export const markAllNotificationsRead = (db, aid) => run(db, "UPDATE notifications SET is_read=1 WHERE association_id=?", aid);
 
 // ----- 전자서명: 문서 -----
-export async function createDocument(db, { associationId, title, body, contentHash, createdBy, ordered = 0, dueDate = "", draft = 0 }) {
-  await run(db, "INSERT INTO documents (association_id, title, body, content_hash, created_by, ordered, due_date, draft) VALUES (?,?,?,?,?,?,?,?)",
-    associationId, title, body, contentHash, createdBy, ordered ? 1 : 0, dueDate || "", draft ? 1 : 0);
+export async function createDocument(db, { associationId, title, body, contentHash, createdBy, ordered = 0, dueDate = "", draft = 0, teamId = 0 }) {
+  await run(db, "INSERT INTO documents (association_id, title, body, content_hash, created_by, ordered, due_date, draft, team_id) VALUES (?,?,?,?,?,?,?,?,?)",
+    associationId, title, body, contentHash, createdBy, ordered ? 1 : 0, dueDate || "", draft ? 1 : 0, teamId | 0);
   return getDocument(db, await lastId(db));
 }
 export const getDocument = (db, id) => first(db, "SELECT * FROM documents WHERE id=?", id);
@@ -669,8 +669,11 @@ export const getDocument = (db, id) => first(db, "SELECT * FROM documents WHERE 
 // ----- 작성 중(초안) -----
 // 초안은 서명 요청도 과금도 발송도 없는 상태다. 쓰다 만 계약서를 저장해 두고
 // 다음 날 이어 쓰기 위한 것이라, 보내는 순간 비로소 계약이 된다.
-export const listDrafts = (db, aid) =>
-  all(db, "SELECT * FROM documents WHERE association_id=? AND draft=1 ORDER BY id DESC", aid);
+export async function listDrafts(db, aid, { assoc = null, user = null } = {}) {
+  const sc = docScopeSql(assoc, user, 2);
+  return all(db, `SELECT d.* FROM documents d WHERE d.association_id=?1 AND d.draft=1${sc ? ` AND ${sc.sql}` : ""} ORDER BY d.id DESC`,
+    aid, ...(sc ? sc.args : []));
+}
 export const saveDraft = (db, id, { title, body, contentHash }) =>
   run(db, "UPDATE documents SET title=?, body=?, content_hash=? WHERE id=? AND draft=1", title, body, contentHash, id);
 // 초안 → 계약. 이 순간부터 서명 요청·과금·발송이 붙는다.
@@ -703,6 +706,62 @@ export const listDocuments = (db, aid) =>
       (SELECT COUNT(*) FROM signature_requests r WHERE r.document_id=d.id) AS signer_count
     FROM documents d LEFT JOIN users u ON u.id = d.created_by
     WHERE d.association_id=? AND d.draft=0 ORDER BY d.created_at DESC`, aid);
+// ---- 부서 경계 ----
+//
+// 한 조직 안에서 인사팀과 영업팀이 같은 콘솔을 쓰면, 인사팀의 근로계약서가 영업팀 화면에
+// 그대로 뜬다. 부서를 켜면 그 경계가 생긴다.
+//
+// 규칙은 셋뿐이고, 판정은 **이 두 함수에서만** 한다(화면마다 따로 세면 반드시 한 곳이 샌다).
+//   · 관리자·운영자는 늘 조직의 계약을 전부 본다.
+//   · 부서 없는 계약(team_id=0)은 모두가 본다 — 그래서 부서를 켜도 지난 계약이 사라지지 않는다.
+//   · 담당자는 자기 부서의 계약과 자기가 만든 계약을 본다.
+const seesAll = (assoc, user) =>
+  !assoc || !assoc.team_scope || !user || user.role === "SUPERADMIN" || user.role === "ADMIN";
+
+export function canSeeDoc(assoc, user, doc) {
+  if (!doc || !assoc || doc.association_id !== assoc.id) return false;
+  if (seesAll(assoc, user)) return true;
+  if (!doc.team_id) return true;
+  if (doc.created_by && doc.created_by === user.id) return true;
+  return !!(user.team_id && user.team_id === doc.team_id);
+}
+// 목록 질의용. i = 이 조각이 쓸 첫 자리표 번호. 볼 것을 다 보면 null(조건 없음).
+function docScopeSql(assoc, user, i, alias = "d") {
+  if (seesAll(assoc, user)) return null;
+  return { sql: `(${alias}.team_id=0 OR ${alias}.team_id=?${i} OR ${alias}.created_by=?${i + 1})`,
+    args: [user.team_id | 0, user.id] };
+}
+
+// ----- 부서 -----
+export const listTeams = (db, aid) =>
+  all(db, "SELECT * FROM teams WHERE association_id=? ORDER BY name, id", aid);
+export const getTeam = (db, id) => first(db, "SELECT * FROM teams WHERE id=?", id);
+export async function createTeam(db, aid, name) {
+  await run(db, "INSERT INTO teams (association_id, name) VALUES (?,?)", aid, name);
+  return getTeam(db, await lastId(db));
+}
+export const renameTeam = (db, id, aid, name) =>
+  run(db, "UPDATE teams SET name=? WHERE id=? AND association_id=?", name, id, aid);
+// 부서를 지워도 계약과 사람은 남는다 — '부서 없음'(전체 공개)으로 돌아갈 뿐이다.
+// 계약을 함께 지우면 조직 개편 한 번에 계약 이력이 통째로 날아간다.
+export async function deleteTeam(db, id, aid) {
+  await run(db, "UPDATE users SET team_id=0 WHERE team_id=? AND association_id=?", id, aid);
+  await run(db, "UPDATE documents SET team_id=0 WHERE team_id=? AND association_id=?", id, aid);
+  await run(db, "UPDATE doc_batches SET team_id=0 WHERE team_id=? AND association_id=?", id, aid);
+  await run(db, "DELETE FROM teams WHERE id=? AND association_id=?", id, aid);
+}
+export const setUserTeam = (db, uid, aid, teamId) =>
+  run(db, "UPDATE users SET team_id=? WHERE id=? AND association_id=?", teamId | 0, uid, aid);
+export const setTeamScope = (db, aid, on) =>
+  run(db, "UPDATE associations SET team_scope=? WHERE id=?", on ? 1 : 0, aid);
+// 부서별 인원 — 관리 화면에서 '아무도 없는 부서' 를 보여 주기 위함
+export const teamCounts = async (db, aid) => {
+  const out = {};
+  for (const r of await all(db, "SELECT team_id, COUNT(*) AS n FROM users WHERE association_id=? AND team_id>0 GROUP BY 1", aid))
+    out[r.team_id] = r.n;
+  return out;
+};
+
 // ---- 계약의 상태 ----
 //
 // 계약이 쌓이면 목록이 곧 제품이다. "지금 뭘 봐야 하는가" 에 답하려면 상태가 한 낱말이어야 한다.
@@ -740,11 +799,13 @@ const DOC_SEARCH = `(d.title LIKE ?1 ESCAPE '\\'
   OR EXISTS (SELECT 1 FROM signature_requests r JOIN users u ON u.id=r.user_id
              WHERE r.document_id=d.id AND u.name LIKE ?1 ESCAPE '\\'))`;
 
-export async function listDocumentsPage(db, aid, { q = "", status = "", limit = 20, offset = 0 } = {}) {
+export async function listDocumentsPage(db, aid, { q = "", status = "", limit = 20, offset = 0, assoc = null, user = null } = {}) {
   const where = [`d.association_id=?${q ? 2 : 1}`, "d.draft=0"];
   const args = [];
   if (q) { args.push(likeParam(q)); where.push(DOC_SEARCH); }
   args.push(aid);
+  const sc = docScopeSql(assoc, user, args.length + 1);
+  if (sc) { where.push(sc.sql); args.push(...sc.args); }
   let sql = `SELECT d.*, u.name AS author_name, ${DOC_STAT}, ${DOC_STATUS} AS status
     FROM documents d LEFT JOIN users u ON u.id=d.created_by WHERE ${where.join(" AND ")}`;
   if (DOC_STATUSES.includes(status)) sql += ` AND ${DOC_STATUS} = '${status}'`;
@@ -752,11 +813,13 @@ export async function listDocumentsPage(db, aid, { q = "", status = "", limit = 
   return all(db, sql, ...args);
 }
 // 상태별 건수 — 목록 위의 칩. 0 건인 상태도 자리를 지킨다(사라지면 화면이 매번 달라 보인다).
-export async function documentCounts(db, aid, q = "") {
+export async function documentCounts(db, aid, q = "", { assoc = null, user = null } = {}) {
   const args = [];
   let where = `d.association_id=?${q ? 2 : 1} AND d.draft=0`;
   if (q) { args.push(likeParam(q)); where += ` AND ${DOC_SEARCH}`; }
   args.push(aid);
+  const sc = docScopeSql(assoc, user, args.length + 1);
+  if (sc) { where += ` AND ${sc.sql}`; args.push(...sc.args); }
   const rows = await all(db, `SELECT ${DOC_STATUS} AS status, COUNT(*) AS n FROM documents d WHERE ${where} GROUP BY 1`, ...args);
   const out = { all: 0 };
   for (const s of DOC_STATUSES) out[s] = 0;
@@ -1056,18 +1119,24 @@ export const partyLabel = (names, slot) => (names && names[slot]) || `${slot}번
 // 한 번의 요청으로 100건을 보낼 수는 없다(워커의 시간·바깥 요청 한도). 받는 사람을 먼저
 // 여기 적어 두고 조금씩 보낸다 — 브라우저를 닫아도 남은 사람이 남고, 보낸 사람에게 두 번 가지 않는다.
 export async function createBatch(db, b) {
-  await run(db, `INSERT INTO doc_batches (association_id, source_id, title, ordered, due_date, slot, fixed, created_by)
-    VALUES (?,?,?,?,?,?,?,?)`, b.associationId, b.sourceId, b.title || "", b.ordered ? 1 : 0,
-    b.dueDate || "", b.slot | 0, JSON.stringify(b.fixed || []), b.createdBy || null);
+  await run(db, `INSERT INTO doc_batches (association_id, source_id, title, ordered, due_date, slot, fixed, team_id, created_by)
+    VALUES (?,?,?,?,?,?,?,?,?)`, b.associationId, b.sourceId, b.title || "", b.ordered ? 1 : 0,
+    b.dueDate || "", b.slot | 0, JSON.stringify(b.fixed || []), b.teamId | 0, b.createdBy || null);
   return getBatch(db, await lastId(db));
 }
 export const getBatch = (db, id) => first(db, "SELECT * FROM doc_batches WHERE id=?", id);
-export const listBatches = (db, aid, limit = 20) =>
-  all(db, `SELECT b.*,
+export function listBatches(db, aid, limit = 20, { assoc = null, user = null } = {}) {
+  const sc = docScopeSql(assoc, user, 2, "b");
+  return all(db, `SELECT b.*,
       (SELECT COUNT(*) FROM doc_batch_rows r WHERE r.batch_id=b.id) AS total,
       (SELECT COUNT(*) FROM doc_batch_rows r WHERE r.batch_id=b.id AND r.status='sent') AS sent,
       (SELECT COUNT(*) FROM doc_batch_rows r WHERE r.batch_id=b.id AND r.status='failed') AS failed
-    FROM doc_batches b WHERE b.association_id=? ORDER BY b.id DESC LIMIT ?`, aid, limit);
+    FROM doc_batches b WHERE b.association_id=?1${sc ? ` AND ${sc.sql}` : ""}
+    ORDER BY b.id DESC LIMIT ${Math.max(1, Math.min(100, limit | 0))}`, aid, ...(sc ? sc.args : []));
+}
+export const canSeeBatch = (assoc, user, b) =>
+  !!b && !!assoc && b.association_id === assoc.id
+    && (seesAll(assoc, user) || !b.team_id || b.created_by === user.id || (!!user.team_id && user.team_id === b.team_id));
 export const deleteBatch = (db, id, aid) =>
   run(db, "DELETE FROM doc_batches WHERE id=? AND association_id=?", id, aid);
 

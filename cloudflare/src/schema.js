@@ -14,6 +14,9 @@ CREATE TABLE IF NOT EXISTS associations (
   email       TEXT NOT NULL DEFAULT '',
   logo        TEXT NOT NULL DEFAULT '',
   seal_media  TEXT NOT NULL DEFAULT '',    -- 이 조직의 직인(법인 인감) 그림. 계약서의 '우리 도장' 자리에 자동으로 찍힌다
+  -- 부서별로 계약을 나눠 볼 것인가. 0 = 담당자가 조직의 계약을 모두 본다(기본·지금까지의 동작).
+  -- 1 = 담당자는 자기 부서 계약과 자기가 만든 계약만 본다. 관리자는 늘 전부 본다.
+  team_scope  INTEGER NOT NULL DEFAULT 0,
   hero_image  TEXT NOT NULL DEFAULT '',    -- 홈 히어로 배경 사진(R2 키). 비우면 프리미엄 그라데이션 히어로
   hero_video  TEXT NOT NULL DEFAULT '',    -- 홈 히어로 배경 영상(R2 키·선택). 사진이 poster 가 된다
   notify_auto INTEGER NOT NULL DEFAULT 0,  -- 알림 자동화. 0 이면 이 조직은 알림톡을 한 통도 자동으로 보내지 않고,
@@ -81,6 +84,7 @@ CREATE TABLE IF NOT EXISTS users (
   session_version INTEGER NOT NULL DEFAULT 0,
   totp_secret     TEXT NOT NULL DEFAULT '',    -- 2FA base32 시크릿(빈 값=미설정)
   totp_enabled    INTEGER NOT NULL DEFAULT 0,  -- 2FA 활성화 여부
+  team_id         INTEGER NOT NULL DEFAULT 0,  -- 소속 부서 (0 = 부서 없음). 담당자에게만 의미가 있다
   created_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -294,8 +298,12 @@ CREATE TABLE IF NOT EXISTS documents (
   attachment_name TEXT NOT NULL DEFAULT '',  -- 원본 파일명(표시용)
   attachment_hash TEXT NOT NULL DEFAULT '',  -- 첨부 파일 SHA-256 (검증 시 실제 파일과 대조)
   last_remind_at  TEXT NOT NULL DEFAULT '',  -- 마지막 리마인더 발송 — 연타 방지
+  -- 이 계약을 맡은 부서. 0 = 부서 없음 = 조직 전체가 본다.
+  -- 만든 사람의 부서를 그대로 받는다(만든 뒤에 사람의 부서가 바뀌어도 계약은 따라가지 않는다).
+  team_id        INTEGER NOT NULL DEFAULT 0,
   created_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE INDEX IF NOT EXISTS idx_doc_team ON documents(association_id, team_id);
 
 -- 서명 기록.
 -- user_id 와 external_id 중 하나만 채워진다(회원 서명 / 외부 서명자 서명).
@@ -401,6 +409,19 @@ CREATE TABLE IF NOT EXISTS doc_field_values (
 );
 CREATE INDEX IF NOT EXISTS idx_docfieldval_doc ON doc_field_values(document_id);
 
+-- 부서(팀). 한 조직 안에서 인사팀과 영업팀이 같은 콘솔을 쓰면, 인사팀의 근로계약서가
+-- 영업팀 화면에 그대로 뜬다. 부서를 두면 그 경계가 생긴다.
+--
+-- ⚠️ 부서를 만들었다고 저절로 나뉘지는 않는다. associations.team_scope 를 켜야 한다 —
+--    쓰던 조직의 화면이 어느 날 갑자기 비어 보이면 그건 기능이 아니라 사고다.
+CREATE TABLE IF NOT EXISTS teams (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
+  name           TEXT NOT NULL,
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_team_assoc ON teams(association_id, name);
+
 -- 대량 발송 — 같은 계약서를 여러 사람에게 각각 한 부씩.
 --
 -- 왜 표로 남기는가: 100명에게 보내는 일은 한 번의 요청으로 끝나지 않는다(워커의 시간·요청 한도).
@@ -415,6 +436,7 @@ CREATE TABLE IF NOT EXISTS doc_batches (
   due_date       TEXT NOT NULL DEFAULT '',
   slot           INTEGER NOT NULL DEFAULT 0,     -- 받는 사람이 앉을 당사자 자리 (0 = 자리 없음)
   fixed          TEXT NOT NULL DEFAULT '[]',     -- 나머지 자리에 고정으로 앉는 회원 id JSON
+  team_id        INTEGER NOT NULL DEFAULT 0,     -- 만든 사람의 부서 (0 = 부서 없음 = 전체 공개)
   created_by     INTEGER REFERENCES users(id) ON DELETE SET NULL,
   created_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -696,7 +718,7 @@ CREATE INDEX IF NOT EXISTS idx_landing_asset_assoc ON landing_assets(association
 // 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
 // 마이그레이션 세대 — migrateColumns 에 단계를 추가할 때마다 +1
 // 36 = 두 갈래(트렁크 33 · 모집형 35)를 합친 세대. 양쪽 DB 모두 다시 한 번 마이그레이션을 타게 한다.
-export const SCHEMA_VERSION = "46";
+export const SCHEMA_VERSION = "47";
 
 export async function ensureSchema(db) {
   const has = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='associations'").first();
@@ -975,6 +997,27 @@ async function migrateColumns(db) {
     document_id INTEGER NOT NULL DEFAULT 0, note TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT (datetime('now')))`).run();
   await db.prepare("CREATE INDEX IF NOT EXISTS idx_docbatchrow ON doc_batch_rows(batch_id, status, seq)").run();
+  // v47: 부서(팀). 인사팀의 근로계약서가 영업팀 화면에 뜨지 않게 하는 경계.
+  // 기본은 꺼짐 — 켜지 않으면 지금까지와 똑같이 담당자가 조직의 계약을 모두 본다.
+  await db.prepare(`CREATE TABLE IF NOT EXISTS teams (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
+    name TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')))`).run();
+  await db.prepare("CREATE INDEX IF NOT EXISTS idx_team_assoc ON teams(association_id, name)").run();
+  const ucols2 = (await db.prepare("PRAGMA table_info(users)").all()).results || [];
+  if (ucols2.length && !ucols2.some((c) => c.name === "team_id"))
+    await db.prepare("ALTER TABLE users ADD COLUMN team_id INTEGER NOT NULL DEFAULT 0").run();
+  // 옛 계약은 team_id=0 으로 남는다 — 0 은 '부서 없음 = 전체 공개' 라, 부서를 켜도
+  // 지난 계약이 갑자기 사라지지 않는다. 이게 이 기능에서 가장 중요한 기본값이다.
+  if (dcols.length && !dcols.some((c) => c.name === "team_id")) {
+    await db.prepare("ALTER TABLE documents ADD COLUMN team_id INTEGER NOT NULL DEFAULT 0").run();
+    await db.prepare("CREATE INDEX IF NOT EXISTS idx_doc_team ON documents(association_id, team_id)").run();
+  }
+  const bcols = (await db.prepare("PRAGMA table_info(doc_batches)").all()).results || [];
+  if (bcols.length && !bcols.some((c) => c.name === "team_id"))
+    await db.prepare("ALTER TABLE doc_batches ADD COLUMN team_id INTEGER NOT NULL DEFAULT 0").run();
+  if (!cols.some((c) => c.name === "team_scope"))
+    await db.prepare("ALTER TABLE associations ADD COLUMN team_scope INTEGER NOT NULL DEFAULT 0").run();
   for (const [name, ddl, idx] of v17) {
     if (have.has(name)) continue;
     await db.prepare(ddl).run();

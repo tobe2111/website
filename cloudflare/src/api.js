@@ -21,6 +21,16 @@ import { seedStarter } from "./starterContent.js";
 import { KINDS, kindById, PRESETS, assocTerms } from "./kinds.js";
 import { TEMPLATE_KEYS, TEMPLATES, sendTest, listProviderTemplates, matchTemplates, sendMany, sendOne, notifyEnabled, autoNotifyOn, canAutoSend, wonToJeon, renderTemplate, templateButton, billingMode, chargeContract, BILLING_MODES, priceOf } from "./notify.js";
 
+// 계약 한 건을 연다 — 조직 경계와 **부서 경계**를 함께 본다.
+//
+// 스무 곳이 넘는 화면·처리가 여기를 지난다. 문이 여럿이면 언젠가 한 곳은 잠기지 않는다.
+// 서명자 화면(/sign)은 이 문을 쓰지 않는다 — 서명자는 부서와 무관하게 자기 계약을 봐야 하고,
+// 그 판정은 canReceiveSign 이 한다.
+export const docOf = async (ctx, id) => {
+  const d = await D.getDocument(ctx.db, Number(id) || 0);
+  return D.canSeeDoc(ctx.assoc, ctx.user, d) ? d : null;
+};
+
 // ctx.request 는 내부 호출 경로에서 없을 수 있다 — 감사 기록이 본 기능을 죽이면 안 된다
 const uaOf = (ctx) => { try { return ctx.request.headers.get("user-agent") || ""; } catch { return ""; } };
 const BOARD_MAX_IMAGES = 6;
@@ -974,6 +984,79 @@ export async function adminRevokeRole(ctx) {
   return back(base + "/admin", `${target.name}님의 권한을 회수했습니다. 계정과 서명 이력은 그대로 남습니다.`);
 }
 
+// ---------- 부서 ----------
+//
+// 한 조직 안에 인사팀과 영업팀이 같이 있으면, 인사팀의 근로계약서가 영업팀 화면에 그대로 뜬다.
+// 부서는 그 경계다. 다만 **켜기 전에는 아무것도 달라지지 않는다** — 쓰던 조직의 화면이
+// 어느 날 갑자기 비어 보이면 그건 기능이 아니라 사고다.
+const TEAM_MAX = 30;
+// 안내문은 back() 이 쿼리로 붙인다 — 여기에 #조각을 두면 '?msg=' 가 조각 안으로 들어가 깨진다.
+// 사람이 보던 묶음(담당자 탭)으로는 화면 스크립트가 알아서 되돌린다.
+const teamsTo = (base) => base + "/admin";
+
+export async function adminAddTeam(ctx) {
+  const { db, form, base, assoc } = ctx;
+  const name = cap((form.get("team_name") || "").replace(/[\x00-\x1f\x7f]/g, " ").trim(), 40);
+  if (!name) return back(teamsTo(base), "부서 이름을 입력해 주세요.", true);
+  const cur = await D.listTeams(db, assoc.id);
+  if (cur.length >= TEAM_MAX) return back(teamsTo(base), `부서는 ${TEAM_MAX}개까지 만들 수 있습니다.`, true);
+  if (cur.some((t) => t.name === name)) return back(teamsTo(base), `'${name}' 부서가 이미 있습니다.`, true);
+  await D.createTeam(db, assoc.id, name);
+  await audit(ctx, "부서추가", name);
+  return back(teamsTo(base), `'${name}' 부서를 만들었습니다. 담당자를 배정해 주세요.`);
+}
+
+export async function adminRenameTeam(ctx) {
+  const { db, form, base, assoc, params } = ctx;
+  const t = await D.getTeam(db, Number(params.id) || 0);
+  if (!t || t.association_id !== assoc.id) return back(teamsTo(base), "부서를 찾을 수 없습니다.", true);
+  const name = cap((form.get("team_name") || "").replace(/[\x00-\x1f\x7f]/g, " ").trim(), 40);
+  if (!name) return back(teamsTo(base), "부서 이름을 입력해 주세요.", true);
+  if ((await D.listTeams(db, assoc.id)).some((x) => x.id !== t.id && x.name === name))
+    return back(teamsTo(base), `'${name}' 부서가 이미 있습니다.`, true);
+  await D.renameTeam(db, t.id, assoc.id, name);
+  await audit(ctx, "부서이름변경", `${t.name} → ${name}`);
+  return back(teamsTo(base), `'${t.name}' 을 '${name}' 으로 바꿨습니다.`);
+}
+
+export async function adminDeleteTeam(ctx) {
+  const { db, base, assoc, params } = ctx;
+  const t = await D.getTeam(db, Number(params.id) || 0);
+  if (!t || t.association_id !== assoc.id) return back(teamsTo(base), "부서를 찾을 수 없습니다.", true);
+  // 계약과 사람은 지우지 않는다 — '부서 없음'(조직 전체 공개)으로 돌아갈 뿐이다.
+  // 조직 개편 한 번에 계약 이력이 통째로 사라지면 그게 더 큰 사고다.
+  await D.deleteTeam(db, t.id, assoc.id);
+  await audit(ctx, "부서삭제", t.name);
+  return back(teamsTo(base), `'${t.name}' 부서를 없앴습니다. 그 부서의 계약과 담당자는 '부서 없음' 이 되어 조직 전체가 다시 봅니다.`);
+}
+
+export async function adminSetUserTeam(ctx) {
+  const { db, form, base, assoc, params } = ctx;
+  const target = await D.getUserById(db, Number(params.id) || 0);
+  if (!target || target.association_id !== assoc.id) return back(teamsTo(base), "대상을 찾을 수 없습니다.", true);
+  const id = Number(form.get("team")) || 0;
+  if (id && !(await D.listTeams(db, assoc.id)).some((t) => t.id === id))
+    return back(teamsTo(base), "이 조직의 부서만 지정할 수 있습니다.", true);
+  await D.setUserTeam(db, target.id, assoc.id, id);
+  const name = id ? (await D.getTeam(db, id)).name : "부서 없음";
+  await audit(ctx, "부서배정", `${target.name} → ${name}`);
+  // 이미 만들어진 계약은 따라가지 않는다 — 계약의 부서는 '만든 시점' 의 것이다.
+  // 사람이 옮겼다고 지난 계약이 새 부서로 딸려 가면, 옮긴 순간 남의 부서 계약이 열린다.
+  return back(teamsTo(base), `${target.name}님을 '${name}' 으로 옮겼습니다. 이미 만들어진 계약의 부서는 그대로입니다.`);
+}
+
+export async function adminTeamScope(ctx) {
+  const { db, form, base, assoc } = ctx;
+  const on = form.get("on") === "1";
+  if (on && !(await D.listTeams(db, assoc.id)).length)
+    return back(teamsTo(base), "먼저 부서를 하나 이상 만들어 주세요.", true);
+  await D.setTeamScope(db, assoc.id, on);
+  await audit(ctx, "부서경계", on ? "켬" : "끔");
+  return back(teamsTo(base), on
+    ? "이제 담당자는 자기 부서의 계약과 자기가 만든 계약만 봅니다. 부서를 정하지 않은 계약은 그대로 모두가 봅니다."
+    : "부서 경계를 껐습니다. 담당자가 조직의 계약을 다시 모두 봅니다.");
+}
+
 // ---------- 부관리자 (회장·총무 등 공동 운영) ----------
 export async function adminAddAdmin(ctx) {
   const { db, base, assoc, user } = ctx;
@@ -1083,7 +1166,7 @@ export async function adminCreateDocument(ctx) {
   }
   // 정기 작업이 쓸 절대 주소를 여기서 확보해 둔다(크론에는 요청이 없다)
   await rememberOrigin(db, new URL(ctx.request.url).origin);
-  const doc = await D.createDocument(db, { associationId: assoc.id, title, body, contentHash: docHash, createdBy: user.id, ordered, dueDate });
+  const doc = await D.createDocument(db, { associationId: assoc.id, title, body, contentHash: docHash, createdBy: user.id, ordered, dueDate, teamId: user.team_id });
   if ((await billingMode(db)) === "per_doc") await chargeContract(db, assoc, { documentId: doc.id, title });
   if (attKey) await D.setDocumentAttachment(db, doc.id, attKey, attName, attHash);
   if (scanFiles.length) {
@@ -1353,7 +1436,7 @@ export async function extOtpVerify(ctx) {
 // 관리자: 외부 서명자 추가 → 서명 링크 발급(+ 알림톡·이메일 발송)
 export async function adminAddExternalSigner(ctx) {
   const { db, env, form, base, assoc, params, request } = ctx;
-  const d = await D.getDocument(db, Number(params.id));
+  const d = await docOf(ctx, params.id);
   const to = `${base}/admin/documents/${d ? d.id : ""}`;
   if (!d || d.association_id !== assoc.id) return back(base + "/admin/documents", "문서를 찾을 수 없습니다.", true);
   if (d.closed) return back(to, "마감된 문서입니다.", true);
@@ -1384,7 +1467,7 @@ export async function adminAddExternalSigner(ctx) {
 
 export async function adminRemoveExternalSigner(ctx) {
   const { db, base, assoc, params } = ctx;
-  const d = await D.getDocument(db, Number(params.id));
+  const d = await docOf(ctx, params.id);
   if (!d || d.association_id !== assoc.id) return back(base + "/admin/documents", "문서를 찾을 수 없습니다.", true);
   const to = `${base}/admin/documents/${d.id}`;
   const signer = await D.getExternalSigner(db, Number(params.sid) || 0);
@@ -1490,7 +1573,7 @@ export async function memberDeclineSign(ctx) {
 // 관리자: 미서명자에게 리마인더 — 알림톡(잔액 차감) 우선, 번호 없으면 이메일
 export async function adminRemindDocument(ctx) {
   const { db, env, base, assoc, params, request } = ctx;
-  const d = await D.getDocument(db, Number(params.id));
+  const d = await docOf(ctx, params.id);
   if (!d || d.association_id !== assoc.id) return back(base + "/admin/documents", "문서를 찾을 수 없습니다.", true);
   if (d.closed) return back(base + "/admin/documents/" + d.id, "마감된 문서입니다.", true);
   // 연타 방지 — 같은 문서에 6시간 안에 두 번 보내지 않는다(비용·수신자 피로)
@@ -1539,7 +1622,7 @@ export async function adminRemindDocument(ctx) {
 // 한 명이라도 서명했으면 잠근다 — 서명자가 확인한 내용이 뒤에서 바뀌면 봉인의 뜻이 사라진다.
 export async function adminEditDocument(ctx) {
   const { db, form, base, assoc, params, user } = ctx;
-  const d = await D.getDocument(db, Number(params.id));
+  const d = await docOf(ctx, params.id);
   if (!d || d.association_id !== assoc.id) return back(base + "/admin/documents", "문서를 찾을 수 없습니다.", true);
   const to = `${base}/admin/documents/${d.id}`;
   if ((await D.listSignatures(db, d.id)).length)
@@ -1580,7 +1663,7 @@ export async function adminEditDocument(ctx) {
 
 export async function adminCloseDocument(ctx) {
   const { db, base, assoc, params } = ctx;
-  const d = await D.getDocument(db, Number(params.id));
+  const d = await docOf(ctx, params.id);
   // 남의 조직 문서는 애초에 손대지 못하지만, 그때 "마감했습니다"라고 답하면 안 된다 —
   // 아무 일도 하지 않고 성공을 보고하는 것은 그 자체로 결함이고, 탐색자에게 힌트도 된다.
   if (!d || d.association_id !== assoc.id) return back(base + "/admin/documents", "문서를 찾을 수 없습니다.", true);
@@ -1623,7 +1706,7 @@ export async function adminSaveTemplate(ctx) {
   const to = base + "/admin/templates";
   const title = cap((form.get("title") || "").trim(), 200);
   const summary = cap((form.get("summary") || "").trim(), 120);
-  const d = await D.getDocument(db, Number(form.get("document")) || 0);
+  const d = await docOf(ctx, form.get("document"));
   if (!title) return back(to, "서식 이름을 입력하세요.", true);
   if (!d || d.association_id !== assoc.id) return back(to, "원본 문서를 찾을 수 없습니다.", true);
   if (await D.countTemplates(db, assoc.id) >= 50) return back(to, "서식은 최대 50개까지 저장할 수 있습니다.", true);
@@ -1677,7 +1760,7 @@ const MAX_FIELDS = 200;
 export const MAX_SLOTS = 8;
 export async function adminSaveFields(ctx) {
   const { db, form, base, assoc, params } = ctx;
-  const d = await D.getDocument(db, Number(params.id));
+  const d = await docOf(ctx, params.id);
   if (!d || d.association_id !== assoc.id) return back(base + "/admin/documents", "문서를 찾을 수 없습니다.", true);
   const to = `${base}/admin/documents/${d.id}/fields`;
   if ((await D.listSignatures(db, d.id)).length) return back(to, "이미 서명이 시작된 문서는 배치를 바꿀 수 없습니다.", true);
@@ -2785,16 +2868,16 @@ export async function adminSaveDraft(ctx) {
   const hash = await contentHash(body);
   let doc;
   if (id) {
-    const cur = await D.getDocument(db, id);
+    const cur = await docOf(ctx, id);
     if (!cur || cur.association_id !== assoc.id) return jsonOut({ ok: false, error: "문서를 찾을 수 없습니다." }, 404);
     if (!cur.draft) return jsonOut({ ok: false, error: "이미 보낸 계약서는 임시저장으로 되돌릴 수 없습니다." }, 409);
     await D.saveDraft(db, id, { title, body, contentHash: hash });
-    doc = await D.getDocument(db, id);
+    doc = await D.getDocument(db, id);   // 방금 위에서 docOf 로 통과시킨 문서다
   } else {
     // 아무것도 안 쓴 화면은 초안이 되지 않는다. 자동 저장이 3초마다 도는데 이 문이 없으면,
     // 작성기를 열어 두기만 해도 '제목 없는 계약서' 가 목록에 쌓인다.
     if (!body.trim() && !form.get("title")) return jsonOut({ ok: false, error: "아직 쓴 내용이 없습니다." }, 400);
-    doc = await D.createDocument(db, { associationId: assoc.id, title, body, contentHash: hash, createdBy: user.id, draft: 1 });
+    doc = await D.createDocument(db, { associationId: assoc.id, title, body, contentHash: hash, createdBy: user.id, draft: 1, teamId: user.team_id });
   }
   return jsonOut({ ok: true, id: doc.id, at: new Date().toISOString(), to: `${base}/admin/documents/write?doc=${doc.id}` });
 }
@@ -2805,7 +2888,7 @@ export async function adminSaveDraft(ctx) {
 //    그래서 **서명 자리를 놓기 전에** 본문을 확정한다. 보낼 때는 이미 채워져 있어야 한다.
 export async function adminFillBlanks(ctx) {
   const { db, form, base, assoc, params } = ctx;
-  const d = await D.getDocument(db, Number(params.id));
+  const d = await docOf(ctx, params.id);
   const to = `${base}/admin/documents/write?doc=${params.id}`;
   if (!d || d.association_id !== assoc.id) return back(base + "/admin/documents", "문서를 찾을 수 없습니다.", true);
   if (!d.draft) return back(`${base}/admin/documents/${d.id}`, "이미 보낸 계약서는 고칠 수 없습니다.", true);
@@ -2831,7 +2914,7 @@ const jsonOut = (obj, status = 200) =>
 // 초안 → 계약. 여기서부터 서명 요청·과금·발송이 붙는다.
 export async function adminPublishDraft(ctx) {
   const { db, form, base, assoc, params } = ctx;
-  const d = await D.getDocument(db, Number(params.id));
+  const d = await docOf(ctx, params.id);
   const to = `${base}/admin/documents/write?doc=${params.id}`;
   if (!d || d.association_id !== assoc.id) return back(base + "/admin/documents", "문서를 찾을 수 없습니다.", true);
   if (!d.draft) return back(`${base}/admin/documents/${d.id}`, "이미 보낸 계약서입니다.", true);
@@ -2939,7 +3022,7 @@ export async function adminPublishDraft(ctx) {
 
 export async function adminDeleteDraft(ctx) {
   const { db, base, assoc, params } = ctx;
-  const d = await D.getDocument(db, Number(params.id));
+  const d = await docOf(ctx, params.id);
   if (!d || d.association_id !== assoc.id || !d.draft) return back(base + "/admin/documents", "작성 중인 계약서를 찾을 수 없습니다.", true);
   await D.deleteDraft(db, d.id, assoc.id);
   return back(base + "/admin/documents", `'${d.title}' 초안을 지웠습니다.`);
@@ -3011,7 +3094,7 @@ export function parseRoster(text, blanks = []) {
 // 명단 양식 내려받기 — 머리글은 이 계약서의 빈칸 이름 그대로다. 사람이 이름을 맞출 필요가 없다.
 export async function adminBulkSample(ctx) {
   const { db, assoc, params } = ctx;
-  const d = await D.getDocument(db, Number(params.id));
+  const d = await docOf(ctx, params.id);
   if (!d || d.association_id !== assoc.id) return new Response("문서를 찾을 수 없습니다.", { status: 404 });
   const blanks = extractVars(d.body);
   const csv = toCsv([
@@ -3028,7 +3111,7 @@ export async function adminBulkSample(ctx) {
 // 명단 올리기 → 보낼 준비가 된 '명단' 하나를 만든다. 아직 아무것도 나가지 않는다.
 export async function adminBulkPrepare(ctx) {
   const { db, form, base, assoc, user, params } = ctx;
-  const d = await D.getDocument(db, Number(params.id));
+  const d = await docOf(ctx, params.id);
   const to = `${base}/admin/documents/${params.id}/bulk`;
   if (!d || d.association_id !== assoc.id) return back(base + "/admin/documents", "문서를 찾을 수 없습니다.", true);
   // 초안에서만 시작한다 — 이미 보낸 계약서를 복제하면 그 계약의 서명·증적까지 함께 복사할 뻔한다.
@@ -3081,7 +3164,7 @@ export async function adminBulkPrepare(ctx) {
   }
   const ordered = form.get("ordered") === "1" ? 1 : 0;
   const title = cap((form.get("title") || "").trim(), 200) || d.title;
-  const batch = await D.createBatch(db, { associationId: assoc.id, sourceId: d.id, title, ordered, dueDate, slot, fixed, createdBy: user.id });
+  const batch = await D.createBatch(db, { associationId: assoc.id, sourceId: d.id, title, ordered, dueDate, slot, fixed, createdBy: user.id, teamId: user.team_id });
   for (const r of parsed.rows) await D.addBatchRow(db, batch.id, r);
   // 정기 작업이 쓸 절대 주소를 확보해 둔다(크론에는 요청이 없다)
   await rememberOrigin(db, new URL(ctx.request.url).origin);
@@ -3103,7 +3186,7 @@ async function sendBatchRow(ctx, { batch, src, row, srcFields, srcParties, srcPa
     : await contentHash(body);
   // 초안으로 만들었다가 과금이 끝난 뒤에 계약으로 바꾼다 — 잔액이 모자라면 아무것도 남지 않아야 한다.
   const doc = await D.createDocument(db, { associationId: assoc.id, title, body, contentHash: hash,
-    createdBy: batch.created_by, ordered: batch.ordered, dueDate: batch.due_date, draft: 1 });
+    createdBy: batch.created_by, ordered: batch.ordered, dueDate: batch.due_date, draft: 1, teamId: batch.team_id });
   if (src.attachment) await D.setDocumentAttachment(db, doc.id, src.attachment, src.attachment_name, src.attachment_hash);
   if (srcPages.length) await D.replaceDocPages(db, doc.id, srcPages);
   if (Object.keys(srcParties).length) await D.replaceDocParties(db, doc.id, srcParties);
@@ -3148,7 +3231,7 @@ async function sendBatchRow(ctx, { batch, src, row, srcFields, srcParties, srcPa
 export async function adminBulkRun(ctx) {
   const { db, base, assoc, params } = ctx;
   const b = await D.getBatch(db, Number(params.bid));
-  if (!b || b.association_id !== assoc.id) return jsonOut({ ok: false, error: "명단을 찾을 수 없습니다." }, 404);
+  if (!D.canSeeBatch(assoc, ctx.user, b)) return jsonOut({ ok: false, error: "명단을 찾을 수 없습니다." }, 404);
   const src = await D.getDocument(db, b.source_id);
   if (!src || src.association_id !== assoc.id)
     return jsonOut({ ok: false, error: "원본 계약서가 없습니다. 초안이 지워진 것 같습니다." }, 409);
@@ -3187,7 +3270,7 @@ export async function adminBulkRun(ctx) {
 export async function adminBulkDelete(ctx) {
   const { db, base, assoc, params } = ctx;
   const b = await D.getBatch(db, Number(params.bid));
-  if (!b || b.association_id !== assoc.id) return back(base + "/admin/documents", "명단을 찾을 수 없습니다.", true);
+  if (!D.canSeeBatch(assoc, ctx.user, b)) return back(base + "/admin/documents", "명단을 찾을 수 없습니다.", true);
   const c = await D.batchCounts(db, b.id);
   // 이미 나간 계약서는 지우지 않는다 — 여기서 지우는 건 '명단' 이지 계약이 아니다.
   await D.deleteBatch(db, b.id, assoc.id);
