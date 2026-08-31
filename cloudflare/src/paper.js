@@ -51,13 +51,71 @@ export function wrapLine(text) {
   return out;
 }
 
+// ---------- 문단의 역할 ----------
+// 계약서 본문은 줄글이 아니다. 표제가 있고, 조(條) 아래 항(項)이 있고, 목적물 표시는 표에 가깝고,
+// 맨 끝에는 "본 계약을 증명하기 위하여…" 라는 말미 문구가 온다.
+// 지금까지는 이 구조가 글자 크기 하나로 뭉개져 나와 계약서로 읽히지 않았다.
+//
+// ⚠️ 줄바꿈 계산은 건드리지 않는다. 필드는 "2쪽의 y=0.78" 처럼 지면 비율로 저장돼 있어서,
+//    줄 수가 한 줄이라도 달라지면 이미 배치된 서명 자리가 통째로 어긋난다.
+//    그래서 여기서는 **이미 끊긴 줄에 역할만 붙이고**, 보이는 방식만 CSS 로 달리한다.
+const RE_ARTICLE = /^\s*제\s*\d+\s*조/;               // 제1조 (목적물)
+const RE_CLAUSE = /^\s*[①-⑳]/;                        // ① 항
+const RE_ITEM = /^\s*(?:\d{1,2}[.)]|[가-힣][.)])\s/;    // 1. / 가. 호
+const RE_CLOSING = /^\s*(?:본|이)\s*계약(?:을|의)/;      // 본 계약을 증명하기 위하여…
+// "  소재지   서울 서초구…" — 짧은 이름표와 값이 공백 두 칸 이상으로 갈린 줄.
+// 계약서의 목적물 표시가 이 모양인데, 비례 글꼴에서는 공백으로 칸이 맞지 않는다.
+const RE_LABEL = /^(\s{1,8})(\S[^\s]{0,11})\s{2,}(\S.*)$/;
+
+// 표제로 볼 만한 첫 줄인가 — "상가건물 임대차계약서" 는 맞고, "제1조 (목적물)" 이나
+// 문장으로 끝나는 줄은 아니다. 애매하면 표제로 보지 않는다(잘못 키우는 쪽이 더 나쁘다).
+const looksLikeTitle = (t) => {
+  const s = t.trim();
+  return !!s && s.length <= 30 && !RE_ARTICLE.test(s) && !RE_CLAUSE.test(s)
+    && !/[.。]$/.test(s) && !/(?:한다|합니다|된다|입니다)$/.test(s) && !s.includes("{{");
+};
+
+function roleOf(para, isFirstText) {
+  if (!para.trim()) return "blank";
+  if (isFirstText && looksLikeTitle(para)) return "title";
+  if (RE_ARTICLE.test(para)) return "article";
+  if (RE_CLOSING.test(para)) return "closing";
+  if (RE_CLAUSE.test(para)) return "clause";
+  if (RE_ITEM.test(para)) return "item";
+  if (RE_LABEL.test(para)) return "label";
+  return "plain";
+}
+
 // 본문 → 페이지 배열. 각 페이지는 LINES_PER_PAGE 줄.
+// 줄은 { t: 글자, role: 역할, cont: 이어지는 줄인가 } 이다.
 export function paginate(body) {
   const lines = [];
-  for (const para of String(body ?? "").split("\n")) lines.push(...wrapLine(para));
+  let seenText = false;
+  for (const para of String(body ?? "").split("\n")) {
+    const role = roleOf(para, !seenText);
+    if (para.trim()) seenText = true;
+    // 이어지는 줄은 원문의 들여쓰기를 잃는다. 그 자리를 CSS 로 되돌려
+    // 항(項) 번호 아래가 아니라 글자 아래에 맞춘다(내어쓰기).
+    // 폭은 22px 을 넘기지 않는다 — 줄바꿈은 이미 끝난 뒤라 더 밀면 오른쪽으로 넘친다.
+    const ind = Math.min(22, Math.round((/^\s*/.exec(para)[0].length) * 4.5) + (role === "clause" || role === "item" ? 14 : 0));
+    const wrapped = wrapLine(para);
+    wrapped.forEach((t, i) => lines.push({ t, role, cont: i > 0, ind }));
+  }
   const pages = [];
   for (let i = 0; i < lines.length; i += LINES_PER_PAGE) pages.push(lines.slice(i, i + LINES_PER_PAGE));
-  return pages.length ? pages : [[""]];
+  return pages.length ? pages : [[{ t: "", role: "blank", cont: false }]];
+}
+
+// 한 줄을 HTML 로. 이름표+값 줄만 두 칸으로 갈라 세로줄을 맞춘다 —
+// 공백으로 맞춘 칸은 비례 글꼴에서 어긋나 표로 읽히지 않는다.
+function lineHtml(ln) {
+  const cls = `pl pl-${ln.role}${ln.cont ? " is-cont" : ""}`;
+  if (ln.role === "label" && !ln.cont) {
+    const m = RE_LABEL.exec(ln.t);
+    if (m) return `<div class="${cls}"><span class="pl-ind">${esc(m[1])}</span><span class="pl-k">${esc(m[2])}</span><span class="pl-v">${esc(m[3])}</span></div>`;
+  }
+  const pad = ln.cont && ln.ind ? ` style="padding-left:${ln.ind}px"` : "";
+  return `<div class="${cls}"${pad}>${esc(ln.t) || "&#8203;"}</div>`;
 }
 export const pageCount = (body) => paginate(body).length;
 
@@ -98,7 +156,7 @@ export function renderPaper(body, { mode = "view", fieldsFor = () => "", waterma
   return `<div class="paper-stack" data-mode="${esc(mode)}" data-pw="${PAGE.w}" data-ph="${PAGE.h}">${pages
     .map((lines, i) => `<div class="paper" data-page="${i}" style="width:${PAGE.w}px;height:${PAGE.h}px">
       ${watermark ? `<div class="paper-wm">${esc(watermark)}</div>` : ""}
-      <div class="paper-text" style="padding:${PAGE.pad}px;font-size:${FONT_PX}px;line-height:${LINE_H}px">${esc(lines.join("\n"))}</div>
+      <div class="paper-text" style="padding:${PAGE.pad}px;font-size:${FONT_PX}px;line-height:${LINE_H}px">${lines.map(lineHtml).join("")}</div>
       <div class="paper-layer">${fieldsFor(i)}</div>
       ${pageNoHtml(i, n)}
     </div>`).join("")}</div>`;
@@ -117,10 +175,13 @@ export function fieldBox(f, { mode = "view", val = null, mine = false, assigneeN
       : f.kind === "check" ? `<span class="pf-check">✔</span>` : `<span class="pf-val">${esc(val.value)}</span>`;
   } else if (mode === "edit") {
     inner = `<span class="pf-tag">${esc(f.label || k.label)}</span>${assigneeName ? `<span class="pf-who">${esc(assigneeName)}</span>` : ""}<i class="pf-grip"></i>`;
+  } else if (f.kind === "stamp") {
+    // 계약서에서 도장 자리는 "도장" 이라고 쓰지 않는다 — (인) 이다.
+    inner = `<span class="pf-tag${mine ? "" : " pf-other"}">(인)</span>`;
   } else if (mine) {
     inner = `<span class="pf-tag">${esc(f.label || k.label)}${f.required ? " *" : ""}</span>`;
   } else {
-    inner = `<span class="pf-tag pf-other">${esc(assigneeName || k.label)}</span>`;
+    inner = `<span class="pf-tag pf-other">${esc(f.label || assigneeName || k.label)}</span>`;
   }
   const attrs = `data-id="${f.id}" data-kind="${esc(f.kind)}" data-req="${f.required ? 1 : 0}" data-assignee="${f.assignee || 0}"`;
   return `<div class="${cls}" ${attrs} style="${style}">${inner}</div>`;

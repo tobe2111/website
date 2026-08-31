@@ -1568,7 +1568,20 @@ a.cc-val:hover{color:var(--brand-text)}
 .paper-stack{--ps:1;transform:scale(var(--ps));transform-origin:top left}
 .paper{position:relative;margin:0 auto 24px;background:#fff;box-shadow:0 2px 14px rgba(15,23,42,.14);overflow:hidden;flex:none}
 .paper-text{position:absolute;inset:0;white-space:pre;overflow:hidden;color:#16181d;
-  font-family:'Nanum Myeongjo','Batang',serif;letter-spacing:-.01em}
+  font-family:var(--font-display);letter-spacing:-.01em}
+/* 계약서는 줄글이 아닙니다 — 표제가 있고, 조(條) 아래 항(項)이 있고,
+   목적물 표시는 표에 가깝고, 맨 끝에 말미 문구가 옵니다.
+   줄 수는 서버가 이미 확정했으므로(필드 좌표가 거기 물려 있습니다) 보이는 방식만 달리합니다. */
+.pl{display:block}
+.pl-title{text-align:center;font-size:19px;font-weight:700;letter-spacing:.15em;padding-bottom:2px}
+.pl-article{font-weight:700;letter-spacing:0}
+.pl-closing{font-weight:500}
+.pl-clause,.pl-item{letter-spacing:-.005em}
+/* 이름표+값 줄 — 공백으로 맞춘 칸은 비례 글꼴에서 어긋나 표로 읽히지 않습니다 */
+.pl-label{display:flex;align-items:baseline}
+.pl-ind{white-space:pre}
+.pl-k{flex:none;min-width:92px;font-weight:700}
+.pl-v{flex:1;min-width:0;border-bottom:1px dotted rgba(22,24,29,.35);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .paper-layer{position:absolute;inset:0}
 .paper-no{position:absolute;left:0;right:0;bottom:18px;text-align:center;font-size:12px;color:#9aa1ac}
 .paper-wm{position:absolute;inset:0;display:grid;place-items:center;font-size:80px;font-weight:800;
@@ -2219,3 +2232,22 @@ input:not([type]),input[type="text"],input[type="email"],input[type="tel"],input
 .foot-info strong{color:var(--ink);font-family:var(--font-display);font-weight:700;font-size:1rem}
 .foot-info p{color:var(--muted);font-size:.86rem}
 .foot-copy{font-size:.82rem;color:var(--muted)}
+
+/* 서명란이 서명란으로 보이게 —— 계약서 끝장의 서명·성명·날짜 자리는
+   빈 네모가 떠 있는 곳이 아니라 '줄 그어진 빈칸' 입니다. 도장 자리는 (인) 이고요.
+   채워지고 나면 줄만 남아 실제 계약서처럼 읽힙니다. (배치 모드는 제외 — 거기서는 상자여야 옮깁니다) */
+.paper .pf-sign:not(.pf-edit),
+.paper .pf-name:not(.pf-edit),
+.paper .pf-date:not(.pf-edit),
+.paper .pf-text:not(.pf-edit){border-radius:0;box-shadow:none;
+  border:0;border-bottom:1px solid rgba(22,24,29,.5);background:none;align-items:flex-end}
+.paper .pf-sign.pf-mine.pf-empty:not(.pf-edit),
+.paper .pf-name.pf-mine.pf-empty:not(.pf-edit),
+.paper .pf-date.pf-mine.pf-empty:not(.pf-edit),
+.paper .pf-text.pf-mine.pf-empty:not(.pf-edit){
+  border-bottom:2px solid var(--brand);background:rgba(11,138,70,.09)}
+.paper .pf-stamp:not(.pf-edit){border-radius:50%;border:1px dashed rgba(22,24,29,.4);background:none}
+.paper .pf-stamp.pf-empty:not(.pf-edit) .pf-tag::after{content:"";}
+.paper .pf-stamp.pf-empty:not(.pf-edit) .pf-tag{font-size:11px;font-weight:500;color:rgba(22,24,29,.45)}
+.paper .pf-stamp.pf-mine.pf-empty:not(.pf-edit){border-color:var(--brand);border-style:solid;background:rgba(11,138,70,.09)}
+.paper .pf-filled:not(.pf-edit) .pf-tag{display:none}

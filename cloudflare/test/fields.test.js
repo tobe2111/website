@@ -263,3 +263,63 @@ test("상인회별 마지막 활동 조회가 compound SELECT 없이 동작한�
   const again = await D.lastActivityByAssociation(db);
   assert.equal(again.find((r) => r.aid === empty.id).last_at, null);
 });
+
+// ---------- 계약서가 계약서로 보이는가 ----------
+// 계약서 본문은 줄글이 아니다. 표제가 있고, 조(條) 아래 항(項)이 있고,
+// 목적물 표시는 표에 가깝고, 맨 끝에 말미 문구와 서명란이 온다.
+// 이 구조가 글자 크기 하나로 뭉개져 나오면 계약서로 읽히지 않는다.
+test("본문의 구조를 읽는다 — 표제 · 조 · 항 · 목적물 표시 · 말미", () => {
+  const body = [
+    "상가건물 임대차계약서", "",
+    '임대인 김갑동 (이하 "갑")과 임차인 이을수 (이하 "을")은 다음과 같이 계약을 체결한다.', "",
+    "제1조 (목적물)", "  소재지   서울 서초구 서초대로 78길 22", "", 
+    "제2조 (보증금)", "  ① 보증금은 금 오천만원으로 한다.", "  1. 계약금은 계약 시 지급한다.", "",
+    "본 계약을 증명하기 위하여 당사자는 아래에 전자서명한다.",
+  ].join("\n");
+  const roles = paginate(body)[0].map((l) => l.role);
+  assert.equal(roles[0], "title", "첫 줄은 표제");
+  assert.ok(roles.includes("article"), "제N조를 조문으로 읽는다");
+  assert.ok(roles.includes("clause"), "①을 항으로 읽는다");
+  assert.ok(roles.includes("item"), "1.을 호로 읽는다");
+  assert.ok(roles.includes("label"), "'소재지  서울…' 을 이름표+값으로 읽는다");
+  assert.ok(roles.includes("closing"), "말미 문구를 알아본다");
+});
+
+test("표제로 착각하지 않는다 — 조문이나 문장으로 시작하면 그냥 본문", () => {
+  assert.equal(paginate("제1조 (목적)\n본문")[0][0].role, "article");
+  assert.equal(paginate("갑은 을에게 목적물을 인도한다.\n다음")[0][0].role, "plain", "문장은 표제가 아니다");
+});
+
+test("역할을 붙여도 줄 나눔은 한 줄도 달라지지 않는다", () => {
+  // 필드는 "2쪽의 y=0.78" 처럼 지면 비율로 저장된다 — 줄 수가 바뀌면 배치가 통째로 어긋난다.
+  const body = LONG;
+  const flat = String(body).split("\n").flatMap((p) => wrapLine(p));
+  const rich = paginate(body).flat();
+  assert.equal(rich.length, flat.length, "줄 수가 같아야 한다");
+  assert.deepEqual(rich.map((l) => l.t), flat, "줄 내용도 같아야 한다");
+});
+
+test("서명란은 본문이 끝나는 자리 바로 아래로 내려온다", async () => {
+  const { BUILTIN, resolveFieldPages, applyVars } = await import("../src/templates.js");
+  const t = BUILTIN.find((x) => x.id === "b-lease");
+  const body = applyVars(t.body, {});
+  const n = pageCount(body);
+  const fixed = resolveFieldPages(t.fields, n);              // body 없이 = 예전 고정 좌표
+  const laid = resolveFieldPages(t.fields, n, body);          // body 를 주면 본문 끝에 맞춘다
+  const firstRow = (rows) => Math.min(...rows.filter((f) => f.kind === "sign").map((f) => f.y));
+  assert.ok(firstRow(laid) < firstRow(fixed),
+    "본문이 짧으면 서명란이 위로 붙는다 — 고정 좌표로 두면 허공에 떠 있다");
+  // 두 당사자 사이 간격은 그대로여야 한다
+  const gap = (rows) => { const ys = rows.filter((f) => f.kind === "sign").map((f) => f.y).sort((a, b) => a - b); return ys[1] - ys[0]; };
+  assert.ok(Math.abs(gap(laid) - gap(fixed)) < 0.001, "당사자 사이 간격은 유지");
+  for (const f of laid) assert.ok(f.y + f.h <= 1, "지면 밖으로 나가지 않는다");
+});
+
+test("서명란 이름표는 계약서가 쓰는 말이다 — '당사자1' 이 아니라 '임대인(갑)'", async () => {
+  const { BUILTIN } = await import("../src/templates.js");
+  const t = BUILTIN.find((x) => x.id === "b-lease");
+  const labels = t.fields.map((f) => f.label).join(" ");
+  assert.match(labels, /임대인\(갑\) 서명/);
+  assert.match(labels, /임차인\(을\) 성명/);
+  assert.ok(!labels.includes("당사자1"), "서명하는 사람이 자기 자리를 찾을 수 있어야 한다");
+});

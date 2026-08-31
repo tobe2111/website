@@ -6,6 +6,8 @@
 // 필드 page 에 -1 을 쓰면 "마지막 페이지" 를 뜻한다. 본문 길이에 따라 쪽수가 달라지므로
 // 서명란은 절대 쪽수가 아니라 '끝장'에 붙어야 한다.
 
+import { paginate, PAGE, LINE_H } from "./paper.js";
+
 // {{변수}} 추출 — 나온 순서대로, 중복 제거
 export function extractVars(body) {
   const out = [];
@@ -26,23 +28,48 @@ export function applyVars(body, values = {}) {
   });
 }
 
-// 서식의 필드 배치를 실제 쪽수에 맞춘다 (-1 → 마지막 쪽)
-export function resolveFieldPages(fields, pages) {
-  return (fields || []).map((f) => ({ ...f, page: f.page < 0 ? Math.max(0, pages + f.page) : Math.min(f.page, pages - 1) }));
+// 서식의 필드 배치를 실제 쪽수에 맞춘다 (-1 → 마지막 쪽).
+// body 를 함께 주면 서명란의 세로 자리도 **본문이 끝나는 자리 바로 아래**로 옮긴다 —
+// 고정 좌표(0.60)에 두면 본문이 짧은 계약서에서 서명란이 허공에 400px 떠 있게 된다.
+// 계약서는 "…아래에 서명한다" 바로 밑에서 서명이 시작돼야 계약서로 읽힌다.
+export function resolveFieldPages(fields, pages, body = null) {
+  const rows = (fields || []).map((f) => ({ ...f, page: f.page < 0 ? Math.max(0, pages + f.page) : Math.min(f.page, pages - 1) }));
+  if (!body) return rows;
+  const y0 = signStartY(body);
+  if (y0 == null) return rows;
+  // 원래 y 를 행 번호로 되돌려(0.60·0.71·…) 새 시작점부터 같은 간격으로 다시 깐다
+  return rows.map((f) => {
+    const row = Math.round((f.y - SIGN_Y0) / SIGN_GAP);
+    if (row < 0 || Math.abs(SIGN_Y0 + row * SIGN_GAP - f.y) > 0.02) return f;   // 서명란 행이 아니면 그대로
+    return { ...f, y: Math.min(0.94 - f.h, y0 + row * SIGN_GAP + (f.y - (SIGN_Y0 + row * SIGN_GAP))) };
+  });
+}
+export const SIGN_Y0 = 0.60, SIGN_GAP = 0.11;
+// 마지막 쪽에서 본문이 끝난 다음 줄의 세로 비율. 서명란이 들어갈 자리가 없으면 null.
+function signStartY(body) {
+  const pages = paginate(body);
+  const last = pages[pages.length - 1];
+  let lastText = -1;
+  for (let i = last.length - 1; i >= 0; i--) if (last[i].t.trim()) { lastText = i; break; }
+  const start = lastText + 3;                       // 말미 문구와 두 줄 띄운다
+  const y = (PAGE.pad + start * LINE_H) / PAGE.h;
+  return y > 0.80 ? null : Math.max(0.30, y);       // 두 당사자가 안 들어가면 원래 자리를 쓴다
 }
 
 // 서명·도장·날짜를 끝장 하단에 나란히 놓는 표준 배치 (당사자 수만큼)
-const signRow = (i, n, assigneeKey) => {
+// 서명란 이름표는 "당사자1" 이 아니라 계약서가 실제로 쓰는 말이어야 한다 —
+// 임대차계약서라면 임대인(갑)·임차인(을) 이다. 서명하는 사람이 자기 자리를 찾을 수 있어야 한다.
+const signRow = (i, who) => {
   const y = 0.60 + i * 0.11;
+  const name = who || `당사자${i + 1}`;
   return [
-    { kind: "name",  label: `당사자${i + 1} 성명`, page: -1, x: 0.10, y, w: 0.22, h: 0.032, party: assigneeKey, required: 1 },
-    { kind: "sign",  label: `당사자${i + 1} 서명`, page: -1, x: 0.36, y: y - 0.012, w: 0.24, h: 0.056, party: assigneeKey, required: 1 },
-    { kind: "stamp", label: "도장",              page: -1, x: 0.64, y: y - 0.016, w: 0.085, h: 0.06, party: assigneeKey, required: 0 },
-    { kind: "date",  label: "날짜",              page: -1, x: 0.76, y, w: 0.15, h: 0.032, party: assigneeKey, required: 1 },
+    { kind: "name",  label: `${name} 성명`, page: -1, x: 0.10, y, w: 0.22, h: 0.032, party: i, required: 1 },
+    { kind: "sign",  label: `${name} 서명`, page: -1, x: 0.36, y: y - 0.012, w: 0.24, h: 0.056, party: i, required: 1 },
+    { kind: "stamp", label: "도장",         page: -1, x: 0.64, y: y - 0.016, w: 0.085, h: 0.06, party: i, required: 0 },
+    { kind: "date",  label: "날짜",         page: -1, x: 0.76, y, w: 0.15, h: 0.032, party: i, required: 1 },
   ];
 };
-const twoParty = [...signRow(0, 2, 0), ...signRow(1, 2, 1)];
-const oneParty = signRow(0, 1, 0);
+const partyRows = (parties) => parties.flatMap((who, i) => signRow(i, who));
 
 // ---------- 기본 서식 (코드 내장 — DB 시딩 불필요) ----------
 // id 가 'b'로 시작하면 내장 서식, 숫자면 상인회가 저장한 서식이다.
@@ -80,8 +107,7 @@ export const BUILTIN = [
 
 제6조 (계약의 해지)
   ① 을이 차임을 3기 이상 연체한 때에는 갑은 계약을 해지할 수 있다.
-  ② 당사자 일방이 본 계약을 위반한 때에는 상대방은 상당한 기간을 정하여 이행을 최고하고,
-     그 기간 내에 이행되지 아니하면 계약을 해지할 수 있다.
+  ② 당사자 일방이 본 계약을 위반한 때에는 상대방은 상당한 기간을 정하여 이행을 최고하고, 그 기간 내에 이행되지 아니하면 계약을 해지할 수 있다.
 
 제7조 (특약사항)
   {{특약사항}}
@@ -91,7 +117,7 @@ export const BUILTIN = [
 
 본 계약을 증명하기 위하여 당사자는 아래에 전자서명한다.`,
     parties: ["임대인(갑)", "임차인(을)"],
-    fields: twoParty,
+    fields: partyRows(["임대인(갑)", "임차인(을)"]),
   },
   {
     id: "b-service",
@@ -135,7 +161,7 @@ export const BUILTIN = [
 
 본 계약을 증명하기 위하여 당사자는 아래에 전자서명한다.`,
     parties: ["위탁자(갑)", "수탁자(을)"],
-    fields: twoParty,
+    fields: partyRows(["위탁자(갑)", "수탁자(을)"]),
   },
   {
     id: "b-nda",
@@ -171,7 +197,7 @@ export const BUILTIN = [
 
 본 계약을 증명하기 위하여 당사자는 아래에 전자서명한다.`,
     parties: ["갑", "을"],
-    fields: twoParty,
+    fields: partyRows(["갑(정보제공자)", "을(정보수령자)"]),
   },
   {
     id: "b-join",
@@ -210,7 +236,7 @@ export const BUILTIN = [
     parties: ["가입 신청인"],
     fields: [
       { kind: "check", label: "위 내용에 동의합니다", page: -1, x: 0.10, y: 0.55, w: 0.035, h: 0.026, party: 0, required: 1 },
-      ...oneParty,
+      ...partyRows(["가입 신청인"]),
     ],
   },
 ];

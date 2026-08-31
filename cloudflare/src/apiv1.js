@@ -216,7 +216,7 @@ async function createDocument(ctx, key, assoc) {
   // 서식의 필드 배치를 실제 사람에게 붙인다 (당사자 번호 → 등록 순서)
   if (tpl && tpl.fields.length) {
     const pages = pageCount(body);
-    const placed = resolveFieldPages(tpl.fields, pages).map((f) => ({
+    const placed = resolveFieldPages(tpl.fields, pages, body).map((f) => ({
       kind: f.kind, label: f.label || "", page: f.page,
       x: round4(f.x), y: round4(f.y), w: round4(f.w), h: round4(f.h),
       assignee: created[f.party | 0] ? -created[f.party | 0].id : 0, required: f.required ? 1 : 0,

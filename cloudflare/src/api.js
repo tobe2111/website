@@ -1036,7 +1036,7 @@ export async function adminCreateDocument(ctx) {
     const signers = partyMap.filter((v) => v > 0);
     await D.createSignatureRequests(db, doc.id, signers);
     const pages = pageCount(body);
-    const placed = resolveFieldPages(tpl.fields, pages).map((f) => ({
+    const placed = resolveFieldPages(tpl.fields, pages, body).map((f) => ({
       kind: f.kind, label: f.label || "", page: f.page,
       x: round4(f.x), y: round4(f.y), w: round4(f.w), h: round4(f.h),
       assignee: partyMap[f.party | 0] || 0, required: f.required ? 1 : 0,
