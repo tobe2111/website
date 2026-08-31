@@ -24,7 +24,7 @@ import { PLANS, PLAN_KEYS, planPrices } from "./plans.js";
 import { emailEnabled as emailOn } from "./email.js";
 import { CRON, CRON_JOBS, cronRunKey } from "./scheduled.js";
 
-const DOC_EVENT_LABEL = { created: "문서 생성", viewed: "계약서 열람", otp_sent: "인증번호 발송", otp_ok: "휴대폰 본인확인", signed: "전자서명 완료", declined: "서명 거절", reminded: "재알림 발송", notified: "알림 발송", edited: "문서 수정", sealed: "직인 날인 (보내는 쪽)" };
+const DOC_EVENT_LABEL = { created: "문서 생성", viewed: "계약서 열람", otp_sent: "인증번호 발송", otp_ok: "휴대폰 본인확인", signed: "전자서명 완료", declined: "서명 거절", reminded: "재알림 발송", notified: "알림 발송", edited: "문서 수정", sealed: "직인 날인 (보내는 쪽)", expired: "기한 경과로 마감" };
 const CATEGORIES = ["음식점", "카페·디저트", "생활·서비스", "패션·잡화", "농수축산", "교육·문화", "기타"];
 const NOTICE_CATEGORIES = ["안내", "공지", "소식", "행사", "혜택", "긴급"];
 const qs = (o) => { const p = new URLSearchParams(); for (const [k, v] of Object.entries(o)) if (v != null && v !== "" && !(k === "page" && v === 1)) p.set(k, v); const s = p.toString(); return s ? "?" + s : ""; };
@@ -1880,10 +1880,11 @@ export async function signForm(ctx) {
       <p>이 계약서 내용으로 계산한 값입니다. 글자 하나만 바뀌어도 값이 달라지므로, 나중에 문서가 바뀌지 않았는지 이 값으로 확인할 수 있습니다.</p>
       <code>${esc(d.content_hash)}</code></details>
     ${otpDone ? `${needOtp ? '<p class="otp-ok">휴대폰 본인확인 완료 — 이 서명에는 본인확인 기록이 함께 남습니다.</p>' : ""}
-    <form method="post" action="${base}/sign/${d.id}" class="stack-form sign-form" id="signForm">
+    <form method="post" action="${base}/sign/${d.id}" class="stack-form sign-form" id="signForm" enctype="multipart/form-data">
       ${padBlock}
       <input type="hidden" name="signature" id="signatureData" />
       <input type="hidden" name="fields" id="fieldValues" />
+      ${fileInputs(myFields)}
       <label>서명자 성명<input type="text" name="signer_name" id="signerName" value="${esc(user.name)}" required autocomplete="name" /></label>
       <label class="check check-tap"><input type="checkbox" name="consent" value="1" required id="signConsent" /> 위 내용을 확인했으며 본인이 전자서명하는 데 동의합니다.</label>
       <button class="btn btn-primary btn-block" id="signSubmit">전자서명 제출</button>
@@ -1905,11 +1906,49 @@ export async function adminDocuments(ctx) {
   // 담당자(STAFF)는 /admin·/admin/api 가 403 이다 — 못 가는 곳으로 가는 링크를 그리면 안 된다
   const canAdmin = user.role === "ADMIN" || user.role === "SUPERADMIN";
   const today = new Date().toISOString().slice(0, 10);
-  const docs = await D.listDocuments(db, assoc.id);
+
+  // ---- 목록: 찾을 수 있어야 목록이다 ----
+  // 계약이 쌓이면 날짜순 한 덩어리로는 아무것도 못 한다. 상태 칩 · 검색 · 쪽 나눔.
+  const q = cap((query.get("q") || "").trim(), 60);
+  const stat = D.DOC_STATUSES.includes(query.get("stat") || "") ? query.get("stat") : "";
+  const page = Math.max(1, Number(query.get("p") || 1) | 0);
+  const PER = 20;
+  const counts = await D.documentCounts(db, assoc.id, q);
+  const docs = await D.listDocumentsPage(db, assoc.id, { q, status: stat, limit: PER, offset: (page - 1) * PER });
+  const shown = stat ? counts[stat] : counts.all;
+  const pages = Math.max(1, Math.ceil(shown / PER));
+  const qs = (over = {}) => {
+    const v = { q, stat, p: page, ...over };
+    const u = new URLSearchParams();
+    if (v.q) u.set("q", v.q);
+    if (v.stat) u.set("stat", v.stat);
+    if (v.p && v.p > 1) u.set("p", String(v.p));
+    const t = u.toString();
+    return `${base}/admin/documents${t ? "?" + t : ""}`;
+  };
+  const STAT_TONE = { open: "wait", overdue: "no", declined: "no", done: "ok", closed: "muted" };
+  const chip = (key, label, n) => `<a class="doc-chip${stat === key ? " on" : ""}${n && (key === "overdue" || key === "declined") ? " is-alert" : ""}" href="${qs({ stat: key, p: 1 })}">${esc(label)} <b>${n}</b></a>`;
+  const chips = `<div class="doc-chips">${chip("", "전체", counts.all)}${D.DOC_STATUSES.map((k) => chip(k, D.DOC_STATUS_LABEL[k], counts[k])).join("")}</div>`;
+
+  const progress = (d) => {
+    if (!d.total) return `<span class="txt-muted">전체 회원</span>`;
+    const pct = Math.round((d.signed / d.total) * 100);
+    return `<span class="doc-prog" style="--pct:${pct}%"><b>${d.signed}</b>/${d.total}</span>`;
+  };
   const rows = docs.length ? docs.map((d) => `<tr><td><a href="${base}/admin/documents/${d.id}">${esc(d.title)}</a>
-    ${d.ordered ? '<span class="badge badge-info">순차</span>' : ""}${d.due_date ? `<span class="badge ${d.due_date < today ? "badge-no" : "badge-wait"}">기한 ${esc(d.due_date)}</span>` : ""}<br /><small>${esc(kstStamp(d.created_at))}</small></td>
-    <td>${d.sign_count}명${d.author_name ? `<br /><small class="txt-muted">${esc(d.author_name)}</small>` : ""}</td><td>${d.closed ? '<span class="badge badge-no">마감</span>' : '<span class="badge badge-ok">진행중</span>'}</td>
-    <td class="actions-cell"><a class="btn btn-xs btn-ghost" href="${base}/admin/documents/${d.id}">보기</a>${d.closed ? "" : `<form method="post" action="${base}/admin/documents/${d.id}/close" data-confirm="마감할까요?"><button class="btn btn-xs btn-ghost">마감</button></form>`}</td></tr>`).join("") : `<tr><td colspan="4" class="empty">문서가 없습니다.</td></tr>`;
+    ${d.ordered ? '<span class="badge badge-info">순차</span>' : ""}<br /><small>${esc(kstStamp(d.created_at))}${d.author_name ? ` · ${esc(d.author_name)}` : ""}</small></td>
+    <td>${progress(d)}</td>
+    <td>${d.due_date ? `<span class="${d.due_date < today && d.status !== "done" ? "txt-no" : ""}">${esc(d.due_date)}</span>` : '<span class="txt-muted">없음</span>'}</td>
+    <td><span class="badge badge-${STAT_TONE[d.status] || "muted"}">${esc(D.DOC_STATUS_LABEL[d.status] || d.status)}</span></td>
+    <td class="actions-cell"><a class="btn btn-xs btn-ghost" href="${base}/admin/documents/${d.id}">보기</a>${
+      // 다 받은 계약과 이미 닫힌 계약에 '마감' 을 또 붙이면, 누를 일 없는 단추가 줄마다 선다.
+      d.closed || d.status === "done" ? "" : `<form method="post" action="${base}/admin/documents/${d.id}/close" data-confirm="마감할까요? 남은 사람은 더 이상 서명할 수 없습니다."><button class="btn btn-xs btn-ghost">마감</button></form>`}</td></tr>`).join("")
+    : `<tr><td colspan="5" class="empty">${q || stat ? "찾는 계약이 없습니다." : "아직 보낸 계약이 없습니다."}</td></tr>`;
+  const pager = pages > 1 ? `<div class="doc-pager">
+    ${page > 1 ? `<a class="btn btn-ghost btn-sm" href="${qs({ p: page - 1 })}">← 이전</a>` : ""}
+    <span>${page} / ${pages}</span>
+    ${page < pages ? `<a class="btn btn-ghost btn-sm" href="${qs({ p: page + 1 })}">다음 →</a>` : ""}</div>` : "";
+
   const members = await D.listSignerCandidates(db, assoc.id, assoc.kind);
   const checks = members.length ? members.map((m) => `<label class="check member-check"><input type="checkbox" name="members" value="${m.id}" /> ${esc(m.name)} <small>${esc(m.email)}</small></label>`).join("") : `<p class="empty">회원이 없습니다.</p>`;
   // 작성 중(초안) — 아직 계약이 아니다. 보내는 순간 비로소 계약이 된다.
@@ -1984,8 +2023,17 @@ export async function adminDocuments(ctx) {
         <div class="member-picker">${checks}</div>
         <p class="panel-hint">순차 서명 시 위 목록 순서대로 서명 요청이 진행됩니다.</p>
         <button class="btn btn-primary">문서 생성 및 서명 요청</button></form></details>
-    <section class="panel"><h2 class="panel-title">문서 목록</h2><div class="table-scroll"><table class="admin-table">
-      <thead><tr><th>문서</th><th>서명 · 만든 사람</th><th>상태</th><th>관리</th></tr></thead><tbody>${rows}</tbody></table></div></section></div></section>`;
+    <section class="panel"><div class="panel-head"><h2 class="panel-title">보낸 계약</h2>
+        <form method="get" action="${base}/admin/documents" class="doc-search" role="search">
+          ${stat ? `<input type="hidden" name="stat" value="${esc(stat)}" />` : ""}
+          <input type="search" name="q" value="${esc(q)}" placeholder="제목 또는 서명자 이름" aria-label="계약 검색" />
+          <button class="btn btn-ghost btn-sm">찾기</button>
+          ${q ? `<a class="btn btn-ghost btn-sm" href="${qs({ q: "", p: 1 })}">지우기</a>` : ""}
+        </form></div>
+      ${chips}
+      <div class="table-scroll"><table class="admin-table">
+      <thead><tr><th>계약</th><th>서명</th><th>기한</th><th>상태</th><th>관리</th></tr></thead><tbody>${rows}</tbody></table></div>
+      ${pager}</section></div></section>`;
   return html(layout({ title: "전자서명 문서", assoc, base, user, body, csrf,
     scripts: `<script src="${assetUrl("/js/pdf-form.js")}" defer></script>` }));
 }
@@ -2656,9 +2704,10 @@ export async function extSignForm(ctx) {
     <details class="doc-hash"><summary>문서 지문 <code>${esc(String(d.content_hash).slice(0, 8))}…${esc(String(d.content_hash).slice(-8))}</code></summary>
       <p>이 계약서 내용으로 계산한 값입니다. 글자 하나만 바뀌어도 값이 달라지므로, 나중에 문서가 바뀌지 않았는지 이 값으로 확인할 수 있습니다.</p>
       <code>${esc(d.content_hash)}</code></details>
-    ${otpDone ? `<form method="post" action="${to}" class="stack-form sign-form" id="signForm">
+    ${otpDone ? `<form method="post" action="${to}" class="stack-form sign-form" id="signForm" enctype="multipart/form-data">
       ${hasSignField ? "" : `<label>서명<div class="sign-pad-wrap"><canvas id="signPad" class="sign-pad" width="600" height="200"></canvas><button type="button" class="btn btn-ghost btn-xs sign-clear" id="signClear">지우기</button></div></label>`}
       <input type="hidden" name="signature" id="signatureData" /><input type="hidden" name="fields" id="fieldValues" />
+      ${fileInputs(myFields)}
       <label>서명자 성명<input type="text" name="signer_name" id="signerName" value="${esc(signer.name)}" required maxlength="60" autocomplete="name" /></label>
       <label class="check check-tap"><input type="checkbox" name="consent" value="1" required id="signConsent" /> 위 내용을 확인했으며 본인이 전자서명하는 데 동의합니다.</label>
       <button class="btn btn-primary btn-block" id="signSubmit">전자서명 제출</button>
@@ -2750,6 +2799,12 @@ export async function documentEvidence(ctx) {
 // 지면에 놓인 필드를 페이지별로 뿌리는 헬퍼. fields 는 값(value/image)이 붙어 있을 수 있다.
 // 계약서에 발신자 직인이 찍혀 있으면 그 사실을 종이에도 적는다.
 // 이 문서를 받은 제3자는 도장 두 개를 보고 "둘 다 서명했다" 로 읽는다 — 한쪽은 서명이 아니다.
+// 첨부 자리는 폼 안에 진짜 <input type=file> 을 하나씩 둔다.
+// 파일을 JSON 에 base64 로 실으면 10MB 가 13MB 로 부풀고, 휴대폰에서 그대로 멈춘다.
+// 화면에는 안 보이고, 지면의 그 칸을 누르면 이 입력을 대신 연다(paper.js).
+const fileInputs = (fields) => (fields || []).filter((f) => f.kind === "file")
+  .map((f) => `<input type="file" id="ff-${f.id}" name="file_${f.id}" accept="image/*,application/pdf" hidden />`).join("");
+
 export const sealNote = (fields, orgName = "") => {
   const n = (fields || []).filter((f) => f.auto === "seal" && (f.image || f.value)).length;
   if (!n) return "";

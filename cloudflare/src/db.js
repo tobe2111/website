@@ -703,6 +703,67 @@ export const listDocuments = (db, aid) =>
       (SELECT COUNT(*) FROM signature_requests r WHERE r.document_id=d.id) AS signer_count
     FROM documents d LEFT JOIN users u ON u.id = d.created_by
     WHERE d.association_id=? AND d.draft=0 ORDER BY d.created_at DESC`, aid);
+// ---- 계약의 상태 ----
+//
+// 계약이 쌓이면 목록이 곧 제품이다. "지금 뭘 봐야 하는가" 에 답하려면 상태가 한 낱말이어야 한다.
+// 상태는 다섯 가지다 — 이 SQL 한 군데에서만 정한다(화면마다 다르게 계산하면 서로 어긋난다).
+//   open     진행 중        아직 다 안 받았고 기한도 안 지났다
+//   overdue  기한 지남      기한이 지났는데 미완료 — 손이 필요한 자리
+//   declined 반려 있음      한 명이라도 거절했다. 가장 먼저 봐야 한다
+//   done     체결 완료      대상 전원이 서명했다
+//   closed   마감           사람이 손으로 닫았다
+const DOC_STAT = `
+  (SELECT COUNT(*) FROM signature_requests r WHERE r.document_id=d.id)
+    + (SELECT COUNT(*) FROM external_signers e WHERE e.document_id=d.id) AS total,
+  (SELECT COUNT(*) FROM signatures s WHERE s.document_id=d.id) AS signed,
+  (SELECT COUNT(*) FROM signature_requests r WHERE r.document_id=d.id AND r.declined_at!='')
+    + (SELECT COUNT(*) FROM external_signers e WHERE e.document_id=d.id AND e.declined_at!='') AS declined`;
+const DOC_STATUS = `CASE
+  WHEN d.closed=1 THEN 'closed'
+  WHEN (SELECT COUNT(*) FROM signature_requests r WHERE r.document_id=d.id AND r.declined_at!='')
+     + (SELECT COUNT(*) FROM external_signers e WHERE e.document_id=d.id AND e.declined_at!='') > 0 THEN 'declined'
+  WHEN ((SELECT COUNT(*) FROM signature_requests r WHERE r.document_id=d.id)
+      + (SELECT COUNT(*) FROM external_signers e WHERE e.document_id=d.id)) > 0
+   AND (SELECT COUNT(*) FROM signatures s WHERE s.document_id=d.id)
+       >= ((SELECT COUNT(*) FROM signature_requests r WHERE r.document_id=d.id)
+         + (SELECT COUNT(*) FROM external_signers e WHERE e.document_id=d.id)) THEN 'done'
+  WHEN d.due_date!='' AND d.due_date < date('now') THEN 'overdue'
+  ELSE 'open' END`;
+export const DOC_STATUSES = ["open", "overdue", "declined", "done", "closed"];
+export const DOC_STATUS_LABEL = {
+  open: "진행 중", overdue: "기한 지남", declined: "반려 있음", done: "체결 완료", closed: "마감",
+};
+
+// 제목으로도, 서명자 이름으로도 찾는다 — 관리자는 "누구랑 한 계약" 으로 기억한다.
+const DOC_SEARCH = `(d.title LIKE ?1 ESCAPE '\\'
+  OR EXISTS (SELECT 1 FROM external_signers e WHERE e.document_id=d.id AND (e.name LIKE ?1 ESCAPE '\\' OR e.org LIKE ?1 ESCAPE '\\'))
+  OR EXISTS (SELECT 1 FROM signature_requests r JOIN users u ON u.id=r.user_id
+             WHERE r.document_id=d.id AND u.name LIKE ?1 ESCAPE '\\'))`;
+
+export async function listDocumentsPage(db, aid, { q = "", status = "", limit = 20, offset = 0 } = {}) {
+  const where = [`d.association_id=?${q ? 2 : 1}`, "d.draft=0"];
+  const args = [];
+  if (q) { args.push(likeParam(q)); where.push(DOC_SEARCH); }
+  args.push(aid);
+  let sql = `SELECT d.*, u.name AS author_name, ${DOC_STAT}, ${DOC_STATUS} AS status
+    FROM documents d LEFT JOIN users u ON u.id=d.created_by WHERE ${where.join(" AND ")}`;
+  if (DOC_STATUSES.includes(status)) sql += ` AND ${DOC_STATUS} = '${status}'`;
+  sql += ` ORDER BY d.created_at DESC LIMIT ${Math.max(1, Math.min(100, limit | 0))} OFFSET ${Math.max(0, offset | 0)}`;
+  return all(db, sql, ...args);
+}
+// 상태별 건수 — 목록 위의 칩. 0 건인 상태도 자리를 지킨다(사라지면 화면이 매번 달라 보인다).
+export async function documentCounts(db, aid, q = "") {
+  const args = [];
+  let where = `d.association_id=?${q ? 2 : 1} AND d.draft=0`;
+  if (q) { args.push(likeParam(q)); where += ` AND ${DOC_SEARCH}`; }
+  args.push(aid);
+  const rows = await all(db, `SELECT ${DOC_STATUS} AS status, COUNT(*) AS n FROM documents d WHERE ${where} GROUP BY 1`, ...args);
+  const out = { all: 0 };
+  for (const s of DOC_STATUSES) out[s] = 0;
+  for (const r of rows) { out[r.status] = r.n; out.all += r.n; }
+  return out;
+}
+
 // 서명 시작 전 문서 수정 — 오타 하나 때문에 계약을 새로 만드는 일이 없도록.
 // 본문이 바뀌면 해시도 다시 계산해야 한다(호출부에서 넘긴다).
 export const updateDocument = (db, id, { title, body, contentHash, dueDate, ordered }) =>
@@ -712,6 +773,17 @@ export const updateDocument = (db, id, { title, body, contentHash, dueDate, orde
 export const clampFieldPages = (db, documentId, lastPage) =>
   run(db, "UPDATE doc_fields SET page=? WHERE document_id=? AND page>?", lastPage, documentId, lastPage);
 export const closeDocument = (db, id) => run(db, "UPDATE documents SET closed=1 WHERE id=?", id);
+
+// 기한이 지났는데 아직 안 닫힌 계약 — 매일 크론이 정리한다.
+// 기한이 지나면 서명은 이미 막히지만(TURN_OK/isPastDue) 상태는 '진행 중' 으로 남아,
+// 아무도 손대지 않는 계약이 목록 맨 위에 영원히 쌓인다. 그러면 목록을 아무도 안 본다.
+export const listExpiredOpen = (db) =>
+  all(db, `SELECT d.*, a.slug AS assoc_slug FROM documents d JOIN associations a ON a.id=d.association_id
+    WHERE d.draft=0 AND d.closed=0 AND d.due_date!='' AND d.due_date < date('now')
+      AND (SELECT COUNT(*) FROM signatures s WHERE s.document_id=d.id)
+        < ((SELECT COUNT(*) FROM signature_requests r WHERE r.document_id=d.id)
+         + (SELECT COUNT(*) FROM external_signers e WHERE e.document_id=d.id))
+    ORDER BY d.due_date`);
 
 // 순차 서명 대기 판정 — 내 앞 순번에 아직 서명하지 않은 사람이 있는가.
 // 회원과 외부 서명자를 같은 sign_order 축에서 함께 본다(둘 중 하나만 보면 순서가 어긋난다).

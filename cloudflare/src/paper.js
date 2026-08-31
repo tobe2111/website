@@ -127,6 +127,9 @@ export const FIELD_KINDS = {
   date:  { label: "날짜",   w: 0.16, h: 0.032 },
   name:  { label: "성명",   w: 0.18, h: 0.032 },
   check: { label: "체크",   w: 0.035, h: 0.025 },
+  // 한국 B2B 계약의 절반은 "사업자등록증 첨부해 주세요" 로 끝난다. 그 자리가 없으면
+  // 계약은 전자로 하고 서류는 이메일로 따로 받게 된다 — 그 순간 증적이 두 곳으로 갈라진다.
+  file:  { label: "파일 첨부", w: 0.26, h: 0.042 },
 };
 export const isFieldKind = (k) => Object.prototype.hasOwnProperty.call(FIELD_KINDS, k);
 
@@ -199,8 +202,10 @@ export function fieldBox(f, { mode = "view", val = null, mine = false, assigneeN
     const bg = val && val.imageUrl ? `<img class="pf-bg" src="${esc(val.imageUrl)}" alt="" />` : "";
     inner = `${bg}<span class="pf-tag">${esc(f.label || k.label)}</span>${assigneeName ? `<span class="pf-who">${esc(assigneeName)}</span>` : ""}<i class="pf-grip"></i>`;
   } else if (filled) {
-    inner = val.imageUrl
-      ? `<img src="${esc(val.imageUrl)}" alt="${esc(k.label)}" />`
+    inner = f.kind === "file"
+      // 첨부는 그림이 아니다 — 파일 이름과 받는 길을 보여 준다(PDF 도 들어온다)
+      ? `<a class="pf-file" href="${esc(val.imageUrl || "#")}" target="_blank" rel="noopener">📎 ${esc(val.value || "첨부")}</a>`
+      : val.imageUrl ? `<img src="${esc(val.imageUrl)}" alt="${esc(k.label)}" />`
       : f.kind === "check" ? `<span class="pf-check">✔</span>` : `<span class="pf-val">${esc(val.value)}</span>`;
   } else if (f.kind === "stamp") {
     // 계약서에서 도장 자리는 "도장" 이라고 쓰지 않는다 — (인) 이다.

@@ -268,6 +268,7 @@
     if (kind === "sign") drawPad(dlgBody, 560, 200);
     else if (kind === "stamp") stampMaker(dlgBody);
     else if (kind === "check") { setValue(el, { value: "1" }); close(); return; }
+    else if (kind === "file") { filePicker(dlgBody, el); }
     else {
       var input = document.createElement("input");
       input.type = kind === "date" ? "date" : "text";
@@ -291,11 +292,39 @@
     close();
   });
 
+  // 파일 첨부 — 폼 안에 이미 있는 진짜 <input type=file> 을 대신 연다.
+  // base64 로 실어 보내지 않는 이유: 10MB 가 13MB 로 부풀고, 휴대폰에서 그대로 멈춘다.
+  function filePicker(host, el) {
+    var real = document.getElementById("ff-" + el.dataset.id);
+    var wrap = document.createElement("div");
+    wrap.className = "fd-file";
+    var btn = document.createElement("button");
+    btn.type = "button"; btn.className = "btn btn-ghost btn-sm";
+    btn.textContent = "파일 고르기";
+    var name = document.createElement("p");
+    name.className = "fd-filename";
+    var picked = real && real.files && real.files[0];
+    name.textContent = picked ? picked.name : "사업자등록증·통장사본 등 (이미지 또는 PDF · 10MB 이하)";
+    wrap.appendChild(btn); wrap.appendChild(name);
+    host.appendChild(wrap);
+    if (!real) { name.textContent = "이 화면에서는 첨부를 받을 수 없습니다."; return; }
+    btn.addEventListener("click", function () { real.click(); });
+    real.onchange = function () {
+      var f = real.files && real.files[0];
+      name.textContent = f ? f.name : "파일을 고르지 않았습니다.";
+    };
+    host._get = function () {
+      var f = real.files && real.files[0];
+      return f ? { value: f.name, file: true } : null;
+    };
+  }
+
   function setValue(el, v) {
     values[el.dataset.id] = v;
     el.classList.remove("pf-empty");
     el.classList.add("pf-filled");
-    if (v.image) el.innerHTML = '<img src="' + v.image + '" alt="" />';
+    if (v.file) el.innerHTML = '<span class="pf-file">📎 ' + String(v.value).replace(/[<&]/g, function (c) { return c === "<" ? "&lt;" : "&amp;"; }) + "</span>";
+    else if (v.image) el.innerHTML = '<img src="' + v.image + '" alt="" />';
     else if (el.dataset.kind === "check") el.innerHTML = '<span class="pf-check">✔</span>';
     else el.innerHTML = '<span class="pf-val">' + v.value.replace(/[<&]/g, function (c) { return c === "<" ? "&lt;" : "&amp;"; }) + "</span>";
     progress();
@@ -303,6 +332,7 @@
   // 체크는 다시 누르면 해제
   function clearValue(el) {
     delete values[el.dataset.id];
+    if (el.dataset.kind === "file") { var r = document.getElementById("ff-" + el.dataset.id); if (r) r.value = ""; }
     el.classList.add("pf-empty"); el.classList.remove("pf-filled");
     el.innerHTML = '<span class="pf-tag">' + (el.dataset.tag || "입력") + "</span>";
     progress();

@@ -259,7 +259,8 @@ test("문서 목록에 만든 사람이 나온다 (담당자가 여러 명일 �
   const row = (await D.listDocuments(db, org.id)).find((x) => x.id === d.id);
   assert.equal(row.author_name, "담당자");
   const h = await (await req("GET", "/t/law/admin/documents", { cookie: adminJar })).text();
-  assert.match(h, /만든 사람/);
+  // 표 머리글이 아니라 '그 줄에 이름이 있는가' 를 본다 — 열 이름은 화면 사정에 따라 바뀐다
+  assert.match(h, /작성자 표시[\s\S]{0,400}담당자/);
 });
 
 test("만든 사람 계정이 사라져도 목록이 깨지지 않는다", async () => {

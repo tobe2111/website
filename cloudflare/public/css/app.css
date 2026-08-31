@@ -1691,6 +1691,12 @@ a.cc-val:hover{color:var(--brand-text)}
 .fd-tab.on,.fd-font.on,.fd-shape.on{border-color:var(--brand);background:var(--brand-050);color:var(--brand-text)}
 .fd-type{margin:10px 0;display:flex;flex-direction:column;gap:8px}
 .fd-stamp{display:flex;flex-direction:column;gap:10px}
+/* 첨부 자리 — 지면 위에서는 클립과 파일 이름 한 줄 */
+.pf-file{font-size:11px;font-weight:600;color:#1d4ed8;text-decoration:none;padding:0 4px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.paper .pf-file{color:#16181d}
+.fd-file{display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.fd-filename{margin:0;font-size:.86rem;color:var(--muted);word-break:break-all}
 .fd-upload{font-size:.84rem;color:var(--ink-soft);display:flex;flex-direction:column;gap:6px}
 .fd-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
 
@@ -2178,6 +2184,31 @@ input:not([type]),input[type="text"],input[type="email"],input[type="tel"],input
   .fp-save{grid-column:1;grid-row:auto}
   .fp-save .btn{width:100%}
 }
+
+/* ===== 계약 목록 — 찾을 수 있어야 목록이다 ===== */
+.doc-search{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.doc-search input[type=search]{min-width:200px;padding:7px 11px;font-size:.9rem}
+.doc-chips{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 14px}
+/* 알약 모양은 이 프로젝트에서 일부러 걷어낸 것이다 — 화면마다 떠 있으면 장식으로 읽힌다.
+   상태 칩도 예외가 아니다. 네모난 단추로 둔다. */
+.doc-chip{display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border-radius:var(--r-sm);
+  border:1px solid var(--line);background:var(--surface);color:var(--ink-soft);
+  font-size:.84rem;font-weight:600;text-decoration:none;transition:.15s}
+.doc-chip b{font-variant-numeric:tabular-nums;color:var(--ink)}
+.doc-chip:hover{border-color:var(--brand-500);background:var(--brand-tint)}
+.doc-chip.on{border-color:var(--brand-700);background:var(--brand-700);color:#fff}
+.doc-chip.on b{color:#fff}
+/* 손이 필요한 자리(기한 지남·반려)는 0건이 아닐 때만 눈에 띈다 */
+.doc-chip.is-alert:not(.on){border-color:var(--no);color:var(--no-fg)}
+.doc-chip.is-alert:not(.on) b{color:var(--no-fg)}
+/* 서명 진행 — 숫자만 보면 3/5 가 많은 건지 적은 건지 모른다. 밑줄이 그만큼 찬다. */
+.doc-prog{position:relative;display:inline-block;padding-bottom:5px;font-variant-numeric:tabular-nums;color:var(--muted)}
+.doc-prog b{color:var(--ink)}
+.doc-prog::before,.doc-prog::after{content:"";position:absolute;left:0;bottom:0;height:3px;border-radius:2px}
+.doc-prog::before{width:100%;background:var(--line)}
+.doc-prog::after{width:var(--pct,0);background:var(--brand-600)}
+.doc-pager{display:flex;align-items:center;justify-content:center;gap:14px;margin-top:14px;
+  font-size:.86rem;color:var(--muted);font-variant-numeric:tabular-nums}
 
 /* 빈 목록 — 테두리 두른 큰 상자 한가운데 회색 글씨는 "여기 뭔가 고장났나" 로 읽힙니다.
    아무것도 없다는 말은 조용한 한 줄이면 충분합니다. */

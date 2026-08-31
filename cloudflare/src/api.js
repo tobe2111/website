@@ -1750,14 +1750,34 @@ function pngFromDataUrl(s, maxBytes = 500 * 1024) {
 }
 
 // 서명자가 채운 필드를 검증하고 저장 — 먼저 전부 검증한 뒤에 쓴다(중간 실패로 반쯤 채워지는 것 방지).
+// 첨부로 받을 수 있는 것 — 사업자등록증·통장사본·신분증이 대부분이다.
+// 실행 파일이나 문서 매크로가 섞이면 그걸 여는 사람이 위험해지므로, 그림과 PDF 만 받는다.
+const ATTACH_MAX = 10 * 1024 * 1024;
+const isPdfBytes = (b) => b.length > 4 && b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46;
+
 async function applyFieldValues(ctx, doc, fields, rawJson) {
-  const { db, env, user } = ctx;
+  const { db, env, user, form } = ctx;
   let raw = {};
   try { raw = JSON.parse(rawJson || "{}") || {}; } catch { return { error: "입력값을 읽을 수 없습니다." }; }
   const staged = [];
   for (const f of fields) {
     const v = raw[String(f.id)];
     const label = f.label || (FIELD_KINDS[f.kind] || {}).label || "항목";
+    if (f.kind === "file") {
+      // 파일은 JSON 에 실어 보내지 않는다 — 10MB 를 base64 로 부풀리면 본문이 13MB 가 된다.
+      // 폼 안의 <input type=file> 로 그대로 온다.
+      const up = form && form.get(`file_${f.id}`);
+      if (!up || typeof up.arrayBuffer !== "function" || !up.size) {
+        if (f.required) return { error: `'${label}' 파일을 올려 주세요.` };
+        continue;
+      }
+      if (up.size > ATTACH_MAX) return { error: `'${label}' 파일이 큽니다. (최대 10MB)` };
+      const bytes = new Uint8Array(await up.arrayBuffer());
+      const type = sniffImage(bytes) || (isPdfBytes(bytes) ? "application/pdf" : "");
+      if (!type) return { error: `'${label}' 은 이미지 또는 PDF 파일만 올릴 수 있습니다.` };
+      staged.push({ f, bytes, type, name: cap(String(up.name || "첨부").replace(/[\\/:*?"<>|\x00-\x1f]/g, "_"), 80) });
+      continue;
+    }
     if (f.kind === "sign" || f.kind === "stamp") {
       if (!v || !v.image) { if (f.required) return { error: `'${label}' 자리를 채워 주세요.` }; continue; }
       const bytes = pngFromDataUrl(v.image);
@@ -1777,9 +1797,12 @@ async function applyFieldValues(ctx, doc, fields, rawJson) {
   let signKey = "";
   for (const st of staged) {
     if (st.bytes) {
-      const key = storage.enabled(env) ? await storage.save(env, st.bytes, "image/png") : "";
+      const key = storage.enabled(env) ? await storage.save(env, st.bytes, st.type || "image/png") : "";
       const hash = await sha256HexBytes(st.bytes);
-      await D.setFieldValue(db, { fieldId: st.f.id, documentId: doc.id, userId: user.id, image: key, imageHash: hash });
+      // 첨부는 파일 이름도 함께 남긴다 — '사업자등록증.pdf' 인지 '통장사본.jpg' 인지가 증적에서 중요하다.
+      // 이름과 해시가 모두 봉인에 들어가므로, 나중에 다른 파일로 바꿔치기하면 드러난다.
+      await D.setFieldValue(db, { fieldId: st.f.id, documentId: doc.id, userId: user.id,
+        value: st.name || "", image: key, imageHash: hash });
       if (st.f.kind === "sign" && !signKey) signKey = key;
     } else {
       await D.setFieldValue(db, { fieldId: st.f.id, documentId: doc.id, userId: user.id, value: st.value });

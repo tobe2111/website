@@ -287,13 +287,38 @@ export async function runWebhooks(env) {
   return deliverWebhooks(env, env.DB);
 }
 
+// 기한이 지난 계약을 닫는다.
+//
+// 기한이 지나면 서명은 이미 막혀 있다. 그런데 상태는 '진행 중' 으로 남아, 아무도 손대지 않는
+// 계약이 목록에 계속 쌓인다. 그러면 목록을 아무도 안 보게 되고, 목록을 안 보면 제품이 죽는다.
+// 닫으면서 관리자에게 한 번 알린다 — 조용히 사라지면 "왜 안 왔지" 가 된다.
+export async function runExpireOverdue(env) {
+  const db = env.DB;
+  const docs = await D.listExpiredOpen(db);
+  let closed = 0;
+  for (const d of docs) {
+    await D.closeDocument(db, d.id);
+    const got = (await D.requestCounts(db, d.id)) || { signed: 0, total: 0 };
+    await D.logDocEvent(db, { documentId: d.id, kind: "expired", actorName: "시스템",
+      detail: `기한(${d.due_date}) 경과로 마감 · 서명 ${got.signed}/${got.total}` });
+    // 관리자 알림함에 한 줄. 여기서 알림톡·메일을 또 쏘지는 않는다 —
+    // 기한 전에 리마인더를 이미 보냈고, 지난 뒤에 다시 보내면 받는 사람이 할 수 있는 게 없다.
+    await D.createNotification(db, { associationId: d.association_id, kind: "doc_expired",
+      message: `기한이 지나 마감했습니다 — ${d.title} (기한 ${d.due_date} · 서명 ${got.signed}/${got.total})`,
+      link: `/t/${d.assoc_slug}/admin/documents/${d.id}` }).catch(() => {});
+    closed++;
+  }
+  return { closed };
+}
+
 export async function runDaily(env) {
+  const expired = await runExpireOverdue(env).catch((e) => ({ error: String(e) }));
   const reminders = await runSignReminders(env).catch((e) => ({ error: String(e) }));
   const anchor = await runChainAnchor(env).catch((e) => ({ error: String(e) }));
   const hooks = await runWebhooks(env).catch((e) => ({ error: String(e) }));
   const leads = await runLeadPurge(env).catch((e) => ({ error: String(e) }));
-  console.log("daily job", JSON.stringify({ reminders, anchor, hooks, leads }));
-  return { reminders, anchor, hooks, leads };
+  console.log("daily job", JSON.stringify({ expired, reminders, anchor, hooks, leads }));
+  return { expired, reminders, anchor, hooks, leads };
 }
 
 // 보관 기간이 지난 상담 신청 파기.

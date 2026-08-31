@@ -162,6 +162,57 @@ const A = "전자계약";
   const ev = await f(`/esign/${token}/evidence`);
   chk(A, "증적 패키지(ZIP)를 내려받는다", ev.status === 200 && /zip/.test(ev.headers.get("content-type") || ""));
 
+  // 계약이 쌓여도 찾을 수 있는가 — 목록이 곧 제품이다
+  {
+    const yday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const late = await D.createDocument(env.DB, { associationId: law.id, title: "기한 지난 계약",
+      body: "제1조", contentHash: await contentHash("제1조"), createdBy: null, dueDate: yday });
+    const m = await mk("late@law.kr", "늦은이", "MERCHANT", law.id);
+    await D.createSignatureRequests(env.DB, late.id, [m.id]);
+
+    const c = await D.documentCounts(env.DB, law.id);
+    chk(A, "계약을 상태로 가른다 (진행 중·기한 지남·반려·완료·마감)", c.overdue >= 1 && c.all >= 3, `전체 ${c.all} · 기한 지남 ${c.overdue}`);
+    const found = await D.listDocumentsPage(env.DB, law.id, { q: "기한 지난" });
+    chk(A, "제목·서명자 이름으로 계약을 찾는다", found.length === 1);
+    const listHtml = await (await f("/t/law/admin/documents", { headers: { cookie: lawJar } })).text();
+    chk(A, "목록에 상태 칩과 검색창이 있다", /doc-chips/.test(listHtml) && /name="q"/.test(listHtml));
+
+    const { runExpireOverdue } = await import("../src/scheduled.js");
+    const ex = await runExpireOverdue(env);
+    chk(A, "기한이 지난 계약은 스스로 마감되고 알림이 남는다",
+      ex.closed >= 1 && (await D.getDocument(env.DB, late.id)).closed === 1, `${ex.closed}건`);
+  }
+
+  // 서명자가 서류를 첨부한다 — 이게 없으면 계약은 전자로 하고 서류는 이메일로 받게 된다
+  {
+    const fb = "제1조 (서류)";
+    const fd2 = await D.createDocument(env.DB, { associationId: law.id, title: "첨부 받는 계약",
+      body: fb, contentHash: await contentHash(fb), createdBy: null });
+    const fm = await mk("att@law.kr", "첨부자", "MERCHANT", law.id);
+    await D.createSignatureRequests(env.DB, fd2.id, [fm.id]);
+    await D.replaceFields(env.DB, fd2.id, [{ kind: "file", label: "사업자등록증", page: 0,
+      x: 0.3, y: 0.8, w: 0.26, h: 0.042, assignee: fm.id, required: 1 }]);
+    const fj = await login("att@law.kr", "pass1234");
+    const sp = await (await f(`/t/law/sign/${fd2.id}`, { headers: { cookie: fj } })).text();
+    chk(A, "서류 첨부 자리를 계약서 위에 놓는다", /name="file_\d+"/.test(sp) && /multipart\/form-data/.test(sp));
+
+    const pdf = new Uint8Array(700); pdf.set(new TextEncoder().encode("%PDF-1.7\n"), 0);
+    const ff = (await D.listFieldsFor(env.DB, fd2.id, fm.id))[0];
+    const body2 = new FormData();
+    body2.set("_csrf", csrfIn(sp)); body2.set("consent", "1"); body2.set("signer_name", "첨부자");
+    body2.set("fields", "{}"); body2.set("signature", PNG);
+    body2.set(`file_${ff.id}`, new File([pdf], "사업자등록증.pdf", { type: "application/pdf" }));
+    const sr2 = await f(`/t/law/sign/${fd2.id}`, { method: "POST", headers: { cookie: fj, origin: B }, body: body2 });
+    const got = (await D.listFieldsWithValues(env.DB, fd2.id))[0];
+    chk(A, "첨부한 서류가 계약과 함께 보관된다", !/err=1/.test(sr2.headers.get("location") || "") && !!got.image,
+      got.value || "");
+    const s2 = (await D.listSignatures(env.DB, fd2.id))[0];
+    chk(A, "첨부를 바꿔치기하면 봉인이 깨진다 (서류도 서명에 잠긴다)",
+      !!s2 && (await verifySignature(env, s2, await D.getDocument(env.DB, fd2.id))).valid === true
+        && await (async () => { await env.DB.prepare("UPDATE doc_field_values SET image_hash='x' WHERE field_id=?").bind(got.id).run();
+          return (await verifySignature(env, s2, await D.getDocument(env.DB, fd2.id))).valid === false; })());
+  }
+
   // 문서 수정 잠금
   const after = await (await f(`/t/law/admin/documents/${docId}`, { headers: { cookie: lawJar } })).text();
   chk(A, "서명이 시작되면 계약서 본문이 잠긴다", !/문서 수정<\/summary>|panel-title">문서 수정/.test(after));

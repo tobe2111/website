@@ -495,3 +495,226 @@ test("작성기 화면에는 STAFF 도 들어갈 수 있고, 일반 회원은 �
   await post(env, mj, "/login", { email: "m@law.kr", password: "pass1234" });
   assert.notEqual((await get(env, mj, "/t/law/admin/documents/write")).status, 200);
 });
+
+// ---------- 계약 목록: 찾을 수 있어야 목록이다 ----------
+// 계약이 쌓이면 날짜순 한 덩어리로는 아무것도 못 한다. 상태가 한 낱말이어야 하고,
+// 그 낱말이 화면마다 같아야 한다(그래서 상태는 SQL 한 군데에서만 정한다).
+async function docWith(env, a, admin, { title, due = "", closed = 0, signers = [], ext = null, sign = 0, decline = 0 }) {
+  const body = "제1조 (범위)";
+  const d = await D.createDocument(env.DB, { associationId: a.id, title, body, contentHash: await contentHash(body),
+    createdBy: admin.id, dueDate: due });
+  if (signers.length) await D.createSignatureRequests(env.DB, d.id, signers);
+  if (ext) await D.addExternalSigner(env.DB, d.id ? { documentId: d.id, name: ext, signOrder: 9 } : {});
+  if (sign) for (const uid of signers.slice(0, sign)) {
+    await D.run(env.DB, `INSERT INTO signatures (document_id, user_id, signer_name, content_hash, verify_code, record_hash, ip)
+      VALUES (?,?,?,?,?,?,?)`, d.id, uid, "서명자", "h", "code" + d.id + uid, "r", "1.1.1.1");
+  }
+  if (decline) await D.run(env.DB, "UPDATE signature_requests SET declined_at=datetime('now') WHERE document_id=? AND user_id=?", d.id, signers[0]);
+  if (closed) await D.closeDocument(env.DB, d.id);
+  return d;
+}
+
+test("상태는 다섯 낱말로 정해진다 — 진행 중·기한 지남·반려·완료·마감", async () => {
+  const { env, a, admin, member } = await seed();
+  const yday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  await docWith(env, a, admin, { title: "진행중건", signers: [member.id] });
+  await docWith(env, a, admin, { title: "기한지남건", signers: [member.id], due: yday });
+  await docWith(env, a, admin, { title: "반려건", signers: [member.id], decline: 1 });
+  await docWith(env, a, admin, { title: "완료건", signers: [member.id], sign: 1 });
+  await docWith(env, a, admin, { title: "마감건", signers: [member.id], closed: 1 });
+
+  const c = await D.documentCounts(env.DB, a.id);
+  assert.equal(c.all, 5);
+  assert.deepEqual([c.open, c.overdue, c.declined, c.done, c.closed], [1, 1, 1, 1, 1]);
+
+  const byStatus = async (s) => (await D.listDocumentsPage(env.DB, a.id, { status: s })).map((d) => d.title);
+  assert.deepEqual(await byStatus("overdue"), ["기한지남건"]);
+  assert.deepEqual(await byStatus("declined"), ["반려건"]);
+  assert.deepEqual(await byStatus("done"), ["완료건"]);
+  assert.deepEqual(await byStatus("closed"), ["마감건"]);
+});
+
+test("기한이 지나도 이미 다 받았으면 '기한 지남' 이 아니다", async () => {
+  const { env, a, admin, member } = await seed();
+  const yday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  await docWith(env, a, admin, { title: "늦었지만 완료", signers: [member.id], due: yday, sign: 1 });
+  const c = await D.documentCounts(env.DB, a.id);
+  assert.equal(c.done, 1);
+  assert.equal(c.overdue, 0, "다 받은 계약을 붉게 칠하면 매일 거짓 경보를 본다");
+});
+
+test("제목으로도, 서명자 이름으로도 찾는다", async () => {
+  const { env, a, admin, member } = await seed();
+  await docWith(env, a, admin, { title: "용역 위탁 계약서", signers: [member.id] });
+  const withExt = await docWith(env, a, admin, { title: "임대차" });
+  await D.addExternalSigner(env.DB, { documentId: withExt.id, name: "박외부", org: "○○상사", signOrder: 1 });
+
+  const t = async (q) => (await D.listDocumentsPage(env.DB, a.id, { q })).map((d) => d.title);
+  assert.deepEqual(await t("위탁"), ["용역 위탁 계약서"]);
+  assert.deepEqual(await t("김서명"), ["용역 위탁 계약서"], "회원 이름으로도 찾아야 한다");
+  assert.deepEqual(await t("박외부"), ["임대차"], "외부 상대방 이름으로도 찾아야 한다");
+  assert.deepEqual(await t("○○상사"), ["임대차"], "상호로도 찾아야 한다");
+  assert.deepEqual(await t("없는말"), []);
+  assert.equal((await D.documentCounts(env.DB, a.id, "위탁")).all, 1, "건수도 검색어를 따라야 한다");
+});
+
+test("검색어에 %와 _ 를 넣어도 전부 뜨지 않는다 (LIKE 와일드카드)", async () => {
+  const { env, a, admin } = await seed();
+  await docWith(env, a, admin, { title: "정상 계약" });
+  assert.deepEqual((await D.listDocumentsPage(env.DB, a.id, { q: "%" })).map((d) => d.title), []);
+  assert.deepEqual((await D.listDocumentsPage(env.DB, a.id, { q: "_" })).map((d) => d.title), []);
+});
+
+test("목록은 쪽으로 나뉜다 — 초안은 여기 섞이지 않는다", async () => {
+  const { env, a, admin } = await seed();
+  for (let i = 0; i < 23; i++) await docWith(env, a, admin, { title: `계약 ${i}` });
+  await draftOf(env, a, admin);
+  assert.equal((await D.documentCounts(env.DB, a.id)).all, 23, "초안은 보낸 계약이 아니다");
+  assert.equal((await D.listDocumentsPage(env.DB, a.id, { limit: 20, offset: 0 })).length, 20);
+  assert.equal((await D.listDocumentsPage(env.DB, a.id, { limit: 20, offset: 20 })).length, 3);
+});
+
+test("목록 화면에 상태 칩과 검색창이 나온다", async () => {
+  const { env, a, admin, member, j } = await seed();
+  const yday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  await docWith(env, a, admin, { title: "기한지남건", signers: [member.id], due: yday });
+  const h = await (await get(env, j, "/t/law/admin/documents")).text();
+  assert.match(h, /doc-chips/);
+  assert.match(h, /기한 지남 <b>1<\/b>/);
+  assert.match(h, /name="q"/);
+  const filtered = await (await get(env, j, "/t/law/admin/documents?stat=done")).text();
+  assert.ok(!/기한지남건/.test(filtered), "다른 상태를 고르면 그 계약은 안 보여야 한다");
+});
+
+// ---------- 기한이 지난 계약은 스스로 닫힌다 ----------
+// 기한이 지나면 서명은 이미 막혀 있다. 그런데 상태가 '진행 중' 으로 남으면 아무도 손대지 않는
+// 계약이 목록에 계속 쌓이고, 그러면 목록을 아무도 안 보게 된다.
+test("기한이 지난 미완료 계약은 크론이 마감하고 알림을 남긴다", async () => {
+  const { env, a, admin, member } = await seed();
+  const yday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  const tmr = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+  const late = await docWith(env, a, admin, { title: "지난 계약", signers: [member.id], due: yday });
+  const soon = await docWith(env, a, admin, { title: "아직 남은 계약", signers: [member.id], due: tmr });
+  const doneLate = await docWith(env, a, admin, { title: "늦었지만 완료", signers: [member.id], due: yday, sign: 1 });
+
+  const { runExpireOverdue } = await import("../src/scheduled.js");
+  assert.deepEqual(await runExpireOverdue(env), { closed: 1 });
+
+  assert.equal((await D.getDocument(env.DB, late.id)).closed, 1);
+  assert.equal((await D.getDocument(env.DB, soon.id)).closed, 0, "기한이 남았으면 건드리지 않는다");
+  assert.equal((await D.getDocument(env.DB, doneLate.id)).closed, 0, "다 받은 계약을 마감으로 덮으면 '체결 완료' 가 사라진다");
+
+  const ev = await D.listDocEvents(env.DB, late.id);
+  assert.equal(ev.filter((e) => e.kind === "expired").length, 1, "왜 닫혔는지 증적에 남아야 한다");
+  const notes = await D.listNotifications(env.DB, a.id);
+  assert.match(notes.map((n) => n.message).join(" "), /기한이 지나 마감했습니다 — 지난 계약/);
+
+  // 두 번 돌려도 다시 닫지 않는다 (알림이 매일 쌓이면 아무도 안 읽는다)
+  assert.deepEqual(await runExpireOverdue(env), { closed: 0 });
+  assert.equal((await D.listNotifications(env.DB, a.id)).length, notes.length);
+});
+
+// ---------- 파일 첨부 자리 ----------
+// "사업자등록증 첨부해 주세요" 를 이메일로 받으면 증적이 두 곳으로 갈라진다.
+// 계약서 안에서 받고, 그 해시가 서명 봉인에 함께 들어가야 한 벌이 된다.
+const PDF_BYTES = () => {
+  const head = new TextEncoder().encode("%PDF-1.7\n");
+  const tail = new TextEncoder().encode("\n%%EOF\n");
+  const mid = new Uint8Array(600).fill(0x20);
+  const out = new Uint8Array(head.length + mid.length + tail.length);
+  out.set(head, 0); out.set(mid, head.length); out.set(tail, head.length + mid.length);
+  return out;
+};
+async function signWithFile(env, a, member, doc, file) {
+  const mj = jar();
+  await post(env, mj, "/login", { email: "m@law.kr", password: "pass1234" });
+  const page = await (await get(env, mj, `/t/law/sign/${doc.id}`)).text();
+  const csrf = (/name="_csrf" value="([^"]+)"/.exec(page) || [])[1];
+  const fields = await D.listFieldsFor(env.DB, doc.id, member.id);
+  const fileF = fields.find((f) => f.kind === "file");
+  const fd = new FormData();
+  fd.set("_csrf", csrf); fd.set("consent", "1"); fd.set("signer_name", "김서명");
+  fd.set("fields", JSON.stringify({}));
+  // 이 문서에는 서명 자리를 따로 두지 않았으므로 서명판 그림이 필요하다 —
+  // 계약서에 첨부만 있고 서명이 없으면 그건 계약이 아니다.
+  fd.set("signature", "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==");
+  if (file) fd.set(`file_${fileF.id}`, new File([file.bytes], file.name, { type: file.type }));
+  const r = await worker.fetch(new Request(B + `/t/law/sign/${doc.id}`, { method: "POST", headers: { cookie: ch(mj) }, body: fd }), env);
+  return { r, fileF, page };
+}
+async function docWithFile(env, a, admin, member, { required = 1 } = {}) {
+  const body = "제1조 (범위)";
+  const d = await D.createDocument(env.DB, { associationId: a.id, title: "첨부 계약", body,
+    contentHash: await contentHash(body), createdBy: admin.id });
+  await D.createSignatureRequests(env.DB, d.id, [member.id]);
+  await D.replaceFields(env.DB, d.id, [
+    { kind: "file", label: "사업자등록증", page: 0, x: 0.3, y: 0.8, w: 0.26, h: 0.042, assignee: member.id, required },
+  ]);
+  return d;
+}
+
+test("첨부 자리는 서명 화면에 진짜 파일 입력으로 나오고, 폼은 multipart 다", async () => {
+  const { env, a, admin, member } = await seed();
+  const d = await docWithFile(env, a, admin, member);
+  const mj = jar();
+  await post(env, mj, "/login", { email: "m@law.kr", password: "pass1234" });
+  const h = await (await get(env, mj, `/t/law/sign/${d.id}`)).text();
+  assert.match(h, /enctype="multipart\/form-data"/, "파일은 JSON 에 실어 보내지 않는다");
+  assert.match(h, /name="file_\d+"/);
+});
+
+test("첨부를 안 올리면 서명이 접수되지 않는다 (화면을 우회해도)", async () => {
+  const { env, a, admin, member } = await seed();
+  const d = await docWithFile(env, a, admin, member);
+  const { r } = await signWithFile(env, a, member, d, null);
+  assert.match(decodeURIComponent(r.headers.get("Location") || ""), /파일을 올려 주세요/);
+  assert.equal((await D.listSignatures(env.DB, d.id)).length, 0);
+});
+
+test("이미지·PDF 만 받는다 (실행 파일이 섞이면 여는 사람이 위험해진다)", async () => {
+  const { env, a, admin, member } = await seed();
+  const d = await docWithFile(env, a, admin, member);
+  const evil = new TextEncoder().encode("MZ\x90\x00실행파일");
+  const { r } = await signWithFile(env, a, member, d, { bytes: evil, name: "나쁜것.exe", type: "application/octet-stream" });
+  assert.match(decodeURIComponent(r.headers.get("Location") || ""), /이미지 또는 PDF/);
+  assert.equal((await D.listSignatures(env.DB, d.id)).length, 0);
+});
+
+test("첨부하면 파일 이름과 해시가 남고, 그 해시가 서명 봉인에 들어간다", async () => {
+  const { env, a, admin, member } = await seed();
+  const { verifySignature } = await import("../src/esign.js");
+  const d = await docWithFile(env, a, admin, member);
+  const { r } = await signWithFile(env, a, member, d, { bytes: PDF_BYTES(), name: "사업자등록증.pdf", type: "application/pdf" });
+  const loc = decodeURIComponent(r.headers.get("Location") || "");
+  assert.ok(!/err=1/.test(loc), `서명이 접수되지 않았다: ${r.headers.get("Location")}`);
+
+  const row = (await D.listFieldsWithValues(env.DB, d.id)).find((f) => f.kind === "file");
+  assert.equal(row.value, "사업자등록증.pdf", "무슨 서류인지가 증적에서 중요하다");
+  assert.ok(row.image, "R2 키가 있어야 다시 받을 수 있다");
+  assert.match(row.image_hash, /^[0-9a-f]{64}$/);
+
+  const sig = (await D.listSignatures(env.DB, d.id))[0];
+  const doc = await D.getDocument(env.DB, d.id);
+  assert.equal((await verifySignature(env, sig, doc)).valid, true);
+  // 첨부만 바꿔치기해도 잡혀야 한다
+  await D.run(env.DB, "UPDATE doc_field_values SET image_hash='deadbeef' WHERE field_id=?", row.id);
+  assert.equal((await verifySignature(env, sig, doc)).valid, false, "첨부를 바꾸면 봉인이 깨져야 한다");
+});
+
+test("파일 이름의 경로 문자는 지운다 (증적 ZIP 에 그대로 들어간다)", async () => {
+  const { env, a, admin, member } = await seed();
+  const d = await docWithFile(env, a, admin, member);
+  await signWithFile(env, a, member, d, { bytes: PDF_BYTES(), name: "../../etc/passwd.pdf", type: "application/pdf" });
+  const row = (await D.listFieldsWithValues(env.DB, d.id)).find((f) => f.kind === "file");
+  assert.ok(!/[\\/]/.test(row.value), `경로 문자가 남았다: ${row.value}`);
+});
+
+test("증적 ZIP 은 첨부를 원래 확장자로 담는다 (.png 로 저장하면 안 열린다)", async () => {
+  const { env, a, admin, member } = await seed();
+  const d = await docWithFile(env, a, admin, member);
+  await signWithFile(env, a, member, d, { bytes: PDF_BYTES(), name: "사업자등록증.pdf", type: "application/pdf" });
+  const { buildEvidence } = await import("../src/evidence.js");
+  const ev = await buildEvidence(env, env.DB, await D.getDocument(env.DB, d.id), await D.getAssociationBySlug(env.DB, "law"));
+  const names = ev.files.map((f) => f.name);
+  assert.ok(names.some((n) => n.startsWith("6_이미지/") && n.endsWith(".pdf")), `PDF 가 안 담겼다: ${names.join(", ")}`);
+});

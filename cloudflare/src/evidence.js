@@ -18,7 +18,7 @@ const b64 = (bytes) => {
 const EVENT_LABEL = {
   created: "문서 생성", viewed: "계약서 열람", otp_sent: "인증번호 발송", otp_ok: "휴대폰 본인확인 완료",
   signed: "전자서명 완료", declined: "서명 거절", reminded: "재알림 발송", notified: "알림 발송", edited: "문서 수정(서명 전)",
-  sealed: "직인 날인 (보내는 쪽)",
+  sealed: "직인 날인 (보내는 쪽)", expired: "기한 경과로 마감",
 };
 const LEVEL_LABEL = { password: "로그인(비밀번호)", otp: "휴대폰 본인확인(OTP)", identity: "신원확인" };
 
@@ -191,7 +191,11 @@ export async function buildEvidence(env, db, doc, assoc) {
     if (imgBytes + bytes.length > MAX_IMAGE_BYTES) { imgSkipped++; continue; }
     imgBytes += bytes.length;
     n++;
-    files.push({ name: `6_이미지/${String(n).padStart(2, "0")}_${safeName(f.label || f.kind)}_${(f.image_hash || "").slice(0, 12)}.png`,
+    // 첨부(사업자등록증 등)는 PDF 로도 온다 — 전부 .png 로 저장하면 열리지 않는다.
+    // 확장자는 데이터 URI 의 실제 타입에서 가져온다.
+    const ext = { "application/pdf": ".pdf", "image/jpeg": ".jpg", "image/png": ".png",
+      "image/webp": ".webp", "image/gif": ".gif" }[m[1]] || ".bin";
+    files.push({ name: `6_이미지/${String(n).padStart(2, "0")}_${safeName(f.label || f.kind)}_${(f.image_hash || "").slice(0, 12)}${ext}`,
       data: bytes });
   }
   if (imgSkipped) files.push({ name: "6_이미지/00_안내.txt",
