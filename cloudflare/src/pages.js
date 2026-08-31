@@ -392,7 +392,7 @@ export async function adminLanding(ctx) {
         상담 신청도 사본별로 따로 집계됩니다. <b>•</b> 표시는 발행되지 않은 수정본이 있다는 뜻입니다.</p>
       <div class="form-two">
         <form method="post" action="${base}/admin/landing/variant" class="stack-form compact">
-          <div class="form-two"><label>사본 이름<input type="text" name="name" required maxlength="40" placeholder="예: 인스타 광고용" /></label>
+          <div class="form-two"><label>사본 이름<input type="text" name="name" required maxlength="40" placeholder="예: 인스타 광고용" autocomplete="name" /></label>
             <label>주소<input type="text" name="slug" required maxlength="40" pattern="[a-z0-9\-]+" placeholder="instagram" /></label></div>
           <button class="btn btn-primary btn-sm">현재 내용으로 사본 만들기</button></form>
         ${cur ? `<form method="post" action="${base}/admin/landing/variant/${encodeURIComponent(cur.slug)}/delete" class="stack-form compact"
@@ -726,7 +726,8 @@ export function loginForm(ctx) {
       ${nextTo ? `<input type="hidden" name="next" value="${esc(nextTo)}" />` : ""}
       <label>이메일<input type="email" name="email" required autocomplete="email" /></label>
       <label>비밀번호<input type="password" name="password" required autocomplete="current-password" /></label>
-      <label class="totp-login">2단계 인증 코드 <small>(설정한 경우만)</small><input type="text" name="totp" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" placeholder="000000" /></label>
+      <details class="totp-login"><summary>2단계 인증을 쓰고 계신가요?</summary>
+        <label>인증 앱의 6자리 코드<input type="text" name="totp" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" placeholder="000000" /></label></details>
       ${turnstileWidget(env)}
       <button class="btn btn-primary btn-block">로그인</button>
     </form>
@@ -1022,11 +1023,11 @@ export function registerForm(ctx) {
   const body = `<section class="section page-top"><div class="container auth-wrap"><div class="auth-card">
     ${authHead(assoc.name + " 가입", "점포 정보를 등록하고 사진·소식을 공유하세요.")}${flashOf(query)}
     <form method="post" action="${base}/register" class="stack-form">
-      <label>대표자 성함<input type="text" name="name" required maxlength="60" /></label>
+      <label>대표자 성함<input type="text" name="name" required maxlength="60" autocomplete="name" /></label>
       <label>휴대폰 <small>(선택 · 서명 요청·공지를 카카오 알림톡으로 받습니다)</small><input type="tel" name="phone" maxlength="13" inputmode="numeric" placeholder="010-1234-5678" autocomplete="tel" /></label>
       <label>이메일<input type="email" name="email" required autocomplete="email" /></label>
       <label>비밀번호 (8자 이상)<input type="password" name="password" required minlength="8" autocomplete="new-password" /></label>
-      <label>점포명<input type="text" name="business_name" required maxlength="100" /></label>
+      <label>점포명<input type="text" name="business_name" required maxlength="100" autocomplete="organization" /></label>
       <label>업종<select name="category">${opts}</select></label>
       <label class="check"><input type="checkbox" name="agree" value="1" required /> <a href="/privacy" target="_blank">개인정보 수집·이용</a>에 동의합니다.</label>
       ${turnstileWidget(env)}
@@ -1128,7 +1129,7 @@ export async function dashboard(ctx) {
           <form method="post" action="${base}/dashboard/products/${p.id}/soldout" class="inline-form"><button class="btn btn-xs btn-ghost">${p.sold_out ? "판매중으로" : "품절로"}</button></form>
           <details class="prod-edit"><summary class="btn btn-xs btn-ghost">수정</summary>
             <form method="post" action="${base}/dashboard/products/${p.id}" class="stack-form compact">
-              <label>이름<input name="name" value="${esc(p.name)}" required></label>
+              <label>이름<input name="name" value="${esc(p.name)}" required autocomplete="name"></label>
               <label>가격 <small>(선택)</small><input name="price" value="${esc(p.price)}" placeholder="예: 8,000원 · 시가 · 미표기"></label>
               <label>한 줄 설명<textarea name="description" rows="2">${esc(p.description)}</textarea></label>
               <label class="check"><input type="checkbox" name="sold_out" value="1"${p.sold_out ? " checked" : ""}> 품절</label>
@@ -1141,7 +1142,7 @@ export async function dashboard(ctx) {
     <h3 class="panel-subtitle">제품 추가</h3>
     <form method="post" action="${base}/dashboard/products" enctype="multipart/form-data" class="stack-form compact">
       <label class="file-drop"><input type="file" name="image" accept="image/*" /><span class="file-drop-text">제품 사진 (선택·최대 8MB)</span></label>
-      <div class="form-two"><label>제품 이름<input name="name" required /></label><label>가격 <small>(선택)</small><input name="price" placeholder="예: 8,000원 · 시가 · 미표기" /></label></div>
+      <div class="form-two"><label>제품 이름<input name="name" required autocomplete="name" /></label><label>가격 <small>(선택)</small><input name="price" placeholder="예: 8,000원 · 시가 · 미표기" /></label></div>
       <label>한 줄 설명 <small>(선택)</small><input name="description" maxlength="300" /></label>
       <button class="btn btn-primary btn-sm">제품 추가</button></form></section>`;
   const updatePanel = `<section class="panel" id="d-updates"><h2 class="panel-title">가게 소식 <span class="badge badge-muted">${updates.length}</span></h2>
@@ -1205,11 +1206,11 @@ export async function dashboard(ctx) {
   const naver = assoc.map_client_id || env.NAVER_MAP_CLIENT_ID; // 상인회 전용 지도 키 우선
   const infoPanel = `  <section class="panel" id="d-info"><h2 class="panel-title">업체 정보</h2>
     <form method="post" action="${base}/dashboard/business" class="stack-form">
-      <label>업체명<input type="text" name="name" value="${esc(b.name)}" required /></label>
+      <label>업체명<input type="text" name="name" value="${esc(b.name)}" required autocomplete="name" /></label>
       <label>업종<select name="category">${opts}</select></label>
       <label>소개<textarea name="description" rows="4">${esc(b.description)}</textarea></label>
-      <div class="form-two"><label>전화<input type="tel" name="phone" value="${esc(b.phone)}" /></label><label>영업시간<input type="text" name="hours" value="${esc(b.hours)}" /></label></div>
-      <label>주소<input type="text" name="address" value="${esc(b.address)}" /></label>
+      <div class="form-two"><label>전화<input type="tel" name="phone" value="${esc(b.phone)}" autocomplete="tel" /></label><label>영업시간<input type="text" name="hours" value="${esc(b.hours)}" /></label></div>
+      <label>주소<input type="text" name="address" value="${esc(b.address)}" autocomplete="street-address" /></label>
       <div class="form-divider">SNS 링크 <small style="font-weight:400;color:var(--muted)">(선택 · 가게 페이지에 버튼으로 표시)</small></div>
       <div class="form-two"><label>인스타그램<input type="url" name="sns_instagram" value="${esc(b.sns_instagram || "")}" placeholder="instagram.com/가게계정" /></label>
         <label>유튜브<input type="url" name="sns_youtube" value="${esc(b.sns_youtube || "")}" placeholder="youtube.com/@채널" /></label></div>
@@ -1326,7 +1327,7 @@ export async function admin(ctx) {
         <b>비교하지 마세요</b> — 하루 방문이 적은 상권이면 한두 달은 그냥 두고 보셔야 합니다.</p>
       <form method="post" action="${base}/admin/home-variant" class="stack-form compact">
         <div class="form-two"><label>사본 이름 <small>(나만 봅니다 — 예: 가게 먼저 보여주기)</small>
-            <input type="text" name="name" required maxlength="40" /></label>
+            <input type="text" name="name" required maxlength="40" autocomplete="name" /></label>
           <label>주소 <small>(영문 소문자·숫자·하이픈)</small>
             <span class="slug-row"><span class="slug-pre">${esc(prettyPath(base + "/l/"))}</span>
             <input type="text" name="slug" required maxlength="40" pattern="[a-z0-9\-]+" placeholder="b" /></span></label></div>
@@ -1431,7 +1432,7 @@ export async function admin(ctx) {
           <input type="number" name="amount" value="50000" min="10000" max="5000000" step="1000" required list="chargePresets" />
           <datalist id="chargePresets"><option value="30000"></option><option value="50000"></option><option value="100000"></option><option value="300000"></option></datalist></label>
         <p class="panel-hint">건당 ${unitPrice.toLocaleString()}원 기준 — 5만원이면 약 ${Math.floor(50000 / unitPrice).toLocaleString()}건입니다.</p>
-        <label>입금자명<input type="text" name="depositor" maxlength="40" placeholder="${esc(assoc.name)}" /></label>
+        <label>입금자명<input type="text" name="depositor" maxlength="40" placeholder="${esc(assoc.name)}" autocomplete="name" /></label>
         <button class="btn btn-primary btn-sm">충전 신청</button></form>
       <div>${orderRows ? `<p class="mini-label">최근 충전 신청</p><ul class="admin-mini-list">${orderRows}</ul>` : `<p class="panel-hint">충전을 신청하면 운영사가 입금을 확인한 뒤 잔액에 반영합니다.</p>`}</div>
     </div>
@@ -1526,8 +1527,8 @@ export async function admin(ctx) {
         <div class="help-body"><p class="help-lead">계약서를 만들고 보낼 사람에게 계정을 발급합니다.
           <b>담당자</b>는 계약 업무만 하고 설정·API 키·과금은 볼 수 없습니다. <b>관리자</b>는 이 콘솔 전부를 함께 씁니다 — 믿을 수 있는 분에게만 주세요.</p>
         <form method="post" action="${base}/admin/admins/add" class="stack-form compact">
-          <div class="form-two"><label>성함<input type="text" name="name" required maxlength="60" /></label><label>이메일<input type="email" name="email" required maxlength="120" /></label></div>
-          <div class="form-two"><label>휴대폰 <small>(선택 · 본인확인용)</small><input type="tel" name="phone" maxlength="13" inputmode="numeric" placeholder="010-1234-5678" /></label>
+          <div class="form-two"><label>성함<input type="text" name="name" required maxlength="60" autocomplete="name" /></label><label>이메일<input type="email" name="email" required maxlength="120" autocomplete="email" /></label></div>
+          <div class="form-two"><label>휴대폰 <small>(선택 · 본인확인용)</small><input type="tel" name="phone" maxlength="13" inputmode="numeric" placeholder="010-1234-5678" autocomplete="tel" /></label>
             <label>권한<select name="role">
               <option value="STAFF">담당자 — 계약서 작성·발송만</option>
               <option value="ADMIN">관리자 — 설정·API·과금 포함</option></select></label></div>
@@ -1536,13 +1537,13 @@ export async function admin(ctx) {
         <div class="help-body"><p class="help-lead">관리자 권한 계정을 하나 더 발급합니다. 승인·공지·브랜딩 등 이 콘솔의 모든 기능을 함께 쓸 수 있으니 믿을 수 있는 분에게만 발급하세요.</p>
         ${admins.length > 1 ? `<p class="panel-hint">현재 관리자: ${admins.map((u) => esc(u.name || u.email)).join(", ")}</p>` : ""}
         <form method="post" action="${base}/admin/admins/add" class="stack-form compact">
-          <div class="form-two"><label>성함<input type="text" name="name" required /></label><label>이메일<input type="email" name="email" required /></label></div>
+          <div class="form-two"><label>성함<input type="text" name="name" required autocomplete="name" /></label><label>이메일<input type="email" name="email" required autocomplete="email" /></label></div>
           <button class="btn btn-primary btn-sm">부관리자 발급 + 임시 비번</button></form></div></details>`}
       ${isEsign ? "" : `<details class="help-box" style="margin-top:14px"><summary>사장님 대신 등록하기 (대행)</summary>
         <div class="help-body"><p class="help-lead">사장님이 직접 못 하실 때 총무가 대신 계정을 만들어 드립니다. 임시 비밀번호를 전달하세요.</p>
         <form method="post" action="${base}/admin/members/add" class="stack-form compact">
-          <div class="form-two"><label>사장님 성함<input type="text" name="name" required /></label><label>이메일<input type="email" name="email" required /></label></div>
-          <div class="form-two"><label>업체명<input type="text" name="business_name" required /></label><label>업종<input type="text" name="category" placeholder="예: 음식점" /></label></div>
+          <div class="form-two"><label>사장님 성함<input type="text" name="name" required autocomplete="name" /></label><label>이메일<input type="email" name="email" required autocomplete="email" /></label></div>
+          <div class="form-two"><label>업체명<input type="text" name="business_name" required autocomplete="organization" /></label><label>업종<input type="text" name="category" placeholder="예: 음식점" /></label></div>
           <button class="btn btn-primary btn-sm">대행 등록 + 임시 비번 발급</button></form></div></details>`}</section>
     ${isEsign || isFranchise ? "" : duesPanel}
     ${isEsign ? "" : `<section class="panel" id="p-biz"><h2 class="panel-title">${isFranchise ? "가맹점" : "업체"} 관리</h2><div class="table-scroll"><table class="admin-table">
@@ -1582,10 +1583,10 @@ ${abPanel}`}
     <div class="sgroup" id="s-settings" data-tab="settings">
     <section class="panel" id="p-brand"><h2 class="panel-title">${isEsign ? "조직 정보 · 브랜딩" : isFranchise ? "브랜드 정보 · 브랜딩" : "상인회 정보 · 브랜딩"}</h2>
       <form method="post" action="${base}/admin/settings" enctype="multipart/form-data" class="stack-form">
-        <div class="form-two"><label>${isEsign ? "조직" : isFranchise ? "브랜드" : "상인회"} 이름<input type="text" name="name" value="${esc(assoc.name)}" required /></label><label>대표 색상<input type="color" name="brand_color" value="${esc(assoc.brand_color)}" /></label></div>
+        <div class="form-two"><label>${isEsign ? "조직" : isFranchise ? "브랜드" : "상인회"} 이름<input type="text" name="name" value="${esc(assoc.name)}" required autocomplete="name" /></label><label>대표 색상<input type="color" name="brand_color" value="${esc(assoc.brand_color)}" /></label></div>
         <label>한 줄 소개<input type="text" name="tagline" value="${esc(assoc.tagline)}" /></label>
-        <div class="form-two"><label>대표 전화<input type="text" name="phone" value="${esc(assoc.phone)}" /></label><label>이메일<input type="email" name="email" value="${esc(assoc.email)}" /></label></div>
-        <label>주소<input type="text" name="address" value="${esc(assoc.address)}" /></label>
+        <div class="form-two"><label>대표 전화<input type="text" name="phone" value="${esc(assoc.phone)}" autocomplete="tel" /></label><label>이메일<input type="email" name="email" value="${esc(assoc.email)}" autocomplete="email" /></label></div>
+        <label>주소<input type="text" name="address" value="${esc(assoc.address)}" autocomplete="street-address" /></label>
         <label class="mini-label">로고 <small>(선택·이미지)</small><input type="file" name="logo" accept="image/*" /></label>
         <label class="mini-label">홈 히어로 배경 사진 <small>(선택·가로 이미지 권장·비우면 프리미엄 그라데이션 유지)</small><input type="file" name="hero_image" accept="image/*" /></label>
         <label class="mini-label">홈 히어로 배경 영상 <small>(선택·MP4 또는 WebM·8MB 이하)</small><input type="file" name="hero_video" accept="video/mp4,video/webm" /></label>
@@ -1764,7 +1765,7 @@ export async function signForm(ctx) {
       ${padBlock}
       <input type="hidden" name="signature" id="signatureData" />
       <input type="hidden" name="fields" id="fieldValues" />
-      <label>서명자 성명<input type="text" name="signer_name" id="signerName" value="${esc(user.name)}" required /></label>
+      <label>서명자 성명<input type="text" name="signer_name" id="signerName" value="${esc(user.name)}" required autocomplete="name" /></label>
       <label class="check check-tap"><input type="checkbox" name="consent" value="1" required id="signConsent" /> 위 내용을 확인했으며 본인이 전자서명하는 데 동의합니다.</label>
       <button class="btn btn-primary btn-block" id="signSubmit">전자서명 제출</button>
       <p class="sign-why" id="signWhy">위 <b>동의</b>에 체크하면 제출할 수 있습니다.</p></form>` : ""}
@@ -1874,10 +1875,10 @@ export async function adminDocumentDetail(ctx) {
         : "<b>지금은 자동 발송이 꺼져 있습니다 — 아래 링크를 복사해 카톡·문자로 직접 보내세요.</b> 링크만으로 서명까지 다 됩니다."}</p>
     ${extRows ? `<ul class="req-list">${extRows}</ul>` : ""}
     ${d.closed ? "" : `<form method="post" action="${base}/admin/documents/${d.id}/external" class="stack-form compact">
-      <div class="form-two"><label>이름<input type="text" name="name" required maxlength="60" placeholder="예: 홍길동" value="${esc(lead ? lead.name : "")}" /></label>
-        <label>소속·상호 (선택)<input type="text" name="org" maxlength="80" placeholder="예: ○○상사" /></label></div>
-      <div class="form-two"><label>이메일 ${otpOn ? "" : "<small>(선택)</small>"}<input type="email" name="email" maxlength="120" placeholder="link@example.com" value="${esc(lead ? lead.email : "")}" /></label>
-        <label>휴대폰 ${otpOn ? "" : "<small>(선택)</small>"}<input type="tel" name="phone" maxlength="13" inputmode="numeric" placeholder="010-1234-5678" value="${esc(lead ? lead.phone : "")}" /></label></div>
+      <div class="form-two"><label>이름<input type="text" name="name" required maxlength="60" placeholder="예: 홍길동" value="${esc(lead ? lead.name : "")}" autocomplete="name" /></label>
+        <label>소속·상호 (선택)<input type="text" name="org" maxlength="80" placeholder="예: ○○상사" autocomplete="organization" /></label></div>
+      <div class="form-two"><label>이메일 ${otpOn ? "" : "<small>(선택)</small>"}<input type="email" name="email" maxlength="120" placeholder="link@example.com" value="${esc(lead ? lead.email : "")}" autocomplete="email" /></label>
+        <label>휴대폰 ${otpOn ? "" : "<small>(선택)</small>"}<input type="tel" name="phone" maxlength="13" inputmode="numeric" placeholder="010-1234-5678" value="${esc(lead ? lead.phone : "")}" autocomplete="tel" /></label></div>
       <p class="panel-hint">${otpOn
         ? "본인확인(휴대폰 인증)이 켜져 있어 <b>연락처가 반드시 필요합니다</b> — 그 번호로 인증번호가 갑니다."
         : "연락처는 <b>비워 두셔도 됩니다.</b> 넣으면 알림톡으로 자동 발송되고, 비우면 발급된 링크를 직접 전달하시면 됩니다."}</p>
@@ -1949,10 +1950,10 @@ export async function adminDocumentNew(ctx) {
         <option value="ext">외부 상대방 — 가입하지 않은 사람</option>
       </select></label>
       <div class="party-ext" data-party="${i}" hidden>
-        <div class="form-two"><label>이름<input type="text" name="ext_name_${i}" maxlength="60" placeholder="예: 홍길동" /></label>
-          <label>소속·상호 <small>(선택)</small><input type="text" name="ext_org_${i}" maxlength="80" placeholder="예: ○○상사" /></label></div>
-        <div class="form-two"><label>휴대폰<input type="tel" name="ext_phone_${i}" maxlength="13" inputmode="numeric" placeholder="010-1234-5678" /></label>
-          <label>이메일 <small>(선택)</small><input type="email" name="ext_email_${i}" maxlength="120" placeholder="link@example.com" /></label></div>
+        <div class="form-two"><label>이름<input type="text" name="ext_name_${i}" maxlength="60" placeholder="예: 홍길동" autocomplete="name" /></label>
+          <label>소속·상호 <small>(선택)</small><input type="text" name="ext_org_${i}" maxlength="80" placeholder="예: ○○상사" autocomplete="organization" /></label></div>
+        <div class="form-two"><label>휴대폰<input type="tel" name="ext_phone_${i}" maxlength="13" inputmode="numeric" placeholder="010-1234-5678" autocomplete="tel" /></label>
+          <label>이메일 <small>(선택)</small><input type="email" name="ext_email_${i}" maxlength="120" placeholder="link@example.com" autocomplete="email" /></label></div>
         <p class="panel-hint">이 연락처로 서명 링크와 본인확인 번호가 갑니다.
           ${emailOn(env) ? "휴대폰이 있으면 알림톡으로, 없으면 이메일로 갑니다." : "<b>이 조직은 이메일 발송을 쓰지 않으므로 휴대폰이 필요합니다.</b>"}</p>
       </div>
@@ -2056,7 +2057,7 @@ export async function adminApi(ctx) {
     <section class="panel panel-accent"><h2 class="panel-title">키 발급</h2>
       <p class="panel-hint">API 호출은 무료입니다. 비용은 <b>알림톡 발송</b>에서만 발생합니다(현재 잔액 기준으로 차감).</p>
       <form method="post" action="${base}/admin/api" class="stack-form compact">
-        <div class="form-two"><label>키 이름<input type="text" name="name" maxlength="60" placeholder="예: 사내 ERP 연동" /></label>
+        <div class="form-two"><label>키 이름<input type="text" name="name" maxlength="60" placeholder="예: 사내 ERP 연동" autocomplete="name" /></label>
           <label>웹훅 주소 (선택)<input type="url" name="webhook_url" maxlength="300" placeholder="https://내서버/esign/webhook" /></label></div>
         <button class="btn btn-primary btn-sm">API 키 발급</button></form></section>
     <section class="panel"><h2 class="panel-title">발급된 키 <span class="badge badge-muted">${active.length} 사용 중</span></h2>
@@ -2216,7 +2217,7 @@ export async function esignLanding(ctx) {
     <div class="section-head"><h2 class="section-title">받으신 계약이 진짜인지 확인</h2></div>
     <p class="landing-lead">확인서의 검증 코드를 넣으면 누구나 위변조 여부를 확인할 수 있습니다. 로그인은 필요 없습니다.</p>
     <form method="get" action="/verify" class="stack-form" style="max-width:420px">
-      <label>검증 코드<input type="text" name="code" placeholder="확인서에 적힌 코드" required /></label>
+      <label>검증 코드<input type="text" name="code" placeholder="확인서에 적힌 코드" required autocomplete="one-time-code" /></label>
       <button class="btn btn-primary btn-block">검증하기</button></form>
   </div></section>
 
@@ -2410,7 +2411,7 @@ async function esignHome(ctx) {
       <div class="section-head"><h2 class="section-title">서명한 계약이 진짜인지 확인</h2></div>
       <p class="landing-lead">확인서에 적힌 검증 코드를 넣으면 누구나 위변조 여부를 확인할 수 있습니다.</p>
       <form method="get" action="/verify" class="stack-form" style="max-width:420px">
-        <label>검증 코드<input type="text" name="code" placeholder="확인서에 적힌 코드" required /></label>
+        <label>검증 코드<input type="text" name="code" placeholder="확인서에 적힌 코드" required autocomplete="one-time-code" /></label>
         <button class="btn btn-primary btn-block">검증하기</button></form>
     </div></section>
     ${noticeHtml}`;
@@ -2492,7 +2493,7 @@ export async function extSignForm(ctx) {
     ${otpDone ? `<form method="post" action="${to}" class="stack-form sign-form" id="signForm">
       ${hasSignField ? "" : `<label>서명<div class="sign-pad-wrap"><canvas id="signPad" class="sign-pad" width="600" height="200"></canvas><button type="button" class="btn btn-ghost btn-xs sign-clear" id="signClear">지우기</button></div></label>`}
       <input type="hidden" name="signature" id="signatureData" /><input type="hidden" name="fields" id="fieldValues" />
-      <label>서명자 성명<input type="text" name="signer_name" id="signerName" value="${esc(signer.name)}" required maxlength="60" /></label>
+      <label>서명자 성명<input type="text" name="signer_name" id="signerName" value="${esc(signer.name)}" required maxlength="60" autocomplete="name" /></label>
       <label class="check check-tap"><input type="checkbox" name="consent" value="1" required id="signConsent" /> 위 내용을 확인했으며 본인이 전자서명하는 데 동의합니다.</label>
       <button class="btn btn-primary btn-block" id="signSubmit">전자서명 제출</button>
       <p class="sign-why" id="signWhy">위 <b>동의</b>에 체크하면 제출할 수 있습니다.</p></form>` : ""}
@@ -2751,7 +2752,7 @@ export async function verifyPage(ctx) {
   let inner;
   if (!sig) {
     inner = `<div class="flash flash-err">해당 검증 코드의 서명 기록을 찾을 수 없습니다.</div>
-      <form method="get" action="/verify" class="stack-form"><label>검증 코드<input type="text" name="code" value="${esc(code)}" /></label><button class="btn btn-primary btn-sm">검증</button></form>`;
+      <form method="get" action="/verify" class="stack-form"><label>검증 코드<input type="text" name="code" value="${esc(code)}" autocomplete="one-time-code" /></label><button class="btn btn-primary btn-sm">검증</button></form>`;
   } else {
     const doc = await D.getDocument(db, sig.document_id);
     const v = await verifySignature(env, sig, doc);
@@ -3228,7 +3229,7 @@ export async function superConsole(ctx) {
       <div class="form-two">
         <label class="mini-label">보낼 종류<select name="kind">${tplEntries.map(([kind, t]) =>
           `<option value="${esc(kind)}">${esc(t.label)}</option>`).join("")}</select></label>
-        <label class="mini-label">받을 휴대폰<input type="tel" name="phone" placeholder="010-1234-5678" maxlength="13" inputmode="numeric" required /></label>
+        <label class="mini-label">받을 휴대폰<input type="tel" name="phone" placeholder="010-1234-5678" maxlength="13" inputmode="numeric" required autocomplete="tel" /></label>
       </div>
       <button class="btn btn-ghost btn-sm">테스트 발송</button></form>
     <p class="panel-hint">시험 발송은 정산에 잡히지 않습니다. 다만 제공사 원가는 실제로 발생합니다(1건 기준 ${(await costOf(db, "alimtalk")).toLocaleString()}원).
@@ -3326,10 +3327,10 @@ export async function superConsole(ctx) {
     <div class="lead-grid">${appCards}</div>` : `<p class="panel-hint">진행 중인 건이 없습니다.</p>`}
     <details class="lead-add"><summary class="btn btn-ghost btn-sm">＋ 직접 발굴한 곳 추가</summary>
       <form method="post" action="/super/prospect" class="stack-form compact">
-        <div class="form-two"><label>조직 이름<input type="text" name="assoc_name" required maxlength="100" placeholder="예: 방배동 먹자골목 상인회" /></label>
-          <label>담당자<input type="text" name="contact_name" maxlength="60" placeholder="예: 김회장" /></label></div>
-        <div class="form-two"><label>이메일 (선택)<input type="email" name="contact_email" /></label>
-          <label>연락처 (선택)<input type="text" name="contact_phone" maxlength="40" /></label></div>
+        <div class="form-two"><label>조직 이름<input type="text" name="assoc_name" required maxlength="100" placeholder="예: 방배동 먹자골목 상인회" autocomplete="organization" /></label>
+          <label>담당자<input type="text" name="contact_name" maxlength="60" placeholder="예: 김회장" autocomplete="name" /></label></div>
+        <div class="form-two"><label>이메일 (선택)<input type="email" name="contact_email" autocomplete="email" /></label>
+          <label>연락처 (선택)<input type="text" name="contact_phone" maxlength="40" autocomplete="tel" /></label></div>
         <label>메모<textarea name="message" rows="2" maxlength="2000" placeholder="어디서 알게 됐는지, 규모, 관심사 등"></textarea></label>
         <button class="btn btn-primary btn-sm">영업 목록에 추가</button></form></details></section>`;
   // 첫 화면에 고객사를 올린다 — 매일 여는 것이 이것인데 탭 안쪽에 묻혀 있었다.
@@ -3412,7 +3413,7 @@ export async function superConsole(ctx) {
         만들면 그 조직만의 주소(<code>/t/이름</code>)와 관리자 계정이 함께 생깁니다.</p>
       <form method="post" action="/super/association" class="stack-form" id="new-assoc-form">
         <div class="form-two"><label>조직 이름 <small>(고객사 실제 이름 — 화면 곳곳에 그대로 나옵니다)</small>
-          <input type="text" name="name" required placeholder="예: 서초구 상인회" /></label>
+          <input type="text" name="name" required placeholder="예: 서초구 상인회" autocomplete="organization" /></label>
           <label>대표 색상 <small>(그 조직 화면의 버튼·강조색)</small><input type="color" name="brand_color" value="#0b6e4f" /></label></div>
         <label>유형 <small>(무엇을 파는지 — 이걸로 화면과 메뉴가 통째로 달라집니다)</small><select name="kind" id="new-kind">
           ${KIND_KEYS.map((k) => `<option value="${k}"${KINDS[k].usesLanding ? ' data-landing="1"' : ""}>${esc(KINDS[k].createLabel || KINDS[k].label)} — ${esc(KINDS[k].createHint)}</option>`).join("")}
@@ -3422,7 +3423,7 @@ export async function superConsole(ctx) {
         <label>한 줄 소개 <small>(고객사 홈 첫 화면의 큰 문구 · 검색결과 설명 · 카톡 공유 미리보기에 나옵니다. 비우면 유형에 맞는 기본 문구가 들어갑니다)</small>
           <input type="text" name="tagline" maxlength="200" placeholder="예: 함께 성장하는 우리 동네 상권" /></label>
         <div class="form-divider">관리자 계정</div>
-        <div class="form-two"><label>관리자 이름<input type="text" name="admin_name" /></label><label>관리자 이메일<input type="email" name="admin_email" required /></label></div>
+        <div class="form-two"><label>관리자 이름<input type="text" name="admin_name" autocomplete="name" /></label><label>관리자 이메일<input type="email" name="admin_email" required autocomplete="email" /></label></div>
         <label>관리자 비밀번호 (8자 이상)<input type="password" name="admin_password" required minlength="8" /></label>
         <button class="btn btn-primary">조직 만들기</button></form></details>
     <details class="panel panel-fold" id="clone-assoc"><summary class="panel-title">기존 사이트 복제해서 만들기</summary>
@@ -3433,11 +3434,11 @@ export async function superConsole(ctx) {
         <label>본으로 삼을 사이트<select name="source_id" required><option value="">— 선택 —</option>
           ${list.map((a) => `<option value="${a.id}">${esc(a.name)} (${esc(kindById(a.kind).label)}${kindById(a.kind).usesLanding ? " · " + esc((PRESETS[a.preset] || {}).label || "") : ""})</option>`).join("")}
         </select></label>
-        <div class="form-two"><label>새 조직 이름<input type="text" name="name" required maxlength="100" /></label>
+        <div class="form-two"><label>새 조직 이름<input type="text" name="name" required maxlength="100" autocomplete="organization" /></label>
           <label>대표 색상 <small>(비우면 원본과 동일)</small><input type="color" name="brand_color" value="#0b6e4f" /></label></div>
         <label>한 줄 소개 <small>(비우면 원본과 동일)</small><input type="text" name="tagline" maxlength="200" /></label>
         <div class="form-divider">관리자 계정</div>
-        <div class="form-two"><label>관리자 이름<input type="text" name="admin_name" /></label><label>관리자 이메일<input type="email" name="admin_email" required /></label></div>
+        <div class="form-two"><label>관리자 이름<input type="text" name="admin_name" autocomplete="name" /></label><label>관리자 이메일<input type="email" name="admin_email" required autocomplete="email" /></label></div>
         <label>관리자 비밀번호 (8자 이상)<input type="password" name="admin_password" required minlength="8" /></label>
         <button class="btn btn-primary">복제해서 만들기</button></form></details>
       </div>
@@ -3466,8 +3467,8 @@ export async function superConsole(ctx) {
       <form method="post" action="/super/platform-info" class="stack-form compact">
         <div class="form-two"><label>플랫폼/서비스명<input type="text" name="site_name" value="${esc(siteName)}" maxlength="60" /></label>
           <label>운영자(사업자)명<input type="text" name="operator" value="${esc(operator)}" maxlength="80" /></label></div>
-        <div class="form-two"><label>문의 이메일<input type="email" name="contact_email" value="${esc(contactEmail)}" /></label>
-          <label>문의 전화(선택)<input type="text" name="contact_phone" value="${esc(contactPhone)}" maxlength="40" /></label></div>
+        <div class="form-two"><label>문의 이메일<input type="email" name="contact_email" value="${esc(contactEmail)}" autocomplete="email" /></label>
+          <label>문의 전화(선택)<input type="text" name="contact_phone" value="${esc(contactPhone)}" maxlength="40" autocomplete="tel" /></label></div>
         <button class="btn btn-ghost btn-sm">정보 저장</button></form>
       <p class="panel-hint">공개 신청: <a href="/apply" target="_blank">/apply</a> · 약관: <a href="/terms" target="_blank">/terms</a> · 개인정보처리방침: <a href="/privacy" target="_blank">/privacy</a></p>    ${deployLine}
   </section>
@@ -3512,7 +3513,7 @@ export function account(ctx) {
   if (user.totp_enabled) {
     twofa = `<p class="panel-hint">2단계 인증이 <b>사용 중</b>입니다. 로그인 시 인증 앱의 6자리 코드가 필요합니다.</p>
       <form method="post" action="/account/2fa/disable" class="stack-form compact">
-        <label>해제하려면 현재 인증 코드 입력<input type="text" name="code" inputmode="numeric" pattern="[0-9]{6}" placeholder="000000" required /></label>
+        <label>해제하려면 현재 인증 코드 입력<input type="text" name="code" inputmode="numeric" pattern="[0-9]{6}" placeholder="000000" required autocomplete="one-time-code" /></label>
         <button class="btn btn-ghost btn-sm">2단계 인증 해제</button></form>`;
   } else if (user.totp_secret) {
     const uri = otpauthUri(user.totp_secret, user.email, assoc ? assoc.name : "상인회");
@@ -3520,7 +3521,7 @@ export function account(ctx) {
       <div class="totp-setup"><p>설정 키: <code class="totp-key">${esc(user.totp_secret)}</code></p>
       <details><summary>otpauth 링크(수동 등록용)</summary><code class="totp-uri">${esc(uri)}</code></details></div>
       <form method="post" action="/account/2fa/enable" class="stack-form compact">
-        <label>앱에 표시된 6자리 코드<input type="text" name="code" inputmode="numeric" pattern="[0-9]{6}" placeholder="000000" required /></label>
+        <label>앱에 표시된 6자리 코드<input type="text" name="code" inputmode="numeric" pattern="[0-9]{6}" placeholder="000000" required autocomplete="one-time-code" /></label>
         <button class="btn btn-primary btn-sm">2단계 인증 활성화</button></form>
       <form method="post" action="/account/2fa/setup" class="stack-form compact"><button class="btn btn-ghost btn-xs">키 새로 생성</button></form>`;
   } else {
@@ -3593,9 +3594,9 @@ export async function setupForm(ctx) {
   const body = `<section class="section page-top"><div class="container auth-wrap"><div class="auth-card">
     <h1 class="auth-title">첫 설정</h1><p class="auth-sub">상인회와 관리자 계정을 만들어 시작하세요. (최초 1회)</p>${flashOf(query)}
     <form method="post" action="/setup" class="stack-form">
-      <label>조직 이름<input type="text" name="assoc_name" required maxlength="100" placeholder="예: 서초구 상인회" /></label>
+      <label>조직 이름<input type="text" name="assoc_name" required maxlength="100" placeholder="예: 서초구 상인회" autocomplete="organization" /></label>
       <div class="form-divider">상인회 관리자 (ADMIN)</div>
-      <label>관리자 이메일<input type="email" name="admin_email" required /></label>
+      <label>관리자 이메일<input type="email" name="admin_email" required autocomplete="email" /></label>
       <label>관리자 비밀번호 (8자 이상)<input type="password" name="admin_password" required minlength="8" /></label>
       <div class="form-divider">운영사 계정 (모든 고객사 · 사이트 복제 권한)</div>
       <label>슈퍼 이메일<input type="email" name="super_email" required /></label>
@@ -3658,10 +3659,10 @@ export function applyForm(ctx) {
   const body = `<section class="section page-top"><div class="container auth-wrap"><div class="auth-card">
     ${authHead("홈페이지 신청", "간단히 신청하면 검토 후 관리자 계정을 발급해 드립니다. (무료)")}${flashOf(query)}
     <form method="post" action="/apply" class="stack-form">
-      <label>상인회·모임 이름<input type="text" name="assoc_name" required maxlength="100" placeholder="예: 강남시장 상인회" /></label>
-      <label>담당자 성함<input type="text" name="contact_name" maxlength="60" /></label>
-      <label>연락받을 이메일<input type="email" name="contact_email" required /></label>
-      <label>연락처(선택)<input type="tel" name="contact_phone" maxlength="40" /></label>
+      <label>상인회·모임 이름<input type="text" name="assoc_name" required maxlength="100" placeholder="예: 강남시장 상인회" autocomplete="organization" /></label>
+      <label>담당자 성함<input type="text" name="contact_name" maxlength="60" autocomplete="name" /></label>
+      <label>연락받을 이메일<input type="email" name="contact_email" required autocomplete="email" /></label>
+      <label>연락처(선택)<input type="tel" name="contact_phone" maxlength="40" autocomplete="tel" /></label>
       <label>남기실 말(선택)<textarea name="message" rows="3" maxlength="2000" placeholder="점포 수, 원하는 기능 등 자유롭게"></textarea></label>
       <label class="check"><input type="checkbox" name="agree" value="1" required /> <a href="/privacy" target="_blank">개인정보 수집·이용</a>에 동의합니다.</label>
       ${turnstileWidget(env)}

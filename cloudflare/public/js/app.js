@@ -272,3 +272,21 @@ document.addEventListener("click", (e) => {
     }
   } catch (e) {}
 })();
+
+// 채우다 만 폼을 두고 나가려 하면 한 번 물어본다.
+// 사장님이 가게 소개를 길게 쓰다 뒤로 가기를 눌러 통째로 날리는 일이 실제로 생긴다.
+// 저장을 누른 경우는 묻지 않는다(그게 나가는 정상 경로다).
+(function () {
+  var dirty = false, saving = false;
+  var forms = document.querySelectorAll("form.stack-form, form.upload-form");
+  if (!forms.length) return;
+  Array.prototype.forEach.call(forms, function (f) {
+    f.addEventListener("input", function () { dirty = true; });
+    f.addEventListener("submit", function () { saving = true; });
+  });
+  window.addEventListener("beforeunload", function (e) {
+    if (!dirty || saving) return;
+    e.preventDefault();
+    e.returnValue = ""; // 문구는 브라우저가 정한다 — 우리가 넣어도 무시된다
+  });
+})();
