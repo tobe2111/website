@@ -1293,8 +1293,10 @@ const docBody = (b) => esc(b).replace(/\n/g, "<br />");
 // 휴대폰에서는 A4 지면이 화면 폭에 맞춰 절반 이하로 줄어들어 본문 글자가 6px 남짓이 된다.
 // 임대차계약서를 읽지 못하는 채로 서명하게 두는 것은, 그 기능이 없는 것과 같다.
 // 지면은 서명 자리를 누르는 데 쓰고, 읽기는 이 블록에서 한다 — 글자 하나까지 같은 본문이다.
+// 좁은 화면에서는 스크립트가 이 블록을 펴 둔 채로 시작한다(paper.js). 그래서 제목은
+// 접혀 있을 때만 말이 되는 문장("글씨가 작으면 —")이 아니라, 펴져 있어도 읽히는 이름이어야 한다.
 const plainRead = (body) => `<details class="read-plain">
-  <summary>글씨가 작으면 — 본문 크게 읽기</summary>
+  <summary>계약서 본문 크게 읽기</summary>
   <p class="rp-note">아래 계약서 지면과 <b>글자 하나까지 같은 내용</b>입니다. 서명·날인 자리는 지면에서 눌러 주세요.</p>
   <div class="rp-body">${docBody(body)}</div></details>`;
 

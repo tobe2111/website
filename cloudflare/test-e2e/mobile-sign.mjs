@@ -98,22 +98,23 @@ ok(mine.length > 0, "내가 채울 자리 강조", `${mine.length}개`);
 // 5) 손가락으로 누를 수 있는 크기인가 (Apple HIG 44×44, 최소 32 이상은 되어야)
 // 보이는 크기가 아니라 '실제로 눌리는 범위'를 잰다 — 칸 중심에서 위아래로 훑어
 // elementFromPoint 가 그 칸을 반환하는 구간을 센다
-// 칸들은 화면 아래에 있다 — 먼저 스크롤해 화면에 올린다
-await page.evaluate(() => { const f = document.querySelector(".pf-mine"); if (f) f.scrollIntoView({ block: "center" }); });
-await page.waitForTimeout(300);
-const tap = await page.evaluate(() => {
-  const out = [];
-  for (const el of document.querySelectorAll(".pf-mine")) {
-    const r = el.getBoundingClientRect();
+// 칸을 하나씩 화면에 올려 가며 잰다. 페이지 안에서 스크롤을 흉내 내면 안 된다 —
+// .paper-wrap 은 overflow:hidden 이고 스크롤 컨테이너는 body 라, scrollIntoView 도
+// window.scrollBy 도 듣지 않는다. 예전엔 지면이 우연히 첫 화면에 들어와 그냥 지나갔다.
+const tap = [];
+for (const el of await page.$$(".pf-mine")) {
+  await el.scrollIntoViewIfNeeded().catch(() => {});
+  const one = await el.evaluate((node) => {
+    const r = node.getBoundingClientRect();
     const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-    if (cy < 0 || cy > innerHeight) continue;
+    if (cy < 0 || cy > innerHeight) return null;
     const hits = (dx, dy) => { let n = 0;
-      for (let d = 0; d < 40; d++) { const e = document.elementFromPoint(cx + dx * d, cy + dy * d); if (!e || !el.contains(e) && e !== el) break; n++; }
+      for (let d = 0; d < 40; d++) { const e = document.elementFromPoint(cx + dx * d, cy + dy * d); if (!e || !node.contains(e) && e !== node) break; n++; }
       return n; };
-    out.push({ h: hits(0, -1) + hits(0, 1), w: hits(-1, 0) + hits(1, 0), box: Math.round(r.height) });
-  }
-  return out;
-});
+    return { h: hits(0, -1) + hits(0, 1), w: hits(-1, 0) + hits(1, 0), box: Math.round(r.height) };
+  });
+  if (one) tap.push(one);
+}
 const minH = tap.length ? Math.min(...tap.map((t) => t.h)) : 0;
 const minW = tap.length ? Math.min(...tap.map((t) => t.w)) : 0;
 ok(minH >= 24 && minW >= 24, "누를 수 있는 범위",
@@ -211,6 +212,57 @@ ok(submit && submit.right <= 391 && submit.h >= 36, "제출 버튼이 화면 안
 // 8) 확대 금지(user-scalable=no)가 걸려 있지 않은가 — 접근성 문제
 const vp = await page.evaluate(() => (document.querySelector('meta[name="viewport"]') || {}).content || "");
 ok(!/user-scalable\s*=\s*no|maximum-scale\s*=\s*1/.test(vp), "손가락 확대 허용", vp);
+
+// 9) 읽을 수 있는가 — A4 를 390px 에 넣으면 본문이 8px 로 내려간다.
+//    지면은 리플로우할 수 없으므로(줄이 다시 나뉘면 서명 자리가 어긋난다) 두 가지로 답한다:
+//    본문을 큰 글자로 펴 두고, 지면은 통째로 크게 볼 수 있게 한다.
+const read = await page.evaluate(() => {
+  const rp = document.querySelector(".read-plain");
+  const body = document.querySelector(".rp-body");
+  const line = document.querySelector(".paper .paper-text > div");
+  const paper = document.querySelector(".paper");
+  const px = (el) => (el ? parseFloat(getComputedStyle(el).fontSize) : 0);
+  return {
+    열려있나: !!(rp && rp.open),
+    큰글자: px(body),
+    지면글자: line && paper ? +(px(line) * (paper.getBoundingClientRect().width / 794)).toFixed(1) : 0,
+  };
+});
+ok(read.열려있나, "휴대폰에서는 본문이 펼쳐진 채로 시작한다 (읽지 못하는 화면이 기본이면 안 된다)");
+ok(read.큰글자 >= 15, "펼친 본문은 읽을 수 있는 크기", `${read.큰글자}px (지면은 ${read.지면글자}px)`);
+
+const zoom = await page.evaluate(async () => {
+  const b = document.querySelector(".paper-zoom button");
+  if (!b || b.hidden) return null;
+  b.click();
+  await new Promise((r) => setTimeout(r, 150));
+  const line = document.querySelector(".paper .paper-text > div");
+  const paper = document.querySelector(".paper");
+  const after = +(parseFloat(getComputedStyle(line).fontSize) * (paper.getBoundingClientRect().width / 794)).toFixed(1);
+  const scrolls = getComputedStyle(paper.closest(".paper-wrap")).overflowX;
+  b.click();
+  return { after, scrolls };
+});
+ok(zoom && zoom.after >= 15, "지면도 통째로 크게 볼 수 있다", zoom ? `${zoom.after}px · 가로 ${zoom.scrolls}` : "(확대 단추 없음)");
+
+// 10) 작은 칸을 못 누르는 문제에 제품이 실제로 내놓는 답 — 지면을 크게 보면 손가락 크기가 된다.
+//     칸 자체의 판정 범위를 44px 로 넓히는 길은 일부러 택하지 않았다: 서명·도장·성명·날짜가
+//     서로 20~30px 안에 붙어 있어 넓히면 이웃끼리 겹치고, 한가운데를 눌러도 옆 칸이 열린다.
+const zoomTap = await page.evaluate(async () => {
+  const b = document.querySelector(".paper-zoom button");
+  if (!b || b.hidden) return null;
+  b.click();
+  await new Promise((r) => setTimeout(r, 150));
+  let best = null;
+  for (const el of document.querySelectorAll(".pf-mine")) {
+    const r = el.getBoundingClientRect();
+    if (!best || r.height > best.h) best = { w: Math.round(r.width), h: Math.round(r.height) };
+  }
+  b.click();
+  return best;
+});
+ok(zoomTap && zoomTap.h >= 44, "지면을 크게 보면 서명 칸이 손가락 크기가 된다",
+  zoomTap ? `${zoomTap.w}×${zoomTap.h}px` : "(확대 단추 없음)");
 
 await page.screenshot({ path: `${OUT}/m4-full.png`, fullPage: true });
 console.log(`\n결과: ${pass} 통과 / ${fail} 실패`);

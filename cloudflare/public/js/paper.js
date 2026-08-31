@@ -10,15 +10,48 @@
   // ---------- 반응형 배율 ----------
   // 지면은 항상 794×1123px 로 그리고, 화면 폭에 맞춰 통째로 축소한다.
   // (내부를 리플로우하지 않으므로 좌표가 절대 흔들리지 않는다)
+  var zoomed = false;
   function fit() {
     var host = stack.parentElement;
     var avail = host ? host.clientWidth : PW;
-    var s = Math.min(1, avail / PW);
+    // 크게 보기: 축소하지 않고 원래 크기로 두고 가로로 민다.
+    var s = zoomed ? 1 : Math.min(1, avail / PW);
     stack.style.setProperty("--ps", s);
     stack.style.height = (stack.querySelectorAll(".paper").length * (PH + 24) * s) + "px";
+    if (host) host.classList.toggle("is-zoom", zoomed);
+    if (zoomBtn) {
+      zoomBtn.hidden = !zoomed && avail >= PW - 2;      // 축소가 아예 없으면 보여줄 이유가 없다
+      zoomBtn.textContent = zoomed ? "화면에 맞추기" : "지면 크게 보기";
+      zoomBtn.setAttribute("aria-pressed", zoomed ? "true" : "false");
+    }
   }
+
+  // 지면은 리플로우할 수 없다 — 줄이 다시 나뉘면 그 위에 놓인 서명 자리가 어긋난다.
+  // 그래서 작게 만드는 대신 **통째로 크게 보고 가로로 미는** 길을 연다.
+  var zoomBtn = null;
+  (function () {
+    var host = stack.parentElement;
+    if (!host || !host.parentNode) return;
+    var bar = document.createElement("div");
+    bar.className = "paper-zoom";
+    zoomBtn = document.createElement("button");
+    zoomBtn.type = "button";
+    zoomBtn.className = "btn btn-ghost btn-sm";
+    zoomBtn.hidden = true;
+    zoomBtn.addEventListener("click", function () { zoomed = !zoomed; fit(); });
+    bar.appendChild(zoomBtn);
+    host.parentNode.insertBefore(bar, host);
+  })();
+
   fit();
   window.addEventListener("resize", fit);
+
+  // 휴대폰에서는 지면 글자가 8px 까지 내려간다. 계약에 서명하는 사람이 못 읽는 화면이
+  // 기본이면 안 되므로, 좁은 화면에서는 '본문 크게 읽기' 를 펴 둔 채로 시작한다.
+  (function () {
+    var rp = document.querySelector(".read-plain");
+    if (rp && window.matchMedia && window.matchMedia("(max-width:700px)").matches) rp.open = true;
+  })();
 
   var round4 = function (v) { return Math.round(Math.min(1, Math.max(0, v)) * 10000) / 10000; };
   var pageOf = function (el) { return el.closest(".paper"); };

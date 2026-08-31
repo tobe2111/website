@@ -1566,6 +1566,15 @@ a.cc-val:hover{color:var(--brand-text)}
 /* ===== 계약서 지면 · 필드 배치 ===== */
 .paper-wrap{position:relative;background:var(--line-soft);border-radius:var(--r-md);padding:16px 0;overflow:hidden}
 .paper-stack{--ps:1;transform:scale(var(--ps));transform-origin:top left}
+/* 지면 크게 보기 — 축소를 풀고 가로로 민다 */
+.paper-zoom{display:flex;justify-content:flex-end;margin:0 0 8px}
+.paper-wrap.is-zoom{overflow-x:auto;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}
+/* 눌리는 영역을 손가락 크기(44px)로 넓혀 보려 했지만 **넣지 않았다**.
+   계약서의 서명·날인 자리는 서로 20~30px 안에 붙어 있다(임대인/임차인 서명·도장·성명·날짜가
+   한 덩어리로 온다). 각 칸을 44px 로 넓히면 이웃끼리 겹쳐, 한가운데를 눌러도 옆 칸이 잡힌다 —
+   작아서 못 누르는 것보다 **엉뚱한 칸이 열리는 쪽이 훨씬 나쁘다**.
+   작은 칸 문제는 두 가지로 답한다: [다음 항목으로 이동] 단추(칸을 누를 필요가 없다)와
+   [지면 크게 보기](배율 1.0 에서는 서명 칸이 175×56px 다). */
 .paper{position:relative;margin:0 auto 24px;background:#fff;box-shadow:0 2px 14px rgba(15,23,42,.14);overflow:hidden;flex:none}
 .paper-text{position:absolute;inset:0;white-space:pre;overflow:hidden;color:#16181d;
   font-family:var(--font-display);letter-spacing:-.01em}
@@ -1678,6 +1687,8 @@ a.cc-val:hover{color:var(--brand-text)}
 
 @media print{
   .paper-wrap{background:none;padding:0;overflow:visible}
+  /* 화면에서만 쓰는 것들 — 종이에 나가면 쪽이 하나 더 늘어난다 */
+  .paper-zoom,.read-plain{display:none!important}
   .paper-stack{transform:none!important;height:auto!important}
   .paper{box-shadow:none;margin:0;break-after:page;page-break-after:always}
   .paper:last-child{break-after:auto;page-break-after:auto}
