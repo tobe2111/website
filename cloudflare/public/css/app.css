@@ -2266,3 +2266,32 @@ input:not([type]),input[type="text"],input[type="email"],input[type="tel"],input
 .pdf-thumb{flex:none;margin:0;width:104px}
 .pdf-thumb img{width:100%;border:1px solid var(--line);background:#fff;display:block}
 .pdf-thumb figcaption{margin-top:4px;font-size:.74rem;color:var(--muted);text-align:center;font-variant-numeric:tabular-nums}
+
+/* ---------- 계약서 작성기 ----------
+   왼쪽에서 쓰고 오른쪽에서 실제 지면을 봅니다. 미리보기는 서버가 그린 것이라
+   여기서 끊긴 자리가 곧 계약서에서 끊길 자리입니다. */
+.write-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:clamp(20px,3vw,36px);align-items:start;margin-bottom:30px}
+.write-left{min-width:0}
+.write-right{min-width:0;position:sticky;top:calc(var(--header-h) + 16px)}
+@media (max-width:1000px){
+  .write-grid{grid-template-columns:minmax(0,1fr)}
+  .write-right{position:static;border-top:1px solid var(--line);padding-top:18px}
+}
+.wt-tools{display:flex;flex-wrap:wrap;gap:6px;margin:14px 0 8px}
+.wt-btn{display:flex;flex-direction:column;align-items:flex-start;gap:1px;padding:7px 11px;cursor:pointer;
+  border:1px solid var(--line);border-radius:var(--r-sm);background:var(--surface);text-align:left;font:inherit}
+.wt-btn b{font-size:.88rem;font-weight:700;color:var(--ink)}
+.wt-btn span{font-size:.72rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.wt-btn:hover{border-color:var(--brand-500);background:var(--brand-tint)}
+.wt-btn:active{transform:translateY(1px)}
+.wt-hint{margin:0 0 10px;font-size:.84rem;color:var(--muted);line-height:1.6}
+.wt-bodylabel textarea{font-family:var(--mono);font-size:14px;line-height:1.85;tab-size:4;white-space:pre;overflow-x:auto}
+.wt-count{margin:6px 0 0;font-size:.8rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.wt-previewhead{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:10px;
+  font-size:.88rem;color:var(--ink-soft)}
+.wt-previewhead span{color:var(--muted);font-variant-numeric:tabular-nums}
+.write-right .paper-wrap{max-height:calc(100vh - var(--header-h) - 140px);overflow-y:auto;overscroll-behavior:contain}
+.wt-saved{font-size:.84rem;color:var(--muted)}
+.wt-saved.is-ok{color:var(--ok-fg);font-weight:600}
+.wt-saved.is-err{color:var(--no-fg);font-weight:600}
+.wt-send{max-width:640px}

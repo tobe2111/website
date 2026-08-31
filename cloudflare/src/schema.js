@@ -286,6 +286,9 @@ CREATE TABLE IF NOT EXISTS documents (
   ordered        INTEGER NOT NULL DEFAULT 0,
   due_date       TEXT NOT NULL DEFAULT '',
   closed         INTEGER NOT NULL DEFAULT 0,
+  -- 작성 중(초안)인가. 초안은 서명 요청도, 과금도, 발송도 없다 —
+  -- 쓰다 만 계약서를 저장해 두고 다음 날 이어 쓰기 위한 상태다.
+  draft          INTEGER NOT NULL DEFAULT 0,
   attachment      TEXT NOT NULL DEFAULT '',  -- 계약서 PDF(R2 키). 있으면 본문 대신 이 파일이 계약 원문
   attachment_name TEXT NOT NULL DEFAULT '',  -- 원본 파일명(표시용)
   attachment_hash TEXT NOT NULL DEFAULT '',  -- 첨부 파일 SHA-256 (검증 시 실제 파일과 대조)
@@ -646,7 +649,7 @@ CREATE INDEX IF NOT EXISTS idx_landing_asset_assoc ON landing_assets(association
 // 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
 // 마이그레이션 세대 — migrateColumns 에 단계를 추가할 때마다 +1
 // 36 = 두 갈래(트렁크 33 · 모집형 35)를 합친 세대. 양쪽 DB 모두 다시 한 번 마이그레이션을 타게 한다.
-export const SCHEMA_VERSION = "42";
+export const SCHEMA_VERSION = "43";
 
 export async function ensureSchema(db) {
   const has = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='associations'").first();
@@ -882,6 +885,10 @@ async function migrateColumns(db) {
   }
   if (dcols.length && !dcols.some((c) => c.name === "last_remind_at")) {
     await db.prepare("ALTER TABLE documents ADD COLUMN last_remind_at TEXT NOT NULL DEFAULT ''").run();
+  }
+  // 작성 중(초안). 옛 문서는 전부 0 — 이미 발송된 계약이므로 초안일 수 없다.
+  if (dcols.length && !dcols.some((c) => c.name === "draft")) {
+    await db.prepare("ALTER TABLE documents ADD COLUMN draft INTEGER NOT NULL DEFAULT 0").run();
   }
   for (const [name, ddl, idx] of v17) {
     if (have.has(name)) continue;

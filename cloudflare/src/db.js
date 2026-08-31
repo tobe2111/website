@@ -657,12 +657,25 @@ export const unreadCount = async (db, aid) => (await first(db, "SELECT COUNT(*) 
 export const markAllNotificationsRead = (db, aid) => run(db, "UPDATE notifications SET is_read=1 WHERE association_id=?", aid);
 
 // ----- 전자서명: 문서 -----
-export async function createDocument(db, { associationId, title, body, contentHash, createdBy, ordered = 0, dueDate = "" }) {
-  await run(db, "INSERT INTO documents (association_id, title, body, content_hash, created_by, ordered, due_date) VALUES (?,?,?,?,?,?,?)",
-    associationId, title, body, contentHash, createdBy, ordered ? 1 : 0, dueDate || "");
+export async function createDocument(db, { associationId, title, body, contentHash, createdBy, ordered = 0, dueDate = "", draft = 0 }) {
+  await run(db, "INSERT INTO documents (association_id, title, body, content_hash, created_by, ordered, due_date, draft) VALUES (?,?,?,?,?,?,?,?)",
+    associationId, title, body, contentHash, createdBy, ordered ? 1 : 0, dueDate || "", draft ? 1 : 0);
   return getDocument(db, await lastId(db));
 }
 export const getDocument = (db, id) => first(db, "SELECT * FROM documents WHERE id=?", id);
+
+// ----- 작성 중(초안) -----
+// 초안은 서명 요청도 과금도 발송도 없는 상태다. 쓰다 만 계약서를 저장해 두고
+// 다음 날 이어 쓰기 위한 것이라, 보내는 순간 비로소 계약이 된다.
+export const listDrafts = (db, aid) =>
+  all(db, "SELECT * FROM documents WHERE association_id=? AND draft=1 ORDER BY id DESC", aid);
+export const saveDraft = (db, id, { title, body, contentHash }) =>
+  run(db, "UPDATE documents SET title=?, body=?, content_hash=? WHERE id=? AND draft=1", title, body, contentHash, id);
+// 초안 → 계약. 이 순간부터 서명 요청·과금·발송이 붙는다.
+export const publishDraft = (db, id, { ordered = 0, dueDate = "" } = {}) =>
+  run(db, "UPDATE documents SET draft=0, ordered=?, due_date=? WHERE id=?", ordered ? 1 : 0, dueDate || "", id);
+export const deleteDraft = (db, id, aid) =>
+  run(db, "DELETE FROM documents WHERE id=? AND association_id=? AND draft=1", id, aid);
 // 만든 사람을 함께 가져온다 — 담당자가 여러 명이면 "누가 보낸 계약인가"가 가장 먼저 필요해진다.
 // created_by 는 ON DELETE SET NULL 이라 계정이 지워져도 목록이 깨지지 않는다(LEFT JOIN).
 // ----- 올린 양식의 쪽 그림 -----
@@ -687,7 +700,7 @@ export const listDocuments = (db, aid) =>
       (SELECT COUNT(*) FROM signatures s WHERE s.document_id=d.id) AS sign_count,
       (SELECT COUNT(*) FROM signature_requests r WHERE r.document_id=d.id) AS signer_count
     FROM documents d LEFT JOIN users u ON u.id = d.created_by
-    WHERE d.association_id=? ORDER BY d.created_at DESC`, aid);
+    WHERE d.association_id=? AND d.draft=0 ORDER BY d.created_at DESC`, aid);
 // 서명 시작 전 문서 수정 — 오타 하나 때문에 계약을 새로 만드는 일이 없도록.
 // 본문이 바뀌면 해시도 다시 계산해야 한다(호출부에서 넘긴다).
 export const updateDocument = (db, id, { title, body, contentHash, dueDate, ordered }) =>
@@ -714,7 +727,10 @@ const TURN_OK = `(d.ordered = 0 OR (
 // 이 규칙은 회원(MERCHANT)에게만 적용한다 — 관리자·담당자까지 끌어들이면, 상인회 관리자가
 // 어느 날 갑자기 '서명 필요' 목록을 보게 된다. 계약을 만드는 사람은 명시적으로 지정됐을 때만
 // 서명 대상이다.
-const toSignSql = (openToAll) => `d.association_id=? AND d.closed=0 AND (d.due_date='' OR d.due_date >= date('now'))
+// ⚠️ d.draft=0 을 빼면 안 된다. 초안은 서명 대상이 하나도 지정돼 있지 않은데,
+// 아래 '대상이 없는 문서는 회원 전체 대상' 규칙에 걸려 **조직 회원 전원에게 열린다**.
+// 쓰다 만 계약서가 서명 가능해지는 셈이다.
+const toSignSql = (openToAll) => `d.association_id=? AND d.closed=0 AND d.draft=0 AND (d.due_date='' OR d.due_date >= date('now'))
   AND NOT EXISTS (SELECT 1 FROM signatures s WHERE s.document_id=d.id AND s.user_id=?)
   AND NOT EXISTS (SELECT 1 FROM signature_requests rd WHERE rd.document_id=d.id AND rd.user_id=? AND rd.declined_at != '')
   AND (EXISTS (SELECT 1 FROM signature_requests r WHERE r.document_id=d.id AND r.user_id=?)${openToAll ? `
@@ -737,6 +753,9 @@ export async function canReceiveSign(db, docId, uid, role) {
   // 대상이 하나도 지정되지 않은 문서만 '회원 전체 대상'이다.
   // ⚠️ 외부 서명자도 대상이다 — 이걸 빠뜨리면 API·서식으로 만든 계약(서명자가 전부 외부)이
   //    signature_requests 가 비어 있다는 이유로 조직 회원 전원에게 열린다.
+  // 초안은 같은 이유로 아무에게도 열리지 않는다 (목록 규칙과 반드시 같아야 한다)
+  const draft = await first(db, "SELECT 1 AS x FROM documents WHERE id=? AND draft=1", docId);
+  if (draft) return false;
   const any = await first(db, `SELECT 1 AS x FROM documents d WHERE d.id=?1 AND (
       EXISTS (SELECT 1 FROM signature_requests r WHERE r.document_id=?1)
       OR EXISTS (SELECT 1 FROM external_signers e WHERE e.document_id=?1))`, docId);

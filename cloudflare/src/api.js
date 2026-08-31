@@ -2633,3 +2633,88 @@ export async function superSetPlatformInfo(ctx) {
   await D.setSetting(db, "contact_phone", cap((form.get("contact_phone") || "").trim(), 40));
   return back("/super", "플랫폼 정보를 저장했습니다.");
 }
+
+// ================= 계약서 작성기 =================
+//
+// 지면 줄바꿈은 서버가 확정한다(paper.js). 그래서 미리보기도 서버가 그린다 —
+// 화면에서 따로 그리면 미리보기와 실제 계약서가 다른 자리에서 끊기고,
+// 그 위에 놓은 서명 자리가 어긋난다.
+export async function adminPreviewPaper(ctx) {
+  const { form } = ctx;
+  const { renderPaper } = await import("./paper.js");
+  const body = cap((form.get("body") || ""), 20000);
+  return new Response(renderPaper(body, { fieldsFor: () => "" }), {
+    headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
+  });
+}
+
+// 임시저장 — 쓰다 만 계약서를 그대로 둔다.
+// 초안은 서명 요청도 과금도 발송도 없다. 보내는 순간 비로소 계약이 된다.
+export async function adminSaveDraft(ctx) {
+  const { db, form, base, assoc, user } = ctx;
+  const title = cap((form.get("title") || "").trim(), 200) || "제목 없는 계약서";
+  const body = cap((form.get("body") || ""), 20000);
+  const id = Number(form.get("doc") || 0);
+  const hash = await contentHash(body);
+  let doc;
+  if (id) {
+    const cur = await D.getDocument(db, id);
+    if (!cur || cur.association_id !== assoc.id) return jsonOut({ ok: false, error: "문서를 찾을 수 없습니다." }, 404);
+    if (!cur.draft) return jsonOut({ ok: false, error: "이미 보낸 계약서는 임시저장으로 되돌릴 수 없습니다." }, 409);
+    await D.saveDraft(db, id, { title, body, contentHash: hash });
+    doc = await D.getDocument(db, id);
+  } else {
+    doc = await D.createDocument(db, { associationId: assoc.id, title, body, contentHash: hash, createdBy: user.id, draft: 1 });
+  }
+  return jsonOut({ ok: true, id: doc.id, at: new Date().toISOString(), to: `${base}/admin/documents/write?doc=${doc.id}` });
+}
+const jsonOut = (obj, status = 200) =>
+  new Response(JSON.stringify(obj), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
+
+// 초안 → 계약. 여기서부터 서명 요청·과금·발송이 붙는다.
+export async function adminPublishDraft(ctx) {
+  const { db, form, base, assoc, params } = ctx;
+  const d = await D.getDocument(db, Number(params.id));
+  const to = `${base}/admin/documents/write?doc=${params.id}`;
+  if (!d || d.association_id !== assoc.id) return back(base + "/admin/documents", "문서를 찾을 수 없습니다.", true);
+  if (!d.draft) return back(`${base}/admin/documents/${d.id}`, "이미 보낸 계약서입니다.", true);
+  if (!String(d.body || "").trim()) return back(to, "본문이 비어 있습니다. 내용을 쓰고 보내 주세요.", true);
+
+  let dueDate = ""; const rawDue = (form.get("due_date") || "").trim();
+  if (rawDue) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(rawDue)) return back(to, "기한 형식(YYYY-MM-DD)을 확인하세요.", true);
+    if (rawDue < new Date().toISOString().slice(0, 10)) return back(to, "기한은 오늘 이후여야 합니다.", true);
+    dueDate = rawDue;
+  }
+  const ordered = form.get("ordered") === "1" ? 1 : 0;
+
+  // 계약당 과금이면 '보내는 순간' 한 번 청구한다 — 초안은 몇 번을 고쳐도 돈이 들지 않는다.
+  if ((await billingMode(db)) === "per_doc") {
+    const bal = await D.getBalance(db, assoc.id);
+    const price = await priceOf(db, "alimtalk", assoc.id);
+    if (bal < price) return back(to, `크레딧 잔액이 부족합니다. (계약 1건 ${price.toLocaleString()}원 · 잔액 ${bal.toLocaleString()}원)`, true);
+  }
+  const target = form.get("target") || "all";
+  let signers = [];
+  if (target === "select") {
+    const ids = form.getAll("members").map((v) => Number(v)).filter(Boolean);
+    const valid = new Set((await D.listSignerCandidates(db, assoc.id, assoc.kind)).map((m) => m.id));
+    signers = ids.filter((id) => valid.has(id));
+    if (!signers.length) return back(to, "서명할 회원을 한 명 이상 골라 주세요.", true);
+  }
+  await D.publishDraft(db, d.id, { ordered, dueDate });
+  if (signers.length) await D.createSignatureRequests(db, d.id, signers);
+  if ((await billingMode(db)) === "per_doc") await chargeContract(db, assoc, { documentId: d.id, title: d.title });
+  await rememberOrigin(db, new URL(ctx.request.url).origin);
+  await audit(ctx, "계약서발송", d.title);
+  return back(`${base}/admin/documents/${d.id}`,
+    "계약서를 보냈습니다. 서명 자리를 아직 안 놓았다면 [서명 자리 배치] 에서 놓아 주세요.");
+}
+
+export async function adminDeleteDraft(ctx) {
+  const { db, base, assoc, params } = ctx;
+  const d = await D.getDocument(db, Number(params.id));
+  if (!d || d.association_id !== assoc.id || !d.draft) return back(base + "/admin/documents", "작성 중인 계약서를 찾을 수 없습니다.", true);
+  await D.deleteDraft(db, d.id, assoc.id);
+  return back(base + "/admin/documents", `'${d.title}' 초안을 지웠습니다.`);
+}

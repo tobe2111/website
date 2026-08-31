@@ -1910,6 +1910,12 @@ export async function adminDocuments(ctx) {
     <td class="actions-cell"><a class="btn btn-xs btn-ghost" href="${base}/admin/documents/${d.id}">보기</a>${d.closed ? "" : `<form method="post" action="${base}/admin/documents/${d.id}/close" data-confirm="마감할까요?"><button class="btn btn-xs btn-ghost">마감</button></form>`}</td></tr>`).join("") : `<tr><td colspan="4" class="empty">문서가 없습니다.</td></tr>`;
   const members = await D.listSignerCandidates(db, assoc.id, assoc.kind);
   const checks = members.length ? members.map((m) => `<label class="check member-check"><input type="checkbox" name="members" value="${m.id}" /> ${esc(m.name)} <small>${esc(m.email)}</small></label>`).join("") : `<p class="empty">회원이 없습니다.</p>`;
+  // 작성 중(초안) — 아직 계약이 아니다. 보내는 순간 비로소 계약이 된다.
+  const drafts = await D.listDrafts(db, assoc.id);
+  const draftRows = drafts.length ? `<ul class="queue-list">${drafts.map((d) => `<li class="queue-item">
+      <a class="q-main" href="${base}/admin/documents/write?doc=${d.id}"><b>${esc(d.title)}</b>
+        <span>작성 중 · ${d.body ? `${String(d.body).length.toLocaleString()}자` : "아직 비어 있음"}</span></a>
+      <a class="q-go" href="${base}/admin/documents/write?doc=${d.id}">이어 쓰기 <span aria-hidden="true">→</span></a></li>`).join("")}</ul>` : "";
   const myTpls = (await D.listTemplates(db, assoc.id)).filter((t) => t.association_id === assoc.id).map(normalizeTemplate);
   const card = (t) => `<a class="tpl-card" href="${base}/admin/documents/new?tpl=${encodeURIComponent(t.id)}">
     <span class="tpl-title">${esc(t.title)}</span>
@@ -1926,6 +1932,11 @@ export async function adminDocuments(ctx) {
       <div class="tpl-grid">${tplCards}</div>
       ${myTpls.length ? `<div class="form-divider">${assoc.kind === "esign" ? "우리 서식" : "우리 상인회 서식"}</div><div class="tpl-grid">${myCards}</div>` : ""}
     </section>
+    <section class="panel panel-accent"><div class="panel-head"><h2 class="panel-title">계약서 쓰기</h2>
+      <a class="btn btn-primary btn-sm" href="${base}/admin/documents/write">새로 쓰기</a></div>
+      <p class="panel-hint">조·항·호를 버튼으로 넣고 오른쪽에서 <b>실제 지면</b>을 보며 씁니다.
+        쓰다 말면 <b>임시저장</b>해 두고 다음에 이어 쓰면 됩니다 — 보내기 전에는 서명 요청도 과금도 없습니다.</p>
+      ${draftRows}</section>
     <details class="panel" id="pdfPanel"><summary class="panel-title">받은 PDF 양식으로 만들기</summary>
       <p class="panel-hint">상대방이 보낸 <b>표준근로계약서·정부 서식·회사 양식</b>을 옮겨 적지 않고 그대로 씁니다.
         PDF 를 고르면 이 화면에서 쪽마다 지면으로 만들고, 그 위에 서명·도장 자리를 놓습니다.
@@ -3913,4 +3924,76 @@ export function robots(ctx) {
     "/*.csv$", "/*.ics$",
   ].map((p) => `Disallow: ${p}`).join("\n");
   return text(`User-agent: *\nAllow: /\n${disallow}\nSitemap: ${o}/sitemap.xml\n`);
+}
+
+// ================= 계약서 작성기 =================
+//
+// "직접 입력" 은 지금도 됐다 — 빈 textarea 에 붙여넣는 것이었다.
+// 그런데 계약서에는 규칙이 있다(조·항·호·목적물 표시·말미 문구). 그 규칙을 아는 사람만
+// 제대로 된 계약서를 쓸 수 있었고, 모르는 사람은 줄글을 넣고 줄글을 받았다.
+//
+// 여기서는 그 규칙을 **버튼이 대신 써 준다**. 저장되는 건 여전히 평문이라
+// 해시·봉인·좌표계·증적이 전부 그대로다 — 자유 편집기(굵게·표·글꼴)를 넣지 않은 이유가 이것이다.
+// 지면 줄바꿈이 흔들리면 그 위에 놓은 서명 자리가 어긋난다.
+export async function adminDocumentWrite(ctx) {
+  const { db, assoc, base, user, query, csrf } = ctx;
+  const id = Number(query.get("doc") || 0);
+  const doc = id ? await D.getDocument(db, id) : null;
+  if (id && (!doc || doc.association_id !== assoc.id)) return notFoundResponse(ctx);
+  if (doc && !doc.draft) return redirect(`${base}/admin/documents/${doc.id}`);
+  const members = await D.listSignerCandidates(db, assoc.id, assoc.kind);
+  const memberChecks = members.length
+    ? members.map((m) => `<label class="check member-check"><input type="checkbox" name="members" value="${m.id}" /> ${esc(m.name)} <small>${esc(m.email)}</small></label>`).join("")
+    : `<p class="empty">사내 회원이 없습니다. 보낸 뒤 계약서 화면에서 <b>외부 상대방</b>을 넣어 주세요.</p>`;
+
+  // 버튼 하나가 무엇을 써 넣는지. 규칙은 paper.js 의 조판이 읽는 것과 같아야 한다.
+  const TOOLS = [
+    ["article", "조", "제N조 (제목)", "조문을 시작합니다. 번호는 자동으로 붙습니다."],
+    ["clause", "항", "① ② ③", "조문 아래 항입니다. 번호가 이어집니다."],
+    ["item", "호", "1. 2. 3.", "항 아래 호입니다."],
+    ["label", "표 줄", "소재지   서울…", "목적물 표시처럼 이름표와 값을 한 줄에."],
+    ["para", "문단", "그냥 줄", "번호 없는 문단입니다."],
+    ["closing", "말미", "본 계약을 증명하기…", "계약서 맨 끝의 문구와 서명란 안내입니다."],
+  ];
+  const toolBtns = TOOLS.map(([k, label, sample, hint]) =>
+    `<button type="button" class="wt-btn" data-ins="${k}" title="${esc(hint)}"><b>${esc(label)}</b><span>${esc(sample)}</span></button>`).join("");
+
+  const startBody = doc ? doc.body : "";
+  const body = `<section class="dash"><div class="container">
+    <div class="dash-head"><div><h1 class="dash-title">계약서 쓰기</h1>
+      <p class="dash-sub"><a href="${base}/admin/documents">← 문서 목록</a>${doc ? ` · 작성 중 · 마지막 저장 ${esc(kstStamp(doc.created_at, { year: false }))}` : ""}</p></div>
+      <div class="dash-head-actions"><span class="wt-saved" id="wtSaved" aria-live="polite"></span>
+        <button type="button" class="btn btn-ghost btn-sm" id="wtSave">임시저장</button></div></div>
+    ${flashOf(query)}
+    <div class="write-grid">
+      <div class="write-left">
+        <label>제목<input type="text" id="wtTitle" maxlength="200" value="${esc(doc ? doc.title : "")}" placeholder="예: 상가건물 임대차계약서" autocomplete="off" /></label>
+        <div class="wt-tools">${toolBtns}</div>
+        <p class="wt-hint">커서가 있는 자리에 넣습니다. <b>조</b>와 <b>항</b>은 앞의 번호를 보고 다음 번호를 스스로 붙입니다.</p>
+        <label class="wt-bodylabel">본문<textarea id="wtBody" rows="24" spellcheck="false" placeholder="맨 윗줄에 계약서 이름을 쓰면 표제가 됩니다.&#10;예) 상가건물 임대차계약서">${esc(startBody)}</textarea></label>
+        <p class="wt-count" id="wtCount"></p>
+      </div>
+      <div class="write-right">
+        <div class="wt-previewhead"><b>지면 미리보기</b><span id="wtPages"></span></div>
+        <div class="paper-wrap" id="wtPreview"></div>
+        <p class="wt-hint">실제 계약서와 <b>같은 자리에서 줄이 끊깁니다</b> — 서명 자리는 이 지면 위에 놓입니다.</p>
+      </div>
+    </div>
+    <form method="post" action="${base}/admin/documents/${doc ? doc.id : 0}/publish" class="panel wt-send" id="wtSendForm">
+      <h2 class="panel-title">보내기</h2>
+      <p class="panel-hint">보내면 계약이 됩니다 — 서명 요청이 나가고, 계약당 과금이면 이때 한 번 청구됩니다.
+        <b>보내기 전에는 몇 번을 고쳐도 아무 일도 일어나지 않습니다.</b></p>
+      <div class="form-two"><label>서명 기한 (선택)<input type="date" name="due_date" /></label>
+        <label class="check check-inline"><input type="checkbox" name="ordered" value="1" /> 순차 서명</label></div>
+      <div class="form-divider">서명 대상</div>
+      <label class="check"><input type="radio" name="target" value="all" checked /> 전체 회원</label>
+      <label class="check"><input type="radio" name="target" value="select" /> 특정 회원</label>
+      <div class="member-picker">${memberChecks}</div>
+      <button class="btn btn-primary" id="wtSend"${doc ? "" : " disabled"}>계약서 보내기</button>
+      ${doc ? `<button type="submit" class="btn btn-ghost btn-sm" formaction="${base}/admin/documents/${doc.id}/draft-delete" formnovalidate data-confirm="작성 중인 이 계약서를 지울까요? 되돌릴 수 없습니다.">초안 지우기</button>` : ""}
+      ${doc ? "" : `<p class="panel-hint">먼저 <b>임시저장</b>을 눌러 주세요. 저장해야 보낼 수 있습니다.</p>`}
+    </form>
+    </div></section>`;
+  return html(layout({ title: "계약서 쓰기", assoc, base, user, body, csrf,
+    scripts: `<script src="${assetUrl("/js/write.js")}" defer></script>` }));
 }

@@ -193,6 +193,14 @@ const TENANT = [
   ["POST", "/admin/notify-auto", api.adminNotifyAuto, "ADMIN"],
   ["POST", "/admin/documents", api.adminCreateDocument, "STAFF"],
   ["GET",  "/admin/documents/new", pages.adminDocumentNew, "STAFF"],
+  // 계약서 작성기 — 조·항·호를 눌러 넣고 오른쪽에서 실제 지면을 보며 쓴다.
+  // 미리보기는 서버가 그린다: 지면 줄바꿈은 서버가 확정하므로, 화면에서 따로 그리면
+  // 미리보기와 실제 계약서가 다른 자리에서 끊긴다.
+  ["GET",  "/admin/documents/write", pages.adminDocumentWrite, "STAFF"],
+  ["POST", "/admin/documents/preview", api.adminPreviewPaper, "STAFF"],
+  ["POST", "/admin/documents/draft", api.adminSaveDraft, "STAFF"],
+  ["POST", "/admin/documents/:id/publish", api.adminPublishDraft, "STAFF"],
+  ["POST", "/admin/documents/:id/draft-delete", api.adminDeleteDraft, "STAFF"],
   ["GET", "/admin/documents/:id", pages.adminDocumentDetail, "STAFF"],
   ["POST", "/admin/documents/:id/edit", api.adminEditDocument, "STAFF"],
   ["POST", "/admin/documents/:id/close", api.adminCloseDocument, "STAFF"],
