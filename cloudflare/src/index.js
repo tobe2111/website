@@ -113,8 +113,8 @@ const TENANT = [
   ["GET", "/contact", pages.contactForm],
   // 가맹 상담 신청 — 프랜차이즈 랜딩의 목적. 로그인 없이 누구나 보내는 공개 경로다.
   ["POST", "/lead", api.leadSubmit],
-  // 캠페인별 랜딩 사본 (광고 소재마다 다른 문구 · 전환율 비교)
-  ["GET", "/l/:slug", pages.franchiseVariant],
+  // 사본 주소 — 모집 랜딩은 광고 소재별 문구, 상인회는 홈 구성 A/B (성과를 나란히 비교한다)
+  ["GET", "/l/:slug", pages.tenantVariant],
   ["GET", "/urdeal", pages.urdealPage],
   ["POST", "/contact", api.contactSubmit],
   ["GET", "/board", pages.board, "MEMBER"],
@@ -156,6 +156,9 @@ const TENANT = [
   ["POST", "/admin/settings", api.adminSettings, "ADMIN"],
   ["POST", "/admin/layout", api.adminSaveLayout, "ADMIN"],
   ["POST", "/admin/layout/reset", api.adminResetLayout, "ADMIN"],
+  // 상인회 홈 A/B — 사본 만들기·지우기
+  ["POST", "/admin/home-variant", api.adminCreateHomeVariant, "ADMIN"],
+  ["POST", "/admin/home-variant/:slug/delete", api.adminDeleteHomeVariant, "ADMIN"],
   ["POST", "/admin/notifications/read", api.adminReadNotifications, "ADMIN"],
   ["POST", "/admin/user/:id/reset-password", api.adminResetUserPassword, "ADMIN"],
   ["POST", "/admin/members/add", api.adminAddMember, "ADMIN"],

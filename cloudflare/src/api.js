@@ -5,7 +5,7 @@ import { sendEmail, sendEmailFor, emailEnabled, mailShell, mailButton } from "./
 import { sessionTokenForUser, sessionCookie, clearSessionCookie } from "./auth.js";
 import { back, redirect } from "./http.js";
 import * as storage from "./storage.js";
-import { countable } from "./traffic.js";
+import { countable, countHomeGoal } from "./traffic.js";
 import { parseEmbed } from "./embed.js";
 import { cap, sniffImage, EMAIL_RE, MAX_IMAGE_BYTES, slugify, esc, safeNext } from "./util.js";
 import { contentHash, sealRecord, newVerifyCode, SEAL_VER, fieldsHashOf, keyStorage, verifyChain } from "./esign.js";
@@ -140,6 +140,8 @@ export async function register(ctx) {
   await D.createBusiness(db, { associationId: assoc.id, ownerId: user.id, name: businessName, category: cap(form.get("category"), 40) });
   await D.createNotification(db, { associationId: assoc.id, kind: "new_business", message: `${name}님이 '${businessName}' 업체로 가입했습니다. 승인 대기 중입니다.`, link: base + "/admin" });
   addCookie(sessionCookie(await sessionTokenForUser(user, env.SESSION_SECRET), isProd));
+  // A/B — 상인회가 원하는 최종 결과. 어느 홈 사본을 보고 온 사람이 실제로 입점했는지 센다.
+  await countHomeGoal(ctx, "signup");
   return back(base + "/dashboard", "가입이 완료되었습니다! 업체 정보를 입력하고 사진을 올려보세요.");
 }
 
@@ -1997,6 +1999,35 @@ export async function logoutAll(ctx) {
 }
 
 // ---------- 홈페이지 구성 저장/초기화 ----------
+// ---------- 상인회 홈 A/B ----------
+// 사본은 '지금 쓰는 홈' 을 그대로 복사해 만든다. 빈 화면에서 시작하면 아무도 안 만든다.
+// 표는 모집 랜딩과 같은 것(landing_variants)을 쓴다 — 무엇을 사본으로 두느냐만 다르다.
+export async function adminCreateHomeVariant(ctx) {
+  const { db, form, base, assoc } = ctx;
+  const to = `${base}/admin#p-ab`;
+  const { kindOf } = await import("./kinds.js");
+  if (kindOf(assoc).home !== "merchant") return back(base + "/admin", "이 조직에는 홈 사본을 만들 수 없습니다.", true);
+  const name = cap((form.get("name") || "").trim(), 40);
+  const slug = cap((form.get("slug") || "").trim().toLowerCase(), 40).replace(/[^a-z0-9-]/g, "");
+  if (!name || !slug) return back(to, "사본 이름과 주소를 입력해 주세요. (주소는 영문 소문자·숫자·하이픈)", true);
+  if (await D.getLandingVariant(db, assoc.id, slug)) return back(to, "이미 쓰고 있는 주소입니다.", true);
+  if ((await D.listLandingVariants(db, assoc.id)).length >= 5)
+    return back(to, "사본은 5개까지입니다. 비교 대상이 많아지면 어느 것도 표본이 차지 않습니다.", true);
+  await D.createLandingVariant(db, { associationId: assoc.id, slug, name, layout: assoc.home_layout || null });
+  await audit(ctx, "홈사본생성", `${name} (/l/${slug})`);
+  return back(to, `'${name}' 사본을 만들었습니다. 주소: ${base}/l/${slug} — 이 주소를 전단 QR·카톡에 뿌리고 비교해 보세요.`);
+}
+export async function adminDeleteHomeVariant(ctx) {
+  const { db, base, assoc, params } = ctx;
+  const to = `${base}/admin#p-ab`;
+  const slug = cap(params.slug || "", 40);
+  const v = await D.getLandingVariant(db, assoc.id, slug);
+  if (!v) return back(to, "사본을 찾을 수 없습니다.", true);
+  await D.deleteLandingVariant(db, assoc.id, slug);
+  await audit(ctx, "홈사본삭제", `${v.name || slug} (/l/${slug})`);
+  return back(to, "사본을 지웠습니다. 쌓인 성과 기록은 남아 있습니다.");
+}
+
 export async function adminSaveLayout(ctx) {
   const { db, form, base, assoc } = ctx;
   const { SECTION_CATALOG } = await import("./homeLayout.js");

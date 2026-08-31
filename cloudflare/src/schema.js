@@ -606,6 +606,10 @@ CREATE TABLE IF NOT EXISTS landing_views (
   day            TEXT NOT NULL,               -- KST 기준 YYYY-MM-DD
   views          INTEGER NOT NULL DEFAULT 0,
   calls          INTEGER NOT NULL DEFAULT 0,  -- 전화 버튼 클릭. 모바일에서는 이게 상담 폼만큼 큰 전환 경로다
+  -- 상인회 홈의 성과 (모집 랜딩의 '상담 신청' 에 해당하는 것이 상인회에는 셋이다)
+  signups        INTEGER NOT NULL DEFAULT 0,  -- 입점 신청 제출 — 상인회가 원하는 최종 결과
+  bizviews       INTEGER NOT NULL DEFAULT 0,  -- 가게 상세 열람 — 홈이 '가게를 보게 만드는가'
+  finds          INTEGER NOT NULL DEFAULT 0,  -- 검색·지도 사용 — 홈이 '찾기' 를 돕는가
   PRIMARY KEY (association_id, variant, day)
 );
 
@@ -625,7 +629,7 @@ CREATE INDEX IF NOT EXISTS idx_landing_asset_assoc ON landing_assets(association
 // 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
 // 마이그레이션 세대 — migrateColumns 에 단계를 추가할 때마다 +1
 // 36 = 두 갈래(트렁크 33 · 모집형 35)를 합친 세대. 양쪽 DB 모두 다시 한 번 마이그레이션을 타게 한다.
-export const SCHEMA_VERSION = "40";
+export const SCHEMA_VERSION = "41";
 
 export async function ensureSchema(db) {
   const has = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='associations'").first();
@@ -952,6 +956,14 @@ async function migrateColumns(db) {
   const vcol = (await db.prepare("PRAGMA table_info(landing_views)").all()).results || [];
   if (vcol.length && !vcol.some((c) => c.name === "calls")) {
     await db.prepare("ALTER TABLE landing_views ADD COLUMN calls INTEGER NOT NULL DEFAULT 0").run();
+  }
+
+  // v41: 상인회 홈 A/B — 성과 셋을 따로 센다. 모집 랜딩은 '상담 신청' 하나였지만
+  //      상인회 홈은 무엇이 성공인지가 하나가 아니다(입점 신청·가게 열람·찾기).
+  for (const c of ["signups", "bizviews", "finds"]) {
+    const cols = (await db.prepare("PRAGMA table_info(landing_views)").all()).results || [];
+    if (!cols.some((x) => x.name === c))
+      await db.prepare(`ALTER TABLE landing_views ADD COLUMN ${c} INTEGER NOT NULL DEFAULT 0`).run();
   }
   // v37: 상담 폼의 업종별 추가 질문 답변
   if (lcol.length && !lcol.some((c) => c.name === "extra")) {

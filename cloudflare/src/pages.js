@@ -1,10 +1,10 @@
 // 공개/인증 페이지 핸들러 (async). ctx = { env, db, assoc, base, user, url, query, csrf, params }
 import * as D from "./db.js";
-import { esc, cap, clip, openBadge, openNow, fmtBytes, kstStamp, kstDate, prettyPath, safeNext } from "./util.js";
+import { esc, cap, clip, openBadge, openNow, fmtBytes, kstStamp, kstDate, prettyPath, safeNext, parseCookies } from "./util.js";
 import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG, ORIGIN, assetUrl } from "./render.js";
 import { verifyInviteToken, SALES_STAGES, otpRequired, selfSignupOn } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
 import { html, notFoundResponse, back, redirect } from "./http.js";
-import { countable } from "./traffic.js";
+import { countable, countHomeGoal, homeVariantCookie } from "./traffic.js";
 import { galleryItem } from "./media-render.js";
 import { priceOf, costOf, jeonToWon, notifyEnabled, autoNotifyOn, canAutoSend, ALIGO_VARS, hasCfg, TEMPLATE_KEYS, TEMPLATES, billingMode, BILLING_MODES } from "./notify.js";
 import { providerLabel } from "./embed.js";
@@ -149,14 +149,23 @@ export async function eventIcs(ctx) {
   return new Response(ics, { headers: { "content-type": "text/calendar; charset=utf-8", "content-disposition": `attachment; filename="event-${e.id}.ics"`, "cache-control": "public, max-age=600" } });
 }
 
-export async function home(ctx) {
+export async function home(ctx, opts = {}) {
   const { db, assoc, base, user, csrf } = ctx;
   // 어떤 홈을 그릴지는 제품 유형 레지스트리가 정한다 (kinds.js). 새 제품을 더해도 이 분기는 그대로다.
   //   esign   = 계약 창구(점포·지도 대신 서명 입구), landing = 한 장짜리 모집 화면
   const home = kindOf(assoc).home;
   if (home === "esign") return esignHome(ctx);
   if (home === "landing") return franchiseHome(ctx);
-  const lay = parseLayout(assoc.home_layout, assoc.name);
+  // A/B 사본이면 그 사본의 구성으로 그리고, 방문을 사본 이름으로 센다.
+  // 기본 홈은 variant "" 로 세므로 둘을 나란히 비교할 수 있다.
+  const variant = String(opts.variant || "");
+  const lay = parseLayout(opts.layoutJson || assoc.home_layout, assoc.name);
+  if (countable(ctx, variant, "view")) await D.bumpLandingView(db, assoc.id, variant).catch(() => {});
+  // 이 방문이 어느 사본에서 시작됐는지 30분만 기억한다. 손님은 홈에서 곧장 신청하지 않고
+  // 가게를 눌러 보고 검색해 본 뒤에 움직이므로, 그 여정을 이어 붙이지 않으면
+  // "어느 홈이 실제로 입점 신청을 만들었나" 를 영원히 알 수 없다.
+  // 개인을 식별하는 값이 아니라 사본 이름 한 조각이고, 30분 뒤 스스로 사라진다.
+  if (ctx.addCookie) ctx.addCookie(homeVariantCookie(variant, base, ctx.isProd));
   // 독립 쿼리는 병렬로 — D1 은 쿼리마다 네트워크 왕복이라 직렬 대기가 TTFB 로 직결됨
   const [{ items }, notices, events, stats, cats, names, recentUpdates] = await Promise.all([
     D.listBusinessesPaged(db, assoc.id, { perPage: 8 }), // 4열 그리드에 맞춰 2줄이 꽉 차게 (6개는 마지막 줄이 비어 보임)
@@ -314,13 +323,19 @@ async function franchiseHome(ctx) {
 }
 
 // 캠페인 사본 — /l/:slug. 인스타용·검색광고용 문구를 따로 두고 전환율을 비교한다.
-export async function franchiseVariant(ctx) {
+// 사본 주소 — 같은 조직의 다른 구성. 모집 랜딩과 상인회 홈이 같은 표(landing_variants)를 쓴다.
+// 무엇을 사본으로 두느냐만 다르다: 모집형은 랜딩 구성, 상인회는 홈 구성.
+export async function tenantVariant(ctx) {
   const { db, assoc, params } = ctx;
-  if (assoc.kind !== "franchise") return notFoundResponse(ctx);
   const v = await D.getLandingVariant(db, assoc.id, String(params.slug || "").slice(0, 40));
   if (!v) return notFoundResponse(ctx);
-  return renderFranchisePage(ctx, { layoutJson: v.layout || assoc.landing_layout, variant: v.slug });
+  if (assoc.kind === "franchise")
+    return renderFranchisePage(ctx, { layoutJson: v.layout || assoc.landing_layout, variant: v.slug });
+  // 상인회 홈 — 전자계약 조직은 홈에 비교할 구성이 없으므로 사본을 두지 않는다
+  if (kindOf(assoc).home !== "merchant") return notFoundResponse(ctx);
+  return home(ctx, { layoutJson: v.layout || assoc.home_layout, variant: v.slug });
 }
+export const franchiseVariant = tenantVariant; // 예전 이름 (라우트 표에서 참조)
 
 // 발행 전 초안 미리보기 — 관리자만.
 export async function adminLandingPreview(ctx) {
@@ -555,6 +570,8 @@ export async function businesses(ctx) {
   const cat = query.get("category"), q = (query.get("q") || "").trim().slice(0, 60);
   const openOnly = query.get("open") === "1";
   const page = parseInt(query.get("page") || "1", 10) || 1;
+  // A/B — 손님이 실제로 '찾는' 행동을 했을 때만 센다. 목록을 그냥 연 것은 찾기가 아니다.
+  if (q || cat || openOnly) await countHomeGoal(ctx, "find");
   // "지금 영업중" 필터: 영업시간 문자열 기반이라 서버에서 계산 — 페이지네이션 대신 넉넉히 가져와 거른다
   let { items, total, page: cur, pages } = await D.listBusinessesPaged(db, assoc.id, { category: cat, q, page: openOnly ? 1 : page, perPage: openOnly ? 1000 : 12 }); // open 필터는 서버 계산이라 넉넉히 (1000곳 초과 상권은 현실적으로 없음)
   if (openOnly) { items = items.filter((b) => openNow(b.hours) === true && !D.isDayOff(b)); total = items.length; cur = 1; pages = 1; }
@@ -591,6 +608,8 @@ export async function businesses(ctx) {
 
 export async function businessDetail(ctx) {
   const { db, env, assoc, base, user, params, csrf } = ctx;
+  // A/B — 이 방문이 어느 홈 사본에서 시작됐는지 세어 둔다. "그 홈이 가게를 보게 만드는가".
+  await countHomeGoal(ctx, "bizview");
   const b = await D.getBusinessBySlug(db, assoc.id, params.slug);
   const canSee = b && (b.status === "approved" || (user && (user.id === b.owner_id || user.role === "SUPERADMIN" || (user.role === "ADMIN" && user.association_id === assoc.id))));
   if (!canSee) return notFoundResponse(ctx);
@@ -724,6 +743,7 @@ const authHead = (title, sub) => `<div class="auth-head"><span class="mark auth-
 // ================= 점포 지도 =================
 export async function mapPage(ctx) {
   const { db, env, assoc, base, user, query, csrf } = ctx;
+  await countHomeGoal(ctx, "find"); // 지도를 여는 것 자체가 '가까운 가게 찾기' 다
   const cat = query.get("category");
   let markers = await D.listBusinessMarkers(db, assoc.id);
   if (cat) markers = markers.filter((m) => m.category === cat);
@@ -1261,6 +1281,52 @@ export async function admin(ctx) {
   ]);
   const today = new Date().toISOString().slice(0, 10);
   const lay = parseLayout(assoc.home_layout, assoc.name);
+
+  // ── 홈 A/B — 같은 상인회의 다른 홈 구성을 나란히 놓고 무엇이 실제로 통했는지 본다.
+  // 성공을 하나로 합치지 않는다. 상인회에는 목적이 둘이다 —
+  // 점주를 늘리는 것(입점 신청)과 손님을 가게로 보내는 것(가게 열람·찾기).
+  // 하나의 '전환율' 로 뭉개면 어느 쪽이 좋아졌는지 알 수 없다.
+  const isMerchant = kindOf(assoc).home === "merchant";
+  const homeVariants = isMerchant ? await D.listLandingVariants(db, assoc.id).catch(() => []) : [];
+  const abStats = isMerchant ? await D.homeVariantStats(db, assoc.id, 30).catch(() => []) : [];
+  const abPanel = !isMerchant ? "" : (() => {
+    const by = new Map(abStats.map((r) => [r.variant || "", r]));
+    const pct = (n, d) => (d > 0 ? `${((n / d) * 100).toFixed(1)}%` : "—");
+    const rows = [{ slug: "", name: "지금 쓰는 홈" }, ...homeVariants.map((v) => ({ slug: v.slug, name: v.name || v.slug }))]
+      .map((v) => {
+        const r = by.get(v.slug) || {};
+        const w = Number(r.views) || 0;
+        // 방문이 얇으면 비율은 우연이다. 숫자를 보여 주되 "아직 비교하지 마세요" 를 같이 말한다.
+        const thin = w < 100;
+        return `<tr><td><b>${esc(v.name)}</b>${v.slug
+            ? `<br /><small><code>${esc(prettyPath(`${base}/l/${v.slug}`))}</code></small>` : ""}</td>
+          <td>${w.toLocaleString()}</td>
+          <td>${(Number(r.signups) || 0).toLocaleString()}<br /><small>${pct(Number(r.signups) || 0, w)}</small></td>
+          <td>${(Number(r.bizviews) || 0).toLocaleString()}<br /><small>${pct(Number(r.bizviews) || 0, w)}</small></td>
+          <td>${(Number(r.finds) || 0).toLocaleString()}<br /><small>${pct(Number(r.finds) || 0, w)}</small></td>
+          <td>${thin ? '<span class="badge badge-muted" title="방문 100회가 넘기 전에는 우연히 높거나 낮게 나옵니다.">표본 부족</span>' : '<span class="badge badge-ok">비교 가능</span>'}
+            ${v.slug ? `<form method="post" action="${base}/admin/home-variant/${esc(v.slug)}/delete" class="inline-form" data-confirm="'${esc(v.name)}' 사본을 지울까요?&#10;쌓인 성과 기록은 남습니다."><button class="btn btn-xs btn-ghost">삭제</button></form>` : ""}</td></tr>`;
+      }).join("");
+    return `<details class="panel panel-fold" id="p-ab"${homeVariants.length ? " open" : ""}>
+      <summary class="panel-title">홈 비교하기 (A/B) ${homeVariants.length
+        ? `<span class="badge badge-info">사본 ${homeVariants.length}</span>` : '<span class="badge badge-muted">아직 없음</span>'}</summary>
+      <p class="panel-hint">지금 쓰는 홈을 그대로 두고 <b>사본</b>을 하나 만들어, 사본 주소를 전단 QR·카톡·인스타에 뿌립니다.
+        어느 쪽이 실제로 <b>입점 신청</b>과 <b>가게 열람</b>을 만들었는지 아래 표에 쌓입니다.
+        사본을 만들면 지금 구성이 그대로 복사되므로, 복사한 뒤 사본만 고치면 됩니다.</p>
+      <div class="table-scroll"><table class="admin-table">
+        <thead><tr><th>홈</th><th>방문</th><th>입점 신청</th><th>가게 열람</th><th>검색·지도</th><th>판정</th></tr></thead>
+        <tbody>${rows}</tbody></table></div>
+      <p class="panel-hint">최근 30일. 비율은 <b>방문 대비</b>입니다. 방문 100회가 넘기 전에는 숫자가 우연히 흔들리니
+        <b>비교하지 마세요</b> — 하루 방문이 적은 상권이면 한두 달은 그냥 두고 보셔야 합니다.</p>
+      <form method="post" action="${base}/admin/home-variant" class="stack-form compact">
+        <div class="form-two"><label>사본 이름 <small>(나만 봅니다 — 예: 가게 먼저 보여주기)</small>
+            <input type="text" name="name" required maxlength="40" /></label>
+          <label>주소 <small>(영문 소문자·숫자·하이픈)</small>
+            <span class="slug-row"><span class="slug-pre">${esc(prettyPath(base + "/l/"))}</span>
+            <input type="text" name="slug" required maxlength="40" pattern="[a-z0-9\-]+" placeholder="b" /></span></label></div>
+        <button class="btn btn-primary btn-sm">지금 홈을 복사해 사본 만들기</button></form>
+    </details>`;
+  })();
   // 핵심 가설 계측: "회원이 스스로 채운다"가 성립하는가. 셀프 등록률 30% 이상이면 성립 신호.
   const selfOk = met.total >= 5 && met.selfRate >= 30;
   const productModPanel = assocProducts.length ? `<section class="panel"><h2 class="panel-title">제품 진열 관리 <span class="badge badge-muted">${assocProducts.length}</span></h2>
@@ -1485,7 +1551,8 @@ ${isFranchise ? `    <section class="panel panel-accent" id="p-home"><h2 class="
         <a href="${base}" target="_blank" class="btn btn-ghost btn-sm">공개 화면 보기</a></span></section>`
   : isEsign ? "" : `    <details class="panel panel-fold" id="p-home"><summary class="panel-title">홈페이지 구성 편집 <span class="badge badge-muted">한 번 정해 두는 것</span></summary>
       <p class="panel-hint">섹션을 켜고 끄거나 순서(▲▼)를 바꾸고 문구를 직접 수정할 수 있습니다.</p>
-      ${layoutEditor(base, lay)}</details>`}
+      ${layoutEditor(base, lay)}</details>
+${abPanel}`}
     ${isEsign ? "" : `<div id="p-products">${productModPanel}</div>`}
     ${isEsign ? "" : `<div class="dash-grid" id="p-content">
       <section class="panel"><h2 class="panel-title">공지·소식</h2>
@@ -3637,9 +3704,13 @@ export async function privacy(ctx) {
     <h2>2. 수집·이용 목적</h2><p>회원 식별 및 관리, 서비스 제공(점포 안내·공지·게시판·전자서명), <b>가맹·창업 상담 응대</b>, 문의 응대, 부정 이용 방지를 위해 이용합니다. 가맹 상담 신청 정보는 해당 브랜드(가맹본부)의 상담 목적으로만 쓰이며, 별도 동의 없이 다른 목적으로 이용하지 않습니다.</p>
     <h2>3. 보유·이용 기간</h2><p>수집·이용 목적 달성 시 지체 없이 파기합니다. 다만 관련 법령에 따라 보존이 필요한 경우 해당 기간 동안 보관합니다. 회원 탈퇴 시 계정 정보는 삭제되며, 전자서명 기록은 법적 효력·분쟁 대비를 위해 별도 기간 보관될 수 있습니다. <b>가맹 상담 신청 정보는 상담이 종료되면 지체 없이 삭제</b>하며, 신청자는 아래 연락처로 삭제를 요청할 수 있습니다.</p>
     <h2>4. 제3자 제공·처리위탁</h2><p>서비스는 원칙적으로 개인정보를 외부에 제공하지 않습니다. 지도(네이버) 및 영상(유튜브·인스타그램·네이버TV)은 이용자가 직접 링크·연동하는 외부 서비스이며, 해당 서비스의 정책이 적용됩니다. 서비스 인프라는 Cloudflare를 통해 운영됩니다.</p>
-    <h2>5. 이용자의 권리</h2><p>이용자는 언제든지 본인의 개인정보 열람·정정·삭제·처리정지를 요청할 수 있으며, 계정 설정 또는 문의처를 통해 행사할 수 있습니다.</p>
-    <h2>6. 안전성 확보 조치</h2><p>비밀번호는 복호화 불가능한 방식(PBKDF2)으로 저장하고, 통신은 HTTPS로 암호화합니다. 2단계 인증(2FA)을 제공합니다.</p>
-    <h2>7. 개인정보 보호책임자·문의</h2><p>${esc(info.operator)}${info.email ? ` (이메일 ${esc(info.email)})` : ""}${info.phone ? ` (전화 ${esc(info.phone)})` : ""}</p>`;
+    <h2>5. 쿠키</h2><p>로그인 유지와 보안(위조 요청 차단)에 쿠키를 씁니다. 이와 별개로, 상인회 홈을 여러 구성으로 나눠 비교하는 동안
+      <b>어느 구성으로 들어왔는지</b>를 30분간 기억하는 쿠키(<code>sc_hv</code>)를 둘 수 있습니다. 사본 이름 한 조각만 담기며
+      개인을 식별하지 않고, 해당 상인회 주소 안에서만 쓰이고, 30분 뒤 스스로 사라집니다. 브라우저 설정에서 쿠키를 거부해도
+      서비스 이용에는 지장이 없습니다(비교 통계에만 잡히지 않습니다).</p>
+    <h2>6. 이용자의 권리</h2><p>이용자는 언제든지 본인의 개인정보 열람·정정·삭제·처리정지를 요청할 수 있으며, 계정 설정 또는 문의처를 통해 행사할 수 있습니다.</p>
+    <h2>7. 안전성 확보 조치</h2><p>비밀번호는 복호화 불가능한 방식(PBKDF2)으로 저장하고, 통신은 HTTPS로 암호화합니다. 2단계 인증(2FA)을 제공합니다.</p>
+    <h2>8. 개인정보 보호책임자·문의</h2><p>${esc(info.operator)}${info.email ? ` (이메일 ${esc(info.email)})` : ""}${info.phone ? ` (전화 ${esc(info.phone)})` : ""}</p>`;
   return legalWrap("개인정보처리방침", inner, info, ctx.csrf);
 }
 

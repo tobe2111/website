@@ -167,6 +167,24 @@ export const bumpLandingView = (db, aid, variant = "") =>
 export const bumpLandingCall = (db, aid, variant = "") =>
   run(db, `INSERT INTO landing_views (association_id, variant, day, views, calls) VALUES (?,?,?,0,1)
     ON CONFLICT(association_id, variant, day) DO UPDATE SET calls = calls + 1`, aid, variant, kstToday());
+
+// 상인회 홈의 성과 셋. 모집 랜딩은 '상담 신청' 하나가 성공이었지만, 상인회 홈은 그렇지 않다 —
+// 점주를 늘리는 것(입점 신청)과 손님을 가게로 보내는 것(가게 열람·찾기)이 둘 다 목적이다.
+// 그래서 하나로 합친 '전환율' 대신 셋을 따로 세고, 화면에서 나란히 보여 준다.
+const HOME_GOALS = { signup: "signups", bizview: "bizviews", find: "finds" };
+export const isHomeGoal = (g) => Object.prototype.hasOwnProperty.call(HOME_GOALS, g);
+export function bumpHomeGoal(db, aid, variant, goal) {
+  const col = HOME_GOALS[goal];
+  if (!col) return Promise.resolve(); // 알 수 없는 이름으로 컬럼을 만들 수 없게 — SQL 은 화이트리스트로만
+  return run(db, `INSERT INTO landing_views (association_id, variant, day, views, ${col}) VALUES (?,?,?,0,1)
+    ON CONFLICT(association_id, variant, day) DO UPDATE SET ${col} = ${col} + 1`, aid, variant, kstToday());
+}
+// 사본별 성과 (최근 N일). 방문이 얇으면 비율은 우연이라, 화면에서 그렇게 말해 준다.
+export const homeVariantStats = (db, aid, days = 30) =>
+  all(db, `SELECT variant,
+      SUM(views) views, SUM(signups) signups, SUM(bizviews) bizviews, SUM(finds) finds
+    FROM landing_views WHERE association_id=? AND day >= date('now','+9 hours',?)
+    GROUP BY variant`, aid, `-${Math.max(1, days | 0)} days`);
 export const landingCallsSince = async (db, aid, days = 30) =>
   (await first(db, `SELECT COALESCE(SUM(calls),0) AS n FROM landing_views WHERE association_id=? AND day >= ?`,
     aid, kstDaysAgo(days))).n;
