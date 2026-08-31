@@ -98,6 +98,9 @@ ${ogImgAbs ? `<meta property="og:image" content="${esc(ogImgAbs)}" />` : ""}
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
 <link rel="stylesheet" id="fontCss" media="print" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css" />
 <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css" /></noscript>
+<!-- 표제는 명조로 받는데, 웹폰트를 내려받지 않는다. 한국어 명조 한 벌은 700 굵기만도 562KB —
+     40~60대 소상공인이 휴대폰으로 여는 화면에 제목 글꼴 하나로 그 무게를 지울 수 없다.
+     기기에 이미 깔린 명조(AppleMyungjo·바탕·Noto Serif CJK)를 쓴다. app.css 의 --font-display 참조. -->
 <link rel="stylesheet" href="${assetUrl("/css/app.css")}" />
 ${preloadImage ? `<link rel="preload" as="image" fetchpriority="high" href="${esc(preloadImage)}" />` : ""}
 <style>:root{--brand:${brandColor};--on-brand:${onBrand};--brand-text:${brandText}}</style>
@@ -132,7 +135,7 @@ ${assoc && kindById(assoc.kind).usesLanding && !isConsole(body) ? stickyBar(asso
     <div class="foot-info">
       <strong>${brand}</strong>
       ${assoc && (assoc.phone || assoc.address) ? `<p>${assoc.address ? esc(assoc.address) : ""}${assoc.phone ? `${assoc.address ? " · " : ""}문의 ${esc(assoc.phone)}` : ""}</p>` : ""}
-      <p class="foot-copy">COPYRIGHT © ${new Date().getFullYear()} ${brand}. ALL RIGHTS RESERVED.</p>
+      <p class="foot-copy">© ${new Date().getFullYear()} ${brand}</p>
     </div>
   </div>
 </div></footer>

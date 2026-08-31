@@ -87,7 +87,7 @@ test("부관리자: 발급 → 새 관리자로 /admin 접근 가능", async () 
   const j2 = jar(); await post(env, j2, "/login", { email: "cfo@s.kr", password: temp });
   const adm = await get(env, j2, "/t/seocho/admin");
   assert.equal(adm.status, 200);
-  assert.match(await adm.text(), /관리자 대시보드/);
+  assert.match(await adm.text(), /상인회 관리/);   // "대시보드" 는 이 화면을 쓰는 사람의 말이 아니다
 });
 
 test("서명 문서 생성: 이메일 미설정이어도 정상 동작(발송 생략)", async () => {

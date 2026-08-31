@@ -271,7 +271,7 @@ const ok = (cond, name) => { if (cond) { pass++; console.log("  ✓", name); } e
   await p.goto(`http://localhost:${PORT}/signfill.html`);
   await p.waitForTimeout(300);
   ok(await p.locator(".pf-mine").count() >= 2, "내가 채울 자리가 강조 표시됨");
-  ok((await p.locator("#fieldProgress").textContent()).includes("남은 필수"), "남은 필수 항목 안내");
+  ok((await p.locator("#fieldProgress").textContent()).includes("남았습니다"), "남은 필수 항목 안내 — 몇 개 중 몇 개인지");
   ok(await p.locator("#signSubmit").isDisabled(), "필수 항목 전에는 제출 버튼 잠금");
 
   // 서명 필드 → 캔버스에 그리기

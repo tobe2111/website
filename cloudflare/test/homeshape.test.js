@@ -119,23 +119,38 @@ test("옛 저장 구성도 새 화면으로 그려진다 (구성 필드가 없�
 });
 
 // ── 일하는 화면 —— 읽는 화면이 아니라 훑고 처리하는 화면이다.
-test("관리자 첫 화면 맨 위는 '오늘 처리할 일' 이고, 며칠 기다렸는지까지 말한다", async () => {
+//
+// 축은 하나다: 왼쪽 칸은 처리할 것, 오른쪽 칸은 지나간 것.
+// 예전에는 맨 위 "오늘 처리할 일" 상자와 가입 신청 표와 알림함이 **같은 사건을 세 번**
+// 말하고 있었다 — 세 번 말하면 한눈에 들어오지 않는다.
+test("첫 화면은 처리할 것과 지나간 것 두 칸이고, 승인을 그 자리에서 한다", async () => {
   const env = makeEnv();
   const pw = await hashPassword("pass1234");
   const a = await D.createAssociation(env.DB, { slug: "s", name: "서초구 상인회", kind: "merchant" });
   await D.createUser(env.DB, { email: "ad@s.kr", passwordHash: pw.hash, salt: pw.salt, name: "회장", role: "ADMIN", associationId: a.id });
   const u = await D.createUser(env.DB, { email: "m@s.kr", passwordHash: pw.hash, salt: pw.salt, name: "사장", role: "MERCHANT", associationId: a.id });
-  await D.createBusiness(env.DB, { associationId: a.id, ownerId: u.id, name: "모둠분식", category: "음식점", description: "" });
+  const b = await D.createBusiness(env.DB, { associationId: a.id, ownerId: u.id, name: "모둠분식", category: "음식점", description: "" });
 
   const j = await login(env, "ad@s.kr");
   const html = await (await jget(env, j, "/t/s/admin")).text();
 
-  assert.match(html, /오늘 처리할 일/);
-  assert.match(html, /입점 신청 1건/);
-  assert.match(html, /모둠분식/, "몇 건인지가 아니라 무엇이 기다리는지를 말한다");
-  assert.match(html, /검토하기/, "어디를 눌러야 하는지까지");
-  // 할 일 상자가 숫자 카드보다 먼저 나온다 — 훑는 순서가 곧 화면 순서다
-  assert.ok(html.indexOf('id="p-todo"') < html.indexOf('id="p-stats"'), "처리할 일이 숫자보다 위");
+  assert.match(html, /class="dash-split"/, "두 칸으로 나뉘어야 한다");
+  const q = html.slice(html.indexOf('id="p-queue"'), html.indexOf('id="p-notif"'));
+  assert.match(q, /모둠분식/, "기다리는 신청이 왼쪽 칸에 보인다");
+  assert.match(q, /기다린 날/, "몇 건인지가 아니라 얼마나 기다렸는지");
+  // 승인 단추가 이 화면 안에 있어야 한다 — 예전에는 다른 탭으로 넘어가야 나왔다
+  assert.match(q, new RegExp(`admin/business/${b.id}/status`), "승인·반려 폼이 첫 화면에 있어야");
+  assert.match(q, /승인<\/button>/);
+
+  // 같은 사건을 두 번 말하지 않는다
+  assert.ok(!html.includes("오늘 처리할 일"), "따로 뜬 할 일 상자는 없앴다 — 아래 표와 같은 말이었다");
+  assert.ok(!html.includes("안 읽은 알림"), "오른쪽 칸이 곧 알림함이다");
+  // 숫자는 결정을 만드는 것만
+  const stats = html.slice(html.indexOf('id="p-stats"'), html.indexOf("</div>", html.indexOf("서명 진행 중")));
+  assert.match(stats, /가입 점포/);
+  assert.match(stats, /이번 주 방문/, "'사람이 오고 있나' 가 실제로 궁금한 숫자다");
+  assert.ok(!stats.includes("미디어"), "세어 봐야 아무것도 달라지지 않는 숫자는 뺐다");
+  assert.ok(!stats.includes("승인 대기"), "바로 아래 표가 이미 말한다");
 });
 
 test("점주 화면은 '못 채우면 무엇을 잃는지' 를 적는다", async () => {
@@ -215,4 +230,39 @@ test("점주 체크리스트는 끝난 것을 줄 그어 늘어놓지 않는다"
   assert.ok(!box.includes("영업 시간 적기"), "이미 채운 것은 목록에서 뺀다");
   assert.match(box, /가게 사진 3장/, "남은 것은 남는다");
   assert.match(box, /나머지 3가지는 이미 채우셨습니다/, "끝난 것은 숫자 한 줄로 센다");
+});
+
+// ── 전자계약 —— 계약서를 읽지 못하는 채로 서명하게 두지 않는다.
+test("휴대폰에서 읽을 수 있게, 서명 화면에 본문 크게 읽기가 붙는다", async () => {
+  const env = makeEnv();
+  const pw = await hashPassword("pass1234");
+  const a = await D.createAssociation(env.DB, { slug: "law", name: "한빛법무법인", kind: "esign" });
+  const ad = await D.createUser(env.DB, { email: "ad@law.kr", passwordHash: pw.hash, salt: pw.salt, name: "담당", role: "ADMIN", associationId: a.id });
+  const body = "제1조 임차인은 본 계약의 조건을 성실히 이행한다.\n제2조 보증금은 금 오천만원으로 한다.";
+  const d = await D.createDocument(env.DB, { associationId: a.id, title: "임대차 계약서", body,
+    contentHash: "x".repeat(64), createdBy: ad.id });
+  // 필드가 있어야 A4 지면으로 그려진다 — 지면이 없으면 본문이 그대로 흐르므로 이 장치도 필요 없다
+  await D.replaceFields(env.DB, d.id, [{ page: 0, kind: "sign", x: 0.5, y: 0.8, w: 0.2, h: 0.05, label: "서명", assignee: 0, required: 1 }]);
+  await D.addExternalSigner(env.DB, { documentId: d.id, name: "김상대" });
+  // 본인이 서명 대상이어야 서명 화면이 열린다
+  await D.createSignatureRequests(env.DB, d.id, [ad.id]);
+  const j = await login(env, "ad@law.kr");
+  const page = await (await jget(env, j, `/t/law/sign/${d.id}`)).text();
+
+  assert.match(page, /class="read-plain"/, "본문 크게 읽기 블록이 있어야 한다");
+  assert.match(page, /본문 크게 읽기/);
+  assert.match(page, /제2조 보증금은 금 오천만원으로 한다/, "지면과 같은 본문이 그대로 들어 있어야 한다");
+  assert.match(page, /글자 하나까지 같은 내용/, "다른 문서를 보여주는 것이 아님을 밝힌다");
+});
+
+test("필드 배치 도구는 스크롤해도 따라온다", async () => {
+  const { readFileSync } = await import("node:fs");
+  const css = readFileSync(new URL("../public/css/app.css", import.meta.url), "utf8");
+  const i = css.indexOf(".fp-dock{");
+  assert.ok(i >= 0, ".fp-dock 규칙이 있어야 한다");
+  const rule = css.slice(i, css.indexOf("}", i));
+  assert.match(rule, /position:sticky/, "계약서가 세 화면 넘게 길다 — 저장 단추가 따라오지 않으면 맨 위까지 되돌아가야 한다");
+  const src = readFileSync(new URL("../src/pages.js", import.meta.url), "utf8");
+  assert.match(src, /class="fp-dock"/);
+  assert.match(src, /id="fieldsForm" class="fp-save"/, "저장 폼이 도구 막대 안에 있어야 한다");
 });

@@ -225,7 +225,8 @@
   function progress() {
     var need = stack.querySelectorAll('.pf-mine[data-req="1"]').length;
     var left = pending().length;
-    if (counter) counter.textContent = left ? "남은 필수 항목 " + left + "개 / " + need + "개" : "필수 항목을 모두 채웠습니다 ✓";
+    // "2개 / 2개" 는 분수처럼 읽혀 다 채운 것으로 오해된다 — 몇 개 중 몇 개를 했는지로 쓴다
+    if (counter) counter.textContent = left ? "필수 항목 " + need + "개 중 " + (need - left) + "개 완료 · " + left + "개 남았습니다" : "필수 항목을 모두 채웠습니다";
     if (counter) counter.className = left ? "field-progress" : "field-progress done";
     if (jump) jump.hidden = left === 0;
     // 제출이 왜 안 눌리는지 말해 준다 — 회색 버튼만 보이면 사람은 페이지를 닫는다.

@@ -22,12 +22,15 @@
   --brand-ring:rgba(11,110,79,.42); --brand-ring:color-mix(in oklab, var(--brand), transparent 58%);
   --accent:#f6a623;
   /* 잉크·라인·표면 */
-  --ink:#1d1d1f; --ink-soft:#515154;
+  /* 회색을 초록 쪽으로 아주 조금 기울입니다. #1d1d1f · #f5f5f7 · #d2d2d7 은
+     가장 많이 복제된 중성 회색이라, 그대로 쓰면 화면이 '어느 제품이나 쓰는 회색' 이 됩니다.
+     브랜드색 쪽으로 기운 회색은 고른 티가 납니다(대비는 그대로 지킵니다). */
+  --ink:#161A17; --ink-soft:#4A524C;
   /* --muted 는 안내문·보조설명 전반에 쓰인다. 옛 값 #86868b 은 흰 배경에서 3.62:1 로
      본문 기준(4.5:1)에 못 미쳐 저시력 사용자가 읽기 어려웠다. 5.07:1 로 올렸다. */
-  --muted:#6e6e73;
-  --line:#d2d2d7; --line-soft:#e8e8ed;
-  --bg:#ffffff; --bg-alt:#f5f5f7; --surface:#ffffff; --surface-2:#f5f5f7; --white:#fff;
+  --muted:#68706A;
+  --line:#CFD5D0; --line-soft:#E3E8E4;
+  --bg:#ffffff; --bg-alt:#F3F6F3; --surface:#ffffff; --surface-2:#F3F6F3; --white:#fff;
   /* 상태색 */
   --ok:#1c7a4d; --ok-bg:#e7f4ec; --ok-fg:#0f5130;
   --wait:#b7791f; --wait-bg:#fbf1dc; --wait-fg:#6f4907;
@@ -41,6 +44,11 @@
   --sh-2:0 2px 8px rgba(0,0,0,.055);
   --sh-3:0 6px 20px rgba(0,0,0,.085);
   --font:'Pretendard Variable',Pretendard,'Apple SD Gothic Neo','Malgun Gothic',system-ui,-apple-system,sans-serif;
+  /* 표제는 명조로 받는다 — 상인회 간판과 계약서가 실제로 쓰는 글씨이고,
+     본문 고딕과 나란히 놓이면 화면이 '어느 서비스나 쓰는 굵은 고딕' 에서 벗어난다.
+     웹폰트를 받지 않는다: 한국 사용자 기기에 이미 깔린 명조를 순서대로 찾고,
+     없으면 본문 글꼴로 조용히 돌아간다(글자가 깨지지 않는다). */
+  --font-display:AppleMyungjo,'Apple Myungjo',Batang,바탕,'Noto Serif KR','Noto Serif CJK KR','Nanum Myeongjo',serif;
   --mono:ui-monospace,'SF Mono','D2Coding',Menlo,monospace;
   --container:1140px; --header-h:56px; --ease:cubic-bezier(.22,.61,.36,1);
   /* ── 하위호환 별칭 (기존 클래스 규칙이 참조) ── */
@@ -2087,3 +2095,127 @@ input:not([type]),input[type="text"],input[type="email"],input[type="tel"],input
 .dash .notif-list li{border-radius:0;padding:11px 4px;border-bottom:1px solid var(--line-soft);background:none}
 .dash .notif-list li.unread{background:none}
 .dash .notif-list li:hover{background:var(--surface-2)}
+
+/* 첫 화면을 두 칸으로 —— 세로로만 쌓으면 "한눈에" 가 성립하지 않습니다.
+   왼쪽은 지금 처리할 것(승인 단추가 그 자리에 있습니다), 오른쪽은 지나간 기록입니다.
+   왼쪽이 넓은 이유는 거기서 일을 하기 때문이고, 오른쪽은 훑기만 하면 됩니다. */
+.dash-split{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:clamp(22px,3vw,38px);align-items:start}
+.dash-col > .panel:first-child{border-top:0;padding-top:0}
+@media (max-width:900px){.dash-split{grid-template-columns:minmax(0,1fr);gap:0}
+  .dash-col + .dash-col > .panel:first-child{border-top:1px solid var(--line);padding-top:20px}}
+
+/* 처리 대기 목록 — 표로 만들 만큼 칸이 여럿이지는 않고, 줄마다 '무엇을 · 어디로' 두 가지만 있습니다 */
+.queue-list{list-style:none;margin:0;padding:0;border-top:1px solid var(--line-soft)}
+.queue-item{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;
+  padding:11px 4px;border-bottom:1px solid var(--line-soft)}
+.q-main{min-width:0;color:inherit}
+.q-main b{display:block;font-size:.95rem;font-weight:600;letter-spacing:-.02em;color:var(--ink)}
+.q-main span{display:block;margin-top:1px;font-size:.84rem;color:var(--muted)}
+.q-main:hover b{color:var(--brand-text);text-decoration:underline}
+.queue-item.is-late .q-main span{color:var(--no-fg)}
+.q-go{flex:none;font-size:.86rem;font-weight:600;color:var(--brand-text);white-space:nowrap}
+.q-go:hover{text-decoration:underline}
+
+/* 필드 배치 도구 — 계약서가 세 화면 넘게 길어서, 도구가 맨 위에만 있으면
+   두 번째 장에 필드를 놓은 뒤 저장하려고 다시 맨 위까지 올라가야 했습니다. */
+.fp-dock{position:sticky;top:var(--header-h);z-index:20;background:var(--surface);
+  border-bottom:1px solid var(--line);padding:12px 0;margin-bottom:18px;
+  display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 16px;align-items:start}
+.fp-dock .fp-bar{margin:0;grid-column:1}
+.fp-dock .fp-props{grid-column:1/-1;margin:0}
+.fp-save{grid-column:2;grid-row:1;align-self:center}
+@media (max-width:720px){
+  .fp-dock{grid-template-columns:minmax(0,1fr)}
+  .fp-save{grid-column:1;grid-row:auto}
+  .fp-save .btn{width:100%}
+}
+
+/* 빈 목록 — 테두리 두른 큰 상자 한가운데 회색 글씨는 "여기 뭔가 고장났나" 로 읽힙니다.
+   아무것도 없다는 말은 조용한 한 줄이면 충분합니다. */
+.notice-list li.empty,.admin-table td.empty,ul li.empty{
+  border:0;background:none;box-shadow:none;padding:14px 2px;text-align:left;
+  font-size:.92rem;line-height:1.6;
+}
+
+/* 본문 크게 읽기 — 휴대폰에서 A4 지면은 절반 이하로 줄어 글자가 6px 남짓이 됩니다.
+   읽지 못하는 계약서에 서명하게 두지 않기 위한 자리입니다. */
+.read-plain{border:1px solid var(--line);border-radius:var(--r-md);margin:0 0 14px;background:var(--surface)}
+.read-plain>summary{cursor:pointer;list-style:none;padding:12px 16px;font-size:.94rem;font-weight:600;color:var(--brand-text)}
+.read-plain>summary::-webkit-details-marker{display:none}
+.read-plain>summary::after{content:" ▾";color:var(--muted)}
+.read-plain[open]>summary::after{content:" ▴"}
+.read-plain>summary:hover{background:var(--surface-2)}
+.rp-note{margin:0;padding:0 16px 10px;font-size:.84rem;color:var(--muted);line-height:1.6}
+.rp-body{padding:14px 16px 18px;border-top:1px solid var(--line-soft);font-size:1rem;line-height:1.9;
+  color:var(--ink);max-height:60vh;overflow-y:auto;overscroll-behavior:contain;word-break:keep-all}
+
+/* ==========================================================================
+   글자 —— 굵은 고딕 하나로 모든 제목을 처리하던 것을 나눕니다.
+   --------------------------------------------------------------------------
+   "AI 가 만든 것 같다" 의 가장 큰 지분은 글자에 있었습니다.
+   900 굵기 큰 제목 + 그 위 작은 회색 눈썹글씨 + 자간 -0.03em — 이 조합은
+   생성된 화면이 거의 예외 없이 쓰는 모양입니다. 굵기가 400·500·600·700·800·900
+   여섯 단계로 흩어져 있어 어느 것도 특별해 보이지 않았습니다.
+
+   그래서 두 가지를 정했습니다.
+     · 표제는 **명조**로 받습니다. 상인회 간판과 계약서가 실제로 쓰는 글씨입니다.
+       본문은 그대로 고딕이라, 둘이 나란히 놓이면 역할이 눈으로 갈립니다.
+     · 굵기는 **400 · 500 · 700** 세 단계만 씁니다. 굵기로 소리치지 않고
+       크기와 글꼴로 층을 만듭니다.
+   ========================================================================== */
+.hp-title,.hf-title,.hero-title,.dash-title,.article-title,.section-title,
+.landing-hero h1,.biz-hero h1,.auth-card h1,.brand>span,.sc-big,.first-invite h3{
+  font-family:var(--font-display);
+  font-weight:700;
+  letter-spacing:-.005em;   /* 명조는 조이면 획이 붙습니다 — 고딕만큼 좁히지 않습니다 */
+  word-break:keep-all;
+}
+/* 명조는 같은 크기에서 고딕보다 작아 보입니다 — 제목만 한 급 올립니다 */
+.dash-title{font-size:clamp(1.55rem,3.4vw,1.95rem);font-weight:700}
+.hp-title{font-weight:700;letter-spacing:-.01em}
+.hf-title{font-weight:700;letter-spacing:-.01em}
+.section-title{font-weight:700}
+.article-title{font-weight:700}
+.brand>span{font-size:16px;font-weight:700;letter-spacing:0}
+/* 콘솔 구역 제목은 표제가 아니라 이름표입니다 — 여기는 고딕을 지킵니다 */
+.dash .panel-title,.panel-title,.panel-subtitle,.biz-section-title{font-family:var(--font)}
+
+/* 눈썹글씨 —— 제목 위에 작은 회색 대문자를 얹는 버릇을 걷습니다.
+   남길 곳에서는 대문자·넓은 자간을 빼고, 그냥 앞줄로 씁니다. */
+.section-eyebrow{font-weight:500;font-size:.82rem;letter-spacing:0;color:var(--muted)}
+
+/* 굵기 정리 — 900·800 을 700 으로, 600 은 자리에 따라 500·700 으로 */
+.dash-sub,.section-lead,.hp-sub{font-weight:400}
+
+/* ==========================================================================
+   머리말·꼬리말 —— 어느 서비스에나 붙어 있던 모양을 걷습니다.
+   --------------------------------------------------------------------------
+   머리말: 흐림 효과(backdrop-filter)를 건 반투명 바 + 둥근 로고 사각형 +
+   메뉴 링크가 알약 배경으로 물드는 hover. 셋 다 생성된 화면의 기본값입니다.
+   불투명한 종이 + 상호 + 밑줄로 표시하는 현재 위치로 바꿉니다.
+
+   꼬리말: 먹빛 띠 + 둥근 마크 + "COPYRIGHT © 2026 X. ALL RIGHTS RESERVED."
+   — 한국어 사이트에 영어 대문자 저작권 줄이 붙는 것은 템플릿을 그대로 쓴 표시입니다.
+   ========================================================================== */
+.site-header{background:var(--surface);-webkit-backdrop-filter:none;backdrop-filter:none;
+  border-bottom:1px solid var(--line)}
+.site-header.scrolled{box-shadow:none;border-bottom-color:var(--ink)}
+.brand-mark{border-radius:3px;width:26px;height:26px}
+.brand-logo{border-radius:3px}
+.main-nav a{border-radius:0;padding:8px 0;margin:0 11px;border-bottom:2px solid transparent}
+.main-nav a:not(.btn):hover{background:none;color:var(--ink);border-bottom-color:var(--line)}
+.main-nav a.active:not(.btn){background:none;color:var(--ink);font-weight:700;border-bottom-color:var(--ink)}
+.main-nav a.btn{margin-left:14px}
+.nav-ops a{margin:0 8px}
+
+.site-footer{background:none;color:var(--muted);border-top:1px solid var(--ink);padding:26px 0 40px}
+.foot-top{border-bottom:0;padding:0 0 14px}
+.foot-policy a{color:var(--ink-soft)}
+.foot-policy a.strong{color:var(--ink);font-weight:500}
+.foot-policy a:hover{text-decoration:underline}
+.foot-policy .sep{background:var(--line)}
+.foot-bottom{padding:14px 0 0;border-top:1px solid var(--line-soft)}
+.foot-mark{display:none}      /* 상호 옆에 마크를 또 붙일 이유가 없습니다 — 머리말에 이미 있습니다 */
+.foot-info strong{color:var(--ink);font-family:var(--font-display);font-weight:700;font-size:1rem}
+.foot-info p{color:var(--muted);font-size:.86rem}
+.foot-copy{font-size:.82rem;color:var(--muted)}

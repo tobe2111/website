@@ -110,7 +110,7 @@ export const KINDS = {
     selfRegister: true, usesLanding: false,
     console: { businesses: true, products: true, dues: true, homeLayout: true, content: true,
       polls: true, invite: true, proxyAdd: true, staff: false, landing: false, leads: false },
-    dashTitle: "관리자 대시보드", siteWord: "홈페이지",
+    dashTitle: "상인회 관리", siteWord: "홈페이지",
   },
   esign: {
     id: "esign", label: "전자계약", createLabel: "전자계약 전용", badge: "badge-info", orgWord: "조직",
@@ -130,7 +130,7 @@ export const KINDS = {
     selfRegister: false, usesLanding: true,
     console: { businesses: true, products: true, dues: false, homeLayout: false, content: true,
       polls: false, invite: true, proxyAdd: true, staff: false, landing: true, leads: true },
-    dashTitle: "모집 관리", siteWord: "랜딩페이지",
+    dashTitle: "가맹 모집 관리", siteWord: "랜딩페이지",
   },
 };
 export const KIND_KEYS = Object.keys(KINDS);

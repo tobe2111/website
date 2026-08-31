@@ -366,6 +366,12 @@ export const listBusinessNames = (db, aid, limit = 300) =>
   all(db, "SELECT name FROM businesses WHERE association_id=? AND status='approved' ORDER BY name LIMIT ?", aid, limit);
 // "지금 문 연 곳 24곳" 을 세려면 영업시간 문자열을 코드에서 읽어야 한다 (SQL 로는 못 푼다).
 // 이름·주소 없이 판단에 필요한 두 칸만 가져온다 — 홈에서 매번 도는 질의라 가볍게.
+// 이번 주 방문과 지난주 방문을 한 번에. "25곳" 같은 자산 숫자만으로는 잘 되고 있는지 알 수 없고,
+// 상인회장이 실제로 궁금한 것은 "사람이 오고 있나" 다. 지난주가 0이면 증감을 말하지 않는다.
+export const visitTrend = (db, aid) => first(db, `SELECT
+    COALESCE(SUM(CASE WHEN day >= date('now','+9 hours','-7 days') THEN views END),0) AS cur,
+    COALESCE(SUM(CASE WHEN day >= date('now','+9 hours','-14 days') AND day < date('now','+9 hours','-7 days') THEN views END),0) AS prev
+  FROM landing_views WHERE association_id=?`, aid);
 export const listBusinessHours = (db, aid, limit = 1000) =>
   all(db, "SELECT hours, day_off_date FROM businesses WHERE association_id=? AND status='approved' LIMIT ?", aid, limit);
 export const listAllBusinesses = (db, aid) =>
@@ -660,8 +666,10 @@ export const getDocument = (db, id) => first(db, "SELECT * FROM documents WHERE 
 // 만든 사람을 함께 가져온다 — 담당자가 여러 명이면 "누가 보낸 계약인가"가 가장 먼저 필요해진다.
 // created_by 는 ON DELETE SET NULL 이라 계정이 지워져도 목록이 깨지지 않는다(LEFT JOIN).
 export const listDocuments = (db, aid) =>
+  // "0명 서명" 만으로는 다 된 건지 아무도 안 한 건지 알 수 없다 — 몇 명 중 몇 명인지가 필요하다.
   all(db, `SELECT d.*, u.name AS author_name,
-      (SELECT COUNT(*) FROM signatures s WHERE s.document_id=d.id) AS sign_count
+      (SELECT COUNT(*) FROM signatures s WHERE s.document_id=d.id) AS sign_count,
+      (SELECT COUNT(*) FROM signature_requests r WHERE r.document_id=d.id) AS signer_count
     FROM documents d LEFT JOIN users u ON u.id = d.created_by
     WHERE d.association_id=? ORDER BY d.created_at DESC`, aid);
 // 서명 시작 전 문서 수정 — 오타 하나 때문에 계약을 새로 만드는 일이 없도록.

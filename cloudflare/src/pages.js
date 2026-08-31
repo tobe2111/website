@@ -1290,6 +1290,14 @@ export async function dashboard(ctx) {
 }
 
 const docBody = (b) => esc(b).replace(/\n/g, "<br />");
+// 휴대폰에서는 A4 지면이 화면 폭에 맞춰 절반 이하로 줄어들어 본문 글자가 6px 남짓이 된다.
+// 임대차계약서를 읽지 못하는 채로 서명하게 두는 것은, 그 기능이 없는 것과 같다.
+// 지면은 서명 자리를 누르는 데 쓰고, 읽기는 이 블록에서 한다 — 글자 하나까지 같은 본문이다.
+const plainRead = (body) => `<details class="read-plain">
+  <summary>글씨가 작으면 — 본문 크게 읽기</summary>
+  <p class="rp-note">아래 계약서 지면과 <b>글자 하나까지 같은 내용</b>입니다. 서명·날인 자리는 지면에서 눌러 주세요.</p>
+  <div class="rp-body">${docBody(body)}</div></details>`;
+
 // CSV 셀: 따옴표 이스케이프 + 수식 인젝션 방지(= + - @ 로 시작하면 \' 접두)
 const csvCell = (v) => {
   let s = String(v == null ? "" : v);
@@ -1302,7 +1310,7 @@ export async function admin(ctx) {
   const { db, env, assoc, base, user, query, csrf } = ctx;
   // 독립 쿼리 병렬화 — D1 은 쿼리마다 왕복이라 직렬 대기가 관리자 TTFB 의 주범이었음
   const duePeriod0 = /^\d{4}-\d{2}$/.test(query.get("due_period") || "") ? query.get("due_period") : D.kstToday().slice(0, 7);
-  const [s, all, notices, events, members, admins, notifs, unread, auditLog, met, assocProducts, allRsvps, dueRowsRaw] = await Promise.all([
+  const [s, all, notices, events, members, admins, notifs, unread, auditLog, met, assocProducts, allRsvps, dueRowsRaw, visitsRaw] = await Promise.all([
     D.stats(db, assoc.id),
     D.listAllBusinesses(db, assoc.id),
     D.listNotices(db, assoc.id),
@@ -1316,8 +1324,10 @@ export async function admin(ctx) {
     D.listAssocProducts(db, assoc.id),
     D.listRsvpsByAssoc(db, assoc.id),
     D.listDuesForPeriod(db, assoc.id, duePeriod0),
+    D.visitTrend(db, assoc.id).catch(() => ({ cur: 0, prev: 0 })),
   ]);
   const today = new Date().toISOString().slice(0, 10);
+  const visits = { cur: Number(visitsRaw && visitsRaw.cur) || 0, prev: Number(visitsRaw && visitsRaw.prev) || 0 };
   const lay = parseLayout(assoc.home_layout, assoc.name);
 
   // ── 홈 A/B — 같은 상인회의 다른 홈 구성을 나란히 놓고 무엇이 실제로 통했는지 본다.
@@ -1500,54 +1510,83 @@ export async function admin(ctx) {
     ["settings", "설정", "", 0],
   ];
 
-  // ── 오늘 처리할 일 —— 일하는 화면은 읽는 화면이 아니라 훑고 처리하는 화면이다.
-  // 예전에는 숫자 카드 다섯 개가 맨 위에 있었는데, "승인 대기 3" 을 보고도
-  // 그게 오늘 온 것인지 일주일 묵은 것인지 알 수 없어 결국 표를 열어 봐야 했다.
-  // 여기서는 몇 건인지가 아니라 **얼마나 기다렸는지**와 **어디를 눌러야 하는지**를 말한다.
+  // ── 며칠 기다렸는지 —— "승인 대기 3" 을 보고도 오늘 온 것인지 일주일 묵은 것인지
+  // 알 수 없으면, 그 숫자는 아무 결정도 만들지 못한다.
   const daysSince = (v) => {
     const t = Date.parse(String(v || "").replace(" ", "T") + "Z");
     return isNaN(t) ? 0 : Math.max(0, Math.floor((Date.now() - t) / 86400000));
   };
   const pendingBiz = all.filter((b) => b.status === "pending");
-  // 29 라는 숫자만으로는 좋은지 나쁜지 알 수 없다. 늘고 있는지가 실제로 궁금한 것이다.
+  // 25 라는 숫자만으로는 좋은지 나쁜지 알 수 없다. 늘고 있는지가 실제로 궁금한 것이다.
   // 다만 없는 변화를 지어내지 않는다 — 0 이면 아예 표시하지 않는다.
   const newBiz30 = all.filter((b) => b.status === "approved" && daysSince(b.created_at) <= 30).length;
   const openDocs = docs.filter((d) => !d.closed);
   const lateDocs = openDocs.filter((d) => isOverdue(d));
-  const todos = [
-    pendingBiz.length ? {
-      label: `${isEsign ? "가입" : "입점"} 신청 ${pendingBiz.length}건`,
-      why: (() => {
-        const oldest = Math.max(...pendingBiz.map((b) => daysSince(b.created_at)));
-        const names = pendingBiz.slice(0, 2).map((b) => b.name).join(" · ");
-        return `${names}${pendingBiz.length > 2 ? ` 외 ${pendingBiz.length - 2}곳` : ""}${oldest > 0 ? `, 가장 오래 기다린 곳 ${oldest}일째` : ""}`;
-      })(),
-      href: "#s-people", cta: "검토하기", warn: pendingBiz.some((b) => daysSince(b.created_at) >= 3),
-    } : null,
-    lateDocs.length ? {
-      label: `기한 지난 계약 ${lateDocs.length}건`,
-      why: `${lateDocs.slice(0, 2).map((d) => d.title).join(" · ")}${lateDocs.length > 2 ? ` 외 ${lateDocs.length - 2}건` : ""} — 서명이 아직 안 끝났습니다`,
-      href: `${base}/admin/documents`, cta: "링크 다시 보내기", warn: true,
-    } : null,
-    !lateDocs.length && openDocs.length ? {
-      label: `서명 대기 ${openDocs.length}건`,
-      why: `${openDocs.slice(0, 2).map((d) => d.title).join(" · ")}${openDocs.length > 2 ? ` 외 ${openDocs.length - 2}건` : ""}`,
-      href: `${base}/admin/documents`, cta: "진행 보기", warn: false,
-    } : null,
-    unread ? { label: `안 읽은 알림 ${unread}건`, why: "회원 신청·서명 완료 같은 소식이 쌓여 있습니다", href: "#s-home", cta: "알림함 열기", warn: false } : null,
-  ].filter(Boolean);
-  const todoBox = todos.length
-    ? `<section class="todo-box" id="p-todo">
-        <h2 class="todo-head">오늘 처리할 일 · ${todos.length}건</h2>
-        <ul class="todo-list">${todos.map((t) => `<li class="todo-item${t.warn ? " is-warn" : ""}">
-          <span class="todo-txt"><b>${esc(t.label)}</b><span>${esc(t.why)}</span></span>
-          <a class="todo-go" href="${t.href}">${esc(t.cta)} <span aria-hidden="true">→</span></a></li>`).join("")}</ul>
-      </section>`
-    // 빈 상자는 고장처럼 보인다 — 아무것도 없을 때는 아무것도 없다고 말한다.
-    : `<p class="todo-clear" id="p-todo">지금 처리할 일이 없습니다.</p>`;
+  // ── 숫자 줄 —— 숫자는 "결정을 만드는 것" 만 남긴다.
+  // 예전에는 승인업체·승인대기·공지·행사·미디어 다섯 개였는데,
+  //   · 승인 대기는 바로 위 할 일 상자가 이미 말하고 있었고 (같은 말 두 번),
+  //   · 공지 6 · 행사 3 · 미디어 25 는 세어 봐야 아무것도 달라지지 않는 숫자였다.
+  // 대신 상인회장이 실제로 궁금해하던 것을 넣는다 — 사람이 오고 있나.
+  const stat = (num, label, opts = {}) =>
+    `<div class="stat-card${opts.alert ? " stat-alert" : ""}"><span class="stat-num">${num}${
+      opts.delta ? `<u class="stat-delta"${opts.deltaTitle ? ` title="${esc(opts.deltaTitle)}" aria-label="${esc(opts.deltaTitle)}"` : ""}>${opts.delta}</u>` : ""
+    }</span><span class="stat-label">${esc(label)}</span></div>`;
+  const visitPct = visits.prev > 0 ? Math.round(((visits.cur - visits.prev) / visits.prev) * 100) : null;
+  const statRow = `<div class="stat-cards" id="p-stats">${isEsign
+    ? (() => { const o = docs.filter((d) => !d.closed); const over = o.filter((d) => isOverdue(d));
+        return stat(o.length, "서명 대기", { alert: !!o.length })
+          + stat(over.length, "기한 지남", { alert: !!over.length })
+          + stat(docCount - o.length, "체결 완료")
+          + stat(staffList.length, "담당자");
+      })()
+    : stat(s.businesses, "가입 점포", newBiz30 ? { delta: `+${newBiz30}`, deltaTitle: `최근 30일에 ${newBiz30}곳 늘었습니다` } : {})
+      + stat(visits.cur.toLocaleString(), "이번 주 방문",
+          visitPct !== null ? { delta: `${visitPct >= 0 ? "+" : ""}${visitPct}%`, deltaTitle: `지난주 ${visits.prev.toLocaleString()}회 대비` } : {})
+      + stat(Number(s.notices) + Number(s.events), "올린 소식")
+      + stat(docs.filter((d) => !d.closed).length, "서명 진행 중")
+  }</div>`;
+
+  // ── 왼쪽 칸 = 처리할 것 · 오른쪽 칸 = 지나간 것.
+  //
+  // 예전에는 맨 위에 "오늘 처리할 일" 상자가 따로 있었는데, 그 상자와 가입 신청 표와
+  // 알림함이 **같은 사건을 세 번** 말하고 있었다 — "입점 신청 2건" · "모둠분식(표)" ·
+  // "모둠분식 — 입점 신청이 들어왔습니다(알림)". 세 번 말하면 한눈에 안 들어온다.
+  //
+  // 그래서 축을 하나로 했다. 처리해야 하는 것은 전부 왼쪽 한 칸에 모으고, 거기서 바로 처리한다.
+  // 예전에는 "검토하기 →" 를 눌러 회원·점포 탭으로 넘어가야 승인 단추가 나왔다 —
+  // 매일 하는 일이 두 번 클릭이면, 그 화면은 매일 쓰라고 만든 화면이 아니다.
+  const signQueue = openDocs.length ? `<section class="panel" id="p-signq"><h2 class="panel-title">서명 대기 <span class="badge ${
+      lateDocs.length ? "badge-no" : "badge-muted"}">${openDocs.length}건${lateDocs.length ? ` · 기한 지남 ${lateDocs.length}` : ""}</span></h2>
+    <ul class="queue-list">${openDocs.slice(0, 5).map((d) => {
+      const late = isOverdue(d);
+      return `<li class="queue-item${late ? " is-late" : ""}">
+        <a class="q-main" href="${base}/admin/documents/${d.id}"><b>${esc(d.title)}</b>
+          <span>${late ? "기한이 지났습니다" : "서명을 기다리는 중"}${d.due_date ? ` · 기한 ${esc(d.due_date)}` : ""}</span></a>
+        <a class="q-go" href="${base}/admin/documents/${d.id}">${late ? "링크 다시 보내기" : "진행 보기"} <span aria-hidden="true">→</span></a></li>`;
+    }).join("")}</ul>
+    ${openDocs.length > 5 ? `<p class="panel-hint" style="margin:12px 0 0"><a href="${base}/admin/documents">진행 중인 계약 ${openDocs.length}건 전체 보기 →</a></p>` : ""}</section>` : "";
+
+  const applyQueue = `<section class="panel" id="p-queue"><h2 class="panel-title">가입 신청${
+      pendingBiz.length ? ` <span class="badge badge-wait">${pendingBiz.length}건</span>` : ""}</h2>
+    ${pendingBiz.length ? `<div class="table-scroll"><table class="admin-table"><thead><tr><th>가게</th><th>대표</th><th>기다린 날</th><th>처리</th></tr></thead><tbody>
+      ${pendingBiz.map((b) => { const d = daysSince(b.created_at);
+        return `<tr><td><b>${esc(b.name)}</b><br /><small>${esc(b.category)}</small></td>
+        <td>${esc(b.owner_name)}<br /><small>${esc(b.owner_email)}</small></td>
+        <td${d >= 3 ? ' class="txt-warn"' : ""}>${d === 0 ? "오늘" : `${d}일째`}</td>
+        <td class="actions-cell">
+          <form method="post" action="${base}/admin/business/${b.id}/status" class="inline-form"><input type="hidden" name="status" value="approved"><button class="btn btn-xs btn-primary">승인</button></form>
+          <form method="post" action="${base}/admin/business/${b.id}/status" class="inline-form"><input type="hidden" name="status" value="rejected"><button class="btn btn-xs btn-ghost">반려</button></form>
+        </td></tr>`; }).join("")}
+    </tbody></table></div>
+    <p class="panel-hint" style="margin:12px 0 0">승인하면 그 자리에서 가게 페이지가 열리고, 사장님께 안내가 갑니다.</p>`
+    : `<p class="empty">기다리는 신청이 없습니다.</p>`}</section>`;
+
+  // 전자계약 조직에는 '가입 신청' 이 없다 — 처리할 것은 서명뿐이다.
+  const queuePanel = isEsign ? (inFlightPanel(base, docs) || `<p class="empty">진행 중인 계약이 없습니다.</p>`)
+    : applyQueue + signQueue;
 
   const body = `<section class="dash"><div class="container">
-    <div class="dash-head"><div><p class="section-eyebrow">조직 관리 · ${esc(assoc.name)}</p><h1 class="dash-title">${isEsign ? "전자계약 관리" : isFranchise ? "가맹 모집 관리" : "관리자 대시보드"}</h1>
+    <div class="dash-head"><div><h1 class="dash-title">${esc(kindOf(assoc).dashTitle)}</h1>
       <p class="dash-sub">${isEsign ? "계약 창구" : isFranchise ? "랜딩페이지" : "홈페이지"}: <a href="${base}" target="_blank">${esc(prettyPath(base))}</a></p></div>
       <div class="dash-head-actions">${isFranchise ? `<a href="${base}/admin/leads" class="btn btn-primary btn-sm">상담 DB ${leads.total}건</a>
         <a href="${base}/admin/landing" class="btn btn-ghost btn-sm">랜딩 편집</a>`
@@ -1568,23 +1607,15 @@ export async function admin(ctx) {
     </nav></aside>
     <div class="console-main">
     <div class="sgroup" id="s-home" data-tab="home">
-    ${todoBox}
-    ${isEsign ? inFlightPanel(base, docs) : ""}
-    <div class="stat-cards" id="p-stats">
-      ${isEsign ? (() => { const o = docs.filter((d) => !d.closed); const over = o.filter((d) => isOverdue(d));
-        return `<div class="stat-card${o.length ? " stat-alert" : ""}"><span class="stat-num">${o.length}</span><span class="stat-label">서명 대기</span></div>
-      <div class="stat-card${over.length ? " stat-alert" : ""}"><span class="stat-num">${over.length}</span><span class="stat-label">기한 지남</span></div>
-      <div class="stat-card"><span class="stat-num">${docCount - o.length}</span><span class="stat-label">체결 완료</span></div>
-      <div class="stat-card"><span class="stat-num">${members.length}</span><span class="stat-label">담당자</span></div>`; })()
-      : `<div class="stat-card"><span class="stat-num">${s.businesses}${newBiz30 ? `<u class="stat-delta" title="최근 30일에 새로 승인된 ${newBiz30}곳" aria-label="최근 30일에 ${newBiz30}곳 늘었습니다">+${newBiz30}</u>` : ""}</span><span class="stat-label">승인 업체</span></div>
-      <div class="stat-card${s.pending ? " stat-alert" : ""}"><span class="stat-num">${s.pending}</span><span class="stat-label">승인 대기</span></div>
-      <div class="stat-card"><span class="stat-num">${s.notices}</span><span class="stat-label">공지</span></div>
-      <div class="stat-card"><span class="stat-num">${s.events}</span><span class="stat-label">행사</span></div>`}
-      ${isEsign ? "" : `<div class="stat-card"><span class="stat-num">${s.mediaCount}</span><span class="stat-label">미디어</span></div>`}</div>
-    <section class="panel" id="p-notif"><div class="panel-head"><h2 class="panel-title">알림함${unread ? ` <span class="badge badge-wait">${unread}</span>` : ""}</h2>
-      ${unread ? `<form method="post" action="${base}/admin/notifications/read"><button class="btn btn-xs btn-ghost">모두 읽음</button></form>` : ""}</div>
-      <ul class="notif-list">${notifRows}</ul></section>
-    </div>
+    ${statRow}
+    <div class="dash-split">
+      <div class="dash-col">${queuePanel}</div>
+      <div class="dash-col">
+        <section class="panel" id="p-notif"><div class="panel-head"><h2 class="panel-title">최근 활동${unread ? ` <span class="badge badge-wait">${unread}</span>` : ""}</h2>
+          ${unread ? `<form method="post" action="${base}/admin/notifications/read"><button class="btn btn-xs btn-ghost">모두 읽음</button></form>` : ""}</div>
+          <ul class="notif-list">${notifRows}</ul></section>
+      </div>
+    </div></div>
 
     <div class="sgroup" id="s-people" data-tab="people">
     <section class="panel" id="p-members"><div class="panel-head"><h2 class="panel-title">${isEsign ? "담당자 관리" : "회원 관리"} <span class="badge badge-muted">${isEsign ? staffList.length : members.length}명</span></h2>
@@ -1719,7 +1750,7 @@ function inFlightPanel(base, docs) {
     const late = isOverdue(d);
     return `<tr class="${late ? "row-late" : ""}">
       <td><a href="${base}/admin/documents/${d.id}">${esc(d.title)}</a></td>
-      <td>${d.sign_count}명 서명</td>
+      <td>${Number(d.signer_count) > 0 ? `${d.sign_count}/${d.signer_count}명` : `${d.sign_count}명`}</td>
       <td>${d.due_date
         ? `${esc(d.due_date)} ${late ? '<span class="badge badge-no">기한 지남</span>' : ""}`
         : '<span class="muted">기한 없음</span>'}</td>
@@ -1774,8 +1805,8 @@ export async function signList(ctx) {
   const all = await D.listDocuments(db, assoc.id);
   const signedFlags = await Promise.all(all.map((d) => D.hasSigned(db, d.id, user.id)));
   const todoRows = todo.length ? todo.map((d) => `<li><a href="${base}/sign/${d.id}"><span class="notice-tag tag-important">서명 필요</span>
-    <span class="notice-title">${esc(d.title)}${d.ordered ? ' <span class="badge badge-info">순차</span>' : ""}${d.due_date ? ` <span class="badge badge-wait">~${esc(d.due_date)}</span>` : ""}</span><time>${esc(kstDate(d.created_at, "."))}</time></a></li>`).join("") : `<li class="empty">서명할 문서가 없습니다.</li>`;
-  const doneRows = all.filter((_, i) => signedFlags[i]).map((d) => `<li><span class="notice-tag badge-ok">서명 완료</span><span class="notice-title">${esc(d.title)}</span></li>`).join("") || `<li class="empty">서명 내역이 없습니다.</li>`;
+    <span class="notice-title">${esc(d.title)}${d.ordered ? ' <span class="badge badge-info">순차</span>' : ""}${d.due_date ? ` <span class="badge badge-wait">~${esc(d.due_date)}</span>` : ""}</span><time>${esc(kstDate(d.created_at, "."))}</time></a></li>`).join("") : `<li class="empty">서명하실 문서가 없습니다. 계약서를 받으시면 카카오톡·문자로 링크가 옵니다.</li>`;
+  const doneRows = all.filter((_, i) => signedFlags[i]).map((d) => `<li><span class="notice-tag badge-ok">서명 완료</span><span class="notice-title">${esc(d.title)}</span></li>`).join("") || `<li class="empty">아직 서명하신 계약이 없습니다.</li>`;
   const body = `<section class="section page-top"><div class="container narrow">
     <a href="${assoc.kind === "esign" ? base + "/" : base + "/dashboard"}" class="back-link">← ${assoc.kind === "esign" ? "홈" : "내 업체"}</a>
     <div class="section-head" style="text-align:left"><h1 class="section-title">전자서명</h1></div>${flashOf(query)}
@@ -1839,6 +1870,7 @@ export async function signForm(ctx) {
     ${flashOf(query)}
     ${otpBlock}
     ${fillBar}
+    ${fields.length ? plainRead(d.body) : ""}
     ${docView}
     ${d.attachment ? `<p class="doc-attach">계약서 원문: <a href="${esc(mediaUrl(d.attachment))}" target="_blank" rel="noopener">${esc(d.attachment_name || "계약서.pdf")}</a> <small>— 이 파일의 내용도 해시에 포함되어 봉인됩니다</small></p>` : ""}
     <details class="doc-hash"><summary>문서 지문 <code>${esc(String(d.content_hash).slice(0, 8))}…${esc(String(d.content_hash).slice(-8))}</code></summary>
@@ -2569,6 +2601,7 @@ export async function extSignForm(ctx) {
   const inner = `${flashOf(query)}${otpBlock}
     ${fields.length && otpDone ? `<div class="field-progress" id="fieldProgress"></div>
       <button type="button" class="btn btn-ghost btn-sm field-jump" id="fieldJump" hidden>다음 항목으로 이동 ↓</button>` : ""}
+    ${fields.length ? plainRead(d.body) : ""}
     ${docView}
     ${d.attachment ? `<p class="doc-attach">계약서 원문: <a href="${esc(mediaUrl(d.attachment))}" target="_blank" rel="noopener">${esc(d.attachment_name || "계약서.pdf")}</a></p>` : ""}
     <details class="doc-hash"><summary>문서 지문 <code>${esc(String(d.content_hash).slice(0, 8))}…${esc(String(d.content_hash).slice(-8))}</code></summary>
@@ -2703,9 +2736,11 @@ export async function adminDocFields(ctx) {
     <div class="dash-head"><div><p class="section-eyebrow">전자계약 · 필드 배치</p><h1 class="dash-title">${esc(d.title)}</h1>
       <p class="dash-sub"><a href="${base}/admin/documents/${d.id}">← 문서로</a> · 서명 대상 ${sigs.total}명</p></div></div>
     ${flashOf(query)}
-    <section class="panel">
-      <p class="fp-hint">놓을 종류를 고른 뒤 <b>계약서 위를 클릭</b>하면 그 자리에 필드가 생깁니다. 드래그로 옮기고, 오른쪽 아래 손잡이로 크기를 조절하세요.
-        각 필드는 <b>누가 채울지</b> 지정할 수 있습니다.</p>
+    <p class="fp-hint">놓을 종류를 고른 뒤 <b>계약서 위를 클릭</b>하면 그 자리에 필드가 생깁니다. 드래그로 옮기고, 오른쪽 아래 손잡이로 크기를 조절하세요.
+      각 필드는 <b>누가 채울지</b> 지정할 수 있습니다.</p>
+    <!-- 계약서가 세 화면 넘게 길다. 도구와 저장 단추가 맨 위에 고정돼 있지 않으면,
+         두 번째 장에 필드를 놓은 뒤 저장하려고 다시 맨 위까지 올라가야 한다. -->
+    <div class="fp-dock">
       <div class="fp-bar">${palette}</div>
       <div class="fp-props" id="fieldProps" hidden>
         <span class="badge badge-info" id="fpKind"></span>
@@ -2714,10 +2749,10 @@ export async function adminDocFields(ctx) {
         <label class="check-inline"><input type="checkbox" id="fpReq" checked /> 필수</label>
         <button type="button" class="btn btn-ghost btn-sm" id="fpDel">삭제</button>
       </div>
-      <form method="post" action="${base}/admin/documents/${d.id}/fields" id="fieldsForm">
+      <form method="post" action="${base}/admin/documents/${d.id}/fields" id="fieldsForm" class="fp-save">
         <input type="hidden" name="fields" id="fieldsData" />
         <button class="btn btn-primary">배치 저장</button></form>
-    </section>
+    </div>
     <div class="paper-wrap">${paper}</div>
     <script type="application/json" id="fieldKinds">${JSON.stringify(FIELD_KINDS)}</script>
     </div></section>`;
