@@ -365,3 +365,13 @@ test("명단 양식 내려받기: 머리글이 이 계약서의 빈칸과 정확
   const head = parseTable(await r.text())[0];
   assert.deepEqual(head, ["이름", "휴대폰", "이메일", "상호", "대금"]);
 });
+
+test("명단 양식: 엑셀이 수식으로 실행할 칸은 앞에 따옴표를 붙인다", () => {
+  // 빈칸 이름은 계약서에 사람이 써 넣은 글자다 — 그게 그대로 머리글이 되어 엑셀에서 열린다
+  const csv = toCsv([["=cmd|' /C calc'!A1", "정상"], ["+1+1", "@SUM(1)"]]);
+  assert.doesNotMatch(csv, /(^|[,\n])=cmd/, "'=' 로 시작하는 칸이 그대로 나가면 안 된다");
+  assert.match(csv, /'=cmd/);
+  assert.match(csv, /'\+1\+1/);
+  assert.match(csv, /'@SUM/);
+  assert.match(csv, /정상/, "멀쩡한 칸은 건드리지 않는다");
+});

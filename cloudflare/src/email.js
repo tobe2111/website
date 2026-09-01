@@ -12,7 +12,7 @@ export async function dailyEmailMax(db) {
   return Number.isFinite(n) && n >= 0 ? n : DEFAULT_DAILY_EMAIL_MAX;
 }
 // 조직에 귀속되는 메일은 반드시 이 함수를 거친다(상한 + 기록).
-export async function sendEmailFor(env, db, assoc, { to, subject, html, kind = "" }) {
+export async function sendEmailFor(env, db, assoc, { to, subject, html, kind = "", tag = "" }) {
   if (!emailEnabled(env)) return { skipped: true };
   const D = await import("./db.js");
   const { maskEmail } = await import("./util.js");
@@ -21,14 +21,15 @@ export async function sendEmailFor(env, db, assoc, { to, subject, html, kind = "
     const max = await dailyEmailMax(db);
     if (max > 0 && (await D.countMessagesToday(db, assoc.id, "email")) >= max) {
       await D.logMessage(db, { associationId: assoc.id, channel: "email", kind, recipient: masked,
-        status: "failed", cost: 0, detail: `하루 발송 상한(${max}건) 초과` });
+        status: "failed", cost: 0, detail: `하루 발송 상한(${max}건) 초과${tag ? ` #${tag}` : ""}` });
       return { capped: true, error: `하루 메일 발송 상한(${max}건)을 넘었습니다.` };
     }
   }
   const r = await sendEmail(env, { to, subject, html });
   if (assoc) {
+    // tag: 같은 주소로 또 보내지 못하게 막을 때 쓰는 해시 꼬리표. 원본 주소는 남기지 않는다.
     await D.logMessage(db, { associationId: assoc.id, channel: "email", kind, recipient: masked,
-      status: r.sent ? "sent" : "failed", cost: 0, detail: r.error || "" });
+      status: r.sent ? "sent" : "failed", cost: 0, detail: `${r.error || ""}${tag ? ` #${tag}` : ""}`.trim() });
   }
   return r;
 }

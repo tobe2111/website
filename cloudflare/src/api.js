@@ -2183,22 +2183,42 @@ export async function acceptInvite(ctx) {
   return back(base + "/dashboard", "환영합니다! 가게가 바로 공개되었습니다. 사진과 제품·메뉴를 채워보세요.");
 }
 
+// 재설정 메일은 같은 주소로 이 시간 안에 두 번 나가지 않는다.
+//
+// 왜 막는가: 계정 열거는 이미 막혀 있지만(있든 없든 같은 안내), **횟수**가 안 막히면 두 가지가 터진다.
+//   ① 남의 메일함을 재설정 메일로 채울 수 있다.
+//   ② 우리 발송 한도를 태운다. 알림톡 심사가 끝나기 전까지 이메일이 유일한 발송 수단이라,
+//      한도가 마르면 전 조직의 계약 서명 링크가 함께 멈춘다.
+const RESET_COOLDOWN_MIN = 10;
+
 export async function forgotPassword(ctx) {
-  const { db, env, form, request } = ctx;
+  const { db, env, form, request, ip } = ctx;
   const email = (form.get("email") || "").toLowerCase().trim();
+  const SAME = "가입된 이메일이라면 재설정 링크를 보냈습니다. 메일함을 확인해 주세요.";
+  // 한 곳에서 쏟아붓는 것부터 막는다. 로그인과 같은 장치를 쓴다(isolate 로컬 · best-effort).
+  if (rateLimited(ip)) return back("/forgot", SAME);
+  recordFail(ip);
   const user = email ? await D.getUserByEmail(db, email) : null;
   // 이메일 설정 시: 재설정 링크 자동 발송 (존재 여부 무관 동일 안내 = 계정 열거 방지)
   if (emailEnabled(env)) {
     if (user) {
-      const token = await makeResetToken(env.SESSION_SECRET, email);
-      const origin = new URL(request.url).origin;
-      const link = `${origin}/reset?token=${encodeURIComponent(token)}`;
-      await sendEmail(env, {
-        to: email, subject: "비밀번호 재설정 안내",
-        html: mailShell("비밀번호 재설정", `<p>아래 버튼을 눌러 새 비밀번호를 설정하세요. 링크는 <b>1시간</b> 동안만 유효합니다.</p>${mailButton(link, "새 비밀번호 설정")}`),
-      });
+      // 주소 자체가 아니라 해시 꼬리표로 센다 — 발송 이력에 원본 주소를 남기지 않기 위함이다.
+      const tag = (await sha256Hex(`reset|${email}`)).slice(0, 16);
+      if (!(await D.recentMailByTag(db, tag, RESET_COOLDOWN_MIN))) {
+        const token = await makeResetToken(env.SESSION_SECRET, email);
+        const origin = new URL(request.url).origin;
+        const link = `${origin}/reset?token=${encodeURIComponent(token)}`;
+        // sendEmailFor 를 거쳐야 하루 상한에 함께 잡히고 발송 이력에도 남는다.
+        // 예전에는 sendEmail 을 직접 불러 상한 밖에서 무제한으로 나갔다.
+        const assocOf = user.association_id ? await D.getAssociationById(db, user.association_id) : null;
+        await sendEmailFor(env, db, assocOf, {
+          to: email, kind: "password_reset", tag,
+          subject: "비밀번호 재설정 안내",
+          html: mailShell("비밀번호 재설정", `<p>아래 버튼을 눌러 새 비밀번호를 설정하세요. 링크는 <b>1시간</b> 동안만 유효합니다.</p>${mailButton(link, "새 비밀번호 설정")}`),
+        }).catch(() => {});
+      }
     }
-    return back("/forgot", "가입된 이메일이라면 재설정 링크를 보냈습니다. 메일함을 확인해 주세요.");
+    return back("/forgot", SAME);
   }
   // 이메일 미설정 폴백: 관리자에게 알림
   if (user && user.association_id) {

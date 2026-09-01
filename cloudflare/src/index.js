@@ -15,7 +15,11 @@ const _schemaReady = new WeakSet(); // DB 별 스키마 준비 캐시
 const _usersConfirmed = new WeakSet(); // DB 별 "계정 존재" 확인 캐시
 
 // 라우트: [method, pattern, handler, auth]
-const GLOBAL = [
+//
+// 두 표를 내보내는 이유: 판매 전 QA(qa-drill)가 **라우트를 하나씩 전부 두드려**
+// 인증이 빠진 곳이 없는지 본다. 라우트가 200줄 가까이 되면, 새 줄에 auth 를 빠뜨리는 것이
+// 가장 흔한 사고인데 그건 사람 눈으로는 안 잡힌다.
+export const GLOBAL = [
   // 전자계약 제품 · 셀프 가입 — 아래 /esign/:token 과 자리 수가 같으므로 반드시 먼저 와야 한다
   // (배열 순서대로 매칭되므로 뒤에 두면 "signup" 이 서명 토큰으로 잡힌다)
   ["GET",  "/esign/signup", pages.esignSignupForm],
@@ -92,7 +96,7 @@ const GLOBAL = [
   ["POST", "/super/platform-mode", api.superSetPlatformMode, "SUPERADMIN"],
   ["POST", "/super/platform-info", api.superSetPlatformInfo, "SUPERADMIN"],
 ];
-const TENANT = [
+export const TENANT = [
   ["GET", "/", pages.home],
   ["GET", "/businesses", pages.businesses],
   ["GET", "/business/:slug", pages.businessDetail],

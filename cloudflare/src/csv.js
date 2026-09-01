@@ -41,8 +41,11 @@ export function parseTable(text) {
 // 배열 → CSV 글자. 엑셀이 한글을 깨뜨리지 않게 BOM 을 앞에 붙인다.
 export function toCsv(rows, { bom = true } = {}) {
   const cell = (v) => {
-    const s = String(v ?? "");
-    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    let s = String(v ?? "");
+    // 수식 인젝션 방지 — '=' 로 시작하는 칸을 엑셀은 수식으로 실행한다.
+    // 이 파일의 머리글은 계약서에 사람이 써 넣은 빈칸 이름에서 온다.
+    if (/^[=+\-@]/.test(s)) s = "'" + s;
+    return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   return (bom ? "﻿" : "") + rows.map((r) => r.map(cell).join(",")).join("\r\n") + "\r\n";
 }

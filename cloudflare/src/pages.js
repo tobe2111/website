@@ -2187,6 +2187,9 @@ export async function adminDocumentNew(ctx) {
   const { db, assoc, base, user, query, csrf, env } = ctx;
   const lead = Number(query.get("lead")) ? await D.getLead(db, Number(query.get("lead")), assoc.id) : null;
   const raw = query.get("tpl") || "";
+  // 서식을 고르지 않고 이 주소로 들어온 것은 '없는 페이지' 가 아니라 '아직 안 고른 것' 이다.
+  // 404 를 띄우면 주소를 직접 친 사람에게 제품이 고장 난 것처럼 보인다.
+  if (!raw) return redirect(`${base}/admin/templates`);
   const src = isBuiltinId(raw) ? builtinById(raw) : await D.getTemplate(db, Number(raw) || 0);
   if (!src || (!isBuiltinId(raw) && src.association_id !== 0 && src.association_id !== assoc.id)) return notFoundResponse(ctx);
   const t = normalizeTemplate(src);

@@ -1327,6 +1327,11 @@ export const logMessage = (db, { associationId, channel = "alimtalk", kind = "",
 export const countMessagesToday = async (db, aid, channel) =>
   (await first(db, `SELECT COUNT(*) AS n FROM message_log WHERE association_id=? AND channel=?
     AND created_at > datetime('now','-1 day')`, aid, channel)).n;
+// 같은 주소로 최근에 나간 메일이 있는가 — 비밀번호 재설정 폭탄을 막는다.
+// 주소 자체가 아니라 해시 꼬리표로 센다(이력에 원본 주소를 남기지 않기 위함).
+export const recentMailByTag = async (db, tag, minutes) =>
+  !!(await first(db, `SELECT 1 AS x FROM message_log WHERE channel='email' AND detail LIKE ?
+    AND created_at > datetime('now', ?) LIMIT 1`, `%#${tag}%`, `-${minutes | 0} minutes`));
 export const listMessages = (db, aid, limit = 50) =>
   all(db, "SELECT * FROM message_log WHERE association_id=? ORDER BY id DESC LIMIT ?", aid, limit);
 // 최근 N시간 동안 특정 종류로 나간 발송 건수 — 공개 폼발(發) 알림톡의 남용 상한 판정에 쓴다

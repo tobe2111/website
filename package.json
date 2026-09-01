@@ -13,11 +13,12 @@
     "test:restore": "node --experimental-sqlite cloudflare/test-e2e/restore-drill.mjs",
     "test:perf": "node --experimental-sqlite cloudflare/test-e2e/perf-drill.mjs",
     "test:a11y": "node --experimental-sqlite cloudflare/test-e2e/a11y-print-drill.mjs",
-    "test:all": "npm run check && npm test && npm run test:e2e && npm run test:send && npm run test:manual && npm run test:mobile && npm run test:restore && npm run test:perf && npm run test:a11y && npm run test:limits",
+    "test:all": "npm run check && npm test && npm run test:e2e && npm run test:send && npm run test:manual && npm run test:mobile && npm run test:restore && npm run test:perf && npm run test:a11y && npm run test:limits && npm run qa",
     "test:limits": "node --experimental-sqlite cloudflare/test-e2e/limits-drill.mjs",
     "test:send": "node --experimental-sqlite cloudflare/test-e2e/send-drill.mjs",
     "test:manual": "node --experimental-sqlite cloudflare/test-e2e/manual-link-drill.mjs",
-    "check": "node --experimental-sqlite cloudflare/test-e2e/feature-check.mjs"
+    "check": "node --experimental-sqlite cloudflare/test-e2e/feature-check.mjs",
+    "qa": "node --experimental-sqlite cloudflare/test-e2e/qa-drill.mjs"
   },
   "license": "MIT"
 }
