@@ -429,7 +429,7 @@ test("말머리(첫 줄)가 무슨 메시지인지 알 수 있을 만큼 구체�
 
 test("수신자가 왜 이 메시지를 받는지 본문이 밝힌다", () => {
   // "수신 대상을 명확하게 확인하기 어렵다"가 반려 사유 중 하나였다.
-  const 수신단서 = /본 안내는|담당자님|신청해 주셔서|본인이 요청/;
+  const 수신단서 = /본 안내는|본 메시지는|담당자님|신청해 주셔서|본인이 요청/;
   for (const [kind, t] of Object.entries(N.TEMPLATES)) {
     assert.match(t.body, 수신단서, `${kind}: 수신 대상·계기를 밝히는 문장이 없다`);
   }
@@ -522,4 +522,77 @@ test("여러 명에게 보낼 때도 같은 게이트를 지난다", async () =>
     assert.equal(r.skipped, true);
     assert.equal(called, 0);
   } finally { globalThis.fetch = real; }
+});
+
+// ── 카카오가 실제로 반려하며 짚은 것들 (2026-08-26 · 08-31) ──
+//
+// 심사자의 말은 두 가지였다.
+//   ① 말머리가 광범위하면 안 된다 — '공지사항', 맨 '전자서명' 은 무엇에 대한 것인지 알 수 없다.
+//   ② 내용이 변수뿐이면 안 된다 — 무엇을 보내는 메시지인지 고정값으로 드러나야 한다.
+// 문구를 고치다 다시 그 상태로 돌아가지 않도록 여기서 잡는다.
+const 실사용템플릿 = () => Object.entries(N.TEMPLATES).filter(([, t]) => !t.pending);
+// 인증번호 문구는 이 검사에서 뺀다. 카카오가 이미 승인했고(2026-08), 본인확인 메시지는
+// 숫자 하나를 전하는 것이 전부라 원래 짧다. 길게 고치면 승인이 깨진다.
+const 내용있는템플릿 = () => 실사용템플릿().filter(([k]) => k !== "sign_otp");
+
+test("카카오 반려: 첫 줄(말머리)이 무엇에 대한 메시지인지 말한다", () => {
+  for (const [kind, t] of 내용있는템플릿()) {
+    const 첫줄 = t.body.split("\n")[0].trim();
+    // 변수를 걷어내고 남는 '고정값' 이 심사자가 제목으로 읽는 부분이다
+    const 고정 = 첫줄.replace(/#\{[^}]+\}/g, "").replace(/[[\]]/g, "").trim();
+    assert.ok(고정.length >= 6, `${kind}: 첫 줄에 고정 제목이 거의 없다 — "${첫줄}"`);
+    assert.doesNotMatch(고정, /^공지사항|^전자서명 /, `${kind}: 광범위한 말머리 — "${고정}"`);
+  }
+});
+
+test("카카오 반려: 재알림 말머리에 '전자계약서' 가 들어간다 (심사자가 준 예시 그대로)", () => {
+  // 08-31 반려 코멘트: "수정 예시 : 전자계약서 서명 미완료 등"
+  assert.match(N.TEMPLATES.sign_remind.body.split("\n")[0], /전자계약서/);
+  assert.match(N.TEMPLATES.sign_remind.body, /이미 서명을 마치신 분께는 발송되지 않습니다/,
+    "누구에게 안 가는지까지 적어야 '수신 대상 불명확' 반려를 다시 안 받는다");
+});
+
+test("카카오 반려: 내용을 관리자가 자유롭게 채우는 문구는 카카오에 올리지 않는다", () => {
+  // 08-31 반려: "변수로만 기재되어 정확한 메시지 발송 목적을 판단하기 어렵다."
+  // 공지 알림톡은 제목도 내용도 관리자가 그때그때 쓴다 — 무엇을 보낼지 우리가 정하지 않는 문구다.
+  // 글자 수로는 이걸 알 수 없다(고정 안내문이 길어도 알맹이는 변수다). 그래서 '올리지 않는다' 만 잡는다.
+  const 자유내용 = (t) => t.vars.some((v) => ["내용", "본문", "메시지"].includes(v));
+  for (const [kind, t] of 실사용템플릿()) {
+    assert.ok(!자유내용(t), `${kind}: 내용을 통째로 변수로 받는 문구는 pending 으로 두어야 한다`);
+  }
+  assert.ok(자유내용(N.TEMPLATES.notice), "공지 문구는 내용이 자유롭다는 사실 자체가 전제다");
+});
+
+test("아직 제품이 안 보내는 문구는 개통에 필요한 것으로 세지 않는다", () => {
+  // 공지 알림톡은 코드 어디에서도 발송되지 않는다. 그걸 '미등록' 으로 세면
+  // 개통 진행도가 영영 100%가 안 되고, 운영자는 없는 기능의 심사를 계속 받게 된다.
+  assert.equal(N.TEMPLATES.notice.pending, true);
+  const 보내는것 = 실사용템플릿().map(([k]) => k);
+  assert.ok(!보내는것.includes("notice"));
+  assert.deepEqual(보내는것.sort(),
+    ["lead_ack", "lead_new", "sign_done", "sign_otp", "sign_remind", "sign_request"],
+    "여기 있는 종류는 실제로 발송되는 코드 경로가 있어야 한다");
+});
+
+// ── 승인된 문구는 잠근다 ────────────────────────────────────────────────
+//
+// 알림톡은 **심사받은 문구와 한 글자라도 다르면 발송이 거절된다.** 그래서 승인이 난 뒤에
+// 문구를 손보면, 테스트는 전부 통과하는데 실제 발송만 전부 실패한다 — 가장 늦게 알아채는 사고다.
+// 아래 지문은 2026-08 카카오 승인 시점의 것이다. 문구를 고쳐야 한다면
+// **먼저 카카오에 재심사를 넣고, 통과한 뒤에 이 지문을 바꾼다.** 순서가 반대면 발송이 멈춘다.
+test("카카오 승인이 난 문구는 함부로 바뀌지 않는다 (바뀌면 발송이 전부 거절된다)", async () => {
+  const { createHash } = await import("node:crypto");
+  const 승인지문 = {
+    sign_request: "58f543034dd5fe62",
+    sign_done: "bebaccbaa7626cb1",
+    sign_otp: "876ded1808a8e8b9",
+    lead_new: "3038db33e98c4a0e",
+    lead_ack: "492ec45f4b4bdedf",
+  };
+  for (const [kind, want] of Object.entries(승인지문)) {
+    const t = N.TEMPLATES[kind];
+    const got = createHash("sha256").update(`${t.body}|${t.button}`).digest("hex").slice(0, 16);
+    assert.equal(got, want,
+      `${kind} 문구가 바뀌었다. 카카오 재심사를 통과한 뒤에 이 지문을 고쳐야 한다 — 지금 배포하면 이 종류의 발송이 전부 거절된다.`);
+  }
 });

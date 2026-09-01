@@ -1046,7 +1046,7 @@ export function registerForm(ctx) {
     ${authHead(assoc.name + " 가입", "점포 정보를 등록하고 사진·소식을 공유하세요.")}${flashOf(query)}
     <form method="post" action="${base}/register" class="stack-form">
       <label>대표자 성함<input type="text" name="name" required maxlength="60" autocomplete="name" /></label>
-      <label>휴대폰 <small>(선택 · 서명 요청·공지를 카카오 알림톡으로 받습니다)</small><input type="tel" name="phone" maxlength="13" inputmode="numeric" placeholder="010-1234-5678" autocomplete="tel" /></label>
+      <label>휴대폰 <small>(선택 · 계약서 서명 요청을 카카오 알림톡으로 받습니다)</small><input type="tel" name="phone" maxlength="13" inputmode="numeric" placeholder="010-1234-5678" autocomplete="tel" /></label>
       <label>이메일<input type="email" name="email" required autocomplete="email" /></label>
       <label>비밀번호 (8자 이상)<input type="password" name="password" required minlength="8" autocomplete="new-password" /></label>
       <label>점포명<input type="text" name="business_name" required maxlength="100" autocomplete="organization" /></label>
@@ -3288,16 +3288,23 @@ export async function superConsole(ctx) {
   ]);
   // 알림톡은 심사받은 문구와 정확히 일치해야 발송된다 — 등록할 원문을 그대로 보여 주고,
   // 받은 코드를 여기 적게 한다. 문구를 화면에서 바로 복사할 수 있어야 등록이 어긋나지 않는다.
+  // pending 문구는 아직 제품이 보내지 않는다. 진행도에서 빼야 '다 됐다' 가 사실이 된다.
   const tplEntries = Object.entries(TEMPLATES);
+  const tplLive = tplEntries.filter(([, t]) => !t.pending);
   const tplVals = await Promise.all(tplEntries.map(([, t]) => D.getSetting(db, t.key)));
   const tplInputs = tplEntries.map(([kind, t], i) =>
-    `<label class="mini-label">${esc(t.label)}${tplVals[i] ? ' <span class="badge badge-ok">등록됨</span>' : ' <span class="badge badge-wait">미등록</span>'}
-      <input type="text" name="${esc(t.key)}" value="${esc(tplVals[i] || "")}" maxlength="60" placeholder="카카오 심사 통과 코드" /></label>`).join("");
+    `<label class="mini-label">${esc(t.label)}${t.pending
+      ? ' <span class="badge badge-muted">아직 제품에 없음</span>'
+      : tplVals[i] ? ' <span class="badge badge-ok">등록됨</span>' : ' <span class="badge badge-wait">미등록</span>'}
+      <input type="text" name="${esc(t.key)}" value="${esc(tplVals[i] || "")}" maxlength="60" placeholder="${t.pending ? "등록하지 않아도 됩니다" : "카카오 심사 통과 코드"}" /></label>`).join("");
   const tplGuide = tplEntries.map(([kind, t]) => `<details class="tpl-reg"><summary>${esc(t.label)} <code>${esc(t.key)}</code>${tplVals[tplEntries.findIndex(([k]) => k === kind)] ? "" : " — 미등록"}</summary>
-      <p class="panel-hint">아래 문구를 <b>그대로</b> 카카오 비즈니스 채널에 등록하세요. 한 글자라도 다르면 발송이 거절됩니다.</p>
+      ${t.pending
+        ? `<p class="flash flash-warn">이 문구는 <b>아직 제품에서 발송되지 않습니다.</b> 카카오에 올리지 마세요 —
+            공지를 알림톡으로 보내는 기능을 만들 때, 카카오 요구대로 <b>목적별(회비·총회·투표…)로 나눠</b> 다시 등록해야 합니다.</p>`
+        : `<p class="panel-hint">아래 문구를 <b>그대로</b> 카카오 비즈니스 채널에 등록하세요. 한 글자라도 다르면 발송이 거절됩니다.</p>`}
       <pre class="code-block" data-select-all>${esc(t.body)}</pre>
       <p class="panel-hint">변수: ${t.vars.map((v) => `<code>#{${esc(v)}}</code>`).join(" ")}${t.button ? ` · 버튼: <b>${esc(t.button)}</b> (웹링크)` : " · 버튼 없음"}</p></details>`).join("");
-  const tplDone = tplVals.filter(Boolean).length;
+  const tplDone = tplEntries.filter(([, t], i) => !t.pending && tplVals[i]).length;
   const mode = await billingMode(db);
   const baseCost = await costOf(db, "alimtalk");
   const selfSignup = (await D.getSetting(db, "esign_self_signup")) !== "0";
@@ -3534,7 +3541,7 @@ export async function superConsole(ctx) {
     </section>
 
     <details class="panel panel-fold"><summary class="panel-title">알림톡 설정
-      <span class="badge ${tplDone === tplEntries.length ? "badge-ok" : "badge-wait"}">템플릿 ${tplDone}/${tplEntries.length}</span></summary>
+      <span class="badge ${tplDone === tplLive.length ? "badge-ok" : "badge-wait"}">템플릿 ${tplDone}/${tplLive.length}</span></summary>
     <p class="panel-hint">한 번 정해 두면 다시 볼 일이 거의 없는 것들입니다.</p>
     <div class="form-divider">단가·템플릿 설정</div>
     <form method="post" action="/super/notify-settings" class="stack-form">
@@ -3560,7 +3567,7 @@ export async function superConsole(ctx) {
       <button class="btn btn-ghost btn-sm">테스트 발송</button></form>
     <p class="panel-hint">시험 발송은 정산에 잡히지 않습니다. 다만 제공사 원가는 실제로 발생합니다(1건 기준 ${(await costOf(db, "alimtalk")).toLocaleString()}원).
       문자 대체발송은 꺼 두어, <b>알림톡 자체가 통했는지</b>만 확인합니다.</p>
-    <div class="form-divider">카카오에 등록할 문구 <span class="badge ${tplDone === tplEntries.length ? "badge-ok" : "badge-wait"}">${tplDone}/${tplEntries.length} 등록</span></div>
+    <div class="form-divider">카카오에 등록할 문구 <span class="badge ${tplDone === tplLive.length ? "badge-ok" : "badge-wait"}">${tplDone}/${tplLive.length} 등록</span></div>
     <p class="panel-hint">알림톡은 심사받은 문구와 <b>글자 하나까지</b> 같아야 발송됩니다. 아래 문구를 그대로 복사해 등록하고, 받은 코드를 위 칸에 넣으세요.
       용도별로 템플릿이 따로 필요합니다 — 인증번호를 '서명 요청' 템플릿으로 보내면 문구가 달라 거절됩니다.</p>
     ${tplGuide}
@@ -3864,7 +3871,7 @@ export function account(ctx) {
     <h1 class="article-title">계정 설정</h1>${flashOf(query)}
     ${superLink}
     <section class="panel"><h2 class="panel-title">알림 받을 휴대폰</h2>
-      <p class="panel-hint">서명 요청·공지를 카카오 알림톡으로 받습니다. ${emailOn(env)
+      <p class="panel-hint">계약서 서명 요청·본인확인 번호를 카카오 알림톡으로 받습니다. ${emailOn(env)
         ? "비워 두면 이메일로만 안내됩니다."
         : "<b>비워 두면 어떤 안내도 받지 못합니다</b> — 이 조직은 이메일 발송을 쓰지 않습니다."}</p>
       <form method="post" action="/account/phone" class="stack-form compact">
