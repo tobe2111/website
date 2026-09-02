@@ -3473,7 +3473,7 @@ export async function superConsole(ctx) {
   const deployLine = `<p class="panel-hint">지금 돌고 있는 배포:
     <code>${esc((env.CF_VERSION_METADATA && env.CF_VERSION_METADATA.id ? String(env.CF_VERSION_METADATA.id) : "").slice(0, 8) || "확인 불가")}</code>
     — 대시보드 <b>Deployments</b> 맨 위 버전과 같으면 최신입니다. 다르면 아직 반영 전이니 잠시 뒤 새로고침하세요.</p>`;
-  const migratePanel = migrateDone ? "" : `<section class="panel panel-warn"><h2 class="panel-title">시크릿 옮기기
+  const migratePanel = migrateDone ? "" : `<section class="panel panel-warn" id="s-secret"><h2 class="panel-title">시크릿 옮기기
       <span class="badge badge-no">${migrate.filter((m) => !(m.onWorker && !m.inDb)).length}건 남음</span></h2>
     <p class="panel-hint">두 값을 데이터베이스에서 <b>워커 Secret</b> 으로 옮깁니다.
       <b>새로 만들지 말고 지금 값을 그대로 옮기세요</b> — 아래 복사 버튼이 현행 값을 클립보드에 넣어 줍니다.
@@ -3523,13 +3523,11 @@ export async function superConsole(ctx) {
     ${keyMode === "secret"
       ? '<p class="panel-hint">서명 개인키가 Cloudflare Secret 에 있습니다. DB 가 유출되어도 봉인을 위조할 수 없습니다.</p>'
       : `<div class="flash flash-warn"><b>서명 개인키가 데이터베이스에 저장되어 있습니다.</b>
-          D1 을 읽을 수 있는 사람은 과거 서명을 위조할 수 있습니다. 아래 순서로 옮기세요.
-          <ol class="hint-steps">
-            <li><code>node cloudflare/scripts/gen-sign-key.mjs</code> 로 키를 새로 만들거나, 현행 키를 그대로 옮기려면 D1 의 <code>settings.sign_key</code> 값을 복사합니다.</li>
-            <li>Workers &amp; Pages → 이 워커 → Settings → Variables 에 <code>SIGN_PRIVATE_KEY</code> 를 <b>Secret</b> 으로 등록합니다.</li>
-            <li>등록 후 D1 에서 <code>DELETE FROM settings WHERE key='sign_key'</code> 로 사본을 지웁니다.</li>
-          </ol>
-          <b>주의:</b> 키를 <u>새로 만들면</u> 기존 서명은 검증에 실패합니다. 이미 받은 서명이 있으면 반드시 현행 키를 그대로 옮기세요.</div>`}
+          D1 을 읽을 수 있는 사람은 과거 서명을 위조할 수 있습니다.
+          <b>이 화면 맨 위 <a href="#s-secret">시크릿 옮기기</a></b> 에서 복사 버튼으로 현행 값을 그대로 옮기세요 —
+          거기에 값 복사·등록·사본 삭제까지 순서대로 있습니다.
+          ${chain.length ? `<br /><b>지금 받아 둔 서명이 ${chain.length}건 있습니다.</b> 키를 새로 만들면 이 ${chain.length}건이 전부 검증에 실패합니다.`
+            : "<br />받아 둔 서명이 아직 없어 지금은 키를 새로 만들어도 잃을 것이 없지만, 옮기는 편이 더 간단합니다."}</div>`}
     <table class="verify-table"><tr><th>공개키 지문</th><td><code>${esc(keyFp)}</code></td></tr>
       <tr><th>공개키 배포</th><td><a href="/.well-known/esign-public-key" target="_blank"><code>/.well-known/esign-public-key</code></a> — 제3자 독립 검증용</td></tr>
       <tr><th>서명 사슬</th><td>${chain.ok ? `연결 정상 (${chain.length}건)` : `<b class="txt-warn">id ${esc(String(chain.brokenAt))} 지점에서 끊김 — 기록이 삭제·변조되었을 수 있습니다</b>`}</td></tr>
