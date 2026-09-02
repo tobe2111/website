@@ -3809,7 +3809,7 @@ export async function superConsole(ctx) {
           <input type="text" name="tagline" maxlength="200" placeholder="예: 함께 성장하는 우리 동네 상권" /></label>
         <div class="form-divider">관리자 계정</div>
         <div class="form-two"><label>관리자 이름<input type="text" name="admin_name" autocomplete="name" /></label><label>관리자 이메일<input type="email" name="admin_email" required autocomplete="email" /></label></div>
-        <label>관리자 비밀번호 (8자 이상)<input type="password" name="admin_password" required minlength="8" /></label>
+        <label>관리자 비밀번호 (8자 이상)<input type="password" name="admin_password" required minlength="8" autocomplete="new-password" /></label>
         <button class="btn btn-primary">조직 만들기</button></form></details>
     <details class="panel panel-fold" id="clone-assoc"><summary class="panel-title">기존 사이트 복제해서 만들기</summary>
       <p class="panel-hint">잘 만들어 둔 사이트를 본으로 새 고객사를 찍어 냅니다. 프랜차이즈든 상인회든 같습니다.
@@ -3824,7 +3824,7 @@ export async function superConsole(ctx) {
         <label>한 줄 소개 <small>(비우면 원본과 동일)</small><input type="text" name="tagline" maxlength="200" /></label>
         <div class="form-divider">관리자 계정</div>
         <div class="form-two"><label>관리자 이름<input type="text" name="admin_name" autocomplete="name" /></label><label>관리자 이메일<input type="email" name="admin_email" required autocomplete="email" /></label></div>
-        <label>관리자 비밀번호 (8자 이상)<input type="password" name="admin_password" required minlength="8" /></label>
+        <label>관리자 비밀번호 (8자 이상)<input type="password" name="admin_password" required minlength="8" autocomplete="new-password" /></label>
         <button class="btn btn-primary">복제해서 만들기</button></form></details>
       </div>
 
@@ -3982,10 +3982,10 @@ export async function setupForm(ctx) {
       <label>조직 이름<input type="text" name="assoc_name" required maxlength="100" placeholder="예: 서초구 상인회" autocomplete="organization" /></label>
       <div class="form-divider">상인회 관리자 (ADMIN)</div>
       <label>관리자 이메일<input type="email" name="admin_email" required autocomplete="email" /></label>
-      <label>관리자 비밀번호 (8자 이상)<input type="password" name="admin_password" required minlength="8" /></label>
+      <label>관리자 비밀번호 (8자 이상)<input type="password" name="admin_password" required minlength="8" autocomplete="new-password" /></label>
       <div class="form-divider">운영사 계정 (모든 고객사 · 사이트 복제 권한)</div>
       <label>슈퍼 이메일<input type="email" name="super_email" required /></label>
-      <label>슈퍼 비밀번호 (8자 이상)<input type="password" name="super_password" required minlength="8" /></label>
+      <label>슈퍼 비밀번호 (8자 이상)<input type="password" name="super_password" required minlength="8" autocomplete="new-password" /></label>
       <button class="btn btn-primary btn-block">설정 완료하고 시작</button>
     </form><p class="auth-note">이 화면은 계정이 하나도 없을 때만 열립니다. 설정 후에는 자동으로 닫힙니다.</p></div></div></section>`;
   return html(layout({ title: "첫 설정", body, csrf }));

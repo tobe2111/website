@@ -279,12 +279,15 @@ document.addEventListener("click", (e) => {
 // 채우다 만 폼을 두고 나가려 하면 한 번 물어본다.
 // 사장님이 가게 소개를 길게 쓰다 뒤로 가기를 눌러 통째로 날리는 일이 실제로 생긴다.
 // 저장을 누른 경우는 묻지 않는다(그게 나가는 정상 경로다).
+// 브라우저의 비밀번호 자동 채움도 input 이벤트를 낸다 — 운영사 콘솔의 '새 조직' 폼에
+// 이메일·비밀번호 칸이 있어, 화면을 열자마자 '고치던 중'으로 잡혀 고객사를 누를 때마다
+// 경고가 떴다. 사람이 손댄 칸은 그 순간 포커스를 갖고 있으니, 그 경우에만 더럽혀진 것으로 본다.
 (function () {
   var dirty = false, saving = false;
   var forms = document.querySelectorAll("form.stack-form, form.upload-form");
   if (!forms.length) return;
   Array.prototype.forEach.call(forms, function (f) {
-    f.addEventListener("input", function () { dirty = true; });
+    f.addEventListener("input", function (e) { if (e.target === document.activeElement) dirty = true; });
     f.addEventListener("submit", function () { saving = true; });
   });
   window.addEventListener("beforeunload", function (e) {

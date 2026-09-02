@@ -57,6 +57,20 @@ test("작성 중인 폼을 두고 나가면 한 번 물어본다", async () => {
   assert.match(appjs, /saving = true/, "저장을 눌렀을 때는 묻지 않아야");
 });
 
+// 운영사 콘솔에는 '새 조직' 폼의 이메일·비밀번호 칸이 늘 떠 있다. 브라우저가 거기에 저장된
+// 비밀번호를 자동으로 채우면 input 이벤트가 나고, 그걸 '고치던 중'으로 잡으면
+// 고객사를 하나 누를 때마다 "사이트에서 나가시겠습니까?" 가 떴다.
+test("이탈 경고는 사람이 손댄 칸에만 반응한다 (자동 채움은 무시)", async () => {
+  assert.match(appjs, /"input", function \(e\) \{ if \(e\.target === document\.activeElement\) dirty = true; \}/,
+    "포커스가 없는 칸의 input(자동 채움)은 더럽힘으로 세지 않아야");
+  // 새 계정을 만드는 비밀번호 칸은 저장된 비밀번호를 채울 자리가 아니다.
+  const bad = [];
+  for (const m of src.matchAll(/<input\b[^>]*type="password"[^>]*>/g)) {
+    if (!/autocomplete="(current-password|new-password|one-time-code)"/.test(m[0])) bad.push(m[0].slice(0, 80));
+  }
+  assert.deepEqual(bad, [], "자동완성 지정이 없는 비밀번호 칸:\n  " + bad.join("\n  "));
+});
+
 // 공지 대표 사진이 로드되는 순간 본문이 아래로 밀리면, 읽던 줄을 놓친다.
 test("사진 자리를 미리 잡아 화면이 튀지 않는다", async () => {
   assert.match(css, /\.article-image\{[^}]*aspect-ratio/);
