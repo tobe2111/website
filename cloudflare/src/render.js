@@ -51,7 +51,7 @@ export function brandTextInk(hex) {
   const ratioOnWhite = (c) => 1.05 / (0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]) + 0.05);
   // 흰 바탕 기준 5.2 를 노린다. 이 색은 흰 바탕뿐 아니라 '브랜드 옅은 배경(tint)' 위에도
   // 자주 얹히는데, 흰 바탕으로 딱 4.5 를 맞추면 tint 위에서 4.3 으로 미끄러진다(실측).
-  // 기본 초록(#0a7d40)은 이미 5.29 라 한 톨도 바뀌지 않는다 — 바뀌는 건 밝은 색을 고른 곳뿐이다.
+  // 기본 블루(#1F6CFF)는 흰 바탕에서 4.52 라 여기서 조금 어두워진다(글자로 쓸 때만). 띠·단추 배경은 원색 그대로다.
   for (let i = 0; i < 40 && ratioOnWhite(rgb) < 5.2; i++) rgb = rgb.map((v) => Math.max(0, Math.round(v * 0.94)));
   return "#" + rgb.map((v) => v.toString(16).padStart(2, "0")).join("");
 }
@@ -85,9 +85,16 @@ ${ogImgAbs ? `<meta property="og:image" content="${esc(ogImgAbs)}" />` : ""}
   // JSON 안의 "<" 를 이스케이프해 </script> 조기 종료(HTML 인젝션)를 차단.
   const ldScript = jsonLd ? `<script type="application/ld+json">${JSON.stringify(jsonLd).replace(/</g, "\\u003c")}</script>` : "";
   // 테넌트 대표색 하나로 사이트 전체 테마 전환 (900~50 스케일 자동 파생). CSS 주입 방지를 위해 HEX 만 허용.
-  const brandColor = /^#[0-9a-fA-F]{3,8}$/.test((assoc && assoc.brand_color) || "") ? assoc.brand_color : "#0a7d40";
+  // 기본 브랜드색은 app.css 의 --brand 와 같아야 한다 (디자인 시스템 v3 · 앱 컨셉 블루).
+  const brandColor = /^#[0-9a-fA-F]{3,8}$/.test((assoc && assoc.brand_color) || "") ? assoc.brand_color : "#1F6CFF";
   const onBrand = onBrandInk(brandColor);
   const brandText = brandTextInk(brandColor);
+  // 하단 탭 — 휴대폰에서 손님이 쓰는 공개 화면에만. 업무 콘솔은 표를 가리고, 랜딩형은 이미 고정 바가 있다.
+  const isDone = /<section class="done-screen"/.test(String(body));
+  // 완료 화면·외부 서명자(로그인 없음) 화면에는 하단 탭을 그리지 않는다 — 그 사람은 이 조직의 손님이 아니다
+  const bnav = assoc && !isConsole(body) && !isDone && !kindById(assoc.kind).usesLanding ? bottomNav(base, activeNav, assoc.kind, user) : "";
+  // 어두운 '완료' 화면이면 머리·바닥도 같은 어둠으로 — 흰 띠가 남으면 화면이 둘로 갈린다
+  const bodyClass = [bnav ? "has-bnav" : "", isDone ? "is-done" : ""].filter(Boolean).join(" ");
   // 모든 POST 폼에 CSRF 히든 필드 주입
   const injected = csrf
     ? String(body).replace(/(<form\b[^>]*\bmethod\s*=\s*["']post["'][^>]*>)/gi, `$1<input type="hidden" name="_csrf" value="${csrf}">`)
@@ -113,7 +120,7 @@ ${assoc ? `<link rel="alternate" type="application/rss+xml" title="${brand} 공�
 <link rel="apple-touch-icon" href="/img/icon-180.png" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" /></head>
-<body${consoleKind ? ` data-console="${esc(consoleKind)}"` : ""}${assoc && kindById(assoc.kind).usesLanding ? ` data-base="${esc(base)}" data-csrf="${esc(csrf || "")}"` : ""}>
+<body${consoleKind ? ` data-console="${esc(consoleKind)}"` : ""}${assoc && kindById(assoc.kind).usesLanding ? ` data-base="${esc(base)}" data-csrf="${esc(csrf || "")}"` : ""}${bodyClass ? ` class="${bodyClass}"` : ""}>
 <a class="skip-link" href="#main">본문 바로가기</a>
 ${consoleKind === "super" ? `<div class="console-strip"><div class="container console-strip-in">
   <b>운영사 콘솔</b><span>여기서 하는 일은 <b>모든 고객사</b>에 적용됩니다</span></div></div>` : ""}
@@ -126,6 +133,7 @@ ${consoleKind === "super" ? `<div class="console-strip"><div class="container co
 </header>
 <main id="main">${injected}</main>
 ${assoc && kindById(assoc.kind).usesLanding && !isConsole(body) ? stickyBar(assoc, base) : ""}
+${bnav}
 <footer class="site-footer"><div class="container">
   <div class="foot-top">
     <nav class="foot-policy"><a href="/privacy" class="strong">개인정보처리방침</a><span class="sep"></span><a href="/terms">이용약관</a>${assoc ? `<span class="sep"></span><a href="${base}/contact">문의하기</a>` : ""}</nav>
@@ -192,6 +200,26 @@ function productNav(user, active, product = null) {
     items.push(`<a href="/esign/signup" class="btn btn-primary btn-sm">시작하기</a>`);
   }
   return items.join("");
+}
+
+// 휴대폰 하단 탭 — 레퍼런스(코레일톡)의 다섯 칸. 상인회는 홈·점포·지도·공지·전체메뉴,
+// 전자계약 조직은 홈·공지·내 서명·전체메뉴. '전체메뉴' 는 상단 햄버거 메뉴를 그대로 연다.
+const BNAV_ICON = {
+  home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></svg>',
+  store: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9l1.2-4.2A1 1 0 0 1 6.2 4h11.6a1 1 0 0 1 1 .8L20 9"/><path d="M4 9v10a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9"/><path d="M9 20v-6h6v6"/></svg>',
+  map: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-6-5.3-6-10a6 6 0 0 1 12 0c0 4.7-6 10-6 10z"/><circle cx="12" cy="11" r="2.2"/></svg>',
+  notice: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11v2a1 1 0 0 0 1 1h2l6 4V6L7 10H5a1 1 0 0 0-1 1z"/><path d="M17 9a4 4 0 0 1 0 6"/></svg>',
+  sign: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M8.5 16.5c1.2-2.4 2-2.4 2.6-1.2.5 1 1.2 1.2 2 .4"/></svg>',
+  menu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h10"/></svg>',
+};
+function bottomNav(base, active, kind = "merchant", user = null) {
+  const K = kindById(kind);
+  const item = (href, label, icon) => `<a href="${href}"${active === href ? ' class="on" aria-current="page"' : ""}>${BNAV_ICON[icon]}<span>${label}</span></a>`;
+  const items = K.nav === "esign"
+    ? [item(`${base}/`, "홈", "home"), item(`${base}/notices`, "공지", "notice"), ...(user ? [item(`${base}/sign`, "내 서명", "sign")] : [])]
+    : [item(`${base}/`, "홈", "home"), item(`${base}/businesses`, "점포", "store"), item(`${base}/map`, "지도", "map"), item(`${base}/notices`, "공지", "notice")];
+  items.push(`<button type="button" class="bnav-menu" data-bnav-menu aria-label="전체메뉴 열기">${BNAV_ICON.menu}<span>전체메뉴</span></button>`);
+  return `<nav class="bnav" aria-label="하단 메뉴">${items.join("")}</nav>`;
 }
 
 function navHtml(base, user, active, kind = "merchant", preset = "") {

@@ -759,7 +759,22 @@ export function loginForm(ctx) {
   return html(layout({ title: "로그인", assoc: ctx.assoc, base: ctx.base, body, csrf, scripts: turnstileScript(env) }));
 }
 
-const flashOf = (q) => flash(q.get("msg") || "", q.get("err") ? "err" : "ok"); // get() 이 이미 디코드 — 이중 디코드는 %25 등에서 URIError
+const flashOf = (q) => flash(q.get("msg") || "", q.get("err") ? "err" : "ok");
+// '2026.09.21 (월)' — 티켓 카드 머리띠의 날짜 표기 (레퍼런스와 같은 꼴)
+const DOW = "일월화수목금토";
+export function ymdDow(ymd) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(ymd || ""));
+  if (!m) return String(ymd || "");
+  const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+  return `${m[1]}.${m[2]}.${m[3]} (${DOW[d.getUTCDay()]})`;
+}
+// 'N일 남음' · '오늘까지' · 'N일 지남' — 기한을 오늘과 견줘 사람 말로
+export function daysLeftText(due, today) {
+  const a = Date.parse(String(due).slice(0, 10) + "T00:00:00Z"), b = Date.parse(String(today).slice(0, 10) + "T00:00:00Z");
+  if (!(a >= 0) || !(b >= 0)) return "";
+  const n = Math.round((a - b) / 86400000);
+  return n > 0 ? `${n}일 남음` : n === 0 ? "오늘까지" : `${-n}일 지남`;
+} // get() 이 이미 디코드 — 이중 디코드는 %25 등에서 URIError
 // 디자인 v2: 인증 카드 브랜드 아이콘 헤더
 const authHead = (title, sub) => `<div class="auth-head"><span class="mark auth-mark">${STOREFRONT_SVG}</span><h1 class="auth-title">${esc(title)}</h1><p class="auth-sub">${esc(sub)}</p></div>`;
 
@@ -1970,24 +1985,32 @@ export async function adminDocuments(ctx) {
     const t = u.toString();
     return `${base}/admin/documents${t ? "?" + t : ""}`;
   };
-  const STAT_TONE = { open: "wait", overdue: "no", declined: "no", done: "ok", closed: "muted" };
   const chip = (key, label, n) => `<a class="doc-chip${stat === key ? " on" : ""}${n && (key === "overdue" || key === "declined") ? " is-alert" : ""}" href="${qs({ stat: key, p: 1 })}">${esc(label)} <b>${n}</b></a>`;
   const chips = `<div class="doc-chips">${chip("", "전체", counts.all)}${D.DOC_STATUSES.map((k) => chip(k, D.DOC_STATUS_LABEL[k], counts[k])).join("")}</div>`;
 
-  const progress = (d) => {
-    if (!d.total) return `<span class="txt-muted">전체 회원</span>`;
-    const pct = Math.round((d.signed / d.total) * 100);
-    return `<span class="doc-prog" style="--pct:${pct}%"><b>${d.signed}</b>/${d.total}</span>`;
-  };
-  const rows = docs.length ? docs.map((d) => `<tr><td><a href="${base}/admin/documents/${d.id}">${esc(d.title)}</a>
-    ${d.ordered ? '<span class="badge badge-info">순차</span>' : ""}<br /><small>${esc(kstStamp(d.created_at))}${d.author_name ? ` · ${esc(d.author_name)}` : ""}</small></td>
-    <td>${progress(d)}</td>
-    <td>${d.due_date ? `<span class="${d.due_date < today && d.status !== "done" ? "txt-no" : ""}">${esc(d.due_date)}</span>` : '<span class="txt-muted">없음</span>'}</td>
-    <td><span class="badge badge-${STAT_TONE[d.status] || "muted"}">${esc(D.DOC_STATUS_LABEL[d.status] || d.status)}</span></td>
-    <td class="actions-cell"><a class="btn btn-xs btn-ghost" href="${base}/admin/documents/${d.id}">보기</a>${
-      // 다 받은 계약과 이미 닫힌 계약에 '마감' 을 또 붙이면, 누를 일 없는 단추가 줄마다 선다.
-      d.closed || d.status === "done" ? "" : `<form method="post" action="${base}/admin/documents/${d.id}/close" data-confirm="마감할까요? 남은 사람은 더 이상 서명할 수 없습니다."><button class="btn btn-xs btn-ghost">마감</button></form>`}</td></tr>`).join("")
-    : `<tr><td colspan="5" class="empty">${q || stat ? "찾는 계약이 없습니다." : "아직 보낸 계약이 없습니다."}</td></tr>`;
+  // 계약 한 건 = 티켓 카드 한 장 (디자인 시스템 v3 · 레퍼런스 '나의 티켓').
+  // 머리띠에 기한과 '며칠 남음', 이름표 줄에 제목과 서명자 수, 큰 숫자 두 개로 서명 진행.
+  // 표를 버린 이유: 휴대폰에서 다섯 칸 표는 가로로 넘치고, 관리자는 대부분 휴대폰으로 확인한다.
+  const rows = docs.length ? `<div class="tk-list">${docs.map((d) => {
+    const when = d.due_date || String(d.created_at || "").slice(0, 10);
+    const right = d.status === "done" ? "체결 완료" : d.status === "closed" ? "마감"
+      : d.status === "declined" ? "반려 있음"
+      : d.due_date ? daysLeftText(d.due_date, today) : "진행 중";
+    const tone = d.status === "overdue" || d.status === "declined" ? " is-alert" : d.status === "done" ? " is-done" : "";
+    return `<article class="tk-card${tone}">
+      <div class="tk-band"><span>${esc(ymdDow(when))}${d.due_date ? "" : " 보냄"}</span><b>${esc(right)}</b></div>
+      <div class="tk-body">
+        <div class="tk-row"><span>${esc(d.title)}${d.ordered ? " · 순차" : ""}</span><small>${d.total ? `${d.total}명` : "전체 회원"}${d.author_name ? ` · ${esc(d.author_name)}` : ""}</small></div>
+        <div class="tk-route">
+          <div class="tk-pt"><small>서명함</small><b>${d.signed}</b></div>
+          <div class="tk-arrow" aria-hidden="true"><svg viewBox="0 0 26 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 7h20"/><path d="M17 2l5 5-5 5"/></svg></div>
+          <div class="tk-pt"><small>전체</small><b>${d.total || "—"}</b></div>
+        </div>
+      </div>
+      <div class="tk-actions"><a class="btn btn-outline" href="${base}/admin/documents/${d.id}">계약서 확인</a></div>
+    </article>`;
+  }).join("")}</div>`
+    : `<div class="tk-empty">${q || stat ? "찾는 계약이 없습니다." : "아직 보낸 계약이 없습니다."}</div>`;
   const pager = pages > 1 ? `<div class="doc-pager">
     ${page > 1 ? `<a class="btn btn-ghost btn-sm" href="${qs({ p: page - 1 })}">← 이전</a>` : ""}
     <span>${page} / ${pages}</span>
@@ -2075,8 +2098,7 @@ export async function adminDocuments(ctx) {
           ${q ? `<a class="btn btn-ghost btn-sm" href="${qs({ q: "", p: 1 })}">지우기</a>` : ""}
         </form></div>
       ${chips}
-      <div class="table-scroll"><table class="admin-table">
-      <thead><tr><th>계약</th><th>서명</th><th>기한</th><th>상태</th><th>관리</th></tr></thead><tbody>${rows}</tbody></table></div>
+      ${rows}
       ${pager}</section></div></section>`;
   return html(layout({ title: "전자서명 문서", assoc, base, user, body, csrf,
     scripts: `<script src="${assetUrl("/js/pdf-form.js")}" defer></script>` }));
@@ -2152,6 +2174,7 @@ export async function adminDocumentDetail(ctx) {
       <p class="dash-sub"><a href="${base}/admin/documents">← 문서 목록</a> · 서명 ${sigs.length}명</p></div>
       <div class="dash-head-actions">
         ${d.closed || !canTalk ? "" : `<form method="post" action="${base}/admin/documents/${d.id}/remind" class="inline-form" data-confirm="미서명자에게 알림톡으로 리마인더를 보낼까요? (잔액이 차감됩니다)"><button class="btn btn-primary btn-sm">미서명자 재알림</button></form>`}
+        ${d.closed || (rc.total > 0 && rc.signed === rc.total) ? "" : `<form method="post" action="${base}/admin/documents/${d.id}/close" class="inline-form" data-confirm="마감할까요? 남은 사람은 더 이상 서명할 수 없습니다."><button class="btn btn-ghost btn-sm">마감</button></form>`}
         <a href="${base}/documents/${d.id}/paper" class="btn btn-ghost btn-sm">완성본 보기</a>
         <a href="${base}/documents/${d.id}/evidence" class="btn btn-ghost btn-sm">증적 패키지</a>
         <a href="${base}/admin/documents/${d.id}/fields" class="btn btn-ghost btn-sm">필드 배치${fieldN ? ` (${fieldN})` : ""}</a>
@@ -2702,11 +2725,40 @@ export async function extSignForm(ctx) {
         <p class="ext-who">${esc(signer.name)}${signer.org ? ` <small>(${esc(signer.org)})</small>` : ""} 님께 서명을 요청했습니다.</p></div>
       ${inner}</div></section>`, csrf }));
 
-  if (await D.hasSignedExt(db, d.id, signer.id))
-    return shellPage(`<div class="flash flash-ok">이미 서명을 마치셨습니다. 확인서는 등록하신 연락처로 보내드렸습니다.</div>
-      <p class="pill-row"><a href="/esign/${encodeURIComponent(params.token)}/paper" class="btn btn-primary btn-sm">계약서 완성본 보기</a>
-        <a href="/esign/${encodeURIComponent(params.token)}/evidence" class="btn btn-ghost btn-sm">증적 패키지 받기</a></p>
-      <p class="panel-hint">증적 패키지에는 서명된 계약서·확인서·검증 방법이 들어 있습니다. 분쟁 시 그대로 쓰실 수 있습니다.</p>`, d.title);
+  if (await D.hasSignedExt(db, d.id, signer.id)) {
+    // 어두운 '완료' 화면 (디자인 시스템 v3 · 레퍼런스 '결제가 완료되었어요').
+    // 서명 직후에도, 나중에 링크를 다시 열어도 같은 화면이다 — 완료는 완료다.
+    const rc = await D.requestCounts(db, d.id);
+    const mine = (await D.listSignatures(db, d.id)).find((x) => x.external_id === signer.id);
+    const tokenQ = encodeURIComponent(params.token);
+    const allDone = rc.total > 0 && rc.signed >= rc.total;
+    const when = d.due_date || String(d.created_at || "").slice(0, 10);
+    return html(layout({ title: d.title, assoc, base, user: null, csrf, body: `<section class="done-screen"><div class="container">
+      <h1 class="done-title">서명이 완료되었어요</h1>
+      <article class="tk-card">
+        <div class="tk-band"><span>${esc(ymdDow(when))}</span><b>${allDone ? "체결 완료" : `서명 ${rc.signed}/${rc.total}`}</b></div>
+        <div class="tk-body">
+          <div class="tk-row"><span>${esc(d.title)}</span><small>${rc.total ? `${rc.total}명` : ""}</small></div>
+          <div class="tk-route">
+            <div class="tk-pt is-text"><small>${esc(assoc.name)}</small><b>${esc(signer.name)}</b></div>
+            <div class="tk-arrow" aria-hidden="true"><svg viewBox="0 0 26 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 7h20"/><path d="M17 2l5 5-5 5"/></svg></div>
+            <div class="tk-pt"><small>서명함</small><b>${rc.signed}<span class="tk-of">/${rc.total || "-"}</span></b></div>
+          </div>
+        </div>
+        <div class="tk-actions"><a class="btn btn-outline" href="/esign/${tokenQ}/paper">계약서 확인</a></div>
+      </article>
+      <ul class="done-notes">
+        <li>서명하신 계약서는 그 순간 봉인되어 한 글자도 바꿀 수 없습니다.</li>
+        <li>확인서는 등록하신 연락처로 보내드렸습니다.${mine ? ` 검증 번호는 <b>${esc(mine.verify_code)}</b> 입니다.` : ""}</li>
+        <li>계약서·확인서·검증 방법이 담긴 증적 패키지는 분쟁 시 그대로 쓰실 수 있습니다.</li>
+      </ul>
+      <section class="done-next">
+        <h3>증적 패키지도 받아 둘까요?</h3>
+        <p class="done-sub">서명된 계약서 · 전자서명 확인서 · 감사 추적 · 검증 방법이 한 벌로 묶여 있습니다.</p>
+        <a class="btn btn-outline" href="/esign/${tokenQ}/evidence"><b>증적 패키지</b><span>내려받기</span> <span aria-hidden="true">›</span></a>
+      </section>
+    </div></section>` }));
+  }
   if (signer.declined_at)
     return shellPage(`<div class="flash flash-warn">이 계약의 서명을 거절하셨습니다.<br /><small>사유: ${esc(signer.decline_reason || "")}</small></div>`, d.title);
   if (d.closed) return shellPage(`<div class="flash flash-warn">마감된 문서입니다.</div>`, d.title);

@@ -40,7 +40,8 @@ export const ASSOC_KINDS = KIND_KEYS;
 export const ASSOC_PRESETS = PRESET_KEYS;
 export const normalizeKind = (k) => (KIND_KEYS.includes(k) ? k : DEFAULT_KIND);
 export const normalizePreset = (p) => (PRESET_KEYS.includes(p) ? p : DEFAULT_PRESET);
-export async function createAssociation(db, { slug, name, brandColor = "#0a7d40", tagline = "함께 성장하는 우리 동네 상권", kind = "merchant", preset = DEFAULT_PRESET }) {
+// 기본 브랜드색은 세 곳이 같아야 한다 — 여기 · schema.js 의 컬럼 기본값 · app.css/render.js 의 --brand.
+export async function createAssociation(db, { slug, name, brandColor = "#1F6CFF", tagline = "함께 성장하는 우리 동네 상권", kind = "merchant", preset = DEFAULT_PRESET }) {
   await run(db, "INSERT INTO associations (slug, name, brand_color, tagline, kind, preset) VALUES (?, ?, ?, ?, ?, ?)",
     slug, name, brandColor, tagline, normalizeKind(kind), normalizePreset(preset));
 

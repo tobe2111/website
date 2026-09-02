@@ -4,6 +4,9 @@
   var header = document.getElementById("siteHeader");
   var toggle = document.getElementById("navToggle");
   var nav = document.getElementById("mainNav");
+  // 하단 탭의 '전체메뉴' 는 새 메뉴를 만들지 않고 상단 햄버거를 연다 — 메뉴가 둘이면 서로 어긋난다
+  var bm = document.querySelector("[data-bnav-menu]");
+  if (bm && toggle) bm.addEventListener("click", function () { toggle.click(); window.scrollTo({ top: 0, behavior: "smooth" }); });
 
   if (toggle && nav) {
     toggle.addEventListener("click", function () {

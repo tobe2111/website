@@ -8,18 +8,19 @@
      color-mix 미지원 구형 브라우저는 폴백을 유지(사이트 정상), 지원 브라우저는 테넌트 색으로 파생. */
   /* 기본 브랜드색 — 흰 글자를 얹었을 때 WCAG AA(4.5:1)를 넘겨야 한다.
      옛 값 #0b8a46 은 4.43:1 로 아슬하게 미달이라, 눈에 띄지 않을 만큼만 어둡게 했다(5.22:1). */
-  --brand:#0a7d40;
-  --brand-900:#063320; --brand-900:color-mix(in oklab, var(--brand), #04100a 50%);
-  --brand-800:#083f2b; --brand-800:color-mix(in oklab, var(--brand), #04100a 28%);
-  --brand-700:#0b6e4f; --brand-700:var(--brand);
-  --brand-600:#1f7d61; --brand-600:color-mix(in oklab, var(--brand), white 12%);
-  --brand-500:#4a9a80; --brand-500:color-mix(in oklab, var(--brand), white 28%);
-  --brand-300:#87b8a7; --brand-300:color-mix(in oklab, var(--brand), white 55%);
-  --brand-100:#cee7de; --brand-100:color-mix(in oklab, var(--brand), white 82%);
-  --brand-50:#e6f3ee;  --brand-50:color-mix(in oklab, var(--brand), white 91%);
+  /* 디자인 시스템 v3 기본색 — 앱 컨셉 블루. schema.js 컬럼 기본값 · db.js · render.js 폴백과 같아야 한다. */
+  --brand:#1F6CFF;
+  --brand-900:#0D2E73; --brand-900:color-mix(in oklab, var(--brand), #04100a 50%);
+  --brand-800:#144DB8; --brand-800:color-mix(in oklab, var(--brand), #04100a 28%);
+  --brand-700:#1F6CFF; --brand-700:var(--brand);
+  --brand-600:#3D7FFF; --brand-600:color-mix(in oklab, var(--brand), white 12%);
+  --brand-500:#6A9BFF; --brand-500:color-mix(in oklab, var(--brand), white 28%);
+  --brand-300:#A6C2FF; --brand-300:color-mix(in oklab, var(--brand), white 55%);
+  --brand-100:#DDE7FF; --brand-100:color-mix(in oklab, var(--brand), white 82%);
+  --brand-50:#EDF2FF;  --brand-50:color-mix(in oklab, var(--brand), white 91%);
   --on-brand:#fff; --brand-text:var(--brand-700);  /* 서버가 브랜드 색에 맞춰 덮어쓴다 */
-  --brand-tint:#e6f3ee; --brand-tint:var(--brand-50);
-  --brand-ring:rgba(11,110,79,.42); --brand-ring:color-mix(in oklab, var(--brand), transparent 58%);
+  --brand-tint:#EDF2FF; --brand-tint:var(--brand-50);
+  --brand-ring:rgba(31,108,255,.42); --brand-ring:color-mix(in oklab, var(--brand), transparent 58%);
   --accent:#f6a623;
   /* 잉크·라인·표면 */
   /* 회색을 초록 쪽으로 아주 조금 기울입니다. #1d1d1f · #f5f5f7 · #d2d2d7 은
@@ -2418,3 +2419,130 @@ input:not([type]),input[type="text"],input[type="email"],input[type="tel"],input
 .bulk-to{white-space:nowrap}
 /* 비고와 링크가 한 줄에 붙으면 "…전달해 주세요 계약서 →" 로 한 문장처럼 읽힌다 */
 .bulk-note a{display:block;margin-top:4px;font-size:.86rem;white-space:nowrap}
+
+/* =========================================================
+   디자인 시스템 v3 — 앱 컨셉 (레퍼런스: 코레일톡 '결제 완료' · '나의 티켓' 화면)
+   ---------------------------------------------------------
+   원칙: 회색 바탕 위에 흰 카드, 카드 머리에 브랜드색 띠, 굵은 숫자, 알약 필터 칩, 둥근 모서리(12/20px).
+   토큰만 덮어써서 기존 화면이 한 번에 갈아입고, 이 컨셉이 요구하는 새 부품(티켓 카드·완료 화면·
+   하단 탭)은 아래에 새로 정의한다. 앞선 v2 규칙보다 뒤에 있어 캐스케이드로 이긴다.
+   색은 스크린샷에서 눈으로 잡은 근사치다(픽셀 추출이 불가능한 환경) — 대비는 전부 실측해 AA 를 넘긴다.
+   ========================================================= */
+:root{
+  --brand:#1F6CFF;                      /* 흰 글자 4.52:1 · 흰 바탕 위 글자 4.52:1 (AA) — render.js 기본값과 같다 */
+  --ink:#111318; --ink-soft:#3C4048;
+  --muted:#5F6672;                      /* 연회색 바탕(#F4F5F7) 위 4.9:1 */
+  --line:#DDE1E7; --line-soft:#ECEEF2;
+  --bg:#F4F5F7; --bg-alt:#EDEFF3; --surface:#fff; --surface-2:#F4F5F7;
+  --r-sm:8px; --r-md:12px; --r-lg:16px; --r-xl:20px;
+  --sh-1:none; --sh-2:none; --sh-3:none;          /* 카드는 그림자 대신 바탕과의 명도 차로 선다 */
+  /* 어두운 '완료' 화면 전용 */
+  --dk-bg:#10141C; --dk-surface:#1A1F29; --dk-surface-2:#222836; --dk-line:#2B3140;
+  --dk-ink:#FFFFFF; --dk-muted:#A2A8B4; --dk-brand:#4C8DFF;   /* 다크 카드 위 5.2:1 */
+  /* UI 표제는 굵은 고딕 — 레퍼런스 전체가 고딕이다. 명조는 여기서 물러난다. */
+  --font-display:var(--font);
+}
+body{background:var(--bg)}
+.dash{background:var(--bg)}
+/* 카드: v2 의 '괘선 위 문단' 을 다시 흰 카드로. 테두리 없이 바탕색 차이로만 구분한다. */
+.dash .panel,.dash details.panel,.panel{
+  background:var(--surface);border:0;border-radius:var(--r-xl);box-shadow:none;
+  padding:20px;margin:0 0 14px;
+}
+.dash details.panel:not([open]){padding:16px 20px;margin-bottom:14px}
+.dash details.panel:not([open]) + details.panel{border-top:0}
+.dash .panel-warn{border-left:0;padding-left:20px;box-shadow:inset 4px 0 0 var(--wait)}
+.dash .panel-accent{border-left:0;padding-left:20px;box-shadow:inset 4px 0 0 var(--brand)}
+.dash .console-main{border-left:0}
+.dash-title{font-size:26px;font-weight:700;letter-spacing:-.02em}
+/* 단추: 12px 라운드, 굵은 글자. 큰 단추는 56px — 레퍼런스의 '승차권 확인' 높이 */
+.btn{border-radius:var(--r-md);font-weight:700}
+.btn-primary{background:var(--brand);box-shadow:none}
+.btn-primary:hover{background:var(--brand-800)}
+.btn-lg{min-height:56px;font-size:18px}
+.btn-outline{background:transparent;border:1.5px solid var(--line);color:var(--brand-text);min-height:56px;font-size:18px;font-weight:700;width:100%}
+.btn-outline:hover{border-color:var(--brand)}
+/* 필터 칩: 알약. 고른 칩은 채우지 않고 파란 테두리 + 파란 글자 (레퍼런스 '전체 1') */
+.doc-chips{gap:8px;margin:0 0 16px;overflow-x:auto;flex-wrap:nowrap;padding-bottom:2px;scrollbar-width:none}
+.doc-chips::-webkit-scrollbar{display:none}
+.doc-chip{border-radius:999px;padding:9px 16px;font-size:16px;font-weight:600;border:1.5px solid #C9CDD4;color:var(--ink-soft);background:var(--surface);white-space:nowrap;flex:none}
+.doc-chip b{font-weight:600;color:inherit}
+.doc-chip:hover{border-color:var(--brand);background:var(--surface)}
+.doc-chip.on{background:var(--surface);border-color:var(--brand);color:var(--brand-text)}
+.doc-chip.on b{color:var(--brand-text)}
+.doc-chip.is-alert:not(.on){border-color:var(--no);color:var(--no-fg)}
+
+/* ── 티켓 카드: 머리띠(날짜 · 며칠 전) + 이름표 줄 + 큰 숫자 두 개 ── */
+.tk-list{display:grid;gap:14px}
+.tk-card{display:block;background:var(--surface);border-radius:var(--r-xl);overflow:hidden;color:inherit}
+.tk-band{display:flex;justify-content:space-between;align-items:center;gap:12px;background:var(--brand);color:var(--on-brand);padding:12px 18px;font-size:16px;font-weight:600;line-height:1.2}
+.tk-band b{font-weight:700}
+.tk-body{padding:14px 18px 18px}
+.tk-row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-size:16px;font-weight:700;padding-bottom:12px;border-bottom:1px solid var(--line-soft)}
+.tk-row span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tk-row small{flex:none;font-size:16px;font-weight:500;color:var(--ink-soft)}
+.tk-route{display:grid;grid-template-columns:1fr auto 1fr;align-items:end;gap:12px;padding:22px 8px 8px;text-align:center}
+.tk-pt small{display:block;font-size:16px;font-weight:600;color:var(--ink);margin-bottom:8px}
+.tk-pt b{display:block;font-size:32px;font-weight:800;letter-spacing:-.02em;line-height:1;font-variant-numeric:tabular-nums}
+.tk-arrow{color:var(--muted);padding-bottom:8px}
+.tk-arrow svg{width:26px;height:14px;display:block}
+.tk-actions{padding:6px 18px 18px}
+.tk-empty{background:var(--surface);border-radius:var(--r-xl);padding:36px 20px;text-align:center;color:var(--muted)}
+
+/* ── 어두운 '완료' 화면 (레퍼런스: 결제가 완료되었어요) ── */
+.done-screen{background:var(--dk-bg);color:var(--dk-ink);padding:24px 0 56px;min-height:calc(100vh - var(--header-h))}
+.done-screen .container{max-width:560px}
+.done-title{text-align:center;font-size:30px;font-weight:700;letter-spacing:-.02em;margin:16px 0 28px;color:var(--dk-ink)}
+.done-screen .tk-card{background:var(--dk-surface)}
+.done-screen .tk-row{border-bottom-color:var(--dk-line);color:var(--dk-ink)}
+.done-screen .tk-row small,.done-screen .tk-pt small{color:var(--dk-ink)}
+.done-screen .tk-pt b{color:var(--dk-ink)}
+.done-screen .tk-arrow{color:var(--dk-muted)}
+.done-screen .btn-outline{border-color:var(--dk-line);color:var(--dk-brand);background:transparent}
+.done-screen .btn-outline:hover{border-color:var(--dk-brand)}
+.done-notes{list-style:none;margin:22px 4px 26px;display:grid;gap:10px;color:var(--dk-muted);font-size:16px;line-height:1.55}
+.done-notes li{position:relative;padding-left:16px}
+.done-notes li::before{content:"";position:absolute;left:2px;top:.62em;width:4px;height:4px;background:var(--dk-muted)}
+.done-next{background:var(--dk-surface);border-radius:var(--r-xl);padding:22px 20px 24px;text-align:center}
+.done-next h3{font-size:20px;font-weight:700;color:var(--dk-ink);margin:0 0 16px;padding-bottom:14px;border-bottom:1px solid var(--dk-line)}
+.done-next .tk-route{padding:8px 8px 4px}
+.done-next .tk-pt small{font-size:22px;font-weight:700;margin-bottom:0}
+.done-next .done-sub{color:var(--dk-muted);font-size:15px;margin:6px 0 18px}
+.done-next .btn-outline{display:inline-flex;width:auto;min-height:52px;padding:0 24px;border-radius:999px;font-size:17px}
+.done-next .btn-outline b{color:var(--dk-brand);margin-right:4px}
+.done-next .btn-outline span{color:var(--dk-ink)}
+/* 완료 화면 안의 상단 헤더는 어둡게 — 흰 띠가 남으면 화면이 둘로 갈린다 */
+body.is-done .site-header{background:var(--dk-bg);border-bottom-color:var(--dk-line)}
+body.is-done .site-header .brand,body.is-done .main-nav a{color:var(--dk-ink)}
+body.is-done .nav-toggle span{background:var(--dk-ink)}
+body.is-done{background:var(--dk-bg)}
+body.is-done .site-footer{background:var(--dk-bg);color:var(--dk-muted);border-top-color:var(--dk-line)}
+body.is-done .site-footer a,body.is-done .foot-info strong{color:var(--dk-ink)}
+
+/* ── 하단 탭 (휴대폰 · 손님 화면) — 레퍼런스: 홈 · 이동편의 · 여행 · 나의 티켓 · 전체메뉴 ── */
+.bnav{display:none}
+@media (max-width:860px){
+  .bnav{position:fixed;left:0;right:0;bottom:0;z-index:70;display:grid;grid-auto-flow:column;grid-auto-columns:1fr;
+    background:var(--surface);border-top:1px solid var(--line-soft);padding:8px 0 max(10px,env(safe-area-inset-bottom))}
+  .bnav a,.bnav button{position:relative;display:flex;flex-direction:column;align-items:center;gap:5px;padding:6px 0 2px;
+    font-size:12px;font-weight:600;color:var(--ink-soft);background:none;border:0;font-family:inherit;line-height:1;cursor:pointer}
+  .bnav svg{width:26px;height:26px;stroke-width:1.8}
+  .bnav .on{color:var(--brand-text)}
+  .bnav .on::before{content:"";position:absolute;top:-9px;left:18%;right:18%;height:3px;border-radius:2px;background:var(--brand)}
+  body.has-bnav{padding-bottom:78px}
+}
+.tk-pt .tk-of{font-size:18px;font-weight:600;color:var(--muted);letter-spacing:0}
+.done-screen .tk-pt .tk-of{color:var(--dk-muted)}
+/* 상태별 머리띠 색 — 기한 지남·반려는 붉게, 체결 완료는 초록으로 (한눈에 손 갈 곳이 보이게) */
+.tk-card.is-alert .tk-band{background:var(--no);color:#fff}
+.tk-card.is-done .tk-band{background:var(--ok);color:#fff}
+/* 완료 화면의 왼쪽 큰 글자는 사람 이름 — 숫자보다 작게, 넘치면 말줄임 */
+.tk-pt.is-text b{font-size:24px;letter-spacing:-.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+/* 어두운 화면 바닥글의 저작권 줄 — 밝은 바탕용 회색(3.2:1)이 그대로 남으면 안 읽힌다 */
+body.is-done .foot-copy,body.is-done .site-footer p{color:var(--dk-muted)}
+/* 인쇄: 하단 탭과 그 여백은 종이에 없다 — 남으면 완성본이 한 쪽 늘어난다 */
+@media print{.bnav{display:none!important}body.has-bnav{padding-bottom:0}}
+
+@media (min-width:861px){
+  .tk-list{grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px}
+}

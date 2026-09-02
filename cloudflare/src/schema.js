@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS associations (
   slug        TEXT NOT NULL UNIQUE,
   name        TEXT NOT NULL,
   tagline     TEXT NOT NULL DEFAULT '함께 성장하는 우리 동네 상권',
-  brand_color TEXT NOT NULL DEFAULT '#0a7d40',
+  brand_color TEXT NOT NULL DEFAULT '#1F6CFF',   -- 디자인 시스템 v3 기본(앱 컨셉 블루). app.css --brand · render.js 기본값과 같다
   phone       TEXT NOT NULL DEFAULT '',
   address     TEXT NOT NULL DEFAULT '',
   email       TEXT NOT NULL DEFAULT '',
@@ -1134,6 +1134,9 @@ async function migrateColumns(db) {
   // v14 때와 같은 원칙 — 기본값을 그대로 둔 곳만 옮기고, 직접 색을 고른 곳은 건드리지 않는다.
   if (cols.some((c) => c.name === "brand_color")) {
     await db.prepare("UPDATE associations SET brand_color='#0a7d40' WHERE brand_color='#0b8a46'").run();
+    // v3: 기본색이 초록에서 블루로. 옛 기본값(#0a7d40)을 그대로 지닌 조직은 색을 '고른' 적이 없다 —
+    // 만들 때 자동으로 채워진 값이다. 그 조직만 새 기본으로 옮기고, 직접 고른 색은 한 톨도 건드리지 않는다.
+    await db.prepare("UPDATE associations SET brand_color='#1F6CFF' WHERE brand_color='#0a7d40'").run();
   }
 }
 

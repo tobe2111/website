@@ -131,7 +131,9 @@ test("같은 링크로 두 번 서명할 수 없다", async () => {
   assert.match(r.headers.get("location") || "", /err=1/);
   assert.equal((await D.listSignatures(db, doc.id)).length, 1);
   const page = await (await req("GET", `/esign/${token}`)).text();
-  assert.match(page, /이미 서명을 마치셨습니다/);
+  // 두 번째로 열어도 '완료' 화면이다 (디자인 시스템 v3 — 서명 직후와 같은 어두운 완료 화면)
+  assert.match(page, /서명이 완료되었어요/);
+  assert.match(page, /done-screen/);
 });
 
 test("동의 체크 없이는 서명되지 않는다", async () => {
