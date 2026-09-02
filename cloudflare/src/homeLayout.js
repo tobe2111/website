@@ -394,7 +394,7 @@ function heroSection(s, deps) {
   const title = esc(s.title || name).replace(/\n/g, "<br />");
   const sub = esc(s.subtitle || (deps.assoc && deps.assoc.tagline) || "우리 동네 상권을 한곳에서 만나보세요.");
   const sug = deps.suggestNames && deps.suggestNames.length;
-  // 배경 사진이 있으면 사진 + 어두운 베일(가독성), 없으면 먹빛 바탕과 타이포만으로 잡는다.
+  // 배경 사진이 있으면 사진 + 어두운 베일(가독성), 없으면 연회색 바탕과 타이포만으로 잡는다 (v3 부터 밝게).
   const photo = deps.heroImage;
   const video = deps.heroVideo;
   // 영상은 '있으면 좋은 것'이다. 사진을 poster 로 깔아 두면 영상이 뜨기 전에도,

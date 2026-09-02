@@ -2546,3 +2546,23 @@ body.is-done .foot-copy,body.is-done .site-footer p{color:var(--dk-muted)}
 @media (min-width:861px){
   .tk-list{grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px}
 }
+
+/* ── 상인회 홈 첫 화면 — 밝게. 레퍼런스(나의 티켓)는 연회색 바탕 위 흰 부품이다.
+   먹빛 바탕은 사진·영상을 깐 조직에서만 남는다 — 사진 위에서는 어두운 베일 + 흰 글자가 읽히는 유일한 길이다. ── */
+.hero-pro:not(.has-photo){background:var(--bg);color:var(--ink)}
+.hero-pro:not(.has-photo) .hp-eyebrow{color:var(--brand-800)}          /* #144DB8 · 연회색 위 6.9:1 */
+.hero-pro:not(.has-photo) .hp-title{color:var(--ink)}
+.hero-pro:not(.has-photo) .hp-sub{color:var(--ink-soft)}
+.hero-pro:not(.has-photo) .hp-search input{background:var(--surface);border:1px solid var(--line);color:var(--ink)}
+.hero-pro:not(.has-photo) .hp-search input::placeholder{color:var(--muted)}
+.hero-pro:not(.has-photo) .hp-search input:focus{border-color:var(--brand);box-shadow:0 0 0 4px var(--brand-ring);background:var(--surface)}
+.hero-pro:not(.has-photo) .hp-search .btn-primary{background:var(--brand);color:var(--on-brand)}
+.hero-pro:not(.has-photo) .hp-search .btn-primary:hover{background:var(--brand-800)}
+.hero-pro:not(.has-photo) .hp-facts-line a,.hero-pro:not(.has-photo) .hp-facts-line span{color:var(--muted)}
+.hero-pro:not(.has-photo) .hp-facts-line b{color:var(--ink)}
+.hero-pro:not(.has-photo) .hp-facts-line a:hover{color:var(--ink)}
+.hero-pro:not(.has-photo) .hp-join{background:var(--surface);color:var(--ink);border:1.5px solid var(--line)}
+.hero-pro:not(.has-photo) .hp-join:hover{background:var(--surface);color:var(--brand-text);border-color:var(--brand)}
+/* 사진 모드: 베일이 초록빛(옛 브랜드색 잔재)이었다 — 중립 먹빛으로, 바탕도 다크 토큰으로 */
+.hero-pro.has-photo{background:var(--dk-bg)}
+.hp-photo-veil{background:linear-gradient(180deg,rgba(12,16,26,.45) 0%,rgba(12,16,26,.58) 55%,rgba(10,13,22,.78) 100%)}
