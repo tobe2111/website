@@ -6,7 +6,7 @@ import { makeEnv } from "./shim.js";
 import { hashPassword } from "../src/crypto.js";
 import * as D from "../src/db.js";
 import { contentHash } from "../src/esign.js";
-import { pageCount } from "../src/paper.js";
+import { pageCount, PAGE, LINE_H } from "../src/paper.js";
 import { BUILTIN, extractVars, applyVars, resolveFieldPages, normalizeTemplate, builtinById, isBuiltinId } from "../src/templates.js";
 
 let env, db, a, admin, u1, u2;
@@ -192,6 +192,104 @@ test("저장한 서식으로 다시 문서를 만들 수 있다 (다른 사람�
   const fields = await D.listFields(db, id);
   assert.ok(fields.some((f) => f.assignee === u2.id) && fields.some((f) => f.assignee === u1.id));
   assert.notEqual(id, madeDocId, "새 문서가 만들어져야 함");
+});
+
+// ---------- 서식 본문 고치기 ----------
+// 서식은 출발점이지 최종본이 아니다. 조항 한 줄은 계약마다 달라진다.
+test("서식 화면에 본문을 고치는 칸이 있다", async () => {
+  const jar = await loginAs("ad@x.kr", "admin1234");
+  const h = await (await req("GET", "/t/s/admin/documents/new?tpl=b-lease", { cookie: jar })).text();
+  assert.match(h, /<textarea[^>]*name="body"/, "본문 편집 칸이 있어야");
+  assert.match(h, /제1조/, "서식 본문이 칸에 들어 있어야");
+  assert.ok(!/name="save_tpl"/.test(h), "표준 서식은 서식 자체를 고칠 수 없다");
+
+  const saved = (await D.listTemplates(db, a.id)).find((t) => t.association_id === a.id);
+  const own = await (await req("GET", `/t/s/admin/documents/new?tpl=${saved.id}`, { cookie: jar })).text();
+  assert.match(own, /name="save_tpl"/, "우리 서식은 서식에도 저장할 수 있어야");
+});
+
+test("고친 본문이 그 계약서의 원문이 된다 (빈칸은 그대로 채워진다)", async () => {
+  const jar = await loginAs("ad@x.kr", "admin1234");
+  const path = "/t/s/admin/documents/new?tpl=b-nda";
+  const csrf = await csrfFrom(jar, path);
+  const edited = "비밀유지 약정\n\n제1조 (목적) 우리끼리만 안다.\n제2조 (특약) 위반 시 {{위약금}} 을 문다.\n\n아래에 서명한다.";
+  const r = await req("POST", "/t/s/admin/documents", { cookie: jar, body: {
+    _csrf: csrf, template: "b-nda", title: "고쳐 만든 NDA", body: edited,
+    var_위약금: "1,000만원", party_0: String(u1.id), party_1: String(u2.id),
+  } });
+  const id = Number((r.headers.get("location") || "").match(/documents\/(\d+)/)[1]);
+  const doc = await D.getDocument(db, id);
+  assert.match(doc.body, /위반 시 1,000만원 을 문다/, "고친 문장 + 채운 빈칸");
+  assert.doesNotMatch(doc.body, /\{\{/, "치환 안 된 빈칸이 남으면 안 됨");
+  assert.equal(doc.content_hash, await contentHash(doc.body), "봉인은 고친 본문 기준");
+  // 표준 서식 자체는 남의 조직도 함께 쓰는 것이라 절대 바뀌면 안 된다
+  assert.match(builtinById("b-nda").body, /제1조/);
+  assert.doesNotMatch(builtinById("b-nda").body, /우리끼리만 안다/, "표준 서식이 오염되면 안 됨");
+});
+
+test("본문을 줄이면 서명 자리도 따라 올라온다 (본문 위에 겹쳐 앉지 않는다)", async () => {
+  const jar = await loginAs("ad@x.kr", "admin1234");
+  const long = normalizeTemplate(builtinById("b-lease")).body;
+  const short = long.split("\n").slice(0, 6).join("\n");
+  const mk = async (body) => {
+    const csrf = await csrfFrom(jar, "/t/s/admin/documents/new?tpl=b-lease");
+    const r = await req("POST", "/t/s/admin/documents", { cookie: jar, body: {
+      _csrf: csrf, template: "b-lease", title: "길이 비교", body,
+      party_0: String(u1.id), party_1: String(u2.id),
+    } });
+    const id = Number((r.headers.get("location") || "").match(/documents\/(\d+)/)[1]);
+    return { id, doc: await D.getDocument(db, id), fields: await D.listFields(db, id) };
+  };
+  const L = await mk(long), S = await mk(short);
+  const lastOf = (x) => pageCount(x.doc.body) - 1;
+  assert.ok(S.fields.length >= 8 && L.fields.length >= 8, "자리는 그대로 놓여야");
+  assert.ok(S.fields.every((f) => f.page === lastOf(S)), "짧은 본문에서도 서명란은 마지막 쪽에");
+  const topOf = (x) => Math.min(...x.fields.map((f) => f.y));
+  assert.ok(topOf(S) < topOf(L), `본문이 짧으면 서명란도 위로 와야 (짧은 ${topOf(S)} < 긴 ${topOf(L)})`);
+  // 본문 마지막 줄보다는 아래여야 한다 — 글자 위에 서명칸이 겹치면 읽을 수도 서명할 수도 없다
+  const bodyLines = short.split("\n").length;
+  assert.ok(topOf(S) > (PAGE.pad + (bodyLines - 1) * LINE_H) / PAGE.h, "서명란이 본문 아래에 있어야");
+});
+
+test("'서식에도 저장'을 체크하면 우리 서식의 본문이 바뀐다", async () => {
+  const jar = await loginAs("ad@x.kr", "admin1234");
+  const saved = (await D.listTemplates(db, a.id)).find((t) => t.association_id === a.id);
+  const before = saved.body;
+  const next = before + "\n제99조 (특약) 반려동물 금지.";
+  const csrf = await csrfFrom(jar, `/t/s/admin/documents/new?tpl=${saved.id}`);
+  await req("POST", "/t/s/admin/documents", { cookie: jar, body: {
+    _csrf: csrf, template: String(saved.id), title: "특약 넣은 임대차", body: next, save_tpl: "1",
+    party_0: String(u1.id), party_1: String(u2.id),
+  } });
+  const after = await D.getTemplate(db, saved.id);
+  assert.match(after.body, /반려동물 금지/, "서식 본문이 바뀌어야");
+  const t = normalizeTemplate(after);
+  assert.ok(t.fields.length >= 8, "서식의 자리가 사라지면 안 됨");
+  assert.ok(t.fields.every((f) => f.page === -1), "끝장 기준 자리는 그대로 끝장 기준");
+});
+
+test("체크하지 않으면 서식은 그대로다", async () => {
+  const jar = await loginAs("ad@x.kr", "admin1234");
+  const saved = (await D.listTemplates(db, a.id)).find((t) => t.association_id === a.id);
+  const before = saved.body;
+  const csrf = await csrfFrom(jar, `/t/s/admin/documents/new?tpl=${saved.id}`);
+  await req("POST", "/t/s/admin/documents", { cookie: jar, body: {
+    _csrf: csrf, template: String(saved.id), title: "이번만 고침", body: before + "\n제100조 (특약) 이번 계약만.",
+    party_0: String(u1.id), party_1: String(u2.id),
+  } });
+  assert.equal((await D.getTemplate(db, saved.id)).body, before, "체크 없이는 서식이 바뀌면 안 됨");
+});
+
+test("남의 서식은 '서식에도 저장'으로도 고칠 수 없다", async () => {
+  const other = await D.createAssociation(db, { slug: "other2", name: "다른곳2" });
+  const foreign = await D.createTemplate(db, { associationId: other.id, title: "남의 것", body: "원본 본문", fields: [], parties: ["갑"], ordered: 0 });
+  const jar = await loginAs("ad@x.kr", "admin1234");
+  const csrf = await csrfFrom(jar, "/t/s/admin/templates");
+  await req("POST", "/t/s/admin/documents", { cookie: jar, body: {
+    _csrf: csrf, template: String(foreign.id), title: "덮어쓰기", body: "바꿔치기", save_tpl: "1",
+    party_0: String(u1.id),
+  } });
+  assert.equal((await D.getTemplate(db, foreign.id)).body, "원본 본문", "남의 서식이 바뀌면 안 됨");
 });
 
 test("다른 상인회의 서식은 쓸 수 없다", async () => {

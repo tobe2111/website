@@ -1053,6 +1053,11 @@ export async function createTemplate(db, t) {
 }
 export const deleteTemplate = (db, id, aid) =>
   run(db, "DELETE FROM doc_templates WHERE id=? AND association_id=?", id, aid);
+// 서식 본문 고치기 — association_id 를 조건에 함께 넣어, 표준 서식(0)과 남의 서식은
+// 어떤 경로로 들어와도 바뀌지 않는다.
+export const updateTemplateBody = (db, id, aid, body, fieldsJson) =>
+  run(db, "UPDATE doc_templates SET body=?, fields=? WHERE id=? AND association_id=? AND association_id<>0",
+    body, fieldsJson, id, aid);
 export const countTemplates = async (db, aid) =>
   (await first(db, "SELECT COUNT(*) AS n FROM doc_templates WHERE association_id=?", aid)).n;
 

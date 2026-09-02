@@ -1087,7 +1087,7 @@ export async function adminCreateDocument(ctx) {
   const title = cap((form.get("title") || "").trim(), 200);
   // 서식에서 만들기 — 본문의 {{빈칸}} 을 입력값으로 치환하고, 배치까지 그대로 복사한다.
   const tplId = (form.get("template") || "").trim();
-  let tpl = null, tplBody = "", partyMap = [];
+  let tpl = null, tplBody = "", tplBase = "", saveTplBody = "", partyMap = [];
   const externalParties = []; // 가입하지 않은 상대방 — 문서를 만든 뒤에 서명자로 등록한다
   if (tplId) {
     const src = isBuiltinId(tplId) ? builtinById(tplId) : await D.getTemplate(db, Number(tplId) || 0);
@@ -1095,9 +1095,20 @@ export async function adminCreateDocument(ctx) {
     if (!isBuiltinId(tplId) && src.association_id !== 0 && src.association_id !== assoc.id)
       return back(base + "/admin/documents", "다른 상인회의 서식은 쓸 수 없습니다.", true);
     tpl = normalizeTemplate(src);
+    // 서식 화면에서 본문을 고쳤을 수 있다. 고친 본문이 이 계약의 원문이 된다 —
+    // 다만 자리는 서식 본문 기준으로 놓여 있으므로, 아래에서 문단을 따라 옮겨 준다.
+    // 칸이 아예 오지 않았으면(옛 화면·JS 없는 브라우저) 서식 본문 그대로 간다.
+    const rawEdit = form.get("body");
+    const bodySrc = rawEdit == null ? tpl.body : cap(String(rawEdit), 20000);
+    // 빈칸은 고친 본문에서 다시 뽑는다 — 고치면서 새로 만든 빈칸도 값이 오면 채워야 한다.
     const vals = {};
-    for (const v of tpl.vars) vals[v] = cap((form.get("var_" + v) || "").replace(/[\x00-\x1f\x7f]/g, " ").trim(), 200);
-    tplBody = applyVars(tpl.body, vals);
+    for (const v of new Set([...tpl.vars, ...extractVars(bodySrc)]))
+      vals[v] = cap((form.get("var_" + v) || "").replace(/[\x00-\x1f\x7f]/g, " ").trim(), 200);
+    tplBase = applyVars(tpl.body, vals);
+    tplBody = applyVars(bodySrc, vals);
+    // 우리 서식에 한해, 체크했을 때만 서식 자체도 고친다. 표준 서식과 남의 서식은 건드리지 않는다.
+    if (form.get("save_tpl") === "1" && !tpl.builtin && src.association_id === assoc.id && rawEdit != null)
+      saveTplBody = cap(String(rawEdit), 20000);
     const members = await D.listSignerCandidates(db, assoc.id, assoc.kind);
     const valid = new Set(members.map((m) => m.id));
     const n = Math.max(1, tpl.parties.length);
@@ -1191,13 +1202,27 @@ export async function adminCreateDocument(ctx) {
     }
     const signers = partyMap.filter((v) => v > 0);
     await D.createSignatureRequests(db, doc.id, signers);
-    const pages = pageCount(body);
-    const placed = resolveFieldPages(tpl.fields, pages, body).map((f) => ({
+    // 자리는 서식 본문 위에 놓여 있다. 그래서 먼저 서식 본문 기준으로 확정하고(마지막 쪽·서명란 앵커),
+    // 본문을 고쳤으면 그만큼 문단을 따라 옮긴다 — 대량 발송에서 쓰는 것과 같은 방법이다.
+    // 이 두 걸음을 건너뛰면 조항 한 줄을 지웠을 때 서명란이 본문 위에 겹쳐 앉는다.
+    const edited = body !== tplBase;
+    const baseFields = resolveFieldPages(tpl.fields, pageCount(tplBase), tplBase);
+    const placed = (edited ? remapFields(tplBase, body, baseFields) : baseFields).map((f) => ({
       kind: f.kind, label: f.label || "", page: f.page,
       x: round4(f.x), y: round4(f.y), w: round4(f.w), h: round4(f.h),
       assignee: partyMap[f.party | 0] || 0, required: f.required ? 1 : 0,
     })).filter((f) => isFieldKind(f.kind) && f.x + f.w <= 1.0001 && f.y + f.h <= 1.0001);
     if (placed.length) await D.replaceFields(db, doc.id, placed);
+    // '서식에도 저장' 을 체크했으면 서식 본문을 고친다. 서식의 자리도 함께 옮기되,
+    // '마지막 쪽'(page<0)으로 놓인 서명란은 쓸 때마다 본문 끝을 다시 찾아 앉으므로 건드리지 않는다.
+    if (saveTplBody && saveTplBody !== tpl.body) {
+      const at = [], move = [];
+      tpl.fields.forEach((f, i) => { if ((f.page | 0) >= 0) { at.push(i); move.push(f); } });
+      const out = tpl.fields.slice();
+      if (move.length) remapFields(tpl.body, saveTplBody, move).forEach((f, k) => { out[at[k]] = f; });
+      await D.updateTemplateBody(db, tpl.id, assoc.id, saveTplBody, JSON.stringify(out));
+      await audit(ctx, "서식수정", `${tpl.title} (계약서 만들면서 함께 저장)`);
+    }
     const recips = (await D.listSignerCandidates(db, assoc.id, assoc.kind)).filter((m) => signers.includes(m.id));
     if (extLinks.length) {
       const sentN = extLinks.filter((x) => x.via).length;

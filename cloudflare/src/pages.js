@@ -2241,6 +2241,19 @@ export async function adminDocumentNew(ctx) {
       </div>
     </div>`).join("");
   const preview = renderPaper(applyVars(t.body, {}), { fieldsFor: () => "" });
+  // 서식은 출발점이지 최종본이 아니다. 표준 서식이든 우리 서식이든 조항 한 줄은
+  // 계약마다 달라진다 — 예전에는 여기서 고칠 수 없어, 만든 뒤 상세 화면에 다시 들어가
+  // 본문을 고쳐야 했다(그 사이 계약은 이미 상대방에게 나가 있었다).
+  // 고친 본문은 이 계약서에만 적용된다. 우리 서식이면 원한다고 표시했을 때만 서식에도 저장한다.
+  const canEditTpl = !t.builtin && src.association_id === assoc.id;
+  const bodyEditor = `<details class="panel-fold tpl-edit"><summary class="tpl-edit-sum">본문 고치기</summary>
+    <p class="panel-hint">고친 내용은 <b>이 계약서에만</b> 적용됩니다${canEditTpl ? " (아래를 체크하면 서식에도 저장됩니다)" : " — 표준 서식은 그대로 남습니다"}.
+      본문을 고치면 <b>서명 자리도 문단을 따라 함께 옮겨집니다.</b>
+      <code>{{보증금}}</code> 처럼 중괄호로 감싸면 계약마다 채우는 빈칸이 되는데,
+      지금 새로 만든 빈칸은 이번 계약서에서는 밑줄로 남습니다 — ${canEditTpl ? "서식에 저장하고 다시 열면" : "서식으로 저장한 뒤 그 서식으로 만들면"} 채우는 칸이 생깁니다.</p>
+    <textarea name="body" id="tplBody" rows="16" maxlength="20000" spellcheck="false" aria-label="계약서 본문">${esc(t.body)}</textarea>
+    ${canEditTpl ? `<label class="check"><input type="checkbox" name="save_tpl" value="1" /> 고친 내용을 <b>이 서식에도 저장</b> — 다음부터 이 내용으로 시작합니다</label>` : ""}
+  </details>`;
   const body = `<section class="dash"><div class="container">
     <div class="dash-head"><div><p class="section-eyebrow">전자계약 · 서식</p><h1 class="dash-title">${esc(t.title)}</h1>
       <p class="dash-sub"><a href="${base}/admin/documents">← 문서 목록</a>${t.builtin ? " · 표준 서식" : " · 우리 서식"}</p></div></div>${flashOf(query)}
@@ -2252,6 +2265,8 @@ export async function adminDocumentNew(ctx) {
           <p class="flash flash-ok">계약 상대방: <b>${esc(lead.name)}</b> (${esc(lead.phone)}) — 문서를 만들면 바로 서명 링크를 발급합니다.</p>` : ""}
           <label>문서 제목<input type="text" name="title" required maxlength="200" value="${esc(t.title)}" /></label>
           ${t.vars.length ? `<div class="form-divider">빈칸 채우기</div><div class="tpl-vars">${varInputs}</div>` : ""}
+          <div class="form-divider">본문</div>
+          ${bodyEditor}
           <div class="form-divider">당사자 지정</div>
           ${partyRows}
           ${members.length ? "" : `<p class="panel-hint">사내에 등록된 서명자가 없습니다 — <b>외부 상대방</b>으로 진행하시면 됩니다.</p>`}
@@ -2261,8 +2276,8 @@ export async function adminDocumentNew(ctx) {
           <p class="panel-hint">만든 뒤에도 <b>필드 배치</b> 화면에서 서명 자리를 옮길 수 있습니다 (서명 시작 전까지).</p>
         </form>
       </section>
-      <div class="tpl-preview"><p class="tpl-preview-cap">미리보기 — 빈칸은 밑줄로 표시됩니다</p>
-        <div class="paper-wrap">${preview}</div></div>
+      <div class="tpl-preview"><p class="tpl-preview-cap">미리보기 — 빈칸은 밑줄로 표시됩니다. 본문을 고치면 여기도 함께 바뀝니다.</p>
+        <div class="paper-wrap" id="tplPreview">${preview}</div></div>
     </div></div></section>`;
   return html(layout({ title: t.title, assoc, base, user, body, csrf,
     scripts: `<script src="${assetUrl("/js/paper.js")}" defer></script><script src="${assetUrl("/js/doc-new.js")}" defer></script>` }));

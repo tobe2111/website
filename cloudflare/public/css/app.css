@@ -1738,6 +1738,17 @@ a.cc-val:hover{color:var(--brand-text)}
 .tpl-vars label{font-size:.84rem;font-weight:600;display:flex;flex-direction:column;gap:4px}
 .tpl-preview-cap{font-size:.8rem;color:var(--muted);margin-bottom:8px}
 .tpl-var{background:var(--brand-050);color:var(--brand-text);padding:1px 6px;border-radius:4px;font-size:.78rem}
+/* 본문 고치기 — 접힌 줄이 '눌러야 하는 것' 으로 보여야 아무도 못 찾는 기능이 되지 않는다 */
+.tpl-edit>summary{cursor:pointer;font-weight:700;padding:10px 0;list-style:none;color:var(--brand-text)}
+.tpl-edit>summary::-webkit-details-marker{display:none}
+.tpl-edit>summary::before{content:"▸ ";font-size:.9em}
+.tpl-edit[open]>summary::before{content:"▾ "}
+/* 계약서는 줄바꿈이 곧 지면이다 — 고정폭 글꼴로, 줄을 임의로 접지 않는다(작성기와 같은 규칙) */
+.tpl-edit textarea{width:100%;min-height:300px;font-family:var(--mono);font-size:13px;line-height:1.8;tab-size:4;
+  white-space:pre;overflow-x:auto;resize:vertical}
+.tpl-edit .check{margin-top:10px}
+/* 고치는 동안에는 왼쪽 칸을 넓혀 준다 — 420px 안에서 계약서 한 줄을 가로로 밀며 쓸 수는 없다 */
+.tpl-layout:has(.tpl-edit[open]){grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
 @media (max-width:980px){.tpl-layout{grid-template-columns:1fr}}
 
 /* 외부(비회원) 서명 화면 */
