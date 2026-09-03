@@ -423,6 +423,82 @@ export async function updateBusiness(ctx) {
   return back(base + "/dashboard", "업체 정보가 저장되었습니다.");
 }
 
+// 관리자가 점포 정보를 대신 채운다.
+//
+// 예전에는 주소·전화·영업시간을 점주 본인만 고칠 수 있었다. 그런데 상인회장이 명단을
+// 미리 넣어 두는 것이 실제 시작 방식이다 — 사장님들은 그 뒤에 로그인한다.
+// 대행 등록만 되고 주소를 못 넣으면 점포에 이름과 업종만 남아, 지도에도 안 뜨고
+// 목록에서도 빈껍데기로 보인다. 그래서 같은 칸을 관리자에게도 연다.
+// 점주가 나중에 자기 화면에서 이어서 고칠 수 있다 — 같은 레코드다.
+export async function adminUpdateBusiness(ctx) {
+  const { db, form, base, assoc, params } = ctx;
+  const b = await D.getBusinessById(db, Number(params.id) || 0);
+  const to = `${base}/admin/business/${Number(params.id) || 0}`;
+  if (!b || b.association_id !== assoc.id) return back(base + "/admin", "업체를 찾을 수 없습니다.", true);
+  const name = cap((form.get("name") || "").trim(), 100);
+  if (!name) return back(to, "업체명을 입력하세요.", true);
+  const coord = (v, mn, mx) => { const s = (v ?? "").trim(); if (s === "") return null; const n = Number(s); return Number.isFinite(n) && n >= mn && n <= mx ? n : undefined; };
+  const lat = coord(form.get("lat"), -90, 90), lng = coord(form.get("lng"), -180, 180);
+  if (lat === undefined || lng === undefined) return back(to, "좌표 형식을 확인해 주세요.", true);
+  const snsUrl = (v) => { const t = cap((v || "").trim(), 200); if (!t) return ""; return /^https?:\/\//.test(t) ? t : "https://" + t; };
+  await D.updateBusiness(db, b.id, {
+    name, category: cap(form.get("category"), 40), description: cap(form.get("description"), 2000),
+    phone: cap(form.get("phone"), 40), address: cap(form.get("address"), 200),
+    hours: cap(form.get("hours"), 100), lat, lng,
+    // 점주가 넣어 둔 SNS 는 관리자 화면에서 다루지 않는다 — 안 그리는 칸을 빈 값으로 덮어쓰면 지워진다
+    snsInstagram: b.sns_instagram, snsYoutube: b.sns_youtube, snsBlog: b.sns_blog,
+    snsKakao: b.sns_kakao, snsNaver: snsUrl(form.get("sns_naver")) || b.sns_naver,
+  });
+  await audit(ctx, "점포정보수정", `${name} (관리자 대행)`);
+  return back(to, "저장했습니다. 사장님이 로그인하면 이어서 고칠 수 있습니다.");
+}
+
+// 카카오 로컬에서 가게 한 곳을 찾아 주소·전화·업종·좌표를 폼에 채워 준다.
+//
+// 구역을 통째로 긁어 '가입 점포' 로 넣지는 않는다. 동의하지 않은 가게가 홈페이지에 올라가고
+// 가입 점포 수가 사실과 달라지기 때문이다. 여기서는 **관리자가 이름을 치고 눈으로 고른** 한 곳만
+// 채운다 — 출처가 분명하고, 저장은 사람이 누른다.
+export async function adminPlaceSearch(ctx) {
+  const { env, query } = ctx;
+  const json = (o, status = 200) => new Response(JSON.stringify(o), {
+    status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
+  const key = String(env.KAKAO_REST_KEY || "").trim();
+  if (!key) return json({ error: "not_configured", message: "카카오 REST 키가 등록되지 않았습니다. 운영사에 문의해 주세요." }, 503);
+  const q = cap((query.get("q") || "").trim(), 60);
+  if (q.length < 2) return json({ places: [] });
+  const url = new URL("https://dapi.kakao.com/v2/local/search/keyword.json");
+  url.searchParams.set("query", q);
+  url.searchParams.set("size", "10");
+  // 좌표를 주면 그 근처를 먼저 보여 준다 — 같은 상호가 전국에 있을 때 골목 것이 위로 온다
+  const x = Number(query.get("x")), y = Number(query.get("y"));
+  if (Number.isFinite(x) && Number.isFinite(y) && x && y) {
+    url.searchParams.set("x", String(x)); url.searchParams.set("y", String(y));
+    url.searchParams.set("radius", "5000"); url.searchParams.set("sort", "distance");
+  }
+  let r;
+  try {
+    r = await fetch(url, { headers: { Authorization: `KakaoAK ${key}` } });
+  } catch {
+    return json({ error: "unreachable", message: "카카오에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요." }, 502);
+  }
+  if (!r.ok) return json({ error: "upstream", message: `카카오가 ${r.status} 로 답했습니다. 키를 확인해 주세요.` }, 502);
+  const data = await r.json().catch(() => null);
+  const docs = (data && Array.isArray(data.documents) ? data.documents : []).slice(0, 10);
+  // 카카오가 주는 값만 그대로 넘긴다 — 우리가 지어내지 않는다
+  return json({ places: docs.map((d) => ({
+    name: cap(String(d.place_name || ""), 100),
+    address: cap(String(d.road_address_name || d.address_name || ""), 200),
+    phone: cap(String(d.phone || ""), 40),
+    // 화면에 보일 때는 맨 끝 낱말만 ('음식점 > 한식 > 국밥' → '국밥').
+    // 다만 우리 업종 목록으로 옮길 때는 전체 갈래가 있어야 한다 — '커피전문점' 만 보면
+    // 카페인지 알 수 없지만 '음식점 > 카페 > 커피전문점' 이면 분명하다.
+    category: cap(String(d.category_name || "").split(">").pop().trim(), 40),
+    categoryPath: cap(String(d.category_name || "").trim(), 120),
+    lat: Number(d.y) || null, lng: Number(d.x) || null,
+    url: /^https?:\/\//.test(String(d.place_url || "")) ? String(d.place_url) : "",
+  })) });
+}
+
 // ---------- 사진 업로드 (R2) ----------
 export async function uploadMedia(ctx) {
   const { db, env, form, user, base, assoc } = ctx;

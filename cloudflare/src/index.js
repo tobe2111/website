@@ -153,6 +153,10 @@ export const TENANT = [
   ["POST", "/sign/:id/otp/verify", api.signOtpVerify, "SIGNER"],
   ["GET", "/admin", pages.admin, "ADMIN"],
   ["POST", "/admin/business/:id/status", api.adminBusinessStatus, "ADMIN"],
+  // 관리자가 점포 정보를 대신 채운다 (사장님이 로그인하기 전에 명단을 세팅하는 경로)
+  ["GET",  "/admin/business/:id", pages.adminBusinessEdit, "ADMIN"],
+  ["POST", "/admin/business/:id", api.adminUpdateBusiness, "ADMIN"],
+  ["GET",  "/admin/place-search", api.adminPlaceSearch, "ADMIN"],
   ["POST", "/admin/notice", api.adminCreateNotice, "ADMIN"],
   ["POST", "/admin/notice/:id/delete", api.adminDeleteNotice, "ADMIN"],
   ["POST", "/admin/event", api.adminCreateEvent, "ADMIN"],

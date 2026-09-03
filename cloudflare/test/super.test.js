@@ -253,10 +253,14 @@ test("연동 값이 있으면 켜짐으로 바뀌고 값 자체는 안 보인다
     body: new URLSearchParams({ _csrf: tk, email: "s2@platform.kr", password: "super1234" }) });
   const jar = [seed, ...(lr.headers.getSetCookie?.() || []).map((c) => c.split(";")[0])].join("; ");
   const html = await (await fetch2("/super", { headers: { cookie: jar } })).text();
-  assert.match(html, /2\/4 켜짐/, "설정한 두 항목이 켜짐으로 세어져야 함");
+  assert.match(html, /2\/5 켜짐/, "설정한 두 항목이 켜짐으로 세어져야 함");
   // 값 자체는 패널에 찍지 않습니다. (CF 방문 통계 토큰은 비콘 스크립트에 들어가는 공개 값이라
   //  페이지 다른 곳에는 정상적으로 나타납니다 — 그래서 패널 구간만 잘라 확인합니다.)
-  const panel = html.slice(html.indexOf("선택 연동 점검")).split("</section>")[0];
+  // 패널 이름이 '선택 연동 점검' → '있으면 좋은 것' 으로 바뀐 뒤로 이 자르기가 -1 을 집어
+  //  문서 끝 한 글자만 보고 있었다. 못 찾으면 시원하게 실패하도록 자리부터 확인한다.
+  const at = html.indexOf("있으면 좋은 것");
+  assert.ok(at > 0, "연동 점검 패널을 찾지 못했습니다 — 제목이 바뀌었으면 이 검사도 함께 고치세요");
+  const panel = html.slice(at).split("</details>")[0];
   assert.doesNotMatch(panel, /abc123|pub-x\.r2\.dev/, "값 자체는 패널에 노출되면 안 됨");
 });
 

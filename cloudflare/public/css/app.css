@@ -2611,6 +2611,18 @@ body.is-done .foot-copy,body.is-done .site-footer p{color:var(--dk-muted)}
 .facts span{display:inline-flex;align-items:baseline;gap:6px;font-size:13px;color:var(--muted);font-weight:500}
 .facts b{font-size:16px;font-weight:700;color:var(--ink-soft);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
 .facts u{text-decoration:none;color:var(--ok-fg);font-weight:700;font-size:12px}
+/* 관리자가 대신 채우는 점포 화면 — 지도에서 찾기 */
+.place-find{display:flex;gap:8px;align-items:center}
+.place-find input{flex:1;min-width:0}
+.place-list{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:6px}
+.place-pick{display:block;width:100%;text-align:left;background:var(--surface-2);border:1px solid var(--line-soft);
+  border-radius:var(--r-md);padding:11px 14px;cursor:pointer;font:inherit;color:inherit}
+.place-pick:hover{border-color:var(--brand);background:var(--surface)}
+.place-pick b{display:block;font-size:14.5px;font-weight:700}
+.place-pick small{display:block;color:var(--muted);font-size:12.5px;margin-top:2px}
+/* 무엇이 비어서 손님에게 어떻게 보이는지 — 목록으로 적는다 */
+.gap-list{margin:8px 0 0;padding-left:18px;display:grid;gap:4px}
+.gap-list li{font-size:13.5px}
 @media (max-width:640px){
   .home-sheet{padding:16px 14px 18px;border-radius:var(--r-lg)}
   .hot{padding:16px 16px 6px}

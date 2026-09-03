@@ -1412,7 +1412,8 @@ export async function admin(ctx) {
 
   const bizRows = all.length ? all.map((b) => `<tr><td><a href="${base}/business/${esc(b.slug)}" target="_blank">${esc(b.name)}</a><br /><small>${esc(b.category)}</small></td>
     <td>${esc(b.owner_name)}<br /><small>${esc(b.owner_email)}</small></td><td>${statusBadge(b.status)}</td>
-    <td class="actions-cell">${b.status !== "approved" ? `<form method="post" action="${base}/admin/business/${b.id}/status"><input type="hidden" name="status" value="approved"><button class="btn btn-xs btn-primary">승인</button></form>` : ""}
+    <td class="actions-cell"><a class="btn btn-xs btn-ghost" href="${base}/admin/business/${b.id}">정보 채우기</a>
+      ${b.status !== "approved" ? `<form method="post" action="${base}/admin/business/${b.id}/status"><input type="hidden" name="status" value="approved"><button class="btn btn-xs btn-primary">승인</button></form>` : ""}
       ${b.status !== "rejected" ? `<form method="post" action="${base}/admin/business/${b.id}/status"><input type="hidden" name="status" value="rejected"><button class="btn btn-xs btn-ghost">반려</button></form>` : ""}</td></tr>`).join("") : `<tr><td colspan="4" class="empty">등록된 업체가 없습니다.</td></tr>`;
   // 전자계약 조직은 '담당자'(관리자·담당자)를 관리한다 — 목록·권한회수·비번 재발급이 필요하다.
   // 한 번 발급한 계정을 회수할 방법이 없으면 퇴사자가 계약을 계속 만들 수 있다.
@@ -2312,6 +2313,68 @@ export async function adminDocumentNew(ctx) {
     </div></div></section>`;
   return html(layout({ title: t.title, assoc, base, user, body, csrf,
     scripts: `<script src="${assetUrl("/js/paper.js")}" defer></script><script src="${assetUrl("/js/doc-new.js")}" defer></script>` }));
+}
+
+// 관리자가 점포 정보를 대신 채우는 화면.
+//
+// 상인회장은 명단을 미리 넣어 두고 사장님을 부른다 — 그게 실제 시작 방식이다.
+// 그런데 예전에는 주소·전화를 점주 본인만 고칠 수 있어, 대행 등록한 점포는
+// 이름과 업종만 있는 빈껍데기로 남았다(지도에 안 뜨고 목록에서도 비어 보인다).
+// 여기서 채워 두면 사장님이 나중에 로그인해 이어서 고친다 — 같은 레코드다.
+export async function adminBusinessEdit(ctx) {
+  const { db, assoc, base, user, query, csrf, env } = ctx;
+  const b = await D.getBusinessById(db, Number(ctx.params.id) || 0);
+  if (!b || b.association_id !== assoc.id) return notFoundResponse(ctx);
+  const opts = CATEGORIES.map((c) => `<option value="${esc(c)}"${c === b.category ? " selected" : ""}>${esc(c)}</option>`).join("");
+  const owner = b.owner_id ? await D.getUserById(db, b.owner_id) : null;
+  const kakaoOn = !!String(env.KAKAO_REST_KEY || "").trim();
+  // 무엇이 비어 있어서 손님에게 어떻게 보이는지 — 숫자가 아니라 결과로 말한다
+  const gaps = [
+    !b.address && "주소가 없어 <b>지도에 뜨지 않습니다</b>",
+    !b.phone && "전화번호가 없어 손님이 <b>전화를 걸 수 없습니다</b>",
+    !b.hours && "영업시간이 없어 <b>'지금 문 연 곳'에 안 뜹니다</b>",
+    (b.lat == null || b.lng == null) && "좌표가 없어 <b>지도 위 핀이 찍히지 않습니다</b>",
+  ].filter(Boolean);
+  const body = `<section class="dash"><div class="container">
+    <div class="dash-head"><div><p class="section-eyebrow"><a href="${base}/admin#s-people">← 회원·점포</a></p>
+      <h1 class="dash-title">${esc(b.name)}</h1>
+      <p class="dash-sub">${statusBadge(b.status)} ${owner ? `· 사장님 ${esc(owner.name)} (${esc(owner.email)})` : "· 연결된 사장님 계정 없음"}</p></div>
+      <div class="dash-head-actions">${b.status === "approved" ? `<a class="btn btn-ghost btn-sm" href="${base}/business/${esc(b.slug)}" target="_blank">가게 페이지 보기 ↗</a>` : ""}</div>
+    </div>${flashOf(query)}
+    ${gaps.length ? `<div class="flash flash-warn"><b>아직 덜 채운 것</b><ul class="gap-list">${gaps.map((g) => `<li>${g}</li>`).join("")}</ul></div>` : ""}
+    <section class="panel">
+      <h2 class="panel-title">가게 정보</h2>
+      <p class="panel-hint">사장님 대신 채워 두는 자리입니다. 사장님이 로그인하면 자기 화면에서 이어서 고칠 수 있습니다.</p>
+      ${kakaoOn ? `<div class="form-divider">지도에서 찾아 채우기</div>
+      <div class="place-find">
+        <input type="text" id="placeQ" value="${esc(b.name)}" placeholder="가게 이름 (예: 방배 버들카페)" aria-label="가게 이름으로 찾기" autocomplete="off" />
+        <button type="button" class="btn btn-ghost btn-sm" id="placeBtn">찾기</button>
+      </div>
+      <p class="panel-hint" id="placeMsg" hidden></p>
+      <ul class="place-list" id="placeList" hidden></ul>
+      <p class="panel-hint">카카오맵에서 찾은 값을 아래 칸에 채워 넣습니다. <b>저장은 확인하고 직접 누르셔야 합니다</b> — 지도의 정보가 늘 최신인 것은 아닙니다.</p>`
+        : `<p class="panel-hint">지도에서 자동으로 채우는 기능은 운영사가 카카오 키를 등록하면 열립니다.</p>`}
+      <form method="post" action="${base}/admin/business/${b.id}" class="stack-form">
+        <label>업체명<input type="text" name="name" id="bizName" value="${esc(b.name)}" required maxlength="100" autocomplete="organization" /></label>
+        <label>업종<select name="category" id="bizCategory">${opts}</select></label>
+        <div class="form-two">
+          <label>전화<input type="tel" name="phone" id="bizPhone" value="${esc(b.phone || "")}" maxlength="40" autocomplete="tel" /></label>
+          <label>영업시간 <small>(예: 10:00-21:00 · 일요일 휴무)</small><input type="text" name="hours" id="bizHours" value="${esc(b.hours || "")}" maxlength="100" /></label>
+        </div>
+        <label>주소<input type="text" name="address" id="bizAddress" value="${esc(b.address || "")}" maxlength="200" autocomplete="street-address" /></label>
+        <label>소개<textarea name="description" rows="4" maxlength="2000">${esc(b.description || "")}</textarea></label>
+        <label>네이버 플레이스 <small>(선택 · 리뷰·길찾기 연결)</small>
+          <input type="url" name="sns_naver" value="${esc(b.sns_naver || "")}" placeholder="naver.me/…" /></label>
+        <div class="form-divider">지도 위치</div>
+        <div class="form-two">
+          <label>위도<input type="text" inputmode="decimal" name="lat" id="bizLat" value="${b.lat != null ? esc(String(b.lat)) : ""}" /></label>
+          <label>경도<input type="text" inputmode="decimal" name="lng" id="bizLng" value="${b.lng != null ? esc(String(b.lng)) : ""}" /></label>
+        </div>
+        <button class="btn btn-primary">저장</button>
+      </form></section>
+    </div></section>`;
+  return html(layout({ title: `${b.name} 정보`, assoc, base, user, body, csrf,
+    scripts: `<script src="${assetUrl("/js/place.js")}" defer></script>` }));
 }
 
 // 우리 상인회 서식 관리 — 만든 문서를 서식으로 저장해 다음부터 재사용
@@ -3365,6 +3428,8 @@ export async function superConsole(ctx) {
     ["네이버 지도", !!env.NAVER_MAP_CLIENT_ID, "NAVER_MAP_CLIENT_ID", "상인회 홈의 점포 지도. 지도가 안 뜨면 Maps 콘솔의 Web 서비스 URL 에 이 사이트 도메인이 등록됐는지 확인하세요."],
     ["사진 직접 서빙", !!env.MEDIA_PUBLIC_BASE, "MEDIA_PUBLIC_BASE", "R2 버킷에 공개 도메인을 켜고 그 주소를 워커 변수에 넣으면 사진이 워커를 거치지 않고 CDN 직행합니다."],
     ["방문 통계", !!env.CF_ANALYTICS_TOKEN, "CF_ANALYTICS_TOKEN", "Cloudflare Web Analytics 에서 사이트를 추가하고 발급된 토큰을 넣으면 모든 페이지에 자동 삽입됩니다."],
+    ["지도에서 가게 찾기", !!String(env.KAKAO_REST_KEY || "").trim(), "KAKAO_REST_KEY",
+      "카카오 개발자센터에서 앱을 만들고 <b>REST API 키</b>를 넣으면, 관리자가 점포 정보를 채울 때 가게 이름만으로 주소·전화·업종·좌표가 채워집니다. 없으면 손으로 적으면 됩니다."],
   ];
   const supers = await soft("슈퍼 계정 목록", () => D.listSuperAdmins(db), []);
   const superPanel = `<section class="panel"><h2 class="panel-title">이 콘솔에 접근 가능한 계정 <span class="badge ${supers.length > 1 ? "badge-wait" : "badge-ok"}">${supers.length}개</span></h2>

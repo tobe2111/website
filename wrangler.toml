@@ -77,3 +77,10 @@ NAVER_MAP_PARAM = "ncpKeyId"
 # CF_ANALYTICS_TOKEN = "xxxxxxxx"
 # R2 퍼블릭 URL(사진 공개 접근). R2 버킷에 공개 도메인 연결 후 넣으세요.
 # MEDIA_PUBLIC_BASE = "https://media.example.com"
+
+# 카카오 로컬(가게 찾기) — 관리자가 점포 정보를 채울 때 가게 이름으로 주소·전화·업종·좌표를 불러온다.
+#   ⚠️ 여기(=[vars], 평문)에 넣지 마세요. 반드시 **Secret** 으로 넣습니다:
+#      Workers & Pages → website → Settings → Variables and Secrets → Type: Secret
+#      (이 파일의 [vars] 는 배포 때 대시보드 값을 덮어써, 평문으로 넣으면 키가 저장소에 남습니다)
+#   없으면 그 기능만 꺼지고 관리자가 손으로 적으면 됩니다.
+#   KAKAO_REST_KEY
