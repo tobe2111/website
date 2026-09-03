@@ -1559,6 +1559,8 @@ export async function admin(ctx) {
   const docs = await D.listDocuments(db, assoc.id);
   const docCount = docs.length;
   const leads = isFranchise ? await D.leadStats(db, assoc.id) : null;
+  // 아직 연락하지 않은 상담 — 현황 화면에서 이름·연락처까지 보여야 그 자리에서 전화를 건다
+  const freshLeads = isFranchise && leads.fresh ? await D.listLeads(db, assoc.id, { status: "new", limit: 6 }) : [];
 
   // 한 화면에 열두 덩어리가 쏟아지던 것을 하는 일별로 묶는다.
   // 처음 보는 사람이 "여기서 뭘 해야 하나"를 훑지 않고 고를 수 있어야 한다.
@@ -1587,24 +1589,24 @@ export async function admin(ctx) {
   //   · 승인 대기는 바로 위 할 일 상자가 이미 말하고 있었고 (같은 말 두 번),
   //   · 공지 6 · 행사 3 · 미디어 25 는 세어 봐야 아무것도 달라지지 않는 숫자였다.
   // 대신 상인회장이 실제로 궁금해하던 것을 넣는다 — 사람이 오고 있나.
-  const stat = (num, label, opts = {}) =>
-    `<div class="stat-card${opts.alert ? " stat-alert" : ""}"><span class="stat-num">${num}${
-      opts.delta ? `<u class="stat-delta"${opts.deltaTitle ? ` title="${esc(opts.deltaTitle)}" aria-label="${esc(opts.deltaTitle)}"` : ""}>${opts.delta}</u>` : ""
-    }</span><span class="stat-label">${esc(label)}</span></div>`;
   const visitPct = visits.prev > 0 ? Math.round(((visits.cur - visits.prev) / visits.prev) * 100) : null;
-  const statRow = `<div class="stat-cards" id="p-stats">${isEsign
-    ? (() => { const o = docs.filter((d) => !d.closed); const over = o.filter((d) => isOverdue(d));
-        return stat(o.length, "서명 대기", { alert: !!o.length })
-          + stat(over.length, "기한 지남", { alert: !!over.length })
-          + stat(docCount - o.length, "체결 완료")
-          + stat(staffList.length, "담당자");
-      })()
-    : stat(s.businesses, "가입 점포", newBiz30 ? { delta: `+${newBiz30}`, deltaTitle: `최근 30일에 ${newBiz30}곳 늘었습니다` } : {})
-      + stat(visits.cur.toLocaleString(), "이번 주 방문",
-          visitPct !== null ? { delta: `${visitPct >= 0 ? "+" : ""}${visitPct}%`, deltaTitle: `지난주 ${visits.prev.toLocaleString()}회 대비` } : {})
-      + stat(Number(s.notices) + Number(s.events), "올린 소식")
-      + stat(docs.filter((d) => !d.closed).length, "서명 진행 중")
-  }</div>`;
+  // ── 참고 숫자 —— 매일 볼 필요 없는 것들. 예전에는 이 넷이 카드로 화면 맨 위를 차지했는데,
+  // 넷이 같은 크기라 그중 손이 필요한 하나가 묻혔다. 알약 한 줄로 맨 아래로 내린다.
+  const fact = (label, num, up = "") =>
+    `<span>${esc(label)} <b>${num}</b>${up ? ` <u>${esc(up)}</u>` : ""}</span>`;
+  // 제품마다 궁금한 숫자가 다르다 — 모집 랜딩에 '가입 점포' 를 보여 줘도 쓸모가 없다
+  const factRow = `<div class="quiet-sec" id="p-stats"><p class="quiet-h">이번 주</p><p class="facts">${isEsign
+    ? fact("진행 중", `${openDocs.length}건`) + fact("체결 완료", `${docCount - openDocs.length}건`)
+      + fact("기한 지남", `${lateDocs.length}건`) + fact("담당자", `${staffList.length}명`)
+    : isFranchise
+      ? fact("상담 신청", `${leads.total.toLocaleString()}건`, leads.week ? `+${leads.week}` : "")
+        + fact("아직 연락 못 함", `${leads.fresh}건`) + fact("계약까지 간 건", `${leads.contract}건`)
+        + fact("방문", `${visits.cur.toLocaleString()}회`, visitPct !== null ? `${visitPct >= 0 ? "+" : ""}${visitPct}%` : "")
+      : fact("방문", `${visits.cur.toLocaleString()}회`, visitPct !== null ? `${visitPct >= 0 ? "+" : ""}${visitPct}%` : "")
+        + fact("가입 점포", `${Number(s.businesses).toLocaleString()}곳`, newBiz30 ? `+${newBiz30}` : "")
+        + fact("올린 소식", `${(Number(s.notices) + Number(s.events)).toLocaleString()}건`)
+        + fact("체결 완료", `${docCount - openDocs.length}건`)
+  }</p></div>`;
 
   // ── 왼쪽 칸 = 처리할 것 · 오른쪽 칸 = 지나간 것.
   //
@@ -1615,35 +1617,65 @@ export async function admin(ctx) {
   // 그래서 축을 하나로 했다. 처리해야 하는 것은 전부 왼쪽 한 칸에 모으고, 거기서 바로 처리한다.
   // 예전에는 "검토하기 →" 를 눌러 회원·점포 탭으로 넘어가야 승인 단추가 나왔다 —
   // 매일 하는 일이 두 번 클릭이면, 그 화면은 매일 쓰라고 만든 화면이 아니다.
-  const signQueue = openDocs.length ? `<section class="panel" id="p-signq"><h2 class="panel-title">서명 대기 <span class="badge ${
-      lateDocs.length ? "badge-no" : "badge-muted"}">${openDocs.length}건${lateDocs.length ? ` · 기한 지남 ${lateDocs.length}` : ""}</span></h2>
-    <ul class="queue-list">${openDocs.slice(0, 5).map((d) => {
+  // ── 손이 필요한 것은 '면' 으로 가른다.
+  //
+  // 예전에는 급한 것도 흰 패널, 안 급한 것도 흰 패널이라 화면에서 구별이 되지 않았다.
+  // 연한 배경색(#EDF2FF)으로 칠해 봤자 흰 바탕과 명도 차가 3% 라 눈에는 같은 흰색이다.
+  // 대비를 만드는 것은 셋뿐이다 — ① 면을 채우고 ② 숫자를 키우고 ③ 나머지를 죽인다.
+  //
+  // 그래서 처리할 것이 있을 때만 브랜드색 블록이 뜬다. 없으면 블록 자체가 사라지므로
+  // **파란 덩어리가 보이는 것 자체가 신호**가 된다. 0 이라는 숫자를 읽을 필요가 없다.
+  const hotBlock = ({ n, title, note, href, hrefLabel, rows, more }) => `<section class="hot">
+    <div class="hot-h"><span class="hot-n">${n}</span>
+      <h3>${esc(title)}${note ? `<small>${note}</small>` : ""}</h3>
+      ${href ? `<a class="hot-all" href="${href}">${esc(hrefLabel || "전체 보기")} <span aria-hidden="true">→</span></a>` : ""}</div>
+    ${rows.join("")}
+    ${more ? `<a class="hot-more" href="${href}">${esc(more)} <span aria-hidden="true">→</span></a>` : ""}</section>`;
+  const hotRow = (title, sub, acts) => `<div class="hot-row">
+    <div class="hot-m"><b>${esc(title)}</b><small>${esc(sub)}</small></div>
+    <div class="hot-acts">${acts}</div></div>`;
+
+  const signHot = openDocs.length ? hotBlock({
+    n: openDocs.length, title: "서명 대기",
+    note: lateDocs.length ? `${lateDocs.length}건은 기한이 지났습니다` : "상대방이 아직 서명하지 않았습니다",
+    href: `${base}/admin/documents`, hrefLabel: "계약서 전체",
+    // 기한 지난 것이 위로 — 오늘 손이 갈 곳이 맨 앞에 있어야 한다
+    rows: [...openDocs].sort((a, b) => (isOverdue(b) ? 1 : 0) - (isOverdue(a) ? 1 : 0)).slice(0, 5).map((d) => {
       const late = isOverdue(d);
-      return `<li class="queue-item${late ? " is-late" : ""}">
-        <a class="q-main" href="${base}/admin/documents/${d.id}"><b>${esc(d.title)}</b>
-          <span>${late ? "기한이 지났습니다" : "서명을 기다리는 중"}${d.due_date ? ` · 기한 ${esc(d.due_date)}` : ""}</span></a>
-        <a class="q-go" href="${base}/admin/documents/${d.id}">${late ? "링크 다시 보내기" : "진행 보기"} <span aria-hidden="true">→</span></a></li>`;
-    }).join("")}</ul>
-    ${openDocs.length > 5 ? `<p class="panel-hint" style="margin:12px 0 0"><a href="${base}/admin/documents">진행 중인 계약 ${openDocs.length}건 전체 보기 →</a></p>` : ""}</section>` : "";
+      return hotRow(d.title,
+        `${late ? `기한 ${daysSince(d.due_date + " 00:00:00")}일 지남` : "서명을 기다리는 중"}${d.due_date && !late ? ` · 기한 ${d.due_date}` : ""}`,
+        `<a class="btn btn-sm" href="${base}/admin/documents/${d.id}">${late ? "링크 다시 보내기" : "진행 보기"}</a>`);
+    }),
+    more: openDocs.length > 5 ? `진행 중인 계약 ${openDocs.length}건 전체 보기` : "",
+  }) : "";
 
-  const applyQueue = `<section class="panel" id="p-queue"><h2 class="panel-title">가입 신청${
-      pendingBiz.length ? ` <span class="badge badge-wait">${pendingBiz.length}건</span>` : ""}</h2>
-    ${pendingBiz.length ? `<div class="table-scroll"><table class="admin-table"><thead><tr><th>가게</th><th>대표</th><th>기다린 날</th><th>처리</th></tr></thead><tbody>
-      ${pendingBiz.map((b) => { const d = daysSince(b.created_at);
-        return `<tr><td><b>${esc(b.name)}</b><br /><small>${esc(b.category)}</small></td>
-        <td>${esc(b.owner_name)}<br /><small>${esc(b.owner_email)}</small></td>
-        <td${d >= 3 ? ' class="txt-warn"' : ""}>${d === 0 ? "오늘" : `${d}일째`}</td>
-        <td class="actions-cell">
-          <form method="post" action="${base}/admin/business/${b.id}/status" class="inline-form"><input type="hidden" name="status" value="approved"><button class="btn btn-xs btn-primary">승인</button></form>
-          <form method="post" action="${base}/admin/business/${b.id}/status" class="inline-form"><input type="hidden" name="status" value="rejected"><button class="btn btn-xs btn-ghost">반려</button></form>
-        </td></tr>`; }).join("")}
-    </tbody></table></div>
-    <p class="panel-hint" style="margin:12px 0 0">승인하면 그 자리에서 가게 페이지가 열리고, 사장님께 안내가 갑니다.</p>`
-    : `<p class="empty">기다리는 신청이 없습니다.</p>`}</section>`;
+  // 가입 신청은 이 자리에서 바로 승인한다 — 매일 하는 일이 '탭 옮겨 가서 누르기' 면 안 된다.
+  const applyHot = pendingBiz.length ? hotBlock({
+    n: pendingBiz.length, title: "가입 신청", note: "승인하면 그 자리에서 가게 페이지가 열립니다",
+    href: `${base}/admin#s-people`, hrefLabel: "회원·점포",
+    // 오래 기다린 순 — 3일째 묵은 신청이 오늘 것 아래에 있으면 그 사장님만 계속 밀린다
+    rows: [...pendingBiz].sort((a, b) => daysSince(b.created_at) - daysSince(a.created_at)).slice(0, 5).map((b) => {
+      const d = daysSince(b.created_at);
+      return hotRow(`${b.name} · ${b.owner_name}`,
+        `${b.category || "업종 미기재"} · ${d === 0 ? "오늘 신청" : `${d}일째 기다리는 중`}`,
+        `<form method="post" action="${base}/admin/business/${b.id}/status" class="inline-form"><input type="hidden" name="status" value="approved"><button class="btn btn-sm">승인</button></form>
+         <form method="post" action="${base}/admin/business/${b.id}/status" class="inline-form"><input type="hidden" name="status" value="rejected"><button class="btn btn-sm is-ghost">반려</button></form>`);
+    }),
+    more: pendingBiz.length > 5 ? `가입 신청 ${pendingBiz.length}건 전체 보기` : "",
+  }) : "";
 
-  // 전자계약 조직에는 '가입 신청' 이 없다 — 처리할 것은 서명뿐이다.
-  const queuePanel = isEsign ? (inFlightPanel(base, docs) || `<p class="empty">진행 중인 계약이 없습니다.</p>`)
-    : applyQueue + signQueue;
+  // 모집 랜딩은 '상담 신청' 이 곧 할 일이다 — 오늘 전화해야 하는 사람.
+  const leadHot = isFranchise && leads && leads.fresh ? hotBlock({
+    n: leads.fresh, title: "새 상담 신청", note: "아직 연락하지 않은 건입니다",
+    href: `${base}/admin/leads`, hrefLabel: "상담 DB",
+    rows: freshLeads.slice(0, 5).map((l) => hotRow(`${l.name}${l.company ? ` · ${l.company}` : ""}`,
+      `${l.phone || l.email || "연락처 없음"} · ${daysSince(l.created_at) === 0 ? "오늘 접수" : `${daysSince(l.created_at)}일 전 접수`}`,
+      `<a class="btn btn-sm" href="${base}/admin/leads">상담 보기</a>`)),
+    more: leads.fresh > 5 ? `새 상담 ${leads.fresh}건 전체 보기` : "",
+  }) : "";
+
+  const hotPanels = [applyHot, leadHot, signHot].filter(Boolean).join("");
+  const queuePanel = hotPanels || `<p class="all-clear">지금 처리할 일이 없습니다</p>`;
 
   const body = `<section class="dash"><div class="container">
     <div class="dash-head"><div><h1 class="dash-title">${esc(kindOf(assoc).dashTitle)}</h1>
@@ -1667,14 +1699,13 @@ export async function admin(ctx) {
     </nav></aside>
     <div class="console-main">
     <div class="sgroup" id="s-home" data-tab="home">
-    ${statRow}
-    <div class="dash-split">
-      <div class="dash-col">${queuePanel}</div>
-      <div class="dash-col">
-        <section class="panel" id="p-notif"><div class="panel-head"><h2 class="panel-title">최근 활동${unread ? ` <span class="badge badge-wait">${unread}</span>` : ""}</h2>
-          ${unread ? `<form method="post" action="${base}/admin/notifications/read"><button class="btn btn-xs btn-ghost">모두 읽음</button></form>` : ""}</div>
-          <ul class="notif-list">${notifRows}</ul></section>
-      </div>
+    <div class="home-sheet">
+      ${queuePanel}
+      <div class="quiet-sec" id="p-notif">
+        <div class="quiet-h">최근 활동${unread ? ` <span class="side-badge">${unread}</span>` : ""}
+          ${unread ? `<form method="post" action="${base}/admin/notifications/read" class="inline-form"><button class="btn-linkish">모두 읽음</button></form>` : ""}</div>
+        <ul class="notif-list">${notifRows}</ul></div>
+      ${factRow}
     </div></div>
 
     <div class="sgroup" id="s-people" data-tab="people">

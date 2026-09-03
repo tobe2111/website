@@ -123,7 +123,7 @@ test("옛 저장 구성도 새 화면으로 그려진다 (구성 필드가 없�
 // 축은 하나다: 왼쪽 칸은 처리할 것, 오른쪽 칸은 지나간 것.
 // 예전에는 맨 위 "오늘 처리할 일" 상자와 가입 신청 표와 알림함이 **같은 사건을 세 번**
 // 말하고 있었다 — 세 번 말하면 한눈에 들어오지 않는다.
-test("첫 화면은 처리할 것과 지나간 것 두 칸이고, 승인을 그 자리에서 한다", async () => {
+test("첫 화면은 손이 필요한 것을 색으로 가르고, 승인을 그 자리에서 한다", async () => {
   const env = makeEnv();
   const pw = await hashPassword("pass1234");
   const a = await D.createAssociation(env.DB, { slug: "s", name: "서초구 상인회", kind: "merchant" });
@@ -134,23 +134,42 @@ test("첫 화면은 처리할 것과 지나간 것 두 칸이고, 승인을 그 
   const j = await login(env, "ad@s.kr");
   const html = await (await jget(env, j, "/t/s/admin")).text();
 
-  assert.match(html, /class="dash-split"/, "두 칸으로 나뉘어야 한다");
-  const q = html.slice(html.indexOf('id="p-queue"'), html.indexOf('id="p-notif"'));
-  assert.match(q, /모둠분식/, "기다리는 신청이 왼쪽 칸에 보인다");
-  assert.match(q, /기다린 날/, "몇 건인지가 아니라 얼마나 기다렸는지");
+  // 손이 필요한 것은 브랜드색 면으로 가른다 — 흰 패널 위 흰 패널로는 구별이 안 됐다
+  const q = html.slice(html.indexOf('class="hot"'), html.indexOf('id="p-notif"'));
+  assert.match(q, /class="hot-n">1</, "몇 건인지가 큰 숫자로 먼저 읽혀야");
+  assert.match(q, /모둠분식/, "기다리는 신청이 그 안에 보인다");
+  assert.match(q, /오늘 신청|일째 기다리는 중/, "몇 건인지가 아니라 얼마나 기다렸는지");
   // 승인 단추가 이 화면 안에 있어야 한다 — 예전에는 다른 탭으로 넘어가야 나왔다
   assert.match(q, new RegExp(`admin/business/${b.id}/status`), "승인·반려 폼이 첫 화면에 있어야");
   assert.match(q, /승인<\/button>/);
 
   // 같은 사건을 두 번 말하지 않는다
-  assert.ok(!html.includes("오늘 처리할 일"), "따로 뜬 할 일 상자는 없앴다 — 아래 표와 같은 말이었다");
-  assert.ok(!html.includes("안 읽은 알림"), "오른쪽 칸이 곧 알림함이다");
-  // 숫자는 결정을 만드는 것만
-  const stats = html.slice(html.indexOf('id="p-stats"'), html.indexOf("</div>", html.indexOf("서명 진행 중")));
+  assert.ok(!html.includes("오늘 처리할 일"), "따로 뜬 할 일 상자는 없앴다 — 파란 블록과 같은 말이었다");
+  assert.ok(!html.includes("안 읽은 알림"), "'최근 활동' 구역이 곧 알림함이다");
+  assert.ok(!html.includes("지금 처리할 일이 없습니다"), "처리할 것이 있는데 없다고 하면 안 된다");
+  // 참고 숫자는 맨 아래로 — 매일 볼 필요 없는 넷이 맨 위 카드를 차지하고 있었다
+  // 이 구역만 잘라 본다 — 문서 끝까지 훑으면 아래 '회원·점포' 탭의 글자까지 딸려 온다
+  const stats = html.slice(html.indexOf('id="p-stats"'), html.indexOf('id="s-people"'));
+  assert.ok(html.indexOf('class="hot"') < html.indexOf('id="p-stats"'), "할 일이 숫자보다 위에 온다");
   assert.match(stats, /가입 점포/);
-  assert.match(stats, /이번 주 방문/, "'사람이 오고 있나' 가 실제로 궁금한 숫자다");
+  assert.match(stats, /방문/, "'사람이 오고 있나' 가 실제로 궁금한 숫자다");
+  assert.ok(!/stat-card/.test(html), "숫자 카드 네 장 줄은 걷어냈다");
   assert.ok(!stats.includes("미디어"), "세어 봐야 아무것도 달라지지 않는 숫자는 뺐다");
-  assert.ok(!stats.includes("승인 대기"), "바로 아래 표가 이미 말한다");
+  assert.ok(!stats.includes("승인 대기"), "위의 파란 블록이 이미 말한다");
+});
+
+// 파란 덩어리가 '보이는 것' 자체가 신호다 — 0 이라는 숫자를 읽게 하지 않는다.
+test("처리할 것이 없으면 파란 블록이 통째로 사라진다", async () => {
+  const env = makeEnv();
+  const pw = await hashPassword("pass1234");
+  const a = await D.createAssociation(env.DB, { slug: "s", name: "서초구 상인회", kind: "merchant" });
+  await D.createUser(env.DB, { email: "ad@s.kr", passwordHash: pw.hash, salt: pw.salt, name: "회장", role: "ADMIN", associationId: a.id });
+  const j = await login(env, "ad@s.kr");
+  const html = await (await jget(env, j, "/t/s/admin")).text();
+
+  assert.ok(!/class="hot"/.test(html), "할 일이 0건이면 파란 블록이 없어야");
+  assert.match(html, /지금 처리할 일이 없습니다/, "그 자리에 한 줄만 남는다");
+  assert.match(html, /id="p-stats"/, "참고 숫자는 그대로 있다");
 });
 
 test("점주 화면은 '못 채우면 무엇을 잃는지' 를 적는다", async () => {

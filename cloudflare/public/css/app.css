@@ -2558,6 +2558,69 @@ body.is-done .foot-copy,body.is-done .site-footer p{color:var(--dk-muted)}
   .tk-list{grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px}
 }
 
+/* =========================================================
+   관리자 현황 — 손이 필요한 것은 '면' 으로 가른다
+   ---------------------------------------------------------
+   흰 패널 위에 흰 패널을 얹으면 무엇이 급한지 보이지 않는다. 연한 색으로 칠해도
+   흰 바탕과 명도 차가 3% 라 눈에는 같은 흰색이다. 그래서 셋을 함께 한다 —
+   ① 급한 것은 브랜드색을 통째로 채우고 ② 숫자를 40px 로 키우고
+   ③ 나머지(최근 활동·이번 주 숫자)는 12.5px 회색으로 낮춘다.
+   ③ 이 없으면 무엇을 키워도 구별되지 않는다.
+   ========================================================= */
+.home-sheet{background:var(--surface);border-radius:var(--r-xl);padding:22px 24px 24px}
+.hot{background:var(--brand);color:var(--on-brand);border-radius:var(--r-lg);padding:20px 22px 8px}
+.hot + .hot{margin-top:10px}
+.hot-h{display:flex;align-items:center;gap:12px;padding-bottom:12px;border-bottom:1px solid rgba(255,255,255,.28)}
+.hot-n{font-size:40px;font-weight:800;line-height:1;letter-spacing:-.04em;font-variant-numeric:tabular-nums}
+.hot-h h3{font-size:17px;font-weight:700;margin:0;letter-spacing:-.02em}
+.hot-h h3 small{display:block;font-size:13px;font-weight:500;color:rgba(255,255,255,.82);margin-top:3px}
+.hot-all{margin-left:auto;flex:none;color:#fff;font-size:13px;font-weight:700;opacity:.88}
+.hot-all:hover{opacity:1;text-decoration:underline}
+.hot-row{display:flex;align-items:center;gap:14px;padding:14px 0;border-bottom:1px solid rgba(255,255,255,.18)}
+.hot-row:last-of-type{border-bottom:0}
+.hot-m{flex:1;min-width:0}
+.hot-m b{display:block;font-size:15.5px;font-weight:700;letter-spacing:-.015em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hot-m small{font-size:13px;color:rgba(255,255,255,.8)}
+.hot-acts{flex:none;display:flex;gap:7px}
+.hot-acts .btn{background:#fff;color:var(--brand-text);font-weight:700;border:0}
+.hot-acts .btn:hover{background:rgba(255,255,255,.88)}
+.hot-acts .btn.is-ghost{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.5)}
+.hot-acts .btn.is-ghost:hover{background:rgba(255,255,255,.14);border-color:#fff}
+.hot-more{display:block;padding:12px 0 6px;font-size:13.5px;font-weight:700;color:#fff;opacity:.88}
+.hot-more:hover{opacity:1;text-decoration:underline}
+/* 할 일이 0건이면 파란 덩어리가 통째로 사라진다 — 그래서 '보이는 것' 자체가 신호다 */
+.all-clear{display:flex;align-items:center;gap:9px;background:var(--ok-bg);color:var(--ok-fg);
+  border-radius:var(--r-lg);padding:16px 20px;font-size:15px;font-weight:700;margin:0}
+/* 참고 구역 — 작고 회색. 여기가 조용해야 위가 크게 들린다 */
+.quiet-sec{margin-top:22px}
+.quiet-h{display:flex;align-items:baseline;gap:8px;font-size:12.5px;font-weight:700;color:var(--muted);
+  letter-spacing:.02em;padding-bottom:7px;border-bottom:1px solid var(--line-soft);margin:0 0 2px}
+.quiet-h .inline-form{display:inline-flex;margin-left:auto;flex:none}
+.btn-linkish{background:none;border:0;padding:0;font:inherit;font-size:12.5px;font-weight:700;
+  color:var(--brand-text);cursor:pointer}
+.btn-linkish:hover{text-decoration:underline}
+.home-sheet .notif-list{margin-top:0}
+.home-sheet .notif-list li{padding:11px 2px;border-radius:0;border-bottom:1px solid var(--line-soft);gap:9px}
+.home-sheet .notif-list li:last-child{border-bottom:0}
+.home-sheet .notif-list li:hover{background:transparent}
+.home-sheet .notif-msg{font-size:14px}
+.home-sheet .notif-list li.empty{color:var(--muted);font-size:13px;justify-content:flex-start}
+/* 참고 숫자 — 배지로 만들지 않는다. 알약이 넷 뜨면 장식으로 읽히고,
+   장식이 늘면 정작 위의 파란 덩어리가 '또 하나의 장식' 이 된다. */
+.facts{display:flex;flex-wrap:wrap;gap:4px 22px;padding:11px 0 0;margin:0}
+.facts span{display:inline-flex;align-items:baseline;gap:6px;font-size:13px;color:var(--muted);font-weight:500}
+.facts b{font-size:16px;font-weight:700;color:var(--ink-soft);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.facts u{text-decoration:none;color:var(--ok-fg);font-weight:700;font-size:12px}
+@media (max-width:640px){
+  .home-sheet{padding:16px 14px 18px;border-radius:var(--r-lg)}
+  .hot{padding:16px 16px 6px}
+  .hot-n{font-size:32px}
+  .hot-row{flex-wrap:wrap;gap:10px}
+  .hot-acts{width:100%}
+  .hot-acts .btn,.hot-acts .inline-form{flex:1}
+  .hot-acts .btn{width:100%}
+}
+
 /* ── 상인회 홈 첫 화면 — 밝게. 레퍼런스(나의 티켓)는 연회색 바탕 위 흰 부품이다.
    먹빛 바탕은 사진·영상을 깐 조직에서만 남는다 — 사진 위에서는 어두운 베일 + 흰 글자가 읽히는 유일한 길이다. ── */
 .hero-pro:not(.has-photo){background:var(--bg);color:var(--ink)}
