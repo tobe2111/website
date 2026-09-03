@@ -184,3 +184,99 @@ test("지도 검색은 로그인한 관리자만 부를 수 있다", async () =>
     void b;
   } finally { globalThis.fetch = realFetch; }
 });
+
+// ── 사진·영상 대신 올리기 ──
+// 사장님이 카톡으로 사진을 보내 오는 것이 실제 흐름이다. 예전에는 점주 본인만 올릴 수 있어
+// 회장님이 받은 사진을 넣을 방법이 없었고, 그래서 대행 등록한 가게는 계속 사진이 없었다.
+const PNG = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="), (c) => c.charCodeAt(0));
+async function postForm(env, j, p, build, from) {
+  const t = (/name="_csrf" value="([^"]+)"/.exec(await (await get(env, j, from || p)).text()) || [])[1];
+  const fd = new FormData();
+  fd.set("_csrf", t);
+  build(fd);
+  const r = await worker.fetch(new Request(B + p, { method: "POST", headers: { cookie: ch(j) }, body: fd }), env);
+  absorb(j, r); return r;
+}
+
+test("관리자가 올린 사진이 가게 페이지의 대표 사진이 된다", async () => {
+  const env = makeEnv();
+  const { b } = await seed(env);
+  await D.setBusinessStatus(env.DB, b.id, "approved");
+  const j = await login(env, "ad@s.kr");
+  const r = await postForm(env, j, `/t/seocho/admin/business/${b.id}/media`, (fd) => {
+    fd.append("files", new File([PNG], "front.png", { type: "image/png" }));
+    fd.set("caption", "매장 전경");
+  }, `/t/seocho/admin/business/${b.id}`);
+  assert.equal(r.status, 303);
+  assert.doesNotMatch(r.headers.get("location") || "", /err=1/);
+
+  const media = await D.listMedia(env.DB, b.id);
+  assert.equal(media.filter((m) => m.kind === "image").length, 1);
+  const page = await (await get(env, jar(), `/t/seocho/business/${encodeURIComponent((await D.getBusinessById(env.DB, b.id)).slug)}`)).text();
+  assert.match(page, /class="biz-cover"/, "맨 앞 사진이 이름 위 대표 사진으로");
+  assert.match(page, /매장 전경/);
+});
+
+test("사진이 없으면 대표 사진 자리가 아예 없다 (회색 상자를 남기지 않는다)", async () => {
+  const env = makeEnv();
+  const { b } = await seed(env);
+  await D.setBusinessStatus(env.DB, b.id, "approved");
+  const page = await (await get(env, jar(), `/t/seocho/business/${encodeURIComponent((await D.getBusinessById(env.DB, b.id)).slug)}`)).text();
+  assert.ok(!page.includes("biz-cover"), "빈 사진 자리는 '아무것도 없는 가게' 라고 먼저 말한다");
+});
+
+test("릴스·쇼츠 주소를 붙여넣으면 세로 영상으로 붙는다", async () => {
+  const env = makeEnv();
+  const { b } = await seed(env);
+  await D.setBusinessStatus(env.DB, b.id, "approved");
+  const j = await login(env, "ad@s.kr");
+  for (const [url, provider] of [["https://www.instagram.com/reel/CxYzAbCdEfG/", "instagram"],
+    ["https://www.youtube.com/shorts/dQw4w9WgXcQ", "youtube"]]) {
+    const r = await post(env, j, `/t/seocho/admin/business/${b.id}/embed`, { url }, `/t/seocho/admin/business/${b.id}`);
+    assert.doesNotMatch(r.headers.get("location") || "", /err=1/, url);
+    assert.ok((await D.listMedia(env.DB, b.id)).some((m) => m.provider === provider), `${provider} 가 붙어야`);
+  }
+  const page = await (await get(env, jar(), `/t/seocho/business/${encodeURIComponent((await D.getBusinessById(env.DB, b.id)).slug)}`)).text();
+  assert.match(page, /data-vertical="1"/, "릴스는 세로로 열려야 — 가로 틀에 넣으면 위아래가 잘린다");
+  assert.match(page, /instagram\.com\/reel\/CxYzAbCdEfG\/embed/);
+});
+
+test("단축 주소는 왜 안 되는지 알려 준다", async () => {
+  const env = makeEnv();
+  const { b } = await seed(env);
+  const j = await login(env, "ad@s.kr");
+  const r = await post(env, j, `/t/seocho/admin/business/${b.id}/embed`, { url: "https://naver.me/xAbCdEf" }, `/t/seocho/admin/business/${b.id}`);
+  const msg = decodeURIComponent(r.headers.get("location") || "");
+  assert.match(msg, /err=1/);
+  assert.match(msg, /단축 주소/, "그냥 '실패' 라고만 하면 같은 주소를 계속 붙여넣게 된다");
+});
+
+test("올린 사진을 지울 수 있고, 남의 조직 점포에는 손대지 못한다", async () => {
+  const env = makeEnv();
+  const { b, ob } = await seed(env);
+  const j = await login(env, "ad@s.kr");
+  await postForm(env, j, `/t/seocho/admin/business/${b.id}/media`, (fd) => {
+    fd.append("files", new File([PNG], "a.png", { type: "image/png" }));
+  }, `/t/seocho/admin/business/${b.id}`);
+  const m = (await D.listMedia(env.DB, b.id))[0];
+  await post(env, j, `/t/seocho/admin/business/${b.id}/media/${m.id}/delete`, {}, `/t/seocho/admin/business/${b.id}`);
+  assert.equal((await D.listMedia(env.DB, b.id)).length, 0);
+
+  // 남의 조직 점포
+  const bad = await postForm(env, j, `/t/seocho/admin/business/${ob.id}/media`, (fd) => {
+    fd.append("files", new File([PNG], "x.png", { type: "image/png" }));
+  }, "/t/seocho/admin");
+  assert.match(bad.headers.get("location") || "", /err=1/);
+  assert.equal((await D.listMedia(env.DB, ob.id)).length, 0);
+});
+
+test("점주는 관리자용 사진 올리기 경로를 쓸 수 없다", async () => {
+  const env = makeEnv();
+  const { b } = await seed(env);
+  const mj = await login(env, "m@s.kr");
+  const r = await postForm(env, mj, `/t/seocho/admin/business/${b.id}/media`, (fd) => {
+    fd.append("files", new File([PNG], "a.png", { type: "image/png" }));
+  }, "/t/seocho/dashboard");
+  assert.notEqual(r.status, 303);
+  assert.equal((await D.listMedia(env.DB, b.id)).length, 0);
+});

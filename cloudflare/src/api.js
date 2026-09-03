@@ -453,6 +453,65 @@ export async function adminUpdateBusiness(ctx) {
   return back(to, "저장했습니다. 사장님이 로그인하면 이어서 고칠 수 있습니다.");
 }
 
+// 관리자가 그 가게의 사진·영상을 대신 올린다.
+//
+// 사장님이 카톡으로 사진을 보내 오는 것이 실제 흐름이다. 예전에는 점주 본인만 올릴 수 있어
+// 회장님이 받은 사진을 넣을 방법이 없었고, 그래서 대행 등록한 가게는 계속 사진이 없었다.
+// 지도에서 사진을 긁어 오지 않는 이유는 따로 있다 — 그 사진들은 사장님·손님·플랫폼이
+// 각각 찍은 남의 저작물이라, 우리 서버에 복사해 우리 페이지에 거는 순간 재배포가 된다.
+async function bizOfAdmin(ctx) {
+  const b = await D.getBusinessById(ctx.db, Number(ctx.params.id) || 0);
+  return b && b.association_id === ctx.assoc.id ? b : null;
+}
+export async function adminUploadMedia(ctx) {
+  const { db, env, form, base, assoc } = ctx;
+  const b = await bizOfAdmin(ctx);
+  if (!b) return back(base + "/admin", "업체를 찾을 수 없습니다.", true);
+  const to = `${base}/admin/business/${b.id}`;
+  const maxPhotos = planOf(assoc).maxPhotos;
+  if ((await D.countBusinessImages(db, b.id)) >= maxPhotos)
+    return back(to, `사진은 최대 ${maxPhotos}장까지 올릴 수 있습니다.`, true);
+  const up = await saveImages(env, form.getAll("files"), 12);
+  if (up.error) return back(to, up.error, true);
+  if (!up.images.length) return back(to, "선택된 사진이 없습니다.", true);
+  const caption = cap((form.get("caption") || "").trim(), 200);
+  for (const im of up.images) await D.addMedia(db, { businessId: b.id, kind: "image", filename: im.filename, size: im.size, caption });
+  await audit(ctx, "점포사진등록", `${b.name} · ${up.images.length}장 (관리자 대행)`);
+  return back(to, `${up.images.length}장 올렸습니다.`);
+}
+// 릴스·쇼츠도 같은 길로 들어온다 — 주소만 붙여 넣으면 되고, 세로 영상은 세로로 열린다.
+export async function adminAddEmbed(ctx) {
+  const { db, form, base, assoc } = ctx;
+  const b = await bizOfAdmin(ctx);
+  if (!b) return back(base + "/admin", "업체를 찾을 수 없습니다.", true);
+  const to = `${base}/admin/business/${b.id}`;
+  const maxEmbeds = planOf(assoc).maxEmbeds;
+  if ((await D.countEmbeds(db, b.id)) >= maxEmbeds) return back(to, `영상 링크는 최대 ${maxEmbeds}개까지 가능합니다.`, true);
+  const raw = form.get("url") || "";
+  const parsed = parseEmbed(raw);
+  if (!parsed) {
+    const short = /(?:naver\.me|bit\.ly|han\.gl|vo\.la|url\.kr|me2\.do)\//i.test(raw);
+    return back(to, short
+      ? "단축 주소는 사용할 수 없습니다. 영상을 열어 주소창에 뜨는 원래 주소를 붙여넣어 주세요."
+      : "지원하는 영상 링크가 아닙니다. (유튜브·쇼츠·인스타 릴스·네이버TV)", true);
+  }
+  await D.addMedia(db, { businessId: b.id, kind: "embed", provider: parsed.provider, embedId: parsed.id,
+    caption: cap((form.get("caption") || "").trim(), 200) });
+  await audit(ctx, "점포영상등록", `${b.name} · ${parsed.provider} (관리자 대행)`);
+  return back(to, "영상 링크를 추가했습니다.");
+}
+export async function adminDeleteMedia(ctx) {
+  const { db, env, base, params } = ctx;
+  const b = await bizOfAdmin(ctx);
+  const m = await D.getMedia(db, Number(params.mid) || 0);
+  if (!b || !m || m.business_id !== b.id) return back(base + "/admin", "삭제할 수 없습니다.", true);
+  if (m.filename) await storage.remove(env, m.filename);
+  if (m.thumb) await storage.remove(env, m.thumb);
+  await D.deleteMedia(db, m.id);
+  await audit(ctx, "점포사진삭제", `${b.name} (관리자 대행)`);
+  return back(`${base}/admin/business/${b.id}`, "삭제했습니다.");
+}
+
 // 카카오 로컬에서 가게 한 곳을 찾아 주소·전화·업종·좌표를 폼에 채워 준다.
 //
 // 구역을 통째로 긁어 '가입 점포' 로 넣지는 않는다. 동의하지 않은 가게가 홈페이지에 올라가고

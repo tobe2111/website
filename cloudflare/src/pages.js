@@ -20,7 +20,7 @@ import { parseLandingLayout, renderLanding, LANDING_CATALOG, safeSrc } from "./f
 import { KINDS, KIND_KEYS, PRESETS, PRESET_KEYS, kindOf, kindById, assocTerms } from "./kinds.js";
 import { turnstileWidget, turnstileScript } from "./turnstile.js";
 import { otpauthUri } from "./totp.js";
-import { PLANS, PLAN_KEYS, planPrices } from "./plans.js";
+import { PLANS, PLAN_KEYS, planPrices, planOf } from "./plans.js";
 import { emailEnabled as emailOn } from "./email.js";
 import { CRON, CRON_JOBS, cronRunKey } from "./scheduled.js";
 
@@ -686,9 +686,15 @@ export async function businessDetail(ctx) {
   const wayToCome = b.lat != null && b.lng != null ? `<h2 class="biz-section-title">오시는 길</h2>
     ${hasGeo ? `<div id="bizMap" class="biz-map" data-lat="${b.lat}" data-lng="${b.lng}" data-name="${esc(b.name)}"></div>` : ""}
     <p class="biz-way">${b.address ? `${PIN_SVG} ${esc(b.address)} · ` : ""}<a href="${esc(naverLink)}" target="_blank" rel="noopener">네이버 지도에서 길찾기 →</a></p>` : "";
+  // 대표 사진 — 맨 앞 사진 한 장을 이름 위에 크게. 없으면 이 자리가 아예 없다.
+  // 회색 상자를 남기면 '아직 아무것도 없는 가게' 라고 먼저 말하는 셈이다.
+  const coverShot = images[0]
+    ? `<span class="biz-cover"><img src="${esc(mediaUrl(images[0].filename))}" alt="${esc(b.name)} 대표 사진" /></span>`
+    : "";
   const body = `
   <section class="biz-hero"><div class="container biz-hero-inner">${pending}
     <div class="biz-hero-lead">
+      ${coverShot}
       <span class="chip chip-light">${esc(b.category)}</span>${bizStatusBadge(b)}<h1>${esc(b.name)}</h1>
       <p class="biz-desc">${esc(b.description || "소개가 곧 등록됩니다.")}</p>
       <div class="biz-actions">
@@ -2348,6 +2354,37 @@ export async function adminBusinessEdit(ctx) {
     !b.hours && "영업시간이 없어 <b>'지금 문 연 곳'에 안 뜹니다</b>",
     (b.lat == null || b.lng == null) && "좌표가 없어 <b>지도 위 핀이 찍히지 않습니다</b>",
   ].filter(Boolean);
+  // ── 사진·영상 —— 사장님이 카톡으로 보내 온 것을 관리자가 대신 올린다.
+  // 지도에서 긁어 오지 않는다: 그 사진들은 사장님·손님·플랫폼이 각각 찍은 남의 저작물이라,
+  // 우리 서버에 복사해 우리 페이지에 거는 순간 재배포가 된다. 링크(네이버 플레이스)는 괜찮다.
+  const media = await D.listMedia(db, b.id);
+  const shots = media.filter((m) => m.kind === "image");
+  const clips = media.filter((m) => m.kind === "embed" || m.kind === "video");
+  const plan = planOf(assoc);
+  const delForm = (m) => `<form method="post" action="${base}/admin/business/${b.id}/media/${m.id}/delete" class="inline-form"
+      data-confirm="이 ${m.kind === "image" ? "사진" : "영상"}을 지울까요?"><button class="btn btn-xs btn-ghost">지우기</button></form>`;
+  const mediaPanel = `<section class="panel"><h2 class="panel-title">사진·영상
+      <span class="badge badge-muted">사진 ${shots.length}/${plan.maxPhotos} · 영상 ${clips.length}/${plan.maxEmbeds}</span></h2>
+    <p class="panel-hint">사장님께 카톡으로 받은 사진을 여기서 대신 올립니다. 맨 앞 사진이 목록·카톡 공유의 대표 사진이 됩니다.
+      <b>지도(네이버·카카오)의 사진은 가져오지 않습니다</b> — 사장님·손님·플랫폼이 각각 찍은 남의 사진이라 옮겨 담으면 저작권 문제가 됩니다.
+      대신 위의 <b>네이버 플레이스</b> 칸에 링크를 걸어 두면 손님이 그쪽에서 사진·리뷰를 봅니다.</p>
+    <form method="post" action="${base}/admin/business/${b.id}/media" enctype="multipart/form-data" class="upload-form">
+      <label class="file-drop"><input type="file" name="files" accept="image/*" multiple /><span class="file-drop-text">사진 선택 (한 장당 최대 8MB · 여러 장 가능)</span></label>
+      <input type="text" name="caption" placeholder="설명 (선택)" class="caption-input" maxlength="200" />
+      <button class="btn btn-primary btn-block">사진 올리기</button></form>
+    ${shots.length ? `<div class="admin-shots">${shots.map((m) => `<figure class="admin-shot">
+      <img src="${esc(mediaUrl(m.thumb || m.filename))}" alt="${esc(m.caption || "가게 사진")}" loading="lazy" />
+      <figcaption>${esc(m.caption || "")}${delForm(m)}</figcaption></figure>`).join("")}</div>` : `<p class="panel-hint">아직 올린 사진이 없습니다 — 사진이 없으면 목록에서 회색 상자로 보입니다.</p>`}
+    <div class="form-divider">영상·릴스·쇼츠</div>
+    <p class="panel-hint">유튜브·유튜브 쇼츠·인스타그램 릴스·네이버TV 주소를 붙여넣으세요. 세로 영상은 세로로 열립니다.
+      <small>단축 주소(naver.me/…)는 안 됩니다 — 영상을 열어 주소창의 원래 주소를 복사해 주세요.</small></p>
+    <form method="post" action="${base}/admin/business/${b.id}/embed" class="stack-form compact">
+      <input type="url" name="url" placeholder="예: instagram.com/reel/…  ·  youtube.com/shorts/…" required />
+      <input type="text" name="caption" placeholder="설명 (선택)" maxlength="200" />
+      <button class="btn btn-ghost btn-sm">영상 추가</button></form>
+    ${clips.length ? `<ul class="admin-clips">${clips.map((m) => `<li>
+      <b>${esc(providerLabel(m.provider) || "영상")}</b> <span class="muted">${esc(m.caption || m.embed_id || "")}</span>${delForm(m)}</li>`).join("")}</ul>` : ""}
+  </section>`;
   const body = `<section class="dash"><div class="container">
     <div class="dash-head"><div><p class="section-eyebrow"><a href="${base}/admin#s-people">← 회원·점포</a></p>
       <h1 class="dash-title">${esc(b.name)}</h1>
@@ -2385,6 +2422,7 @@ export async function adminBusinessEdit(ctx) {
         </div>
         <button class="btn btn-primary">저장</button>
       </form></section>
+    ${mediaPanel}
     </div></section>`;
   return html(layout({ title: `${b.name} 정보`, assoc, base, user, body, csrf,
     scripts: `<script src="${assetUrl("/js/place.js")}" defer></script>` }));
