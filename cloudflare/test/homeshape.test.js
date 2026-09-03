@@ -345,3 +345,67 @@ test("쪽 그림만 보내고 원본 PDF 를 빠뜨리면 만들지 않는다", 
   assert.match(to, /원본 PDF/, "그림만 남기면 '그 그림이 원본과 같다'를 증명할 방법이 없다");
   assert.equal((await D.listDocuments(env.DB, a.id)).length, 0);
 });
+
+// 홈 섹션 검사용 씨앗 — 운영자 계정이 없으면 사이트가 /setup 으로 보내므로 한 명은 만들어 둔다.
+async function seedPhotos(notices) {
+  const env = makeEnv();
+  const pw = await hashPassword("pass1234");
+  const a = await D.createAssociation(env.DB, { slug: "s", name: "방배카페골목상인회", kind: "merchant" });
+  await D.createUser(env.DB, { email: "ad@s.kr", passwordHash: pw.hash, salt: pw.salt, name: "회장", role: "ADMIN", associationId: a.id });
+  for (const [title, image] of notices)
+    await D.createNotice(env.DB, { associationId: a.id, title, body: "본문", image, tag: image ? "소식" : "공지" });
+  return { env, a };
+}
+
+// ── 홈에서 무엇을 보여 주고 무엇을 치웠나 ─────────────────────────────
+//
+// 이 홈의 주 손님은 '가게를 찾는 사람' 이다. 점주 모집 안내(절차·혜택·FAQ)를 다 펴 두면
+// 화면의 절반이 모집 문서가 되어 정작 가게가 안 보인다. 모집은 맨 아래 배너 하나로 족하다.
+test("기본 홈에는 입점 절차·혜택·FAQ 가 없다 (모집은 맨 아래 배너 하나)", async () => {
+  const { env } = await seedPhotos([]);
+  const html = await (await get(env, "/t/s/")).text();
+  assert.ok(!html.includes("입점은 이렇게 진행됩니다"), "절차 안내는 기본에서 꺼져 있어야");
+  assert.ok(!html.includes("입점하면 생기는 것"), "혜택 안내는 기본에서 꺼져 있어야");
+  assert.ok(!html.includes("자주 묻는 질문"), "FAQ 는 기본에서 꺼져 있어야");
+  assert.match(html, /아직 회원이 아니신가요\?/, "가입 배너는 남는다");
+  // 쓰고 싶은 상인회는 홈 구성에서 켤 수 있어야 한다 — 지운 게 아니라 끈 것이다
+  assert.ok(defaultLayout("x").some((s) => s.type === "steps"), "섹션 자체는 목록에 남아 있어야");
+});
+
+test("사진 붙은 공지는 활동사진 판으로 뜨고, 공지 목록에 두 번 나오지 않는다", async () => {
+  const { env } = await seedPhotos([["달빛축제 현장", "shot.jpg"], ["9월 정기총회 안내", ""]]);
+  const html = await (await get(env, "/t/s/")).text();
+
+  assert.match(html, /class="photo-board"/, "활동사진 판이 있어야");
+  assert.match(html, /pb-card/);
+  assert.equal((html.match(/달빛축제 현장/g) || []).length, 1, "사진 공지는 한 번만 — 같은 말을 두 번 하지 않는다");
+  assert.match(html, /9월 정기총회 안내/, "사진 없는 공지는 공지 목록에 남는다");
+});
+
+test("사진 붙은 공지가 하나도 없으면 활동사진 자리가 아예 없다", async () => {
+  const { env } = await seedPhotos([["주차 안내", ""]]);
+  const html = await (await get(env, "/t/s/")).text();
+  assert.ok(!html.includes("photo-board"), "빈 사진판은 '아무것도 안 한 상인회' 로 읽힌다");
+  assert.ok(!html.includes("활동사진"), "제목만 남기지도 않는다");
+  assert.match(html, /주차 안내/, "공지는 그대로 목록에");
+});
+
+test("영상은 주소를 넣었을 때만 뜬다 (없거나 이상하면 자리 자체가 없다)", async () => {
+  const { env, a } = await seedPhotos([]);
+  const lay = (url) => serializeLayout(parseLayout(null, a.name).map((s) => (s.type === "video" ? { ...s, url } : s)));
+
+  const none = await (await get(env, "/t/s/")).text();
+  assert.ok(!none.includes("home-video"), "주소가 없으면 빈 검은 네모를 남기지 않는다");
+  assert.ok(!none.includes("영상으로 보기"));
+
+  await env.DB.prepare("UPDATE associations SET home_layout=? WHERE id=?").bind(lay("https://naver.me/abcd"), a.id).run();
+  const bad = await (await get(env, "/t/s/")).text();
+  assert.ok(!bad.includes("home-video"), "읽을 수 없는 주소(단축 링크)면 섹션이 없다");
+
+  await env.DB.prepare("UPDATE associations SET home_layout=? WHERE id=?").bind(lay("https://www.youtube.com/watch?v=dQw4w9WgXcQ"), a.id).run();
+  const ok = await (await get(env, "/t/s/")).text();
+  assert.match(ok, /class="home-video"/);
+  // 쿠키를 심지 않는 주소로만 띄운다 — 손님이 우리 홈을 보다 광고 추적을 당하지 않게
+  assert.match(ok, /youtube-nocookie\.com\/embed\/dQw4w9WgXcQ/);
+  assert.ok(!/youtube\.com\/watch/.test(ok), "원본 주소를 그대로 iframe 에 넣지 않는다");
+});

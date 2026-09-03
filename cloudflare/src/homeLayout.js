@@ -1,6 +1,7 @@
 // 홈페이지 구성(레이아웃) 시스템
 // 각 상인회는 섹션의 표시 여부·순서·문구를 독립적으로 바꿀 수 있습니다.
 import { esc } from "./util.js";
+import { parseEmbed, embedSrc } from "./embed.js";
 
 const ico = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
 
@@ -109,6 +110,21 @@ export const SECTION_CATALOG = {
     label: "동네 새소식 (가게 소식 피드)",
     fields: [{ key: "title", label: "제목", type: "text" }],
   },
+  photos: {
+    label: "활동사진 (사진 붙은 공지를 사진판으로)",
+    fields: [
+      { key: "title", label: "제목", type: "text" },
+      { key: "lead", label: "설명", type: "textarea" },
+    ],
+  },
+  video: {
+    label: "영상 (유튜브·네이버TV·인스타 릴스)",
+    fields: [
+      { key: "title", label: "제목", type: "text" },
+      { key: "url", label: "영상 주소", type: "text" },
+      { key: "lead", label: "설명", type: "textarea" },
+    ],
+  },
   showcase: {
     label: "브랜드 쇼케이스 (야경 밴드)",
     fields: [
@@ -168,9 +184,18 @@ export function defaultLayout(assocName = "우리 상인회") {
     // 쇼케이스(검은 인용 띠)는 기본에서 끕니다 — 새 정보를 주지 않으면서 화면 한가운데를 끊습니다.
     // 쓰고 싶은 상인회는 홈 구성에서 켤 수 있습니다.
     { type: "showcase", enabled: false, title: "", lead: "" },
-    { type: "steps", enabled: true, title: "입점은 이렇게 진행됩니다", lead: "" },
-    { type: "benefits", enabled: true, title: "입점하면 생기는 것", lead: "" },
-    { type: "faq", enabled: true, title: "자주 묻는 질문" },
+    // 활동사진 — 사진이 붙은 공지를 사진판으로 보여준다. 상인회가 실제로 무엇을 하는 곳인지는
+    // 문장보다 사진이 빨리 말한다. 사진 붙은 공지가 하나도 없으면 섹션 자체가 안 나온다.
+    { type: "photos", enabled: true, title: "활동사진", lead: "" },
+    // 영상 — 주소를 넣지 않으면 아예 없는 섹션이다.
+    { type: "video", enabled: true, title: "영상으로 보기", url: "", lead: "" },
+    // 입점 안내 세 덩어리는 기본에서 끕니다.
+    //   이 홈의 주 손님은 '가게를 찾는 사람' 이고, 점주 모집은 맨 아래 가입 배너 하나로 충분합니다.
+    //   절차·혜택·FAQ 를 다 펴 두면 홈의 절반이 모집 안내가 되어, 정작 가게가 안 보입니다.
+    //   점포를 모으는 시기에는 홈 구성에서 켜면 됩니다.
+    { type: "steps", enabled: false, title: "입점은 이렇게 진행됩니다", lead: "" },
+    { type: "benefits", enabled: false, title: "입점하면 생기는 것", lead: "" },
+    { type: "faq", enabled: false, title: "자주 묻는 질문" },
     { type: "contact", enabled: true, title: "연락처·오시는 길", hours: "" },
     { type: "cta", enabled: true, title: "아직 회원이 아니신가요?", body: "지금 업체를 등록하면 나만의 업체 페이지에 사진·영상을 올리고 상권 홍보에 함께할 수 있습니다.", buttonLabel: "무료로 업체 등록하기" },
   ];
@@ -203,11 +228,15 @@ export function parseLayout(json, assocName) {
       const i = out.findIndex((s) => s.type === "businesses");
       out.splice(i >= 0 ? i + 1 : out.length, 0, { type: "updates", enabled: true, title: "가게가 전하는 소식" });
     }
-    // 안내 섹션 업그레이드 — 점포가 적은 상권에서 홈이 텅 비지 않게, 가입 배너 앞에 순서대로 주입
+    // 새 섹션 업그레이드 — 예전에 저장해 둔 홈 구성에도 자리를 만들어 준다.
+    // 입점 안내 셋은 꺼진 채로 넣는다: 이미 켜서 쓰고 있는 상인회의 설정은 위 filter 가 그대로 살리고,
+    // 여기 걸리는 것은 '그런 섹션이 있는 줄도 몰랐던' 옛 구성뿐이라 임의로 켜면 홈이 갑자기 길어진다.
     const guides = [
-      ["steps", { type: "steps", enabled: true, title: "입점은 이렇게 진행됩니다", lead: "" }],
-      ["benefits", { type: "benefits", enabled: true, title: "입점하면 생기는 것", lead: "" }],
-      ["faq", { type: "faq", enabled: true, title: "자주 묻는 질문" }],
+      ["photos", { type: "photos", enabled: true, title: "활동사진", lead: "" }],
+      ["video", { type: "video", enabled: true, title: "영상으로 보기", url: "", lead: "" }],
+      ["steps", { type: "steps", enabled: false, title: "입점은 이렇게 진행됩니다", lead: "" }],
+      ["benefits", { type: "benefits", enabled: false, title: "입점하면 생기는 것", lead: "" }],
+      ["faq", { type: "faq", enabled: false, title: "자주 묻는 질문" }],
       ["contact", { type: "contact", enabled: true, title: "연락처·오시는 길", hours: "" }],
     ];
     for (const [type, sec] of guides) {
@@ -302,6 +331,20 @@ function renderSection(s, deps) {
     case "updates":
       if (!deps.updatesHtml) return ""; // 소식 없으면 섹션 숨김
       return sectionWrap("section-sub", s.title || "가게가 전하는 소식", "", `<div class="update-grid">${deps.updatesHtml}</div>`);
+    case "photos":
+      // 사진 붙은 공지가 없으면 섹션 자체가 없다 — 빈 사진판은 '아직 아무것도 안 한 상인회'로 읽힌다
+      if (!deps.photosHtml) return "";
+      return sectionWrap("section-alt section-sub", s.title || "활동사진", s.lead || "",
+        `<div class="photo-board">${deps.photosHtml}</div>`, { href: `${deps.base}/notices`, label: "전체보기" });
+    case "video": {
+      // 주소를 넣지 않으면 아예 없는 섹션이다 — 빈 검은 네모를 남기지 않는다
+      const em = parseEmbed(s.url || "");
+      if (!em) return "";
+      return sectionWrap("section-sub", s.title || "영상으로 보기", s.lead || "",
+        `<div class="home-video"><iframe src="${esc(embedSrc(em.provider, em.id))}" title="${esc(s.title || "영상")}"
+          loading="lazy" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"
+          allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture"></iframe></div>`);
+    }
     case "mapbanner": {
       const n = deps.stats ? deps.stats.businesses : 0; // counts.businesses 는 페이지당 카드 수 — 전체 수는 stats
       if (!n) return ""; // 점포가 0곳이면 빈 지도로 보내는 배너일 뿐이라 숨깁니다

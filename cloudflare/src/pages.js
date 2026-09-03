@@ -201,11 +201,24 @@ export async function home(ctx, opts = {}) {
     <a class="cat-tab cat-tab-all" href="${base}/businesses">전체 ${Number(stats.businesses) || 0}곳</a>
   </nav>` : "";
   const eventsHtml = events.map((e) => eventCard(base, e)).join("");
+  // ── 활동사진 —— 사진이 붙은 공지를 사진판으로 보여준다.
+  // 상인회가 실제로 무엇을 하는 곳인지는 문장보다 사진이 빨리 말한다.
+  // 다만 같은 공지를 사진판과 공지 목록에 두 번 늘어놓지는 않는다 — 사진판이 켜져 있으면
+  // 그 공지는 사진판 몫이고, 아래 공지 목록에는 사진 없는 것만 남는다.
+  const photoOn = lay.some((s) => s.type === "photos" && s.enabled !== false);
+  const withPhoto = photoOn ? notices.filter((n) => n.image) : [];
+  const textNotices = photoOn ? notices.filter((n) => !n.image) : notices;
+  const photosHtml = withPhoto.slice(0, 6).map((n) => `<a class="pb-card" href="${base}/notices/${n.id}">
+    <span class="pb-shot"><img src="${esc(mediaUrl(n.image))}" alt="" loading="lazy" />
+      <span class="pb-view" aria-hidden="true">view <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></span></span>
+    <time>${esc(kstDate(n.created_at))}</time>
+    <strong>${esc(n.title)}</strong></a>`).join("");
   const body = renderHome(lay, {
     assoc, base, stats, businessesHtml, businessRowsHtml, openCount, catTiles, eventsHtml, loggedIn: !!user,
     heroImage: assoc.hero_image ? mediaUrl(assoc.hero_image) : "",
     heroVideo: assoc.hero_video ? mediaUrl(assoc.hero_video) : "",
-    noticesHtml: notices.length ? noticeRows(base, notices) : "",
+    photosHtml,
+    noticesHtml: textNotices.length ? noticeRows(base, textNotices) : "",
     counts: { businesses: items.length, notices: notices.length, events: events.length },
     // 사진 카드 구성은 8곳, 한 줄 목록 구성은 12곳을 보여준다
     suggestNames: names.map((r) => r.name),
