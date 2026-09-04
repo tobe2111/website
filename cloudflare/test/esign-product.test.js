@@ -88,7 +88,7 @@ test("전자계약 조직의 관리자 콘솔에는 점포·회비·홈구성이
 test("상인회 관리자 콘솔은 기존 그대로다", async () => {
   const jar = await loginAs("m@x.kr", "admin1234");
   const h = await (await req("GET", "/t/mart/admin", { cookie: jar })).text();
-  assert.match(h, /업체 관리|업체 승인/);
+  assert.match(h, /회원·점포|업체 승인/);
   assert.match(h, /회비 장부/);
   assert.match(h, /홈페이지 구성 편집/);
 });

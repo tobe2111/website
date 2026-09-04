@@ -2949,4 +2949,137 @@ a.bc-val,.map-store-name,.map-store-link{display:inline-flex;align-items:center;
   .sec-v5 .join-cta{border-radius:18px;align-items:stretch}
   .jc-go{justify-content:space-between;width:100%;padding:14px 18px;border-radius:var(--r-pill);
     background:rgba(255,255,255,.16);min-height:56px}
+/* ==========================================================================
+   업무 콘솔 (.is-console) — 손님 화면이 아니라 '일하는 화면'
+
+   관리자 화면이 홈페이지처럼 보이던 이유는 색이 아니라 뼈대였습니다.
+   위에는 손님용 메뉴, 아래에는 회사 소개 푸터, 가운데 1140px 만 쓰고 좌우는 비어 있고,
+   회원 34명이 세로 9,948px 로 끝없이 이어졌습니다. 표에 머리도 검색도 쪽수도 없었습니다.
+
+   여기서 고치는 것 셋:
+     ① 껍데기를 벗긴다 — 손님 메뉴·마케팅 푸터는 render.js 에서 이미 빠졌고, 여기서는 폭을 넓힙니다
+     ② 차림표를 붙잡는다 — 표를 아래로 훑는 동안 왼쪽 차림표가 따라옵니다
+     ③ 목록을 표로 바꾼다 — 고정된 머리 · 검색 · 거르개 · 쪽수
+   ========================================================================== */
+body.is-console{--container:1560px}
+body.is-console .container{padding-inline:clamp(20px,3vw,36px)}
+body.is-console .site-header{position:sticky;top:0;z-index:60;background:var(--surface);border-bottom:1px solid var(--line)}
+body.is-console .main-nav{gap:18px;align-items:center;font-size:13.5px}
+body.is-console .main-nav a{color:var(--muted);font-weight:600}
+body.is-console .main-nav a:hover{color:var(--ink)}
+.cnav-out{color:var(--brand-text)!important}
+.cnav-out-form{display:inline-flex}
+.dash{padding-top:clamp(20px,2.4vw,30px)}
+.dash .dash-head{margin-bottom:18px}
+.dash .dash-title{font-size:clamp(1.25rem,2.2vw,1.55rem);font-weight:800}
+/* 차림표가 표를 따라 내려옵니다 — 40번째 줄에서 다른 탭으로 가려고 맨 위까지 올라가지 않게 */
+@media (min-width:861px){
+  .dash .console-side nav{position:sticky;top:calc(var(--header-h) + 18px)}
+}
+
+/* ── 표 도구줄: 찾기 · 거르개 · 건수 ─────────────────────────────── */
+.tbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.tbar-search{display:flex;gap:6px;flex:1 1 260px;min-width:0;max-width:380px}
+.tbar-search input{flex:1;min-width:0;height:36px;padding:0 12px;font-size:14px}
+.tbar-chips{display:flex;gap:6px;flex-wrap:wrap}
+.tbar-chip{
+  height:32px;display:inline-flex;align-items:center;gap:6px;padding:0 12px;
+  border:1px solid var(--line);border-radius:8px;background:var(--surface);
+  font-size:13px;font-weight:600;color:var(--muted);white-space:nowrap;
+}
+.tbar-chip:hover{border-color:var(--ink-soft);color:var(--ink)}
+.tbar-chip.on{background:var(--ink);border-color:var(--ink);color:#fff}
+.tbar-chip b{font-variant-numeric:tabular-nums;font-weight:700;opacity:.75}
+.tbar-count{margin-left:auto;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.tbar-count b{color:var(--ink);font-weight:700}
+
+/* ── 데이터 표 ────────────────────────────────────────────────────
+   머리가 스크롤에 붙어 있어야 40번째 줄에서도 어느 칸이 무엇인지 압니다.
+   줄 높이를 낮춰 한 화면에 더 담고, 누르는 자리는 줄 전체로 넓힙니다. */
+/* 겉상자에 overflow 를 주면 안 됩니다 — 그 순간 표 머리의 '붙어 있기' 가
+   화면이 아니라 그 상자에 묶여, 아래로 훑으면 머리가 같이 사라집니다.
+   둥근 모서리는 상자를 자르는 대신 표 머리·바닥 칸에 직접 줍니다. */
+.dtable-wrap{border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+table.dtable{width:100%;border-collapse:separate;border-spacing:0;font-size:14px;min-width:600px}
+table.dtable thead th{
+  position:sticky;top:calc(var(--header-h) + 1px);z-index:5;
+  background:var(--bg);border-bottom:1px solid var(--line);
+  padding:9px 14px;text-align:left;white-space:nowrap;
+  font-size:12px;font-weight:700;letter-spacing:.02em;color:var(--muted);
+}
+table.dtable thead th:first-child{border-top-left-radius:11px}
+table.dtable thead th:last-child{border-top-right-radius:11px}
+table.dtable tbody tr:last-child td:first-child{border-bottom-left-radius:11px}
+table.dtable tbody tr:last-child td:last-child{border-bottom-right-radius:11px}
+table.dtable tbody td{padding:11px 14px;border-bottom:1px solid var(--line-soft);vertical-align:middle}
+table.dtable tbody tr:last-child td{border-bottom:0}
+table.dtable tbody tr:hover td{background:var(--bg)}
+table.dtable .num{text-align:right;font-variant-numeric:tabular-nums}
+table.dtable .act{text-align:right;white-space:nowrap;width:1%}
+table.dtable .act form{display:inline-flex}
+table.dtable .act > * + *{margin-left:6px}
+/* 첫 칸은 그 줄이 무엇인지 — 굵게, 그리고 상세로 가는 길 */
+.dt-main{display:block;font-weight:700;color:var(--ink)}
+a.dt-main:hover{color:var(--brand-text);text-decoration:underline}
+.dt-sub{display:block;margin-top:2px;font-size:12.5px;color:var(--muted)}
+.dt-empty{padding:44px 16px;text-align:center;color:var(--muted)}
+.dt-empty b{display:block;color:var(--ink);font-size:15px;margin-bottom:4px}
+
+/* ── 쪽수 ─────────────────────────────────────────────────────── */
+.pager{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:14px;flex-wrap:wrap}
+.pager a,.pager span{
+  min-width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;
+  padding:0 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);
+  font-size:13px;font-weight:600;color:var(--muted);font-variant-numeric:tabular-nums;
+}
+.pager a:hover{border-color:var(--ink-soft);color:var(--ink)}
+.pager .on{background:var(--ink);border-color:var(--ink);color:#fff}
+.pager .gap{border:0;background:none;min-width:16px;padding:0}
+
+@media (min-width:721px) and (max-width:900px){
+  .dtable-wrap{overflow-x:auto}   /* 이 구간에서만 — 여기서는 머리가 안 붙어도 줄이 몇 개 안 보인다 */
+}
+@media (max-width:720px){
+  .tbar-count{margin-left:0;width:100%}
+  table.dtable{min-width:0}
+  table.dtable thead{display:none}
+  table.dtable tbody td{display:block;border-bottom:0;padding:2px 14px}
+  table.dtable tbody td:first-child{padding-top:12px}
+  table.dtable tbody td.act{padding:10px 14px 14px;text-align:left}
+  table.dtable tbody tr{display:block;border-bottom:1px solid var(--line-soft)}
+  table.dtable tbody tr:last-child{border-bottom:0}
+  table.dtable td[data-th]::before{content:attr(data-th) " ";color:var(--muted);font-size:12.5px}
+}
+
+/* ── 콘솔 안의 입력칸 —— 손님 화면과 같은 크기를 쓰면 안 됩니다 ─────────
+   손님용 폼은 휴대폰에서 엄지로 누르는 것이라 칸이 큽니다. 관리자는 데스크톱에서
+   마우스와 탭키로 하루에 수십 번 칩니다. 같은 크기를 쓰면 '회원 추가' 폼 하나가
+   화면 1,400px 을 먹고, 그 아래에 뭐가 있는지 보이지 않습니다.
+   휴대폰 폭에서는 원래 크기로 되돌립니다 — 거기서는 엄지로 누르는 게 맞습니다. */
+@media (min-width:861px){
+  .dash .stack-form{gap:12px}
+  .dash .stack-form > label,
+  .dash .form-two > label{font-size:13px;font-weight:600;color:var(--ink-soft);gap:5px}
+  .dash .stack-form input:not([type=checkbox]):not([type=radio]),
+  .dash .stack-form select,
+  .dash .form-two input:not([type=checkbox]):not([type=radio]),
+  .dash .form-two select{min-height:38px;height:38px;padding:0 11px;font-size:14px}
+  .dash .stack-form textarea{font-size:14px;padding:9px 11px}
+  .dash .form-two{gap:12px 16px}
+  /* 콘솔의 제출 단추는 폭을 다 먹지 않습니다 — 폼이 끝났다는 표시면 충분합니다 */
+  .dash .stack-form .btn-block{display:inline-flex;width:auto;min-width:180px;align-self:flex-start}
+  .dash .panel-hint{font-size:13px;line-height:1.55}
+}
+
+/* 데스크톱에서 '급한 일' 덩어리를 조인다.
+   파랗게 키운 것은 눈에 띄게 하려던 것인데, 다섯 줄이 화면의 절반을 먹으면
+   '급한 일' 이 아니라 '화면 전부' 가 됩니다. 크게 만드는 것과 눈에 띄는 것은 다릅니다.
+   휴대폰에서는 원래 크기를 씁니다 — 거기서는 한 번에 한 덩어리만 보입니다. */
+@media (min-width:861px){
+  .home-sheet{background:none;padding:0}       /* 흰 카드 안의 파란 카드 — 겹상자를 하나 걷습니다 */
+  .hot{padding:16px 18px 6px}
+  .hot-n{font-size:30px}
+  .hot-h{padding-bottom:10px}
+  .hot-h h3{font-size:15.5px}
+  .hot-row{padding:9px 0}
 }

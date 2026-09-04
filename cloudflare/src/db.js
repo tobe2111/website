@@ -398,6 +398,39 @@ export const listAllBusinesses = (db, aid) =>
   all(db, `SELECT b.*, u.email AS owner_email, u.name AS owner_name FROM businesses b JOIN users u ON u.id=b.owner_id
            WHERE b.association_id=? ORDER BY CASE b.status WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END, b.created_at DESC`, aid);
 
+// 관리자 목록 — 찾기·거르개·쪽수.
+//
+// 예전에는 전부를 한 번에 뽑아 한 화면에 늘어놓았다. 34곳에 세로 9,948px 이었고,
+// 300곳이면 8만 픽셀이다. 회장님이 특정 사장님 하나를 찾으려면 브라우저 찾기를 눌러야 했다.
+// 그리고 같은 사람이 '회원 목록' 과 '업체 관리' 에 두 번 나와 화면이 두 배로 길었다 —
+// 상인회에서 회원과 점포는 같은 것이므로 표도 하나여야 한다.
+export async function listBusinessesPage(db, aid, { q = "", status = "", limit = 50, offset = 0 } = {}) {
+  let where = " WHERE b.association_id = ?"; const args = [aid];
+  if (status) { where += " AND b.status = ?"; args.push(status); }
+  if (q) {
+    const l = likeParam(q);
+    // 전화번호는 숫자만 저장하므로, 하이픈을 넣어 친 것도 찾히게 숫자만 남겨 한 번 더 본다
+    const digits = String(q).replace(/\D/g, "");
+    where += ` AND (b.name LIKE ? ESCAPE '\\' OR b.category LIKE ? ESCAPE '\\' OR u.name LIKE ? ESCAPE '\\'
+                    OR b.address LIKE ? ESCAPE '\\'${digits ? " OR u.phone LIKE ? ESCAPE '\\' OR b.phone LIKE ? ESCAPE '\\'" : ""})`;
+    args.push(l, l, l, l);
+    if (digits) { const d = likeParam(digits); args.push(d, d); }
+  }
+  const base = ` FROM businesses b JOIN users u ON u.id = b.owner_id${where}`;
+  const total = (await first(db, "SELECT COUNT(*) AS n" + base, ...args)).n;
+  const rows = await all(db, `SELECT b.*, u.email AS owner_email, u.name AS owner_name, u.phone AS owner_phone, u.id AS owner_uid${base}
+    ORDER BY CASE b.status WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END, b.created_at DESC
+    LIMIT ? OFFSET ?`, ...args, limit, offset);
+  return { rows, total };
+}
+// 거르개 칩에 붙는 건수 — 0 건인 칸도 보여야 "반려가 없다" 는 사실을 알 수 있다
+export async function businessStatusCounts(db, aid) {
+  const rows = await all(db, "SELECT status, COUNT(*) AS n FROM businesses WHERE association_id=? GROUP BY status", aid);
+  const out = { all: 0, pending: 0, approved: 0, rejected: 0 };
+  for (const r of rows) { out[r.status] = r.n; out.all += r.n; }
+  return out;
+}
+
 function bizWhere(aid, { status = "approved", category = null, q = null }) {
   let sql = " WHERE association_id = ? AND status = ?"; const args = [aid, status];
   if (category) { sql += " AND category = ?"; args.push(category); }

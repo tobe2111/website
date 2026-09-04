@@ -29,6 +29,16 @@ const CATEGORIES = ["음식점", "카페·디저트", "생활·서비스", "패�
 const NOTICE_CATEGORIES = ["안내", "공지", "소식", "행사", "혜택", "긴급"];
 const qs = (o) => { const p = new URLSearchParams(); for (const [k, v] of Object.entries(o)) if (v != null && v !== "" && !(k === "page" && v === 1)) p.set(k, v); const s = p.toString(); return s ? "?" + s : ""; };
 const canModerate = (user, assoc) => user && (user.role === "SUPERADMIN" || (user.role === "ADMIN" && user.association_id === assoc.id));
+// 쪽 번호 — 앞뒤 1·2쪽과 현재 주변만 내고 나머지는 '…' 로 접는다.
+// 쪽이 서른 개인데 서른 개를 다 그리면 그 줄을 읽는 데 또 시간이 든다.
+function pageLinks(cur, total) {
+  const out = [];
+  for (let i = 1; i <= total; i++) {
+    if (i === 1 || i === total || Math.abs(i - cur) <= 1) out.push(i);
+    else if (out[out.length - 1] !== "…") out.push("…");
+  }
+  return out;
+}
 
 // 카테고리 SVG 라인 아이콘 (디자인 시스템: brand-700 stroke, 이모지 대체)
 const _ic = (inner) => `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${inner}</svg>`;
@@ -1386,7 +1396,13 @@ export async function admin(ctx) {
   const { db, env, assoc, base, user, query, csrf } = ctx;
   // 독립 쿼리 병렬화 — D1 은 쿼리마다 왕복이라 직렬 대기가 관리자 TTFB 의 주범이었음
   const duePeriod0 = /^\d{4}-\d{2}$/.test(query.get("due_period") || "") ? query.get("due_period") : D.kstToday().slice(0, 7);
-  const [s, all, notices, events, members, admins, notifs, unread, auditLog, met, assocProducts, allRsvps, dueRowsRaw, visitsRaw, popupList] = await Promise.all([
+  // 점포 목록은 찾기·거르개·쪽수로 끊어 가져온다. 전부 뽑아 한 화면에 늘어놓으면
+  // 300곳짜리 상인회에서 화면이 8만 픽셀이 된다.
+  const bizQ = (query.get("bq") || "").trim().slice(0, 60);
+  const bizStatus = ["pending", "approved", "rejected"].includes(query.get("bs")) ? query.get("bs") : "";
+  const BIZ_PER = 50;
+  const bizPage = Math.max(1, parseInt(query.get("bp") || "1", 10) || 1);
+  const [s, all, notices, events, members, admins, notifs, unread, auditLog, met, assocProducts, allRsvps, dueRowsRaw, visitsRaw, popupList, bizPageData, bizCounts] = await Promise.all([
     D.stats(db, assoc.id),
     D.listAllBusinesses(db, assoc.id),
     D.listNotices(db, assoc.id),
@@ -1402,6 +1418,8 @@ export async function admin(ctx) {
     D.listDuesForPeriod(db, assoc.id, duePeriod0),
     D.visitTrend(db, assoc.id).catch(() => ({ cur: 0, prev: 0 })),
     D.listPopups(db, assoc.id).catch(() => []),
+    D.listBusinessesPage(db, assoc.id, { q: bizQ, status: bizStatus, limit: BIZ_PER, offset: (bizPage - 1) * BIZ_PER }),
+    D.businessStatusCounts(db, assoc.id),
   ]);
   const today = new Date().toISOString().slice(0, 10);
   const visits = { cur: Number(visitsRaw && visitsRaw.cur) || 0, prev: Number(visitsRaw && visitsRaw.prev) || 0 };
@@ -1470,12 +1488,49 @@ export async function admin(ctx) {
   const auditPanel = `<details class="panel panel-fold"><summary class="panel-title">감사 로그 <span class="badge badge-muted">최근 ${auditLog.length}</span></summary>
     <ul class="audit-list">${auditLog.length ? auditLog.map((a) => `<li><span class="audit-action">${esc(a.action)}</span> <span class="audit-detail">${esc(a.detail)}</span><span class="audit-meta">${esc(a.actor_name)} · ${esc(kstStamp(a.created_at, { year: false }))}</span></li>`).join("") : `<li class="empty">기록이 없습니다.</li>`}</ul></details>`;
 
-  const bizRows = all.length ? all.map((b) => `<tr><td><a href="${base}/business/${esc(b.slug)}" target="_blank">${esc(b.name)}</a><br /><small>${esc(b.category)}</small></td>
-    <td>${esc(b.owner_name)}<br /><small>${isPlaceholderEmail(b.owner_email)
-      ? '<span class="badge badge-wait">로그인 미설정</span>' : esc(b.owner_email)}</small></td><td>${statusBadge(b.status)}</td>
-    <td class="actions-cell"><a class="btn btn-xs btn-ghost" href="${base}/admin/business/${b.id}">정보 채우기</a>
-      ${b.status !== "approved" ? `<form method="post" action="${base}/admin/business/${b.id}/status"><input type="hidden" name="status" value="approved"><button class="btn btn-xs btn-primary">승인</button></form>` : ""}
-      ${b.status !== "rejected" ? `<form method="post" action="${base}/admin/business/${b.id}/status"><input type="hidden" name="status" value="rejected"><button class="btn btn-xs btn-ghost">반려</button></form>` : ""}</td></tr>`).join("") : `<tr><td colspan="4" class="empty">등록된 업체가 없습니다.</td></tr>`;
+  // ── 점포·회원 표 ────────────────────────────────────────────────
+  //
+  // 예전에는 같은 사람이 '회원 목록' 과 '업체 관리' 에 두 번 나왔다. 상인회에서 회원과
+  // 점포는 같은 것이므로 표도 하나다 — 두 벌이면 화면만 두 배로 길어지고, 어느 쪽에서
+  // 손대야 하는지도 헷갈린다.
+  const bizLink = (extra) => `${base}/admin${qs({ bq: bizQ, bs: bizStatus, bp: 1, ...extra })}#s-people`;
+  const bizChips = [["", "전체", bizCounts.all], ["pending", "승인 대기", bizCounts.pending],
+    ["approved", "공개 중", bizCounts.approved], ["rejected", "반려", bizCounts.rejected]]
+    .map(([v, label, n]) => `<a class="tbar-chip${bizStatus === v ? " on" : ""}" href="${bizLink({ bs: v })}">${label} <b>${n}</b></a>`).join("");
+  const bizToolbar = `<div class="tbar">
+    <form method="get" action="${base}/admin" class="tbar-search" role="search">
+      ${bizStatus ? `<input type="hidden" name="bs" value="${esc(bizStatus)}" />` : ""}
+      <input type="search" name="bq" value="${esc(bizQ)}" placeholder="가게 이름 · 사장님 · 업종 · 전화번호" aria-label="점포 찾기" />
+      <button class="btn btn-ghost btn-sm">찾기</button>
+    </form>
+    <div class="tbar-chips">${bizChips}</div>
+    <span class="tbar-count">${bizQ || bizStatus ? `${bizCounts.all}곳 중 <b>${bizPageData.total}</b>곳` : `모두 <b>${bizPageData.total}</b>곳`}</span>
+  </div>`;
+  const loginCell = (b) => !isPlaceholderEmail(b.owner_email) ? esc(b.owner_email)
+    : b.owner_phone ? `<span class="badge badge-ok">휴대폰</span> ${esc(D.maskPhone(b.owner_phone))}`
+    : '<span class="badge badge-wait">로그인 수단 없음</span>';
+  const bizRows = bizPageData.rows.map((b) => `<tr>
+    <td data-th="가게"><a class="dt-main" href="${base}/admin/business/${b.id}">${esc(b.name)}</a>
+      <span class="dt-sub">${esc(b.category || "업종 미지정")}${b.address ? " · " + esc(String(b.address).split(" ").slice(0, 3).join(" ")) : ' · <span class="txt-muted">주소 없음</span>'}</span></td>
+    <td data-th="사장님">${esc(b.owner_name)}<span class="dt-sub">${loginCell(b)}</span></td>
+    <td data-th="상태">${statusBadge(b.status)}</td>
+    <td data-th="등록" class="num"><span class="dt-sub">${esc(kstDate(b.created_at))}</span></td>
+    <td class="act">
+      ${b.status === "pending" ? `<form method="post" action="${base}/admin/business/${b.id}/status"><input type="hidden" name="status" value="approved"><button class="btn btn-xs btn-primary">승인</button></form>
+        <form method="post" action="${base}/admin/business/${b.id}/status"><input type="hidden" name="status" value="rejected"><button class="btn btn-xs btn-ghost">반려</button></form>`
+        : `<a class="btn btn-xs btn-ghost" href="${base}/admin/business/${b.id}">정보 채우기</a>
+           ${b.status === "approved" ? `<a class="btn btn-xs btn-ghost" href="${base}/business/${esc(b.slug)}" target="_blank" rel="noopener">가게 보기 ↗</a>` : ""}`}
+    </td></tr>`).join("");
+  const bizPages = Math.max(1, Math.ceil(bizPageData.total / BIZ_PER));
+  const bizPager = bizPages < 2 ? "" : `<nav class="pager" aria-label="점포 목록 쪽 이동">${
+    pageLinks(bizPage, bizPages).map((p) => p === "…" ? '<span class="gap">…</span>'
+      : p === bizPage ? `<span class="on" aria-current="page">${p}</span>`
+      : `<a href="${base}/admin${qs({ bq: bizQ, bs: bizStatus, bp: p })}#s-people">${p}</a>`).join("")}</nav>`;
+  const bizTable = `${bizToolbar}<div class="dtable-wrap"><table class="dtable">
+    <thead><tr><th>가게</th><th>사장님 · 로그인</th><th>상태</th><th class="num">등록</th><th class="act">관리</th></tr></thead>
+    <tbody>${bizRows}</tbody></table>${bizPageData.rows.length ? "" : `<div class="dt-empty">
+      <b>${bizQ || bizStatus ? "찾는 조건에 맞는 가게가 없습니다" : "아직 등록된 가게가 없습니다"}</b>
+      ${bizQ || bizStatus ? `<a href="${base}/admin#s-people">조건 지우기</a>` : "아래 <b>회원 추가</b>에서 상호만 치면 주소·전화가 자동으로 채워집니다."}</div>`}</div>${bizPager}`;
   // 전자계약 조직은 '담당자'(관리자·담당자)를 관리한다 — 목록·권한회수·비번 재발급이 필요하다.
   // 한 번 발급한 계정을 회수할 방법이 없으면 퇴사자가 계약을 계속 만들 수 있다.
   const staffList = [...admins, ...(await D.listUsersByAssociation(db, assoc.id, "STAFF"))];
@@ -1530,17 +1585,8 @@ export async function admin(ctx) {
         ${assoc.team_scope ? 'data-confirm="부서 경계를 끌까요?&#10;담당자가 조직의 계약을 다시 모두 보게 됩니다."' : ""}>${assoc.team_scope ? "끄기" : "켜기"}</button>
       ${teams.length ? "" : `<small class="txt-muted">부서를 먼저 하나 만들어 주세요.</small>`}</form></section>`;
 
-  // 사장님이 무엇으로 들어오는지를 그 자리에 적는다.
-  // 가짜 주소(@no-login.invalid)를 그대로 보여 주면 회장님이 그걸 진짜 주소로 알고
-  // 사장님께 불러 줄 수 있어서, 주소 대신 '무엇으로 로그인하는지' 를 쓴다.
-  const loginBy = (m) => !isPlaceholderEmail(m.email) ? esc(m.email)
-    : m.phone ? '<span class="badge badge-ok">휴대폰으로 로그인</span>'
-    : '<span class="badge badge-wait">로그인 수단 없음</span>';
-  const memberRows = members.length ? members.map((m) => `<tr><td>${esc(m.name)}<br /><small>${loginBy(m)}${
-      m.phone ? ` · ${esc(D.maskPhone(m.phone))}` : ""}</small></td><td>${esc(m.business_name || "-")}</td>
-    <td class="actions-cell"><form method="post" action="${base}/admin/user/${m.id}/reset-password" data-confirm="임시 비밀번호를 발급할까요?"><button class="btn btn-xs btn-ghost"${
-      isPlaceholderEmail(m.email) && !m.phone ? " disabled title=\"이메일도 휴대폰 번호도 없어 로그인할 방법이 없습니다 — 점포 화면에서 하나를 넣어 주세요\"" : ""
-    }>임시 비밀번호</button></form></td></tr>`).join("") : `<tr><td colspan="3" class="empty">회원이 없습니다.</td></tr>`;
+  // (회원 목록은 위 점포 표 하나로 합쳤다 — 상인회에서 회원과 점포는 같은 것이다.
+  //  비밀번호 발급처럼 한 사람에 대한 일은 그 가게 화면의 [사장님 로그인] 에 모여 있다.)
   // ── 회원 추가 —— 예전에는 접힌 상자 안 맨 아래에 있어 아무도 못 찾았다.
   // 상인회장이 명단을 먼저 넣는 것이 실제 시작 방식이므로, 이건 눈에 보이는 자리에 있어야 한다.
   const kakaoReady = !!String(env.KAKAO_REST_KEY || "").trim();
@@ -1838,7 +1884,7 @@ export async function admin(ctx) {
     </div></div>
 
     <div class="sgroup" id="s-people" data-tab="people">
-    <section class="panel" id="p-members"><div class="panel-head"><h2 class="panel-title">${isEsign ? "담당자 관리" : "회원 관리"} <span class="badge badge-muted">${isEsign ? staffList.length : members.length}명</span></h2>
+    <section class="panel" id="p-members"><div class="panel-head"><h2 class="panel-title">${isEsign ? "담당자 관리" : `${isFranchise ? "가맹점" : "회원·점포"}`} <span class="badge badge-muted">${isEsign ? staffList.length + "명" : bizCounts.all + "곳"}</span></h2>
       <span class="pill-row">${members.length && !isEsign ? `<a class="btn btn-xs btn-ghost" href="${base}/admin/members.csv">명단 CSV</a>` : ""}<a class="btn btn-xs btn-ghost" href="${base}/admin/export.json">전체 백업(JSON)</a></span></div>
       ${isEsign ? `<p class="panel-hint">계약서를 만들고 보내는 사람들입니다. <b>담당자</b>는 계약 업무만 하고 설정·API 키·과금은 볼 수 없습니다.
         권한을 회수해도 계정과 서명 이력은 남습니다 — 지우면 증거가 사라지기 때문입니다.</p>
@@ -1847,7 +1893,7 @@ export async function admin(ctx) {
         <p class="panel-hint">사내에서 로그인해 서명하는 분들입니다(계약을 만들지는 않습니다).</p>
         <div class="table-scroll"><table class="admin-table"><thead><tr><th>이름</th><th>비밀번호</th></tr></thead><tbody>${members.map((m) => `<tr><td>${esc(m.name)}<br /><small>${esc(m.email)}</small></td>
           <td class="actions-cell"><form method="post" action="${base}/admin/user/${m.id}/reset-password" data-confirm="임시 비밀번호를 발급할까요?"><button class="btn btn-xs btn-ghost">임시 비밀번호</button></form></td></tr>`).join("")}</tbody></table></div>` : ""}`
-      : `<div class="table-scroll"><table class="admin-table"><thead><tr><th>회원</th><th>업체</th><th>비밀번호</th></tr></thead><tbody>${memberRows}</tbody></table></div>`}
+      : bizTable}
       ${query.get("invite") ? `<div class="invite-box">
         <p class="invite-box-title">초대 링크가 만들어졌습니다 <small>(7일 유효)</small></p>
         <input type="text" class="invite-url" value="${esc(`${ORIGIN}${base}/invite?t=${encodeURIComponent(query.get("invite"))}`)}" readonly data-select-all />
@@ -1878,8 +1924,6 @@ export async function admin(ctx) {
     ${isEsign ? "" : addMemberPanel}
     ${isEsign ? teamsPanel : ""}
     ${isEsign || isFranchise ? "" : duesPanel}
-    ${isEsign ? "" : `<section class="panel" id="p-biz"><h2 class="panel-title">${isFranchise ? "가맹점" : "업체"} 관리</h2><div class="table-scroll"><table class="admin-table">
-      <thead><tr><th>업체</th><th>사장님</th><th>상태</th><th>관리</th></tr></thead><tbody>${bizRows}</tbody></table></div></section>`}
     </div>
 
 ${isEsign ? "" : `<div class="sgroup" id="s-content" data-tab="content">`}
@@ -2504,20 +2548,31 @@ export async function adminBusinessEdit(ctx) {
   // ── 사장님이 무엇으로 들어오는가.
   // 이메일 없이 등록한 계정은 휴대폰 번호가 곧 아이디다. 그래서 번호를 여기서 고칠 수 있어야 한다 —
   // 번호를 잘못 받아 적으면 사장님은 영영 못 들어오고, 그걸 고칠 화면이 어디에도 없었다.
-  const ownerLoginPanel = !owner || !isPlaceholderEmail(owner.email) ? "" :
-    `<section class="panel panel-accent"><h2 class="panel-title">사장님 로그인</h2>
-      <p class="panel-hint">${owner.phone
-        ? `이 사장님은 <b>휴대폰 ${esc(D.maskPhone(owner.phone))} 번호가 아이디</b>입니다. 비밀번호는 회원 목록의 [임시 비밀번호] 로 발급합니다.
+  // 한 사장님에 대한 일은 여기 한 군데에 모은다 — 아이디가 무엇인지, 비밀번호를 어떻게 주는지.
+  // 예전에는 비밀번호 발급이 목록에, 이메일 지정이 이 화면에 흩어져 있었다.
+  const noLogin = owner && isPlaceholderEmail(owner.email);
+  const ownerLoginPanel = !owner ? "" :
+    `<section class="panel${noLogin && !owner.phone ? " panel-accent" : ""}"><h2 class="panel-title">사장님 로그인</h2>
+      <p class="panel-hint">${!noLogin
+        ? `아이디는 <b>${esc(owner.email)}</b> 입니다.`
+        : owner.phone
+        ? `이 사장님은 <b>휴대폰 ${esc(D.maskPhone(owner.phone))} 번호가 아이디</b>입니다.
            이메일은 안 넣으셔도 됩니다 — 사장님이 이메일로 들어오길 원하실 때만 아래에서 정해 주세요.`
-        : `이메일도 휴대폰 번호도 없는 계정이라 사장님은 <b>아직 로그인할 수 없습니다.</b> 아래에서 둘 중 하나를 넣어 주세요.`}</p>
+        : `이메일도 휴대폰 번호도 없는 계정이라 사장님은 <b>아직 로그인할 수 없습니다.</b> 아래에서 둘 중 하나를 넣어 주세요.`}
+        비밀번호를 잊으셨으면 아래 [임시 비밀번호 발급] 을 눌러 새로 알려 드리면 됩니다.</p>
+      <form method="post" action="${base}/admin/user/${owner.id}/reset-password" class="inline-form"
+        data-confirm="${esc(owner.name)}님의 임시 비밀번호를 발급할까요?&#10;기존 비밀번호는 즉시 무효가 됩니다."><button class="btn btn-ghost btn-sm"${
+        noLogin && !owner.phone ? " disabled title=\"아이디가 없어 발급해도 들어올 수 없습니다 — 먼저 아래에서 휴대폰이나 이메일을 넣어 주세요\"" : ""
+      }>임시 비밀번호 발급</button></form>
+      <div class="form-divider">아이디</div>
       <form method="post" action="${base}/admin/business/${b.id}/owner-phone" class="stack-form compact">
-        <label>사장님 휴대폰 (아이디)<input type="tel" name="phone" maxlength="20" inputmode="numeric" autocomplete="tel"
+        <label>사장님 휴대폰${noLogin ? " (아이디)" : " (알림톡 수신)"}<input type="tel" name="phone" maxlength="20" inputmode="numeric" autocomplete="tel"
           placeholder="010-1234-5678" value="${esc(owner.phone ? D.formatPhone(owner.phone) : "")}" /></label>
         <button class="btn btn-ghost btn-sm">휴대폰 번호 저장</button></form>
-      <div class="form-divider">또는 이메일로</div>
+      ${noLogin ? `<div class="form-divider">또는 이메일로</div>
       <form method="post" action="${base}/admin/business/${b.id}/owner-email" class="stack-form compact">
         <label>사장님 이메일<input type="email" name="email" required maxlength="120" autocomplete="email" placeholder="사장님이 쓰시는 이메일" /></label>
-        <button class="btn btn-primary btn-sm">지정하고 임시 비밀번호 발급</button></form></section>`;
+        <button class="btn btn-primary btn-sm">지정하고 임시 비밀번호 발급</button></form>` : ""}</section>`;
 
   const body = `<section class="dash"><div class="container">
     <div class="dash-head"><div><p class="section-eyebrow"><a href="${base}/admin#s-people">← 회원·점포</a></p>

@@ -320,7 +320,7 @@ test("이메일 없이 휴대폰만으로 회원을 추가할 수 있다", async
   // 목록에 가짜 주소를 진짜인 양 보여 주지 않는다
   const html = await (await get(env, j, "/t/seocho/admin")).text();
   assert.ok(!html.includes("no-login.invalid"), "가짜 주소를 화면에 그대로 내보이면 안 된다");
-  assert.match(html, /휴대폰으로 로그인/, "무엇이 아이디인지 목록에 적혀야");
+  assert.match(html, /badge-ok">휴대폰<\/span>/, "무엇이 아이디인지 목록에 적혀야");
 });
 
 test("이메일도 휴대폰도 없으면 거절한다 (연락할 방법이 없다)", async () => {

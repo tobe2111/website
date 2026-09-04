@@ -61,8 +61,17 @@ export function brandTextInk(hex) {
 // 아이콘·테마색은 아래 meta/link 로 충분하다. manifest.webmanifest 파일 자체는 남겨 두되
 // display 를 browser 로 두어, 직접 열어 봐도 설치 대상이 되지 않는다.
 export function layout({ title, assoc, base = "", user = null, body, activeNav = "", description = "", scripts = "", csrf = "", ogImage = "", preloadImage = "", jsonLd = null, product = null, console: consoleKind = "" }) {
-  const nav = assoc ? navHtml(base, user, activeNav, assoc.kind, assoc.preset)
-    : consoleKind === "super" ? superNav()
+  // 업무 화면(콘솔)에는 손님용 메뉴를 걸지 않는다.
+  //
+  // 예전에는 관리자 화면 맨 위에 공개 홈 메뉴(소개·가입 점포·점포 지도·게시판·투표)가,
+  // 맨 아래에 마케팅 푸터(개인정보처리방침·이용약관·저작권)가 그대로 붙어 있었다.
+  // 그러면 화면이 '관리 도구' 가 아니라 '관리자로 로그인한 홈페이지' 로 읽힌다 —
+  // 업무용 콘솔에 회사 소개 푸터를 다는 서비스는 없다.
+  const workScreen = isConsole(body);
+  // 운영사 콘솔은 이미 자기 머리글을 갖고 있다 — 거기까지 바꾸지 않는다.
+  const nav = consoleKind === "super" ? superNav()
+    : workScreen ? consoleNav(assoc, base, user)
+    : assoc ? navHtml(base, user, activeNav, assoc.kind, assoc.preset)
     : product && product.nav !== false ? productNav(user, activeNav, product) : "";
   // 상인회에 속하지 않은 화면의 이름: 제품이 지정되면 그 제품, 아니면 운영사.
   // 예전 기본값("상인회 플랫폼")은 전자계약 고객에게 남의 서비스 간판으로 보였다.
@@ -97,7 +106,7 @@ ${ogImgAbs ? `<meta property="og:image" content="${esc(ogImgAbs)}" />` : ""}
   // 완료 화면·외부 서명자(로그인 없음) 화면에는 하단 탭을 그리지 않는다 — 그 사람은 이 조직의 손님이 아니다
   const bnav = assoc && !isConsole(body) && !isDone && !kindById(assoc.kind).usesLanding ? bottomNav(base, activeNav, assoc.kind, user) : "";
   // 어두운 '완료' 화면이면 머리·바닥도 같은 어둠으로 — 흰 띠가 남으면 화면이 둘로 갈린다
-  const bodyClass = [bnav ? "has-bnav" : "", isDone ? "is-done" : ""].filter(Boolean).join(" ");
+  const bodyClass = [bnav ? "has-bnav" : "", isDone ? "is-done" : "", workScreen ? "is-console" : ""].filter(Boolean).join(" ");
   // 모든 POST 폼에 CSRF 히든 필드 주입
   const injected = csrf
     ? String(body).replace(/(<form\b[^>]*\bmethod\s*=\s*["']post["'][^>]*>)/gi, `$1<input type="hidden" name="_csrf" value="${csrf}">`)
@@ -140,7 +149,7 @@ ${consoleKind === "super" ? `<div class="console-strip"><div class="container co
 <main id="main">${injected}</main>
 ${assoc && kindById(assoc.kind).usesLanding && !isConsole(body) ? stickyBar(assoc, base) : ""}
 ${bnav}
-<footer class="site-footer"><div class="container">
+${workScreen ? "" : `<footer class="site-footer"><div class="container">
   <div class="foot-top">
     <nav class="foot-policy"><a href="/privacy" class="strong">개인정보처리방침</a><span class="sep"></span><a href="/terms">이용약관</a>${assoc ? `<span class="sep"></span><a href="${base}/contact">문의하기</a>` : ""}</nav>
   </div>
@@ -152,7 +161,7 @@ ${bnav}
       <p class="foot-copy">© ${new Date().getFullYear()} ${brand}</p>
     </div>
   </div>
-</div></footer>
+</div></footer>`}
 <script src="${assetUrl("/js/app.js")}" defer></script>${scripts}
 </body></html>`;
 }
@@ -161,6 +170,19 @@ ${bnav}
 // 손님용 고정 바를 업무 화면에 띄우면 표를 가리는 방해물일 뿐이라, 화면 종류로 갈라 준다.
 // (페이지마다 플래그를 넘기는 방식은 새 콘솔 화면을 만들 때 빠뜨리기 쉬워 쓰지 않는다.)
 const isConsole = (body) => /<section class="dash"/.test(String(body));
+
+// 업무 화면의 상단 줄 — 손님용 메뉴 대신 '지금 어느 조직에서 일하는가' 와 나가는 길만.
+// 화면 이동은 왼쪽 사이드바가 맡으므로 여기에 메뉴를 또 늘어놓지 않는다.
+function consoleNav(assoc, base, user) {
+  const out = [];
+  if (assoc) out.push(`<a class="cnav-out" href="${base}/" target="_blank" rel="noopener">사이트 보기 <span aria-hidden="true">↗</span></a>`);
+  if (user && user.role === "SUPERADMIN") out.push(`<a href="/super">운영사 콘솔</a>`);
+  if (user) {
+    out.push(`<a href="/account">${esc(user.name || "내 계정")}</a>`);
+    out.push(`<form method="post" action="/logout" class="cnav-out-form"><button class="btn btn-ghost btn-xs">로그아웃</button></form>`);
+  }
+  return out.join("");
+}
 
 // 프랜차이즈 고정 하단 바 — 스크롤 어디에 있든 전화·신청이 한 번에 닿는다.
 // 랜딩뿐 아니라 매장 안내·공지 같은 하위 페이지에도 붙인다: 거기서 마음먹은 사람이

@@ -239,7 +239,10 @@ test("관리 화면은 하는 일별 탭으로 나뉜다", async () => {
   assert.ok(!/참여 계측/.test(html));
 
   // 같은 패널이 두 군데 그려지면 어느 쪽이 진짜인지 헷갈린다
-  assert.equal((html.match(/id="p-biz"/g) || []).length, 1, "업체 관리가 한 번만");
+  // 회원 목록과 업체 목록은 하나로 합쳤다 — 상인회에서 둘은 같은 것이라, 두 벌이면
+  // 같은 사람이 화면에 두 번 나오고 어느 쪽에서 손대야 하는지 헷갈린다.
+  assert.equal((html.match(/id="p-members"/g) || []).length, 1, "회원·점포 표가 한 번만");
+  assert.ok(!/id="p-biz"/.test(html), "업체 목록을 따로 또 그리지 않는다");
   assert.equal((html.match(/id="p-brand"/g) || []).length, 1, "브랜딩이 한 번만");
   assert.equal((html.match(/id="p-notify"/g) || []).length, 1, "알림톡이 한 번만");
 });
