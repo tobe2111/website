@@ -95,7 +95,7 @@ test("찾기 앞세우기 구성: 사진 없이 검색창이 주인공, 목록�
   assert.match(html, /어느 가게를 찾으세요\?/);
   assert.ok(!html.includes('class="hero-pro'), "사진 히어로는 쓰지 않는다");
   assert.match(html, /class="biz-rows"/);
-  assert.ok(!html.includes('class="market-grid"'), "사진 카드 격자는 쓰지 않는다");
+  assert.ok(!html.includes('class="market-rail"'), "사진 카드 줄은 쓰지 않는다 (한 줄 목록 구성이므로)");
   assert.match(html, /오늘 휴무|오픈|마감/, "배지가 없는 줄이므로 영업 상태를 줄 안에서 말해야 한다");
 });
 
@@ -115,7 +115,7 @@ test("옛 저장 구성도 새 화면으로 그려진다 (구성 필드가 없�
   const { env } = await seed({ layout: old });
   const html = await (await get(env, "/t/s/")).text();
   assert.match(html, /class="hero-pro/, "구성이 안 적혀 있으면 사진 히어로가 기본");
-  assert.match(html, /class="market-grid"/);
+  assert.match(html, /class="market-rail"/, "사진 카드 구성은 가로로 미는 줄로 그린다");
 });
 
 // ── 일하는 화면 —— 읽는 화면이 아니라 훑고 처리하는 화면이다.

@@ -304,7 +304,14 @@ function renderSection(s, deps) {
         s.lead,
         (s.style || "grid") === "list"
           ? `${deps.catTiles || ""}<ul class="biz-rows">${deps.businessRowsHtml || deps.businessesHtml}</ul>`
-          : `${deps.catTiles || ""}<div class="market-grid">${deps.businessesHtml}</div>`,
+          // 가로로 미는 줄 —— 레퍼런스처럼 오른쪽 카드가 살짝 걸쳐 "옆에 더 있다" 를 몸으로 알린다.
+          // 자바스크립트 없이도 손가락·트랙패드로 밀리고, 화살표는 스크립트가 붙을 때만 켜진다.
+          : `${deps.catTiles || ""}<div class="rail-wrap">
+              <div class="market-rail" id="bizRail">${deps.businessesHtml}</div>
+              <div class="rail-nav" hidden>
+                <button type="button" class="rail-btn" data-rail="prev" aria-label="이전 가게 보기"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+                <button type="button" class="rail-btn" data-rail="next" aria-label="다음 가게 보기"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
+              </div></div>`,
         { href: `${deps.base}/businesses`, label: "더보기" }
       );
     case "notices":

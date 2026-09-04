@@ -175,7 +175,10 @@ const isConsole = (body) => /<section class="dash"/.test(String(body));
 // 화면 이동은 왼쪽 사이드바가 맡으므로 여기에 메뉴를 또 늘어놓지 않는다.
 function consoleNav(assoc, base, user) {
   const out = [];
-  if (assoc) out.push(`<a class="cnav-out" href="${base}/" target="_blank" rel="noopener">사이트 보기 <span aria-hidden="true">↗</span></a>`);
+  // 관리자가 가장 자주 누르는 것은 "내 홈페이지 어떻게 보이나" 다. 글자 링크가 아니라 단추로 둔다.
+  // (예전에는 제목 아래에 `홈페이지: /t/우리동네` 라고 주소를 적어 뒀는데, 관리자에게 주소 조각은
+  //  아무 쓸모가 없고 누를 수 있는지도 잘 안 보였다. 그 줄을 지우고 이 단추 하나로 모았다.)
+  if (assoc) out.push(`<a class="cnav-out" href="${base}/" target="_blank" rel="noopener">홈페이지 보기 <span aria-hidden="true">↗</span></a>`);
   if (user && user.role === "SUPERADMIN") out.push(`<a href="/super">운영사 콘솔</a>`);
   if (user) {
     out.push(`<a href="/account">${esc(user.name || "내 계정")}</a>`);

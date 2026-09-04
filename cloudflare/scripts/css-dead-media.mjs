@@ -100,7 +100,8 @@ function scanBlock(text, base, cond) {
 scanBlock(clean, 0, "");
 
 // ── 판정: max-width 미디어 규칙보다 **뒤에** 오는 조건 없는 규칙이 같은 선택자·같은 속성을 다시 쓰는가 ──
-const dead = [];
+const dead = [];   // 같은 선택자를 덮은 것 — 확실히 죽었다
+const maybe = [];  // 선택자를 더 좁혀 덮은 것 — 그 문맥 밖에서는 앞 규칙이 살아 있을 수 있다
 for (const mr of mediaRules) {
   if (!/max-width/i.test(mr.cond)) continue;      // 좁은 화면용 규칙만 본다
   const mspec = specificity(mr.sel);
@@ -111,7 +112,11 @@ for (const mr of mediaRules) {
       // 뒤쪽에 `.sec-v5 .cat-tab{min-height:40px}` 를 두면 앞쪽 @media 의
       // `.cat-tab{min-height:44px}` 가 특정도로 밀려 죽는다 — 실제로 이 저장소에서 났다.
       const same = tr.sel === mr.sel;
-      const narrows = !same && new RegExp("(^|[\\s>+~])" + mr.sel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "$").test(tr.sel);
+      let narrows = !same && new RegExp("(^|[\\s>+~])" + mr.sel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "$").test(tr.sel);
+      // ⚠️ 오탐 걸러내기 — 뒤 규칙이 **페이지 문맥**을 얹은 것이면(`body.is-console …`, `html[data-x] …`)
+      // 앞 규칙은 그 문맥이 아닌 화면에서 여전히 살아 있다. 죽은 것이 아니라 갈라진 것이다.
+      // (실제로 `body.is-console .main-nav` 가 공개 화면의 `.main-nav` 를 죽였다고 잘못 알렸다)
+      if (narrows && /^(body|html)\b/i.test(tr.sel)) narrows = false;
       if (!same && !narrows) continue;
       if (same && specificity(tr.sel) < mspec) continue;   // 같은 선택자인데 특정도가 낮으면 못 이긴다
       const hit = Object.keys(tr.props).find((p) => covers(p, prop));
@@ -120,7 +125,7 @@ for (const mr of mediaRules) {
       // 덮어쓰는 값이 **똑같으면** 화면은 그대로다. 정리할 중복일 뿐 버그가 아니므로 알리지 않는다.
       const norm = (v) => String(v).replace(/\s+/g, " ").trim().toLowerCase();
       if (hit === prop && norm(tr.props[hit]) === norm(mr.props[prop])) continue;
-      dead.push({ sel: mr.sel, prop, cond: mr.cond, bySel: tr.sel,
+      (same ? dead : maybe).push({ sel: mr.sel, prop, cond: mr.cond, bySel: tr.sel,
         mline: clean.slice(0, mr.at).split("\n").length,
         tline: clean.slice(0, tr.at).split("\n").length, by: hit });
       break;
@@ -129,15 +134,23 @@ for (const mr of mediaRules) {
 }
 
 const rel = path.relative(process.cwd(), FILE);
-if (!dead.length) {
-  console.log(`\n✓ ${rel} — 죽은 반응형 규칙 없음 (@media 규칙 ${mediaRules.length}개 검사)\n`);
-  process.exit(0);
-}
-console.log(`\n✗ ${rel} — 뒤 규칙에 덮여 동작하지 않는 반응형 선언 ${dead.length}건\n`);
-for (const d of dead) {
+const show = (d) => {
   console.log(`  ${d.sel} { ${d.prop} }`);
   console.log(`    ${d.mline}줄  @media ${d.cond}  ← 여기서 정한 것이`);
   console.log(`    ${d.tline}줄  \`${d.bySel}\` 의 ${d.by} 에 덮여 무시됩니다\n`);
+};
+// 좁혀서 덮은 것은 **경고**로만 알린다. 앞 규칙이 다른 문맥(다른 화면·다른 컨테이너)에서는
+// 그대로 살아 있을 수 있어, 이것만으로 실패를 내면 고칠 것이 없는데도 계속 빨갛다.
+// 그 문맥이 유일한 자리라면 진짜 버그이므로, 눈으로 한 번 보라고 남긴다.
+if (maybe.length) {
+  console.log(`\n△ ${rel} — 좁힌 선택자에 덮인 선언 ${maybe.length}건 (문맥이 갈린 것일 수 있으니 확인만)\n`);
+  maybe.forEach(show);
 }
+if (!dead.length) {
+  console.log(`✓ ${rel} — 죽은 반응형 규칙 없음 (@media 규칙 ${mediaRules.length}개 검사)\n`);
+  process.exit(0);
+}
+console.log(`\n✗ ${rel} — 뒤 규칙에 덮여 동작하지 않는 반응형 선언 ${dead.length}건\n`);
+dead.forEach(show);
 console.log(`고치는 법: 덮는 규칙 **뒤에** @media 를 다시 쓰거나, 특정도를 한 단 올리세요.\n`);
 process.exit(1);
