@@ -3114,6 +3114,13 @@ a.dt-main:hover{color:var(--brand-text);text-decoration:underline}
 .mini-edit .dtable-wrap{margin-bottom:10px}
 .mini-edit .dtable thead th{position:static}   /* 펼친 상자 안에서는 붙어 있을 필요가 없습니다 */
 
+/* 문의함 — 안 읽은 것은 거르개에서도 눈에 띄어야 합니다 */
+.tbar-chip.is-alert{border-color:var(--wait-fg);color:var(--wait-fg)}
+.tbar-chip.is-alert.on{background:var(--wait-fg);border-color:var(--wait-fg);color:#fff}
+.inbox-msg{margin:14px 14px 4px;padding:12px 14px;background:var(--surface);border-radius:10px;
+  white-space:pre-wrap;font-size:14px;line-height:1.65;color:var(--ink)}
+.mini-edit > .form-two{margin:10px 14px 0}
+
 /* =========================================================================
    홈 v5-b —— 색으로 채운 카드와 가로로 미는 줄
    레퍼런스의 첫 구역이 하는 일은 셋이다: 사진 위·색 아래, 옆으로 걸침, 화살표.
