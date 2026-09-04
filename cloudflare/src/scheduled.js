@@ -29,6 +29,8 @@ export const TABLES = [
   "associations", "users", "businesses", "media", "products", "coupons",
   "updates", "polls", "poll_votes", "event_rsvps", "dues",
   "notices", "events", "posts", "comments", "post_images",
+  // popups: 홈 안내창. 노출 기간까지 함께 살아나야 복원 뒤에 지난 팝업이 다시 뜨지 않는다.
+  "popups",
   "documents", "signatures", "signature_requests",
   // 전자계약 — 필드 배치·채운 값·서식·감사 추적·외부 서명자까지 있어야 계약이 복원된다.
   // (서명 봉인만 남고 '무엇을 어디에 채웠는지'가 없으면 계약서를 다시 그릴 수 없다)

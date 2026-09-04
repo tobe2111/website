@@ -89,6 +89,9 @@ ${ogImgAbs ? `<meta property="og:image" content="${esc(ogImgAbs)}" />` : ""}
   const brandColor = /^#[0-9a-fA-F]{3,8}$/.test((assoc && assoc.brand_color) || "") ? assoc.brand_color : "#1F6CFF";
   const onBrand = onBrandInk(brandColor);
   const brandText = brandTextInk(brandColor);
+  // 구글 애널리틱스(GA4) 측정 ID — 관리자가 넣은 값이 <script src> 의 쿼리로 나가므로
+  // 규격('G-' + 영숫자)에 맞는 것만 통과시킵니다. 저장할 때도 거르지만, 나가는 자리에서 한 번 더 봅니다.
+  const gaId = /^G-[A-Z0-9]{4,20}$/i.test((assoc && assoc.ga_measurement_id) || "") ? assoc.ga_measurement_id : "";
   // 하단 탭 — 휴대폰에서 손님이 쓰는 공개 화면에만. 업무 콘솔은 표를 가리고, 랜딩형은 이미 고정 바가 있다.
   const isDone = /<section class="done-screen"/.test(String(body));
   // 완료 화면·외부 서명자(로그인 없음) 화면에는 하단 탭을 그리지 않는다 — 그 사람은 이 조직의 손님이 아니다
@@ -113,6 +116,9 @@ ${preloadImage ? `<link rel="preload" as="image" fetchpriority="high" href="${es
 <style>:root{--brand:${brandColor};--on-brand:${onBrand};--brand-text:${brandText}}</style>
 ${assoc && assoc.naver_verification ? `<meta name="naver-site-verification" content="${esc(assoc.naver_verification)}" />` : ""}
 ${assoc && assoc.google_verification ? `<meta name="google-site-verification" content="${esc(assoc.google_verification)}" />` : ""}
+${gaId ? `<link rel="preconnect" href="https://www.googletagmanager.com" crossorigin />
+<script async src="https://www.googletagmanager.com/gtag/js?id=${esc(gaId)}"></script>
+<script src="${assetUrl("/js/ga.js")}" data-ga-id="${esc(gaId)}" defer></script>` : ""}
 ${assoc ? `<link rel="alternate" type="application/rss+xml" title="${brand} 공지·소식" href="${base}/feed.xml" />` : ""}
 <meta property="og:locale" content="ko_KR" />
 <meta name="theme-color" content="${brandColor}" />

@@ -296,3 +296,19 @@ document.addEventListener("click", (e) => {
     e.returnValue = ""; // 문구는 브라우저가 정한다 — 우리가 넣어도 무시된다
   });
 })();
+
+// ── 상권 색 견본 ──
+// 누르면 위의 색상 입력칸에 값을 넣습니다. 저장은 기존 '브랜딩 저장' 버튼이 그대로 합니다 —
+// 누르자마자 색이 바뀌면 되돌릴 방법이 없고, 실수로 눌렀다는 것을 알아채기도 어렵습니다.
+(function () {
+  var input = document.getElementById("brandColor");
+  var wrap = document.querySelector(".theme-swatches");
+  if (!input || !wrap) return;
+  wrap.addEventListener("click", function (e) {
+    var btn = e.target.closest("[data-theme-color]");
+    if (!btn) return;
+    input.value = btn.getAttribute("data-theme-color");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    [].forEach.call(wrap.querySelectorAll(".theme-sw"), function (b) { b.classList.toggle("is-on", b === btn); });
+  });
+})();

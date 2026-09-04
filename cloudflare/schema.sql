@@ -6,12 +6,19 @@ CREATE TABLE IF NOT EXISTS associations (
   slug        TEXT NOT NULL UNIQUE,
   name        TEXT NOT NULL,
   tagline     TEXT NOT NULL DEFAULT '함께 성장하는 우리 동네 상권',
-  brand_color TEXT NOT NULL DEFAULT '#0a7d40',
+  brand_color TEXT NOT NULL DEFAULT '#1F6CFF',   -- 디자인 시스템 v3 기본(앱 컨셉 블루). app.css --brand · render.js 기본값과 같다
   phone       TEXT NOT NULL DEFAULT '',
   address     TEXT NOT NULL DEFAULT '',
   email       TEXT NOT NULL DEFAULT '',
   logo        TEXT NOT NULL DEFAULT '',
+  seal_media  TEXT NOT NULL DEFAULT '',    -- 이 조직의 직인(법인 인감) 그림. 계약서의 '우리 도장' 자리에 자동으로 찍힌다
+  -- 부서별로 계약을 나눠 볼 것인가. 0 = 담당자가 조직의 계약을 모두 본다(기본·지금까지의 동작).
+  -- 1 = 담당자는 자기 부서 계약과 자기가 만든 계약만 본다. 관리자는 늘 전부 본다.
+  team_scope  INTEGER NOT NULL DEFAULT 0,
   hero_image  TEXT NOT NULL DEFAULT '',    -- 홈 히어로 배경 사진(R2 키). 비우면 프리미엄 그라데이션 히어로
+  hero_video  TEXT NOT NULL DEFAULT '',    -- 홈 히어로 배경 영상(R2 키·선택). 사진이 poster 가 된다
+  notify_auto INTEGER NOT NULL DEFAULT 0,  -- 알림 자동화. 0 이면 이 조직은 알림톡을 한 통도 자동으로 보내지 않고,
+                                           -- 관리자가 서명 링크를 카톡·문자로 직접 전달한다(기본값).
   map_lat     REAL NOT NULL DEFAULT 37.4837,
   map_lng     REAL NOT NULL DEFAULT 127.0324,
   map_zoom    INTEGER NOT NULL DEFAULT 14,
@@ -25,6 +32,7 @@ CREATE TABLE IF NOT EXISTS associations (
   map_client_id TEXT NOT NULL DEFAULT '',     -- 상인회별 네이버 지도 키 (비우면 플랫폼 공용 키)
   naver_verification TEXT NOT NULL DEFAULT '',  -- 네이버 서치어드바이저 소유 확인 코드
   google_verification TEXT NOT NULL DEFAULT '', -- 구글 서치콘솔 소유 확인 코드
+  ga_measurement_id TEXT NOT NULL DEFAULT '',  -- 구글 애널리틱스(GA4) 측정 ID 'G-XXXXXXX'
   plan        TEXT NOT NULL DEFAULT 'free',   -- 요금제(free|basic|pro)
   -- 조직 유형. merchant  = 상인회 홈페이지(점포·지도·공지 + 전자계약),
   --            esign     = 전자계약만 쓰는 조직(법무·부동산 등),
@@ -75,6 +83,7 @@ CREATE TABLE IF NOT EXISTS users (
   session_version INTEGER NOT NULL DEFAULT 0,
   totp_secret     TEXT NOT NULL DEFAULT '',    -- 2FA base32 시크릿(빈 값=미설정)
   totp_enabled    INTEGER NOT NULL DEFAULT 0,  -- 2FA 활성화 여부
+  team_id         INTEGER NOT NULL DEFAULT 0,  -- 소속 부서 (0 = 부서 없음). 담당자에게만 의미가 있다
   created_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -233,6 +242,24 @@ CREATE TABLE IF NOT EXISTS events (
   created_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- 홈 팝업 —— 관리자가 홈 첫 화면에 띄우는 안내창.
+-- 손님 화면을 가로막는 유일한 것이라 반드시 스스로 사라질 수 있어야 합니다:
+-- 노출 기간(start_date~end_date)이 지나면 자동으로 내려가고, 방문자는 '오늘 하루 보지 않기'로 닫습니다.
+CREATE TABLE IF NOT EXISTS popups (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
+  title          TEXT NOT NULL,
+  body           TEXT NOT NULL DEFAULT '',
+  image          TEXT NOT NULL DEFAULT '',
+  link_url       TEXT NOT NULL DEFAULT '',
+  link_label     TEXT NOT NULL DEFAULT '',
+  start_date     TEXT NOT NULL DEFAULT '',   -- 'YYYY-MM-DD' · 비우면 즉시
+  end_date       TEXT NOT NULL DEFAULT '',   -- 'YYYY-MM-DD' · 비우면 끌 때까지
+  enabled        INTEGER NOT NULL DEFAULT 1,
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_popups_assoc ON popups(association_id, enabled);
+
 CREATE TABLE IF NOT EXISTS notifications (
   id             INTEGER PRIMARY KEY AUTOINCREMENT,
   association_id INTEGER REFERENCES associations(id) ON DELETE CASCADE,
@@ -281,12 +308,19 @@ CREATE TABLE IF NOT EXISTS documents (
   ordered        INTEGER NOT NULL DEFAULT 0,
   due_date       TEXT NOT NULL DEFAULT '',
   closed         INTEGER NOT NULL DEFAULT 0,
+  -- 작성 중(초안)인가. 초안은 서명 요청도, 과금도, 발송도 없다 —
+  -- 쓰다 만 계약서를 저장해 두고 다음 날 이어 쓰기 위한 상태다.
+  draft          INTEGER NOT NULL DEFAULT 0,
   attachment      TEXT NOT NULL DEFAULT '',  -- 계약서 PDF(R2 키). 있으면 본문 대신 이 파일이 계약 원문
   attachment_name TEXT NOT NULL DEFAULT '',  -- 원본 파일명(표시용)
   attachment_hash TEXT NOT NULL DEFAULT '',  -- 첨부 파일 SHA-256 (검증 시 실제 파일과 대조)
   last_remind_at  TEXT NOT NULL DEFAULT '',  -- 마지막 리마인더 발송 — 연타 방지
+  -- 이 계약을 맡은 부서. 0 = 부서 없음 = 조직 전체가 본다.
+  -- 만든 사람의 부서를 그대로 받는다(만든 뒤에 사람의 부서가 바뀌어도 계약은 따라가지 않는다).
+  team_id        INTEGER NOT NULL DEFAULT 0,
   created_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE INDEX IF NOT EXISTS idx_doc_team ON documents(association_id, team_id);
 
 -- 서명 기록.
 -- user_id 와 external_id 중 하나만 채워진다(회원 서명 / 외부 서명자 서명).
@@ -343,12 +377,40 @@ CREATE TABLE IF NOT EXISTS doc_fields (
   y           REAL NOT NULL DEFAULT 0,
   w           REAL NOT NULL DEFAULT 0.2,
   h           REAL NOT NULL DEFAULT 0.04,
-  assignee    INTEGER NOT NULL DEFAULT 0,     -- 서명자 user_id (0 = 서명하는 사람 누구나)
+  assignee    INTEGER NOT NULL DEFAULT 0,     -- 서명자 ref (0 = 누구나 · 양수 = 회원 user_id · 음수 = -외부서명자 id)
+  slot        INTEGER NOT NULL DEFAULT 0,     -- 당사자 자리 (0 = 지정 없음 · 1 = 첫 번째 당사자 …). 보낼 때 assignee 로 확정된다
+  auto        TEXT NOT NULL DEFAULT '',       -- 사람이 아니라 우리가 채우는 자리. 'seal' = 조직 직인 자동 날인
   required    INTEGER NOT NULL DEFAULT 1,
   sort        INTEGER NOT NULL DEFAULT 0,
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_docfield_doc ON doc_fields(document_id, page, sort);
+
+-- 당사자 자리의 이름. '1번째 당사자' 는 자리를 놓는 사람에게 아무것도 말해 주지 않는다 —
+-- 계약서는 임대인·임차인·갑·을 로 말한다. 지면 위 이름표도 그 말이어야 읽힌다.
+CREATE TABLE IF NOT EXISTS doc_parties (
+  document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+  slot        INTEGER NOT NULL,               -- 1 = 첫 번째 당사자 …
+  name        TEXT NOT NULL DEFAULT '',
+  PRIMARY KEY (document_id, slot)
+);
+
+-- 계약서 지면이 '올린 양식' 일 때의 쪽 그림.
+--
+-- 상대방이 보낸 PDF(표준근로계약서·정부 서식·회사 양식)를 옮겨 적지 않고 그대로 쓰려면
+-- 그 쪽들이 지면이어야 한다. 관리자 브라우저에서 PDF 를 쪽별 그림으로 구워 여기에 남긴다.
+--
+-- ⚠️ 법적 원문은 여전히 **원본 PDF 파일**(documents.attachment)이고, 그 해시가 봉인에 들어간다.
+--    여기 그림은 '보기·서명 자리 배치용 지면' 이다. 브라우저 렌더링 결과라 원본과 한 픽셀까지
+--    같다고 보장할 수 없으므로, 증적 패키지에는 반드시 원본 PDF 가 함께 담긴다.
+CREATE TABLE IF NOT EXISTS doc_pages (
+  document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+  page        INTEGER NOT NULL,               -- 0부터
+  media       TEXT NOT NULL,                  -- R2 키 (쪽 그림)
+  w           INTEGER NOT NULL DEFAULT 0,     -- 그림 원래 가로 픽셀 (지면 비율 계산용)
+  h           INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (document_id, page)
+);
 
 -- 채워진 값. 이미지(서명 그림·도장)는 R2 키와 함께 바이트 해시를 남겨 사후 교체를 탐지한다.
 CREATE TABLE IF NOT EXISTS doc_field_values (
@@ -363,6 +425,55 @@ CREATE TABLE IF NOT EXISTS doc_field_values (
   UNIQUE (field_id)
 );
 CREATE INDEX IF NOT EXISTS idx_docfieldval_doc ON doc_field_values(document_id);
+
+-- 부서(팀). 한 조직 안에서 인사팀과 영업팀이 같은 콘솔을 쓰면, 인사팀의 근로계약서가
+-- 영업팀 화면에 그대로 뜬다. 부서를 두면 그 경계가 생긴다.
+--
+-- ⚠️ 부서를 만들었다고 저절로 나뉘지는 않는다. associations.team_scope 를 켜야 한다 —
+--    쓰던 조직의 화면이 어느 날 갑자기 비어 보이면 그건 기능이 아니라 사고다.
+CREATE TABLE IF NOT EXISTS teams (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
+  name           TEXT NOT NULL,
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_team_assoc ON teams(association_id, name);
+
+-- 대량 발송 — 같은 계약서를 여러 사람에게 각각 한 부씩.
+--
+-- 왜 표로 남기는가: 100명에게 보내는 일은 한 번의 요청으로 끝나지 않는다(워커의 시간·요청 한도).
+-- 그래서 받는 사람을 먼저 여기 적어 두고 조금씩 나눠 보낸다. 브라우저를 닫아도 남은 사람이
+-- 그대로 남아 있고, 이미 보낸 사람에게 두 번 가지 않는다.
+CREATE TABLE IF NOT EXISTS doc_batches (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
+  source_id      INTEGER NOT NULL,               -- 원본 초안. 초안이 지워져도 보낸 기록은 남아야 하므로 FK 를 걸지 않는다
+  title          TEXT NOT NULL DEFAULT '',
+  ordered        INTEGER NOT NULL DEFAULT 0,
+  due_date       TEXT NOT NULL DEFAULT '',
+  slot           INTEGER NOT NULL DEFAULT 0,     -- 받는 사람이 앉을 당사자 자리 (0 = 자리 없음)
+  fixed          TEXT NOT NULL DEFAULT '[]',     -- 나머지 자리에 고정으로 앉는 회원 id JSON
+  team_id        INTEGER NOT NULL DEFAULT 0,     -- 만든 사람의 부서 (0 = 부서 없음 = 전체 공개)
+  created_by     INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_docbatch_assoc ON doc_batches(association_id, id);
+
+CREATE TABLE IF NOT EXISTS doc_batch_rows (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  batch_id    INTEGER NOT NULL REFERENCES doc_batches(id) ON DELETE CASCADE,
+  seq         INTEGER NOT NULL DEFAULT 0,        -- 올린 표에서의 줄 번호 (사람이 고칠 때 찾는 번호)
+  name        TEXT NOT NULL DEFAULT '',
+  phone       TEXT NOT NULL DEFAULT '',
+  email       TEXT NOT NULL DEFAULT '',
+  org         TEXT NOT NULL DEFAULT '',
+  vars        TEXT NOT NULL DEFAULT '{}',        -- 이 사람 몫의 빈칸 값 JSON
+  status      TEXT NOT NULL DEFAULT 'pending',   -- pending|sent|failed
+  document_id INTEGER NOT NULL DEFAULT 0,        -- 만들어진 계약서
+  note        TEXT NOT NULL DEFAULT '',          -- 실패 이유 · 보낸 수단
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_docbatchrow ON doc_batch_rows(batch_id, status, seq);
 
 -- 계약서 서식 — 본문 + 필드 배치를 한 벌로 저장해 재사용한다.
 -- 본문의 {{변수}} 는 문서를 만들 때 값만 채운다. association_id=0 이면 플랫폼 공용.
@@ -601,6 +712,10 @@ CREATE TABLE IF NOT EXISTS landing_views (
   day            TEXT NOT NULL,               -- KST 기준 YYYY-MM-DD
   views          INTEGER NOT NULL DEFAULT 0,
   calls          INTEGER NOT NULL DEFAULT 0,  -- 전화 버튼 클릭. 모바일에서는 이게 상담 폼만큼 큰 전환 경로다
+  -- 상인회 홈의 성과 (모집 랜딩의 '상담 신청' 에 해당하는 것이 상인회에는 셋이다)
+  signups        INTEGER NOT NULL DEFAULT 0,  -- 입점 신청 제출 — 상인회가 원하는 최종 결과
+  bizviews       INTEGER NOT NULL DEFAULT 0,  -- 가게 상세 열람 — 홈이 '가게를 보게 만드는가'
+  finds          INTEGER NOT NULL DEFAULT 0,  -- 검색·지도 사용 — 홈이 '찾기' 를 돕는가
   PRIMARY KEY (association_id, variant, day)
 );
 

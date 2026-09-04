@@ -863,6 +863,54 @@ export async function adminDeleteEvent(ctx) {
   }
   return back(base + "/admin", "행사를 삭제했습니다.");
 }
+// ---------- 홈 팝업 ----------
+//
+// 관리자가 홈 첫 화면에 띄우는 안내창입니다. 손님 화면을 가로막는 유일한 요소라
+// 세 가지를 지킵니다: ① 노출 기간이 지나면 스스로 내려간다 ② 방문자가 '오늘 하루 보지 않기'로 닫는다
+// ③ 링크는 http(s) 만 — 관리자 계정이 털렸을 때 javascript: 주소가 팝업 버튼으로 나가면 안 됩니다.
+const YMD = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || "").trim()) ? String(v).trim() : "");
+const httpUrl = (v) => {
+  const t = cap((v || "").trim(), 300);
+  if (!t) return "";
+  // 같은 사이트 안으로 보내는 상대 경로(/t/…)는 그대로 둡니다. 그 외에는 http(s) 만 통과시킵니다.
+  if (t.startsWith("/") && !t.startsWith("//")) return t;
+  return /^https?:\/\//i.test(t) ? t : "";
+};
+export async function adminCreatePopup(ctx) {
+  const { db, env, form, base, assoc } = ctx;
+  const title = (form.get("title") || "").trim();
+  if (!title) return back(base + "/admin", "팝업 제목을 입력하세요.", true);
+  const up = await saveImages(env, form.getAll("image"), 1);
+  if (up.error) return back(base + "/admin", up.error, true);
+  const start = YMD(form.get("start_date")), end = YMD(form.get("end_date"));
+  if (start && end && end < start) return back(base + "/admin", "노출 종료일이 시작일보다 빠릅니다.", true);
+  await D.createPopup(db, {
+    associationId: assoc.id, title: cap(title, 100), body: cap(form.get("body"), 500),
+    image: up.images[0]?.filename || "", linkUrl: httpUrl(form.get("link_url")),
+    linkLabel: cap((form.get("link_label") || "").trim(), 30), startDate: start, endDate: end,
+  });
+  await audit(ctx, "팝업등록", title);
+  return back(base + "/admin", "팝업을 등록했습니다.");
+}
+export async function adminDeletePopup(ctx) {
+  const { db, env, base, assoc, params } = ctx;
+  const p = await D.getPopup(db, Number(params.id));
+  if (p && p.association_id === assoc.id) {
+    if (p.image) await storage.remove(env, p.image);
+    await D.deletePopup(db, p.id);
+    await audit(ctx, "팝업삭제", p.title);
+  }
+  return back(base + "/admin", "팝업을 삭제했습니다.");
+}
+export async function adminTogglePopup(ctx) {
+  const { db, base, assoc, params } = ctx;
+  const p = await D.getPopup(db, Number(params.id));
+  if (!p || p.association_id !== assoc.id) return back(base + "/admin", "팝업을 찾을 수 없습니다.", true);
+  await D.setPopupEnabled(db, p.id, !p.enabled);
+  await audit(ctx, p.enabled ? "팝업내림" : "팝업올림", p.title);
+  return back(base + "/admin", p.enabled ? "팝업을 내렸습니다." : "팝업을 다시 띄웁니다.");
+}
+
 // 히어로 배경 영상 저장 — 파일 이름이나 MIME 은 얼마든지 속일 수 있으므로 실제 바이트로 본다.
 // mp4/mov 는 4바이트 뒤에 "ftyp", webm 은 EBML 매직(1A 45 DF A3)으로 시작한다.
 const HERO_VIDEO_MAX = 8 * 1024 * 1024; // 8MB — 첫 화면에서 받는 파일이다. 크면 시골 LTE 에서 첫 인상이 망가진다
@@ -904,7 +952,10 @@ export async function adminSettings(ctx) {
   // 검색엔진 소유 확인 코드: 메타 태그 content 로 그대로 나가므로 안전한 문자만 허용
   const verCode = (v) => (cap(v, 100) || "").replace(/[^-\w.]/g, "");
   await D.updateAssociation(db, assoc.id, { name: cap(form.get("name").trim(), 100), tagline: cap(form.get("tagline"), 200), brand_color: color, phone: cap(form.get("phone"), 40), email: cap(form.get("email"), 120), address: cap(form.get("address"), 200), logo, hero_image: heroImage, hero_video: heroVideo,
-    naver_verification: verCode(form.get("naver_verification")), google_verification: verCode(form.get("google_verification")) });
+    naver_verification: verCode(form.get("naver_verification")), google_verification: verCode(form.get("google_verification")),
+    // GA4 측정 ID — 'G-' + 영숫자. 이 값은 구글로 나가는 <script src> 의 쿼리에 그대로 붙으므로
+    // 규격에 맞지 않으면 아예 저장하지 않습니다(빈 값 = 애널리틱스 끔).
+    ga_measurement_id: (() => { const v = cap((form.get("ga_measurement_id") || "").trim(), 30).toUpperCase(); return /^G-[A-Z0-9]{4,20}$/.test(v) ? v : ""; })() });
   await audit(ctx, "브랜딩수정", "");
   return back(base + "/admin", "상인회 정보가 저장되었습니다.");
 }

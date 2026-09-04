@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS associations (
   map_client_id TEXT NOT NULL DEFAULT '',     -- 상인회별 네이버 지도 키 (비우면 플랫폼 공용 키)
   naver_verification TEXT NOT NULL DEFAULT '',  -- 네이버 서치어드바이저 소유 확인 코드
   google_verification TEXT NOT NULL DEFAULT '', -- 구글 서치콘솔 소유 확인 코드
+  ga_measurement_id TEXT NOT NULL DEFAULT '',  -- 구글 애널리틱스(GA4) 측정 ID 'G-XXXXXXX'
   plan        TEXT NOT NULL DEFAULT 'free',   -- 요금제(free|basic|pro)
   -- 조직 유형. merchant  = 상인회 홈페이지(점포·지도·공지 + 전자계약),
   --            esign     = 전자계약만 쓰는 조직(법무·부동산 등),
@@ -242,6 +243,24 @@ CREATE TABLE IF NOT EXISTS events (
   image          TEXT NOT NULL DEFAULT '',
   created_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- 홈 팝업 —— 관리자가 홈 첫 화면에 띄우는 안내창.
+-- 손님 화면을 가로막는 유일한 것이라 반드시 스스로 사라질 수 있어야 합니다:
+-- 노출 기간(start_date~end_date)이 지나면 자동으로 내려가고, 방문자는 '오늘 하루 보지 않기'로 닫습니다.
+CREATE TABLE IF NOT EXISTS popups (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
+  title          TEXT NOT NULL,
+  body           TEXT NOT NULL DEFAULT '',
+  image          TEXT NOT NULL DEFAULT '',
+  link_url       TEXT NOT NULL DEFAULT '',
+  link_label     TEXT NOT NULL DEFAULT '',
+  start_date     TEXT NOT NULL DEFAULT '',   -- 'YYYY-MM-DD' · 비우면 즉시
+  end_date       TEXT NOT NULL DEFAULT '',   -- 'YYYY-MM-DD' · 비우면 끌 때까지
+  enabled        INTEGER NOT NULL DEFAULT 1,
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_popups_assoc ON popups(association_id, enabled);
 
 CREATE TABLE IF NOT EXISTS notifications (
   id             INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -757,6 +776,9 @@ async function migrateColumns(db) {
     await db.prepare("ALTER TABLE associations ADD COLUMN naver_verification TEXT NOT NULL DEFAULT ''").run();
     await db.prepare("ALTER TABLE associations ADD COLUMN google_verification TEXT NOT NULL DEFAULT ''").run();
   }
+  if (!cols.some((c) => c.name === "ga_measurement_id")) {
+    await db.prepare("ALTER TABLE associations ADD COLUMN ga_measurement_id TEXT NOT NULL DEFAULT ''").run();
+  }
   // 우리 직인(법인 인감) 그림
   if (!cols.some((c) => c.name === "seal_media")) {
     await db.prepare("ALTER TABLE associations ADD COLUMN seal_media TEXT NOT NULL DEFAULT ''").run();
@@ -801,6 +823,12 @@ async function migrateColumns(db) {
   for (const [name, ddl, idx] of v11) {
     const tbl = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").bind(name).first();
     if (!tbl) { await db.prepare(ddl).run(); for (const i of idx) await db.prepare(i).run(); }
+  }
+  // 홈 팝업 표 (기존 배포 업그레이드)
+  const popTbl = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='popups'").first();
+  if (!popTbl) {
+    await db.prepare(`CREATE TABLE popups (id INTEGER PRIMARY KEY AUTOINCREMENT, association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE, title TEXT NOT NULL, body TEXT NOT NULL DEFAULT '', image TEXT NOT NULL DEFAULT '', link_url TEXT NOT NULL DEFAULT '', link_label TEXT NOT NULL DEFAULT '', start_date TEXT NOT NULL DEFAULT '', end_date TEXT NOT NULL DEFAULT '', enabled INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL DEFAULT (datetime('now')))`).run();
+    await db.prepare("CREATE INDEX IF NOT EXISTS idx_popups_assoc ON popups(association_id, enabled)").run();
   }
   // v13 인덱스 (기존 배포 업그레이드): 행사 신청 상인회 집계·회비 월 조회
   await db.prepare("CREATE INDEX IF NOT EXISTS idx_rsvp_assoc ON event_rsvps(association_id)").run();
