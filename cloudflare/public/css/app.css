@@ -280,7 +280,7 @@ a.bc-val:hover{text-decoration:underline}
 .biz-panel .btn-ghost{background:transparent;color:#fff;border-color:rgba(255,255,255,.28)}
 .biz-panel .btn-ghost:hover{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.5)}
 @media (max-width:940px){
-  .biz-hero-inner{grid-template-columns:1fr;gap:26px}
+  .biz-hero-inner{gap:26px}  /* 열 접기는 v3 재정의 바로 뒤에서 — 여기 두면 덮입니다 */
   .biz-panel{max-width:460px}
 }
 /* 점포 상세의 소제목 — 홈 섹션 헤더와 같은 결(밑줄 + 700)로 통일 */
@@ -802,8 +802,7 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
      max-height:0 은 border-box 라도 패딩을 줄이지 못하므로, 패딩 자체를 열릴 때만 줍니다. */
   .main-nav{position:fixed;inset:var(--header-h) 0 auto 0;flex-direction:column;align-items:stretch;gap:0;padding:0 16px;background:var(--surface);border-bottom:1px solid transparent;box-shadow:none;max-height:0;overflow:hidden;transition:max-height .35s var(--ease),padding .35s var(--ease)}
   .main-nav.open{max-height:420px;padding:8px 16px 16px;border-bottom-color:var(--line);box-shadow:0 20px 30px rgba(0,0,0,.08)}
-  .main-nav a{padding:14px 12px;font-size:1.05rem}
-  .main-nav a+a{border-top:1px solid var(--line-soft)}
+  /* .main-nav a 의 좁은 화면 값은 파일 뒤(머리말 v3 블록 다음)에서 정합니다 — 여기 두면 덮입니다 */
   .main-nav .btn{margin-top:10px;justify-content:center}
   .nav-logout{margin-left:0}
   /* 모바일에선 세로 목록이라 왼쪽 구분선 대신 위쪽 구분선으로 */
@@ -822,7 +821,7 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
   .market-body{padding:11px 12px 13px}
   .market-body h3{font-size:.95rem}
   .market-thumb{aspect-ratio:1/1}
-  .update-grid{grid-template-columns:1fr}
+  /* .update-grid 의 열 수는 .update-grid 정의 바로 뒤에서 한꺼번에 정합니다 */
 }
 @media (prefers-reduced-motion:reduce){
   *{scroll-behavior:auto!important}
@@ -1329,7 +1328,7 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .feat-card:hover::after{color:var(--brand-text);transform:translateX(2px)}
 .feat-mint{grid-row:span 2}
 @media (max-width:880px){
-    .feat-band{margin-top:-28px}
+    /* .feat-band 의 좁은 화면 값은 .feat-band 정의 바로 뒤에서 정합니다 */
   .feat-inner{grid-template-columns:1fr;gap:22px;align-items:stretch}
   .feat-mint{grid-row:auto;min-height:120px}
   .hi-title{text-shadow:0 2px 14px rgba(255,255,255,.8),0 1px 3px rgba(255,255,255,.9)}
@@ -1498,6 +1497,8 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .hp-search .btn-primary:hover{background:rgba(255,255,255,.86)}
 /* 카드가 히어로 하단에 살짝 겹치는 3열 행 */
 .feat-band{margin-top:clamp(-64px,-5vw,-44px);margin-bottom:8px}
+/* 좁은 화면에서는 덜 겹친다 (앞쪽 880px 블록의 같은 선언이 이 줄에 덮여 죽어 있었다) */
+@media (max-width:880px){.feat-band{margin-top:-28px}}
 .feat-cards-row{grid-template-columns:repeat(3,1fr);gap:14px}
 .feat-cards-row .feat-mint{grid-row:auto}
 .feat-cards-row .feat-card{min-height:0}
@@ -2337,6 +2338,15 @@ input:not([type]),input[type="text"],input[type="email"],input[type="tel"],input
 .main-nav a.active:not(.btn){background:none;color:var(--ink);font-weight:700;border-bottom-color:var(--ink)}
 .main-nav a.btn{margin-left:14px}
 .nav-ops a{margin:0 8px}
+/* 좁은 화면의 서랍 메뉴는 위 규칙(가로 메뉴용 padding:8px 0)에 덮이면 안 된다.
+   덮이면 항목 높이가 절반이 되고 좌우 여백이 사라져, 손가락으로 옆 줄을 누르게 된다.
+   파일 앞쪽 860px 블록에 같은 내용이 있었지만 이 줄들보다 앞이라 죽어 있었다. */
+@media (max-width:860px){
+  .main-nav a{padding:14px 12px;margin:0;font-size:1.05rem;border-bottom:0}
+  .main-nav a+a{border-top:1px solid var(--line-soft)}
+  .main-nav a.btn{margin-left:0}
+  .nav-ops a{margin:0}
+}
 
 .site-footer{background:none;color:var(--muted);border-top:1px solid var(--ink);padding:26px 0 40px}
 .foot-top{border-bottom:0;padding:0 0 14px}
@@ -2674,6 +2684,11 @@ body.is-done .foot-copy,body.is-done .site-footer p{color:var(--dk-muted)}
 .biz-hero{background:var(--bg);color:var(--ink);padding:clamp(26px,4vw,40px) 0 clamp(20px,3vw,30px)}
 .biz-hero-inner{background:var(--surface);border-radius:var(--r-xl);padding:clamp(22px,3vw,32px);
   grid-template-columns:minmax(0,1fr) 300px;align-items:start}
+/* ⚠️ 바로 위 줄이 파일 앞쪽(940px 구간)의 "1열로 접기" 를 순서로 눌러 버리고 있었습니다.
+   그 결과 휴대폰에서 오른쪽 안내 카드가 300px 을 그대로 가져가고 왼쪽 칸이 30px 남아,
+   가게 이름이 "고 / 을 / 돼 / 지 / 국 / 밥" 처럼 한 글자씩 세로로 쏟아졌습니다.
+   손님이 가게를 눌렀을 때 처음 보는 화면이 이 상태였습니다. 접는 규칙을 여기서 다시 답니다. */
+@media (max-width:940px){.biz-hero-inner{grid-template-columns:1fr}}
 .biz-hero h1{color:var(--ink);margin:10px 0 12px}
 .biz-desc{color:var(--ink-soft)}
 .biz-hero .chip-light{background:var(--bg-alt);color:var(--ink-soft);border:0}
