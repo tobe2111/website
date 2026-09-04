@@ -85,6 +85,10 @@ await D.createPopup(env.DB, { associationId: m.id, title: "여름 골목 야시�
   linkUrl: "/t/market/events", linkLabel: "행사 자세히 보기" });
 await grab("/t/market", "market-home.html");
 await grab("/t/market/businesses", "market-list.html");
+await grab("/t/market/notices", "market-notices.html");
+await grab("/t/market/map", "market-map.html");
+await grab("/t/market/events", "market-events.html");
+await grab("/t/market/business/goeul-gukbap", "market-biz.html");
 
 const MIME = { ".html": "text/html; charset=utf-8", ".css": "text/css", ".js": "text/javascript", ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg" };
 const srv = http.createServer((req, res) => {
@@ -215,6 +219,10 @@ const PAGES = [
   ["상인회 홈 (모바일)", "market-home.html", { width: 390, height: 844, isMobile: true }],
   ["상인회 홈 (데스크톱)", "market-home.html", { width: 1440, height: 900 }],
   ["가입 점포 목록 (모바일)", "market-list.html", { width: 390, height: 844, isMobile: true }],
+  ["가게 페이지 (모바일)", "market-biz.html", { width: 390, height: 844, isMobile: true }],
+  ["공지·소식 (모바일)", "market-notices.html", { width: 390, height: 844, isMobile: true }],
+  ["점포 지도 (모바일)", "market-map.html", { width: 390, height: 844, isMobile: true }],
+  ["행사 (모바일)", "market-events.html", { width: 390, height: 844, isMobile: true }],
   ["상담 DB 콘솔", "leads.html", { width: 1280, height: 900 }],
   ["랜딩 편집기", "editor.html", { width: 1280, height: 900 }],
 ];

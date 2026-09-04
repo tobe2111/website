@@ -848,7 +848,7 @@ export async function mapPage(ctx) {
   const loader = naver ? `<script src="https://oapi.map.naver.com/openapi/v3/maps.js?${esc(env.NAVER_MAP_PARAM || "ncpClientId")}=${esc(naver)}"></script><script src="${assetUrl("/js/map.js")}" defer></script>` : "";
   const markerData = markers.map((m) => ({ name: m.name, slug: m.slug, category: m.category, lat: m.lat, lng: m.lng, address: m.address || "", phone: m.phone || "" }));
   const body = `<section class="section page-top"><div class="container">
-    <div class="section-head"><h2 class="section-title">가입 점포 지도</h2><p class="section-lead">${esc(assoc.name)} 가입 점포 ${markers.length}곳</p></div>
+    <div class="section-head"><h1 class="section-title">가입 점포 지도</h1><p class="section-lead">${esc(assoc.name)} 가입 점포 ${markers.length}곳</p></div>
     <div class="chip-filters">${chips}</div>${mapEl}
     <ul class="map-list">${listRows}</ul>
     <script type="application/json" id="mapData">${JSON.stringify(markerData).replace(/</g, "\\u003c")}</script>
@@ -899,8 +899,8 @@ export async function notices(ctx) {
   const chips = `<a href="${base}/notices${qs({ q })}" class="chip-filter${!tag ? " active" : ""}">전체</a>` +
     tags.map((t) => `<a href="${base}/notices${qs({ tag: t.tag, q })}" class="chip-filter${tag === t.tag ? " active" : ""}">${esc(t.tag)} <em>${t.n}</em></a>`).join("");
   const body = `<section class="section page-top"><div class="container">
-    <div class="section-head"><h2 class="section-title">공지사항</h2><p class="section-lead">총 ${total}</p></div>
-    <form method="get" action="${base}/notices" class="board-search">${tag ? `<input type="hidden" name="tag" value="${esc(tag)}">` : ""}<input type="search" name="q" value="${esc(q)}" placeholder="제목·내용 검색"><button class="btn btn-ghost btn-sm">검색</button></form>
+    <div class="section-head"><h1 class="section-title">공지사항</h1><p class="section-lead">총 ${total}건</p></div>
+    <form method="get" action="${base}/notices" class="board-search">${tag ? `<input type="hidden" name="tag" value="${esc(tag)}">` : ""}<input type="search" name="q" value="${esc(q)}" placeholder="제목·내용 검색" aria-label="공지 제목·내용 검색"><button class="btn btn-ghost btn-sm">검색</button></form>
     ${tags.length > 1 ? `<div class="chip-filters">${chips}</div>` : ""}
     <ul class="notice-list">${items.length ? noticeRows(base, items) : `<li class="empty">${q || tag ? "조건에 맞는 공지가 없습니다." : "등록된 공지가 없습니다."}</li>`}</ul>
     ${pager((i) => `${base}/notices${qs({ q, tag, page: i })}`, cur, pages)}
@@ -951,9 +951,10 @@ export async function events(ctx) {
     cards.push(eventCard(base, e).replace("</article>", rsvp + "</article>"));
   }
   const body = `<section class="section page-top"><div class="container">
-    <div class="section-head"><h2 class="section-title">행사·소식</h2>
+    <div class="section-head"><h1 class="section-title">행사·소식</h1>
       ${isMember ? `<p class="section-lead">회원은 행사별로 참가 신청을 할 수 있습니다. 명단은 관리자에게 전달됩니다.</p>` : ""}</div>
     ${flashOf(query)}
+    <h2 class="a11y-only">행사 목록</h2>
     <div class="event-grid">${cards.join("") || `<p class="empty">예정된 행사가 없습니다.</p>`}</div></div></section>`;
   // 구조화 데이터: Event — 구글/네이버 행사 리치 결과(날짜·장소·주최)
   const eventLd = list.map((e) => ({
@@ -1007,7 +1008,7 @@ export async function polls(ctx) {
       <label>마감일 (선택·비우면 수동 마감)<input type="date" name="closes_at" /></label>
       <button class="btn btn-primary btn-sm">투표 시작</button></form></section>` : "";
   const body = `<section class="section page-top"><div class="container narrow">
-    <div class="section-head"><h2 class="section-title">안건 투표</h2>
+    <div class="section-head"><h1 class="section-title">안건 투표</h1>
       <p class="section-lead">총회에 못 오셔도 폰에서 의견을 남길 수 있습니다. 1인 1표, 마감 전 변경 가능.</p></div>
     ${flashOf(query)}
     ${createForm}
@@ -1031,7 +1032,7 @@ export async function board(ctx) {
       <span class="board-meta">${esc(p.author_name || "(탈퇴)")} · ${esc(kstDate(p.created_at, "."))}${p.comment_count ? ` · 댓글 ${p.comment_count}` : ""}</span></li>`;
   }).join("") : `<li class="empty">${q ? "검색 결과가 없습니다." : "아직 게시글이 없습니다."}</li>`;
   const body = `<section class="section page-top"><div class="container">
-    <div class="section-head"><h2 class="section-title">회원 게시판</h2><p class="section-lead">글 ${total}</p></div>
+    <div class="section-head"><h1 class="section-title">회원 게시판</h1><p class="section-lead">글 ${total}개</p></div>
     ${flashOf(query)}
     <form method="get" action="${base}/board" class="board-search"><input type="search" name="q" value="${esc(q)}" placeholder="제목·내용 검색"><button class="btn btn-ghost btn-sm">검색</button></form>
     <section class="panel"><h2 class="panel-title">새 글 쓰기</h2>
@@ -1155,7 +1156,7 @@ export function urdealPage(ctx) {
     ["3", "손님이 매장에서 사용", "손님이 폰으로 이용권을 보여주면 확인 후 사용 처리 — 끝."],
   ];
   const body = `<section class="section page-top"><div class="container narrow">
-    <div class="section-head"><h2 class="section-title">유어딜로 매출 만들기</h2>
+    <div class="section-head"><h1 class="section-title">유어딜로 매출 만들기</h1>
       <p class="section-lead">이 홈페이지는 우리 가게를 <b>알리는 곳</b>, 유어딜은 <b>파는 곳</b>입니다. 운영사의 커머스 서비스라 상인회 회원은 등록을 도와드립니다.</p></div>
     <div class="urdeal-hero">
       <span class="fb-badge">FAMILY SERVICE</span>
