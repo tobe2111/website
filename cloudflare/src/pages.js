@@ -765,7 +765,10 @@ export function loginForm(ctx) {
     ${flash(query.get("msg") || "", query.get("err") ? "err" : "ok")}
     <form method="post" action="/login" class="stack-form">
       ${nextTo ? `<input type="hidden" name="next" value="${esc(nextTo)}" />` : ""}
-      <label>이메일<input type="email" name="email" required autocomplete="email" /></label>
+      <label>이메일 또는 휴대폰 번호
+        <input type="text" name="login" required autocomplete="username" inputmode="email"
+          placeholder="${esign ? "name@company.co.kr" : "name@example.com 또는 010-1234-5678"}" />
+        ${esign ? "" : `<small class="txt-muted">이메일이 없으시면 상인회에 등록된 휴대폰 번호로 들어오세요.</small>`}</label>
       <label>비밀번호<input type="password" name="password" required autocomplete="current-password" /></label>
       <details class="totp-login"><summary>2단계 인증을 쓰고 계신가요?</summary>
         <label>인증 앱의 6자리 코드<input type="text" name="totp" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" placeholder="000000" /></label></details>
@@ -1489,19 +1492,24 @@ export async function admin(ctx) {
         ${assoc.team_scope ? 'data-confirm="부서 경계를 끌까요?&#10;담당자가 조직의 계약을 다시 모두 보게 됩니다."' : ""}>${assoc.team_scope ? "끄기" : "켜기"}</button>
       ${teams.length ? "" : `<small class="txt-muted">부서를 먼저 하나 만들어 주세요.</small>`}</form></section>`;
 
-  // 이메일 없이 등록한 사장님은 아직 로그인할 수 없다. 가짜 주소를 그대로 보여 주면
-  // 회장님이 그걸 진짜 주소로 알고 사장님께 불러 줄 수 있으므로, 상태를 그대로 적는다.
-  const memberRows = members.length ? members.map((m) => `<tr><td>${esc(m.name)}<br /><small>${
-      isPlaceholderEmail(m.email) ? '<span class="badge badge-wait">로그인 미설정</span>' : esc(m.email)
-    }${m.phone ? ` · ${esc(D.maskPhone(m.phone))}` : ""}</small></td><td>${esc(m.business_name || "-")}</td>
-    <td class="actions-cell"><form method="post" action="${base}/admin/user/${m.id}/reset-password" data-confirm="임시 비밀번호를 발급할까요?"><button class="btn btn-xs btn-ghost"${isPlaceholderEmail(m.email) ? " disabled title=\"로그인 이메일이 아직 없습니다 — 점포 화면에서 지정해 주세요\"" : ""}>임시 비밀번호</button></form></td></tr>`).join("") : `<tr><td colspan="3" class="empty">회원이 없습니다.</td></tr>`;
+  // 사장님이 무엇으로 들어오는지를 그 자리에 적는다.
+  // 가짜 주소(@no-login.invalid)를 그대로 보여 주면 회장님이 그걸 진짜 주소로 알고
+  // 사장님께 불러 줄 수 있어서, 주소 대신 '무엇으로 로그인하는지' 를 쓴다.
+  const loginBy = (m) => !isPlaceholderEmail(m.email) ? esc(m.email)
+    : m.phone ? '<span class="badge badge-ok">휴대폰으로 로그인</span>'
+    : '<span class="badge badge-wait">로그인 수단 없음</span>';
+  const memberRows = members.length ? members.map((m) => `<tr><td>${esc(m.name)}<br /><small>${loginBy(m)}${
+      m.phone ? ` · ${esc(D.maskPhone(m.phone))}` : ""}</small></td><td>${esc(m.business_name || "-")}</td>
+    <td class="actions-cell"><form method="post" action="${base}/admin/user/${m.id}/reset-password" data-confirm="임시 비밀번호를 발급할까요?"><button class="btn btn-xs btn-ghost"${
+      isPlaceholderEmail(m.email) && !m.phone ? " disabled title=\"이메일도 휴대폰 번호도 없어 로그인할 방법이 없습니다 — 점포 화면에서 하나를 넣어 주세요\"" : ""
+    }>임시 비밀번호</button></form></td></tr>`).join("") : `<tr><td colspan="3" class="empty">회원이 없습니다.</td></tr>`;
   // ── 회원 추가 —— 예전에는 접힌 상자 안 맨 아래에 있어 아무도 못 찾았다.
   // 상인회장이 명단을 먼저 넣는 것이 실제 시작 방식이므로, 이건 눈에 보이는 자리에 있어야 한다.
   const kakaoReady = !!String(env.KAKAO_REST_KEY || "").trim();
   const addMemberPanel = `<section class="panel panel-accent" id="p-addmember">
     <h2 class="panel-title">회원 추가</h2>
-    <p class="panel-hint">사장님 대신 등록합니다. <b>이메일은 없어도 됩니다</b> — 상인회 안내는 알림톡으로 나가므로 실제로 필요한 건 휴대폰입니다.
-      이메일을 비우면 사장님은 아직 로그인할 수 없고, 나중에 점포 화면에서 <b>로그인 이메일</b>을 지정하면 그때 임시 비밀번호가 나옵니다.</p>
+    <p class="panel-hint">사장님 대신 등록합니다. <b>이메일은 없어도 됩니다</b> — 이메일을 비우면 <b>휴대폰 번호가 곧 아이디</b>가 되고,
+      등록을 마치면 임시 비밀번호가 바로 나옵니다. 그 둘을 사장님께 불러 주시면 됩니다.</p>
     ${kakaoReady ? `<div class="form-divider">지도에서 찾아 간편 등록</div>
     <div class="place-find" data-place-find>
       <input type="text" data-place-q placeholder="가게 이름 (예: 방배 버들카페)" aria-label="가게 이름으로 찾기" autocomplete="off" />
@@ -2413,21 +2421,36 @@ export async function adminBusinessEdit(ctx) {
     ${clips.length ? `<ul class="admin-clips">${clips.map((m) => `<li>
       <b>${esc(providerLabel(m.provider) || "영상")}</b> <span class="muted">${esc(m.caption || m.embed_id || "")}</span>${delForm(m)}</li>`).join("")}</ul>` : ""}
   </section>`;
+  // ── 사장님이 무엇으로 들어오는가.
+  // 이메일 없이 등록한 계정은 휴대폰 번호가 곧 아이디다. 그래서 번호를 여기서 고칠 수 있어야 한다 —
+  // 번호를 잘못 받아 적으면 사장님은 영영 못 들어오고, 그걸 고칠 화면이 어디에도 없었다.
+  const ownerLoginPanel = !owner || !isPlaceholderEmail(owner.email) ? "" :
+    `<section class="panel panel-accent"><h2 class="panel-title">사장님 로그인</h2>
+      <p class="panel-hint">${owner.phone
+        ? `이 사장님은 <b>휴대폰 ${esc(D.maskPhone(owner.phone))} 번호가 아이디</b>입니다. 비밀번호는 회원 목록의 [임시 비밀번호] 로 발급합니다.
+           이메일은 안 넣으셔도 됩니다 — 사장님이 이메일로 들어오길 원하실 때만 아래에서 정해 주세요.`
+        : `이메일도 휴대폰 번호도 없는 계정이라 사장님은 <b>아직 로그인할 수 없습니다.</b> 아래에서 둘 중 하나를 넣어 주세요.`}</p>
+      <form method="post" action="${base}/admin/business/${b.id}/owner-phone" class="stack-form compact">
+        <label>사장님 휴대폰 (아이디)<input type="tel" name="phone" maxlength="20" inputmode="numeric" autocomplete="tel"
+          placeholder="010-1234-5678" value="${esc(owner.phone ? D.formatPhone(owner.phone) : "")}" /></label>
+        <button class="btn btn-ghost btn-sm">휴대폰 번호 저장</button></form>
+      <div class="form-divider">또는 이메일로</div>
+      <form method="post" action="${base}/admin/business/${b.id}/owner-email" class="stack-form compact">
+        <label>사장님 이메일<input type="email" name="email" required maxlength="120" autocomplete="email" placeholder="사장님이 쓰시는 이메일" /></label>
+        <button class="btn btn-primary btn-sm">지정하고 임시 비밀번호 발급</button></form></section>`;
+
   const body = `<section class="dash"><div class="container">
     <div class="dash-head"><div><p class="section-eyebrow"><a href="${base}/admin#s-people">← 회원·점포</a></p>
       <h1 class="dash-title">${esc(b.name)}</h1>
       <p class="dash-sub">${statusBadge(b.status)} ${owner
-        ? `· 사장님 ${esc(owner.name)}${isPlaceholderEmail(owner.email) ? ' <span class="badge badge-wait">로그인 미설정</span>' : ` (${esc(owner.email)})`}`
+        ? `· 사장님 ${esc(owner.name)}${!isPlaceholderEmail(owner.email) ? ` (${esc(owner.email)})` :
+            owner.phone ? ` <span class="badge badge-ok">휴대폰 ${esc(D.maskPhone(owner.phone))} 로 로그인</span>`
+                        : ' <span class="badge badge-wait">로그인 수단 없음</span>'}`
         : "· 연결된 사장님 계정 없음"}</p></div>
       <div class="dash-head-actions">${b.status === "approved" ? `<a class="btn btn-ghost btn-sm" href="${base}/business/${esc(b.slug)}" target="_blank">가게 페이지 보기 ↗</a>` : ""}</div>
     </div>${flashOf(query)}
     ${gaps.length ? `<div class="flash flash-warn"><b>아직 덜 채운 것</b><ul class="gap-list">${gaps.map((g) => `<li>${g}</li>`).join("")}</ul></div>` : ""}
-    ${owner && isPlaceholderEmail(owner.email) ? `<section class="panel panel-accent"><h2 class="panel-title">로그인 이메일 지정</h2>
-      <p class="panel-hint">이메일 없이 등록한 계정입니다. 사장님은 <b>아직 로그인할 수 없습니다</b> — 여기서 주소를 정하면 임시 비밀번호가 나옵니다.
-        지금 화면의 정보를 회장님이 대신 관리하시는 중이라면 비워 두셔도 됩니다.</p>
-      <form method="post" action="${base}/admin/business/${b.id}/owner-email" class="stack-form compact">
-        <label>사장님 이메일<input type="email" name="email" required maxlength="120" autocomplete="email" placeholder="사장님이 쓰시는 이메일" /></label>
-        <button class="btn btn-primary btn-sm">지정하고 임시 비밀번호 발급</button></form></section>` : ""}
+    ${ownerLoginPanel}
     <section class="panel">
       <h2 class="panel-title">가게 정보</h2>
       <p class="panel-hint">사장님 대신 채워 두는 자리입니다. 사장님이 로그인하면 자기 화면에서 이어서 고칠 수 있습니다.</p>
