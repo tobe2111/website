@@ -472,6 +472,13 @@ export async function adminUpdateBusiness(ctx) {
     snsInstagram: b.sns_instagram, snsYoutube: b.sns_youtube, snsBlog: b.sns_blog,
     snsKakao: b.sns_kakao, snsNaver: snsUrl(form.get("sns_naver")) || b.sns_naver,
   });
+  // 유어딜 가게 번호 — 이 번호가 있는 점포의 이용권이 홈 '우리 골목 이용권' 에 걸린다.
+  // 칸을 아예 안 그린 화면(점주 대시보드)에서 온 저장은 건드리지 않는다.
+  if (form.has("urdeal_seller_id")) {
+    const raw = String(form.get("urdeal_seller_id") || "").trim();
+    if (raw && !/^\d{1,12}$/.test(raw)) return back(to, "유어딜 가게 번호는 숫자만 넣어 주세요. (예: 128)", true);
+    await D.setUrdealSeller(db, b.id, assoc.id, raw ? Number(raw) : 0);
+  }
   await audit(ctx, "점포정보수정", `${name} (관리자 대행)`);
   return back(to, "저장했습니다. 사장님이 로그인하면 이어서 고칠 수 있습니다.");
 }
@@ -1288,9 +1295,24 @@ export async function adminDueToggle(ctx) {
   if (!/^\d{4}-\d{2}$/.test(period) || !userId) return back(base + "/admin", "입력값을 확인해 주세요.", true);
   const member = await D.getUserById(db, userId);
   if (!member || member.association_id !== assoc.id) return back(base + "/admin", "회원을 찾을 수 없습니다.", true);
-  if (form.get("on") === "1") await D.setDuePaid(db, assoc.id, userId, period);
-  else await D.setDueUnpaid(db, assoc.id, userId, period);
+  if (form.get("on") === "1") {
+    // 금액을 안 적어 보내면 상인회가 정해 둔 기본 회비로 넣는다 — 매번 같은 숫자를
+    // 타이핑하게 하면 임원이 그냥 엑셀로 돌아간다.
+    const raw = String(form.get("amount") || "").replace(/[,\s원]/g, "");
+    if (raw && !/^\d{1,9}$/.test(raw)) return back(`${base}/admin?due_period=${encodeURIComponent(period)}`, "회비 금액은 숫자만 넣어 주세요.", true);
+    await D.setDuePaid(db, assoc.id, userId, period, raw ? Number(raw) : (assoc.dues_amount || 0));
+  } else await D.setDueUnpaid(db, assoc.id, userId, period);
   return redirect(`${base}/admin?due_period=${encodeURIComponent(period)}#p-dues`);
+}
+
+// 기본 월 회비 — 한 번 정해 두면 체크할 때마다 그 금액이 들어간다.
+export async function adminDuesAmount(ctx) {
+  const { db, form, base, assoc } = ctx;
+  const raw = String(form.get("dues_amount") || "").replace(/[,\s원]/g, "");
+  if (raw && !/^\d{1,9}$/.test(raw)) return back(base + "/admin#p-dues", "회비 금액은 숫자만 넣어 주세요. (예: 30000)", true);
+  await D.setDuesAmount(db, assoc.id, raw ? Number(raw) : 0);
+  await audit(ctx, "회비금액변경", raw ? `${Number(raw).toLocaleString("ko-KR")}원` : "안 정함");
+  return back(base + "/admin#p-dues", raw ? `기본 월 회비를 ${Number(raw).toLocaleString("ko-KR")}원으로 정했습니다.` : "기본 회비를 지웠습니다 — 금액 없이 체크만 합니다.");
 }
 
 // 권한 회수 — 계정을 지우지 않고 역할만 내린다.

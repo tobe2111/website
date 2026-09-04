@@ -4,6 +4,7 @@ import { esc, cap, clip, openBadge, openNow, hoursLine, dongOf, fmtBytes, kstSta
 import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG, ORIGIN, assetUrl } from "./render.js";
 import { verifyInviteToken, SALES_STAGES, otpRequired, selfSignupOn, MAX_SLOTS, BULK_MAX, BULK_CHUNK, docOf, isPlaceholderEmail } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
 import { html, notFoundResponse, back, redirect } from "./http.js";
+import { deals as urdealDeals, urdealProductUrl } from "./urdeal.js";
 import { countable, countHomeGoal, homeVariantCookie } from "./traffic.js";
 import { galleryItem } from "./media-render.js";
 import { priceOf, costOf, jeonToWon, notifyEnabled, autoNotifyOn, canAutoSend, ALIGO_VARS, hasCfg, TEMPLATE_KEYS, TEMPLATES, billingMode, BILLING_MODES } from "./notify.js";
@@ -242,8 +243,19 @@ export async function home(ctx, opts = {}) {
       <span class="pb-view" aria-hidden="true">view <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></span></span>
     <time>${esc(kstDate(n.created_at))}</time>
     <strong>${esc(n.title)}</strong></a>`).join("");
+  // ── 우리 골목 이용권 (유어딜) —— 유어딜 가게 번호를 넣어 둔 점포의 이용권을 가져온다.
+  //
+  // 남의 서비스라 죽거나 느려질 수 있다. 실패하면 빈 목록으로 두고 넘어간다 —
+  // 유어딜이 안 된다고 상인회 홈이 같이 죽으면 안 된다. (섹션은 사장님을 부르는 칸으로 남는다.)
+  const dealsOn = lay.some((x) => x.type === "deals" && x.enabled !== false);
+  const dealRows = dealsOn
+    ? await urdealDeals(ctx.env, await D.urdealSellerIds(db, assoc.id).catch(() => [])).catch(() => [])
+    : [];
+  const dealCards = dealRows.map((d) => ({ ...d, url: urdealProductUrl(ctx.env, d.id) }));
+
   const body = renderHome(lay, {
     assoc, base, stats, businessesHtml, businessRowsHtml, openCount, catTiles, eventsHtml, loggedIn: !!user,
+    deals: dealCards,
     heroImage: assoc.hero_image ? mediaUrl(assoc.hero_image) : "",
     heroVideo: assoc.hero_video ? mediaUrl(assoc.hero_video) : "",
     photosHtml,
@@ -709,6 +721,10 @@ export async function businessDetail(ctx) {
   // A/B — 이 방문이 어느 홈 사본에서 시작됐는지 세어 둔다. "그 홈이 가게를 보게 만드는가".
   await countHomeGoal(ctx, "bizview");
   const b = await D.getBusinessBySlug(db, assoc.id, params.slug);
+  // 이 가게가 몇 번 보였는지도 따로 센다 — 상인회가 사장님께 보여 줄 숫자다.
+  // 봇·연타를 거르는 잣대는 위 홈 성과와 같은 것을 써야 숫자끼리 비교가 된다.
+  if (b && b.status === "approved" && countable(ctx, "biz:" + b.id, "bizview"))
+    await D.bumpBusinessView(db, b.id, assoc.id).catch(() => {});
   const canSee = b && (b.status === "approved" || (user && (user.id === b.owner_id || user.role === "SUPERADMIN" || (user.role === "ADMIN" && user.association_id === assoc.id))));
   if (!canSee) return notFoundResponse(ctx);
   const [media, prods, coupons, updates, others] = await Promise.all([
@@ -1420,7 +1436,7 @@ export async function admin(ctx) {
   const BIZ_PER = 50;
   const bizPage = Math.max(1, parseInt(query.get("bp") || "1", 10) || 1);
   const inboxStatus = D.LEAD_STATUSES.includes(query.get("is")) ? query.get("is") : "";
-  const [s, all, notices, events, members, admins, notifs, unread, auditLog, met, assocProducts, allRsvps, dueRowsRaw, visitsRaw, popupList, bizPageData, bizCounts, inbox, inboxCounts] = await Promise.all([
+  const [s, all, notices, events, members, admins, notifs, unread, auditLog, met, assocProducts, allRsvps, dueRowsRaw, visitsRaw, popupList, bizPageData, bizCounts, inbox, inboxCounts, topBiz, outcomes, byDay] = await Promise.all([
     D.stats(db, assoc.id),
     D.listAllBusinesses(db, assoc.id),
     D.listNotices(db, assoc.id),
@@ -1440,6 +1456,9 @@ export async function admin(ctx) {
     D.businessStatusCounts(db, assoc.id),
     D.listLeads(db, assoc.id, { source: "contact", status: inboxStatus, limit: 100 }).catch(() => []),
     D.leadStatusCounts(db, assoc.id, "contact").catch(() => ({ all: 0 })),
+    D.topBusinesses(db, assoc.id, { days: 30, limit: 8 }).catch(() => []),
+    D.homeOutcomes(db, assoc.id, 30).catch(() => ({ views: 0, bizviews: 0, finds: 0, signups: 0, calls: 0 })),
+    D.visitsByDay(db, assoc.id, 30).catch(() => []),
   ]);
   const today = new Date().toISOString().slice(0, 10);
   const visits = { cur: Number(visitsRaw && visitsRaw.cur) || 0, prev: Number(visitsRaw && visitsRaw.prev) || 0 };
@@ -1732,16 +1751,52 @@ export async function admin(ctx) {
   // 회비 장부: ?due_period=YYYY-MM (기본 이번 달)
   const duePeriod = duePeriod0;
   const paidSet = new Set(dueRowsRaw.map((r) => r.user_id));
-  const dueRows = members.map((m) => `<tr><td>${esc(m.name)}<br /><small>${esc(m.business_name || "")}</small></td>
-    <td>${paidSet.has(m.id) ? '<span class="badge badge-ok">납부</span>' : '<span class="badge badge-wait">미납</span>'}</td>
-    <td class="actions-cell"><form method="post" action="${base}/admin/dues" class="inline-form">
-      <input type="hidden" name="period" value="${esc(duePeriod)}" /><input type="hidden" name="user_id" value="${m.id}" /><input type="hidden" name="on" value="${paidSet.has(m.id) ? "0" : "1"}" />
-      <button class="btn btn-xs ${paidSet.has(m.id) ? "btn-ghost" : "btn-primary"}">${paidSet.has(m.id) ? "납부 취소" : "납부 체크"}</button></form></td></tr>`).join("")
-    || `<tr><td colspan="3" class="empty">회원이 없습니다.</td></tr>`;
-  const duesPanel = `<section class="panel" id="p-dues"><div class="panel-head"><h2 class="panel-title">회비 장부 <span class="badge badge-muted">${paidSet.size}/${members.length} 납부</span></h2>
+  const paidAmt = new Map(dueRowsRaw.map((r) => [r.user_id, Number(r.amount) || 0]));
+  const won = (v) => (Number(v) || 0).toLocaleString("ko-KR");
+  const dueRows = members.map((m) => {
+    const on = paidSet.has(m.id);
+    const amt = paidAmt.get(m.id) || 0;
+    return `<tr>
+      <td data-th="회원"><span class="dt-main">${esc(m.name)}</span><span class="dt-sub">${esc(m.business_name || "-")}</span></td>
+      <td data-th="상태">${on ? '<span class="badge badge-ok">납부</span>' : '<span class="badge badge-wait">미납</span>'}</td>
+      <td data-th="금액" class="num">${on ? (amt ? `<b>${won(amt)}원</b>` : '<span class="txt-muted">금액 없음</span>') : ""}</td>
+      <td class="act"><form method="post" action="${base}/admin/dues" class="inline-form due-form">
+        <input type="hidden" name="period" value="${esc(duePeriod)}" /><input type="hidden" name="user_id" value="${m.id}" />
+        <input type="hidden" name="on" value="${on ? "0" : "1"}" />
+        ${on ? "" : `<input type="text" name="amount" inputmode="numeric" class="due-amt" aria-label="${esc(m.name)}님이 낸 금액"
+            value="${assoc.dues_amount ? won(assoc.dues_amount) : ""}" placeholder="금액" maxlength="11" />`}
+        <button class="btn btn-xs ${on ? "btn-ghost" : "btn-primary"}">${on ? "납부 취소" : "납부 체크"}</button></form></td></tr>`;
+  }).join("") || `<tr><td colspan="4" class="empty">회원이 없습니다.</td></tr>`;
+  // 회비 요약 — 임원이 총회에서 읽는 것은 두 줄이다: 얼마 걷혔나 / 누가 안 냈나.
+  // 예전에는 '냈다/안 냈다' 체크뿐이라 그 두 줄을 만들 수 없었고, 결국 엑셀을 따로 썼다.
+  // 장부가 둘이면 반드시 어긋난다.
+  const collected = dueRowsRaw.reduce((n, r) => n + (Number(r.amount) || 0), 0);
+  const expected = (assoc.dues_amount || 0) * members.length;
+  const unpaidN = Math.max(0, members.length - paidSet.size);
+  const duesPanel = `<section class="panel" id="p-dues"><div class="panel-head">
+      <h2 class="panel-title">회비 장부 <span class="badge badge-muted">${paidSet.size}/${members.length} 납부</span></h2>
       <form method="get" action="${base}/admin" class="inline-form"><input type="month" name="due_period" value="${esc(duePeriod)}" data-autosubmit /><button class="btn btn-xs btn-ghost">이동</button></form></div>
-    <p class="panel-hint">납부 <b>기록</b>만 남기는 장부입니다(결제 아님). 월을 바꿔 지난 달 현황도 볼 수 있습니다.</p>
-    <div class="table-scroll"><table class="admin-table"><thead><tr><th>회원</th><th>${esc(duePeriod)}</th><th>처리</th></tr></thead><tbody>${dueRows}</tbody></table></div></section>`;
+    <p class="panel-hint">납부 <b>기록</b>만 남기는 장부입니다(결제 아님 — 돈은 계좌로 받으시고 여기에 적으세요).
+      월을 바꿔 지난 달 현황도 볼 수 있습니다.</p>
+
+    <ul class="st-acts due-sum">
+      <li><b>${won(collected)}원</b><span class="st-act-l">${esc(duePeriod)} 걷힘</span>
+        <span class="st-act-w">${assoc.dues_amount ? `받을 것 ${won(expected)}원 중` : "기본 회비를 정하면 받을 금액도 함께 나옵니다"}</span></li>
+      <li><b>${unpaidN}명</b><span class="st-act-l">미납</span>
+        <span class="st-act-w">${unpaidN ? `<a href="${base}/admin/dues/unpaid.csv?period=${encodeURIComponent(duePeriod)}">명단 CSV로 받기</a>` : "모두 내셨습니다"}</span></li>
+    </ul>
+
+    <form method="post" action="${base}/admin/dues/amount" class="inline-form due-set">
+      <label class="mini-label">기본 월 회비
+        <input type="text" name="dues_amount" inputmode="numeric" maxlength="11"
+          value="${assoc.dues_amount ? won(assoc.dues_amount) : ""}" placeholder="예: 30000" /></label>
+      <button class="btn btn-ghost btn-sm">저장</button>
+      <span class="panel-hint">한 번 정해 두면 납부 체크할 때 이 금액이 자동으로 들어갑니다. 사람마다 다르면 그 자리에서 고치면 됩니다.</span>
+    </form>
+
+    <div class="dtable-wrap"><table class="dtable">
+      <thead><tr><th>회원</th><th>${esc(duePeriod)}</th><th class="num">금액</th><th class="act">처리</th></tr></thead>
+      <tbody>${dueRows}</tbody></table></div></section>`;
   // ----- 알림톡: 잔액·충전 신청·발송 이력 -----
   const [balance, msgStats, msgs, orders, unitPrice] = await Promise.all([
     D.getBalance(db, assoc.id), D.messageStats(db, assoc.id), D.listMessages(db, assoc.id, 10),
@@ -1850,12 +1905,87 @@ export async function admin(ctx) {
       : `<div class="dt-empty"><b>${inboxStatus ? "그 상태인 문의가 없습니다" : "아직 들어온 문의가 없습니다"}</b>
          ${inboxStatus ? `<a href="${base}/admin#s-inbox">전체 보기</a>` : "홈페이지 아래 <b>문의하기</b> 로 들어옵니다."}</div>`}</section>`;
 
+  // ── 성과 화면 ───────────────────────────────────────────────────
+  //
+  // 상인회가 재계약할 때 실제로 묻는 것은 "그래서 우리한테 뭐가 좋았냐" 다.
+  // 지금까지는 그 답이 화면 어디에도 없었다 — 회장님이 총회에서 보여 줄 것이 없으면
+  // 홈페이지는 '작년에 만든 것' 이 되고, 다음 해 예산에서 빠진다.
+  //
+  // 숫자를 늘어놓지 않는다. 세 가지만 답한다:
+  //   ① 사람이 오긴 오나 (방문, 지난주 대비)
+  //   ② 와서 가게를 보나 (가게 열람·찾기·전화·입점 신청)
+  //   ③ 어느 가게가 잘 됐나 (사장님께 그대로 보여 줄 수 있는 줄)
+  const statsPanel = (() => {
+    const n = (v) => (Number(v) || 0).toLocaleString("ko-KR");
+    const delta = visits.prev > 0
+      ? Math.round(((visits.cur - visits.prev) / visits.prev) * 100)
+      : (visits.cur > 0 ? null : 0);
+    const deltaTxt = delta === null ? '<span class="st-new">첫 주</span>'
+      : delta === 0 ? '<span class="st-flat">지난주와 같음</span>'
+      : `<span class="${delta > 0 ? "st-up" : "st-down"}">지난주보다 ${delta > 0 ? "+" : ""}${delta}%</span>`;
+
+    // 막대 — 빈 날도 자리를 차지해야 '며칠 쉬었는지' 가 보인다
+    const days = 30;
+    const byDayMap = new Map(byDay.map((r) => [r.day, Number(r.views) || 0]));
+    const bars = [];
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date(Date.now() + 9 * 3600 * 1000 - i * 86400000).toISOString().slice(0, 10);
+      bars.push([d, byDayMap.get(d) || 0]);
+    }
+    const peak = Math.max(1, ...bars.map(([, v]) => v));
+    const chart = `<div class="spark" role="img" aria-label="최근 30일 방문 — 하루 최대 ${peak}회">
+      ${bars.map(([d, v]) => `<span class="spark-bar" style="height:${Math.max(2, Math.round((v / peak) * 100))}%" title="${esc(d)} · ${n(v)}회"></span>`).join("")}
+    </div><div class="spark-axis"><span>30일 전</span><span>오늘</span></div>`;
+
+    // 손님이 한 일 — '몇 %' 로 뭉개지 않는다. 홈을 연 사람 중 몇 명이 그걸 했는지로 적는다.
+    const rate = (v) => (outcomes.views > 0 ? `홈을 연 ${Math.round((v / outcomes.views) * 100)}%` : "");
+    const acts = [
+      ["가게를 열어 봤다", outcomes.bizviews, "홈이 가게를 보게 만들었는가"],
+      ["검색·지도를 썼다", outcomes.finds, "찾는 것을 도왔는가"],
+      ["전화를 걸었다", outcomes.calls, "손님이 실제로 가게에 닿았는가"],
+      ["입점 신청을 했다", outcomes.signups, "새 회원이 들어오는 길"],
+    ];
+    const thin = outcomes.views < 30;
+
+    const topRows = topBiz.map((b, i) => `<tr>
+      <td data-th="순위" class="num"><b>${i + 1}</b></td>
+      <td data-th="가게"><a class="dt-main" href="${base}/business/${esc(b.slug)}" target="_blank" rel="noopener">${esc(b.name)}</a>
+        <span class="dt-sub">${esc(b.category || "업종 미지정")}</span></td>
+      <td data-th="열람" class="num"><b>${n(b.views)}</b>회</td>
+    </tr>`).join("");
+
+    return `<section class="panel" id="p-stats"><div class="panel-head">
+        <h2 class="panel-title">성과 <span class="badge badge-muted">최근 30일</span></h2></div>
+      <p class="panel-hint">총회에서 그대로 보여 주실 수 있는 숫자입니다. 방문은 검색 로봇과 새로고침 연타를 뺀 것입니다.</p>
+
+      <div class="st-head">
+        <div class="st-big"><b>${n(visits.cur)}</b><span>이번 주 방문</span>${deltaTxt}</div>
+        ${chart}
+      </div>
+
+      <div class="form-divider">손님이 무엇을 했나</div>
+      ${thin ? `<p class="panel-hint">아직 방문이 ${n(outcomes.views)}회라 비율은 우연일 수 있습니다 — 숫자만 보세요.</p>` : ""}
+      <ul class="st-acts">${acts.map(([label, v, why]) => `<li>
+        <b>${n(v)}</b><span class="st-act-l">${label}</span>
+        <span class="st-act-w">${esc(why)}${thin || !v ? "" : " · " + rate(v)}</span></li>`).join("")}</ul>
+
+      <div class="form-divider">많이 본 가게</div>
+      ${topBiz.length ? `<div class="dtable-wrap"><table class="dtable">
+          <thead><tr><th class="num">순위</th><th>가게</th><th class="num">열람</th></tr></thead>
+          <tbody>${topRows}</tbody></table></div>
+        <p class="panel-hint">사장님께 그대로 보여 드릴 수 있는 줄입니다. 열람이 0인 가게는 넣지 않습니다.</p>`
+        : `<div class="dt-empty"><b>아직 열람 기록이 없습니다</b>
+           손님이 가게 페이지를 열면 여기에 쌓입니다.</div>`}
+    </section>`;
+  })();
+
   const ADMIN_TABS = [
     ["home", "현황", "", unread || 0],
     [isEsign ? "people" : "people", isEsign ? "담당자" : "회원·점포", "", isEsign ? 0 : (s.pending || 0)],
     ...(isEsign ? [] : [["content", isFranchise ? "가맹점·콘텐츠" : "콘텐츠", "", 0]]),
     // 문의함 — 아직 답 안 한 건수를 그대로 단다. 0 이면 배지가 없다.
     ...(isEsign || isFranchise ? [] : [["inbox", "문의", "", inboxCounts.new || 0]]),
+    ...(isEsign || isFranchise ? [] : [["stats", "성과", "", 0]]),
     ["notify", "알림톡", "", 0],
     ["settings", "설정", "", 0],
   ];
@@ -2068,6 +2198,7 @@ ${abPanel}`}
     ${isEsign ? "" : "</div>"}
 
     ${isEsign || isFranchise ? "" : `<div class="sgroup" id="s-inbox" data-tab="inbox">${inboxPanel}</div>`}
+    ${isEsign || isFranchise ? "" : `<div class="sgroup" id="s-stats" data-tab="stats">${statsPanel}</div>`}
 
     <div class="sgroup" id="s-notify" data-tab="notify">${notifyPanel}</div>
 
@@ -2182,6 +2313,19 @@ export async function adminExportMembers(ctx) {
   const lines = [["이름", "이메일", "업체명", "역할"], ...members.map((m) => [m.name, m.email, m.business_name || "", m.role])];
   const csv = "﻿" + lines.map((r) => r.map(csvCell).join(",")).join("\r\n");
   return text(csv, 200, { "content-type": "text/csv; charset=utf-8", "content-disposition": `attachment; filename="members_${assoc.slug}.csv"`, "cache-control": "no-store" });
+}
+
+// 미납 명단 — 임원이 실제로 하는 일은 이 명단을 들고 전화를 도는 것이다.
+// 화면에서 세는 것만으로는 그 일을 못 한다.
+export async function adminExportUnpaid(ctx) {
+  const { db, assoc, query } = ctx;
+  const period = /^\d{4}-\d{2}$/.test(query.get("period") || "") ? query.get("period") : D.kstToday().slice(0, 7);
+  const rows = await D.unpaidMembers(db, assoc.id, period);
+  const lines = [["가게", "사장님", "연락처"],
+    ...rows.map((r) => [r.business_name || "", r.name || "", D.formatPhone(r.phone)])];
+  const csv = "\ufeff" + lines.map((r) => r.map(csvCell).join(",")).join("\r\n");
+  return text(csv, 200, { "content-type": "text/csv; charset=utf-8",
+    "content-disposition": `attachment; filename="unpaid_${assoc.slug}_${period}.csv"`, "cache-control": "no-store" });
 }
 
 // 행사 참가자 명단 — 자리·다과·상품권을 이 명단으로 준비한다.
@@ -2739,6 +2883,14 @@ export async function adminBusinessEdit(ctx) {
         <label>소개<textarea name="description" rows="4" maxlength="2000">${esc(b.description || "")}</textarea></label>
         <label>네이버 플레이스 <small>(선택 · 리뷰·길찾기 연결)</small>
           <input type="url" name="sns_naver" value="${esc(b.sns_naver || "")}" placeholder="naver.me/…" /></label>
+        <div class="form-divider">유어딜 (이용권 판매)</div>
+        <p class="panel-hint">이 가게가 유어딜에서 이용권을 팔고 있으면 <b>가게 번호</b>를 넣어 주세요.
+          그러면 그 이용권이 상인회 홈의 <b>우리 골목 이용권</b> 자리에 자동으로 걸립니다.
+          번호는 유어딜 가게 화면 주소 끝의 숫자입니다 (예: live.ur-team.com/seller/<b>128</b> → 128).
+          안 팔면 비워 두세요.</p>
+        <label>유어딜 가게 번호 <small>(선택)</small>
+          <input type="text" inputmode="numeric" name="urdeal_seller_id" maxlength="12"
+            value="${b.urdeal_seller_id ? esc(String(b.urdeal_seller_id)) : ""}" placeholder="예: 128" /></label>
         <div class="form-divider">지도 위치</div>
         <div class="form-two">
           <label>위도<input type="text" inputmode="decimal" name="lat" data-place="lat" value="${b.lat != null ? esc(String(b.lat)) : ""}" /></label>

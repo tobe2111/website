@@ -182,6 +182,34 @@ export function bumpHomeGoal(db, aid, variant, goal) {
   return run(db, `INSERT INTO landing_views (association_id, variant, day, views, ${col}) VALUES (?,?,?,0,1)
     ON CONFLICT(association_id, variant, day) DO UPDATE SET ${col} = ${col} + 1`, aid, variant, kstToday());
 }
+// ── 가게별 열람 수 ─────────────────────────────────────────────────
+// 상인회가 재계약할 때 실제로 묻는 것은 "우리 골목에서 어느 가게가 잘 보였나" 다.
+// 지금까지는 상인회 전체 합계만 있어서, 회장님이 사장님께 보여 줄 것이 없었다.
+export const bumpBusinessView = (db, bizId, aid) =>
+  run(db, `INSERT INTO business_views (business_id, association_id, day, views) VALUES (?,?,?,1)
+    ON CONFLICT(business_id, day) DO UPDATE SET views = views + 1`, bizId, aid, kstToday());
+
+// 많이 본 순서. 0회인 가게는 넣지 않는다 — "안 본 가게" 목록을 회장님이 사장님께
+// 보여 줄 일은 없고, 그 줄이 길어지면 정작 잘 된 가게가 안 보인다.
+export const topBusinesses = (db, aid, { days = 30, limit = 8 } = {}) =>
+  all(db, `SELECT b.id, b.name, b.slug, b.category, SUM(v.views) AS views
+    FROM business_views v JOIN businesses b ON b.id = v.business_id
+    WHERE v.association_id=? AND v.day >= date('now','+9 hours',?) AND b.status='approved'
+    GROUP BY b.id ORDER BY views DESC, b.name LIMIT ?`, aid, `-${Number(days) || 30} days`, limit);
+
+// 손님이 홈에서 무엇을 했나 (최근 N일). 방문·가게 열람·찾기·입점 신청·전화.
+export const homeOutcomes = async (db, aid, days = 30) =>
+  (await first(db, `SELECT COALESCE(SUM(views),0) views, COALESCE(SUM(bizviews),0) bizviews,
+      COALESCE(SUM(finds),0) finds, COALESCE(SUM(signups),0) signups, COALESCE(SUM(calls),0) calls
+    FROM landing_views WHERE association_id=? AND day >= date('now','+9 hours',?)`,
+    aid, `-${Number(days) || 30} days`)) || { views: 0, bizviews: 0, finds: 0, signups: 0, calls: 0 };
+
+// 날짜별 방문 (막대 하나가 하루). 빈 날은 여기서 채우지 않는다 — 화면에서 채운다.
+export const visitsByDay = (db, aid, days = 30) =>
+  all(db, `SELECT day, SUM(views) AS views FROM landing_views
+    WHERE association_id=? AND day >= date('now','+9 hours',?) GROUP BY day ORDER BY day`,
+    aid, `-${Number(days) || 30} days`);
+
 // 사본별 성과 (최근 N일). 방문이 얇으면 비율은 우연이라, 화면에서 그렇게 말해 준다.
 export const homeVariantStats = (db, aid, days = 30) =>
   all(db, `SELECT variant,
@@ -445,6 +473,15 @@ export async function businessStatusCounts(db, aid) {
   return out;
 }
 
+export const setUrdealSeller = (db, id, aid, sellerId) =>
+  run(db, "UPDATE businesses SET urdeal_seller_id=? WHERE id=? AND association_id=?", Number(sellerId) || 0, id, aid);
+// 유어딜 가게 번호가 있는 점포만. 홈에 걸 이용권을 가져올 때 쓴다.
+// 홈에 보이는 12곳만이 아니라 공개된 점포 전부를 본다 — 이용권을 파는 가게가
+// 목록 두 번째 쪽에 있다고 골목 화면에서 빠질 이유가 없다.
+export const urdealSellerIds = async (db, aid) =>
+  (await all(db, "SELECT urdeal_seller_id AS id FROM businesses WHERE association_id=? AND status='approved' AND urdeal_seller_id>0", aid))
+    .map((r) => r.id);
+
 function bizWhere(aid, { status = "approved", category = null, q = null }) {
   let sql = " WHERE association_id = ? AND status = ?"; const args = [aid, status];
   if (category) { sql += " AND category = ?"; args.push(category); }
@@ -624,12 +661,40 @@ export const listRsvpsByAssoc = (db, aid) =>
            WHERE r.association_id=? ORDER BY r.created_at`, aid);
 
 // ----- 회비 장부 (납부 기록만 — 결제 아님) -----
-export const setDuePaid = (db, aid, userId, period) =>
-  run(db, "INSERT OR IGNORE INTO dues (association_id, user_id, period) VALUES (?,?,?)", aid, userId, period);
+export const setDuesAmount = (db, aid, won) =>
+  run(db, "UPDATE associations SET dues_amount=? WHERE id=?", Math.max(0, Number(won) || 0), aid);
+
+// 이번 달 회비가 얼마나 걷혔나 — 임원이 총회에서 읽는 두 줄(걷힘 / 받을 것)이다.
+// 금액 없이 체크만 한 옛 기록(amount=0)은 '냈다' 로는 세되 금액에는 더하지 않는다.
+export async function duesSummary(db, aid, period, dueAmount) {
+  const paid = await first(db, `SELECT COUNT(*) AS n, COALESCE(SUM(amount),0) AS won
+    FROM dues WHERE association_id=? AND period=?`, aid, period);
+  const members = await first(db, "SELECT COUNT(*) AS n FROM users WHERE association_id=? AND role='MERCHANT'", aid);
+  const total = members.n || 0, paidN = paid.n || 0;
+  return {
+    total, paid: paidN, unpaid: Math.max(0, total - paidN),
+    collected: paid.won || 0,
+    expected: (Number(dueAmount) || 0) * total,
+  };
+}
+// 미납 명단 — 임원이 실제로 하는 일은 이 명단을 들고 전화를 도는 것이다.
+export const unpaidMembers = (db, aid, period) =>
+  all(db, `SELECT u.id, u.name, u.phone, b.name AS business_name
+    FROM users u LEFT JOIN businesses b ON b.owner_id = u.id
+    WHERE u.association_id=? AND u.role='MERCHANT'
+      AND NOT EXISTS (SELECT 1 FROM dues d WHERE d.association_id=u.association_id AND d.user_id=u.id AND d.period=?)
+    ORDER BY b.name, u.name`, aid, period);
+
+// 다시 체크하면 금액을 고친다 — 처음에 기본값으로 넣었다가 실제로 받은 금액이 다를 때
+// 지웠다 다시 넣게 하면 임원이 그냥 엑셀로 돌아간다.
+export const setDuePaid = (db, aid, userId, period, amount = 0) =>
+  run(db, `INSERT INTO dues (association_id, user_id, period, amount) VALUES (?,?,?,?)
+    ON CONFLICT(association_id, user_id, period) DO UPDATE SET amount=excluded.amount`,
+    aid, userId, period, Math.max(0, Number(amount) || 0));
 export const setDueUnpaid = (db, aid, userId, period) =>
   run(db, "DELETE FROM dues WHERE association_id=? AND user_id=? AND period=?", aid, userId, period);
 export const listDuesForPeriod = (db, aid, period) =>
-  all(db, "SELECT user_id FROM dues WHERE association_id=? AND period=?", aid, period);
+  all(db, "SELECT user_id, amount FROM dues WHERE association_id=? AND period=?", aid, period);
 export async function moveProduct(db, id, dir) {
   const p = await getProduct(db, id); if (!p) return;
   const neighbor = await first(db,

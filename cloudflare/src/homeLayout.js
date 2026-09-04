@@ -125,6 +125,13 @@ export const SECTION_CATALOG = {
       { key: "lead", label: "설명", type: "textarea" },
     ],
   },
+  deals: {
+    label: "우리 골목 이용권 (유어딜)",
+    fields: [
+      { key: "title", label: "제목", type: "text" },
+      { key: "lead", label: "설명", type: "textarea" },
+    ],
+  },
   showcase: {
     label: "브랜드 쇼케이스 (야경 밴드)",
     fields: [
@@ -177,6 +184,9 @@ export function defaultLayout(assocName = "우리 상인회") {
     // 제목이 "지금 문 연 가게" 인데 목록에는 문 닫은 가게도 섞여 있었습니다.
     // 문 연 곳만 보는 것은 바로 위 업종 줄의 첫 칸이 합니다.
     { type: "businesses", enabled: true, title: "골목마다 이야기가 있는\n우리 동네 가게", lead: "", style: "grid" },
+    // 우리 골목 이용권 — 가게 목록 바로 뒤. 손님이 가게를 본 다음에 살 것을 만난다.
+    // 이용권이 하나도 없어도 섹션이 비지 않는다(사장님을 부르는 칸이 늘 있다) — 그래서 기본으로 켠다.
+    { type: "deals", enabled: true, title: "우리 골목 이용권", lead: "" },
     { type: "updates", enabled: true, title: "오늘도 문을 여는\n가게 소식" },
     { type: "mapbanner", enabled: true, title: "우리 동네 점포 지도", subtitle: "" },
     { type: "notices", enabled: true, title: "함께 알아 두면 좋은\n상인회 공지" },
@@ -232,6 +242,7 @@ export function parseLayout(json, assocName) {
     // 입점 안내 셋은 꺼진 채로 넣는다: 이미 켜서 쓰고 있는 상인회의 설정은 위 filter 가 그대로 살리고,
     // 여기 걸리는 것은 '그런 섹션이 있는 줄도 몰랐던' 옛 구성뿐이라 임의로 켜면 홈이 갑자기 길어진다.
     const guides = [
+      ["deals", { type: "deals", enabled: true, title: "우리 골목 이용권", lead: "" }],
       ["photos", { type: "photos", enabled: true, title: "활동사진", lead: "" }],
       ["video", { type: "video", enabled: true, title: "영상으로 보기", url: "", lead: "" }],
       ["steps", { type: "steps", enabled: false, title: "입점은 이렇게 진행됩니다", lead: "" }],
@@ -338,6 +349,34 @@ function renderSection(s, deps) {
     case "updates":
       if (!deps.updatesHtml) return ""; // 소식 없으면 섹션 숨김
       return sectionWrap("section-sub", s.title || "가게가 전하는 소식", "", `<div class="update-grid">${deps.updatesHtml}</div>`);
+    // 우리 골목 이용권 (유어딜) — 손님에게는 살 것을, 사장님에게는 만들 자리를.
+    //
+    // 이 섹션은 이용권이 하나도 없어도 비지 않는다. 마지막 칸(사장님을 부르는 칸)이 늘 있고,
+    // 이용권이 0개면 그 칸 하나가 섹션 전체가 된다 — '아직 아무도 안 파는 골목' 이 아니라
+    // '지금 시작하는 자리' 로 읽히게 하는 것이 이 섹션의 목적이다.
+    case "deals": {
+      const list = deps.deals || [];
+      const won = (n) => Number(n || 0).toLocaleString("ko-KR");
+      const card = (d) => `<a class="deal-card" href="${esc(d.url)}" target="_blank" rel="noopener">
+        ${d.image ? `<img class="deal-thumb" src="${esc(d.image)}" alt="" loading="lazy" decoding="async" />`
+                  : `<span class="deal-thumb is-blank" aria-hidden="true"></span>`}
+        <span class="deal-b">
+          ${d.shop ? `<b class="deal-shop">${esc(d.shop)}</b>` : ""}
+          <span class="deal-name">${esc(d.name)}</span>
+          <span class="deal-price">${d.was ? `<s>${won(d.was)}원</s>` : ""}<b>${won(d.price)}원</b>${d.off ? `<em>${d.off}%</em>` : ""}</span>
+        </span></a>`;
+      const join = `<article class="deal-card is-join"><div class="deal-join">
+        <span class="deal-tag">사장님께</span>
+        <b>우리 가게 이용권 만들어서 홍보하기</b>
+        <p>손님이 미리 사고 매장에서 그대로 쓰는 이용권입니다. 만들어 두면 이 골목 화면에 걸리고,
+           결제와 정산은 유어딜이 대신합니다.</p>
+        <a class="btn btn-deal" href="${deps.base}/urdeal">이용권 만들러 가기</a>
+      </div></article>`;
+      return sectionWrap("section-deals", s.title || "우리 골목 이용권",
+        s.lead || (list.length ? "미리 사 두고 매장에서 그대로 쓰세요." : "우리 골목 가게의 이용권을 미리 사고 매장에서 그대로 씁니다."),
+        `<div class="deal-row${list.length ? "" : " is-empty"}">${list.slice(0, 5).map(card).join("")}${join}</div>`,
+        list.length ? { href: `${deps.base}/urdeal`, label: "유어딜에서 더 보기" } : null);
+    }
     case "photos":
       // 사진 붙은 공지가 없으면 섹션 자체가 없다 — 빈 사진판은 '아직 아무것도 안 한 상인회'로 읽힌다
       if (!deps.photosHtml) return "";
