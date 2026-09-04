@@ -272,7 +272,7 @@ ok(zoomTap && zoomTap.h >= 44, "지면을 크게 보면 서명 칸이 손가락 
     contentHash: await E.contentHash(dbody), createdBy: null, draft: 1 });
   const admin = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
   await admin.goto(`${BASE}/login`, { waitUntil: "networkidle" });
-  await admin.fill('input[name="email"]', "b@h.kr");
+  await admin.fill('input[name="login"]', "b@h.kr");
   await admin.fill('input[name="password"]', "password1234");
   await Promise.all([admin.waitForNavigation(), admin.locator("form button").first().tap()]);
   await admin.goto(`${BASE}/t/hanbit/admin/documents/${draft.id}/fields`, { waitUntil: "networkidle" });

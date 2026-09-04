@@ -113,7 +113,7 @@ const authHead = (t, sub) => `<div class="auth-head"><span class="mark auth-mark
 const loginBody = `<section class="section page-top"><div class="container auth-wrap"><div class="auth-card">
   ${authHead("로그인", "상인회 회원·관리자 로그인")}
   <form method="post" action="#" class="stack-form">
-    <label>이메일<input type="email" name="email" required /></label>
+    <label>이메일 또는 휴대폰 번호<input type="text" name="login" required placeholder="name@example.com 또는 010-1234-5678" /></label>
     <label>비밀번호<input type="password" name="password" required /></label>
     <label class="totp-login">2단계 인증 코드 <small>(설정한 경우만)</small><input type="text" name="totp" placeholder="000000" /></label>
     <button class="btn btn-primary btn-block">로그인</button>
