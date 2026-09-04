@@ -72,7 +72,9 @@ export async function makeZip(files, { at = new Date() } = {}) {
     const ch = new Uint8Array(46 + name.length);
     const cv = new DataView(ch.buffer);
     cv.setUint32(0, 0x02014b50, true);
-    cv.setUint16(4, 20, true); cv.setUint16(6, 20, true);
+    // "만든 시스템" 을 Unix(3) 로 적는다. MS-DOS(0) 로 두면 일부 압축 프로그램이
+    // 파일명을 옛 도스 코드페이지로 읽어 한글이 깨진다 — UTF-8 플래그를 켜 뒀는데도 그렇다.
+    cv.setUint16(4, (3 << 8) | 20, true); cv.setUint16(6, 20, true);
     cv.setUint16(8, 0x0800, true);
     cv.setUint16(10, method, true);
     cv.setUint16(12, time, true); cv.setUint16(14, date, true);
@@ -80,6 +82,7 @@ export async function makeZip(files, { at = new Date() } = {}) {
     cv.setUint32(20, body.length, true);
     cv.setUint32(24, raw.length, true);
     cv.setUint16(28, name.length, true);
+    cv.setUint32(38, 0o100644 * 0x10000, true); // 유닉스 권한 rw-r--r-- (0 이면 권한 없는 파일로 풀리는 도구가 있다)
     cv.setUint32(42, offset, true);
     ch.set(name, 46);
     central.push(ch);
