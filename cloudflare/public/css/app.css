@@ -2949,6 +2949,7 @@ a.bc-val,.map-store-name,.map-store-link{display:inline-flex;align-items:center;
   .sec-v5 .join-cta{border-radius:18px;align-items:stretch}
   .jc-go{justify-content:space-between;width:100%;padding:14px 18px;border-radius:var(--r-pill);
     background:rgba(255,255,255,.16);min-height:56px}
+}
 /* ==========================================================================
    업무 콘솔 (.is-console) — 손님 화면이 아니라 '일하는 화면'
 
@@ -2967,6 +2968,10 @@ body.is-console .site-header{position:sticky;top:0;z-index:60;background:var(--s
 body.is-console .main-nav{gap:18px;align-items:center;font-size:13.5px}
 body.is-console .main-nav a{color:var(--muted);font-weight:600}
 body.is-console .main-nav a:hover{color:var(--ink)}
+/* 좁은 화면에서는 콘솔에서도 서랍 메뉴다 — 위 줄이 파일 앞쪽(860px)의 세로 배치를 덮지 않게 */
+@media (max-width:860px){
+  body.is-console .main-nav{flex-direction:column;align-items:stretch;gap:0;font-size:1.05rem}
+}
 .cnav-out{color:var(--brand-text)!important}
 .cnav-out-form{display:inline-flex}
 .dash{padding-top:clamp(20px,2.4vw,30px)}
@@ -3108,3 +3113,60 @@ a.dt-main:hover{color:var(--brand-text);text-decoration:underline}
 .mini-edit > .mini-del{padding:12px 0 14px;border-top:1px solid var(--line-soft);margin-top:14px}
 .mini-edit .dtable-wrap{margin-bottom:10px}
 .mini-edit .dtable thead th{position:static}   /* 펼친 상자 안에서는 붙어 있을 필요가 없습니다 */
+
+/* =========================================================================
+   홈 v5-b —— 색으로 채운 카드와 가로로 미는 줄
+   레퍼런스의 첫 구역이 하는 일은 셋이다: 사진 위·색 아래, 옆으로 걸침, 화살표.
+   ========================================================================= */
+
+/* 가로로 미는 줄 */
+.rail-wrap{position:relative}
+.market-rail{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(240px,272px);gap:16px;
+  overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch;
+  /* 줄 끝에서 카드가 잘리지 않게 본문 여백만큼 안팎으로 뺐다 넣는다 */
+  margin-inline:calc(-1 * var(--rail-pad,20px));padding-inline:var(--rail-pad,20px);padding-block:2px}
+.market-rail::-webkit-scrollbar{display:none}
+.market-rail>.market-card{scroll-snap-align:start}
+.rail-nav{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+.rail-btn{display:grid;place-items:center;width:44px;height:44px;border-radius:50%;cursor:pointer;
+  border:1px solid var(--line);background:var(--surface);color:var(--ink-soft);transition:border-color .2s,color .2s}
+.rail-btn:hover:not(:disabled){border-color:var(--ink);color:var(--ink)}
+.rail-btn:disabled{opacity:.35;cursor:default}
+
+/* 색으로 채운 카드 —— 사진은 위, 본문은 업종색 한 덩어리 */
+.sec-v5 .market-rail .market-card{border:0;border-radius:16px;overflow:hidden;background:var(--surface)}
+.sec-v5 .market-rail .market-thumb{aspect-ratio:4/3;border-radius:0}
+.sec-v5 .market-rail .market-body{background:var(--tone,var(--ink));color:#fff;padding:18px 18px 20px;
+  min-height:118px;display:flex;flex-direction:column;gap:5px}
+.sec-v5 .market-rail .mc-cat{color:rgba(255,255,255,.9);font-size:.76rem;font-weight:600;letter-spacing:0}
+.sec-v5 .market-rail .market-body h3{margin:0}
+.sec-v5 .market-rail .market-body h3 a{color:#fff;font-size:1.12rem;font-weight:700;letter-spacing:-.025em}
+.sec-v5 .market-rail .mc-when{color:rgba(255,255,255,.95);font-size:.86rem;margin-top:4px}
+.sec-v5 .market-rail .mc-when::before{background:rgba(255,255,255,.9)}
+/* 흰 글자를 옅게 깔면 밝은 업종색(원두빛·팥색) 위에서 4.09:1 까지 떨어져 AA(4.5)에 못 미쳤다.
+   실측해서 올렸다 — 옅게 보이는 멋보다 읽히는 것이 먼저다. */
+.sec-v5 .market-rail .mc-meta{color:rgba(255,255,255,.92);font-size:.82rem;margin-top:auto}
+.sec-v5 .market-rail .mc-meta svg{color:rgba(255,255,255,.8)}
+/* 영업 상태 배지는 사진 위에 흰 알약으로 (색 본문과 겹치지 않게) */
+.sec-v5 .market-rail .market-open{background:rgba(255,255,255,.94)}
+
+@media (max-width:640px){
+  .market-rail{grid-auto-columns:minmax(210px,72vw);gap:12px}
+  .rail-nav{display:none}   /* 손가락으로 미는 화면에서는 화살표가 자리만 먹는다 */
+}
+@media (max-width:600px){
+  /* 앞쪽 600px 구간이 정해 둔 좁은 화면 값 — 위의 레일 규칙이 특정도로 덮으므로 여기서 다시 */
+  .sec-v5 .market-rail .market-body{padding:14px 14px 16px;min-height:104px}
+  .sec-v5 .market-rail .market-thumb{aspect-ratio:1/1}
+  .sec-v5 .market-rail .market-body h3 a{font-size:1.02rem}
+}
+
+/* 콘솔 머리말의 '홈페이지 보기' — 관리자가 가장 자주 누르는 것이라 글자 링크가 아니라 단추로 */
+body.is-console .main-nav a.cnav-out{display:inline-flex;align-items:center;gap:6px;min-height:38px;
+  padding:0 14px;border-radius:var(--r-pill);border:1px solid var(--line);
+  background:var(--surface);color:var(--ink)!important;font-weight:600}
+body.is-console .main-nav a.cnav-out:hover{border-color:var(--ink);background:var(--surface-2)}
+/* 쪽 번호 — 세로가 34px 이라 손가락 기준(44px)에 못 미쳤다 (다른 세션이 패딩을 줄인 뒤 다시 걸렸다) */
+@media (hover:none),(pointer:coarse){
+  .pager .pg{min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center}
+}

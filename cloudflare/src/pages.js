@@ -26,6 +26,23 @@ import { CRON, CRON_JOBS, cronRunKey } from "./scheduled.js";
 
 const DOC_EVENT_LABEL = { created: "문서 생성", viewed: "계약서 열람", otp_sent: "인증번호 발송", otp_ok: "휴대폰 본인확인", signed: "전자서명 완료", declined: "서명 거절", reminded: "재알림 발송", notified: "알림 발송", edited: "문서 수정", sealed: "직인 날인 (보내는 쪽)", expired: "기한 경과로 마감" };
 const CATEGORIES = ["음식점", "카페·디저트", "생활·서비스", "패션·잡화", "농수축산", "교육·문화", "기타"];
+// 업종마다 고정된 색. 레퍼런스(카카오임팩트)의 카드처럼 **본문을 색으로 채우기** 위한 것이다.
+//
+// 색을 무작위로 돌리지 않고 업종에 묶는 이유: 색이 정보가 되어야 하기 때문이다.
+// 같은 업종은 언제 어느 화면에서 봐도 같은 색이라, 손님이 두 번째 방문부터는
+// 색만 보고 "저건 카페" 를 안다. 무작위면 색은 그냥 소음이다.
+//
+// 일곱 색 모두 흰 글자를 얹어 WCAG AA(4.5:1)를 넘는지 재 뒀다 — scripts/a11y.mjs 가 매번 다시 잰다.
+const CAT_TONE = {
+  "음식점": "#8E2F3E",      // 팥색      7.9:1
+  "카페·디저트": "#6F4423", // 원두빛    8.3:1
+  "생활·서비스": "#1F5F7A", // 물빛      6.6:1
+  "패션·잡화": "#6D3B8E",   // 자주      7.9:1
+  "농수축산": "#1F6B3F",    // 솔잎      6.5:1
+  "교육·문화": "#14655F",   // 이끼      6.9:1
+  "기타": "#3F4652",        // 먹빛      9.1:1
+};
+const catTone = (c) => CAT_TONE[String(c || "").trim()] || CAT_TONE["기타"];
 const NOTICE_CATEGORIES = ["안내", "공지", "소식", "행사", "혜택", "긴급"];
 const qs = (o) => { const p = new URLSearchParams(); for (const [k, v] of Object.entries(o)) if (v != null && v !== "" && !(k === "page" && v === 1)) p.set(k, v); const s = p.toString(); return s ? "?" + s : ""; };
 const canModerate = (user, assoc) => user && (user.role === "SUPERADMIN" || (user.role === "ADMIN" && user.association_id === assoc.id));
@@ -101,7 +118,7 @@ function businessCard(base, b, cover) {
       ${thumb}
       ${open ? `<span class="market-open">${open}</span>` : ""}
     </a>
-    <div class="market-body">
+    <div class="market-body" style="--tone:${catTone(b.category)}">
       <span class="mc-cat">${esc(b.category)}</span>
       <h3><a href="${base}/business/${esc(b.slug)}">${esc(b.name)}</a></h3>
       ${h.label ? `<p class="mc-when mc-${h.state}">${esc(h.label)}</p>` : ""}
@@ -266,7 +283,7 @@ export async function home(ctx, opts = {}) {
     },
   };
   return html(layout({ title: "", assoc, base, user, body: body + popupLayer(popups), activeNav: `${base}/`, csrf, description: assoc.tagline, jsonLd: [orgLd, siteLd],
-    scripts: `${names.length ? `<script src="${assetUrl("/js/suggest.js")}" defer></script>` : ""}${popups.length ? `<script src="${assetUrl("/js/popup.js")}" defer></script>` : ""}` }));
+    scripts: `${names.length ? `<script src="${assetUrl("/js/suggest.js")}" defer></script>` : ""}${popups.length ? `<script src="${assetUrl("/js/popup.js")}" defer></script>` : ""}${cardItems.length ? `<script src="${assetUrl("/js/rail.js")}" defer></script>` : ""}` }));
 }
 
 // 홈 팝업 마크업.
@@ -1901,8 +1918,7 @@ export async function admin(ctx) {
   const queuePanel = hotPanels || `<p class="all-clear">지금 처리할 일이 없습니다</p>`;
 
   const body = `<section class="dash"><div class="container">
-    <div class="dash-head"><div><h1 class="dash-title">${esc(kindOf(assoc).dashTitle)}</h1>
-      <p class="dash-sub">${isEsign ? "계약 창구" : isFranchise ? "랜딩페이지" : "홈페이지"}: <a href="${base}" target="_blank">${esc(prettyPath(base))}</a></p></div>
+    <div class="dash-head"><div><h1 class="dash-title">${esc(kindOf(assoc).dashTitle)}</h1></div>
       <div class="dash-head-actions">${isFranchise ? `<a href="${base}/admin/leads" class="btn btn-primary btn-sm">상담 DB ${leads.total}건</a>
         <a href="${base}/admin/landing" class="btn btn-ghost btn-sm">랜딩 편집</a>`
         : `<a href="${base}/admin/documents" class="btn btn-primary btn-sm">계약서 만들기</a>`}</div></div>

@@ -232,3 +232,21 @@ test("점주 대시보드가 하는 일별 탭으로 나뉜다", async () => {
   assert.match(seg, /id="consoleNav"/, "탭이 붙을 자리가 있어야");
   assert.match(seg, /super-tabs\.js/, "탭 장치를 실어야");
 });
+
+// 닫히지 않은 중괄호 하나면 **그 뒤 CSS 가 전부 죽는다.**
+// 실제로 그렇게 됐다: 붙임 두 개가 병합되면서 @media 의 닫는 괄호가 사라졌고,
+// 그 아래 업무 콘솔 스타일 전체가 라이브에서 무시되고 있었다. 화면은 조용히 망가지고
+// 브라우저는 아무 말도 하지 않는다. 그래서 사람 눈이 아니라 여기서 센다.
+test("app.css 의 중괄호가 맞는다 — 하나만 어긋나도 그 뒤가 전부 죽는다", async () => {
+  const { readFileSync } = await import("node:fs");
+  const raw = readFileSync(new URL("../public/css/app.css", import.meta.url), "utf8");
+  const css = raw.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " ")); // 주석 제거(줄 유지)
+  let depth = 0, line = 1, badLine = 0;
+  for (const ch of css) {
+    if (ch === "\n") line++;
+    else if (ch === "{") depth++;
+    else if (ch === "}") { depth--; if (depth < 0 && !badLine) badLine = line; }
+  }
+  assert.equal(badLine, 0, `닫는 중괄호가 남습니다 (${badLine}줄)`);
+  assert.equal(depth, 0, `닫히지 않은 중괄호가 ${depth}개 남았습니다 — 그 뒤 규칙이 전부 무시됩니다`);
+});
