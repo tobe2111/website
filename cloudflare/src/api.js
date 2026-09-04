@@ -980,25 +980,76 @@ export async function adminResetUserPassword(ctx) {
 
 // 관리자 대행 등록: 총무가 사장님 대신 회원+업체를 만들고 임시 비번을 전달.
 // source='proxy' 로 태깅 → '셀프 등록률' 계측의 분모/분자에 반영.
+// 로그인 자리만 잡아 두는 주소. .invalid 는 절대 실재하지 않도록 예약된 최상위 도메인이라
+// (RFC 2606) 실수로 메일이 나갈 일이 없다. 사장님이 나중에 진짜 이메일을 정하면 교체된다.
+export const NO_LOGIN_DOMAIN = "no-login.invalid";
+export const isPlaceholderEmail = (e) => String(e || "").endsWith("@" + NO_LOGIN_DOMAIN);
+
 export async function adminAddMember(ctx) {
   // 전자계약 조직에는 업체가 없다 — 담당자는 '담당자 추가'로, 내부 서명자는 이 경로로 받되
   // 업체 레코드를 만들지 않는다(만들면 쓰지도 않을 '내 업체' 화면이 열린다).
   const { db, form, base, assoc } = ctx;
   const name = cap((form.get("name") || "").trim(), 60);
   const email = cap((form.get("email") || "").toLowerCase().trim(), 120);
+  const phone = D.normalizePhone(form.get("phone") || "");
   const businessName = cap((form.get("business_name") || "").trim(), 100);
   const isEsign = assoc.kind === "esign";
-  if (!name || !EMAIL_RE.test(email) || (!isEsign && !businessName))
-    return back(base + "/admin", isEsign ? "이름·이메일을 확인해 주세요." : "이름·이메일·업체명을 확인해 주세요.", true);
-  if (await D.getUserByEmail(db, email)) return back(base + "/admin", "이미 가입된 이메일입니다.", true);
+  const to = base + "/admin";
+  if (!name) return back(to, "성함을 입력해 주세요.", true);
+  if (!isEsign && !businessName) return back(to, "업체명을 입력해 주세요.", true);
+  // 이메일은 이제 선택이다. 상인회 사장님 중에는 이메일이 없는 분이 많고, 이 서비스는
+  // 안내를 알림톡으로 보내므로 실제로 필요한 연락처는 휴대폰이다.
+  // 다만 로그인은 이메일로 하므로, 없으면 '아직 로그인 못 하는 상태' 로 자리만 잡아 둔다.
+  if (email && !EMAIL_RE.test(email)) return back(to, "이메일 형식을 확인해 주세요.", true);
+  if (phone && !D.isValidPhone(phone)) return back(to, "휴대폰 번호 형식을 확인해 주세요. (010-1234-5678)", true);
+  if (!email && !phone) return back(to, "이메일이나 휴대폰 중 하나는 있어야 합니다 — 둘 다 없으면 사장님께 연락할 방법이 없습니다.", true);
+  if (email && await D.getUserByEmail(db, email)) return back(to, "이미 가입된 이메일입니다.", true);
   if ((await D.countMembers(db, assoc.id)) >= planOf(assoc).maxMembers)
-    return back(base + "/admin", "회원 정원이 가득 찼습니다.", true);
+    return back(to, "회원 정원이 가득 찼습니다.", true);
+  const loginEmail = email || `p${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}@${NO_LOGIN_DOMAIN}`;
   const temp = tempPassword();
   const { hash, salt } = await hashPassword(temp);
-  const user = await D.createUser(db, { email, passwordHash: hash, salt, name, role: "MERCHANT", associationId: assoc.id });
-  if (!isEsign) await D.createBusiness(db, { associationId: assoc.id, ownerId: user.id, name: businessName, category: cap(form.get("category"), 40), source: "proxy" });
-  await audit(ctx, isEsign ? "서명자등록" : "회원대행등록", `${name}${businessName ? " / " + businessName : ""} (${email})`);
-  return back(base + "/admin", `${isEsign ? "내부 서명자" : "대행"} 등록 완료 — ${name}님 로그인: ${email} / 임시비번 ${temp} (본인에게 전달하세요)`);
+  const user = await D.createUser(db, { email: loginEmail, passwordHash: hash, salt, name, role: "MERCHANT", associationId: assoc.id, phone });
+  if (!isEsign) {
+    const biz = await D.createBusiness(db, { associationId: assoc.id, ownerId: user.id, name: businessName, category: cap(form.get("category"), 40), source: "proxy" });
+    // 지도에서 찾아 채운 값이 함께 왔으면 그 자리에서 저장한다 — 안 그러면 등록하자마자
+    // 다시 [정보 채우기] 로 들어가 같은 값을 또 넣어야 한다.
+    const coord = (v, mn, mx) => { const t = String(v ?? "").trim(); if (!t) return null; const n = Number(t); return Number.isFinite(n) && n >= mn && n <= mx ? n : null; };
+    const address = cap((form.get("address") || "").trim(), 200);
+    const bizPhone = cap((form.get("biz_phone") || "").trim(), 40);
+    const lat = coord(form.get("lat"), -90, 90), lng = coord(form.get("lng"), -180, 180);
+    if (address || bizPhone || lat != null) {
+      await D.updateBusiness(db, biz.id, {
+        name: biz.name, category: biz.category, description: "", phone: bizPhone, address, hours: "", lat, lng,
+        snsInstagram: "", snsYoutube: "", snsBlog: "", snsKakao: "", snsNaver: "",
+      });
+    }
+  }
+  await audit(ctx, isEsign ? "서명자등록" : "회원대행등록", `${name}${businessName ? " / " + businessName : ""} (${email || "이메일 없음"})`);
+  return back(to, email
+    ? `${isEsign ? "내부 서명자" : "대행"} 등록 완료 — ${name}님 로그인: ${email} / 임시비번 ${temp} (본인에게 전달하세요)`
+    : `${name}님을 등록했습니다. 이메일이 없어 아직 로그인은 못 하십니다 — 점포 화면에서 로그인 이메일을 지정하면 그때 비밀번호가 나옵니다.`);
+}
+
+// 이메일 없이 등록해 둔 사장님에게 나중에 로그인 이메일을 지정한다.
+// 이게 없으면 이메일 없이 등록한 계정은 영영 로그인할 수 없는 껍데기로 남는다.
+export async function adminSetOwnerEmail(ctx) {
+  const { db, form, base, assoc, params } = ctx;
+  const b = await D.getBusinessById(db, Number(params.id) || 0);
+  if (!b || b.association_id !== assoc.id) return back(base + "/admin", "업체를 찾을 수 없습니다.", true);
+  const to = `${base}/admin/business/${b.id}`;
+  const owner = b.owner_id ? await D.getUserById(db, b.owner_id) : null;
+  if (!owner) return back(to, "연결된 사장님 계정이 없습니다.", true);
+  if (!isPlaceholderEmail(owner.email)) return back(to, "이미 로그인 이메일이 있는 계정입니다.", true);
+  const email = cap((form.get("email") || "").toLowerCase().trim(), 120);
+  if (!EMAIL_RE.test(email)) return back(to, "이메일 형식을 확인해 주세요.", true);
+  if (await D.getUserByEmail(db, email)) return back(to, "이미 가입된 이메일입니다.", true);
+  const temp = tempPassword();
+  const { hash, salt } = await hashPassword(temp);
+  await D.setUserEmail(db, owner.id, email);
+  await D.updateUserPassword(db, owner.id, hash, salt);
+  await audit(ctx, "로그인이메일지정", `${b.name} · ${owner.name} → ${email}`);
+  return back(to, `로그인 이메일을 지정했습니다 — ${email} / 임시비번 ${temp} (사장님께 전달하세요)`);
 }
 
 // ---------- 가게 소식 (한 줄 피드) ----------

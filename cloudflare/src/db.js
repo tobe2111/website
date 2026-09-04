@@ -305,6 +305,10 @@ export const setUserRole = (db, id, associationId, role) =>
   run(db, "UPDATE users SET role=?, session_version = session_version + 1 WHERE id=? AND association_id=?",
     role, id, associationId);
 export const setUserPhone = (db, id, phone) => run(db, "UPDATE users SET phone=? WHERE id=?", normalizePhone(phone), id);
+// 이메일 없이 등록해 둔 계정에 나중에 로그인 주소를 지정한다.
+// 세션 판을 올려, 옛 주소로 남아 있던 로그인은 즉시 끊는다.
+export const setUserEmail = (db, id, email) =>
+  run(db, "UPDATE users SET email=?, session_version = session_version + 1 WHERE id=?", email, id);
 export const updateUserPassword = (db, id, hash, salt) =>
   run(db, "UPDATE users SET password_hash=?, salt=?, session_version = session_version + 1 WHERE id=?", hash, salt, id);
 export const bumpSessionVersion = (db, id) => run(db, "UPDATE users SET session_version = session_version + 1 WHERE id=?", id);

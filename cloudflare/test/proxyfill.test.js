@@ -108,7 +108,7 @@ test("카카오 키가 없으면 그 사실을 말해 주고, 화면도 그 기�
   const { b } = await seed(env);
   const j = await login(env, "ad@s.kr");
   const html = await (await get(env, j, `/t/seocho/admin/business/${b.id}`)).text();
-  assert.ok(!/id="placeQ"/.test(html), "키가 없으면 찾기 칸을 그리지 않는다");
+  assert.ok(!/data-place-find/.test(html), "키가 없으면 찾기 칸을 그리지 않는다");
   assert.match(html, /운영사가 카카오 키를 등록하면/);
 
   const r = await get(env, j, "/t/seocho/admin/place-search?q=버들카페");
@@ -133,7 +133,7 @@ test("지도 검색은 카카오가 준 값만 넘기고, 업종은 맨 끝 낱�
   try {
     const j = await login(env, "ad@s.kr");
     const html = await (await get(env, j, `/t/seocho/admin/business/${b.id}`)).text();
-    assert.match(html, /id="placeQ"/, "키가 있으면 찾기 칸이 열린다");
+    assert.match(html, /data-place-find/, "키가 있으면 찾기 칸이 열린다");
 
     const r = await get(env, j, "/t/seocho/admin/place-search?q=버들카페");
     assert.equal(r.status, 200);
@@ -279,4 +279,125 @@ test("점주는 관리자용 사진 올리기 경로를 쓸 수 없다", async (
   }, "/t/seocho/dashboard");
   assert.notEqual(r.status, 303);
   assert.equal((await D.listMedia(env.DB, b.id)).length, 0);
+});
+
+// ── 회원 추가 ──
+// 상인회 사장님 중에는 이메일이 없는 분이 많다. 이 서비스는 안내를 알림톡으로 보내므로
+// 실제로 필요한 연락처는 휴대폰이다. 이메일을 필수로 두면 명단을 아예 못 넣는다.
+test("회원 추가 폼이 접힌 상자 안이 아니라 눈에 보이는 자리에 있다", async () => {
+  const env = makeEnv();
+  await seed(env);
+  const j = await login(env, "ad@s.kr");
+  const html = await (await get(env, j, "/t/seocho/admin")).text();
+  const at = html.indexOf('id="p-addmember"');
+  assert.ok(at > 0, "회원 추가 패널이 있어야");
+  // 여는 태그를 함께 본다 — 접힌 상자(details)면 회장님이 못 찾는다
+  assert.match(html.slice(Math.max(0, at - 120), at + 40), /<section class="panel panel-accent"/, "접힌 상자가 아니라 패널로");
+  assert.match(html.slice(at, at + 1600), /name="phone"/, "휴대폰 칸이 있어야 — 알림톡이 나가는 곳이다");
+  assert.match(html.slice(at, at + 1800), /이메일은 없어도 됩니다/);
+});
+
+test("이메일 없이 휴대폰만으로 회원을 추가할 수 있다", async () => {
+  const env = makeEnv();
+  const { a } = await seed(env);
+  const j = await login(env, "ad@s.kr");
+  const r = await post(env, j, "/t/seocho/admin/members/add",
+    { name: "박기석", phone: "010-3333-4444", business_name: "골목정육점", category: "농수축산" }, "/t/seocho/admin");
+  const msg = decodeURIComponent(r.headers.get("location") || "");
+  assert.doesNotMatch(msg, /err=1/, msg);
+  assert.match(msg, /아직 로그인은 못 하십니다/, "무엇이 안 되는지 그 자리에서 말해야");
+
+  const members = await D.listUsersByAssociation(env.DB, a.id, "MERCHANT");
+  const added = members.find((m) => m.name === "박기석");
+  assert.ok(added, "회원이 만들어져야");
+  assert.equal(added.phone, "01033334444", "휴대폰이 저장돼야 — 알림톡이 여기로 간다");
+  assert.match(added.email, /@no-login\.invalid$/, "실재하지 않도록 예약된 도메인이어야 메일이 잘못 나갈 일이 없다");
+  const biz = (await D.listAllBusinesses(env.DB, a.id)).find((x) => x.name === "골목정육점");
+  assert.ok(biz, "점포도 함께 만들어져야");
+  assert.equal(biz.source, "proxy");
+
+  // 목록에 가짜 주소를 진짜인 양 보여 주지 않는다
+  const html = await (await get(env, j, "/t/seocho/admin")).text();
+  assert.ok(!html.includes("no-login.invalid"), "가짜 주소를 화면에 그대로 내보이면 안 된다");
+  assert.match(html, /로그인 미설정/);
+});
+
+test("이메일도 휴대폰도 없으면 거절한다 (연락할 방법이 없다)", async () => {
+  const env = makeEnv();
+  await seed(env);
+  const j = await login(env, "ad@s.kr");
+  const r = await post(env, j, "/t/seocho/admin/members/add", { name: "이름만", business_name: "가게" }, "/t/seocho/admin");
+  const msg = decodeURIComponent(r.headers.get("location") || "");
+  assert.match(msg, /err=1/);
+  assert.match(msg, /연락할 방법이 없습니다/);
+});
+
+test("나중에 로그인 이메일을 지정하면 그때 임시 비밀번호가 나온다", async () => {
+  const env = makeEnv();
+  const { a } = await seed(env);
+  const j = await login(env, "ad@s.kr");
+  await post(env, j, "/t/seocho/admin/members/add",
+    { name: "박기석", phone: "010-3333-4444", business_name: "골목정육점" }, "/t/seocho/admin");
+  const biz = (await D.listAllBusinesses(env.DB, a.id)).find((x) => x.name === "골목정육점");
+
+  const page = await (await get(env, j, `/t/seocho/admin/business/${biz.id}`)).text();
+  assert.match(page, /로그인 이메일 지정/, "그 자리에서 지정할 수 있어야");
+  assert.match(page, /아직 로그인할 수 없습니다/);
+
+  const r = await post(env, j, `/t/seocho/admin/business/${biz.id}/owner-email`,
+    { email: "gogol@example.kr" }, `/t/seocho/admin/business/${biz.id}`);
+  const msg = decodeURIComponent(r.headers.get("location") || "");
+  assert.doesNotMatch(msg, /err=1/, msg);
+  assert.match(msg, /임시비번/, "발급된 비밀번호를 알려 줘야 전달할 수 있다");
+  assert.equal((await D.getUserById(env.DB, biz.owner_id)).email, "gogol@example.kr");
+
+  // 이제 정말 로그인이 되는가 — 화면에 적힌 비밀번호로
+  const temp = /임시비번 (\S+)/.exec(msg)[1];
+  const mj = jar();
+  const lr = await post(env, mj, "/login", { email: "gogol@example.kr", password: temp });
+  assert.equal(lr.status, 303, "지정한 주소로 실제 로그인이 돼야");
+  assert.doesNotMatch(lr.headers.get("location") || "", /err=1/);
+});
+
+test("이미 이메일이 있는 계정은 이 경로로 주소를 바꿀 수 없다", async () => {
+  const env = makeEnv();
+  const { b } = await seed(env);
+  const j = await login(env, "ad@s.kr");
+  const r = await post(env, j, `/t/seocho/admin/business/${b.id}/owner-email`,
+    { email: "hijack@example.kr" }, `/t/seocho/admin/business/${b.id}`);
+  assert.match(r.headers.get("location") || "", /err=1/);
+  assert.equal((await D.getUserById(env.DB, b.owner_id)).email, "m@s.kr");
+});
+
+test("지도에서 찾아 채운 주소·전화·좌표가 등록과 동시에 저장된다", async () => {
+  const env = makeEnv();
+  env.KAKAO_REST_KEY = "test-key";
+  const { a } = await seed(env);
+  const j = await login(env, "ad@s.kr");
+  // 화면에도 찾기 칸이 있어야 한다 (키가 있을 때만)
+  const html = await (await get(env, j, "/t/seocho/admin")).text();
+  const at = html.indexOf('id="p-addmember"');
+  assert.match(html.slice(at, at + 2500), /data-place-find/, "회원 추가에서도 지도로 찾을 수 있어야");
+
+  const r = await post(env, j, "/t/seocho/admin/members/add", {
+    name: "이도현", phone: "010-5555-6666", business_name: "방배커피로스터스", category: "카페·디저트",
+    address: "서울 서초구 방배로 33", biz_phone: "02-585-1234", lat: "37.4835", lng: "126.9976",
+  }, "/t/seocho/admin");
+  assert.doesNotMatch(r.headers.get("location") || "", /err=1/);
+
+  const biz = (await D.listAllBusinesses(env.DB, a.id)).find((x) => x.name === "방배커피로스터스");
+  assert.equal(biz.address, "서울 서초구 방배로 33", "등록하자마자 주소가 들어 있어야 — 두 번 넣게 하지 않는다");
+  assert.equal(biz.phone, "02-585-1234");
+  assert.equal(Number(biz.lat).toFixed(4), "37.4835");
+  assert.equal(biz.category, "카페·디저트");
+});
+
+test("지도 키가 없으면 회원 추가에도 찾기 칸을 내걸지 않는다", async () => {
+  const env = makeEnv();
+  await seed(env);
+  const j = await login(env, "ad@s.kr");
+  const html = await (await get(env, j, "/t/seocho/admin")).text();
+  const at = html.indexOf('id="p-addmember"');
+  assert.ok(!html.slice(at, at + 2500).includes("data-place-find"), "쓸 수 없는 기능을 내걸면 안 된다");
+  assert.ok(!html.includes("/js/place.js"), "쓰지 않는 스크립트를 내려받게 하지 않는다");
 });
