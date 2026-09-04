@@ -594,7 +594,7 @@ export const rsvpEvent = (db, eventId, aid, userId) =>
 export const cancelRsvp = (db, eventId, userId) => run(db, "DELETE FROM event_rsvps WHERE event_id=? AND user_id=?", eventId, userId);
 export const rsvpCount = async (db, eventId) => (await first(db, "SELECT COUNT(*) AS n FROM event_rsvps WHERE event_id=?", eventId)).n;
 export const listRsvps = (db, eventId) =>
-  all(db, `SELECT r.*, u.name AS user_name, b.name AS biz_name FROM event_rsvps r
+  all(db, `SELECT r.*, u.name AS user_name, u.phone AS phone, b.name AS biz_name FROM event_rsvps r
            JOIN users u ON u.id = r.user_id LEFT JOIN businesses b ON b.owner_id = u.id
            WHERE r.event_id=? ORDER BY r.created_at`, eventId);
 export const userRsvped = async (db, eventId, userId) => !!(await first(db, "SELECT 1 AS x FROM event_rsvps WHERE event_id=? AND user_id=?", eventId, userId));
@@ -602,8 +602,10 @@ export const userRsvped = async (db, eventId, userId) => !!(await first(db, "SEL
 export const eventRsvpSummary = (db, aid, uid = 0) =>
   all(db, "SELECT event_id, COUNT(*) AS n, MAX(user_id = ?2) AS mine FROM event_rsvps WHERE association_id = ?1 GROUP BY event_id", aid, uid);
 // 관리자 행사 목록용 — 상인회 전체 참가 명단을 1쿼리로
+// 연락처를 함께 뽑는다 — 참가자가 몇 명인지가 아니라 '누가 오는지' 를 알아야
+// 자리·다과·상품권을 준비할 수 있다. 숫자만으로는 아무것도 못 한다.
 export const listRsvpsByAssoc = (db, aid) =>
-  all(db, `SELECT r.event_id, u.name AS user_name, b.name AS biz_name FROM event_rsvps r
+  all(db, `SELECT r.event_id, r.created_at, u.name AS user_name, u.phone AS phone, b.name AS biz_name FROM event_rsvps r
            JOIN users u ON u.id = r.user_id LEFT JOIN businesses b ON b.owner_id = u.id
            WHERE r.association_id=? ORDER BY r.created_at`, aid);
 
@@ -635,6 +637,15 @@ export async function createNotice(db, { associationId, title, body, tag, image 
     associationId, title, body || "", tag || "안내", image || "", pinned ? 1 : 0);
   return getNotice(db, await lastId(db));
 }
+// 고치기 — 예전에는 만들기와 지우기만 있었다. 오타 하나에 공지를 지웠다 다시 쓰면
+// 카톡으로 돌린 링크가 죽는다(주소가 글 번호이기 때문). 같은 글을 그대로 고친다.
+// image 를 넘기지 않으면 원래 사진을 그대로 둔다 — 사진을 안 다시 올렸다고 지워 버리면 안 된다.
+export async function updateNotice(db, id, aid, { title, body, tag, pinned, image = null }) {
+  await run(db, `UPDATE notices SET title=?, body=?, tag=?, pinned=?${image === null ? "" : ", image=?"}
+    WHERE id=? AND association_id=?`,
+    ...[title, body || "", tag || "안내", pinned ? 1 : 0, ...(image === null ? [] : [image]), id, aid]);
+  return getNotice(db, id);
+}
 export const deleteNotice = (db, id) => run(db, "DELETE FROM notices WHERE id=?", id);
 export async function listNoticesPaged(db, aid, { page = 1, perPage = 20, q = null, tag = null } = {}) {
   let w = " WHERE association_id = ?"; const a = [aid];
@@ -656,6 +667,12 @@ export async function createEvent(db, { associationId, title, event_date, place,
   await run(db, "INSERT INTO events (association_id, title, event_date, place, description, image) VALUES (?,?,?,?,?,?)",
     associationId, title, event_date, place || "", description || "", image || "");
   return getEvent(db, await lastId(db));
+}
+export async function updateEvent(db, id, aid, { title, event_date, place, description, image = null }) {
+  await run(db, `UPDATE events SET title=?, event_date=?, place=?, description=?${image === null ? "" : ", image=?"}
+    WHERE id=? AND association_id=?`,
+    ...[title, event_date, place || "", description || "", ...(image === null ? [] : [image]), id, aid]);
+  return getEvent(db, id);
 }
 export const deleteEvent = (db, id) => run(db, "DELETE FROM events WHERE id=?", id);
 

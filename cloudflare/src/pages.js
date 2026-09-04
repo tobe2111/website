@@ -1614,16 +1614,64 @@ export async function admin(ctx) {
       <button class="btn btn-primary">회원 추가</button></form>
     <p class="panel-hint">등록한 뒤 <b>[정보 채우기]</b> 에서 주소·전화·사진을 채우면 손님 화면에 제대로 뜹니다.
       사장님이 직접 하시게 하려면 아래 <b>초대 링크</b>를 카톡으로 보내세요.</p></section>`;
-  const noticeRows2 = notices.map((n) => `<li><span class="notice-tag${n.pinned ? " tag-important" : ""}">${esc(n.tag)}</span><span class="notice-title">${esc(n.title)}</span>
-    <form method="post" action="${base}/admin/notice/${n.id}/delete" data-confirm="삭제?"><button class="link-danger">삭제</button></form></li>`).join("") || `<li class="empty">공지가 없습니다.</li>`;
+  // 고치기는 그 줄 안에서 펼쳐진다.
+  //
+  // 예전에는 만들기와 지우기만 있었다. 오타 하나를 고치려면 지우고 다시 써야 했는데,
+  // 그러면 글 주소가 바뀌어 이미 카톡으로 돌린 링크가 죽는다. 매주 쓰는 기능에서
+  // 그건 그냥 못 쓰는 것이다.
+  const imgSwap = (cur, label) => `<label class="mini-label">${label}
+      <input type="file" name="image" accept="image/*" /></label>
+    ${cur ? `<label class="check"><input type="checkbox" name="drop_image" value="1" /> 지금 사진 지우기</label>` : ""}
+    <p class="panel-hint">사진을 새로 고르지 않으면 지금 사진이 그대로 남습니다.</p>`;
+  const noticeRows2 = notices.map((n) => `<li class="mini-item">
+    <details class="mini-edit"><summary>
+      <span class="notice-tag${n.pinned ? " tag-important" : ""}">${esc(n.tag)}</span>
+      <span class="notice-title">${esc(n.title)}</span><span class="mini-edit-hint">고치기</span></summary>
+      <form method="post" action="${base}/admin/notice/${n.id}" enctype="multipart/form-data" class="stack-form compact">
+        <input type="text" name="title" value="${esc(n.title)}" required maxlength="200" aria-label="공지 제목" />
+        <textarea name="body" rows="4" aria-label="공지 내용">${esc(n.body || "")}</textarea>
+        <div class="form-two"><label class="mini-label">카테고리<select name="tag">${
+          NOTICE_CATEGORIES.map((c) => `<option value="${esc(c)}"${c === n.tag ? " selected" : ""}>${esc(c)}</option>`).join("")}</select></label>
+          <label class="check"><input type="checkbox" name="pinned" value="1"${n.pinned ? " checked" : ""} /> 상단 고정</label></div>
+        ${imgSwap(n.image, "대표 이미지 바꾸기 <small>(선택)</small>")}
+        <span class="pill-row"><button class="btn btn-primary btn-sm">고친 내용 저장</button>
+          <a class="btn btn-ghost btn-sm" href="${base}/notices/${n.id}" target="_blank" rel="noopener">공지 보기 ↗</a></span>
+      </form>
+      <form method="post" action="${base}/admin/notice/${n.id}/delete" class="mini-del"
+        data-confirm="'${esc(n.title)}' 공지를 지울까요?&#10;이미 돌린 링크가 죽습니다 — 내용만 고치실 거면 위에서 고치세요."><button class="link-danger">이 공지 지우기</button></form>
+    </details></li>`).join("") || `<li class="empty">공지가 없습니다.</li>`;
   const rsvpsByEvent = new Map();
   for (const r of allRsvps) { if (!rsvpsByEvent.has(r.event_id)) rsvpsByEvent.set(r.event_id, []); rsvpsByEvent.get(r.event_id).push(r); }
   let eventRows = "";
   for (const e of events) {
     const rsvps = rsvpsByEvent.get(e.id) || [];
-    eventRows += `<li><span class="event-mini-date">${esc(e.event_date)}</span><span class="notice-title">${esc(e.title)}</span>
-      ${rsvps.length ? `<details class="rsvp-names"><summary>참가 ${rsvps.length}곳</summary><p>${rsvps.map((r) => esc(r.biz_name || r.user_name)).join(", ")}</p></details>` : ""}
-      <form method="post" action="${base}/admin/event/${e.id}/delete" data-confirm="삭제?"><button class="link-danger">삭제</button></form></li>`;
+    // 참가 신청은 숫자만 보여 주면 쓸모가 없다 — 회장님이 필요한 건 누가 오는지와 연락처다.
+    // (자리·다과·상품권을 그 명단으로 준비한다.)
+    const rsvpBlock = !rsvps.length ? `<p class="panel-hint">아직 참가 신청이 없습니다.</p>`
+      : `<div class="dtable-wrap"><table class="dtable"><thead><tr><th>가게</th><th>사장님</th><th>연락처</th></tr></thead><tbody>${
+          rsvps.map((r) => `<tr><td data-th="가게">${esc(r.biz_name || "-")}</td><td data-th="사장님">${esc(r.user_name || "-")}</td>
+            <td data-th="연락처">${r.phone ? esc(D.formatPhone(r.phone)) : '<span class="txt-muted">번호 없음</span>'}</td></tr>`).join("")
+        }</tbody></table></div>
+        <span class="pill-row"><a class="btn btn-ghost btn-sm" href="${base}/admin/event/${e.id}/rsvps.csv">참가자 명단 CSV</a></span>`;
+    eventRows += `<li class="mini-item">
+      <details class="mini-edit"><summary>
+        <span class="event-mini-date">${esc(e.event_date)}</span>
+        <span class="notice-title">${esc(e.title)}</span>
+        <span class="mini-edit-hint">${rsvps.length ? `참가 ${rsvps.length}곳 · 고치기` : "고치기"}</span></summary>
+        <form method="post" action="${base}/admin/event/${e.id}" enctype="multipart/form-data" class="stack-form compact">
+          <input type="text" name="title" value="${esc(e.title)}" required maxlength="200" aria-label="행사명" />
+          <div class="form-two"><label class="mini-label">날짜<input type="date" name="event_date" value="${esc(String(e.event_date || "").slice(0, 10))}" required /></label>
+            <label class="mini-label">장소<input type="text" name="place" value="${esc(e.place || "")}" maxlength="120" /></label></div>
+          <textarea name="description" rows="3" aria-label="행사 설명">${esc(e.description || "")}</textarea>
+          ${imgSwap(e.image, "대표 이미지 바꾸기 <small>(선택 · 홈에 포스터형 카드로 표시)</small>")}
+          <span class="pill-row"><button class="btn btn-primary btn-sm">고친 내용 저장</button>
+            <a class="btn btn-ghost btn-sm" href="${base}/events" target="_blank" rel="noopener">행사 보기 ↗</a></span>
+        </form>
+        <div class="form-divider">참가 신청 ${rsvps.length}곳</div>
+        ${rsvpBlock}
+        <form method="post" action="${base}/admin/event/${e.id}/delete" class="mini-del"
+          data-confirm="'${esc(e.title)}' 행사를 지울까요?&#10;참가 신청 ${rsvps.length}건도 함께 사라집니다."><button class="link-danger">이 행사 지우기</button></form>
+      </details></li>`;
   }
   eventRows = eventRows || `<li class="empty">행사가 없습니다.</li>`;
   // ── 홈 팝업 —— 목록에는 "지금 뜨는가"를 상태로 적습니다.
@@ -2068,6 +2116,22 @@ export async function adminExportMembers(ctx) {
   const lines = [["이름", "이메일", "업체명", "역할"], ...members.map((m) => [m.name, m.email, m.business_name || "", m.role])];
   const csv = "﻿" + lines.map((r) => r.map(csvCell).join(",")).join("\r\n");
   return text(csv, 200, { "content-type": "text/csv; charset=utf-8", "content-disposition": `attachment; filename="members_${assoc.slug}.csv"`, "cache-control": "no-store" });
+}
+
+// 행사 참가자 명단 — 자리·다과·상품권을 이 명단으로 준비한다.
+// 화면의 표로도 보이지만, 총무가 실제로 하는 일은 이걸 엑셀로 열어 표시해 가며 부르는 것이다.
+export async function adminExportRsvps(ctx) {
+  const { db, assoc, params } = ctx;
+  const e = await D.getEvent(db, Number(params.id) || 0);
+  if (!e || e.association_id !== assoc.id) return notFoundResponse(ctx);
+  const rsvps = await D.listRsvps(db, e.id);
+  const lines = [["가게", "사장님", "연락처", "신청일시"],
+    ...rsvps.map((r) => [r.biz_name || "", r.user_name || "", D.formatPhone(r.phone), kstStamp(r.created_at)])];
+  const csv = "﻿" + lines.map((r) => r.map(csvCell).join(",")).join("\r\n");
+  // 파일 이름에 행사명을 넣지 않는다 — 한글 파일명은 브라우저마다 처리가 갈려 깨진다.
+  return text(csv, 200, { "content-type": "text/csv; charset=utf-8",
+    "content-disposition": `attachment; filename="rsvps_${assoc.slug}_${String(e.event_date || "").slice(0, 10)}.csv"`,
+    "cache-control": "no-store" });
 }
 
 // ================= 전자서명 =================

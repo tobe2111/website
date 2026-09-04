@@ -863,6 +863,27 @@ export async function adminCreateNotice(ctx) {
   await audit(ctx, "공지등록", title);
   return back(base + "/admin", "공지를 등록했습니다.");
 }
+// 공지 고치기 — 지웠다 다시 쓰면 주소가 바뀌어 카톡으로 돌린 링크가 죽는다.
+// 사진은 새로 고르지 않으면 원래 것을 그대로 둔다. 지우려면 [사진 지우기] 를 체크한다.
+export async function adminUpdateNotice(ctx) {
+  const { db, env, form, base, assoc, params } = ctx;
+  const n = await D.getNotice(db, Number(params.id) || 0);
+  if (!n || n.association_id !== assoc.id) return back(base + "/admin", "공지를 찾을 수 없습니다.", true);
+  const title = cap((form.get("title") || "").trim(), 200);
+  if (!title) return back(base + "/admin#s-content", "공지 제목을 입력하세요.", true);
+  const up = await saveImages(env, form.getAll("image"), 1);
+  if (up.error) return back(base + "/admin#s-content", up.error, true);
+  const drop = form.get("drop_image") === "1";
+  const nextImage = up.images[0] ? up.images[0].filename : drop ? "" : null;
+  // 바꿔치웠거나 지운 사진은 저장소에서도 치운다 — 안 그러면 아무도 안 보는 파일이 쌓인다
+  if (nextImage !== null && n.image && n.image !== nextImage) await storage.remove(env, n.image).catch(() => {});
+  await D.updateNotice(db, n.id, assoc.id, {
+    title, body: cap(form.get("body"), 10000), tag: cap(form.get("tag") || "안내", 20),
+    pinned: form.get("pinned") === "1", image: nextImage,
+  });
+  await audit(ctx, "공지수정", title);
+  return back(base + "/admin#s-content", "공지를 고쳤습니다.");
+}
 export async function adminDeleteNotice(ctx) {
   const { db, env, base, assoc, params } = ctx;
   const n = await D.getNotice(db, Number(params.id));
@@ -876,6 +897,25 @@ export async function adminCreateEvent(ctx) {
   if (up.error) return back(base + "/admin", up.error, true);
   await D.createEvent(db, { associationId: assoc.id, title: cap(form.get("title").trim(), 200), event_date: cap(form.get("event_date"), 10), place: cap(form.get("place"), 120), description: cap(form.get("description"), 2000), image: up.images[0]?.filename || "" });
   return back(base + "/admin", "행사를 등록했습니다.");
+}
+export async function adminUpdateEvent(ctx) {
+  const { db, env, form, base, assoc, params } = ctx;
+  const e = await D.getEvent(db, Number(params.id) || 0);
+  if (!e || e.association_id !== assoc.id) return back(base + "/admin", "행사를 찾을 수 없습니다.", true);
+  const title = cap((form.get("title") || "").trim(), 200);
+  const date = cap((form.get("event_date") || "").trim(), 10);
+  if (!title || !date) return back(base + "/admin#s-content", "행사명과 날짜를 입력하세요.", true);
+  const up = await saveImages(env, form.getAll("image"), 1);
+  if (up.error) return back(base + "/admin#s-content", up.error, true);
+  const drop = form.get("drop_image") === "1";
+  const nextImage = up.images[0] ? up.images[0].filename : drop ? "" : null;
+  if (nextImage !== null && e.image && e.image !== nextImage) await storage.remove(env, e.image).catch(() => {});
+  await D.updateEvent(db, e.id, assoc.id, {
+    title, event_date: date, place: cap(form.get("place"), 120),
+    description: cap(form.get("description"), 2000), image: nextImage,
+  });
+  await audit(ctx, "행사수정", title);
+  return back(base + "/admin#s-content", "행사를 고쳤습니다.");
 }
 export async function adminDeleteEvent(ctx) {
   const { db, env, base, assoc, params } = ctx;

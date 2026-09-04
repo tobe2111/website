@@ -3083,3 +3083,28 @@ a.dt-main:hover{color:var(--brand-text);text-decoration:underline}
   .hot-h h3{font-size:15.5px}
   .hot-row{padding:9px 0}
 }
+
+/* ── 목록 줄 안에서 바로 고치기 ─────────────────────────────────────
+   공지·행사를 고치려고 다른 화면으로 보내지 않습니다. 총무가 하는 일은
+   "목록을 보다가 저거 날짜 틀렸네" 이고, 그 자리에서 펴서 고치는 게 맞습니다. */
+.admin-mini-list li.mini-item{display:block;padding:0;background:none}
+.mini-edit{background:var(--bg-alt);border-radius:10px}
+.mini-edit > summary{
+  display:flex;align-items:center;gap:12px;padding:11px 14px;cursor:pointer;
+  border-radius:10px;list-style:none;
+}
+.mini-edit > summary::-webkit-details-marker{display:none}
+.mini-edit > summary:hover{background:var(--surface-2)}
+.mini-edit[open] > summary{border-bottom:1px solid var(--line-soft);border-radius:10px 10px 0 0}
+.mini-edit-hint{margin-left:auto;flex:none;font-size:12.5px;font-weight:600;color:var(--muted)}
+.mini-edit[open] .mini-edit-hint::after{content:" 닫기"}
+.mini-edit > summary:hover .mini-edit-hint{color:var(--brand-text)}
+.mini-edit > form,
+.mini-edit > .dtable-wrap,
+.mini-edit > .panel-hint,
+.mini-edit > .form-divider,
+.mini-edit > .pill-row{margin-left:14px;margin-right:14px}
+.mini-edit > form{padding-top:14px}
+.mini-edit > .mini-del{padding:12px 0 14px;border-top:1px solid var(--line-soft);margin-top:14px}
+.mini-edit .dtable-wrap{margin-bottom:10px}
+.mini-edit .dtable thead th{position:static}   /* 펼친 상자 안에서는 붙어 있을 필요가 없습니다 */
