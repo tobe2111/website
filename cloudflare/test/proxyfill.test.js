@@ -305,7 +305,8 @@ test("이메일 없이 휴대폰만으로 회원을 추가할 수 있다", async
     { name: "박기석", phone: "010-3333-4444", business_name: "골목정육점", category: "농수축산" }, "/t/seocho/admin");
   const msg = decodeURIComponent(r.headers.get("location") || "");
   assert.doesNotMatch(msg, /err=1/, msg);
-  assert.match(msg, /아직 로그인은 못 하십니다/, "무엇이 안 되는지 그 자리에서 말해야");
+  assert.match(msg, /휴대폰 번호로 로그인/, "무엇으로 들어오는지 그 자리에서 말해야");
+  assert.match(msg, /임시비번/, "비밀번호를 알려 줘야 사장님께 전달할 수 있다");
 
   const members = await D.listUsersByAssociation(env.DB, a.id, "MERCHANT");
   const added = members.find((m) => m.name === "박기석");
@@ -319,7 +320,7 @@ test("이메일 없이 휴대폰만으로 회원을 추가할 수 있다", async
   // 목록에 가짜 주소를 진짜인 양 보여 주지 않는다
   const html = await (await get(env, j, "/t/seocho/admin")).text();
   assert.ok(!html.includes("no-login.invalid"), "가짜 주소를 화면에 그대로 내보이면 안 된다");
-  assert.match(html, /로그인 미설정/);
+  assert.match(html, /휴대폰으로 로그인/, "무엇이 아이디인지 목록에 적혀야");
 });
 
 test("이메일도 휴대폰도 없으면 거절한다 (연락할 방법이 없다)", async () => {
@@ -341,8 +342,8 @@ test("나중에 로그인 이메일을 지정하면 그때 임시 비밀번호�
   const biz = (await D.listAllBusinesses(env.DB, a.id)).find((x) => x.name === "골목정육점");
 
   const page = await (await get(env, j, `/t/seocho/admin/business/${biz.id}`)).text();
-  assert.match(page, /로그인 이메일 지정/, "그 자리에서 지정할 수 있어야");
-  assert.match(page, /아직 로그인할 수 없습니다/);
+  assert.match(page, /사장님 로그인/, "그 자리에서 지정할 수 있어야");
+  assert.match(page, /번호가 아이디/, "휴대폰만 있는 계정은 그 번호가 아이디임을 알려야");
 
   const r = await post(env, j, `/t/seocho/admin/business/${biz.id}/owner-email`,
     { email: "gogol@example.kr" }, `/t/seocho/admin/business/${biz.id}`);
@@ -400,4 +401,90 @@ test("지도 키가 없으면 회원 추가에도 찾기 칸을 내걸지 않는
   const at = html.indexOf('id="p-addmember"');
   assert.ok(!html.slice(at, at + 2500).includes("data-place-find"), "쓸 수 없는 기능을 내걸면 안 된다");
   assert.ok(!html.includes("/js/place.js"), "쓰지 않는 스크립트를 내려받게 하지 않는다");
+});
+
+// ── 휴대폰 번호 로그인 ──────────────────────────────────────────────
+// 이메일 없이 등록한 사장님이 실제로 들어올 수 있어야 한다. 이게 안 되면
+// '이메일 없이 등록' 은 명단에만 이름이 오르는 반쪽짜리 기능이다.
+
+test("휴대폰 번호와 임시 비밀번호로 사장님이 실제로 로그인한다", async () => {
+  const env = makeEnv();
+  const { a } = await seed(env);
+  const j = await login(env, "ad@s.kr");
+  const r = await post(env, j, "/t/seocho/admin/members/add",
+    { name: "박기석", phone: "010-3333-4444", business_name: "골목정육점" }, "/t/seocho/admin");
+  const msg = decodeURIComponent(r.headers.get("location") || "");
+  const temp = /임시비번 (\S+)/.exec(msg)[1];
+
+  const mj = jar();
+  const lr = await post(env, mj, "/login", { login: "010-3333-4444", password: temp });
+  assert.equal(lr.status, 303, "번호로 로그인이 돼야: " + msg);
+  assert.doesNotMatch(lr.headers.get("location") || "", /err=1/);
+
+  // 로그인한 사람이 정말 그 사장님인가 — 자기 가게 화면이 열려야
+  const dash = await (await get(env, mj, "/t/seocho/dashboard")).text();
+  assert.match(dash, /골목정육점/);
+  const added = (await D.listUsersByAssociation(env.DB, a.id, "MERCHANT")).find((m) => m.name === "박기석");
+  assert.match(added.email, /@no-login\.invalid$/, "이메일은 여전히 자리표시자여야");
+});
+
+test("하이픈을 넣든 안 넣든 같은 번호로 본다", async () => {
+  const env = makeEnv();
+  await seed(env);
+  const j = await login(env, "ad@s.kr");
+  const msg = decodeURIComponent((await post(env, j, "/t/seocho/admin/members/add",
+    { name: "박기석", phone: "01033334444", business_name: "골목정육점" }, "/t/seocho/admin")).headers.get("location"));
+  const temp = /임시비번 (\S+)/.exec(msg)[1];
+  const lr = await post(env, jar(), "/login", { login: "010-3333-4444", password: temp });
+  assert.equal(lr.status, 303);
+});
+
+test("이메일처럼 생긴 값은 번호로 읽지 않는다", async () => {
+  const env = makeEnv();
+  await seed(env);
+  // 주소 안의 숫자만 뽑으면 유효한 번호가 되는 주소 — 번호 조회로 새면 엉뚱한 계정이 열린다
+  const lr = await post(env, jar(), "/login", { login: "a01033334444b@x.kr", password: "pass1234" });
+  assert.match(lr.headers.get("location") || "", /err=1/, "이 주소는 계정이 없으므로 실패해야");
+});
+
+test("같은 번호에 같은 비밀번호를 쓰는 계정이 둘이면 아무도 들여보내지 않는다", async () => {
+  const env = makeEnv();
+  const { a } = await seed(env);
+  const h = await hashPassword("same-pass-9999");
+  for (const n of ["부부1", "부부2"])
+    await D.createUser(env.DB, { email: `${n}@x.kr`, passwordHash: h.hash, salt: h.salt, name: n, role: "MERCHANT", associationId: a.id, phone: "01055556666" });
+  const lr = await post(env, jar(), "/login", { login: "010-5555-6666", password: "same-pass-9999" });
+  assert.match(lr.headers.get("location") || "", /err=1/, "누구인지 정할 수 없으면 남의 가게를 열어 주는 것보다 막는 게 맞다");
+  // 각자의 이메일로는 여전히 들어갈 수 있다
+  assert.equal((await post(env, jar(), "/login", { login: "부부1@x.kr", password: "same-pass-9999" })).status, 303);
+});
+
+test("관리자가 잘못 받아 적은 사장님 번호를 고친다", async () => {
+  const env = makeEnv();
+  const { a } = await seed(env);
+  const j = await login(env, "ad@s.kr");
+  await post(env, j, "/t/seocho/admin/members/add",
+    { name: "박기석", phone: "010-3333-4444", business_name: "골목정육점" }, "/t/seocho/admin");
+  const biz = (await D.listAllBusinesses(env.DB, a.id)).find((x) => x.name === "골목정육점");
+
+  const r = await post(env, j, `/t/seocho/admin/business/${biz.id}/owner-phone`,
+    { phone: "010-9999-8888" }, `/t/seocho/admin/business/${biz.id}`);
+  assert.doesNotMatch(r.headers.get("location") || "", /err=1/);
+  assert.equal((await D.getUserById(env.DB, biz.owner_id)).phone, "01099998888");
+
+  // 번호가 아이디인 계정에서 번호를 비우면 로그인 수단이 사라진다 — 막아야 한다
+  const bad = await post(env, j, `/t/seocho/admin/business/${biz.id}/owner-phone`,
+    { phone: "" }, `/t/seocho/admin/business/${biz.id}`);
+  assert.match(decodeURIComponent(bad.headers.get("location") || ""), /로그인할 수 없게 됩니다/);
+  assert.equal((await D.getUserById(env.DB, biz.owner_id)).phone, "01099998888", "막았으면 값도 그대로여야");
+});
+
+test("남의 상인회 사장님 번호는 못 고친다", async () => {
+  const env = makeEnv();
+  const { ob } = await seed(env);
+  const j = await login(env, "ad@s.kr");
+  const r = await post(env, j, `/t/seocho/admin/business/${ob.id}/owner-phone`,
+    { phone: "010-1111-2222" }, "/t/seocho/admin");
+  assert.match(decodeURIComponent(r.headers.get("location") || ""), /err=1/);
+  assert.notEqual((await D.getUserById(env.DB, ob.owner_id)).phone, "01011112222");
 });

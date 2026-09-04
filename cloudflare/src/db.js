@@ -299,6 +299,19 @@ export async function createUser(db, { email, passwordHash, salt, name, role = "
 export const normalizePhone = (p) => String(p || "").replace(/\D/g, "").slice(0, 11);
 export const isValidPhone = (p) => /^01[016789]\d{7,8}$/.test(normalizePhone(p));
 export const maskPhone = (p) => { const d = normalizePhone(p); return d.length < 8 ? "***" : `${d.slice(0, 3)}****${d.slice(-4)}`; };
+// 화면에 되돌려 보여줄 때만 하이픈을 넣는다 (저장은 숫자만).
+export const formatPhone = (p) => {
+  const d = normalizePhone(p);
+  if (d.length === 11) return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}`;
+  if (d.length === 10) return `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
+  return d;
+};
+// 휴대폰 번호로 계정 찾기 — 번호는 유일하지 않다(부부가 가게 둘을 하는 경우가 실제로 있다).
+// 그래서 여럿을 돌려주고, 누구인지는 비밀번호가 가른다. 5개로 끊는 건 느려지지 않게 하려는 것.
+export const listUsersByPhone = (db, phone) => {
+  const d = normalizePhone(phone);
+  return d ? all(db, "SELECT * FROM users WHERE phone = ? ORDER BY id LIMIT 5", d) : Promise.resolve([]);
+};
 // 역할 변경 — 조직 안에서만. 세션 버전을 올려 기존 로그인을 무효화한다
 // (권한을 회수했는데 열려 있던 탭이 계속 동작하면 회수가 아니다).
 export const setUserRole = (db, id, associationId, role) =>

@@ -163,6 +163,7 @@ export const TENANT = [
   ["POST", "/admin/business/:id/media/:mid/delete", api.adminDeleteMedia, "ADMIN"],
   // 이메일 없이 등록해 둔 사장님에게 나중에 로그인 주소를 지정한다
   ["POST", "/admin/business/:id/owner-email", api.adminSetOwnerEmail, "ADMIN"],
+  ["POST", "/admin/business/:id/owner-phone", api.adminSetOwnerPhone, "ADMIN"],
   ["POST", "/admin/notice", api.adminCreateNotice, "ADMIN"],
   ["POST", "/admin/notice/:id/delete", api.adminDeleteNotice, "ADMIN"],
   ["POST", "/admin/event", api.adminCreateEvent, "ADMIN"],

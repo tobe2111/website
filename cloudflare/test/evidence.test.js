@@ -80,6 +80,25 @@ test("빈 ZIP 도 규격에 맞는다", async () => {
   assert.deepEqual([...z.slice(0, 4)], [0x50, 0x4b, 0x05, 0x06]);
 });
 
+// 위 테스트는 이 기계에 깔린 unzip 이 어떻게 만들어졌느냐에 따라 결과가 갈린다.
+// 이름이 깨지느냐 마느냐를 정하는 건 헤더 두 곳이므로, 그것 자체를 못 박아 둔다.
+test("파일명 헤더가 UTF-8 · 유닉스로 적힌다", async () => {
+  const z = await makeZip([{ name: "계약서.txt", data: "가" }]);
+  const v = new DataView(z.buffer, z.byteOffset, z.byteLength);
+  assert.equal(v.getUint16(6, true) & 0x0800, 0x0800, "로컬 헤더에 UTF-8 플래그");
+
+  const cd = z.indexOf(0x50) >= 0 ? [...z].findIndex((_, i) =>
+    z[i] === 0x50 && z[i + 1] === 0x4b && z[i + 2] === 0x01 && z[i + 3] === 0x02) : -1;
+  assert.ok(cd > 0, "중앙 디렉터리를 찾음");
+  assert.equal(v.getUint16(cd + 8, true) & 0x0800, 0x0800, "중앙 디렉터리에도 UTF-8 플래그");
+  assert.equal(v.getUint16(cd + 4, true) >> 8, 3,
+    "만든 시스템 = 유닉스 (MS-DOS 로 두면 압축 프로그램이 한글 이름을 코드페이지로 읽어 깨뜨린다)");
+  assert.equal(v.getUint32(cd + 38, true) >>> 16, 0o100644, "유닉스 권한 rw-r--r--");
+
+  const nameLen = v.getUint16(cd + 28, true);
+  assert.equal(new TextDecoder().decode(z.slice(cd + 46, cd + 46 + nameLen)), "계약서.txt");
+});
+
 // ---------- 내용물 ----------
 const read = (p) => readFileSync(path.join(DIR, "x", p), "utf8");
 

@@ -97,15 +97,38 @@ function recordFail(ip) {
   if (!r || now - r.first > 15 * 60 * 1000) attempts.set(ip, { count: 1, first: now }); else r.count++;
 }
 
+// 로그인 칸 하나로 이메일과 휴대폰 번호를 함께 받는다.
+//
+// 왜 — 이메일 없이 등록한 사장님(이름·전화번호만 있는 회원)이 지금까지는 아예 못 들어왔다.
+// 40~60대 사장님에게 이메일 주소를 새로 만들게 하는 것이 실제 도입을 막는 벽이었다.
+//
+// 번호는 유일하지 않으므로 후보를 여럿 놓고 비밀번호로 가른다. 둘 이상이 같은 번호에
+// 같은 비밀번호를 쓰는 경우는 누구인지 정할 수 없으니 아무도 들여보내지 않는다 —
+// 남의 가게 화면이 열리는 것보다 못 들어가는 편이 낫다.
+async function findLoginUser(db, who, password) {
+  const ok = async (u) => u && (await verifyPassword(password, u.salt, u.password_hash)) ? u : null;
+  // 숫자와 구분기호만 적혔을 때에만 번호로 본다. 이 검사가 없으면
+  // 'a01012345678@x.kr' 같은 주소가 번호로 읽혀 엉뚱한 계정을 찾게 된다.
+  const looksLikePhone = /^[\d\s().+-]+$/.test(who) && D.isValidPhone(who);
+  if (looksLikePhone) {
+    const hits = [];
+    for (const u of await D.listUsersByPhone(db, who)) if (await ok(u)) hits.push(u);
+    return hits.length === 1 ? hits[0] : null;
+  }
+  return ok(await D.getUserByEmail(db, who.toLowerCase()));
+}
+
 export async function login(ctx) {
   const { db, form, env, addCookie, isProd, ip } = ctx;
   if (rateLimited(ip)) return back("/login", "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해 주세요.", true);
   if (!(await turnstileVerify(env, form.get("cf-turnstile-response"), ip))) return back("/login", "봇 방지 확인에 실패했습니다. 다시 시도해 주세요.", true);
-  const email = (form.get("email") || "").toLowerCase().trim();
-  const user = email ? await D.getUserByEmail(db, email) : null;
-  if (!user || !(await verifyPassword(form.get("password") || "", user.salt, user.password_hash))) {
+  // 칸 이름은 login 이지만, 예전 폼·자동완성이 email 로 보내는 경우도 받아 준다.
+  const who = (form.get("login") || form.get("email") || "").trim();
+  const password = form.get("password") || "";
+  const user = await findLoginUser(db, who, password);
+  if (!user) {
     recordFail(ip);
-    return back("/login", "이메일 또는 비밀번호가 올바르지 않습니다.", true);
+    return back("/login", "이메일·휴대폰 번호 또는 비밀번호가 올바르지 않습니다.", true);
   }
   if (user.totp_enabled) {
     const { totpVerify } = await import("./totp.js");
@@ -1022,11 +1045,17 @@ export async function adminResetUserPassword(ctx) {
   if (target.role === "SUPERADMIN") return back(base + "/admin", "플랫폼 운영자 계정은 여기서 바꿀 수 없습니다.", true);
   // 자기 비밀번호는 계정 설정에서 바꾼다. 여기서 되면 세션 탈취자가 곧바로 계정을 굳혀 버린다.
   if (target.id === ctx.user.id) return back(base + "/admin", "본인 비밀번호는 계정 설정에서 변경해 주세요.", true);
+  // 이메일 없이 등록한 사장님은 휴대폰 번호로 들어온다. 무엇을 불러 줘야 하는지
+  // 여기서 같이 말해 주지 않으면, 회장님이 가짜 주소(@no-login.invalid)를 불러 준다.
+  const byPhone = isPlaceholderEmail(target.email);
+  if (byPhone && !target.phone)
+    return back(base + "/admin", `${target.name}님은 이메일도 휴대폰 번호도 없어 로그인할 방법이 없습니다. 점포 화면에서 하나를 넣어 주세요.`, true);
   const temp = tempPassword();
   const { hash, salt } = await hashPassword(temp);
   await D.updateUserPassword(db, target.id, hash, salt);
-  await audit(ctx, "비밀번호재설정", target.email);
-  return back(base + "/admin", `${target.name}님 임시 비밀번호: ${temp} — 전달 후 변경 안내하세요.`);
+  await audit(ctx, "비밀번호재설정", byPhone ? `${target.name} (휴대폰 로그인)` : target.email);
+  const idLabel = byPhone ? `휴대폰 ${D.maskPhone(target.phone)}` : target.email;
+  return back(base + "/admin", `${target.name}님 — ${idLabel} / 임시 비밀번호 ${temp} (전달 후 변경 안내하세요)`);
 }
 
 // 관리자 대행 등록: 총무가 사장님 대신 회원+업체를 만들고 임시 비번을 전달.
@@ -1077,9 +1106,30 @@ export async function adminAddMember(ctx) {
     }
   }
   await audit(ctx, isEsign ? "서명자등록" : "회원대행등록", `${name}${businessName ? " / " + businessName : ""} (${email || "이메일 없음"})`);
-  return back(to, email
-    ? `${isEsign ? "내부 서명자" : "대행"} 등록 완료 — ${name}님 로그인: ${email} / 임시비번 ${temp} (본인에게 전달하세요)`
-    : `${name}님을 등록했습니다. 이메일이 없어 아직 로그인은 못 하십니다 — 점포 화면에서 로그인 이메일을 지정하면 그때 비밀번호가 나옵니다.`);
+  // 이메일이 없으면 휴대폰 번호가 곧 아이디다. 그 자리에서 비밀번호까지 알려 주지 않으면
+  // 회장님이 사장님께 전화해 불러 줄 것이 없다.
+  return back(to, `${isEsign ? "내부 서명자" : "대행"} 등록 완료 — ${name}님 로그인: ${
+    email || D.maskPhone(phone) + " (휴대폰 번호로 로그인)"} / 임시비번 ${temp} (본인에게 전달하세요)`);
+}
+
+// 사장님 휴대폰 번호 수정 — 이메일 없이 등록한 계정에서는 이 번호가 곧 아이디다.
+// 번호를 잘못 받아 적으면 사장님이 영영 못 들어오는데, 예전에는 고칠 화면이 없었다.
+export async function adminSetOwnerPhone(ctx) {
+  const { db, form, base, assoc, params } = ctx;
+  const b = await D.getBusinessById(db, Number(params.id) || 0);
+  if (!b || b.association_id !== assoc.id) return back(base + "/admin", "업체를 찾을 수 없습니다.", true);
+  const to = `${base}/admin/business/${b.id}`;
+  const owner = b.owner_id ? await D.getUserById(db, b.owner_id) : null;
+  if (!owner) return back(to, "연결된 사장님 계정이 없습니다.", true);
+  const phone = D.normalizePhone(form.get("phone") || "");
+  if (phone && !D.isValidPhone(phone)) return back(to, "휴대폰 번호 형식을 확인해 주세요. (010-1234-5678)", true);
+  if (!phone && isPlaceholderEmail(owner.email))
+    return back(to, "이 계정은 휴대폰 번호가 아이디입니다 — 비우면 사장님이 로그인할 수 없게 됩니다.", true);
+  await D.setUserPhone(db, owner.id, phone);
+  await audit(ctx, "사장님연락처변경", `${b.name} · ${owner.name} → ${phone ? D.maskPhone(phone) : "지움"}`);
+  return back(to, phone
+    ? `휴대폰 번호를 저장했습니다 — 사장님은 ${D.formatPhone(phone)} 로 로그인하십니다. 비밀번호는 회원 목록의 [임시 비밀번호] 로 발급하세요.`
+    : "휴대폰 번호를 지웠습니다.");
 }
 
 // 이메일 없이 등록해 둔 사장님에게 나중에 로그인 이메일을 지정한다.
