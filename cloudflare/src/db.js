@@ -445,6 +445,15 @@ export async function businessStatusCounts(db, aid) {
   return out;
 }
 
+export const setUrdealSeller = (db, id, aid, sellerId) =>
+  run(db, "UPDATE businesses SET urdeal_seller_id=? WHERE id=? AND association_id=?", Number(sellerId) || 0, id, aid);
+// 유어딜 가게 번호가 있는 점포만. 홈에 걸 이용권을 가져올 때 쓴다.
+// 홈에 보이는 12곳만이 아니라 공개된 점포 전부를 본다 — 이용권을 파는 가게가
+// 목록 두 번째 쪽에 있다고 골목 화면에서 빠질 이유가 없다.
+export const urdealSellerIds = async (db, aid) =>
+  (await all(db, "SELECT urdeal_seller_id AS id FROM businesses WHERE association_id=? AND status='approved' AND urdeal_seller_id>0", aid))
+    .map((r) => r.id);
+
 function bizWhere(aid, { status = "approved", category = null, q = null }) {
   let sql = " WHERE association_id = ? AND status = ?"; const args = [aid, status];
   if (category) { sql += " AND category = ?"; args.push(category); }

@@ -122,6 +122,7 @@ CREATE TABLE IF NOT EXISTS businesses (
   sns_blog       TEXT NOT NULL DEFAULT '',
   sns_kakao      TEXT NOT NULL DEFAULT '',
   source         TEXT NOT NULL DEFAULT 'self',   -- 'self'(사장님 직접) | 'proxy'(관리자 대행) — 핵심 가설 계측
+  urdeal_seller_id INTEGER NOT NULL DEFAULT 0,   -- 유어딜 가게 번호 (0=안 씀). 이 가게의 이용권을 홈에 건다
   created_at     TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at     TEXT,                            -- 콘텐츠 갱신 시각(살아있는 홈 판정)
   UNIQUE (association_id, slug)
@@ -737,7 +738,7 @@ CREATE INDEX IF NOT EXISTS idx_landing_asset_assoc ON landing_assets(association
 // 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
 // 마이그레이션 세대 — migrateColumns 에 단계를 추가할 때마다 +1
 // 36 = 두 갈래(트렁크 33 · 모집형 35)를 합친 세대. 양쪽 DB 모두 다시 한 번 마이그레이션을 타게 한다.
-export const SCHEMA_VERSION = "47";
+export const SCHEMA_VERSION = "48";
 
 export async function ensureSchema(db) {
   const has = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='associations'").first();
@@ -1044,6 +1045,13 @@ async function migrateColumns(db) {
   const bcols = (await db.prepare("PRAGMA table_info(doc_batches)").all()).results || [];
   if (bcols.length && !bcols.some((c) => c.name === "team_id"))
     await db.prepare("ALTER TABLE doc_batches ADD COLUMN team_id INTEGER NOT NULL DEFAULT 0").run();
+  // v48: 유어딜 가게 번호. 이 번호가 있는 점포의 이용권을 홈 '우리 골목 이용권' 에 건다.
+  // 0 = 유어딜을 안 쓰는 가게 (대부분). 번호는 유어딜이 발급한 셀러 번호를 그대로 적는다.
+  {
+    const bz = (await db.prepare("PRAGMA table_info(businesses)").all()).results || [];
+    if (bz.length && !bz.some((c) => c.name === "urdeal_seller_id"))
+      await db.prepare("ALTER TABLE businesses ADD COLUMN urdeal_seller_id INTEGER NOT NULL DEFAULT 0").run();
+  }
   if (!cols.some((c) => c.name === "team_scope"))
     await db.prepare("ALTER TABLE associations ADD COLUMN team_scope INTEGER NOT NULL DEFAULT 0").run();
   for (const [name, ddl, idx] of v17) {

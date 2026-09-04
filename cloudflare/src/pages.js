@@ -4,6 +4,7 @@ import { esc, cap, clip, openBadge, openNow, hoursLine, dongOf, fmtBytes, kstSta
 import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG, ORIGIN, assetUrl } from "./render.js";
 import { verifyInviteToken, SALES_STAGES, otpRequired, selfSignupOn, MAX_SLOTS, BULK_MAX, BULK_CHUNK, docOf, isPlaceholderEmail } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
 import { html, notFoundResponse, back, redirect } from "./http.js";
+import { deals as urdealDeals, urdealProductUrl } from "./urdeal.js";
 import { countable, countHomeGoal, homeVariantCookie } from "./traffic.js";
 import { galleryItem } from "./media-render.js";
 import { priceOf, costOf, jeonToWon, notifyEnabled, autoNotifyOn, canAutoSend, ALIGO_VARS, hasCfg, TEMPLATE_KEYS, TEMPLATES, billingMode, BILLING_MODES } from "./notify.js";
@@ -242,8 +243,19 @@ export async function home(ctx, opts = {}) {
       <span class="pb-view" aria-hidden="true">view <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></span></span>
     <time>${esc(kstDate(n.created_at))}</time>
     <strong>${esc(n.title)}</strong></a>`).join("");
+  // ── 우리 골목 이용권 (유어딜) —— 유어딜 가게 번호를 넣어 둔 점포의 이용권을 가져온다.
+  //
+  // 남의 서비스라 죽거나 느려질 수 있다. 실패하면 빈 목록으로 두고 넘어간다 —
+  // 유어딜이 안 된다고 상인회 홈이 같이 죽으면 안 된다. (섹션은 사장님을 부르는 칸으로 남는다.)
+  const dealsOn = lay.some((x) => x.type === "deals" && x.enabled !== false);
+  const dealRows = dealsOn
+    ? await urdealDeals(ctx.env, await D.urdealSellerIds(db, assoc.id).catch(() => [])).catch(() => [])
+    : [];
+  const dealCards = dealRows.map((d) => ({ ...d, url: urdealProductUrl(ctx.env, d.id) }));
+
   const body = renderHome(lay, {
     assoc, base, stats, businessesHtml, businessRowsHtml, openCount, catTiles, eventsHtml, loggedIn: !!user,
+    deals: dealCards,
     heroImage: assoc.hero_image ? mediaUrl(assoc.hero_image) : "",
     heroVideo: assoc.hero_video ? mediaUrl(assoc.hero_video) : "",
     photosHtml,
@@ -2735,6 +2747,14 @@ export async function adminBusinessEdit(ctx) {
         <label>소개<textarea name="description" rows="4" maxlength="2000">${esc(b.description || "")}</textarea></label>
         <label>네이버 플레이스 <small>(선택 · 리뷰·길찾기 연결)</small>
           <input type="url" name="sns_naver" value="${esc(b.sns_naver || "")}" placeholder="naver.me/…" /></label>
+        <div class="form-divider">유어딜 (이용권 판매)</div>
+        <p class="panel-hint">이 가게가 유어딜에서 이용권을 팔고 있으면 <b>가게 번호</b>를 넣어 주세요.
+          그러면 그 이용권이 상인회 홈의 <b>우리 골목 이용권</b> 자리에 자동으로 걸립니다.
+          번호는 유어딜 가게 화면 주소 끝의 숫자입니다 (예: live.ur-team.com/seller/<b>128</b> → 128).
+          안 팔면 비워 두세요.</p>
+        <label>유어딜 가게 번호 <small>(선택)</small>
+          <input type="text" inputmode="numeric" name="urdeal_seller_id" maxlength="12"
+            value="${b.urdeal_seller_id ? esc(String(b.urdeal_seller_id)) : ""}" placeholder="예: 128" /></label>
         <div class="form-divider">지도 위치</div>
         <div class="form-two">
           <label>위도<input type="text" inputmode="decimal" name="lat" data-place="lat" value="${b.lat != null ? esc(String(b.lat)) : ""}" /></label>

@@ -472,6 +472,13 @@ export async function adminUpdateBusiness(ctx) {
     snsInstagram: b.sns_instagram, snsYoutube: b.sns_youtube, snsBlog: b.sns_blog,
     snsKakao: b.sns_kakao, snsNaver: snsUrl(form.get("sns_naver")) || b.sns_naver,
   });
+  // 유어딜 가게 번호 — 이 번호가 있는 점포의 이용권이 홈 '우리 골목 이용권' 에 걸린다.
+  // 칸을 아예 안 그린 화면(점주 대시보드)에서 온 저장은 건드리지 않는다.
+  if (form.has("urdeal_seller_id")) {
+    const raw = String(form.get("urdeal_seller_id") || "").trim();
+    if (raw && !/^\d{1,12}$/.test(raw)) return back(to, "유어딜 가게 번호는 숫자만 넣어 주세요. (예: 128)", true);
+    await D.setUrdealSeller(db, b.id, assoc.id, raw ? Number(raw) : 0);
+  }
   await audit(ctx, "점포정보수정", `${name} (관리자 대행)`);
   return back(to, "저장했습니다. 사장님이 로그인하면 이어서 고칠 수 있습니다.");
 }
