@@ -1088,9 +1088,8 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .cat-tab-open{font-weight:700;color:var(--ink);border-bottom-color:var(--brand-700)}
 .cat-tab-all{margin-left:auto;font-variant-numeric:tabular-nums}
 @media (max-width:640px){
-  .cat-tabs{flex-wrap:nowrap;overflow-x:auto;gap:0 18px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
-  .cat-tabs::-webkit-scrollbar{display:none}
-  .cat-tab-all{margin-left:0}
+  /* .cat-tabs 의 좁은 화면 동작은 홈 v5 블록(파일 끝)에서 정합니다 — 여기 두면 특정도에 눌립니다 */
+  .cat-tabs{-webkit-overflow-scrolling:touch}
 }
 .row-toggle{display:flex;align-items:center;gap:10px}
 /* 404 (디자인: 그라디언트 숫자 + 브랜드 글로우) */
@@ -1162,12 +1161,9 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .console-main{min-width:0}
 .console-main [id]{scroll-margin-top:calc(var(--header-h) + 12px)}
 @media (max-width:860px){
-  .console-grid{grid-template-columns:1fr}
   .console-side{position:static;top:auto}
-  .console-side nav{flex-direction:row;flex-wrap:wrap;gap:6px}
-  /* 손가락으로 누르는 자리다 — 실측 17px 이던 것을 44px 로 올린다.
-     좁은 화면에서 탭이 두 줄로 접히므로 각 칸이 고르게 나뉘도록 flex 로 늘린다. */
-  .console-side a{min-height:44px;padding:0 14px;font-size:14px;flex:1 1 auto;justify-content:center}
+  /* 콘솔의 좁은 화면 접기(한 칸 · 가로 차림표 · 44px 탭)는 파일 뒤쪽 `.dash …` 재정의
+     **다음**에서 정합니다. 여기 두면 그 재정의에 특정도로 눌려 죽습니다. */
 }
 /* 머리글의 '랜딩페이지' 도 같은 이유로 넉넉히 */
 @media (max-width:860px){
@@ -2100,6 +2096,18 @@ input:not([type]),input[type="text"],input[type="email"],input[type="tel"],input
   border-radius:0;padding:8px 0 8px 12px;font-size:13.5px;font-weight:500;
   border-left:2px solid transparent;color:var(--ink-soft);
 }
+/* ⚠️ 바로 위 `.dash …` 규칙들이 파일 앞쪽(860px 구간)의 "휴대폰에서는 한 칸으로 접는다" 를
+   특정도로 눌러 버리고 있었습니다. 그래서 휴대폰에서도 184px 짜리 차림표가 그대로 남고,
+   메뉴 글자가 13.5px·패딩 8px 로 돌아가 손가락으로 누르기 어려웠습니다.
+   관리자 화면을 휴대폰으로 여는 상인회 사무국이 실제로 겪는 일입니다. 여기서 다시 정합니다. */
+@media (max-width:860px){
+  .dash .console-grid{grid-template-columns:1fr;gap:0}
+  .dash .console-main{border-left:0;padding-left:0;padding-top:18px}
+  .dash .console-side nav{flex-direction:row;flex-wrap:wrap;gap:6px;padding:0}
+  .dash .console-side a{min-height:44px;padding:0 14px;font-size:14px;flex:1 1 auto;
+    justify-content:center;border-left:0;border-radius:var(--r-md)}
+}
+
 .dash .console-side a:hover{background:none;color:var(--ink);border-left-color:var(--line)}
 .dash .console-side a.on,
 .dash .console-side a[aria-current]{color:var(--ink);font-weight:700;border-left-color:var(--ink)}
@@ -2838,4 +2846,107 @@ a.bc-val,.map-store-name,.map-store-link{display:inline-flex;align-items:center;
   a.bc-val,.map-store-name,.map-store-link{min-height:44px}
   /* 가게 페이지의 '길찾기' 줄도 같은 자로 (문장 안 링크라 세로만 키운다) */
   .biz-way a{display:inline-flex;align-items:center;min-height:44px}
+}
+
+/* =========================================================================
+   홈 v5 —— 여백과 타이포로 잡는 결
+   -------------------------------------------------------------------------
+   레퍼런스로 받은 화면(카카오임팩트)에서 가져온 것은 장식이 아니라 **규칙** 넷입니다.
+
+     ① 제목을 두 줄로 크게 — 밑줄도 눈썹글씨도 없이 타이포만으로 구역을 가른다
+     ② 면은 납작하게 — 그림자를 걷고, 라운드를 키우고, 색은 한 덩어리로 칠한다
+     ③ 소식 카드는 뒤집는다 — 태그·글이 먼저, 사진은 맨 아래
+     ④ 여백을 크게 — 구역 사이가 넉넉해야 각 구역이 하나의 이야기로 읽힌다
+
+   `.sec-v5` 는 홈에서 만들어지는 구역에만 붙습니다(homeLayout.js). 다른 화면은 그대로입니다.
+   ========================================================================= */
+
+/* ① 두 줄 제목 —— 밑줄을 걷고 크기로 말한다 */
+.sec-v5 .section-head.head-row{border-bottom:0;padding-bottom:0;align-items:flex-end;
+  margin-bottom:clamp(18px,2.6vw,26px);gap:16px}
+.sec-v5 .head-row .section-title{font-size:clamp(1.5rem,3.2vw,2.05rem);line-height:1.3;
+  letter-spacing:-.035em;font-weight:700}
+.sec-v5 .head-row .section-lead{margin-top:10px;font-size:.95rem}
+/* 각주 구역(연락처)은 그대로 작게 — 모든 제목이 같은 크기면 다시 아무것도 강조하지 못한다 */
+.sec-v5.section-note .head-row .section-title{font-size:clamp(1.02rem,1.6vw,1.15rem)}
+.sec-v5 .section-more-link{font-size:.9rem;color:var(--ink-soft)}
+
+/* ④ 구역 사이 여백 —— 큰 제목에는 그만한 숨이 필요하다 */
+.sec-v5{padding-block:clamp(44px,6vw,84px)}
+.sec-v5.section-sub{padding-block:clamp(38px,5vw,72px)}
+.sec-v5.section-note{padding-block:clamp(30px,4vw,52px)}
+
+/* ② 납작한 면 —— 그림자를 걷고 라운드를 키운다 */
+.sec-v5 .market-card,.sec-v5 .update-card,.sec-v5 .event-card,
+.sec-v5 .notice-list,.sec-v5 .contact-card,.sec-v5 .map-banner{box-shadow:none}
+.sec-v5 .market-card{border-radius:16px;overflow:hidden;border:1px solid var(--line-soft)}
+.sec-v5 .event-card,.sec-v5 .contact-card{border-radius:16px}
+.sec-v5 .notice-list{border-radius:16px;overflow:hidden}
+
+/* ③ 소식 카드 —— 태그·글이 먼저, 사진은 맨 아래 */
+.sec-v5 .update-card{display:flex;flex-direction:column;gap:0;align-items:stretch;padding:0;
+  border-radius:16px;overflow:hidden;background:var(--surface-2);border:1px solid var(--line-soft);
+  transition:border-color .2s,transform .2s var(--ease)}
+/* 마우스를 올려도 카드를 들어올리지 않습니다 — 이 저장소가 일부러 뺀 연출입니다(plain.test.js).
+   반응은 테두리로만 남깁니다. */
+.sec-v5 .update-card:hover{border-color:var(--ink-soft)}
+.sec-v5 .uc-body{display:flex;flex-direction:column;gap:12px;padding:20px 20px 22px;min-height:132px}
+.sec-v5 .uc-tag{align-self:flex-start;font-size:.76rem;font-weight:600;color:var(--ink-soft);
+  background:var(--surface);border-radius:var(--r-pill);padding:6px 12px;line-height:1}
+.sec-v5 .uc-text{font-size:1.04rem;font-weight:600;line-height:1.45;letter-spacing:-.022em;color:var(--ink);
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.sec-v5 .uc-body time{margin-top:auto;font-size:.78rem;color:var(--muted)}
+.sec-v5 .uc-shot{display:block;aspect-ratio:16/10;background:var(--bg-alt)}
+.sec-v5 .uc-shot img{width:100%;height:100%;object-fit:cover;display:block}
+
+/* 업종 줄 —— 선택된 것은 검정 알약. 밑줄 탭보다 손가락에 잘 보인다 */
+.sec-v5 .cat-tabs{border-bottom:0;gap:8px;padding-bottom:0;margin-bottom:clamp(16px,2.4vw,22px)}
+.sec-v5 .cat-tab{border:1px solid var(--line);border-radius:var(--r-pill);padding:9px 16px;
+  min-height:40px;font-size:.9rem;font-weight:500;color:var(--ink-soft);background:var(--surface);
+  border-bottom-width:1px;margin-bottom:0}
+.sec-v5 .cat-tab:hover{border-color:var(--ink-soft);color:var(--ink);background:var(--surface)}
+.sec-v5 .cat-tab-open{background:var(--ink);border-color:var(--ink);color:#fff;font-weight:600}
+.sec-v5 .cat-tab-open:hover{background:var(--ink);border-color:var(--ink);color:#fff}
+.sec-v5 .cat-tab-all{margin-left:auto;border-style:dashed}
+/* 손가락 화면에서는 44px. 위의 `.sec-v5 .cat-tab` 이 특정도가 높아 파일 앞쪽의
+   `(pointer:coarse) .cat-tab{min-height:44px}` 를 눌러 버리므로 여기서 다시 정한다. */
+@media (hover:none),(pointer:coarse){
+  .sec-v5 .cat-tab{min-height:44px;padding-block:0}
+}
+
+/* ── 좁은 화면 ──────────────────────────────────────────────
+   레퍼런스는 데스크톱 화면이지만, 이 사이트를 여는 사람 대부분은 휴대폰입니다.
+   큰 제목은 그대로 두되(작게 줄이면 이 결이 사라집니다) 줄 간격과 여백만 조입니다. */
+@media (max-width:640px){
+  .sec-v5{padding-block:36px}
+  .sec-v5.section-sub{padding-block:32px}
+  .sec-v5.section-note{padding-block:26px}
+  .sec-v5 .section-head.head-row{flex-direction:column;align-items:flex-start;gap:8px}
+  .sec-v5 .head-row .section-title{font-size:1.42rem;line-height:1.32}
+  .sec-v5 .section-more-link{align-self:flex-end;margin-top:-30px}
+  .sec-v5 .uc-body{padding:16px 16px 18px;min-height:0;gap:10px}
+  .sec-v5 .uc-text{font-size:1rem}
+  /* 업종 줄은 접히지 않고 옆으로 밀린다 — 여덟 개가 세 줄로 접히면 가게가 화면 밖으로 밀린다 */
+  .sec-v5 .cat-tabs{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;
+    margin-inline:-20px;padding-inline:20px;scroll-snap-type:x proximity}
+  .sec-v5 .cat-tabs::-webkit-scrollbar{display:none}
+  .sec-v5 .cat-tab{flex:none;scroll-snap-align:start}
+  .sec-v5 .cat-tab-all{margin-left:0}
+}
+
+/* 맺음 카드 —— 브랜드색 한 장으로 페이지를 닫는다 (레퍼런스의 오른쪽 큰 카드) */
+.sec-v5 .join-cta{background:var(--brand-700);border:0;border-radius:22px;color:var(--on-brand);
+  padding:clamp(30px,4vw,52px) clamp(24px,3.4vw,44px);align-items:end}
+.sec-v5 .join-cta h2{color:var(--on-brand);font-size:clamp(1.3rem,2.8vw,1.85rem);line-height:1.34;
+  letter-spacing:-.03em;margin-bottom:12px}
+.sec-v5 .join-cta p{color:var(--on-brand);opacity:.82;max-width:46ch;margin:0}
+.jc-go{display:inline-flex;align-items:center;gap:12px;white-space:nowrap;
+  font-size:1rem;font-weight:700;letter-spacing:-.02em;color:var(--on-brand)}
+.jc-arrow{display:grid;place-items:center;width:40px;height:40px;border-radius:50%;flex:none;
+  color:var(--on-brand);background:rgba(255,255,255,.18);transition:background .2s,transform .2s var(--ease)}
+.jc-go:hover .jc-arrow{background:rgba(255,255,255,.32);transform:translate(2px,-2px)}
+@media (max-width:760px){
+  .sec-v5 .join-cta{border-radius:18px;align-items:stretch}
+  .jc-go{justify-content:space-between;width:100%;padding:14px 18px;border-radius:var(--r-pill);
+    background:rgba(255,255,255,.16);min-height:56px}
 }

@@ -224,9 +224,16 @@ export async function home(ctx, opts = {}) {
     counts: { businesses: items.length, notices: notices.length, events: events.length },
     // 사진 카드 구성은 8곳, 한 줄 목록 구성은 12곳을 보여준다
     suggestNames: names.map((r) => r.name),
+    // 소식 카드 —— 가게 이름을 작은 알약으로 먼저 보여주고, 소식 문장을 제목처럼 크게 두고,
+    // 사진은 **맨 아래**에 깝니다. 사진을 위에 두면 사진 없는 소식(대부분입니다)이
+    // 회색 빈 칸으로 시작해 버립니다. 글이 먼저면 사진이 있든 없든 카드가 성립합니다.
     updatesHtml: recentUpdates.map((u) => `<a class="update-card" href="${base}/business/${esc(u.biz_slug)}">
-      ${u.image ? `<span class="uc-img"><img src="${esc(mediaUrl(u.image))}" alt="" loading="lazy" /></span>` : ""}
-      <span class="uc-body"><strong>${esc(u.biz_name)}</strong><p>${esc(u.body)}</p><time>${esc(kstDate(u.created_at, ".").slice(5))}</time></span></a>`).join(""),
+      <span class="uc-body">
+        <span class="uc-tag">${esc(u.biz_name)}</span>
+        <strong class="uc-text">${esc(u.body)}</strong>
+        <time>${esc(kstDate(u.created_at, ".").slice(5))}</time>
+      </span>
+      ${u.image ? `<span class="uc-shot"><img src="${esc(mediaUrl(u.image))}" alt="" loading="lazy" /></span>` : ""}</a>`).join(""),
   });
   // 검색엔진 구조화 데이터: 상인회 = 조직 + 사이트 검색액션(사이트링크 검색창)
   const homeUrl = `${ORIGIN}${base}/`;

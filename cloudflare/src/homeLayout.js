@@ -176,11 +176,11 @@ export function defaultLayout(assocName = "우리 상인회") {
     { type: "featurecards", enabled: false, title: "", lead: "" },
     // 제목이 "지금 문 연 가게" 인데 목록에는 문 닫은 가게도 섞여 있었습니다.
     // 문 연 곳만 보는 것은 바로 위 업종 줄의 첫 칸이 합니다.
-    { type: "businesses", enabled: true, title: "우리 동네 가게", lead: "", style: "grid" },
-    { type: "updates", enabled: true, title: "가게가 전하는 소식" },
+    { type: "businesses", enabled: true, title: "골목마다 이야기가 있는\n우리 동네 가게", lead: "", style: "grid" },
+    { type: "updates", enabled: true, title: "오늘도 문을 여는\n가게 소식" },
     { type: "mapbanner", enabled: true, title: "우리 동네 점포 지도", subtitle: "" },
-    { type: "notices", enabled: true, title: "상인회 공지" },
-    { type: "events", enabled: true, title: "다가오는 행사" },
+    { type: "notices", enabled: true, title: "함께 알아 두면 좋은\n상인회 공지" },
+    { type: "events", enabled: true, title: "골목이 북적이는\n다가오는 행사" },
     // 쇼케이스(검은 인용 띠)는 기본에서 끕니다 — 새 정보를 주지 않으면서 화면 한가운데를 끊습니다.
     // 쓰고 싶은 상인회는 홈 구성에서 켤 수 있습니다.
     { type: "showcase", enabled: false, title: "", lead: "" },
@@ -226,7 +226,7 @@ export function parseLayout(json, assocName) {
     // 구버전 업그레이드: 동네 새소식 섹션이 없으면 업체 섹션 뒤에 추가
     if (!out.some((s) => s.type === "updates")) {
       const i = out.findIndex((s) => s.type === "businesses");
-      out.splice(i >= 0 ? i + 1 : out.length, 0, { type: "updates", enabled: true, title: "가게가 전하는 소식" });
+      out.splice(i >= 0 ? i + 1 : out.length, 0, { type: "updates", enabled: true, title: "오늘도 문을 여는\n가게 소식" });
     }
     // 새 섹션 업그레이드 — 예전에 저장해 둔 홈 구성에도 자리를 만들어 준다.
     // 입점 안내 셋은 꺼진 채로 넣는다: 이미 켜서 쓰고 있는 상인회의 설정은 위 filter 가 그대로 살리고,
@@ -415,14 +415,18 @@ function renderSection(s, deps) {
         `<ul class="contact-grid">${cards}</ul>${hours ? `<p class="contact-hours">${hours}</p>` : ""}`);
     }
     case "cta":
-      return `<section class="section"><div class="container">
+      // 페이지를 맺는 한 장. 위쪽이 전부 흰 바탕 위 납작한 면이라, 마지막만 브랜드색으로
+      // 칠하면 광고가 아니라 마침표로 읽힙니다. 화살표는 "여기서 다음으로 간다" 는 표시입니다.
+      return `<section class="section sec-v5"><div class="container">
         <div class="join-cta">
-          <span class="jc-glow" aria-hidden="true"></span>
           <div class="jc-text">
             <h2>${esc(s.title || "")}</h2>
             <p>${esc(s.body || "")}</p>
           </div>
-          <a href="${deps.base}/register" class="btn btn-primary btn-lg">${esc(s.buttonLabel || "업체 등록하기")}</a>
+          <a href="${deps.base}/register" class="jc-go">
+            <span>${esc(s.buttonLabel || "업체 등록하기")}</span>
+            <span class="jc-arrow" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></span>
+          </a>
         </div></div></section>`;
     default:
       return "";
@@ -523,10 +527,17 @@ function featureCardsSection(s, deps) {
   </div></section>`;
 }
 
+// 구역 껍데기.
+//
+// 제목은 **두 줄로 끊어 쓸 수 있습니다** — 줄바꿈(\n)을 그대로 살립니다.
+// "골목마다 이야기가 있는 / 우리 동네 가게" 처럼 앞줄이 꾸미고 뒷줄이 이름을 말하는 형태가
+// 한 줄짜리 라벨보다 사람 말에 가깝고, 화면에 리듬이 생깁니다.
+// 관리자가 한 줄로만 적으면 한 줄로 나옵니다(예전과 같음).
 function sectionWrap(extraClass, title, lead, inner, more) {
-  return `<section class="section ${extraClass}"><div class="container">
+  const heading = esc(title || "").replace(/\n/g, "<br />");
+  return `<section class="section sec-v5 ${extraClass}"><div class="container">
     <div class="section-head head-row">
-      <div><h2 class="section-title">${esc(title || "")}</h2>
+      <div><h2 class="section-title">${heading}</h2>
       ${lead ? `<p class="section-lead">${esc(lead)}</p>` : ""}</div>
       ${more ? `<a class="section-more-link" href="${more.href}">${esc(more.label)} <span aria-hidden="true">›</span></a>` : ""}
     </div>

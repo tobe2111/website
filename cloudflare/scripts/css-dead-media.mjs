@@ -107,15 +107,20 @@ for (const mr of mediaRules) {
   for (const prop of Object.keys(mr.props)) {
     for (const tr of topRules) {
       if (tr.at <= mr.at) continue;                // 뒤에 있어야 이긴다
-      if (tr.sel !== mr.sel) continue;             // 같은 선택자만 (문자열 동일)
-      if (specificity(tr.sel) < mspec) continue;   // 특정도가 낮으면 못 이긴다
+      // 같은 선택자이거나, **그 선택자를 더 좁힌 것**(`.cat-tab` ↔ `.sec-v5 .cat-tab`)이면 이길 수 있다.
+      // 뒤쪽에 `.sec-v5 .cat-tab{min-height:40px}` 를 두면 앞쪽 @media 의
+      // `.cat-tab{min-height:44px}` 가 특정도로 밀려 죽는다 — 실제로 이 저장소에서 났다.
+      const same = tr.sel === mr.sel;
+      const narrows = !same && new RegExp("(^|[\\s>+~])" + mr.sel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "$").test(tr.sel);
+      if (!same && !narrows) continue;
+      if (same && specificity(tr.sel) < mspec) continue;   // 같은 선택자인데 특정도가 낮으면 못 이긴다
       const hit = Object.keys(tr.props).find((p) => covers(p, prop));
       if (!hit) continue;
       if (/!important/i.test(mr.props[prop]) && !/!important/i.test(tr.props[hit])) continue;
       // 덮어쓰는 값이 **똑같으면** 화면은 그대로다. 정리할 중복일 뿐 버그가 아니므로 알리지 않는다.
       const norm = (v) => String(v).replace(/\s+/g, " ").trim().toLowerCase();
       if (hit === prop && norm(tr.props[hit]) === norm(mr.props[prop])) continue;
-      dead.push({ sel: mr.sel, prop, cond: mr.cond,
+      dead.push({ sel: mr.sel, prop, cond: mr.cond, bySel: tr.sel,
         mline: clean.slice(0, mr.at).split("\n").length,
         tline: clean.slice(0, tr.at).split("\n").length, by: hit });
       break;
@@ -132,7 +137,7 @@ console.log(`\n✗ ${rel} — 뒤 규칙에 덮여 동작하지 않는 반응형
 for (const d of dead) {
   console.log(`  ${d.sel} { ${d.prop} }`);
   console.log(`    ${d.mline}줄  @media ${d.cond}  ← 여기서 정한 것이`);
-  console.log(`    ${d.tline}줄  같은 선택자의 ${d.by} 에 덮여 무시됩니다\n`);
+  console.log(`    ${d.tline}줄  \`${d.bySel}\` 의 ${d.by} 에 덮여 무시됩니다\n`);
 }
 console.log(`고치는 법: 덮는 규칙 **뒤에** @media 를 다시 쓰거나, 특정도를 한 단 올리세요.\n`);
 process.exit(1);
