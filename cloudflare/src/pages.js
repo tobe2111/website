@@ -1640,7 +1640,11 @@ export async function admin(ctx) {
     </div>
     <p class="panel-hint" data-place-msg hidden></p>
     <ul class="place-list" data-place-list hidden></ul>
-    <p class="panel-hint">고르면 업체명·업종·주소·전화·좌표가 아래에 채워집니다. <b>사장님 성함과 휴대폰만 더 적으면 끝</b>입니다.</p>` : ""}
+    <p class="panel-hint">고르면 업체명·업종·주소·전화·좌표가 아래에 채워집니다. <b>사장님 성함과 휴대폰만 더 적으면 끝</b>입니다.</p>`
+      // 키가 없다고 이 자리를 통째로 지우면, 이런 기능이 있다는 것 자체를 관리자가 알 수 없다.
+      // 꺼져 있다는 사실과 켜는 방법을 한 줄로 남긴다 — 없는 것과 꺼진 것은 다르다.
+      : `<p class="panel-hint">가게 이름만으로 주소·전화·업종·지도 위치를 채워 넣는 <b>지도에서 찾기</b>는 지금 꺼져 있습니다 —
+      운영사가 카카오 지도 키를 등록하면 이 자리에 검색 칸이 생깁니다. 그때까지는 아래에 직접 적어 주세요.</p>`}
     <form method="post" action="${base}/admin/members/add" class="stack-form">
       <div class="form-two"><label>사장님 성함<input type="text" name="name" required maxlength="60" autocomplete="name" /></label>
         <label>휴대폰 <small>(알림톡·연락용)</small><input type="tel" name="phone" maxlength="13" inputmode="numeric" placeholder="010-1234-5678" autocomplete="tel" /></label></div>
