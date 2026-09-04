@@ -250,3 +250,36 @@ test("app.css 의 중괄호가 맞는다 — 하나만 어긋나도 그 뒤가 �
   assert.equal(badLine, 0, `닫는 중괄호가 남습니다 (${badLine}줄)`);
   assert.equal(depth, 0, `닫히지 않은 중괄호가 ${depth}개 남았습니다 — 그 뒤 규칙이 전부 무시됩니다`);
 });
+
+// 관리 콘솔의 카드는 사방 20px 여백으로 섭니다. 그런데 예전(괘선) 디자인에서 쓰던
+// "묶음의 첫 칸만 위 여백을 뺀다" 는 예외가 남아, 각 탭의 **첫 카드**에서만 제목이
+// 카드 천장에 붙어 있었습니다(실측 0~3px). 그 예외는 카드 규칙보다 선택자가 한 단
+// 구체적이라, 뒤에 온 카드 규칙을 이기고도 아무 표시를 내지 않습니다 — 브라우저는
+// 이런 걸 오류로 알리지 않고, 코드에는 '카드는 20px' 이라고 적혀 있어 아무도 의심하지 않습니다.
+//
+// 죽은 @media 검사기(scripts/css-dead-media.mjs)는 좁은 화면 규칙이 죽는 경우만 보므로
+// 이건 못 잡습니다. 그래서 여기서 따로 지킵니다.
+test("콘솔 카드의 위 여백을 :first-child 예외가 지우지 않는다", async () => {
+  const { readFileSync } = await import("node:fs");
+  const css = readFileSync(new URL("../public/css/app.css", import.meta.url), "utf8");
+  const bare = css.replace(/\/\*[\s\S]*?\*\//g, "");
+  const bad = [];
+  // `... .panel:first-child { ... padding-top:0 ... }` 꼴을 모두 잡는다
+  for (const m of bare.matchAll(/([^{}]*\.panel[^{}]*:first-child[^{}]*)\{([^{}]*)\}/g)) {
+    if (/padding(-top)?\s*:\s*0/.test(m[2])) bad.push(m[1].trim().replace(/\s+/g, " "));
+  }
+  assert.deepEqual(bad, [], `첫 카드의 위 여백을 지우는 규칙이 있습니다:\n  ${bad.join("\n  ")}`);
+});
+
+// 카드끼리는 흰 상자와 사이 여백으로 이미 갈립니다. 거기에 가로줄까지 그으면
+// 카드 위에 선이 얹혀 '카드가 아닌 것' 처럼 보입니다 — 좁은 화면에서만 그랬습니다.
+test("콘솔 카드 위에 가로줄을 얹지 않는다", async () => {
+  const { readFileSync } = await import("node:fs");
+  const css = readFileSync(new URL("../public/css/app.css", import.meta.url), "utf8");
+  const bare = css.replace(/\/\*[\s\S]*?\*\//g, "");
+  const bad = [];
+  for (const m of bare.matchAll(/([^{}]*\.(?:dash-col|sgroup)[^{}]*\.panel[^{}]*)\{([^{}]*)\}/g)) {
+    if (/border-top\s*:\s*[^;]*\d/.test(m[2])) bad.push(m[1].trim().replace(/\s+/g, " "));
+  }
+  assert.deepEqual(bad, [], `카드 위에 선을 긋는 규칙이 있습니다:\n  ${bad.join("\n  ")}`);
+});

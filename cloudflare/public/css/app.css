@@ -2070,8 +2070,9 @@ input:not([type]),input[type="text"],input[type="email"],input[type="tel"],input
   background:none;border:0;border-radius:0;box-shadow:none;
   padding:20px 0 0;margin:0 0 30px;border-top:1px solid var(--line);
 }
-.dash .sgroup > .panel:first-child,
-.dash .sgroup > details.panel:first-child{border-top:0;padding-top:0}
+/* 예전(괘선) 디자인에서는 묶음의 첫 칸만 위 선·위 여백을 뺐다. 지금은 카드라서 그러면
+   제목이 카드 천장에 붙는다. 이 예외는 아래 카드 규칙보다 선택자가 구체적이라 조용히 이겼다 —
+   각 탭의 첫 카드만 여백 0 이 되어 있었다. 예외를 지우고 카드 여백(20px)을 그대로 쓴다. */
 /* 구역을 나누는 선은 제목 위 하나면 됩니다 — 위아래로 두 줄이면 제목이 상자에 갇힙니다 */
 .dash .panel-title{font-size:1.02rem;font-weight:700;letter-spacing:-.02em;margin-bottom:14px;padding-bottom:0;border-bottom:0}
 .dash .panel-head{margin-bottom:14px}
@@ -2214,9 +2215,9 @@ input:not([type]),input[type="text"],input[type="email"],input[type="tel"],input
    왼쪽은 지금 처리할 것(승인 단추가 그 자리에 있습니다), 오른쪽은 지나간 기록입니다.
    왼쪽이 넓은 이유는 거기서 일을 하기 때문이고, 오른쪽은 훑기만 하면 됩니다. */
 .dash-split{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:clamp(22px,3vw,38px);align-items:start}
-.dash-col > .panel:first-child{border-top:0;padding-top:0}
-@media (max-width:900px){.dash-split{grid-template-columns:minmax(0,1fr);gap:0}
-  .dash-col + .dash-col > .panel:first-child{border-top:1px solid var(--line);padding-top:20px}}
+/* 좁은 화면에서 두 칸이 한 줄로 쌓인다. 예전에는 여기서 칸 사이에 가로줄을 넣었지만,
+   카드끼리는 흰 상자와 사이 여백으로 이미 갈린다 — 줄을 더 그으면 카드 위에 선이 얹힌다. */
+@media (max-width:900px){.dash-split{grid-template-columns:minmax(0,1fr);gap:0}}
 
 /* 처리 대기 목록 — 표로 만들 만큼 칸이 여럿이지는 않고, 줄마다 '무엇을 · 어디로' 두 가지만 있습니다 */
 .queue-list{list-style:none;margin:0;padding:0;border-top:1px solid var(--line-soft)}
