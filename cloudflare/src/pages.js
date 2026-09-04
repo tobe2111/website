@@ -17,7 +17,7 @@ import { KEY_PREFIX } from "./apiv1.js";
 import { text } from "./http.js";
 import { parseLayout, renderHome, SECTION_CATALOG, HOME_PRESETS } from "./homeLayout.js";
 import { parseLandingLayout, renderLanding, LANDING_CATALOG, safeSrc } from "./franchise.js";
-import { KINDS, KIND_KEYS, PRESETS, PRESET_KEYS, kindOf, kindById, assocTerms } from "./kinds.js";
+import { KINDS, KIND_KEYS, PRESETS, PRESET_KEYS, kindOf, kindById, assocTerms, AREA_THEMES } from "./kinds.js";
 import { turnstileWidget, turnstileScript } from "./turnstile.js";
 import { otpauthUri } from "./totp.js";
 import { PLANS, PLAN_KEYS, planPrices, planOf } from "./plans.js";
@@ -187,6 +187,8 @@ export async function home(ctx, opts = {}) {
     D.listAssocUpdates(db, assoc.id, 6),
     D.listBusinessHours(db, assoc.id),
   ]);
+  // 홈 팝업 — 관리자가 띄운 안내창. 기간이 지난 것은 질의에서 이미 빠집니다.
+  const popups = await D.listActivePopups(db, assoc.id, 3).catch(() => []);
   const cardItems = items.slice(0, 8);
   const covers = await D.coverImagesFor(db, cardItems.map((b) => b.id));
   const businessesHtml = cardItems.map((b) => businessCard(base, b, covers.get(b.id))).join("");
@@ -222,9 +224,16 @@ export async function home(ctx, opts = {}) {
     counts: { businesses: items.length, notices: notices.length, events: events.length },
     // 사진 카드 구성은 8곳, 한 줄 목록 구성은 12곳을 보여준다
     suggestNames: names.map((r) => r.name),
+    // 소식 카드 —— 가게 이름을 작은 알약으로 먼저 보여주고, 소식 문장을 제목처럼 크게 두고,
+    // 사진은 **맨 아래**에 깝니다. 사진을 위에 두면 사진 없는 소식(대부분입니다)이
+    // 회색 빈 칸으로 시작해 버립니다. 글이 먼저면 사진이 있든 없든 카드가 성립합니다.
     updatesHtml: recentUpdates.map((u) => `<a class="update-card" href="${base}/business/${esc(u.biz_slug)}">
-      ${u.image ? `<span class="uc-img"><img src="${esc(mediaUrl(u.image))}" alt="" loading="lazy" /></span>` : ""}
-      <span class="uc-body"><strong>${esc(u.biz_name)}</strong><p>${esc(u.body)}</p><time>${esc(kstDate(u.created_at, ".").slice(5))}</time></span></a>`).join(""),
+      <span class="uc-body">
+        <span class="uc-tag">${esc(u.biz_name)}</span>
+        <strong class="uc-text">${esc(u.body)}</strong>
+        <time>${esc(kstDate(u.created_at, ".").slice(5))}</time>
+      </span>
+      ${u.image ? `<span class="uc-shot"><img src="${esc(mediaUrl(u.image))}" alt="" loading="lazy" /></span>` : ""}</a>`).join(""),
   });
   // 검색엔진 구조화 데이터: 상인회 = 조직 + 사이트 검색액션(사이트링크 검색창)
   const homeUrl = `${ORIGIN}${base}/`;
@@ -246,8 +255,31 @@ export async function home(ctx, opts = {}) {
       "query-input": "required name=search_term_string",
     },
   };
-  return html(layout({ title: "", assoc, base, user, body, activeNav: `${base}/`, csrf, description: assoc.tagline, jsonLd: [orgLd, siteLd],
-    scripts: names.length ? `<script src="${assetUrl("/js/suggest.js")}" defer></script>` : "" }));
+  return html(layout({ title: "", assoc, base, user, body: body + popupLayer(popups), activeNav: `${base}/`, csrf, description: assoc.tagline, jsonLd: [orgLd, siteLd],
+    scripts: `${names.length ? `<script src="${assetUrl("/js/suggest.js")}" defer></script>` : ""}${popups.length ? `<script src="${assetUrl("/js/popup.js")}" defer></script>` : ""}` }));
+}
+
+// 홈 팝업 마크업.
+//
+// 처음에는 아무것도 보이지 않게 두고(hidden), 자바스크립트가 '오늘 안 봤다'를 확인한 뒤에만 엽니다.
+// 그래서 자바스크립트가 꺼진 브라우저에서는 팝업이 아예 뜨지 않습니다 — 화면을 가로막아 놓고
+// 닫을 수단이 없는 상태가 되는 것보다, 안 뜨는 편이 낫습니다.
+// 읽어 주는 프로그램(스크린리더)에는 창으로 알려야 하므로 role="dialog" + aria-modal 을 답니다.
+function popupLayer(popups) {
+  if (!popups || !popups.length) return "";
+  const cards = popups.map((p) => `<div class="popup-card" role="dialog" aria-modal="true" aria-labelledby="popupTitle${p.id}" data-popup="${p.id}" hidden>
+    <div class="popup-head"><h2 class="popup-title" id="popupTitle${p.id}">${esc(p.title)}</h2>
+      <button type="button" class="popup-x" data-popup-close aria-label="팝업 닫기">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    ${p.image ? `<img class="popup-img" src="${esc(mediaUrl(p.image))}" alt="" />` : ""}
+    ${p.body ? `<p class="popup-body">${esc(p.body).replace(/\n/g, "<br />")}</p>` : ""}
+    ${p.link_url ? `<a class="btn btn-primary btn-sm popup-go" href="${esc(p.link_url)}">${esc(p.link_label || "자세히 보기")}</a>` : ""}
+    <div class="popup-foot">
+      <label class="check popup-today"><input type="checkbox" data-popup-today /> 오늘 하루 보지 않기</label>
+      <button type="button" class="btn btn-ghost btn-xs" data-popup-close>닫기</button>
+    </div>
+  </div>`).join("");
+  return `<div class="popup-layer" id="popupLayer" hidden><div class="popup-dim" data-popup-close></div>${cards}</div>`;
 }
 
 // 섹션 편집기 — 상인회 홈(SECTION_CATALOG)과 프랜차이즈 랜딩(LANDING_CATALOG)이 같은 편집기를 쓴다.
@@ -618,9 +650,13 @@ export async function businesses(ctx) {
   const covers = await D.coverImagesFor(db, items.map((b) => b.id));
   const cards = items.map((b) => businessCard(base, b, covers.get(b.id))).join("") || `<p class="empty">${openOnly ? "지금 문 연 가게가 없습니다." : q ? "검색 결과가 없습니다." : "등록된 점포가 없습니다."}</p>`;
   const body = `<section class="section page-top"><div class="container">
-    <div class="section-head"><h2 class="section-title">가입 점포 안내</h2><p class="section-lead">총 ${total}곳</p></div>
-    <form method="get" action="${base}/businesses" class="board-search"><input type="search" name="q" value="${esc(q)}" placeholder="점포·업종 검색" /><button class="btn btn-ghost btn-sm">검색</button></form>
+    <div class="section-head"><h1 class="section-title">가입 점포 안내</h1><p class="section-lead">총 ${total}곳</p></div>
+    <form method="get" action="${base}/businesses" class="board-search"><input type="search" name="q" value="${esc(q)}" placeholder="점포·업종 검색" aria-label="점포·업종 검색" /><button class="btn btn-ghost btn-sm">검색</button></form>
     <div class="chip-filters">${chips}</div>
+    <!-- 눈에는 안 보이지만 읽어 주는 프로그램에는 들리는 제목.
+         페이지 제목(h1) 다음에 가게 이름(h3)이 바로 오면 단계를 하나 건너뛴 것이 되어,
+         목차만 훑어 내려가는 이용자가 "여기부터 목록" 이라는 신호를 못 받습니다. -->
+    <h2 class="a11y-only">점포 목록</h2>
     <div class="market-grid" id="bizGrid">${cards}</div>
     ${openOnly ? "" : pager((i) => `${base}/businesses${qs({ category: cat, q, page: i })}`, cur, pages)}
   </div></section>`;
@@ -822,7 +858,7 @@ export async function mapPage(ctx) {
   const loader = naver ? `<script src="https://oapi.map.naver.com/openapi/v3/maps.js?${esc(env.NAVER_MAP_PARAM || "ncpClientId")}=${esc(naver)}"></script><script src="${assetUrl("/js/map.js")}" defer></script>` : "";
   const markerData = markers.map((m) => ({ name: m.name, slug: m.slug, category: m.category, lat: m.lat, lng: m.lng, address: m.address || "", phone: m.phone || "" }));
   const body = `<section class="section page-top"><div class="container">
-    <div class="section-head"><h2 class="section-title">가입 점포 지도</h2><p class="section-lead">${esc(assoc.name)} 가입 점포 ${markers.length}곳</p></div>
+    <div class="section-head"><h1 class="section-title">가입 점포 지도</h1><p class="section-lead">${esc(assoc.name)} 가입 점포 ${markers.length}곳</p></div>
     <div class="chip-filters">${chips}</div>${mapEl}
     <ul class="map-list">${listRows}</ul>
     <script type="application/json" id="mapData">${JSON.stringify(markerData).replace(/</g, "\\u003c")}</script>
@@ -873,8 +909,8 @@ export async function notices(ctx) {
   const chips = `<a href="${base}/notices${qs({ q })}" class="chip-filter${!tag ? " active" : ""}">전체</a>` +
     tags.map((t) => `<a href="${base}/notices${qs({ tag: t.tag, q })}" class="chip-filter${tag === t.tag ? " active" : ""}">${esc(t.tag)} <em>${t.n}</em></a>`).join("");
   const body = `<section class="section page-top"><div class="container">
-    <div class="section-head"><h2 class="section-title">공지사항</h2><p class="section-lead">총 ${total}</p></div>
-    <form method="get" action="${base}/notices" class="board-search">${tag ? `<input type="hidden" name="tag" value="${esc(tag)}">` : ""}<input type="search" name="q" value="${esc(q)}" placeholder="제목·내용 검색"><button class="btn btn-ghost btn-sm">검색</button></form>
+    <div class="section-head"><h1 class="section-title">공지사항</h1><p class="section-lead">총 ${total}건</p></div>
+    <form method="get" action="${base}/notices" class="board-search">${tag ? `<input type="hidden" name="tag" value="${esc(tag)}">` : ""}<input type="search" name="q" value="${esc(q)}" placeholder="제목·내용 검색" aria-label="공지 제목·내용 검색"><button class="btn btn-ghost btn-sm">검색</button></form>
     ${tags.length > 1 ? `<div class="chip-filters">${chips}</div>` : ""}
     <ul class="notice-list">${items.length ? noticeRows(base, items) : `<li class="empty">${q || tag ? "조건에 맞는 공지가 없습니다." : "등록된 공지가 없습니다."}</li>`}</ul>
     ${pager((i) => `${base}/notices${qs({ q, tag, page: i })}`, cur, pages)}
@@ -925,9 +961,10 @@ export async function events(ctx) {
     cards.push(eventCard(base, e).replace("</article>", rsvp + "</article>"));
   }
   const body = `<section class="section page-top"><div class="container">
-    <div class="section-head"><h2 class="section-title">행사·소식</h2>
+    <div class="section-head"><h1 class="section-title">행사·소식</h1>
       ${isMember ? `<p class="section-lead">회원은 행사별로 참가 신청을 할 수 있습니다. 명단은 관리자에게 전달됩니다.</p>` : ""}</div>
     ${flashOf(query)}
+    <h2 class="a11y-only">행사 목록</h2>
     <div class="event-grid">${cards.join("") || `<p class="empty">예정된 행사가 없습니다.</p>`}</div></div></section>`;
   // 구조화 데이터: Event — 구글/네이버 행사 리치 결과(날짜·장소·주최)
   const eventLd = list.map((e) => ({
@@ -981,7 +1018,7 @@ export async function polls(ctx) {
       <label>마감일 (선택·비우면 수동 마감)<input type="date" name="closes_at" /></label>
       <button class="btn btn-primary btn-sm">투표 시작</button></form></section>` : "";
   const body = `<section class="section page-top"><div class="container narrow">
-    <div class="section-head"><h2 class="section-title">안건 투표</h2>
+    <div class="section-head"><h1 class="section-title">안건 투표</h1>
       <p class="section-lead">총회에 못 오셔도 폰에서 의견을 남길 수 있습니다. 1인 1표, 마감 전 변경 가능.</p></div>
     ${flashOf(query)}
     ${createForm}
@@ -1005,7 +1042,7 @@ export async function board(ctx) {
       <span class="board-meta">${esc(p.author_name || "(탈퇴)")} · ${esc(kstDate(p.created_at, "."))}${p.comment_count ? ` · 댓글 ${p.comment_count}` : ""}</span></li>`;
   }).join("") : `<li class="empty">${q ? "검색 결과가 없습니다." : "아직 게시글이 없습니다."}</li>`;
   const body = `<section class="section page-top"><div class="container">
-    <div class="section-head"><h2 class="section-title">회원 게시판</h2><p class="section-lead">글 ${total}</p></div>
+    <div class="section-head"><h1 class="section-title">회원 게시판</h1><p class="section-lead">글 ${total}개</p></div>
     ${flashOf(query)}
     <form method="get" action="${base}/board" class="board-search"><input type="search" name="q" value="${esc(q)}" placeholder="제목·내용 검색"><button class="btn btn-ghost btn-sm">검색</button></form>
     <section class="panel"><h2 class="panel-title">새 글 쓰기</h2>
@@ -1129,7 +1166,7 @@ export function urdealPage(ctx) {
     ["3", "손님이 매장에서 사용", "손님이 폰으로 이용권을 보여주면 확인 후 사용 처리 — 끝."],
   ];
   const body = `<section class="section page-top"><div class="container narrow">
-    <div class="section-head"><h2 class="section-title">유어딜로 매출 만들기</h2>
+    <div class="section-head"><h1 class="section-title">유어딜로 매출 만들기</h1>
       <p class="section-lead">이 홈페이지는 우리 가게를 <b>알리는 곳</b>, 유어딜은 <b>파는 곳</b>입니다. 운영사의 커머스 서비스라 상인회 회원은 등록을 도와드립니다.</p></div>
     <div class="urdeal-hero">
       <span class="fb-badge">FAMILY SERVICE</span>
@@ -1349,7 +1386,7 @@ export async function admin(ctx) {
   const { db, env, assoc, base, user, query, csrf } = ctx;
   // 독립 쿼리 병렬화 — D1 은 쿼리마다 왕복이라 직렬 대기가 관리자 TTFB 의 주범이었음
   const duePeriod0 = /^\d{4}-\d{2}$/.test(query.get("due_period") || "") ? query.get("due_period") : D.kstToday().slice(0, 7);
-  const [s, all, notices, events, members, admins, notifs, unread, auditLog, met, assocProducts, allRsvps, dueRowsRaw, visitsRaw] = await Promise.all([
+  const [s, all, notices, events, members, admins, notifs, unread, auditLog, met, assocProducts, allRsvps, dueRowsRaw, visitsRaw, popupList] = await Promise.all([
     D.stats(db, assoc.id),
     D.listAllBusinesses(db, assoc.id),
     D.listNotices(db, assoc.id),
@@ -1364,6 +1401,7 @@ export async function admin(ctx) {
     D.listRsvpsByAssoc(db, assoc.id),
     D.listDuesForPeriod(db, assoc.id, duePeriod0),
     D.visitTrend(db, assoc.id).catch(() => ({ cur: 0, prev: 0 })),
+    D.listPopups(db, assoc.id).catch(() => []),
   ]);
   const today = new Date().toISOString().slice(0, 10);
   const visits = { cur: Number(visitsRaw && visitsRaw.cur) || 0, prev: Number(visitsRaw && visitsRaw.prev) || 0 };
@@ -1542,6 +1580,37 @@ export async function admin(ctx) {
       <form method="post" action="${base}/admin/event/${e.id}/delete" data-confirm="삭제?"><button class="link-danger">삭제</button></form></li>`;
   }
   eventRows = eventRows || `<li class="empty">행사가 없습니다.</li>`;
+  // ── 홈 팝업 —— 목록에는 "지금 뜨는가"를 상태로 적습니다.
+  // 켜 두고 기간이 지난 것과, 아예 내려 둔 것은 다릅니다. 둘을 같은 회색으로 그리면
+  // 왜 안 뜨는지 관리자가 화면만 보고는 알 수 없습니다.
+  const todayKst = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+  const popupRows = popupList.length ? popupList.map((p) => {
+    const notYet = p.start_date && p.start_date > todayKst;
+    const over = p.end_date && p.end_date < todayKst;
+    const state = !p.enabled ? ['<span class="badge badge-muted">내림</span>', "내려 둔 팝업입니다"]
+      : notYet ? [`<span class="badge badge-wait">대기</span>`, `${p.start_date}부터 뜹니다`]
+      : over ? [`<span class="badge badge-muted">기간 끝</span>`, `${p.end_date}에 끝났습니다`]
+      : ['<span class="badge badge-ok">노출 중</span>', "지금 홈에서 뜹니다"];
+    const term = p.start_date || p.end_date ? `${esc(p.start_date || "즉시")} ~ ${esc(p.end_date || "끌 때까지")}` : "기간 제한 없음";
+    return `<li>${state[0]}<span class="notice-title">${esc(p.title)}</span>
+      <small class="txt-muted">${esc(term)} · ${esc(state[1])}</small>
+      <form method="post" action="${base}/admin/popup/${p.id}/toggle" class="inline-form"><button class="btn btn-xs btn-ghost">${p.enabled ? "내리기" : "다시 띄우기"}</button></form>
+      <form method="post" action="${base}/admin/popup/${p.id}/delete" data-confirm="팝업을 삭제할까요?"><button class="link-danger">삭제</button></form></li>`;
+  }).join("") : `<li class="empty">팝업이 없습니다.</li>`;
+  const popupPanel = `<section class="panel" id="p-popup"><h2 class="panel-title">홈 팝업 <span class="badge badge-muted">${popupList.filter((p) => p.enabled).length}개 켜짐</span></h2>
+      <p class="panel-hint">홈 첫 화면에 안내창을 띄웁니다. 손님이 보는 화면을 가로막는 유일한 기능이라,
+        <b>노출 기간을 정해 두면 그날이 지나 자동으로 내려갑니다</b> — 내리는 것을 잊어 지난 행사 안내가 몇 달씩 뜨는 일이 없습니다.
+        방문자는 <b>오늘 하루 보지 않기</b>로 닫을 수 있고, 그 선택은 그 사람 휴대폰에만 남습니다.</p>
+      <form method="post" action="${base}/admin/popup" enctype="multipart/form-data" class="stack-form compact">
+        <input type="text" name="title" placeholder="팝업 제목 (예: 여름 골목 야시장 안내)" maxlength="100" required />
+        <textarea name="body" rows="3" maxlength="500" placeholder="내용 (선택)"></textarea>
+        <div class="form-two"><label class="mini-label">노출 시작 <small>(비우면 즉시)</small><input type="date" name="start_date" /></label>
+          <label class="mini-label">노출 종료 <small>(비우면 끌 때까지)</small><input type="date" name="end_date" /></label></div>
+        <div class="form-two"><label class="mini-label">누르면 갈 주소 <small>(선택)</small><input type="text" name="link_url" placeholder="https:// 또는 /t/…" maxlength="300" /></label>
+          <label class="mini-label">버튼 문구 <small>(선택)</small><input type="text" name="link_label" placeholder="자세히 보기" maxlength="30" /></label></div>
+        <label class="mini-label">이미지 <small>(선택)</small><input type="file" name="image" accept="image/*" /></label>
+        <button class="btn btn-primary btn-sm">팝업 등록</button></form>
+      <ul class="admin-mini-list">${popupRows}</ul></section>`;
   // 회비 장부: ?due_period=YYYY-MM (기본 이번 달)
   const duePeriod = duePeriod0;
   const paidSet = new Set(dueRowsRaw.map((r) => r.user_id));
@@ -1839,6 +1908,7 @@ ${abPanel}`}
           <label class="mini-label">대표 이미지 <small>(선택 · 홈에 포스터형 카드로 표시)</small><input type="file" name="image" accept="image/*" /></label>
           <button class="btn btn-primary btn-sm">등록</button></form>
         <ul class="admin-mini-list">${eventRows}</ul></section></div>`}
+    ${isEsign || isFranchise ? "" : `<div id="p-popup-wrap">${popupPanel}</div>`}
     ${isEsign ? "" : "</div>"}
 
     <div class="sgroup" id="s-notify" data-tab="notify">${notifyPanel}</div>
@@ -1846,7 +1916,13 @@ ${abPanel}`}
     <div class="sgroup" id="s-settings" data-tab="settings">
     <section class="panel" id="p-brand"><h2 class="panel-title">${isEsign ? "조직 정보 · 브랜딩" : isFranchise ? "브랜드 정보 · 브랜딩" : "상인회 정보 · 브랜딩"}</h2>
       <form method="post" action="${base}/admin/settings" enctype="multipart/form-data" class="stack-form">
-        <div class="form-two"><label>${isEsign ? "조직" : isFranchise ? "브랜드" : "상인회"} 이름<input type="text" name="name" value="${esc(assoc.name)}" required autocomplete="name" /></label><label>대표 색상<input type="color" name="brand_color" value="${esc(assoc.brand_color)}" /></label></div>
+        <div class="form-two"><label>${isEsign ? "조직" : isFranchise ? "브랜드" : "상인회"} 이름<input type="text" name="name" value="${esc(assoc.name)}" required autocomplete="name" /></label><label>대표 색상<input type="color" name="brand_color" id="brandColor" value="${esc(assoc.brand_color)}" /></label></div>
+        ${isEsign ? "" : `<fieldset class="theme-pick"><legend>우리 상권에 어울리는 색 <small>(눌러서 위 색상에 적용)</small></legend>
+          <div class="theme-swatches">${AREA_THEMES.map((t) => `<button type="button" class="theme-sw${t.color.toLowerCase() === String(assoc.brand_color).toLowerCase() ? " is-on" : ""}" data-theme-color="${t.color}"
+            style="--sw:${t.color}" title="${esc(t.hint)}"><span class="theme-dot" aria-hidden="true"></span><span class="theme-name">${esc(t.label)}</span></button>`).join("")}</div>
+          <p class="panel-hint">여기 있는 색은 모두 <b>흰 글자를 얹어도 읽히는지</b> 미리 재 둔 것입니다.
+            나머지 밝기 단계와 글자색은 이 색에서 자동으로 만들어집니다. 원하는 색이 따로 있으면 위 색상 네모에서 직접 고르셔도 됩니다.</p>
+        </fieldset>`}
         <label>한 줄 소개<input type="text" name="tagline" value="${esc(assoc.tagline)}" /></label>
         <div class="form-two"><label>대표 전화<input type="text" name="phone" value="${esc(assoc.phone)}" autocomplete="tel" /></label><label>이메일<input type="email" name="email" value="${esc(assoc.email)}" autocomplete="email" /></label></div>
         <label>주소<input type="text" name="address" value="${esc(assoc.address)}" autocomplete="street-address" /></label>
@@ -1862,6 +1938,10 @@ ${abPanel}`}
         <div class="form-divider">검색 노출 (선택) — 네이버·구글에 사이트를 등록할 때 발급받는 소유 확인 코드</div>
         <div class="form-two"><label>네이버 서치어드바이저 코드<input type="text" name="naver_verification" value="${esc(assoc.naver_verification || "")}" placeholder="content=&quot;…&quot; 안의 값만" /></label>
           <label>구글 서치콘솔 코드<input type="text" name="google_verification" value="${esc(assoc.google_verification || "")}" placeholder="content=&quot;…&quot; 안의 값만" /></label></div>
+        <label>구글 애널리틱스 측정 ID <small>(선택 · 방문자 통계)</small><input type="text" name="ga_measurement_id" value="${esc(assoc.ga_measurement_id || "")}" placeholder="G-XXXXXXXXXX" maxlength="30" /></label>
+        <p class="panel-hint">구글 애널리틱스에서 <b>데이터 스트림</b>을 만들면 나오는 <code>G-</code> 로 시작하는 값입니다.
+          넣으면 이 상인회의 모든 화면에서 방문자 수·유입 경로가 집계됩니다. 비우면 아무것도 보내지 않습니다.
+          방문자 IP 는 익명화해서 보냅니다.</p>
         <p class="panel-hint">입력하면 모든 페이지에 확인 메타 태그가 자동 삽입됩니다. 등록 후 사이트맵 <code>/sitemap.xml</code> 과 RSS <code>${esc(prettyPath(base))}/feed.xml</code> 을 제출하세요.</p>
         <button class="btn btn-primary btn-sm">브랜딩 저장</button></form></section>
     ${auditPanel}

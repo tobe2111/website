@@ -69,6 +69,27 @@ await grab("/t/demo", "landing.html");
 await grab("/t/demo/admin/leads", "leads.html", true);
 await grab("/t/demo/admin/landing", "editor.html", true);
 
+// ── 상인회 홈 —— 이 화면의 이용자는 동네 손님과 40~60대 점주다.
+// 랜딩만 재고 있으면, 정작 사람이 가장 많이 여는 화면(가게를 찾는 홈)이 측정 밖에 남는다.
+// 팝업은 화면을 가로막는 유일한 요소라 반드시 함께 잰다 — 대비가 낮으면 닫을 단추도 안 보인다.
+const { seedDemo } = await import("../src/demoContent.js");
+const m = await D.createAssociation(env.DB, { slug: "market", name: "방배 카페골목 상인회", kind: "merchant" });
+await seedDemo(env, env.DB, m, { emailDomain: "market.kr" });
+await D.updateAssociation(env.DB, m.id, {
+  name: "방배 카페골목 상인회", tagline: "커피 한 잔에서 시작하는 골목", brand_color: "#6F4423",
+  phone: "02-9410-1004", email: "office@market.kr", address: "서울 서초구 방배로 42",
+  logo: "", hero_image: "", hero_video: "", naver_verification: "", google_verification: "", ga_measurement_id: "",
+});
+await D.createPopup(env.DB, { associationId: m.id, title: "여름 골목 야시장이 열립니다",
+  body: "8월 15일(금) 저녁 6시부터 10시까지 골목길을 차 없는 거리로 운영합니다.",
+  linkUrl: "/t/market/events", linkLabel: "행사 자세히 보기" });
+await grab("/t/market", "market-home.html");
+await grab("/t/market/businesses", "market-list.html");
+await grab("/t/market/notices", "market-notices.html");
+await grab("/t/market/map", "market-map.html");
+await grab("/t/market/events", "market-events.html");
+await grab("/t/market/business/goeul-gukbap", "market-biz.html");
+
 const MIME = { ".html": "text/html; charset=utf-8", ".css": "text/css", ".js": "text/javascript", ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg" };
 const srv = http.createServer((req, res) => {
   const f = path.join(DIR, req.url.split("?")[0]);
@@ -81,9 +102,31 @@ const PORT = srv.address().port;
 const AUDIT = () => {
   const out = { contrast: [], tap: [], label: [], heading: [], alt: [], focus: [], misc: [] };
   const px = (v) => parseFloat(v) || 0;
+  // 색 문자열 → {r,g,b,a}
+  //
+  // ⚠️ 예전에는 rgb()/rgba() 만 정규식으로 읽었습니다. 그런데 이 사이트의 브랜드 색 단계는
+  // color-mix(in oklab, …) 로 파생되고, 크롬은 그 계산 결과를 **oklab(...)** 문자열로 돌려줍니다.
+  // 그래서 정규식이 못 읽고 null → "배경을 모르겠다" → body 의 흰색으로 후퇴했고,
+  // 결과적으로 **짙은 브랜드 배경 위의 흰 글자가 흰 바탕 위의 흰 글자로 측정**됐습니다.
+  // 랜딩 히어로에서 1.09:1 이라는 있을 수 없는 값이 나온 것이 그 때문입니다.
+  // 브라우저가 이미 계산해 둔 색이므로, 1×1 캔버스에 칠해 sRGB 바이트로 돌려받습니다 —
+  // oklab·lab·color(display-p3 …) 등 앞으로 어떤 표기가 와도 그대로 읽힙니다.
+  const cvs = document.createElement("canvas");
+  cvs.width = cvs.height = 1;
+  const cx = cvs.getContext("2d", { willReadFrequently: true });
   const parse = (c) => {
-    const m = /rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?\)/.exec(c || "");
-    return m ? { r: +m[1], g: +m[2], b: +m[3], a: m[4] == null ? 1 : +m[4] } : null;
+    const v = String(c || "").trim();
+    if (!v || v === "transparent") return null;
+    const m = /rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?\)/.exec(v);
+    if (m) return { r: +m[1], g: +m[2], b: +m[3], a: m[4] == null ? 1 : +m[4] };
+    try {
+      cx.clearRect(0, 0, 1, 1);
+      cx.fillStyle = "#000";
+      cx.fillStyle = v;
+      cx.fillRect(0, 0, 1, 1);
+      const d = cx.getImageData(0, 0, 1, 1).data;
+      return { r: d[0], g: d[1], b: d[2], a: d[3] / 255 };
+    } catch { return null; }
   };
   const lum = ({ r, g, b }) => {
     const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
@@ -173,6 +216,13 @@ const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromi
 
 const PAGES = [
   ["손님이 보는 랜딩 (모바일)", "landing.html", { width: 390, height: 844, isMobile: true }],
+  ["상인회 홈 (모바일)", "market-home.html", { width: 390, height: 844, isMobile: true }],
+  ["상인회 홈 (데스크톱)", "market-home.html", { width: 1440, height: 900 }],
+  ["가입 점포 목록 (모바일)", "market-list.html", { width: 390, height: 844, isMobile: true }],
+  ["가게 페이지 (모바일)", "market-biz.html", { width: 390, height: 844, isMobile: true }],
+  ["공지·소식 (모바일)", "market-notices.html", { width: 390, height: 844, isMobile: true }],
+  ["점포 지도 (모바일)", "market-map.html", { width: 390, height: 844, isMobile: true }],
+  ["행사 (모바일)", "market-events.html", { width: 390, height: 844, isMobile: true }],
   ["상담 DB 콘솔", "leads.html", { width: 1280, height: 900 }],
   ["랜딩 편집기", "editor.html", { width: 1280, height: 900 }],
 ];

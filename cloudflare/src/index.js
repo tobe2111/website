@@ -168,6 +168,9 @@ export const TENANT = [
   ["POST", "/admin/notice/:id/delete", api.adminDeleteNotice, "ADMIN"],
   ["POST", "/admin/event", api.adminCreateEvent, "ADMIN"],
   ["POST", "/admin/event/:id/delete", api.adminDeleteEvent, "ADMIN"],
+  ["POST", "/admin/popup", api.adminCreatePopup, "ADMIN"],
+  ["POST", "/admin/popup/:id/delete", api.adminDeletePopup, "ADMIN"],
+  ["POST", "/admin/popup/:id/toggle", api.adminTogglePopup, "ADMIN"],
   ["POST", "/admin/settings", api.adminSettings, "ADMIN"],
   ["POST", "/admin/layout", api.adminSaveLayout, "ADMIN"],
   ["POST", "/admin/layout/reset", api.adminResetLayout, "ADMIN"],
@@ -282,7 +285,7 @@ function resolveTenant(env, hostname, pathname) {
   return null;
 }
 
-function securityHeaders(env) {
+function securityHeaders(env, opts = {}) {
   // 네이버 지도 SDK 는 oapi 로더 외에 *.pstatic.net 에서 스타일 스크립트(JSONP)도 로드함.
   // 상인회별 지도 키(map_client_id)만 있고 공용 키가 비어 있어도 동작해야 하므로 항상 허용.
   const naver = " https://oapi.map.naver.com https://*.pstatic.net";
@@ -290,13 +293,18 @@ function securityHeaders(env) {
   const ts = env.TURNSTILE_SITE_KEY ? " https://challenges.cloudflare.com" : "";
   const cfa = env.CF_ANALYTICS_TOKEN ? " https://static.cloudflareinsights.com" : "";
   const cfaConn = env.CF_ANALYTICS_TOKEN ? " https://cloudflareinsights.com" : "";
+  // 구글 애널리틱스 — 측정 ID 를 넣어 둔 조직의 화면에서만 문을 엽니다.
+  // 정책을 전 조직에 한 번에 열어 두면, 애널리틱스를 안 쓰는 상인회까지 구글 도메인에서
+  // 스크립트를 받을 수 있는 상태가 됩니다. 쓰는 곳에서만, 쓰는 만큼만 엽니다.
+  const ga = opts.ga ? " https://www.googletagmanager.com" : "";
+  const gaConn = opts.ga ? " https://www.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com" : "";
   const csp = [
     "default-src 'self'", "base-uri 'self'", "object-src 'none'", "frame-ancestors 'self'", "form-action 'self'",
-    `script-src 'self'${naver}${ts}${cfa}`, "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
+    `script-src 'self'${naver}${ts}${cfa}${ga}`, "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
     // blob: — PDF 양식을 쪽 그림으로 굽는 화면에서 미리보기를 그린다(우리 스크립트가 만든 같은 출처 값).
     "img-src 'self' data: blob: https:", "media-src 'self' https:",
     `frame-src 'self' https://www.youtube-nocookie.com https://www.youtube.com https://www.instagram.com https://tv.naver.com${ts}`,
-    `connect-src 'self'${naver}${naverImg}${ts}${cfaConn}`, "font-src 'self' https://cdn.jsdelivr.net",
+    `connect-src 'self'${naver}${naverImg}${ts}${cfaConn}${gaConn}`, "font-src 'self' https://cdn.jsdelivr.net",
   ].join("; ");
   return {
     "X-Content-Type-Options": "nosniff", "X-Frame-Options": "SAMEORIGIN",
@@ -473,7 +481,7 @@ async function handle(request, env) {
       const ok = authorize(user, route.auth, assoc, request.method === "GET" ? pathname : "");
       if (ok !== true) return finalize(typeof ok === "string" ? redirect(ok) : forbidden(), setCookies, env, timing);
       const res = await route.handler({ ...baseCtx, assoc, base: t.base, params: route.params });
-      return finalize(res, setCookies, env, timing, tCanon);
+      return finalize(res, setCookies, env, timing, tCanon, assoc);
     }
     // 테넌트 경로에 없으면 전역 라우트 폴백 (개별 도메인·서브도메인에서 /login, /verify, /sitemap.xml 등)
     const gt = matchRoute(GLOBAL, request.method, t.subpath);
@@ -481,7 +489,7 @@ async function handle(request, env) {
       const ok = authorize(user, gt.auth, assoc, request.method === "GET" ? pathname : "");
       if (ok !== true) return finalize(typeof ok === "string" ? redirect(ok) : forbidden(), setCookies, env, timing);
       const res = await gt.handler({ ...baseCtx, assoc, base: t.base, params: gt.params });
-      return finalize(res, setCookies, env, timing, tCanon);
+      return finalize(res, setCookies, env, timing, tCanon, assoc);
     }
     return finalize(notFoundResponse({ assoc, base: t.base }), setCookies, env, timing);
   }
@@ -537,9 +545,9 @@ function instrumentDb(db, acc) {
   return { prepare: (sql) => wrapStmt(db.prepare(sql)) };
 }
 
-async function finalize(res, setCookies, env, timing, canonical = "") {
+async function finalize(res, setCookies, env, timing, canonical = "", assoc = null) {
   const headers = new Headers(res.headers);
-  const sec = securityHeaders(env);
+  const sec = securityHeaders(env, { ga: !!(assoc && assoc.ga_measurement_id) });
   for (const [k, v] of Object.entries(sec)) headers.set(k, v);
   const isHtml = (headers.get("content-type") || "").includes("text/html");
   // 호버 시 다음 페이지 선(先)로딩 — 지원 브라우저만 반응, 나머지는 무시

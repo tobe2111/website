@@ -139,3 +139,24 @@ export const kindById = (id) => KINDS[id] || KINDS[DEFAULT_KIND];
 export const kindOf = (assoc) => kindById(assoc && assoc.kind);
 // 조직이 쓰는 업종 문구 (랜딩형이 아니면 프리셋은 의미가 없다)
 export const assocTerms = (assoc) => termsOf(assoc && assoc.preset);
+
+// ── 상권 색 테마 ───────────────────────────────────────────────────────
+//
+// 예전에는 관리자 화면에 색 고르는 네모 하나만 있었습니다. 그 네모는 1,600만 가지를 고를 수 있고,
+// 어느 것이 우리 골목에 어울리는지는 아무 말도 해 주지 않습니다. 실제로 상인회 담당자가
+// 고르기 좋은 것은 "우리는 카페 골목이다" 같은 **상권의 성격**이지 색 이름이 아닙니다.
+//
+// 그래서 상권 유형별로 한 벌씩 골라 둡니다. 모두 흰 글자를 얹었을 때 WCAG AA(4.5:1)를 넘습니다
+// — 나머지 밝기 단계와 글자색은 이 색에서 자동으로 파생되므로(app.css · render.js),
+// 여기 있는 색을 고르는 한 화면 어디에서도 글자가 안 읽히는 일이 생기지 않습니다.
+// 색 네모는 그대로 남습니다. 이건 고르기 어려운 사람을 위한 출발점입니다.
+export const AREA_THEMES = [
+  { id: "cafe", color: "#6F4423", label: "카페 골목", hint: "원두빛 갈색 — 카페·디저트가 많은 골목" },
+  { id: "caramel", color: "#8A5A33", label: "베이커리 · 캐러멜", hint: "밝은 갈색 — 빵집·브런치가 많은 거리" },
+  { id: "market", color: "#B4442B", label: "전통시장", hint: "차양 주홍 — 장이 서는 활기찬 시장" },
+  { id: "food", color: "#8E2F3E", label: "먹자골목", hint: "짙은 팥색 — 식당이 모인 골목" },
+  { id: "culture", color: "#14655F", label: "문화 · 예술거리", hint: "이끼 청록 — 공방·책방·갤러리" },
+  { id: "green", color: "#1F6B3F", label: "동네 상점가", hint: "솔잎 초록 — 생활 밀착 근린상권" },
+  { id: "city", color: "#1F6CFF", label: "도심 상권", hint: "앱 블루 — 오피스가·신도시 (기본값)" },
+  { id: "ink", color: "#2F3437", label: "차분한 먹빛", hint: "색을 앞세우지 않는 단정한 화면" },
+];

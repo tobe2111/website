@@ -280,7 +280,7 @@ a.bc-val:hover{text-decoration:underline}
 .biz-panel .btn-ghost{background:transparent;color:#fff;border-color:rgba(255,255,255,.28)}
 .biz-panel .btn-ghost:hover{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.5)}
 @media (max-width:940px){
-  .biz-hero-inner{grid-template-columns:1fr;gap:26px}
+  .biz-hero-inner{gap:26px}  /* 열 접기는 v3 재정의 바로 뒤에서 — 여기 두면 덮입니다 */
   .biz-panel{max-width:460px}
 }
 /* 점포 상세의 소제목 — 홈 섹션 헤더와 같은 결(밑줄 + 700)로 통일 */
@@ -712,7 +712,10 @@ body[data-console="super"] .site-header .nav-logout .btn:hover{color:#fff;backgr
 .check-inline{align-self:end}
 
 /* ---------- 게시판 첨부·검색 ---------- */
-.board-search{display:flex;gap:8px;margin:0 0 18px}
+/* 검색줄 —— 폭 제한이 없어 1140px 본문에서 입력칸이 1,020px 까지 늘어났습니다.
+   한 줄짜리 검색어를 받는 칸이 화면을 가로지르면 폼이 아니라 빈 띠로 읽히고,
+   홈의 검색창(560px)과도 따로 놉니다. 같은 자로 맞춥니다. */
+.board-search{display:flex;gap:8px;margin:0 0 18px;max-width:560px}
 .board-search input[type=search]{flex:1;padding:10px 14px;border:1px solid var(--line);border-radius:10px;font:inherit}
 .board-row .board-thumb{flex:none;width:44px;height:44px;border-radius:8px;overflow:hidden;border:1px solid var(--line)}
 .board-row .board-thumb img{width:100%;height:100%;object-fit:cover}
@@ -799,8 +802,7 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
      max-height:0 은 border-box 라도 패딩을 줄이지 못하므로, 패딩 자체를 열릴 때만 줍니다. */
   .main-nav{position:fixed;inset:var(--header-h) 0 auto 0;flex-direction:column;align-items:stretch;gap:0;padding:0 16px;background:var(--surface);border-bottom:1px solid transparent;box-shadow:none;max-height:0;overflow:hidden;transition:max-height .35s var(--ease),padding .35s var(--ease)}
   .main-nav.open{max-height:420px;padding:8px 16px 16px;border-bottom-color:var(--line);box-shadow:0 20px 30px rgba(0,0,0,.08)}
-  .main-nav a{padding:14px 12px;font-size:1.05rem}
-  .main-nav a+a{border-top:1px solid var(--line-soft)}
+  /* .main-nav a 의 좁은 화면 값은 파일 뒤(머리말 v3 블록 다음)에서 정합니다 — 여기 두면 덮입니다 */
   .main-nav .btn{margin-top:10px;justify-content:center}
   .nav-logout{margin-left:0}
   /* 모바일에선 세로 목록이라 왼쪽 구분선 대신 위쪽 구분선으로 */
@@ -819,7 +821,7 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
   .market-body{padding:11px 12px 13px}
   .market-body h3{font-size:.95rem}
   .market-thumb{aspect-ratio:1/1}
-  .update-grid{grid-template-columns:1fr}
+  /* .update-grid 의 열 수는 .update-grid 정의 바로 뒤에서 한꺼번에 정합니다 */
 }
 @media (prefers-reduced-motion:reduce){
   *{scroll-behavior:auto!important}
@@ -917,7 +919,16 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .update-body time{font-size:.78rem;color:var(--muted)}
 .update-feed.compact{margin-top:14px;margin-bottom:0}
 /* 홈: 동네 새소식 카드 */
-.update-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,340px));gap:14px;justify-content:center}
+/* 소식 격자 —— auto-fit + justify-content:center 였습니다. 카드가 340px 에서 멈추고
+   남는 폭만큼 가운데로 모이는 바람에, 이 구역만 제목보다 안쪽에서 시작하고
+   마지막 줄은 가운데에 떠 있었습니다. 페이지의 다른 모든 구역은 본문 폭 왼쪽에
+   맞춰져 있으니 여기만 어긋난 셈입니다. 3열 균등 격자로 왼쪽선을 되찾습니다. */
+.update-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+/* 태블릿은 2열, 휴대폰은 1열. 파일 앞쪽(640px 구간)에 이미 1열 규칙이 있지만
+   여기가 뒤라서 순서로 이겨 버립니다 — 그러면 390px 에서 카드가 반 폭이 되어
+   "오늘 김치를 새로 담갔습니다. 아삭…" 처럼 한 줄이 잘립니다. 여기서 함께 끝냅니다. */
+@media (max-width:900px){.update-grid{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:640px){.update-grid{grid-template-columns:1fr}}
 .update-card{display:flex;gap:12px;align-items:center;background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--radius-sm);padding:14px 16px;box-shadow:var(--sh-1);transition:box-shadow .2s}
 .update-card:hover{box-shadow:var(--sh-2);border-color:var(--line)}
 .uc-img{flex:none;width:56px;height:56px;border-radius:10px;overflow:hidden}
@@ -1077,9 +1088,8 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .cat-tab-open{font-weight:700;color:var(--ink);border-bottom-color:var(--brand-700)}
 .cat-tab-all{margin-left:auto;font-variant-numeric:tabular-nums}
 @media (max-width:640px){
-  .cat-tabs{flex-wrap:nowrap;overflow-x:auto;gap:0 18px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
-  .cat-tabs::-webkit-scrollbar{display:none}
-  .cat-tab-all{margin-left:0}
+  /* .cat-tabs 의 좁은 화면 동작은 홈 v5 블록(파일 끝)에서 정합니다 — 여기 두면 특정도에 눌립니다 */
+  .cat-tabs{-webkit-overflow-scrolling:touch}
 }
 .row-toggle{display:flex;align-items:center;gap:10px}
 /* 404 (디자인: 그라디언트 숫자 + 브랜드 글로우) */
@@ -1151,12 +1161,9 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .console-main{min-width:0}
 .console-main [id]{scroll-margin-top:calc(var(--header-h) + 12px)}
 @media (max-width:860px){
-  .console-grid{grid-template-columns:1fr}
   .console-side{position:static;top:auto}
-  .console-side nav{flex-direction:row;flex-wrap:wrap;gap:6px}
-  /* 손가락으로 누르는 자리다 — 실측 17px 이던 것을 44px 로 올린다.
-     좁은 화면에서 탭이 두 줄로 접히므로 각 칸이 고르게 나뉘도록 flex 로 늘린다. */
-  .console-side a{min-height:44px;padding:0 14px;font-size:14px;flex:1 1 auto;justify-content:center}
+  /* 콘솔의 좁은 화면 접기(한 칸 · 가로 차림표 · 44px 탭)는 파일 뒤쪽 `.dash …` 재정의
+     **다음**에서 정합니다. 여기 두면 그 재정의에 특정도로 눌려 죽습니다. */
 }
 /* 머리글의 '랜딩페이지' 도 같은 이유로 넉넉히 */
 @media (max-width:860px){
@@ -1196,12 +1203,23 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .mb-chev{flex:none;display:grid;place-items:center;width:32px;height:32px;color:var(--muted);transition:transform .2s var(--ease),color .2s}
 .map-banner:hover .mb-chev{color:var(--brand-text);transform:translateX(3px)}
 /* 가입 CTA — 웜 패널 유지, 장식 글로우 제거 */
-.join-cta{position:relative;overflow:hidden;text-align:left;padding:clamp(32px,5vw,52px) 24px;border-radius:var(--r-lg);border:1px solid var(--line-soft);background:var(--bg-alt)}
+/* 가입 CTA —— 문구 아래 버튼을 세로로 쌓아 두니 띠가 길어지고, 정작 눌러야 할 버튼이
+   왼쪽 아래 구석에 작게 앉아 있었습니다. 좌우로 갈라 글은 왼쪽, 버튼은 오른쪽 끝에 둡니다 —
+   띠가 짧아지고 버튼이 제 자리(시선이 끝나는 곳)를 갖습니다. 좁은 화면에서는 다시 쌓입니다. */
+.join-cta{position:relative;overflow:hidden;text-align:left;display:grid;grid-template-columns:1fr auto;
+  align-items:center;gap:clamp(20px,3vw,36px);padding:clamp(28px,3.6vw,40px) clamp(22px,3vw,34px);
+  border-radius:var(--r-lg);border:1px solid var(--line-soft);background:var(--bg-alt)}
+.jc-text{min-width:0}
+.join-cta .btn{white-space:nowrap}
+@media (max-width:760px){
+  .join-cta{grid-template-columns:1fr;gap:20px}
+  .join-cta .btn{width:100%}
+}
 .jc-glow{display:none}
-.jc-mark{position:relative;width:44px;height:44px;border-radius:var(--r-md);margin:0 0 18px;background:var(--brand-tint);color:var(--brand-text)}
+.jc-mark{display:none}  /* 좌우 2단에서는 가게 아이콘이 새 정보를 주지 않고 줄만 늘립니다 */
 .jc-mark svg{width:22px;height:22px}
 .join-cta h2{position:relative;font-size:clamp(1.25rem,2.6vw,1.6rem);font-weight:700;letter-spacing:-.025em;margin-bottom:10px}
-.join-cta p{position:relative;max-width:52ch;margin:0 0 24px;color:var(--muted);line-height:1.75;font-size:.95rem}
+.join-cta p{position:relative;max-width:56ch;margin:0;color:var(--muted);line-height:1.75;font-size:.95rem}
 
 /* 행사 이미지 카드 (시안: 16:10 사진 + 오버레이 + 날짜 칩) */
 .event-photo-card{position:relative;aspect-ratio:16/10;border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--sh-1);transition:box-shadow .25s}
@@ -1306,7 +1324,7 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .feat-card:hover::after{color:var(--brand-text);transform:translateX(2px)}
 .feat-mint{grid-row:span 2}
 @media (max-width:880px){
-    .feat-band{margin-top:-28px}
+    /* .feat-band 의 좁은 화면 값은 .feat-band 정의 바로 뒤에서 정합니다 */
   .feat-inner{grid-template-columns:1fr;gap:22px;align-items:stretch}
   .feat-mint{grid-row:auto;min-height:120px}
   .hi-title{text-shadow:0 2px 14px rgba(255,255,255,.8),0 1px 3px rgba(255,255,255,.9)}
@@ -1392,6 +1410,14 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .head-row{align-items:baseline;padding-bottom:14px;border-bottom:1px solid var(--line-soft)}
 .head-row .section-title{position:relative;padding-top:0;font-size:clamp(1.2rem,2vw,1.5rem);letter-spacing:-.03em;font-weight:700}
 .head-row .section-title::before{content:none}
+/* 구역 리듬은 head-row 안에서도 지켜져야 합니다.
+   바로 위 `.head-row .section-title` 이 파일 앞쪽의 `.section-sub`·`.section-note` 규칙과
+   특정도가 같아 순서로 이겨 버렸고, 그 결과 홈의 다섯 제목이 모두 24px 로 나왔습니다 —
+   가게(주인공)와 연락처(각주)가 같은 목소리로 말하고 있었습니다.
+   특정도를 한 단 올려 24 · 20 · 16px 세 층이 실제로 그려지게 합니다. */
+.section-sub .head-row .section-title{font-size:clamp(1.06rem,1.7vw,1.24rem)}
+.section-note .head-row .section-title{font-size:1.02rem;font-weight:600;color:var(--ink-soft);letter-spacing:-.02em}
+.section-note .head-row{padding-bottom:10px}
 .head-row .section-lead{color:var(--muted);font-size:.9rem;margin-top:6px}
 .section-more-link{color:var(--ink-soft);font-weight:600;font-size:.86rem;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;transition:color .2s}
 .section-more-link:hover{color:var(--brand-text);text-decoration:none}
@@ -1416,9 +1442,15 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
    '오늘 신청 6건'은 손님이 아니라 회장님이 볼 숫자였습니다. 연락처는 페이지 끝으로,
    운영 숫자는 관리자 화면으로 옮기고 첫 화면에는 손님에게 쓸모 있는 두 숫자만 남겼습니다.
    ※ padding 단축 표기는 .container 의 좌우 여백을 0 으로 덮어쓰므로 padding-block 을 씁니다. */
-.hp-inner{position:relative;z-index:2;display:block;text-align:left;padding-block:clamp(48px,6vw,76px) clamp(44px,5vw,66px)}
-.hp-lead{min-width:0;max-width:720px}
-.hp-actions{display:flex;flex-wrap:wrap;align-items:center;gap:14px 22px;margin-top:22px}
+/* 폭 —— 예전에는 이 덩어리 전체가 720px 에 갇혀 있었습니다. 1440px 화면에서 재 보면
+   글이 끝나는 지점부터 오른쪽 끝까지 660px, 본문 폭의 60% 가 빈 회색이었습니다.
+   없는 내용을 지어 채우지는 않습니다 — 바로가기 카드를 껐던 이유(머리말 메뉴와 겹침)가 그대로 살아 있습니다.
+   대신 표제를 키우고 검색창을 넓혀 왼쪽 덩어리가 제 몫의 폭을 차지하게 하고,
+   위아래 여백을 조여 빈 회색 띠가 아니라 짧고 단단한 대문이 되게 했습니다. */
+.hp-inner{position:relative;z-index:2;display:block;text-align:left;padding-block:clamp(40px,4.6vw,60px) clamp(32px,3.6vw,46px)}
+.hp-lead{min-width:0;max-width:none}
+.hp-title,.hp-sub{max-width:720px}
+.hp-actions{display:flex;flex-wrap:wrap;align-items:center;gap:14px 22px;margin-top:24px}
 .hp-facts-line{display:flex;flex-wrap:wrap;gap:6px 20px;margin:0;font-size:.9rem}
 .hp-facts-line a,.hp-facts-line span{color:rgba(255,255,255,.62)}
 .hp-facts-line b{font-weight:700;color:#fff;margin-left:3px;font-variant-numeric:tabular-nums}
@@ -1426,7 +1458,7 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .hp-join{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.34)}
 .hp-join:hover{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.62)}
 @media (max-width:940px){
-  .hp-inner{padding-block:clamp(40px,7vw,60px) clamp(36px,5vw,52px)}
+  .hp-inner{padding-block:clamp(36px,6vw,52px) clamp(30px,4.4vw,44px)}
   .hp-actions{gap:12px 16px}
 }
 
@@ -1450,9 +1482,10 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 @media (max-width:640px){.hf-quick a.btn{margin-left:0;width:100%;text-align:center}}
 /* 한글에는 넓은 자간이 어울리지 않습니다 (자간 .2em 이면 '함 께  만 드 는' 처럼 흩어짐) */
 .hp-eyebrow{font-weight:600;font-size:clamp(11.5px,1.1vw,13px);letter-spacing:.08em;color:rgba(255,255,255,.52)}
-.hp-title{font-weight:700;font-size:clamp(1.85rem,4.2vw,2.85rem);letter-spacing:-.035em;line-height:1.14;margin-top:14px}
+.hp-title{font-weight:700;font-size:clamp(1.85rem,4.2vw,3.15rem);letter-spacing:-.035em;line-height:1.14;margin-top:14px}
 .hp-sub{margin:14px 0 0;font-size:clamp(.98rem,1.4vw,1.06rem);line-height:1.7;color:rgba(255,255,255,.62);max-width:40ch}
-.hp-search{max-width:440px;margin:28px 0 0}
+/* 검색창은 이 화면의 주 동작입니다. 440px 이면 히어로가 아니라 폼 한 칸으로 읽힙니다. */
+.hp-search{max-width:560px;margin:26px 0 0}
 .hp-search input{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);color:#fff;box-shadow:none}
 .hp-search input::placeholder{color:rgba(255,255,255,.42)}
 .hp-search input:focus{border-color:rgba(255,255,255,.42);box-shadow:none;background:rgba(255,255,255,.11)}
@@ -1460,6 +1493,8 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .hp-search .btn-primary:hover{background:rgba(255,255,255,.86)}
 /* 카드가 히어로 하단에 살짝 겹치는 3열 행 */
 .feat-band{margin-top:clamp(-64px,-5vw,-44px);margin-bottom:8px}
+/* 좁은 화면에서는 덜 겹친다 (앞쪽 880px 블록의 같은 선언이 이 줄에 덮여 죽어 있었다) */
+@media (max-width:880px){.feat-band{margin-top:-28px}}
 .feat-cards-row{grid-template-columns:repeat(3,1fr);gap:14px}
 .feat-cards-row .feat-mint{grid-row:auto}
 .feat-cards-row .feat-card{min-height:0}
@@ -1840,7 +1875,7 @@ tr.is-loss td{background:var(--no-bg);color:var(--no-fg)}
 .fr-hero-actions{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin-top:30px}
 .fr-hero-actions .btn-ghost{background:transparent;color:#fff;border-color:rgba(255,255,255,.5)}
 .fr-hero-actions .btn-ghost:hover{background:rgba(255,255,255,.14)}
-.fr-hero-note{margin-top:16px;font-size:.87rem;color:rgba(255,255,255,.7)}
+.fr-hero-note{margin-top:16px;font-size:.87rem;color:rgba(255,255,255,.78)}
 
 /* 흐르는 띠 */
 .fr-ticker{overflow:hidden;background:var(--ink);color:#fff;padding:13px 0}
@@ -2061,6 +2096,18 @@ input:not([type]),input[type="text"],input[type="email"],input[type="tel"],input
   border-radius:0;padding:8px 0 8px 12px;font-size:13.5px;font-weight:500;
   border-left:2px solid transparent;color:var(--ink-soft);
 }
+/* ⚠️ 바로 위 `.dash …` 규칙들이 파일 앞쪽(860px 구간)의 "휴대폰에서는 한 칸으로 접는다" 를
+   특정도로 눌러 버리고 있었습니다. 그래서 휴대폰에서도 184px 짜리 차림표가 그대로 남고,
+   메뉴 글자가 13.5px·패딩 8px 로 돌아가 손가락으로 누르기 어려웠습니다.
+   관리자 화면을 휴대폰으로 여는 상인회 사무국이 실제로 겪는 일입니다. 여기서 다시 정합니다. */
+@media (max-width:860px){
+  .dash .console-grid{grid-template-columns:1fr;gap:0}
+  .dash .console-main{border-left:0;padding-left:0;padding-top:18px}
+  .dash .console-side nav{flex-direction:row;flex-wrap:wrap;gap:6px;padding:0}
+  .dash .console-side a{min-height:44px;padding:0 14px;font-size:14px;flex:1 1 auto;
+    justify-content:center;border-left:0;border-radius:var(--r-md)}
+}
+
 .dash .console-side a:hover{background:none;color:var(--ink);border-left-color:var(--line)}
 .dash .console-side a.on,
 .dash .console-side a[aria-current]{color:var(--ink);font-weight:700;border-left-color:var(--ink)}
@@ -2299,6 +2346,15 @@ input:not([type]),input[type="text"],input[type="email"],input[type="tel"],input
 .main-nav a.active:not(.btn){background:none;color:var(--ink);font-weight:700;border-bottom-color:var(--ink)}
 .main-nav a.btn{margin-left:14px}
 .nav-ops a{margin:0 8px}
+/* 좁은 화면의 서랍 메뉴는 위 규칙(가로 메뉴용 padding:8px 0)에 덮이면 안 된다.
+   덮이면 항목 높이가 절반이 되고 좌우 여백이 사라져, 손가락으로 옆 줄을 누르게 된다.
+   파일 앞쪽 860px 블록에 같은 내용이 있었지만 이 줄들보다 앞이라 죽어 있었다. */
+@media (max-width:860px){
+  .main-nav a{padding:14px 12px;margin:0;font-size:1.05rem;border-bottom:0}
+  .main-nav a+a{border-top:1px solid var(--line-soft)}
+  .main-nav a.btn{margin-left:0}
+  .nav-ops a{margin:0}
+}
 
 .site-footer{background:none;color:var(--muted);border-top:1px solid var(--ink);padding:26px 0 40px}
 .foot-top{border-bottom:0;padding:0 0 14px}
@@ -2636,6 +2692,11 @@ body.is-done .foot-copy,body.is-done .site-footer p{color:var(--dk-muted)}
 .biz-hero{background:var(--bg);color:var(--ink);padding:clamp(26px,4vw,40px) 0 clamp(20px,3vw,30px)}
 .biz-hero-inner{background:var(--surface);border-radius:var(--r-xl);padding:clamp(22px,3vw,32px);
   grid-template-columns:minmax(0,1fr) 300px;align-items:start}
+/* ⚠️ 바로 위 줄이 파일 앞쪽(940px 구간)의 "1열로 접기" 를 순서로 눌러 버리고 있었습니다.
+   그 결과 휴대폰에서 오른쪽 안내 카드가 300px 을 그대로 가져가고 왼쪽 칸이 30px 남아,
+   가게 이름이 "고 / 을 / 돼 / 지 / 국 / 밥" 처럼 한 글자씩 세로로 쏟아졌습니다.
+   손님이 가게를 눌렀을 때 처음 보는 화면이 이 상태였습니다. 접는 규칙을 여기서 다시 답니다. */
+@media (max-width:940px){.biz-hero-inner{grid-template-columns:1fr}}
 .biz-hero h1{color:var(--ink);margin:10px 0 12px}
 .biz-desc{color:var(--ink-soft)}
 .biz-hero .chip-light{background:var(--bg-alt);color:var(--ink-soft);border:0}
@@ -2709,3 +2770,183 @@ body.is-done .foot-copy,body.is-done .site-footer p{color:var(--dk-muted)}
 /* 사진 모드: 베일이 초록빛(옛 브랜드색 잔재)이었다 — 중립 먹빛으로, 바탕도 다크 토큰으로 */
 .hero-pro.has-photo{background:var(--dk-bg)}
 .hp-photo-veil{background:linear-gradient(180deg,rgba(12,16,26,.45) 0%,rgba(12,16,26,.58) 55%,rgba(10,13,22,.78) 100%)}
+
+/* ---------- 홈 팝업 ----------
+   손님 화면을 가로막는 유일한 요소입니다. 그래서 크기를 재고 만듭니다:
+   화면 높이의 80%를 넘지 않고(넘으면 창 안에서 스크롤), 닫기 단추는 손가락이 닿는 44px 이며,
+   '오늘 하루 보지 않기'는 닫기 옆에 나란히 둡니다 — 구석에 작게 두면 매일 다시 뜹니다. */
+.popup-layer{position:fixed;inset:0;z-index:120;display:flex;align-items:center;justify-content:center;padding:20px}
+.popup-dim{position:absolute;inset:0;background:rgba(12,16,26,.52);-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px)}
+body.popup-open{overflow:hidden}
+.popup-card{position:relative;z-index:1;width:min(420px,100%);max-height:80vh;overflow-y:auto;background:var(--surface);border-radius:var(--r-xl);box-shadow:var(--sh-3);padding:20px}
+.popup-card+.popup-card{margin-left:14px}
+.popup-head{display:flex;align-items:flex-start;gap:10px}
+.popup-title{font-size:1.12rem;font-weight:700;letter-spacing:-.02em;line-height:1.35;margin-right:auto}
+.popup-x{flex:none;width:44px;height:44px;margin:-10px -10px 0 0;display:grid;place-items:center;border:none;background:transparent;color:var(--muted);cursor:pointer;border-radius:var(--r-md)}
+.popup-x:hover{background:var(--surface-2);color:var(--ink)}
+.popup-img{width:100%;margin-top:14px;border-radius:var(--r-lg);border:1px solid var(--line-soft)}
+.popup-body{margin-top:12px;font-size:.94rem;line-height:1.65;color:var(--ink-soft)}
+.popup-go{margin-top:16px;width:100%}
+.popup-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:18px;padding-top:14px;border-top:1px solid var(--line-soft)}
+.popup-today{font-size:.86rem;color:var(--muted);margin:0}
+@media (max-width:640px){
+  .popup-layer{align-items:flex-end;padding:0}
+  .popup-card{width:100%;max-height:86vh;border-radius:var(--r-xl) var(--r-xl) 0 0}
+  .popup-card+.popup-card{margin-left:0}
+}
+/* 팝업이 여럿이면 가로로 늘어놓지 않고 한 번에 하나만 — 좁은 화면에서 서로를 밀어냅니다 */
+@media (max-width:900px){.popup-card~.popup-card{display:none}}
+
+/* ---------- 상권 색 견본 (관리자 브랜딩) ---------- */
+.theme-pick{border:1px solid var(--line-soft);border-radius:var(--r-lg);padding:14px 16px 12px;margin:4px 0 2px}
+.theme-pick>legend{font-size:.86rem;font-weight:600;color:var(--ink-soft);padding:0 6px}
+.theme-pick>legend small{font-weight:400;color:var(--muted)}
+.theme-swatches{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
+.theme-sw{display:inline-flex;align-items:center;gap:8px;min-height:40px;padding:0 13px 0 10px;border:1.5px solid var(--line);border-radius:var(--r-pill);background:var(--surface);cursor:pointer;font-family:inherit;font-size:.86rem;font-weight:600;color:var(--ink-soft)}
+.theme-sw:hover{border-color:var(--ink-soft);color:var(--ink)}
+.theme-sw.is-on{border-color:var(--ink);color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+.theme-dot{width:18px;height:18px;border-radius:50%;background:var(--sw);border:1px solid rgba(0,0,0,.12);flex:none}
+
+/* ---------- 손가락이 닿는 크기 (WCAG 2.5.8) ----------
+   실측(scripts/a11y.mjs)에서 상인회 홈의 작은 링크들이 걸렸습니다 —
+   업종 탭 36px, '더보기' 25px, 히어로의 숫자 링크 24px, '캘린더에 추가' 21px.
+   이 화면을 휴대폰으로 여는 사람은 40~60대 손님과 점주입니다. 몇 px 모자란 링크는
+   "안 눌린다" 가 아니라 **옆 것이 눌린다** 로 나타나고, 그건 그대로 이탈이 됩니다.
+   글자 크기는 그대로 두고 눌리는 넓이만 키웁니다 — 화면 모양은 바뀌지 않습니다. */
+.hp-facts-line a,.hp-facts-line span{display:inline-flex;align-items:center;min-height:24px}
+.cat-tab{display:inline-flex;align-items:center;min-height:24px}
+.section-more-link{min-height:24px}
+.event-cal{min-height:24px}
+a.cc-val{display:inline-flex;align-items:center;min-height:24px}
+.popup-today{display:inline-flex;align-items:center;min-height:24px}
+@media (hover:none),(pointer:coarse){
+  /* 손가락 화면에서만 44px 로 — 마우스 화면까지 키우면 줄 간격이 헐거워집니다 */
+  .hp-facts-line a,.hp-facts-line span{min-height:44px}
+  .hp-facts-line{gap:0 20px}
+  /* 업종 탭은 '기타'처럼 두 글자짜리가 있어 세로만 키워선 모자랍니다 — 좌우로도 넓힙니다 */
+  .cat-tab{min-height:44px;min-width:44px;justify-content:center;padding:0 8px 10px;margin-inline:-8px}
+  .section-more-link{min-height:44px}
+  .event-cal{min-height:44px;margin-top:2px}
+  a.cc-val{min-height:44px}
+  .popup-today{min-height:44px}
+}
+/* 업종 칩(점포 목록) — 42px 이라 손가락 기준 44px 에 두 픽셀 모자랐습니다 */
+@media (hover:none),(pointer:coarse){
+  .chip-filter{display:inline-flex;align-items:center;min-height:44px;min-width:44px;justify-content:center}
+}
+/* 화면에는 안 보이되 읽어 주는 프로그램에는 읽히는 글 (display:none 은 아예 안 읽힙니다) */
+.a11y-only{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap;border:0}
+/* 찜 단추 — 카드 모서리의 34px 원. 손가락 화면에서는 44px 로 넓힙니다 */
+@media (hover:none),(pointer:coarse){.fav-btn{width:44px;height:44px}}
+/* 쪽 번호 — 세로 46px 인데 가로가 40px 이라 손가락 기준에 모자랐습니다 */
+@media (hover:none),(pointer:coarse){.pager .pg{min-width:44px}}
+/* 손가락 크기 — 가게 페이지·점포 지도에서도 (실측 scripts/a11y.mjs) */
+a.bc-val,.map-store-name,.map-store-link{display:inline-flex;align-items:center;min-height:24px}
+@media (hover:none),(pointer:coarse){
+  a.bc-val,.map-store-name,.map-store-link{min-height:44px}
+  /* 가게 페이지의 '길찾기' 줄도 같은 자로 (문장 안 링크라 세로만 키운다) */
+  .biz-way a{display:inline-flex;align-items:center;min-height:44px}
+}
+
+/* =========================================================================
+   홈 v5 —— 여백과 타이포로 잡는 결
+   -------------------------------------------------------------------------
+   레퍼런스로 받은 화면(카카오임팩트)에서 가져온 것은 장식이 아니라 **규칙** 넷입니다.
+
+     ① 제목을 두 줄로 크게 — 밑줄도 눈썹글씨도 없이 타이포만으로 구역을 가른다
+     ② 면은 납작하게 — 그림자를 걷고, 라운드를 키우고, 색은 한 덩어리로 칠한다
+     ③ 소식 카드는 뒤집는다 — 태그·글이 먼저, 사진은 맨 아래
+     ④ 여백을 크게 — 구역 사이가 넉넉해야 각 구역이 하나의 이야기로 읽힌다
+
+   `.sec-v5` 는 홈에서 만들어지는 구역에만 붙습니다(homeLayout.js). 다른 화면은 그대로입니다.
+   ========================================================================= */
+
+/* ① 두 줄 제목 —— 밑줄을 걷고 크기로 말한다 */
+.sec-v5 .section-head.head-row{border-bottom:0;padding-bottom:0;align-items:flex-end;
+  margin-bottom:clamp(18px,2.6vw,26px);gap:16px}
+.sec-v5 .head-row .section-title{font-size:clamp(1.5rem,3.2vw,2.05rem);line-height:1.3;
+  letter-spacing:-.035em;font-weight:700}
+.sec-v5 .head-row .section-lead{margin-top:10px;font-size:.95rem}
+/* 각주 구역(연락처)은 그대로 작게 — 모든 제목이 같은 크기면 다시 아무것도 강조하지 못한다 */
+.sec-v5.section-note .head-row .section-title{font-size:clamp(1.02rem,1.6vw,1.15rem)}
+.sec-v5 .section-more-link{font-size:.9rem;color:var(--ink-soft)}
+
+/* ④ 구역 사이 여백 —— 큰 제목에는 그만한 숨이 필요하다 */
+.sec-v5{padding-block:clamp(44px,6vw,84px)}
+.sec-v5.section-sub{padding-block:clamp(38px,5vw,72px)}
+.sec-v5.section-note{padding-block:clamp(30px,4vw,52px)}
+
+/* ② 납작한 면 —— 그림자를 걷고 라운드를 키운다 */
+.sec-v5 .market-card,.sec-v5 .update-card,.sec-v5 .event-card,
+.sec-v5 .notice-list,.sec-v5 .contact-card,.sec-v5 .map-banner{box-shadow:none}
+.sec-v5 .market-card{border-radius:16px;overflow:hidden;border:1px solid var(--line-soft)}
+.sec-v5 .event-card,.sec-v5 .contact-card{border-radius:16px}
+.sec-v5 .notice-list{border-radius:16px;overflow:hidden}
+
+/* ③ 소식 카드 —— 태그·글이 먼저, 사진은 맨 아래 */
+.sec-v5 .update-card{display:flex;flex-direction:column;gap:0;align-items:stretch;padding:0;
+  border-radius:16px;overflow:hidden;background:var(--surface-2);border:1px solid var(--line-soft);
+  transition:border-color .2s,transform .2s var(--ease)}
+/* 마우스를 올려도 카드를 들어올리지 않습니다 — 이 저장소가 일부러 뺀 연출입니다(plain.test.js).
+   반응은 테두리로만 남깁니다. */
+.sec-v5 .update-card:hover{border-color:var(--ink-soft)}
+.sec-v5 .uc-body{display:flex;flex-direction:column;gap:12px;padding:20px 20px 22px;min-height:132px}
+.sec-v5 .uc-tag{align-self:flex-start;font-size:.76rem;font-weight:600;color:var(--ink-soft);
+  background:var(--surface);border-radius:var(--r-pill);padding:6px 12px;line-height:1}
+.sec-v5 .uc-text{font-size:1.04rem;font-weight:600;line-height:1.45;letter-spacing:-.022em;color:var(--ink);
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.sec-v5 .uc-body time{margin-top:auto;font-size:.78rem;color:var(--muted)}
+.sec-v5 .uc-shot{display:block;aspect-ratio:16/10;background:var(--bg-alt)}
+.sec-v5 .uc-shot img{width:100%;height:100%;object-fit:cover;display:block}
+
+/* 업종 줄 —— 선택된 것은 검정 알약. 밑줄 탭보다 손가락에 잘 보인다 */
+.sec-v5 .cat-tabs{border-bottom:0;gap:8px;padding-bottom:0;margin-bottom:clamp(16px,2.4vw,22px)}
+.sec-v5 .cat-tab{border:1px solid var(--line);border-radius:var(--r-pill);padding:9px 16px;
+  min-height:40px;font-size:.9rem;font-weight:500;color:var(--ink-soft);background:var(--surface);
+  border-bottom-width:1px;margin-bottom:0}
+.sec-v5 .cat-tab:hover{border-color:var(--ink-soft);color:var(--ink);background:var(--surface)}
+.sec-v5 .cat-tab-open{background:var(--ink);border-color:var(--ink);color:#fff;font-weight:600}
+.sec-v5 .cat-tab-open:hover{background:var(--ink);border-color:var(--ink);color:#fff}
+.sec-v5 .cat-tab-all{margin-left:auto;border-style:dashed}
+/* 손가락 화면에서는 44px. 위의 `.sec-v5 .cat-tab` 이 특정도가 높아 파일 앞쪽의
+   `(pointer:coarse) .cat-tab{min-height:44px}` 를 눌러 버리므로 여기서 다시 정한다. */
+@media (hover:none),(pointer:coarse){
+  .sec-v5 .cat-tab{min-height:44px;padding-block:0}
+}
+
+/* ── 좁은 화면 ──────────────────────────────────────────────
+   레퍼런스는 데스크톱 화면이지만, 이 사이트를 여는 사람 대부분은 휴대폰입니다.
+   큰 제목은 그대로 두되(작게 줄이면 이 결이 사라집니다) 줄 간격과 여백만 조입니다. */
+@media (max-width:640px){
+  .sec-v5{padding-block:36px}
+  .sec-v5.section-sub{padding-block:32px}
+  .sec-v5.section-note{padding-block:26px}
+  .sec-v5 .section-head.head-row{flex-direction:column;align-items:flex-start;gap:8px}
+  .sec-v5 .head-row .section-title{font-size:1.42rem;line-height:1.32}
+  .sec-v5 .section-more-link{align-self:flex-end;margin-top:-30px}
+  .sec-v5 .uc-body{padding:16px 16px 18px;min-height:0;gap:10px}
+  .sec-v5 .uc-text{font-size:1rem}
+  /* 업종 줄은 접히지 않고 옆으로 밀린다 — 여덟 개가 세 줄로 접히면 가게가 화면 밖으로 밀린다 */
+  .sec-v5 .cat-tabs{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;
+    margin-inline:-20px;padding-inline:20px;scroll-snap-type:x proximity}
+  .sec-v5 .cat-tabs::-webkit-scrollbar{display:none}
+  .sec-v5 .cat-tab{flex:none;scroll-snap-align:start}
+  .sec-v5 .cat-tab-all{margin-left:0}
+}
+
+/* 맺음 카드 —— 브랜드색 한 장으로 페이지를 닫는다 (레퍼런스의 오른쪽 큰 카드) */
+.sec-v5 .join-cta{background:var(--brand-700);border:0;border-radius:22px;color:var(--on-brand);
+  padding:clamp(30px,4vw,52px) clamp(24px,3.4vw,44px);align-items:end}
+.sec-v5 .join-cta h2{color:var(--on-brand);font-size:clamp(1.3rem,2.8vw,1.85rem);line-height:1.34;
+  letter-spacing:-.03em;margin-bottom:12px}
+.sec-v5 .join-cta p{color:var(--on-brand);opacity:.82;max-width:46ch;margin:0}
+.jc-go{display:inline-flex;align-items:center;gap:12px;white-space:nowrap;
+  font-size:1rem;font-weight:700;letter-spacing:-.02em;color:var(--on-brand)}
+.jc-arrow{display:grid;place-items:center;width:40px;height:40px;border-radius:50%;flex:none;
+  color:var(--on-brand);background:rgba(255,255,255,.18);transition:background .2s,transform .2s var(--ease)}
+.jc-go:hover .jc-arrow{background:rgba(255,255,255,.32);transform:translate(2px,-2px)}
+@media (max-width:760px){
+  .sec-v5 .join-cta{border-radius:18px;align-items:stretch}
+  .jc-go{justify-content:space-between;width:100%;padding:14px 18px;border-radius:var(--r-pill);
+    background:rgba(255,255,255,.16);min-height:56px}
+}

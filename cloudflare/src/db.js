@@ -75,8 +75,8 @@ export async function cloneAssociation(db, sourceId, { slug, name, brandColor, t
   return getAssociationById(db, made.id);
 }
 export function updateAssociation(db, id, f) {
-  return run(db, `UPDATE associations SET name=?, tagline=?, brand_color=?, phone=?, email=?, address=?, logo=?, hero_image=?, hero_video=?, naver_verification=?, google_verification=? WHERE id=?`,
-    f.name, f.tagline, f.brand_color, f.phone, f.email, f.address, f.logo, f.hero_image || "", f.hero_video || "", f.naver_verification || "", f.google_verification || "", id);
+  return run(db, `UPDATE associations SET name=?, tagline=?, brand_color=?, phone=?, email=?, address=?, logo=?, hero_image=?, hero_video=?, naver_verification=?, google_verification=?, ga_measurement_id=? WHERE id=?`,
+    f.name, f.tagline, f.brand_color, f.phone, f.email, f.address, f.logo, f.hero_image || "", f.hero_video || "", f.naver_verification || "", f.google_verification || "", f.ga_measurement_id || "", id);
 }
 export const setAssociationActive = (db, id, a) => run(db, "UPDATE associations SET active=? WHERE id=?", a ? 1 : 0, id);
 export const getAssociationByDomain = (db, host) => first(db, "SELECT * FROM associations WHERE custom_domain = ? AND custom_domain != ''", String(host || "").toLowerCase());
@@ -625,6 +625,26 @@ export async function createEvent(db, { associationId, title, event_date, place,
   return getEvent(db, await lastId(db));
 }
 export const deleteEvent = (db, id) => run(db, "DELETE FROM events WHERE id=?", id);
+
+// ----- 홈 팝업 -----
+// 손님 화면을 가로막는 유일한 요소라, 스스로 내려갈 수 있어야 합니다.
+// 노출 기간은 한국 날짜(kstToday)로 판단합니다 — date('now') 는 UTC 라
+// 새벽 0~9시에 어제 끝난 팝업이 살아 있거나 오늘 시작할 팝업이 안 뜹니다.
+export const listPopups = (db, aid) =>
+  all(db, "SELECT * FROM popups WHERE association_id=? ORDER BY enabled DESC, id DESC", aid);
+export const getPopup = (db, id) => first(db, "SELECT * FROM popups WHERE id=?", id);
+export const listActivePopups = (db, aid, limit = 3) =>
+  all(db, `SELECT * FROM popups WHERE association_id=? AND enabled=1
+             AND (start_date='' OR start_date<=?) AND (end_date='' OR end_date>=?)
+           ORDER BY id DESC LIMIT ?`, aid, kstToday(), kstToday(), limit);
+export async function createPopup(db, { associationId, title, body, image, linkUrl, linkLabel, startDate, endDate }) {
+  await run(db, `INSERT INTO popups (association_id, title, body, image, link_url, link_label, start_date, end_date)
+                 VALUES (?,?,?,?,?,?,?,?)`,
+    associationId, title, body || "", image || "", linkUrl || "", linkLabel || "", startDate || "", endDate || "");
+  return getPopup(db, await lastId(db));
+}
+export const deletePopup = (db, id) => run(db, "DELETE FROM popups WHERE id=?", id);
+export const setPopupEnabled = (db, id, on) => run(db, "UPDATE popups SET enabled=? WHERE id=?", on ? 1 : 0, id);
 
 // ----- Board -----
 export const getPost = (db, id) =>
