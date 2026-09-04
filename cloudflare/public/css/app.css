@@ -3108,3 +3108,10 @@ a.dt-main:hover{color:var(--brand-text);text-decoration:underline}
 .mini-edit > .mini-del{padding:12px 0 14px;border-top:1px solid var(--line-soft);margin-top:14px}
 .mini-edit .dtable-wrap{margin-bottom:10px}
 .mini-edit .dtable thead th{position:static}   /* 펼친 상자 안에서는 붙어 있을 필요가 없습니다 */
+
+/* 문의함 — 안 읽은 것은 거르개에서도 눈에 띄어야 합니다 */
+.tbar-chip.is-alert{border-color:var(--wait-fg);color:var(--wait-fg)}
+.tbar-chip.is-alert.on{background:var(--wait-fg);border-color:var(--wait-fg);color:#fff}
+.inbox-msg{margin:14px 14px 4px;padding:12px 14px;background:var(--surface);border-radius:10px;
+  white-space:pre-wrap;font-size:14px;line-height:1.65;color:var(--ink)}
+.mini-edit > .form-two{margin:10px 14px 0}

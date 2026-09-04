@@ -2472,7 +2472,19 @@ export async function contactSubmit(ctx) {
   const message = cap((form.get("message") || "").trim(), 2000);
   if (form.get("agree") !== "1") return back(base + "/contact", "개인정보 수집·이용에 동의해 주세요.", true);
   if (!name || !contact || !message) return back(base + "/contact", "성함·연락처·문의 내용을 모두 입력해 주세요.", true);
-  await D.createNotification(db, { associationId: assoc.id, kind: "contact", message: `[문의] ${name} (${contact}): ${cap(message, 200)}`, link: base + "/admin" });
+  // 문의는 남는 곳이 있어야 한다.
+  //
+  // 예전에는 알림함에 한 줄만 남겼다. 회장님이 그 줄을 한 번 읽고 지나가면 그 문의는
+  // 사실상 사라졌다 — 누가 물었는지, 답을 했는지, 언제 왔는지를 나중에 알 방법이 없었다.
+  // 모집 랜딩의 상담 표(leads)와 담기는 값이 같아서 그 표를 함께 쓴다. source 로 갈린다.
+  //
+  // '연락처' 한 칸으로 받으므로 @ 가 있으면 이메일, 아니면 전화로 넣는다.
+  const isMail = contact.includes("@");
+  await D.createLead(db, {
+    associationId: assoc.id, name, message, source: "contact",
+    phone: isMail ? "" : contact, email: isMail ? contact : "",
+  }).catch(() => {}); // 표에 못 넣어도 아래 알림·메일은 나가야 한다
+  await D.createNotification(db, { associationId: assoc.id, kind: "contact", message: `[문의] ${name} (${contact}): ${cap(message, 200)}`, link: base + "/admin#s-inbox" });
   if (emailEnabled(env) && assoc.email) {
     await sendEmail(env, {
       to: assoc.email,
@@ -2919,32 +2931,37 @@ async function notifyLead(ctx, lead) {
 }
 
 // ---------- 상담 DB 관리 (관리자) ----------
+// 같은 표를 두 화면이 쓴다 — 모집 랜딩의 상담 DB 와 상인회 콘솔의 문의함.
+// 손댄 뒤에는 왔던 화면으로 돌려보낸다. 상인회 회장을 상담 DB 로 보내면 남의 화면이다.
+const leadBack = (base, lead) => lead.source === "contact" ? base + "/admin#s-inbox" : base + "/admin/leads";
 export async function adminLeadStatus(ctx) {
   const { db, form, base, assoc, params } = ctx;
   const lead = await D.getLead(db, Number(params.id) || 0, assoc.id);
   if (!lead) return back(base + "/admin/leads", "신청 건을 찾을 수 없습니다.", true);
+  const to = leadBack(base, lead);
   const status = form.get("status");
-  if (!D.LEAD_STATUSES.includes(status)) return back(base + "/admin/leads", "잘못된 상태값입니다.", true);
+  if (!D.LEAD_STATUSES.includes(status)) return back(to, "잘못된 상태값입니다.", true);
   await D.setLeadStatus(db, lead.id, assoc.id, status);
   // 감사 로그·주소창에도 이름을 남기지 않는다 (감사 로그는 파기 대상이 아니고, 주소는 방문 기록에 남는다)
-  await audit(ctx, "상담상태변경", `#${lead.id}: ${D.LEAD_STATUS_LABEL[status]}`);
-  return back(base + "/admin/leads", `신청 건을 '${D.LEAD_STATUS_LABEL[status]}'(으)로 바꿨습니다.`);
+  await audit(ctx, lead.source === "contact" ? "문의상태변경" : "상담상태변경", `#${lead.id}: ${D.LEAD_STATUS_LABEL[status]}`);
+  return back(to, `'${D.LEAD_STATUS_LABEL[status]}'(으)로 바꿨습니다.`);
 }
 export async function adminLeadMemo(ctx) {
   const { db, form, base, assoc, params } = ctx;
   const lead = await D.getLead(db, Number(params.id) || 0, assoc.id);
   if (!lead) return back(base + "/admin/leads", "신청 건을 찾을 수 없습니다.", true);
   await D.setLeadMemo(db, lead.id, assoc.id, cap(form.get("memo"), 500));
-  return back(base + "/admin/leads", "메모를 저장했습니다.");
+  return back(leadBack(base, lead), "메모를 저장했습니다.");
 }
 export async function adminLeadDelete(ctx) {
   const { db, base, assoc, params } = ctx;
   const lead = await D.getLead(db, Number(params.id) || 0, assoc.id);
   if (!lead) return back(base + "/admin/leads", "신청 건을 찾을 수 없습니다.", true);
+  const to = leadBack(base, lead);
   await D.deleteLead(db, lead.id, assoc.id);
   // 지운 내용(이름·번호)은 감사 로그에도 남기지 않는다 — 지웠는데 다른 표에 남으면 지운 게 아니다
-  await audit(ctx, "상담신청삭제", `#${lead.id}`);
-  return back(base + "/admin/leads", "신청 건을 삭제했습니다.");
+  await audit(ctx, lead.source === "contact" ? "문의삭제" : "상담신청삭제", `#${lead.id}`);
+  return back(to, "지웠습니다.");
 }
 
 // ---------- 2단계 인증 (TOTP) ----------

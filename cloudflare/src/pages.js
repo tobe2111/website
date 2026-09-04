@@ -1402,7 +1402,8 @@ export async function admin(ctx) {
   const bizStatus = ["pending", "approved", "rejected"].includes(query.get("bs")) ? query.get("bs") : "";
   const BIZ_PER = 50;
   const bizPage = Math.max(1, parseInt(query.get("bp") || "1", 10) || 1);
-  const [s, all, notices, events, members, admins, notifs, unread, auditLog, met, assocProducts, allRsvps, dueRowsRaw, visitsRaw, popupList, bizPageData, bizCounts] = await Promise.all([
+  const inboxStatus = D.LEAD_STATUSES.includes(query.get("is")) ? query.get("is") : "";
+  const [s, all, notices, events, members, admins, notifs, unread, auditLog, met, assocProducts, allRsvps, dueRowsRaw, visitsRaw, popupList, bizPageData, bizCounts, inbox, inboxCounts] = await Promise.all([
     D.stats(db, assoc.id),
     D.listAllBusinesses(db, assoc.id),
     D.listNotices(db, assoc.id),
@@ -1420,6 +1421,8 @@ export async function admin(ctx) {
     D.listPopups(db, assoc.id).catch(() => []),
     D.listBusinessesPage(db, assoc.id, { q: bizQ, status: bizStatus, limit: BIZ_PER, offset: (bizPage - 1) * BIZ_PER }),
     D.businessStatusCounts(db, assoc.id),
+    D.listLeads(db, assoc.id, { source: "contact", status: inboxStatus, limit: 100 }).catch(() => []),
+    D.leadStatusCounts(db, assoc.id, "contact").catch(() => ({ all: 0 })),
   ]);
   const today = new Date().toISOString().slice(0, 10);
   const visits = { cur: Number(visitsRaw && visitsRaw.cur) || 0, prev: Number(visitsRaw && visitsRaw.prev) || 0 };
@@ -1787,10 +1790,51 @@ export async function admin(ctx) {
 
   // 한 화면에 열두 덩어리가 쏟아지던 것을 하는 일별로 묶는다.
   // 처음 보는 사람이 "여기서 뭘 해야 하나"를 훑지 않고 고를 수 있어야 한다.
+  // ── 손님 문의함 ─────────────────────────────────────────────────
+  //
+  // 예전에는 문의가 알림함에 한 줄로만 남았다. 회장님이 그 줄을 한 번 읽고 지나가면
+  // 그 문의는 사실상 사라졌다 — 누가 물었는지, 답을 했는지, 언제 왔는지를 나중에 알
+  // 방법이 없었다. 홈페이지에 문의 칸을 두고 답을 못 하면 안 두느니만 못하다.
+  const INBOX_LABEL = { new: "안 읽음", contacted: "답변함", visit: "만나기로", contract: "해결", drop: "보류·종결" };
+  const inboxLink = (v) => `${base}/admin${qs({ is: v })}#s-inbox`;
+  const inboxChips = [["", "전체", inboxCounts.all], ...D.LEAD_STATUSES.map((k) => [k, INBOX_LABEL[k], inboxCounts[k] || 0])]
+    .map(([v, label, n]) => `<a class="tbar-chip${inboxStatus === v ? " on" : ""}${v === "new" && n ? " is-alert" : ""}" href="${inboxLink(v)}">${esc(label)} <b>${n}</b></a>`).join("");
+  const inboxRows = inbox.map((l) => `<li class="mini-item">
+    <details class="mini-edit"${l.status === "new" ? " open" : ""}><summary>
+      <span class="badge ${l.status === "new" ? "badge-wait" : l.status === "drop" ? "badge-neutral" : "badge-ok"}">${esc(INBOX_LABEL[l.status] || l.status)}</span>
+      <span class="notice-title">${esc(l.name)}${l.phone || l.email ? ` · ${esc(l.phone ? D.formatPhone(l.phone) : l.email)}` : ""}</span>
+      <span class="mini-edit-hint">${esc(kstStamp(l.created_at, { year: false }))}</span></summary>
+      <p class="inbox-msg">${esc(l.message || "")}</p>
+      <div class="form-two">
+        <form method="post" action="${base}/admin/leads/${l.id}/status" class="stack-form compact">
+          <label class="mini-label">처리 상태<select name="status" data-autosubmit>${
+            D.LEAD_STATUSES.map((k) => `<option value="${k}"${k === l.status ? " selected" : ""}>${esc(INBOX_LABEL[k])}</option>`).join("")}</select></label>
+          <noscript><button class="btn btn-ghost btn-sm">상태 저장</button></noscript></form>
+        <form method="post" action="${base}/admin/leads/${l.id}/memo" class="stack-form compact">
+          <label class="mini-label">우리 메모 <small>(손님에게는 안 보입니다)</small>
+            <input type="text" name="memo" value="${esc(l.memo || "")}" maxlength="500" placeholder="예: 3/5 전화 드림 — 주차 안내" /></label>
+          <button class="btn btn-ghost btn-sm">메모 저장</button></form>
+      </div>
+      ${l.phone ? `<span class="pill-row"><a class="btn btn-primary btn-sm" href="tel:${esc(D.normalizePhone(l.phone))}">전화 걸기</a></span>` : ""}
+      <form method="post" action="${base}/admin/leads/${l.id}/delete" class="mini-del"
+        data-confirm="이 문의를 지울까요?&#10;되돌릴 수 없습니다."><button class="link-danger">이 문의 지우기</button></form>
+    </details></li>`).join("");
+  const inboxPanel = `<section class="panel" id="p-inbox"><div class="panel-head">
+      <h2 class="panel-title">손님 문의 <span class="badge badge-muted">${inboxCounts.all}건</span></h2>
+      <span class="pill-row"><a class="btn btn-xs btn-ghost" href="${base}/admin/leads.csv">전체 CSV</a>
+        <a class="btn btn-xs btn-ghost" href="${base}/contact" target="_blank" rel="noopener">문의 화면 보기 ↗</a></span></div>
+    <p class="panel-hint">홈페이지 <b>문의하기</b> 로 들어온 것입니다. 답을 하신 뒤 상태를 바꿔 두면 무엇이 남았는지 한눈에 보입니다.</p>
+    <div class="tbar"><div class="tbar-chips">${inboxChips}</div></div>
+    ${inbox.length ? `<ul class="admin-mini-list">${inboxRows}</ul>`
+      : `<div class="dt-empty"><b>${inboxStatus ? "그 상태인 문의가 없습니다" : "아직 들어온 문의가 없습니다"}</b>
+         ${inboxStatus ? `<a href="${base}/admin#s-inbox">전체 보기</a>` : "홈페이지 아래 <b>문의하기</b> 로 들어옵니다."}</div>`}</section>`;
+
   const ADMIN_TABS = [
     ["home", "현황", "", unread || 0],
     [isEsign ? "people" : "people", isEsign ? "담당자" : "회원·점포", "", isEsign ? 0 : (s.pending || 0)],
     ...(isEsign ? [] : [["content", isFranchise ? "가맹점·콘텐츠" : "콘텐츠", "", 0]]),
+    // 문의함 — 아직 답 안 한 건수를 그대로 단다. 0 이면 배지가 없다.
+    ...(isEsign || isFranchise ? [] : [["inbox", "문의", "", inboxCounts.new || 0]]),
     ["notify", "알림톡", "", 0],
     ["settings", "설정", "", 0],
   ];
@@ -2002,6 +2046,8 @@ ${abPanel}`}
         <ul class="admin-mini-list">${eventRows}</ul></section></div>`}
     ${isEsign || isFranchise ? "" : `<div id="p-popup-wrap">${popupPanel}</div>`}
     ${isEsign ? "" : "</div>"}
+
+    ${isEsign || isFranchise ? "" : `<div class="sgroup" id="s-inbox" data-tab="inbox">${inboxPanel}</div>`}
 
     <div class="sgroup" id="s-notify" data-tab="notify">${notifyPanel}</div>
 

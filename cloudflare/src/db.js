@@ -223,10 +223,24 @@ export async function createLead(db, { associationId, name, phone = "", email = 
   return first(db, "SELECT * FROM leads WHERE id=?", await lastId(db));
 }
 export const getLead = (db, id, aid) => first(db, "SELECT * FROM leads WHERE id=? AND association_id=?", id, aid);
-export const listLeads = (db, aid, { status = "", limit = 200, offset = 0 } = {}) =>
-  status
-    ? all(db, "SELECT * FROM leads WHERE association_id=? AND status=? ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?", aid, status, limit, offset)
-    : all(db, "SELECT * FROM leads WHERE association_id=? ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?", aid, limit, offset);
+// source 로 갈라 본다. 같은 표를 두 제품이 쓰기 때문이다 —
+// 모집 랜딩의 '가맹 상담'(landing)과 상인회 홈의 '손님 문의'(contact)는
+// 담기는 값이 같아서 표를 따로 만들 이유가 없다. 화면만 다르면 된다.
+export const listLeads = (db, aid, { status = "", source = "", limit = 200, offset = 0 } = {}) => {
+  const w = ["association_id=?"]; const a = [aid];
+  if (status) { w.push("status=?"); a.push(status); }
+  if (source) { w.push("source=?"); a.push(source); }
+  return all(db, `SELECT * FROM leads WHERE ${w.join(" AND ")} ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`, ...a, limit, offset);
+};
+// 거르개 칩에 붙는 건수
+export async function leadStatusCounts(db, aid, source = "") {
+  const rows = await all(db, `SELECT status, COUNT(*) AS n FROM leads WHERE association_id=?${source ? " AND source=?" : ""} GROUP BY status`,
+    ...(source ? [aid, source] : [aid]));
+  const out = { all: 0 };
+  for (const k of LEAD_STATUSES) out[k] = 0;
+  for (const r of rows) { out[r.status] = r.n; out.all += r.n; }
+  return out;
+}
 export const setLeadStatus = (db, id, aid, status) =>
   run(db, "UPDATE leads SET status=?, updated_at=datetime('now') WHERE id=? AND association_id=?",
     LEAD_STATUSES.includes(status) ? status : "new", id, aid);
