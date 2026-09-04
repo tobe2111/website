@@ -1618,7 +1618,10 @@ export async function admin(ctx) {
   //  비밀번호 발급처럼 한 사람에 대한 일은 그 가게 화면의 [사장님 로그인] 에 모여 있다.)
   // ── 회원 추가 —— 예전에는 접힌 상자 안 맨 아래에 있어 아무도 못 찾았다.
   // 상인회장이 명단을 먼저 넣는 것이 실제 시작 방식이므로, 이건 눈에 보이는 자리에 있어야 한다.
-  const kakaoReady = !!String(env.KAKAO_REST_KEY || "").trim();
+  // 가게 찾기는 카카오·네이버 **둘 중 하나만** 있어도 된다 — 소상공인은 네이버에만
+  // 등록한 경우가 흔해, 카카오만 보면 "우리 가게가 없다" 가 된다.
+  const kakaoReady = !!(String(env.KAKAO_REST_KEY || "").trim()
+    || (String(env.NAVER_SEARCH_ID || "").trim() && String(env.NAVER_SEARCH_SECRET || "").trim()));
   const addMemberPanel = `<section class="panel panel-accent" id="p-addmember">
     <h2 class="panel-title">회원 추가</h2>
     <p class="panel-hint">사장님 대신 등록합니다. <b>이메일은 없어도 됩니다</b> — 이메일을 비우면 <b>휴대폰 번호가 곧 아이디</b>가 되고,
@@ -1634,7 +1637,7 @@ export async function admin(ctx) {
       // 키가 없다고 이 자리를 통째로 지우면, 이런 기능이 있다는 것 자체를 관리자가 알 수 없다.
       // 꺼져 있다는 사실과 켜는 방법을 한 줄로 남긴다 — 없는 것과 꺼진 것은 다르다.
       : `<p class="panel-hint">가게 이름만으로 주소·전화·업종·지도 위치를 채워 넣는 <b>지도에서 찾기</b>는 지금 꺼져 있습니다 —
-      운영사가 카카오 지도 키를 등록하면 이 자리에 검색 칸이 생깁니다. 그때까지는 아래에 직접 적어 주세요.</p>`}
+      운영사가 카카오 또는 네이버 지도 키를 등록하면 이 자리에 검색 칸이 생깁니다. 그때까지는 아래에 직접 적어 주세요.</p>`}
     <form method="post" action="${base}/admin/members/add" class="stack-form">
       <div class="form-two"><label>사장님 성함<input type="text" name="name" required maxlength="60" autocomplete="name" /></label>
         <label>휴대폰 <small>(알림톡·연락용)</small>
@@ -2773,7 +2776,10 @@ export async function adminBusinessEdit(ctx) {
   if (!b || b.association_id !== assoc.id) return notFoundResponse(ctx);
   const opts = CATEGORIES.map((c) => `<option value="${esc(c)}"${c === b.category ? " selected" : ""}>${esc(c)}</option>`).join("");
   const owner = b.owner_id ? await D.getUserById(db, b.owner_id) : null;
-  const kakaoOn = !!String(env.KAKAO_REST_KEY || "").trim();
+  const kakaoOn = !!(String(env.KAKAO_REST_KEY || "").trim()
+    || (String(env.NAVER_SEARCH_ID || "").trim() && String(env.NAVER_SEARCH_SECRET || "").trim()));
+  // 사진 찾기는 카카오 이미지 검색 전용이다 — 네이버만 넣은 조직에 되지도 않는 칸을 띄우지 않는다.
+  const imageSearchOn = !!String(env.KAKAO_REST_KEY || "").trim();
   // 무엇이 비어 있어서 손님에게 어떻게 보이는지 — 숫자가 아니라 결과로 말한다
   const gaps = [
     !b.address && "주소가 없어 <b>지도에 뜨지 않습니다</b>",
@@ -2798,7 +2804,7 @@ export async function adminBusinessEdit(ctx) {
       <label class="file-drop"><input type="file" name="files" accept="image/*" multiple /><span class="file-drop-text">사진 선택 (한 장당 최대 8MB · 여러 장 가능)</span></label>
       <input type="text" name="caption" placeholder="설명 (선택)" class="caption-input" maxlength="200" />
       <button class="btn btn-primary btn-block">사진 올리기</button></form>
-    ${kakaoOn ? `<div class="form-divider">웹에서 찾아 담기 <small>(최대 ${5}장)</small></div>
+    ${imageSearchOn ? `<div class="form-divider">웹에서 찾아 담기 <small>(최대 ${5}장)</small></div>
     <p class="panel-hint"><b>여기 뜨는 것은 그 가게의 공식 사진이 아니라, 웹에서 그 이름으로 검색된 사진입니다.</b>
       다른 지점이나 상관없는 사진이 섞여 나오니 <b>눈으로 확인하고</b> 골라 주세요.
       남이 찍은 사진이므로 <b>출처를 함께 저장</b>하고, 사장님 사진이 들어오면 바꿔 주시는 것이 좋습니다.</p>
@@ -2880,7 +2886,7 @@ export async function adminBusinessEdit(ctx) {
       <p class="panel-hint" data-place-msg hidden></p>
       <ul class="place-list" data-place-list hidden></ul>
       <p class="panel-hint">카카오맵에서 찾은 값을 아래 칸에 채워 넣습니다. <b>저장은 확인하고 직접 누르셔야 합니다</b> — 지도의 정보가 늘 최신인 것은 아닙니다.</p>`
-        : `<p class="panel-hint">지도에서 자동으로 채우는 기능은 운영사가 카카오 키를 등록하면 열립니다.</p>`}
+        : `<p class="panel-hint">지도에서 자동으로 채우는 기능은 운영사가 카카오 또는 네이버 지도 키를 등록하면 열립니다.</p>`}
       <form method="post" action="${base}/admin/business/${b.id}" class="stack-form">
         <label>업체명<input type="text" name="name" data-place="name" value="${esc(b.name)}" required maxlength="100" autocomplete="organization" /></label>
         <label>업종<select name="category" data-place="category">${opts}</select></label>
@@ -2911,7 +2917,7 @@ export async function adminBusinessEdit(ctx) {
     </div></section>`;
   return html(layout({ title: `${b.name} 정보`, assoc, base, user, body, csrf,
     scripts: `<script src="${assetUrl("/js/place.js")}" defer></script>${
-      kakaoOn ? `<script src="${assetUrl("/js/photo-pick.js")}" defer></script>` : ""}` }));
+      imageSearchOn ? `<script src="${assetUrl("/js/photo-pick.js")}" defer></script>` : ""}` }));
 }
 
 // 우리 상인회 서식 관리 — 만든 문서를 서식으로 저장해 다음부터 재사용
@@ -3965,8 +3971,11 @@ export async function superConsole(ctx) {
     ["네이버 지도", !!env.NAVER_MAP_CLIENT_ID, "NAVER_MAP_CLIENT_ID", "상인회 홈의 점포 지도. 지도가 안 뜨면 Maps 콘솔의 Web 서비스 URL 에 이 사이트 도메인이 등록됐는지 확인하세요."],
     ["사진 직접 서빙", !!env.MEDIA_PUBLIC_BASE, "MEDIA_PUBLIC_BASE", "R2 버킷에 공개 도메인을 켜고 그 주소를 워커 변수에 넣으면 사진이 워커를 거치지 않고 CDN 직행합니다."],
     ["방문 통계", !!env.CF_ANALYTICS_TOKEN, "CF_ANALYTICS_TOKEN", "Cloudflare Web Analytics 에서 사이트를 추가하고 발급된 토큰을 넣으면 모든 페이지에 자동 삽입됩니다."],
-    ["지도에서 가게 찾기", !!String(env.KAKAO_REST_KEY || "").trim(), "KAKAO_REST_KEY",
-      "카카오 개발자센터에서 앱을 만들고 <b>REST API 키</b>를 넣으면, 관리자가 점포 정보를 채울 때 가게 이름만으로 주소·전화·업종·좌표가 채워집니다. 없으면 손으로 적으면 됩니다."],
+    ["지도에서 가게 찾기 (카카오)", !!String(env.KAKAO_REST_KEY || "").trim(), "KAKAO_REST_KEY",
+      "카카오 개발자센터에서 앱을 만들고 <b>REST API 키</b>를 넣으면, 관리자가 점포 정보를 채울 때 가게 이름만으로 주소·전화·업종·좌표가 채워집니다. 같은 키로 <b>가게 사진 찾기</b>도 함께 열립니다."],
+    ["지도에서 가게 찾기 (네이버)", !!(String(env.NAVER_SEARCH_ID || "").trim() && String(env.NAVER_SEARCH_SECRET || "").trim()), "NAVER_SEARCH_ID · NAVER_SEARCH_SECRET",
+      "네이버 개발자센터에서 <b>검색 API</b> 애플리케이션을 만들어 Client ID·Secret 을 넣습니다. <b>소상공인은 네이버에만 등록한 경우가 많아, 카카오에 없는 가게가 여기서 나옵니다.</b> 둘 다 넣으면 두 곳을 함께 찾아 한 줄로 합쳐 보여 줍니다. (지도를 그리는 NAVER_MAP_CLIENT_ID 와는 다른 키입니다)"],
+
   ];
   const supers = await soft("슈퍼 계정 목록", () => D.listSuperAdmins(db), []);
   const superPanel = `<section class="panel"><h2 class="panel-title">이 콘솔에 접근 가능한 계정 <span class="badge ${supers.length > 1 ? "badge-wait" : "badge-ok"}">${supers.length}개</span></h2>

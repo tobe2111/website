@@ -3303,3 +3303,6 @@ a.deal-card:hover{border-color:var(--deal);transition:border-color .18s}
 /* 담은 사진 밑의 출처 한 줄 — 남의 사진임을 화면에서도 숨기지 않는다 */
 .shot-src{display:block;font-size:.72rem;color:var(--muted);margin-top:2px}
 .shot-src a{text-decoration:underline}
+/* 후보가 어느 지도에서 왔는지 — 카카오에 없는 가게가 흔해, 네이버에서 온 것을 구분해 보여 준다 */
+.place-src{display:inline-block;margin-top:3px;font-style:normal;font-size:.7rem;font-weight:600;
+  color:var(--muted);background:var(--surface-2,#f1f2f4);border-radius:4px;padding:1px 6px}
