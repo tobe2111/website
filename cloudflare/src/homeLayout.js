@@ -418,9 +418,10 @@ function renderSection(s, deps) {
       return `<section class="section"><div class="container">
         <div class="join-cta">
           <span class="jc-glow" aria-hidden="true"></span>
-          <span class="mark jc-mark" aria-hidden="true"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9l1.2-4.2A1 1 0 0 1 6.2 4h11.6a1 1 0 0 1 1 .8L20 9"/><path d="M4 9v10a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9"/><path d="M9 20v-5h6v5"/></svg></span>
-          <h2>${esc(s.title || "")}</h2>
-          <p>${esc(s.body || "")}</p>
+          <div class="jc-text">
+            <h2>${esc(s.title || "")}</h2>
+            <p>${esc(s.body || "")}</p>
+          </div>
           <a href="${deps.base}/register" class="btn btn-primary btn-lg">${esc(s.buttonLabel || "업체 등록하기")}</a>
         </div></div></section>`;
     default:
