@@ -103,9 +103,30 @@ wrangler deploy
 
 끝나면 `https://seocho-website.<계정>.workers.dev` 주소가 나옵니다. HTTPS 자동.
 
-### 깃허브 자동 배포(선택)
-Cloudflare 대시보드 → Workers & Pages → 해당 워커 → **Settings → Build** 에서
-깃허브 저장소를 연결하면, 이후 **push 할 때마다 자동 배포**됩니다.
+### 깃허브 자동 배포
+
+두 가지 길이 있는데 **둘 다 켜면 한 번 푸시에 두 번 배포**되니 하나만 씁니다.
+
+**① GitHub Actions (권장 · 저장소의 `.github/workflows/deploy.yml`)**
+
+기본 브랜치에 푸시하면 검사(기능 목록 + 단위 테스트)를 돌리고 배포합니다.
+**실패가 저장소 Actions 탭에 빨갛게 남는 것**이 핵심입니다 — 대시보드 빌드는 조용히
+멈춰도 알 방법이 없어, 배포가 안 된 것을 한참 뒤에야 알게 됩니다.
+
+준비물 — 저장소 **Settings → Secrets and variables → Actions**:
+
+| 이름 | 값 |
+| --- | --- |
+| `CLOUDFLARE_API_TOKEN` | Cloudflare → My Profile → API Tokens → **Edit Cloudflare Workers** 템플릿으로 발급 |
+| `CLOUDFLARE_ACCOUNT_ID` | 대시보드 오른쪽 아래 Account ID (토큰이 계정 하나에만 묶여 있으면 생략 가능) |
+
+이 길을 쓰기로 했다면 대시보드의 Workers Builds 는 꺼 둡니다.
+
+**② Cloudflare Workers Builds (대시보드)**
+
+Workers & Pages → 해당 워커 → **Settings → Build** 에서 깃허브 저장소를 연결합니다.
+⚠️ **Branch 설정을 실제 기본 브랜치로 맞춰야 합니다.** 기본값 `main` 으로 두면
+다른 이름의 브랜치에 푸시해도 아무 일도 일어나지 않습니다 — 실제로 겪은 사고입니다.
 
 ---
 

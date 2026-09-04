@@ -1,0 +1,66 @@
+# 기본 브랜치에 푸시하면 Cloudflare 로 배포한다.
+#
+# 왜 이걸 두는가 — 예전에는 대시보드의 Workers Builds(깃허브 연동)에만 기대고 있었는데,
+# 그게 조용히 멈춘 것을 15시간 뒤에야 알았다. 배포가 안 된 것과 배포가 실패한 것을
+# 구분할 방법이 화면 어디에도 없었기 때문이다.
+# 여기로 옮기면 실패가 저장소 Actions 탭에 빨갛게 남는다 — 그게 이 파일의 존재 이유다.
+#
+# 준비물 — 저장소 Settings → Secrets and variables → Actions:
+#   CLOUDFLARE_API_TOKEN   Cloudflare 대시보드 → My Profile → API Tokens →
+#                          "Edit Cloudflare Workers" 템플릿으로 발급.
+#                          D1·R2 를 함께 쓰므로 계정 리소스 접근이 포함된 토큰이어야 한다.
+#   CLOUDFLARE_ACCOUNT_ID  대시보드 오른쪽 아래 Account ID (토큰이 계정 하나에만 묶여 있으면 없어도 됨)
+#
+# ⚠️ 대시보드의 Workers Builds 와 이 워크플로를 **둘 다** 켜 두면 한 번 푸시에 두 번 배포된다.
+#    둘 중 하나만 쓴다 — 이 파일을 쓰기로 했다면 대시보드 쪽 자동 빌드는 꺼 둔다.
+#
+# 시크릿(SESSION_SECRET·SIGN_PRIVATE_KEY·ALIGO_*·KAKAO_REST_KEY)은 여기서 다루지 않는다.
+# 그것들은 워커에 이미 등록돼 있고, 배포는 값을 건드리지 않는다.
+
+name: 배포
+
+on:
+  push:
+  workflow_dispatch:        # 손으로 다시 돌리고 싶을 때 (Actions 탭 → Run workflow)
+
+permissions:
+  contents: read
+
+# 같은 브랜치에서 배포가 겹치면 나중 것이 먼저 끝나 옛 코드가 살아남을 수 있다.
+# 새 배포가 시작되면 앞선 것을 취소한다.
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    # 기본 브랜치에 실제 커밋이 들어왔을 때만 (브랜치를 새로 만든 것만으로는 배포하지 않는다)
+    if: github.ref_name == github.event.repository.default_branch && github.event.created == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22      # 검사에 --experimental-sqlite 가 필요하다 (22+)
+
+      # 깨진 코드를 라이브에 올리지 않는다. 여기서 막히면 배포가 안 되는 게 맞다.
+      # 브라우저가 필요한 검사(e2e·접근성)는 빼고, 로직 검사만 돌린다 — 1분 안에 끝난다.
+      - name: 검사 (기능 목록 + 단위 테스트)
+        run: |
+          npm run check
+          npm test
+
+      - name: Cloudflare 배포
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: 무엇이 올라갔는지 남긴다
+        run: |
+          echo "### 배포 완료" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- 커밋: \`${GITHUB_SHA:0:7}\` — $(git log -1 --pretty=%s)" >> $GITHUB_STEP_SUMMARY
+          echo "- 확인: 운영사 콘솔 \`/super\` → 설정·보안 탭의 '지금 돌고 있는 배포'" >> $GITHUB_STEP_SUMMARY
