@@ -103,9 +103,64 @@ wrangler deploy
 
 끝나면 `https://seocho-website.<계정>.workers.dev` 주소가 나옵니다. HTTPS 자동.
 
-### 깃허브 자동 배포(선택)
-Cloudflare 대시보드 → Workers & Pages → 해당 워커 → **Settings → Build** 에서
-깃허브 저장소를 연결하면, 이후 **push 할 때마다 자동 배포**됩니다.
+### 깃허브 자동 배포
+
+두 가지 길이 있는데 **둘 다 켜면 한 번 푸시에 두 번 배포**되니 하나만 씁니다.
+
+**① GitHub Actions (권장 · 저장소의 `.github/workflows/deploy.yml`)**
+
+기본 브랜치에 푸시하면 검사(기능 목록 + 단위 테스트)를 돌리고 배포합니다.
+**실패가 저장소 Actions 탭에 빨갛게 남는 것**이 핵심입니다 — 대시보드 빌드는 조용히
+멈춰도 알 방법이 없어, 배포가 안 된 것을 한참 뒤에야 알게 됩니다.
+
+#### 토큰 만들기 — 권한을 직접 채워야 합니다
+
+Cloudflare → 우상단 프로필 → **My Profile → API Tokens → Create Token**
+→ **Edit Cloudflare Workers** 템플릿 **Use template**.
+
+⚠️ **템플릿만 쓰면 배포가 실패합니다.** 이 워커는 D1(데이터베이스)과 R2(사진)를 함께
+쓰는데 템플릿에는 그 둘이 없습니다. 아래 두 줄을 **Add more** 로 직접 더하세요.
+
+| 구분 | 권한 | 수준 | 왜 필요한가 |
+| --- | --- | --- | --- |
+| Account | Workers Scripts | Edit | 워커 코드·정적 자산(css/js) 배포 — 템플릿에 포함 |
+| Account | **D1** | **Edit** | `[[d1_databases]]` 바인딩을 붙이려면 필요 — **직접 추가** |
+| Account | **Workers R2 Storage** | **Edit** | `[[r2_buckets]]` 바인딩을 붙이려면 필요 — **직접 추가** |
+| Account | Workers KV Storage | Edit | 템플릿에 포함(안 써도 그대로 둡니다) |
+| Zone | Workers Routes | Edit | 지금은 안 쓰지만, 나중에 개별 도메인을 붙일 때 필요 — 템플릿에 포함 |
+
+- **Account Resources**: Include → 이 계정 하나만
+- **Zone Resources**: 개별 도메인을 안 쓰면 그대로 둬도 됩니다
+- TTL·IP 제한: 기본값
+
+**Continue to summary → Create Token.** 토큰은 **이 화면에서 한 번만** 보입니다.
+
+#### 저장소에 넣기
+
+저장소 **Settings → Secrets and variables → Actions → New repository secret**
+
+| 이름 | 값 |
+| --- | --- |
+| `CLOUDFLARE_API_TOKEN` | 방금 발급한 토큰 |
+| `CLOUDFLARE_ACCOUNT_ID` | 대시보드 주소창의 `dash.cloudflare.com/<이 부분>` (토큰이 계정 하나에만 묶여 있으면 생략 가능) |
+
+#### 실패하면 이런 말이 나옵니다
+
+| 메시지 | 뜻 | 고치는 법 |
+| --- | --- | --- |
+| `Authentication error [code: 10000]` | 토큰 권한 부족 | 위 표의 D1·R2 를 넣었는지 확인 |
+| `binding DB of type d1 …` | D1 권한 없음 | Account → D1 → Edit 추가 |
+| `binding MEDIA of type r2_bucket …` | R2 권한 없음 | Account → Workers R2 Storage → Edit 추가 |
+| `Unable to authenticate request` | 토큰 오타·만료 | 새로 발급해 시크릿 교체 |
+| 검사 단계에서 빨감 | 코드가 깨졌다 | 배포가 안 된 게 맞습니다 — 로그의 실패 항목을 고칩니다 |
+
+이 길을 쓰기로 했다면 대시보드의 Workers Builds 는 꺼 둡니다.
+
+**② Cloudflare Workers Builds (대시보드)**
+
+Workers & Pages → 해당 워커 → **Settings → Build** 에서 깃허브 저장소를 연결합니다.
+⚠️ **Branch 설정을 실제 기본 브랜치로 맞춰야 합니다.** 기본값 `main` 으로 두면
+다른 이름의 브랜치에 푸시해도 아무 일도 일어나지 않습니다 — 실제로 겪은 사고입니다.
 
 ---
 

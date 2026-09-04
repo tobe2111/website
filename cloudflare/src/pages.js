@@ -2,7 +2,7 @@
 import * as D from "./db.js";
 import { esc, cap, clip, openBadge, openNow, hoursLine, dongOf, fmtBytes, kstStamp, kstDate, prettyPath, safeNext, parseCookies } from "./util.js";
 import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG, ORIGIN, assetUrl } from "./render.js";
-import { verifyInviteToken, SALES_STAGES, otpRequired, selfSignupOn, MAX_SLOTS, BULK_MAX, BULK_CHUNK, docOf } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
+import { verifyInviteToken, SALES_STAGES, otpRequired, selfSignupOn, MAX_SLOTS, BULK_MAX, BULK_CHUNK, docOf, isPlaceholderEmail } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
 import { html, notFoundResponse, back, redirect } from "./http.js";
 import { countable, countHomeGoal, homeVariantCookie } from "./traffic.js";
 import { galleryItem } from "./media-render.js";
@@ -1461,7 +1461,8 @@ export async function admin(ctx) {
     <ul class="audit-list">${auditLog.length ? auditLog.map((a) => `<li><span class="audit-action">${esc(a.action)}</span> <span class="audit-detail">${esc(a.detail)}</span><span class="audit-meta">${esc(a.actor_name)} · ${esc(kstStamp(a.created_at, { year: false }))}</span></li>`).join("") : `<li class="empty">기록이 없습니다.</li>`}</ul></details>`;
 
   const bizRows = all.length ? all.map((b) => `<tr><td><a href="${base}/business/${esc(b.slug)}" target="_blank">${esc(b.name)}</a><br /><small>${esc(b.category)}</small></td>
-    <td>${esc(b.owner_name)}<br /><small>${esc(b.owner_email)}</small></td><td>${statusBadge(b.status)}</td>
+    <td>${esc(b.owner_name)}<br /><small>${isPlaceholderEmail(b.owner_email)
+      ? '<span class="badge badge-wait">로그인 미설정</span>' : esc(b.owner_email)}</small></td><td>${statusBadge(b.status)}</td>
     <td class="actions-cell"><a class="btn btn-xs btn-ghost" href="${base}/admin/business/${b.id}">정보 채우기</a>
       ${b.status !== "approved" ? `<form method="post" action="${base}/admin/business/${b.id}/status"><input type="hidden" name="status" value="approved"><button class="btn btn-xs btn-primary">승인</button></form>` : ""}
       ${b.status !== "rejected" ? `<form method="post" action="${base}/admin/business/${b.id}/status"><input type="hidden" name="status" value="rejected"><button class="btn btn-xs btn-ghost">반려</button></form>` : ""}</td></tr>`).join("") : `<tr><td colspan="4" class="empty">등록된 업체가 없습니다.</td></tr>`;
@@ -1519,8 +1520,39 @@ export async function admin(ctx) {
         ${assoc.team_scope ? 'data-confirm="부서 경계를 끌까요?&#10;담당자가 조직의 계약을 다시 모두 보게 됩니다."' : ""}>${assoc.team_scope ? "끄기" : "켜기"}</button>
       ${teams.length ? "" : `<small class="txt-muted">부서를 먼저 하나 만들어 주세요.</small>`}</form></section>`;
 
-  const memberRows = members.length ? members.map((m) => `<tr><td>${esc(m.name)}<br /><small>${esc(m.email)}</small></td><td>${esc(m.business_name || "-")}</td>
-    <td class="actions-cell"><form method="post" action="${base}/admin/user/${m.id}/reset-password" data-confirm="임시 비밀번호를 발급할까요?"><button class="btn btn-xs btn-ghost">임시 비밀번호</button></form></td></tr>`).join("") : `<tr><td colspan="3" class="empty">회원이 없습니다.</td></tr>`;
+  // 이메일 없이 등록한 사장님은 아직 로그인할 수 없다. 가짜 주소를 그대로 보여 주면
+  // 회장님이 그걸 진짜 주소로 알고 사장님께 불러 줄 수 있으므로, 상태를 그대로 적는다.
+  const memberRows = members.length ? members.map((m) => `<tr><td>${esc(m.name)}<br /><small>${
+      isPlaceholderEmail(m.email) ? '<span class="badge badge-wait">로그인 미설정</span>' : esc(m.email)
+    }${m.phone ? ` · ${esc(D.maskPhone(m.phone))}` : ""}</small></td><td>${esc(m.business_name || "-")}</td>
+    <td class="actions-cell"><form method="post" action="${base}/admin/user/${m.id}/reset-password" data-confirm="임시 비밀번호를 발급할까요?"><button class="btn btn-xs btn-ghost"${isPlaceholderEmail(m.email) ? " disabled title=\"로그인 이메일이 아직 없습니다 — 점포 화면에서 지정해 주세요\"" : ""}>임시 비밀번호</button></form></td></tr>`).join("") : `<tr><td colspan="3" class="empty">회원이 없습니다.</td></tr>`;
+  // ── 회원 추가 —— 예전에는 접힌 상자 안 맨 아래에 있어 아무도 못 찾았다.
+  // 상인회장이 명단을 먼저 넣는 것이 실제 시작 방식이므로, 이건 눈에 보이는 자리에 있어야 한다.
+  const kakaoReady = !!String(env.KAKAO_REST_KEY || "").trim();
+  const addMemberPanel = `<section class="panel panel-accent" id="p-addmember">
+    <h2 class="panel-title">회원 추가</h2>
+    <p class="panel-hint">사장님 대신 등록합니다. <b>이메일은 없어도 됩니다</b> — 상인회 안내는 알림톡으로 나가므로 실제로 필요한 건 휴대폰입니다.
+      이메일을 비우면 사장님은 아직 로그인할 수 없고, 나중에 점포 화면에서 <b>로그인 이메일</b>을 지정하면 그때 임시 비밀번호가 나옵니다.</p>
+    ${kakaoReady ? `<div class="form-divider">지도에서 찾아 간편 등록</div>
+    <div class="place-find" data-place-find>
+      <input type="text" data-place-q placeholder="가게 이름 (예: 방배 버들카페)" aria-label="가게 이름으로 찾기" autocomplete="off" />
+      <button type="button" class="btn btn-ghost btn-sm" data-place-go>찾기</button>
+    </div>
+    <p class="panel-hint" data-place-msg hidden></p>
+    <ul class="place-list" data-place-list hidden></ul>
+    <p class="panel-hint">고르면 업체명·업종·주소·전화·좌표가 아래에 채워집니다. <b>사장님 성함과 휴대폰만 더 적으면 끝</b>입니다.</p>` : ""}
+    <form method="post" action="${base}/admin/members/add" class="stack-form">
+      <div class="form-two"><label>사장님 성함<input type="text" name="name" required maxlength="60" autocomplete="name" /></label>
+        <label>휴대폰 <small>(알림톡·연락용)</small><input type="tel" name="phone" maxlength="13" inputmode="numeric" placeholder="010-1234-5678" autocomplete="tel" /></label></div>
+      <div class="form-two"><label>업체명<input type="text" name="business_name" data-place="name" required maxlength="100" autocomplete="organization" /></label>
+        <label>업종<select name="category" data-place="category">${CATEGORIES.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("")}</select></label></div>
+      <div class="form-two"><label>가게 주소 <small>(선택 · 지도에 뜨려면 필요합니다)</small><input type="text" name="address" data-place="address" maxlength="200" autocomplete="street-address" /></label>
+        <label>가게 전화 <small>(선택)</small><input type="tel" name="biz_phone" data-place="phone" maxlength="40" /></label></div>
+      <label>이메일 <small>(선택 · 있으면 바로 로그인할 수 있습니다)</small><input type="email" name="email" maxlength="120" autocomplete="email" /></label>
+      <input type="hidden" name="lat" data-place="lat" /><input type="hidden" name="lng" data-place="lng" />
+      <button class="btn btn-primary">회원 추가</button></form>
+    <p class="panel-hint">등록한 뒤 <b>[정보 채우기]</b> 에서 주소·전화·사진을 채우면 손님 화면에 제대로 뜹니다.
+      사장님이 직접 하시게 하려면 아래 <b>초대 링크</b>를 카톡으로 보내세요.</p></section>`;
   const noticeRows2 = notices.map((n) => `<li><span class="notice-tag${n.pinned ? " tag-important" : ""}">${esc(n.tag)}</span><span class="notice-title">${esc(n.title)}</span>
     <form method="post" action="${base}/admin/notice/${n.id}/delete" data-confirm="삭제?"><button class="link-danger">삭제</button></form></li>`).join("") || `<li class="empty">공지가 없습니다.</li>`;
   const rsvpsByEvent = new Map();
@@ -1827,12 +1859,8 @@ export async function admin(ctx) {
         <form method="post" action="${base}/admin/admins/add" class="stack-form compact">
           <div class="form-two"><label>성함<input type="text" name="name" required autocomplete="name" /></label><label>이메일<input type="email" name="email" required autocomplete="email" /></label></div>
           <button class="btn btn-primary btn-sm">부관리자 발급 + 임시 비번</button></form></div></details>`}
-      ${isEsign ? "" : `<details class="help-box" style="margin-top:14px"><summary>사장님 대신 등록하기 (대행)</summary>
-        <div class="help-body"><p class="help-lead">사장님이 직접 못 하실 때 총무가 대신 계정을 만들어 드립니다. 임시 비밀번호를 전달하세요.</p>
-        <form method="post" action="${base}/admin/members/add" class="stack-form compact">
-          <div class="form-two"><label>사장님 성함<input type="text" name="name" required autocomplete="name" /></label><label>이메일<input type="email" name="email" required autocomplete="email" /></label></div>
-          <div class="form-two"><label>업체명<input type="text" name="business_name" required autocomplete="organization" /></label><label>업종<input type="text" name="category" placeholder="예: 음식점" /></label></div>
-          <button class="btn btn-primary btn-sm">대행 등록 + 임시 비번 발급</button></form></div></details>`}</section>
+      </section>
+    ${isEsign ? "" : addMemberPanel}
     ${isEsign ? teamsPanel : ""}
     ${isEsign || isFranchise ? "" : duesPanel}
     ${isEsign ? "" : `<section class="panel" id="p-biz"><h2 class="panel-title">${isFranchise ? "가맹점" : "업체"} 관리</h2><div class="table-scroll"><table class="admin-table">
@@ -1905,7 +1933,7 @@ ${abPanel}`}
     </div>
         </div></div></div></section>`;
   return html(layout({ title: "관리자", assoc, base, user, body, activeNav: `${base}/admin`, csrf,
-    scripts: `<script src="${assetUrl("/js/layout-editor.js")}" defer></script><script src="${assetUrl("/js/upload-resize.js")}" defer></script><script src="${assetUrl("/js/file-preview.js")}" defer></script><script src="${assetUrl("/js/share.js")}" defer></script><script src="${assetUrl("/js/super-tabs.js")}" defer></script>` }));
+    scripts: `<script src="${assetUrl("/js/layout-editor.js")}" defer></script><script src="${assetUrl("/js/upload-resize.js")}" defer></script><script src="${assetUrl("/js/file-preview.js")}" defer></script><script src="${assetUrl("/js/share.js")}" defer></script><script src="${assetUrl("/js/super-tabs.js")}" defer></script>${kakaoReady ? `<script src="${assetUrl("/js/place.js")}" defer></script>` : ""}` }));
 }
 
 // 기한이 지났는가 — due_date 는 'YYYY-MM-DD' 이고 그날 자정까지로 본다(KST 기준).
@@ -2461,37 +2489,45 @@ export async function adminBusinessEdit(ctx) {
   const body = `<section class="dash"><div class="container">
     <div class="dash-head"><div><p class="section-eyebrow"><a href="${base}/admin#s-people">← 회원·점포</a></p>
       <h1 class="dash-title">${esc(b.name)}</h1>
-      <p class="dash-sub">${statusBadge(b.status)} ${owner ? `· 사장님 ${esc(owner.name)} (${esc(owner.email)})` : "· 연결된 사장님 계정 없음"}</p></div>
+      <p class="dash-sub">${statusBadge(b.status)} ${owner
+        ? `· 사장님 ${esc(owner.name)}${isPlaceholderEmail(owner.email) ? ' <span class="badge badge-wait">로그인 미설정</span>' : ` (${esc(owner.email)})`}`
+        : "· 연결된 사장님 계정 없음"}</p></div>
       <div class="dash-head-actions">${b.status === "approved" ? `<a class="btn btn-ghost btn-sm" href="${base}/business/${esc(b.slug)}" target="_blank">가게 페이지 보기 ↗</a>` : ""}</div>
     </div>${flashOf(query)}
     ${gaps.length ? `<div class="flash flash-warn"><b>아직 덜 채운 것</b><ul class="gap-list">${gaps.map((g) => `<li>${g}</li>`).join("")}</ul></div>` : ""}
+    ${owner && isPlaceholderEmail(owner.email) ? `<section class="panel panel-accent"><h2 class="panel-title">로그인 이메일 지정</h2>
+      <p class="panel-hint">이메일 없이 등록한 계정입니다. 사장님은 <b>아직 로그인할 수 없습니다</b> — 여기서 주소를 정하면 임시 비밀번호가 나옵니다.
+        지금 화면의 정보를 회장님이 대신 관리하시는 중이라면 비워 두셔도 됩니다.</p>
+      <form method="post" action="${base}/admin/business/${b.id}/owner-email" class="stack-form compact">
+        <label>사장님 이메일<input type="email" name="email" required maxlength="120" autocomplete="email" placeholder="사장님이 쓰시는 이메일" /></label>
+        <button class="btn btn-primary btn-sm">지정하고 임시 비밀번호 발급</button></form></section>` : ""}
     <section class="panel">
       <h2 class="panel-title">가게 정보</h2>
       <p class="panel-hint">사장님 대신 채워 두는 자리입니다. 사장님이 로그인하면 자기 화면에서 이어서 고칠 수 있습니다.</p>
       ${kakaoOn ? `<div class="form-divider">지도에서 찾아 채우기</div>
-      <div class="place-find">
-        <input type="text" id="placeQ" value="${esc(b.name)}" placeholder="가게 이름 (예: 방배 버들카페)" aria-label="가게 이름으로 찾기" autocomplete="off" />
-        <button type="button" class="btn btn-ghost btn-sm" id="placeBtn">찾기</button>
+      <div class="place-find" data-place-find>
+        <input type="text" data-place-q value="${esc(b.name)}" placeholder="가게 이름 (예: 방배 버들카페)" aria-label="가게 이름으로 찾기" autocomplete="off" />
+        <button type="button" class="btn btn-ghost btn-sm" data-place-go>찾기</button>
       </div>
-      <p class="panel-hint" id="placeMsg" hidden></p>
-      <ul class="place-list" id="placeList" hidden></ul>
+      <p class="panel-hint" data-place-msg hidden></p>
+      <ul class="place-list" data-place-list hidden></ul>
       <p class="panel-hint">카카오맵에서 찾은 값을 아래 칸에 채워 넣습니다. <b>저장은 확인하고 직접 누르셔야 합니다</b> — 지도의 정보가 늘 최신인 것은 아닙니다.</p>`
         : `<p class="panel-hint">지도에서 자동으로 채우는 기능은 운영사가 카카오 키를 등록하면 열립니다.</p>`}
       <form method="post" action="${base}/admin/business/${b.id}" class="stack-form">
-        <label>업체명<input type="text" name="name" id="bizName" value="${esc(b.name)}" required maxlength="100" autocomplete="organization" /></label>
-        <label>업종<select name="category" id="bizCategory">${opts}</select></label>
+        <label>업체명<input type="text" name="name" data-place="name" value="${esc(b.name)}" required maxlength="100" autocomplete="organization" /></label>
+        <label>업종<select name="category" data-place="category">${opts}</select></label>
         <div class="form-two">
-          <label>전화<input type="tel" name="phone" id="bizPhone" value="${esc(b.phone || "")}" maxlength="40" autocomplete="tel" /></label>
+          <label>전화<input type="tel" name="phone" data-place="phone" value="${esc(b.phone || "")}" maxlength="40" autocomplete="tel" /></label>
           <label>영업시간 <small>(예: 10:00-21:00 · 일요일 휴무)</small><input type="text" name="hours" id="bizHours" value="${esc(b.hours || "")}" maxlength="100" /></label>
         </div>
-        <label>주소<input type="text" name="address" id="bizAddress" value="${esc(b.address || "")}" maxlength="200" autocomplete="street-address" /></label>
+        <label>주소<input type="text" name="address" data-place="address" value="${esc(b.address || "")}" maxlength="200" autocomplete="street-address" /></label>
         <label>소개<textarea name="description" rows="4" maxlength="2000">${esc(b.description || "")}</textarea></label>
         <label>네이버 플레이스 <small>(선택 · 리뷰·길찾기 연결)</small>
           <input type="url" name="sns_naver" value="${esc(b.sns_naver || "")}" placeholder="naver.me/…" /></label>
         <div class="form-divider">지도 위치</div>
         <div class="form-two">
-          <label>위도<input type="text" inputmode="decimal" name="lat" id="bizLat" value="${b.lat != null ? esc(String(b.lat)) : ""}" /></label>
-          <label>경도<input type="text" inputmode="decimal" name="lng" id="bizLng" value="${b.lng != null ? esc(String(b.lng)) : ""}" /></label>
+          <label>위도<input type="text" inputmode="decimal" name="lat" data-place="lat" value="${b.lat != null ? esc(String(b.lat)) : ""}" /></label>
+          <label>경도<input type="text" inputmode="decimal" name="lng" data-place="lng" value="${b.lng != null ? esc(String(b.lng)) : ""}" /></label>
         </div>
         <button class="btn btn-primary">저장</button>
       </form></section>
