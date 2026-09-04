@@ -925,7 +925,11 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
    마지막 줄은 가운데에 떠 있었습니다. 페이지의 다른 모든 구역은 본문 폭 왼쪽에
    맞춰져 있으니 여기만 어긋난 셈입니다. 3열 균등 격자로 왼쪽선을 되찾습니다. */
 .update-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+/* 태블릿은 2열, 휴대폰은 1열. 파일 앞쪽(640px 구간)에 이미 1열 규칙이 있지만
+   여기가 뒤라서 순서로 이겨 버립니다 — 그러면 390px 에서 카드가 반 폭이 되어
+   "오늘 김치를 새로 담갔습니다. 아삭…" 처럼 한 줄이 잘립니다. 여기서 함께 끝냅니다. */
 @media (max-width:900px){.update-grid{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:640px){.update-grid{grid-template-columns:1fr}}
 .update-card{display:flex;gap:12px;align-items:center;background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--radius-sm);padding:14px 16px;box-shadow:var(--sh-1);transition:box-shadow .2s}
 .update-card:hover{box-shadow:var(--sh-2);border-color:var(--line)}
 .uc-img{flex:none;width:56px;height:56px;border-radius:10px;overflow:hidden}
