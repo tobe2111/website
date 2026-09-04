@@ -34,16 +34,6 @@ const CATEGORIES = ["음식점", "카페·디저트", "생활·서비스", "패�
 // 색만 보고 "저건 카페" 를 안다. 무작위면 색은 그냥 소음이다.
 //
 // 일곱 색 모두 흰 글자를 얹어 WCAG AA(4.5:1)를 넘는지 재 뒀다 — scripts/a11y.mjs 가 매번 다시 잰다.
-const CAT_TONE = {
-  "음식점": "#8E2F3E",      // 팥색      7.9:1
-  "카페·디저트": "#6F4423", // 원두빛    8.3:1
-  "생활·서비스": "#1F5F7A", // 물빛      6.6:1
-  "패션·잡화": "#6D3B8E",   // 자주      7.9:1
-  "농수축산": "#1F6B3F",    // 솔잎      6.5:1
-  "교육·문화": "#14655F",   // 이끼      6.9:1
-  "기타": "#3F4652",        // 먹빛      9.1:1
-};
-const catTone = (c) => CAT_TONE[String(c || "").trim()] || CAT_TONE["기타"];
 const NOTICE_CATEGORIES = ["안내", "공지", "소식", "행사", "혜택", "긴급"];
 const qs = (o) => { const p = new URLSearchParams(); for (const [k, v] of Object.entries(o)) if (v != null && v !== "" && !(k === "page" && v === 1)) p.set(k, v); const s = p.toString(); return s ? "?" + s : ""; };
 const canModerate = (user, assoc) => user && (user.role === "SUPERADMIN" || (user.role === "ADMIN" && user.association_id === assoc.id));
@@ -119,7 +109,7 @@ function businessCard(base, b, cover) {
       ${thumb}
       ${open ? `<span class="market-open">${open}</span>` : ""}
     </a>
-    <div class="market-body" style="--tone:${catTone(b.category)}">
+    <div class="market-body">
       <span class="mc-cat">${esc(b.category)}</span>
       <h3><a href="${base}/business/${esc(b.slug)}">${esc(b.name)}</a></h3>
       ${h.label ? `<p class="mc-when mc-${h.state}">${esc(h.label)}</p>` : ""}
@@ -2803,15 +2793,31 @@ export async function adminBusinessEdit(ctx) {
   const mediaPanel = `<section class="panel"><h2 class="panel-title">사진·영상
       <span class="badge badge-muted">사진 ${shots.length}/${plan.maxPhotos} · 영상 ${clips.length}/${plan.maxEmbeds}</span></h2>
     <p class="panel-hint">사장님께 카톡으로 받은 사진을 여기서 대신 올립니다. 맨 앞 사진이 목록·카톡 공유의 대표 사진이 됩니다.
-      <b>지도(네이버·카카오)의 사진은 가져오지 않습니다</b> — 사장님·손님·플랫폼이 각각 찍은 남의 사진이라 옮겨 담으면 저작권 문제가 됩니다.
-      대신 위의 <b>네이버 플레이스</b> 칸에 링크를 걸어 두면 손님이 그쪽에서 사진·리뷰를 봅니다.</p>
+      맨 앞 사진이 목록·카톡 공유의 대표 사진이 됩니다.</p>
     <form method="post" action="${base}/admin/business/${b.id}/media" enctype="multipart/form-data" class="upload-form">
       <label class="file-drop"><input type="file" name="files" accept="image/*" multiple /><span class="file-drop-text">사진 선택 (한 장당 최대 8MB · 여러 장 가능)</span></label>
       <input type="text" name="caption" placeholder="설명 (선택)" class="caption-input" maxlength="200" />
       <button class="btn btn-primary btn-block">사진 올리기</button></form>
+    ${kakaoOn ? `<div class="form-divider">웹에서 찾아 담기 <small>(최대 ${5}장)</small></div>
+    <p class="panel-hint"><b>여기 뜨는 것은 그 가게의 공식 사진이 아니라, 웹에서 그 이름으로 검색된 사진입니다.</b>
+      다른 지점이나 상관없는 사진이 섞여 나오니 <b>눈으로 확인하고</b> 골라 주세요.
+      남이 찍은 사진이므로 <b>출처를 함께 저장</b>하고, 사장님 사진이 들어오면 바꿔 주시는 것이 좋습니다.</p>
+    <form method="post" action="${base}/admin/business/${b.id}/photos/import" class="photo-pick" data-photo-pick>
+      <input type="hidden" name="q" data-pick-q-sent value="${esc(b.name)}" />
+      <div class="place-find">
+        <input type="text" data-pick-q value="${esc([b.name, b.address ? b.address.split(" ").slice(0, 2).join(" ") : ""].filter(Boolean).join(" "))}"
+          placeholder="가게 이름 (예: 방배 버들카페)" aria-label="사진을 찾을 가게 이름" autocomplete="off" />
+        <button type="button" class="btn btn-ghost btn-sm" data-pick-go>사진 찾기</button>
+      </div>
+      <p class="panel-hint" data-pick-msg hidden></p>
+      <ul class="pick-grid" data-pick-list hidden></ul>
+      <button class="btn btn-primary btn-block" data-pick-save hidden>고른 사진 담기</button>
+    </form>` : ""}
     ${shots.length ? `<div class="admin-shots">${shots.map((m) => `<figure class="admin-shot">
       <img src="${esc(mediaUrl(m.thumb || m.filename))}" alt="${esc(m.caption || "가게 사진")}" loading="lazy" />
-      <figcaption>${esc(m.caption || "")}${delForm(m)}</figcaption></figure>`).join("")}</div>` : `<p class="panel-hint">아직 올린 사진이 없습니다 — 사진이 없으면 목록에서 회색 상자로 보입니다.</p>`}
+      <figcaption>${esc(m.caption || "")}${m.source_name ? `<small class="shot-src">출처 ${m.source_url
+        ? `<a href="${esc(m.source_url)}" target="_blank" rel="noopener nofollow">${esc(m.source_name)}</a>`
+        : esc(m.source_name)}</small>` : ""}${delForm(m)}</figcaption></figure>`).join("")}</div>` : `<p class="panel-hint">아직 올린 사진이 없습니다 — 사진이 없으면 목록에서 회색 상자로 보입니다.</p>`}
     <div class="form-divider">영상·릴스·쇼츠</div>
     <p class="panel-hint">유튜브·유튜브 쇼츠·인스타그램 릴스·네이버TV 주소를 붙여넣으세요. 세로 영상은 세로로 열립니다.
       <small>단축 주소(naver.me/…)는 안 됩니다 — 영상을 열어 주소창의 원래 주소를 복사해 주세요.</small></p>
@@ -2904,7 +2910,8 @@ export async function adminBusinessEdit(ctx) {
     ${mediaPanel}
     </div></section>`;
   return html(layout({ title: `${b.name} 정보`, assoc, base, user, body, csrf,
-    scripts: `<script src="${assetUrl("/js/place.js")}" defer></script>` }));
+    scripts: `<script src="${assetUrl("/js/place.js")}" defer></script>${
+      kakaoOn ? `<script src="${assetUrl("/js/photo-pick.js")}" defer></script>` : ""}` }));
 }
 
 // 우리 상인회 서식 관리 — 만든 문서를 서식으로 저장해 다음부터 재사용

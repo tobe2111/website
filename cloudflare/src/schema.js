@@ -140,6 +140,10 @@ CREATE TABLE IF NOT EXISTS media (
   embed_id      TEXT NOT NULL DEFAULT '',
   original_name TEXT NOT NULL DEFAULT '',
   caption       TEXT NOT NULL DEFAULT '',
+  -- 웹에서 찾아 담은 사진은 **남이 찍은 것**이다. 어디서 왔는지를 함께 남기지 않으면
+  -- 나중에 내려 달라는 요청이 왔을 때 어느 사진인지조차 찾을 수 없다.
+  source_name   TEXT NOT NULL DEFAULT '',   -- 출처 사이트 이름
+  source_url    TEXT NOT NULL DEFAULT '',   -- 그 사진이 실린 원문 주소
   size          INTEGER NOT NULL DEFAULT 0,
   created_at    TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -795,6 +799,17 @@ async function migrateColumns(db) {
   if (!cols.some((c) => c.name === "seal_media")) {
     await db.prepare("ALTER TABLE associations ADD COLUMN seal_media TEXT NOT NULL DEFAULT ''").run();
   }
+  // media 출처 컬럼 (기존 배포 업그레이드): 웹에서 담은 사진이 어디서 왔는지
+  const medTbl = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='media'").first();
+  if (medTbl) {
+    const mcols = (await db.prepare("PRAGMA table_info(media)").all()).results || [];
+    for (const col of ["source_name", "source_url"]) {
+      if (!mcols.some((c) => c.name === col)) {
+        await db.prepare(`ALTER TABLE media ADD COLUMN ${col} TEXT NOT NULL DEFAULT ''`).run();
+      }
+    }
+  }
+
   // businesses 계측 컬럼 (기존 배포 업그레이드): 등록 경로·갱신 시각
   const bizTbl = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='businesses'").first();
   if (bizTbl) {

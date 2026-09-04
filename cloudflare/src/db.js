@@ -517,9 +517,9 @@ export async function coverImagesFor(db, businessIds) {
 export const getMedia = (db, id) => first(db, "SELECT * FROM media WHERE id = ?", id);
 export const deleteMedia = (db, id) => run(db, "DELETE FROM media WHERE id = ?", id);
 export const countEmbeds = async (db, businessId) => (await first(db, "SELECT COUNT(*) AS n FROM media WHERE business_id=? AND kind='embed'", businessId)).n;
-export async function addMedia(db, { businessId, kind, filename = "", poster = "", thumb = "", provider = "", embedId = "", originalName = "", size = 0, caption = "" }) {
-  await run(db, "INSERT INTO media (business_id, kind, filename, poster, thumb, provider, embed_id, original_name, size, caption) VALUES (?,?,?,?,?,?,?,?,?,?)",
-    businessId, kind, filename, poster, thumb, provider, embedId, originalName, size, caption);
+export async function addMedia(db, { businessId, kind, filename = "", poster = "", thumb = "", provider = "", embedId = "", originalName = "", size = 0, caption = "", sourceName = "", sourceUrl = "" }) {
+  await run(db, "INSERT INTO media (business_id, kind, filename, poster, thumb, provider, embed_id, original_name, size, caption, source_name, source_url) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+    businessId, kind, filename, poster, thumb, provider, embedId, originalName, size, caption, sourceName, sourceUrl);
   await run(db, "UPDATE businesses SET updated_at=datetime('now') WHERE id=?", businessId); // 콘텐츠 갱신 계측
   return getMedia(db, await lastId(db));
 }

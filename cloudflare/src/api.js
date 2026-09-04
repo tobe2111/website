@@ -588,6 +588,112 @@ export async function adminPlaceSearch(ctx) {
   })) });
 }
 
+// ---------- 웹에서 가게 사진 찾아 담기 ----------
+//
+// 지도(로컬) 검색은 사진을 주지 않는다 — 상호·주소·전화·업종·좌표뿐이다.
+// 사진은 **이미지 검색**이라는 별개의 창구에서 온다. 열쇠는 같은 것을 쓴다.
+//
+// ⚠️ 여기서 오는 것은 '그 가게의 공식 사진' 이 아니라 **웹에서 그 이름으로 검색된 사진**이다.
+//    남의 블로그 후기 사진, 다른 지점, 아예 상관없는 사진이 섞여 나온다. 그래서
+//    ① 사람이 눈으로 고르고 ② 최대 다섯 장까지만 담고 ③ 출처를 함께 저장한다.
+//    출처를 안 남기면 나중에 내려 달라는 요청이 왔을 때 어느 사진인지 찾을 수조차 없다.
+const IMPORT_MAX = 5;
+export async function adminImageSearch(ctx) {
+  const { env, query } = ctx;
+  const json = (o, status = 200) => new Response(JSON.stringify(o), {
+    status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
+  const key = String(env.KAKAO_REST_KEY || "").trim();
+  if (!key) return json({ error: "not_configured", message: "이미지 검색 열쇠가 등록되지 않았습니다. 운영사에 문의해 주세요." }, 503);
+  const q = cap((query.get("q") || "").trim(), 60);
+  if (q.length < 2) return json({ images: [] });
+  const url = new URL("https://dapi.kakao.com/v2/search/image");
+  url.searchParams.set("query", q);
+  url.searchParams.set("size", "24");
+  let r;
+  try {
+    r = await fetch(url, { headers: { Authorization: `KakaoAK ${key}` } });
+  } catch {
+    return json({ error: "unreachable", message: "이미지 검색에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요." }, 502);
+  }
+  if (!r.ok) return json({ error: "upstream", message: `이미지 검색이 ${r.status} 로 답했습니다.` }, 502);
+  const data = await r.json().catch(() => null);
+  const docs = (data && Array.isArray(data.documents) ? data.documents : []);
+  return json({ max: IMPORT_MAX, images: docs.filter((d) => httpsOnly(d.image_url)).slice(0, 24).map((d) => ({
+    url: String(d.image_url), thumb: httpsOnly(d.thumbnail_url) ? String(d.thumbnail_url) : String(d.image_url),
+    site: cap(String(d.display_sitename || ""), 60),
+    doc: httpsOnly(d.doc_url) ? String(d.doc_url) : "",
+    w: Number(d.width) || 0, h: Number(d.height) || 0,
+  })) });
+}
+const httpsOnly = (u) => { try { return new URL(String(u)).protocol === "https:"; } catch { return false; } };
+
+// 고른 사진을 우리 저장소로 가져온다.
+//
+// 주소를 화면에서 받아 그대로 fetch 하면, 그 칸이 곧 **우리 서버로 아무 주소나 찌르는 창구**가 된다
+// (SSRF). 그래서 두 겹으로 막는다:
+//   ① 같은 검색어로 **서버가 직접 다시 검색**해, 그 결과에 없는 주소는 통째로 버린다
+//   ② 그래도 https·공개 도메인만, 내부망·IP 주소는 거부한다 (웹훅 주소와 같은 잣대)
+export async function adminImportPhotos(ctx) {
+  const { db, env, form, base, assoc } = ctx;
+  const b = await D.getBusinessById(db, Number(ctx.params.id) || 0);
+  if (!b || b.association_id !== assoc.id) return back(`${base}/admin`, "업체를 찾을 수 없습니다.", true);
+  const at = (m, bad) => back(`${base}/admin/business/${b.id}`, m, bad);
+  const key = String(env.KAKAO_REST_KEY || "").trim();
+  if (!key) return at("이미지 검색 열쇠가 등록되지 않았습니다.", true);
+  if (!storage.enabled(env)) return at("사진 저장소(R2)가 아직 연결되지 않았습니다.", true);
+
+  const q = cap((form.get("q") || "").trim(), 60);
+  const picked = form.getAll("url").map(String).filter(Boolean).slice(0, IMPORT_MAX);
+  if (!q || !picked.length) return at("가져올 사진을 골라 주세요.", true);
+
+  const plan = planOf(assoc);
+  const have = await D.countBusinessImages(db, b.id);
+  if (have >= plan.maxPhotos) return at(`사진은 최대 ${plan.maxPhotos}장까지 올릴 수 있습니다.`, true);
+  const room = Math.min(IMPORT_MAX, plan.maxPhotos - have);
+
+  // ① 서버가 같은 검색어로 다시 물어, 실제로 그 결과에 있던 주소만 통과시킨다
+  let allow = new Map();
+  try {
+    const u = new URL("https://dapi.kakao.com/v2/search/image");
+    u.searchParams.set("query", q); u.searchParams.set("size", "24");
+    const r = await fetch(u, { headers: { Authorization: `KakaoAK ${key}` } });
+    if (!r.ok) return at("이미지 검색을 다시 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.", true);
+    for (const d of ((await r.json()).documents || [])) {
+      if (httpsOnly(d.image_url)) allow.set(String(d.image_url),
+        { site: cap(String(d.display_sitename || ""), 60), doc: httpsOnly(d.doc_url) ? String(d.doc_url) : "" });
+    }
+  } catch {
+    return at("이미지 검색에 연결하지 못했습니다.", true);
+  }
+
+  let saved = 0, skipped = 0;
+  for (const raw of picked) {
+    if (saved >= room) break;
+    const meta = allow.get(raw);
+    // ② 검색 결과에 없던 주소 = 화면이 아니라 누군가 손으로 넣은 것. 버린다.
+    if (!meta) { skipped++; continue; }
+    const chk = checkWebhookUrl(raw, env.PUBLIC_ORIGIN || "");   // https · 공개 도메인 · 내부망 금지
+    if (!chk.ok) { skipped++; continue; }
+    let res;
+    try { res = await fetch(raw, { redirect: "follow" }); } catch { skipped++; continue; }
+    if (!res.ok) { skipped++; continue; }
+    const len = Number(res.headers.get("content-length") || 0);
+    if (len && len > MAX_IMAGE_BYTES) { skipped++; continue; }
+    const buf = new Uint8Array(await res.arrayBuffer());
+    if (buf.byteLength > MAX_IMAGE_BYTES) { skipped++; continue; }
+    const real = sniffImage(buf);            // 확장자·헤더가 아니라 실제 바이트로 판정
+    if (!real) { skipped++; continue; }
+    const stored = await storage.save(env, buf, real);
+    await D.addMedia(db, { businessId: b.id, kind: "image", filename: stored, size: buf.byteLength,
+      caption: "", sourceName: meta.site, sourceUrl: meta.doc });
+    saved++;
+  }
+  const tail = skipped ? ` (${skipped}장은 가져오지 못했습니다)` : "";
+  return saved
+    ? at(`사진 ${saved}장을 담았습니다.${tail} 사장님 사진이 들어오면 바꿔 주세요.`)
+    : at(`사진을 가져오지 못했습니다.${tail}`, true);
+}
+
 // ---------- 사진 업로드 (R2) ----------
 export async function uploadMedia(ctx) {
   const { db, env, form, user, base, assoc } = ctx;
