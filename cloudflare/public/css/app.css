@@ -3260,3 +3260,13 @@ a.deal-card:hover{border-color:var(--deal);transition:border-color .18s}
   .st-acts{grid-template-columns:minmax(0,1fr)}
   .spark{height:56px}
 }
+
+/* 회비 — 요약 두 칸과 기본 금액 한 줄. 표는 데이터 표(.dtable)를 그대로 씁니다. */
+.due-sum{grid-template-columns:repeat(2,minmax(0,1fr));margin-bottom:16px}
+.due-set{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+.due-set .mini-label{flex:0 0 auto}
+.due-set input{width:140px}
+.due-set .panel-hint{flex:1 1 260px;margin:0 0 4px}
+.due-form{display:inline-flex;align-items:center;gap:6px}
+.due-amt{width:104px;text-align:right}
+@media (max-width:520px){ .due-sum{grid-template-columns:minmax(0,1fr)} }

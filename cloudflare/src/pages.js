@@ -1747,16 +1747,52 @@ export async function admin(ctx) {
   // 회비 장부: ?due_period=YYYY-MM (기본 이번 달)
   const duePeriod = duePeriod0;
   const paidSet = new Set(dueRowsRaw.map((r) => r.user_id));
-  const dueRows = members.map((m) => `<tr><td>${esc(m.name)}<br /><small>${esc(m.business_name || "")}</small></td>
-    <td>${paidSet.has(m.id) ? '<span class="badge badge-ok">납부</span>' : '<span class="badge badge-wait">미납</span>'}</td>
-    <td class="actions-cell"><form method="post" action="${base}/admin/dues" class="inline-form">
-      <input type="hidden" name="period" value="${esc(duePeriod)}" /><input type="hidden" name="user_id" value="${m.id}" /><input type="hidden" name="on" value="${paidSet.has(m.id) ? "0" : "1"}" />
-      <button class="btn btn-xs ${paidSet.has(m.id) ? "btn-ghost" : "btn-primary"}">${paidSet.has(m.id) ? "납부 취소" : "납부 체크"}</button></form></td></tr>`).join("")
-    || `<tr><td colspan="3" class="empty">회원이 없습니다.</td></tr>`;
-  const duesPanel = `<section class="panel" id="p-dues"><div class="panel-head"><h2 class="panel-title">회비 장부 <span class="badge badge-muted">${paidSet.size}/${members.length} 납부</span></h2>
+  const paidAmt = new Map(dueRowsRaw.map((r) => [r.user_id, Number(r.amount) || 0]));
+  const won = (v) => (Number(v) || 0).toLocaleString("ko-KR");
+  const dueRows = members.map((m) => {
+    const on = paidSet.has(m.id);
+    const amt = paidAmt.get(m.id) || 0;
+    return `<tr>
+      <td data-th="회원"><span class="dt-main">${esc(m.name)}</span><span class="dt-sub">${esc(m.business_name || "-")}</span></td>
+      <td data-th="상태">${on ? '<span class="badge badge-ok">납부</span>' : '<span class="badge badge-wait">미납</span>'}</td>
+      <td data-th="금액" class="num">${on ? (amt ? `<b>${won(amt)}원</b>` : '<span class="txt-muted">금액 없음</span>') : ""}</td>
+      <td class="act"><form method="post" action="${base}/admin/dues" class="inline-form due-form">
+        <input type="hidden" name="period" value="${esc(duePeriod)}" /><input type="hidden" name="user_id" value="${m.id}" />
+        <input type="hidden" name="on" value="${on ? "0" : "1"}" />
+        ${on ? "" : `<input type="text" name="amount" inputmode="numeric" class="due-amt" aria-label="${esc(m.name)}님이 낸 금액"
+            value="${assoc.dues_amount ? won(assoc.dues_amount) : ""}" placeholder="금액" maxlength="11" />`}
+        <button class="btn btn-xs ${on ? "btn-ghost" : "btn-primary"}">${on ? "납부 취소" : "납부 체크"}</button></form></td></tr>`;
+  }).join("") || `<tr><td colspan="4" class="empty">회원이 없습니다.</td></tr>`;
+  // 회비 요약 — 임원이 총회에서 읽는 것은 두 줄이다: 얼마 걷혔나 / 누가 안 냈나.
+  // 예전에는 '냈다/안 냈다' 체크뿐이라 그 두 줄을 만들 수 없었고, 결국 엑셀을 따로 썼다.
+  // 장부가 둘이면 반드시 어긋난다.
+  const collected = dueRowsRaw.reduce((n, r) => n + (Number(r.amount) || 0), 0);
+  const expected = (assoc.dues_amount || 0) * members.length;
+  const unpaidN = Math.max(0, members.length - paidSet.size);
+  const duesPanel = `<section class="panel" id="p-dues"><div class="panel-head">
+      <h2 class="panel-title">회비 장부 <span class="badge badge-muted">${paidSet.size}/${members.length} 납부</span></h2>
       <form method="get" action="${base}/admin" class="inline-form"><input type="month" name="due_period" value="${esc(duePeriod)}" data-autosubmit /><button class="btn btn-xs btn-ghost">이동</button></form></div>
-    <p class="panel-hint">납부 <b>기록</b>만 남기는 장부입니다(결제 아님). 월을 바꿔 지난 달 현황도 볼 수 있습니다.</p>
-    <div class="table-scroll"><table class="admin-table"><thead><tr><th>회원</th><th>${esc(duePeriod)}</th><th>처리</th></tr></thead><tbody>${dueRows}</tbody></table></div></section>`;
+    <p class="panel-hint">납부 <b>기록</b>만 남기는 장부입니다(결제 아님 — 돈은 계좌로 받으시고 여기에 적으세요).
+      월을 바꿔 지난 달 현황도 볼 수 있습니다.</p>
+
+    <ul class="st-acts due-sum">
+      <li><b>${won(collected)}원</b><span class="st-act-l">${esc(duePeriod)} 걷힘</span>
+        <span class="st-act-w">${assoc.dues_amount ? `받을 것 ${won(expected)}원 중` : "기본 회비를 정하면 받을 금액도 함께 나옵니다"}</span></li>
+      <li><b>${unpaidN}명</b><span class="st-act-l">미납</span>
+        <span class="st-act-w">${unpaidN ? `<a href="${base}/admin/dues/unpaid.csv?period=${encodeURIComponent(duePeriod)}">명단 CSV로 받기</a>` : "모두 내셨습니다"}</span></li>
+    </ul>
+
+    <form method="post" action="${base}/admin/dues/amount" class="inline-form due-set">
+      <label class="mini-label">기본 월 회비
+        <input type="text" name="dues_amount" inputmode="numeric" maxlength="11"
+          value="${assoc.dues_amount ? won(assoc.dues_amount) : ""}" placeholder="예: 30000" /></label>
+      <button class="btn btn-ghost btn-sm">저장</button>
+      <span class="panel-hint">한 번 정해 두면 납부 체크할 때 이 금액이 자동으로 들어갑니다. 사람마다 다르면 그 자리에서 고치면 됩니다.</span>
+    </form>
+
+    <div class="dtable-wrap"><table class="dtable">
+      <thead><tr><th>회원</th><th>${esc(duePeriod)}</th><th class="num">금액</th><th class="act">처리</th></tr></thead>
+      <tbody>${dueRows}</tbody></table></div></section>`;
   // ----- 알림톡: 잔액·충전 신청·발송 이력 -----
   const [balance, msgStats, msgs, orders, unitPrice] = await Promise.all([
     D.getBalance(db, assoc.id), D.messageStats(db, assoc.id), D.listMessages(db, assoc.id, 10),
@@ -2273,6 +2309,19 @@ export async function adminExportMembers(ctx) {
   const lines = [["이름", "이메일", "업체명", "역할"], ...members.map((m) => [m.name, m.email, m.business_name || "", m.role])];
   const csv = "﻿" + lines.map((r) => r.map(csvCell).join(",")).join("\r\n");
   return text(csv, 200, { "content-type": "text/csv; charset=utf-8", "content-disposition": `attachment; filename="members_${assoc.slug}.csv"`, "cache-control": "no-store" });
+}
+
+// 미납 명단 — 임원이 실제로 하는 일은 이 명단을 들고 전화를 도는 것이다.
+// 화면에서 세는 것만으로는 그 일을 못 한다.
+export async function adminExportUnpaid(ctx) {
+  const { db, assoc, query } = ctx;
+  const period = /^\d{4}-\d{2}$/.test(query.get("period") || "") ? query.get("period") : D.kstToday().slice(0, 7);
+  const rows = await D.unpaidMembers(db, assoc.id, period);
+  const lines = [["가게", "사장님", "연락처"],
+    ...rows.map((r) => [r.business_name || "", r.name || "", D.formatPhone(r.phone)])];
+  const csv = "\ufeff" + lines.map((r) => r.map(csvCell).join(",")).join("\r\n");
+  return text(csv, 200, { "content-type": "text/csv; charset=utf-8",
+    "content-disposition": `attachment; filename="unpaid_${assoc.slug}_${period}.csv"`, "cache-control": "no-store" });
 }
 
 // 행사 참가자 명단 — 자리·다과·상품권을 이 명단으로 준비한다.

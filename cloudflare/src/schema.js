@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS associations (
   naver_verification TEXT NOT NULL DEFAULT '',  -- 네이버 서치어드바이저 소유 확인 코드
   google_verification TEXT NOT NULL DEFAULT '', -- 구글 서치콘솔 소유 확인 코드
   ga_measurement_id TEXT NOT NULL DEFAULT '',  -- 구글 애널리틱스(GA4) 측정 ID 'G-XXXXXXX'
+  dues_amount INTEGER NOT NULL DEFAULT 0,      -- 기본 월 회비(원). 0 = 안 정함(금액 없이 체크만)
   plan        TEXT NOT NULL DEFAULT 'free',   -- 요금제(free|basic|pro)
   -- 조직 유형. merchant  = 상인회 홈페이지(점포·지도·공지 + 전자계약),
   --            esign     = 전자계약만 쓰는 조직(법무·부동산 등),
@@ -217,6 +218,7 @@ CREATE TABLE IF NOT EXISTS dues (
   association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
   user_id        INTEGER NOT NULL,
   period         TEXT NOT NULL,               -- YYYY-MM (월별 회비)
+  amount         INTEGER NOT NULL DEFAULT 0,  -- 낸 금액(원). 0 = 금액 없이 체크만 한 기록
   memo           TEXT NOT NULL DEFAULT '',
   created_at     TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE(association_id, user_id, period)
@@ -747,7 +749,7 @@ CREATE INDEX IF NOT EXISTS idx_landing_asset_assoc ON landing_assets(association
 // 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
 // 마이그레이션 세대 — migrateColumns 에 단계를 추가할 때마다 +1
 // 36 = 두 갈래(트렁크 33 · 모집형 35)를 합친 세대. 양쪽 DB 모두 다시 한 번 마이그레이션을 타게 한다.
-export const SCHEMA_VERSION = "49";
+export const SCHEMA_VERSION = "50";
 
 export async function ensureSchema(db) {
   const has = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='associations'").first();
@@ -1054,6 +1056,17 @@ async function migrateColumns(db) {
   const bcols = (await db.prepare("PRAGMA table_info(doc_batches)").all()).results || [];
   if (bcols.length && !bcols.some((c) => c.name === "team_id"))
     await db.prepare("ALTER TABLE doc_batches ADD COLUMN team_id INTEGER NOT NULL DEFAULT 0").run();
+  // v50: 회비를 금액으로 적는다. 예전에는 '냈다/안 냈다' 체크뿐이라 얼마가 걷혔는지
+  // 알 수 없었고, 임원이 결국 엑셀을 따로 썼다. 그러면 두 장부가 어긋난다.
+  // amount 0 은 '금액 없이 체크만 한 옛 기록' 이다 — 지우지 않는다.
+  {
+    const dc = (await db.prepare("PRAGMA table_info(dues)").all()).results || [];
+    if (dc.length && !dc.some((c) => c.name === "amount"))
+      await db.prepare("ALTER TABLE dues ADD COLUMN amount INTEGER NOT NULL DEFAULT 0").run();
+    if (cols.length && !cols.some((c) => c.name === "dues_amount"))
+      await db.prepare("ALTER TABLE associations ADD COLUMN dues_amount INTEGER NOT NULL DEFAULT 0").run();
+  }
+
   // v49: 가게별 열람 수. 상인회가 재계약할 때 실제로 묻는 것은 "우리 골목에서 어느 가게가
   // 잘 보였나" 인데, 지금까지는 상인회 전체 합계만 있고 가게별 숫자가 없었다.
   // 하루 한 줄로 접어 둔다 — 방문 한 건씩 남기면 표가 금세 못 쓰게 커진다.

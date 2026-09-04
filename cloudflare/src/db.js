@@ -661,12 +661,40 @@ export const listRsvpsByAssoc = (db, aid) =>
            WHERE r.association_id=? ORDER BY r.created_at`, aid);
 
 // ----- 회비 장부 (납부 기록만 — 결제 아님) -----
-export const setDuePaid = (db, aid, userId, period) =>
-  run(db, "INSERT OR IGNORE INTO dues (association_id, user_id, period) VALUES (?,?,?)", aid, userId, period);
+export const setDuesAmount = (db, aid, won) =>
+  run(db, "UPDATE associations SET dues_amount=? WHERE id=?", Math.max(0, Number(won) || 0), aid);
+
+// 이번 달 회비가 얼마나 걷혔나 — 임원이 총회에서 읽는 두 줄(걷힘 / 받을 것)이다.
+// 금액 없이 체크만 한 옛 기록(amount=0)은 '냈다' 로는 세되 금액에는 더하지 않는다.
+export async function duesSummary(db, aid, period, dueAmount) {
+  const paid = await first(db, `SELECT COUNT(*) AS n, COALESCE(SUM(amount),0) AS won
+    FROM dues WHERE association_id=? AND period=?`, aid, period);
+  const members = await first(db, "SELECT COUNT(*) AS n FROM users WHERE association_id=? AND role='MERCHANT'", aid);
+  const total = members.n || 0, paidN = paid.n || 0;
+  return {
+    total, paid: paidN, unpaid: Math.max(0, total - paidN),
+    collected: paid.won || 0,
+    expected: (Number(dueAmount) || 0) * total,
+  };
+}
+// 미납 명단 — 임원이 실제로 하는 일은 이 명단을 들고 전화를 도는 것이다.
+export const unpaidMembers = (db, aid, period) =>
+  all(db, `SELECT u.id, u.name, u.phone, b.name AS business_name
+    FROM users u LEFT JOIN businesses b ON b.owner_id = u.id
+    WHERE u.association_id=? AND u.role='MERCHANT'
+      AND NOT EXISTS (SELECT 1 FROM dues d WHERE d.association_id=u.association_id AND d.user_id=u.id AND d.period=?)
+    ORDER BY b.name, u.name`, aid, period);
+
+// 다시 체크하면 금액을 고친다 — 처음에 기본값으로 넣었다가 실제로 받은 금액이 다를 때
+// 지웠다 다시 넣게 하면 임원이 그냥 엑셀로 돌아간다.
+export const setDuePaid = (db, aid, userId, period, amount = 0) =>
+  run(db, `INSERT INTO dues (association_id, user_id, period, amount) VALUES (?,?,?,?)
+    ON CONFLICT(association_id, user_id, period) DO UPDATE SET amount=excluded.amount`,
+    aid, userId, period, Math.max(0, Number(amount) || 0));
 export const setDueUnpaid = (db, aid, userId, period) =>
   run(db, "DELETE FROM dues WHERE association_id=? AND user_id=? AND period=?", aid, userId, period);
 export const listDuesForPeriod = (db, aid, period) =>
-  all(db, "SELECT user_id FROM dues WHERE association_id=? AND period=?", aid, period);
+  all(db, "SELECT user_id, amount FROM dues WHERE association_id=? AND period=?", aid, period);
 export async function moveProduct(db, id, dir) {
   const p = await getProduct(db, id); if (!p) return;
   const neighbor = await first(db,
