@@ -3226,3 +3226,37 @@ a.deal-card:hover{border-color:var(--deal);transition:border-color .18s}
   .deal-row{grid-template-columns:minmax(0,1fr)}
   .deal-thumb{height:170px}
 }
+
+/* ── 성과 화면 ────────────────────────────────────────────────────
+   상인회가 총회에서 보여 주는 숫자입니다. 그래서 화면의 목적이 '분석' 이 아니라
+   '보여 주기' 입니다 — 큰 숫자 하나, 추이 한 줄, 사장님께 그대로 읽어 줄 표 하나. */
+.st-head{display:flex;align-items:flex-end;gap:clamp(20px,4vw,44px);flex-wrap:wrap;margin-bottom:26px}
+.st-big{flex:none}
+.st-big b{display:block;font-size:clamp(2.2rem,5vw,3rem);font-weight:800;letter-spacing:-.04em;
+  line-height:1;font-variant-numeric:tabular-nums;color:var(--ink)}
+.st-big > span{display:block;margin-top:6px;font-size:13.5px;color:var(--muted)}
+.st-up,.st-down,.st-flat,.st-new{display:inline-block;margin-top:8px;font-size:13px;font-weight:700}
+.st-up{color:var(--ok-fg)}
+.st-down{color:var(--no-fg)}
+.st-flat,.st-new{color:var(--muted)}
+
+/* 추이 — 눈금도 범례도 없습니다. 여기서 읽을 것은 '늘고 있나' 하나뿐입니다 */
+.spark{flex:1 1 320px;min-width:0;display:flex;align-items:flex-end;gap:2px;height:72px}
+.spark-bar{flex:1;min-width:0;background:var(--brand);border-radius:2px 2px 0 0;opacity:.85}
+.spark-bar:hover{opacity:1}
+.spark-axis{flex-basis:100%;display:flex;justify-content:space-between;
+  font-size:12px;color:var(--muted);margin-top:6px}
+
+/* 손님이 한 일 — 숫자가 먼저, 그 숫자가 무슨 뜻인지가 뒤 */
+.st-acts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin:0 0 4px;padding:0;list-style:none}
+.st-acts li{display:flex;flex-direction:column;gap:3px;padding:14px 16px;
+  background:var(--bg-alt);border-radius:var(--r-md)}
+.st-acts b{font-size:1.6rem;font-weight:800;line-height:1.1;font-variant-numeric:tabular-nums;color:var(--ink)}
+.st-act-l{font-size:13.5px;font-weight:600;color:var(--ink)}
+.st-act-w{font-size:12px;color:var(--muted);line-height:1.5}
+
+@media (max-width:820px){ .st-acts{grid-template-columns:repeat(2,minmax(0,1fr))} }
+@media (max-width:520px){
+  .st-acts{grid-template-columns:minmax(0,1fr)}
+  .spark{height:56px}
+}

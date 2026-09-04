@@ -182,6 +182,34 @@ export function bumpHomeGoal(db, aid, variant, goal) {
   return run(db, `INSERT INTO landing_views (association_id, variant, day, views, ${col}) VALUES (?,?,?,0,1)
     ON CONFLICT(association_id, variant, day) DO UPDATE SET ${col} = ${col} + 1`, aid, variant, kstToday());
 }
+// ── 가게별 열람 수 ─────────────────────────────────────────────────
+// 상인회가 재계약할 때 실제로 묻는 것은 "우리 골목에서 어느 가게가 잘 보였나" 다.
+// 지금까지는 상인회 전체 합계만 있어서, 회장님이 사장님께 보여 줄 것이 없었다.
+export const bumpBusinessView = (db, bizId, aid) =>
+  run(db, `INSERT INTO business_views (business_id, association_id, day, views) VALUES (?,?,?,1)
+    ON CONFLICT(business_id, day) DO UPDATE SET views = views + 1`, bizId, aid, kstToday());
+
+// 많이 본 순서. 0회인 가게는 넣지 않는다 — "안 본 가게" 목록을 회장님이 사장님께
+// 보여 줄 일은 없고, 그 줄이 길어지면 정작 잘 된 가게가 안 보인다.
+export const topBusinesses = (db, aid, { days = 30, limit = 8 } = {}) =>
+  all(db, `SELECT b.id, b.name, b.slug, b.category, SUM(v.views) AS views
+    FROM business_views v JOIN businesses b ON b.id = v.business_id
+    WHERE v.association_id=? AND v.day >= date('now','+9 hours',?) AND b.status='approved'
+    GROUP BY b.id ORDER BY views DESC, b.name LIMIT ?`, aid, `-${Number(days) || 30} days`, limit);
+
+// 손님이 홈에서 무엇을 했나 (최근 N일). 방문·가게 열람·찾기·입점 신청·전화.
+export const homeOutcomes = async (db, aid, days = 30) =>
+  (await first(db, `SELECT COALESCE(SUM(views),0) views, COALESCE(SUM(bizviews),0) bizviews,
+      COALESCE(SUM(finds),0) finds, COALESCE(SUM(signups),0) signups, COALESCE(SUM(calls),0) calls
+    FROM landing_views WHERE association_id=? AND day >= date('now','+9 hours',?)`,
+    aid, `-${Number(days) || 30} days`)) || { views: 0, bizviews: 0, finds: 0, signups: 0, calls: 0 };
+
+// 날짜별 방문 (막대 하나가 하루). 빈 날은 여기서 채우지 않는다 — 화면에서 채운다.
+export const visitsByDay = (db, aid, days = 30) =>
+  all(db, `SELECT day, SUM(views) AS views FROM landing_views
+    WHERE association_id=? AND day >= date('now','+9 hours',?) GROUP BY day ORDER BY day`,
+    aid, `-${Number(days) || 30} days`);
+
 // 사본별 성과 (최근 N일). 방문이 얇으면 비율은 우연이라, 화면에서 그렇게 말해 준다.
 export const homeVariantStats = (db, aid, days = 30) =>
   all(db, `SELECT variant,

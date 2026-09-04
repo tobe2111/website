@@ -230,7 +230,7 @@ test("관리 화면은 하는 일별 탭으로 나뉜다", async () => {
   const html = await (await f("/t/tabs/admin", { headers: { cookie: jar } })).text();
 
   const tabs = [...html.matchAll(/<div class="sgroup" id="s-(\w+)"/g)].map((m) => m[1]);
-  assert.deepEqual(tabs, ["home", "people", "content", "inbox", "notify", "settings"]);
+  assert.deepEqual(tabs, ["home", "people", "content", "inbox", "stats", "notify", "settings"]);
   assert.match(html, /id="consoleNav"/, "탭 장치가 붙을 자리가 있어야");
   assert.match(html, /super-tabs\.js/, "탭 장치를 싣어야");
 

@@ -721,6 +721,10 @@ export async function businessDetail(ctx) {
   // A/B — 이 방문이 어느 홈 사본에서 시작됐는지 세어 둔다. "그 홈이 가게를 보게 만드는가".
   await countHomeGoal(ctx, "bizview");
   const b = await D.getBusinessBySlug(db, assoc.id, params.slug);
+  // 이 가게가 몇 번 보였는지도 따로 센다 — 상인회가 사장님께 보여 줄 숫자다.
+  // 봇·연타를 거르는 잣대는 위 홈 성과와 같은 것을 써야 숫자끼리 비교가 된다.
+  if (b && b.status === "approved" && countable(ctx, "biz:" + b.id, "bizview"))
+    await D.bumpBusinessView(db, b.id, assoc.id).catch(() => {});
   const canSee = b && (b.status === "approved" || (user && (user.id === b.owner_id || user.role === "SUPERADMIN" || (user.role === "ADMIN" && user.association_id === assoc.id))));
   if (!canSee) return notFoundResponse(ctx);
   const [media, prods, coupons, updates, others] = await Promise.all([
@@ -1432,7 +1436,7 @@ export async function admin(ctx) {
   const BIZ_PER = 50;
   const bizPage = Math.max(1, parseInt(query.get("bp") || "1", 10) || 1);
   const inboxStatus = D.LEAD_STATUSES.includes(query.get("is")) ? query.get("is") : "";
-  const [s, all, notices, events, members, admins, notifs, unread, auditLog, met, assocProducts, allRsvps, dueRowsRaw, visitsRaw, popupList, bizPageData, bizCounts, inbox, inboxCounts] = await Promise.all([
+  const [s, all, notices, events, members, admins, notifs, unread, auditLog, met, assocProducts, allRsvps, dueRowsRaw, visitsRaw, popupList, bizPageData, bizCounts, inbox, inboxCounts, topBiz, outcomes, byDay] = await Promise.all([
     D.stats(db, assoc.id),
     D.listAllBusinesses(db, assoc.id),
     D.listNotices(db, assoc.id),
@@ -1452,6 +1456,9 @@ export async function admin(ctx) {
     D.businessStatusCounts(db, assoc.id),
     D.listLeads(db, assoc.id, { source: "contact", status: inboxStatus, limit: 100 }).catch(() => []),
     D.leadStatusCounts(db, assoc.id, "contact").catch(() => ({ all: 0 })),
+    D.topBusinesses(db, assoc.id, { days: 30, limit: 8 }).catch(() => []),
+    D.homeOutcomes(db, assoc.id, 30).catch(() => ({ views: 0, bizviews: 0, finds: 0, signups: 0, calls: 0 })),
+    D.visitsByDay(db, assoc.id, 30).catch(() => []),
   ]);
   const today = new Date().toISOString().slice(0, 10);
   const visits = { cur: Number(visitsRaw && visitsRaw.cur) || 0, prev: Number(visitsRaw && visitsRaw.prev) || 0 };
@@ -1858,12 +1865,87 @@ export async function admin(ctx) {
       : `<div class="dt-empty"><b>${inboxStatus ? "그 상태인 문의가 없습니다" : "아직 들어온 문의가 없습니다"}</b>
          ${inboxStatus ? `<a href="${base}/admin#s-inbox">전체 보기</a>` : "홈페이지 아래 <b>문의하기</b> 로 들어옵니다."}</div>`}</section>`;
 
+  // ── 성과 화면 ───────────────────────────────────────────────────
+  //
+  // 상인회가 재계약할 때 실제로 묻는 것은 "그래서 우리한테 뭐가 좋았냐" 다.
+  // 지금까지는 그 답이 화면 어디에도 없었다 — 회장님이 총회에서 보여 줄 것이 없으면
+  // 홈페이지는 '작년에 만든 것' 이 되고, 다음 해 예산에서 빠진다.
+  //
+  // 숫자를 늘어놓지 않는다. 세 가지만 답한다:
+  //   ① 사람이 오긴 오나 (방문, 지난주 대비)
+  //   ② 와서 가게를 보나 (가게 열람·찾기·전화·입점 신청)
+  //   ③ 어느 가게가 잘 됐나 (사장님께 그대로 보여 줄 수 있는 줄)
+  const statsPanel = (() => {
+    const n = (v) => (Number(v) || 0).toLocaleString("ko-KR");
+    const delta = visits.prev > 0
+      ? Math.round(((visits.cur - visits.prev) / visits.prev) * 100)
+      : (visits.cur > 0 ? null : 0);
+    const deltaTxt = delta === null ? '<span class="st-new">첫 주</span>'
+      : delta === 0 ? '<span class="st-flat">지난주와 같음</span>'
+      : `<span class="${delta > 0 ? "st-up" : "st-down"}">지난주보다 ${delta > 0 ? "+" : ""}${delta}%</span>`;
+
+    // 막대 — 빈 날도 자리를 차지해야 '며칠 쉬었는지' 가 보인다
+    const days = 30;
+    const byDayMap = new Map(byDay.map((r) => [r.day, Number(r.views) || 0]));
+    const bars = [];
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date(Date.now() + 9 * 3600 * 1000 - i * 86400000).toISOString().slice(0, 10);
+      bars.push([d, byDayMap.get(d) || 0]);
+    }
+    const peak = Math.max(1, ...bars.map(([, v]) => v));
+    const chart = `<div class="spark" role="img" aria-label="최근 30일 방문 — 하루 최대 ${peak}회">
+      ${bars.map(([d, v]) => `<span class="spark-bar" style="height:${Math.max(2, Math.round((v / peak) * 100))}%" title="${esc(d)} · ${n(v)}회"></span>`).join("")}
+    </div><div class="spark-axis"><span>30일 전</span><span>오늘</span></div>`;
+
+    // 손님이 한 일 — '몇 %' 로 뭉개지 않는다. 홈을 연 사람 중 몇 명이 그걸 했는지로 적는다.
+    const rate = (v) => (outcomes.views > 0 ? `홈을 연 ${Math.round((v / outcomes.views) * 100)}%` : "");
+    const acts = [
+      ["가게를 열어 봤다", outcomes.bizviews, "홈이 가게를 보게 만들었는가"],
+      ["검색·지도를 썼다", outcomes.finds, "찾는 것을 도왔는가"],
+      ["전화를 걸었다", outcomes.calls, "손님이 실제로 가게에 닿았는가"],
+      ["입점 신청을 했다", outcomes.signups, "새 회원이 들어오는 길"],
+    ];
+    const thin = outcomes.views < 30;
+
+    const topRows = topBiz.map((b, i) => `<tr>
+      <td data-th="순위" class="num"><b>${i + 1}</b></td>
+      <td data-th="가게"><a class="dt-main" href="${base}/business/${esc(b.slug)}" target="_blank" rel="noopener">${esc(b.name)}</a>
+        <span class="dt-sub">${esc(b.category || "업종 미지정")}</span></td>
+      <td data-th="열람" class="num"><b>${n(b.views)}</b>회</td>
+    </tr>`).join("");
+
+    return `<section class="panel" id="p-stats"><div class="panel-head">
+        <h2 class="panel-title">성과 <span class="badge badge-muted">최근 30일</span></h2></div>
+      <p class="panel-hint">총회에서 그대로 보여 주실 수 있는 숫자입니다. 방문은 검색 로봇과 새로고침 연타를 뺀 것입니다.</p>
+
+      <div class="st-head">
+        <div class="st-big"><b>${n(visits.cur)}</b><span>이번 주 방문</span>${deltaTxt}</div>
+        ${chart}
+      </div>
+
+      <div class="form-divider">손님이 무엇을 했나</div>
+      ${thin ? `<p class="panel-hint">아직 방문이 ${n(outcomes.views)}회라 비율은 우연일 수 있습니다 — 숫자만 보세요.</p>` : ""}
+      <ul class="st-acts">${acts.map(([label, v, why]) => `<li>
+        <b>${n(v)}</b><span class="st-act-l">${label}</span>
+        <span class="st-act-w">${esc(why)}${thin || !v ? "" : " · " + rate(v)}</span></li>`).join("")}</ul>
+
+      <div class="form-divider">많이 본 가게</div>
+      ${topBiz.length ? `<div class="dtable-wrap"><table class="dtable">
+          <thead><tr><th class="num">순위</th><th>가게</th><th class="num">열람</th></tr></thead>
+          <tbody>${topRows}</tbody></table></div>
+        <p class="panel-hint">사장님께 그대로 보여 드릴 수 있는 줄입니다. 열람이 0인 가게는 넣지 않습니다.</p>`
+        : `<div class="dt-empty"><b>아직 열람 기록이 없습니다</b>
+           손님이 가게 페이지를 열면 여기에 쌓입니다.</div>`}
+    </section>`;
+  })();
+
   const ADMIN_TABS = [
     ["home", "현황", "", unread || 0],
     [isEsign ? "people" : "people", isEsign ? "담당자" : "회원·점포", "", isEsign ? 0 : (s.pending || 0)],
     ...(isEsign ? [] : [["content", isFranchise ? "가맹점·콘텐츠" : "콘텐츠", "", 0]]),
     // 문의함 — 아직 답 안 한 건수를 그대로 단다. 0 이면 배지가 없다.
     ...(isEsign || isFranchise ? [] : [["inbox", "문의", "", inboxCounts.new || 0]]),
+    ...(isEsign || isFranchise ? [] : [["stats", "성과", "", 0]]),
     ["notify", "알림톡", "", 0],
     ["settings", "설정", "", 0],
   ];
@@ -2076,6 +2158,7 @@ ${abPanel}`}
     ${isEsign ? "" : "</div>"}
 
     ${isEsign || isFranchise ? "" : `<div class="sgroup" id="s-inbox" data-tab="inbox">${inboxPanel}</div>`}
+    ${isEsign || isFranchise ? "" : `<div class="sgroup" id="s-stats" data-tab="stats">${statsPanel}</div>`}
 
     <div class="sgroup" id="s-notify" data-tab="notify">${notifyPanel}</div>
 
