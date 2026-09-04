@@ -162,7 +162,11 @@ ${workScreen ? "" : `<footer class="site-footer"><div class="container">
     </div>
   </div>
 </div></footer>`}
-<script src="${assetUrl("/js/app.js")}" defer></script>${scripts}
+<script src="${assetUrl("/js/app.js")}" defer></script>${
+  // 전화번호 칸이 있는 화면에서만 싣는다 — 없는 화면에 받게 하지 않는다.
+  // 칸이 열다섯 군데에 흩어져 있어 화면마다 손으로 붙이면 반드시 빠뜨린다.
+  /type="tel"/.test(body) ? `<script src="${assetUrl("/js/phone.js")}" defer></script>` : ""
+}${scripts}
 </body></html>`;
 }
 

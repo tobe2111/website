@@ -3271,3 +3271,11 @@ a.deal-card:hover{border-color:var(--deal);transition:border-color .18s}
 .due-form{display:inline-flex;align-items:center;gap:6px}
 .due-amt{width:104px;text-align:right}
 @media (max-width:520px){ .due-sum{grid-template-columns:minmax(0,1fr)} }
+
+/* 입력칸 밑 한 줄 안내 —— "몇 자리를 넣어야 하는지" 를 다 치기 전에 알려 준다.
+   처음 쓰는 분이 막히는 자리는 규칙을 모르는 곳이지, 규칙을 어긴 곳이 아니다.
+   그래서 틀렸다고 빨갛게 막지 않고, 무엇이 남았는지·이 번호가 무엇에 쓰이는지를 말한다.
+   ⚠️ 색만으로 뜻을 전하지 않는다 — 글로 이미 다 말하고 색은 거들기만 한다(색맹·흑백 화면). */
+.field-help{display:block;margin-top:6px;font-size:.86rem;line-height:1.5;color:var(--muted)}
+.field-help-ok{color:var(--ok-fg)}
+.field-help-warn{color:var(--wait-fg)}

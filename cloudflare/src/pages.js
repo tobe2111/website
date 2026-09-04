@@ -1647,7 +1647,10 @@ export async function admin(ctx) {
       운영사가 카카오 지도 키를 등록하면 이 자리에 검색 칸이 생깁니다. 그때까지는 아래에 직접 적어 주세요.</p>`}
     <form method="post" action="${base}/admin/members/add" class="stack-form">
       <div class="form-two"><label>사장님 성함<input type="text" name="name" required maxlength="60" autocomplete="name" /></label>
-        <label>휴대폰 <small>(알림톡·연락용)</small><input type="tel" name="phone" maxlength="13" inputmode="numeric" placeholder="010-1234-5678" autocomplete="tel" /></label></div>
+        <label>휴대폰 <small>(알림톡·연락용)</small>
+          <input type="tel" name="phone" maxlength="13" inputmode="numeric" placeholder="010-0000-0000"
+            autocomplete="tel" data-phone-help="id" aria-describedby="addMemberPhoneHelp" />
+          <span class="field-help" id="addMemberPhoneHelp" aria-live="polite">숫자만 눌러도 자동으로 끊어집니다.</span></label></div>
       <div class="form-two"><label>업체명<input type="text" name="business_name" data-place="name" required maxlength="100" autocomplete="organization" /></label>
         <label>업종<select name="category" data-place="category">${CATEGORIES.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("")}</select></label></div>
       <div class="form-two"><label>가게 주소 <small>(선택 · 지도에 뜨려면 필요합니다)</small><input type="text" name="address" data-place="address" maxlength="200" autocomplete="street-address" /></label>
