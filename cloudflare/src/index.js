@@ -157,8 +157,10 @@ export const TENANT = [
   ["GET",  "/admin/business/:id", pages.adminBusinessEdit, "ADMIN"],
   ["POST", "/admin/business/:id", api.adminUpdateBusiness, "ADMIN"],
   ["GET",  "/admin/place-search", api.adminPlaceSearch, "ADMIN"],
+  ["GET",  "/admin/image-search", api.adminImageSearch, "ADMIN"],
   // 사장님이 카톡으로 보내 온 사진·릴스를 관리자가 대신 올린다
   ["POST", "/admin/business/:id/media", api.adminUploadMedia, "ADMIN"],
+  ["POST", "/admin/business/:id/photos/import", api.adminImportPhotos, "ADMIN"],
   ["POST", "/admin/business/:id/embed", api.adminAddEmbed, "ADMIN"],
   ["POST", "/admin/business/:id/media/:mid/delete", api.adminDeleteMedia, "ADMIN"],
   // 이메일 없이 등록해 둔 사장님에게 나중에 로그인 주소를 지정한다
