@@ -3174,9 +3174,11 @@ body.is-console .main-nav a.cnav-out{display:inline-flex;align-items:center;gap:
   padding:0 14px;border-radius:var(--r-pill);border:1px solid var(--line);
   background:var(--surface);color:var(--ink)!important;font-weight:600}
 body.is-console .main-nav a.cnav-out:hover{border-color:var(--ink);background:var(--surface-2)}
-/* 쪽 번호 — 세로가 34px 이라 손가락 기준(44px)에 못 미쳤다 (다른 세션이 패딩을 줄인 뒤 다시 걸렸다) */
+/* 쪽 번호 — 세로가 34px 이라 손가락 기준(44px)에 못 미쳤다 (다른 세션이 패딩을 줄인 뒤 다시 걸렸다).
+   쪽 번호 마크업이 두 벌이다: 손님 화면은 .pg, 콘솔 표는 그냥 a/span. 둘 다 손가락으로 누른다. */
 @media (hover:none),(pointer:coarse){
-  .pager .pg{min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center}
+  .pager .pg,.pager a,.pager span{min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center}
+  .pager .gap{min-width:16px}
 }
 /* ==========================================================================
    우리 골목 이용권 (유어딜)
@@ -3188,9 +3190,11 @@ body.is-console .main-nav a.cnav-out:hover{border-color:var(--ink);background:va
    그리고 이 섹션은 이용권이 하나도 없어도 비지 않습니다. 마지막 칸(사장님을 부르는 칸)이
    늘 있고, 0개면 그 칸 하나가 섹션 전체가 됩니다.
    ========================================================================== */
-:root{--deal:#FF5A3C; --deal-ink:#B02D14; --deal-tint:#FFF1ED; --deal-line:#F6C9BC}
-.btn-deal{background:var(--deal);color:#fff;border:0;font-weight:700}
-.btn-deal:hover{background:#E6482C;color:#fff}
+/* --deal 은 테두리·강조선용입니다. 그 위에 흰 글씨를 얹으면 대비가 3.1:1 밖에 안 나와
+   본문 기준(4.5:1)에 못 미칩니다 — 글자가 올라가는 버튼은 --deal-btn(5.0:1) 을 씁니다. */
+:root{--deal:#FF5A3C; --deal-btn:#CC3A1D; --deal-ink:#B02D14; --deal-tint:#FFF1ED; --deal-line:#F6C9BC}
+.btn-deal{background:var(--deal-btn);color:#fff;border:0;font-weight:700}
+.btn-deal:hover{background:var(--deal-ink);color:#fff}
 .deal-tag{display:inline-block;font-size:11px;font-weight:800;letter-spacing:.08em;
   color:var(--deal-ink);background:var(--deal-tint);border-radius:6px;padding:3px 8px}
 .section-deals{background:var(--surface)}
