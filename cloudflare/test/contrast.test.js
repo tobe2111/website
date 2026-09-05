@@ -86,3 +86,62 @@ test("쪽 번호는 손님 화면(.pg)과 콘솔 표(a/span) 양쪽 다 손가�
   assert.match(touch[0], /\.pager \.pg/);
   assert.match(touch[0], /\.pager a/);
 });
+
+// ── 관리자 콘솔의 뼈대 —— 브라우저 없이 HTML 만 보고 잡히는 것들 ────────────────
+//
+// scripts/a11y.mjs 가 실제로 화면을 띄워 재지만 크로미움이 있어야 돌아,
+// 배포 검사에 못 들어간다. 여기서는 마크업만 보면 판정되는 두 가지를 지킨다.
+import worker from "../src/index.js";
+import { makeEnv } from "./shim.js";
+import * as D from "../src/db.js";
+import { hashPassword } from "../src/crypto.js";
+
+async function consoleHtml() {
+  const env = makeEnv();
+  await D.createAssociation(env.DB, { slug: "seocho", name: "방배카페골목상인회", kind: "merchant" });
+  const pw = await hashPassword("pass1234");
+  await D.createUser(env.DB, { email: "ad@s.kr", passwordHash: pw.hash, salt: pw.salt, name: "회장", role: "ADMIN", associationId: 1 });
+  const jar = {};
+  const absorb = (r) => { for (const s of r.headers.getSetCookie?.() || []) { const kv = s.split(";")[0]; const i = kv.indexOf("="); jar[kv.slice(0, i)] = kv.slice(i + 1); } };
+  const ck = () => Object.entries(jar).map(([k, v]) => `${k}=${v}`).join("; ");
+  const g = await worker.fetch(new Request("http://localhost/login"), env); absorb(g);
+  const tk = (/name="_csrf" value="([^"]+)"/.exec(await g.text()) || [])[1];
+  absorb(await worker.fetch(new Request("http://localhost/login", { method: "POST",
+    headers: { cookie: ck(), "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ _csrf: tk, login: "ad@s.kr", password: "pass1234" }).toString() }), env));
+  return (await worker.fetch(new Request("http://localhost/t/seocho/admin", { headers: { cookie: ck() } }), env)).text();
+}
+
+test("콘솔의 입력칸에는 모두 이름표가 있다 (placeholder 는 이름표가 아니다)", async () => {
+  const html = await consoleHtml();
+  // <label>…<input></label> 로 감싼 것은 통과. 그 밖에는 aria-label 이 있어야 한다.
+  const wrapped = new Set();
+  for (const m of html.matchAll(/<label\b[^>]*>([\s\S]*?)<\/label>/g))
+    for (const t of m[1].matchAll(/<(?:input|select|textarea)\b[^>]*/g)) wrapped.add(t[0]);
+  const bad = [];
+  for (const m of html.matchAll(/<(input|select|textarea)\b[^>]*/g)) {
+    const tag = m[0];
+    if (/type=["']?(hidden|submit|button)/.test(tag)) continue;
+    if (/aria-label=|aria-labelledby=|\btitle=/.test(tag)) continue;
+    if (wrapped.has(tag)) continue;
+    bad.push(tag.slice(0, 90));
+  }
+  assert.deepEqual(bad, []);
+});
+
+test("급한 일 덩어리의 제목은 h2 — h1 다음에 h3 이 오면 단계를 건너뛴다", async () => {
+  const html = await consoleHtml();
+  const levels = [...html.matchAll(/<h([1-6])\b/g)].map((m) => +m[1]);
+  assert.ok(levels.length, "제목이 하나는 있어야");
+  let prev = 0;
+  const skips = [];
+  for (const lv of levels) { if (prev && lv > prev + 1) skips.push(`h${prev} → h${lv}`); prev = lv; }
+  assert.deepEqual(skips, []);
+});
+
+test("접근성 실측 목록에 관리자 콘솔 화면이 들어 있다", () => {
+  const src = readFileSync(new URL("../scripts/a11y.mjs", import.meta.url), "utf8");
+  for (const tab of ["s-home", "s-people", "s-inbox", "s-stats"])
+    assert.match(src, new RegExp(`"${tab}"`), `${tab} 탭이 측정 목록에서 빠졌다`);
+  assert.match(src, /관리자 콘솔 · 현황 \(모바일\)/, "휴대폰 폭 측정이 빠졌다");
+});

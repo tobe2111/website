@@ -1779,8 +1779,8 @@ export async function admin(ctx) {
         <b>노출 기간을 정해 두면 그날이 지나 자동으로 내려갑니다</b> — 내리는 것을 잊어 지난 행사 안내가 몇 달씩 뜨는 일이 없습니다.
         방문자는 <b>오늘 하루 보지 않기</b>로 닫을 수 있고, 그 선택은 그 사람 휴대폰에만 남습니다.</p>
       <form method="post" action="${base}/admin/popup" enctype="multipart/form-data" class="stack-form compact">
-        <input type="text" name="title" placeholder="팝업 제목 (예: 여름 골목 야시장 안내)" maxlength="100" required />
-        <textarea name="body" rows="3" maxlength="500" placeholder="내용 (선택)"></textarea>
+        <input type="text" name="title" placeholder="팝업 제목 (예: 여름 골목 야시장 안내)" aria-label="팝업 제목" maxlength="100" required />
+        <textarea name="body" rows="3" maxlength="500" placeholder="내용 (선택)" aria-label="팝업 내용"></textarea>
         <div class="form-two"><label class="mini-label">노출 시작 <small>(비우면 즉시)</small><input type="date" name="start_date" /></label>
           <label class="mini-label">노출 종료 <small>(비우면 끌 때까지)</small><input type="date" name="end_date" /></label></div>
         <div class="form-two"><label class="mini-label">누르면 갈 주소 <small>(선택)</small><input type="text" name="link_url" placeholder="https:// 또는 /t/…" maxlength="300" /></label>
@@ -1815,7 +1815,7 @@ export async function admin(ctx) {
   const unpaidN = Math.max(0, members.length - paidSet.size);
   const duesPanel = `<section class="panel" id="p-dues"><div class="panel-head">
       <h2 class="panel-title">회비 장부 <span class="badge badge-muted">${paidSet.size}/${members.length} 납부</span></h2>
-      <form method="get" action="${base}/admin" class="inline-form"><input type="month" name="due_period" value="${esc(duePeriod)}" data-autosubmit /><button class="btn btn-xs btn-ghost">이동</button></form></div>
+      <form method="get" action="${base}/admin" class="inline-form"><input type="month" name="due_period" value="${esc(duePeriod)}" aria-label="회비를 볼 월" data-autosubmit /><button class="btn btn-xs btn-ghost">이동</button></form></div>
     <p class="panel-hint">납부 <b>기록</b>만 남기는 장부입니다(결제 아님 — 돈은 계좌로 받으시고 여기에 적으세요).
       월을 바꿔 지난 달 현황도 볼 수 있습니다.</p>
 
@@ -2085,7 +2085,7 @@ export async function admin(ctx) {
   // **파란 덩어리가 보이는 것 자체가 신호**가 된다. 0 이라는 숫자를 읽을 필요가 없다.
   const hotBlock = ({ n, title, note, href, hrefLabel, rows, more }) => `<section class="hot">
     <div class="hot-h"><span class="hot-n">${n}</span>
-      <h3>${esc(title)}${note ? `<small>${note}</small>` : ""}</h3>
+      <h2>${esc(title)}${note ? `<small>${note}</small>` : ""}</h2>
       ${href ? `<a class="hot-all" href="${href}">${esc(hrefLabel || "전체 보기")} <span aria-hidden="true">→</span></a>` : ""}</div>
     ${rows.join("")}
     ${more ? `<a class="hot-more" href="${href}">${esc(more)} <span aria-hidden="true">→</span></a>` : ""}</section>`;
@@ -2222,15 +2222,15 @@ ${abPanel}`}
     ${isEsign ? "" : `<div class="dash-grid" id="p-content">
       <section class="panel"><h2 class="panel-title">공지·소식</h2>
         <form method="post" action="${base}/admin/notice" enctype="multipart/form-data" class="stack-form compact">
-          <input type="text" name="title" placeholder="제목" required /><textarea name="body" rows="3" placeholder="내용"></textarea>
+          <input type="text" name="title" placeholder="제목" aria-label="새 공지 제목" required /><textarea name="body" rows="3" placeholder="내용" aria-label="새 공지 내용"></textarea>
           <div class="form-two"><label class="mini-label">카테고리<select name="tag">${noticeCats}</select></label><label class="check"><input type="checkbox" name="pinned" value="1" /> 상단 고정</label></div>
           <label class="mini-label">대표 이미지 <small>(선택)</small><input type="file" name="image" accept="image/*" /></label>
           <button class="btn btn-primary btn-sm">등록</button></form>
         <ul class="admin-mini-list">${noticeRows2}</ul></section>
       <section class="panel"><h2 class="panel-title">행사</h2>
         <form method="post" action="${base}/admin/event" enctype="multipart/form-data" class="stack-form compact">
-          <input type="text" name="title" placeholder="행사명" required /><input type="date" name="event_date" required />
-          <input type="text" name="place" placeholder="장소" /><textarea name="description" rows="2" placeholder="설명"></textarea>
+          <input type="text" name="title" placeholder="행사명" aria-label="새 행사명" required /><input type="date" name="event_date" aria-label="행사 날짜" required />
+          <input type="text" name="place" placeholder="장소" aria-label="행사 장소" /><textarea name="description" rows="2" placeholder="설명" aria-label="행사 설명"></textarea>
           <label class="mini-label">대표 이미지 <small>(선택 · 홈에 포스터형 카드로 표시)</small><input type="file" name="image" accept="image/*" /></label>
           <button class="btn btn-primary btn-sm">등록</button></form>
         <ul class="admin-mini-list">${eventRows}</ul></section></div>`}
