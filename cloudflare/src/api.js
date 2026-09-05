@@ -1470,6 +1470,39 @@ export async function adminClosePoll(ctx) {
   await audit(ctx, "투표마감", p.title);
   return back(base + "/polls", "투표를 마감했습니다.");
 }
+// 공지·행사는 그 자리에서 고칠 수 있는데 투표만 안 됐다. 오타 하나 때문에 지우고 다시 만들면
+// 이미 들어온 표가 함께 사라진다 — 회장님 입장에서는 "고쳤다" 가 아니라 "무르고 다시 물었다" 다.
+export async function adminUpdatePoll(ctx) {
+  const { db, form, base, assoc, params } = ctx;
+  const p = await D.getPoll(db, Number(params.id));
+  if (!p || p.association_id !== assoc.id) return back(base + "/polls", "투표를 찾을 수 없습니다.", true);
+  const title = cap((form.get("title") || "").trim(), 200);
+  if (!title) return back(base + "/polls", "안건 제목을 입력해 주세요.", true);
+  const rawClose = (form.get("closes_at") || "").trim();
+  await D.updatePoll(db, p.id, assoc.id, {
+    title, body: cap((form.get("body") || "").trim(), 2000),
+    closesAt: /^\d{4}-\d{2}-\d{2}$/.test(rawClose) ? rawClose : "",
+  });
+  await audit(ctx, "투표수정", `#${p.id} ${title}`);
+  return back(base + "/polls", "안건을 고쳤습니다. 이미 들어온 표는 그대로 남습니다.");
+}
+export async function adminReopenPoll(ctx) {
+  const { db, base, assoc, params } = ctx;
+  const p = await D.getPoll(db, Number(params.id));
+  if (!p || p.association_id !== assoc.id) return back(base + "/polls", "투표를 찾을 수 없습니다.", true);
+  await D.reopenPoll(db, p.id);
+  await audit(ctx, "투표재개", `#${p.id} ${p.title}`);
+  return back(base + "/polls", "투표를 다시 열었습니다. 마감일이 지나 있었으면 함께 지웠습니다.");
+}
+export async function adminDeletePoll(ctx) {
+  const { db, base, assoc, params } = ctx;
+  const p = await D.getPoll(db, Number(params.id));
+  if (!p || p.association_id !== assoc.id) return back(base + "/polls", "투표를 찾을 수 없습니다.", true);
+  const votes = await D.countPollVotes(db, p.id);
+  await D.deletePoll(db, p.id, assoc.id);
+  await audit(ctx, "투표삭제", `#${p.id} ${p.title} (표 ${votes})`);
+  return back(base + "/polls", `안건을 지웠습니다.${votes ? ` 들어와 있던 표 ${votes}개도 함께 사라졌습니다.` : ""}`);
+}
 export async function pollVote(ctx) {
   const { db, form, base, assoc, user, params } = ctx;
   const p = await D.getPoll(db, Number(params.id));

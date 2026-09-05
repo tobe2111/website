@@ -644,6 +644,24 @@ export const createPoll = (db, { associationId, title, body = "", closesAt = "",
 export const listPolls = (db, aid) => all(db, "SELECT * FROM polls WHERE association_id=? ORDER BY closed, created_at DESC", aid);
 export const getPoll = (db, id) => first(db, "SELECT * FROM polls WHERE id=?", id);
 export const closePoll = (db, id) => run(db, "UPDATE polls SET closed=1 WHERE id=?", id);
+// 마감을 잘못 눌렀을 때. 마감일이 이미 지났으면 그것까지 지워야 실제로 다시 열린다 —
+// closed 만 0 으로 돌리면 isPollOpen 이 여전히 닫힌 것으로 본다.
+export const reopenPoll = (db, id) =>
+  run(db, `UPDATE polls SET closed=0, closes_at = CASE WHEN closes_at <> '' AND closes_at < ? THEN '' ELSE closes_at END
+    WHERE id=?`, kstToday(), id);
+// 공지·행사는 그 자리에서 고칠 수 있는데 투표만 안 됐다. 오타 하나에 지우고 다시 만들면
+// 이미 넣은 표가 함께 사라진다 — 그건 고치는 게 아니라 무르는 것이다.
+export const updatePoll = (db, id, aid, { title, body = "", closesAt = "" }) =>
+  run(db, "UPDATE polls SET title=?, body=?, closes_at=? WHERE id=? AND association_id=?", title, body, closesAt, id, aid);
+// 표를 먼저 지운다 — 외래키 cascade 가 켜져 있다는 보장이 없어, 안 지우면 주인 없는 표가 남는다.
+export async function deletePoll(db, id, aid) {
+  const p = await first(db, "SELECT id FROM polls WHERE id=? AND association_id=?", id, aid);
+  if (!p) return;
+  await run(db, "DELETE FROM poll_votes WHERE poll_id=?", id);
+  await run(db, "DELETE FROM polls WHERE id=? AND association_id=?", id, aid);
+}
+export const countPollVotes = async (db, pollId) =>
+  Number((await first(db, "SELECT COUNT(*) AS n FROM poll_votes WHERE poll_id=?", pollId))?.n) || 0;
 export const isPollOpen = (p) => p && !p.closed && (!p.closes_at || p.closes_at >= kstToday());
 export const votePoll = (db, pollId, userId, choice) =>
   run(db, "INSERT INTO poll_votes (poll_id, user_id, choice) VALUES (?,?,?) ON CONFLICT(poll_id, user_id) DO UPDATE SET choice=excluded.choice, created_at=datetime('now')", pollId, userId, choice);

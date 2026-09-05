@@ -1041,7 +1041,24 @@ export async function polls(ctx) {
       ${voteBtns}
       <div class="poll-results">${bar("찬성", "yes", "is-yes")}${bar("반대", "no", "is-no")}${bar("기권", "abstain", "is-abs")}
         <p class="panel-hint">총 ${r.total}명 참여</p></div>
-      ${isAdmin && open ? `<form method="post" action="${base}/admin/polls/${p.id}/close" data-confirm="이 투표를 마감할까요? 마감 후에는 변경할 수 없습니다."><button class="btn btn-xs btn-ghost">투표 마감</button></form>` : ""}
+      ${isAdmin ? `<details class="mini-edit poll-edit"><summary>
+        <span class="mini-edit-hint">안건 고치기${r.total ? ` · 이미 ${r.total}명 투표함` : ""}</span></summary>
+        ${r.total ? `<p class="panel-hint">이미 <b>${r.total}명</b>이 투표했습니다.
+          오타나 날짜를 고치는 것은 괜찮지만, <b>묻는 내용 자체를 바꾸면 그분들은 다른 질문에 답한 것이 됩니다.</b>
+          내용을 바꾸실 거면 새 안건을 올리시는 편이 맞습니다.</p>` : ""}
+        <form method="post" action="${base}/admin/polls/${p.id}" class="stack-form compact">
+          <input type="hidden" name="_csrf" value="${csrf}" />
+          <label>안건 제목<input type="text" name="title" value="${esc(p.title)}" required maxlength="200" /></label>
+          <label>설명 <small>(선택)</small><textarea name="body" rows="3" maxlength="2000">${esc(p.body || "")}</textarea></label>
+          <label>마감일 <small>(선택·비우면 수동 마감)</small><input type="date" name="closes_at" value="${esc(String(p.closes_at || "").slice(0, 10))}" /></label>
+          <button class="btn btn-primary btn-sm">고친 내용 저장</button></form>
+        <span class="pill-row">
+          ${open ? `<form method="post" action="${base}/admin/polls/${p.id}/close" data-confirm="이 투표를 마감할까요?&#10;마감해도 다시 열 수 있습니다."><input type="hidden" name="_csrf" value="${csrf}" /><button class="btn btn-ghost btn-sm">투표 마감</button></form>`
+            : `<form method="post" action="${base}/admin/polls/${p.id}/reopen"><input type="hidden" name="_csrf" value="${csrf}" /><button class="btn btn-ghost btn-sm">다시 열기</button></form>`}
+        </span>
+        <form method="post" action="${base}/admin/polls/${p.id}/delete" class="mini-del"
+          data-confirm="'${esc(p.title)}' 안건을 지울까요?&#10;${r.total ? `들어와 있는 표 ${r.total}개도 함께 사라집니다. ` : ""}내용만 고치실 거면 위에서 고치세요."><input type="hidden" name="_csrf" value="${csrf}" /><button class="link-danger">이 안건 지우기</button></form>
+      </details>` : ""}
     </section>`);
   }
   const createForm = isAdmin ? `<section class="panel panel-accent"><h2 class="panel-title">새 안건 올리기</h2>

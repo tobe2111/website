@@ -3134,6 +3134,10 @@ a.dt-main:hover{color:var(--brand-text);text-decoration:underline}
 .mini-edit > .mini-del{padding:12px 0 14px;border-top:1px solid var(--line-soft);margin-top:14px}
 .mini-edit .dtable-wrap{margin-bottom:10px}
 .mini-edit .dtable thead th{position:static}   /* 펼친 상자 안에서는 붙어 있을 필요가 없습니다 */
+/* 투표 카드 안의 고치기 서랍 — 카드 바닥에 붙습니다 (제목 줄이 따로 없어 여백만 맞춥니다) */
+.poll-edit{margin-top:14px}
+.poll-edit > summary{padding:10px 14px}
+.poll-edit > summary .mini-edit-hint{margin-left:0}
 
 /* 문의함 — 안 읽은 것은 거르개에서도 눈에 띄어야 합니다 */
 .tbar-chip.is-alert{border-color:var(--wait-fg);color:var(--wait-fg)}
