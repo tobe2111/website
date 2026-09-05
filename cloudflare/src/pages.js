@@ -1288,6 +1288,7 @@ export async function dashboard(ctx) {
   const media = await D.listMedia(db, b.id);
   const products = await D.listProducts(db, b.id, { includeHidden: true });
   const coupons = await D.listCoupons(db, b.id);
+  const couponUses = await D.couponUseCounts(db, assoc.id).catch(() => new Map());
   const updates = await D.listUpdates(db, b.id, 10);
   const dayOff = D.isDayOff(b);
   const plan = PLANS[assoc.plan] || PLANS.free;
@@ -1329,11 +1330,15 @@ export async function dashboard(ctx) {
         <div class="update-body"><p>${esc(u.body)}</p><time>${esc(kstDate(u.created_at, "."))}</time></div>
         <form method="post" action="${base}/dashboard/updates/${u.id}/delete" data-confirm="이 소식을 삭제할까요?"><button class="link-danger">삭제</button></form></li>`).join("")}</ul>` : ""}</section>`;
   const couponPanel = `<section class="panel" id="d-coupons"><h2 class="panel-title">쿠폰·혜택 <span class="badge badge-muted">${coupons.length}/5</span></h2>
-      <p class="panel-hint">손님이 매장에서 <strong>이 화면을 보여주면</strong> 제공하는 혜택입니다. 결제·발급 기능이 없어 부담 없이 운영할 수 있어요. 기한이 지나면 자동으로 내려갑니다.</p>
+      <p class="panel-hint">손님이 매장에서 <strong>이 화면을 보여주면</strong> 제공하는 혜택입니다. 결제·발급 기능이 없어 부담 없이 운영할 수 있어요. 기한이 지나면 자동으로 내려갑니다.
+        손님이 쓰실 때마다 <strong>사용 처리</strong>를 눌러 주세요 — 몇 번 쓰였는지가 상인회 성과 숫자로 잡힙니다.</p>
       ${coupons.length ? `<ul class="coupon-admin-list">${coupons.map((c) => {
         const expired = c.valid_until && c.valid_until < new Date().toISOString().slice(0, 10);
-        return `<li class="coupon-admin${expired ? " is-expired" : ""}"><div class="ca-text"><strong>${esc(c.title)}</strong>${c.terms ? `<small>${esc(c.terms)}</small>` : ""}<small>${c.valid_until ? `~${esc(c.valid_until)}` : "무기한"}${expired ? " · 기간 종료(비노출)" : ""}</small></div>
-          <form method="post" action="${base}/dashboard/coupons/${c.id}/delete" data-confirm="이 쿠폰을 삭제할까요?"><button class="link-danger">삭제</button></form></li>`;
+        const u = couponUses.get(c.id) || { total: 0, today: 0 };
+        return `<li class="coupon-admin${expired ? " is-expired" : ""}"><div class="ca-text"><strong>${esc(c.title)}</strong>${c.terms ? `<small>${esc(c.terms)}</small>` : ""}<small>${c.valid_until ? `~${esc(c.valid_until)}` : "무기한"}${expired ? " · 기간 종료(비노출)" : ""} · 지금까지 ${u.total}번 사용${u.today ? ` (오늘 ${u.today}번)` : ""}</small></div>
+          <div class="ca-acts">${expired ? "" : `<form method="post" action="${base}/dashboard/coupons/${c.id}/use"><input type="hidden" name="_csrf" value="${csrf}" /><button class="btn btn-primary btn-xs">사용 처리</button></form>
+          ${u.today ? `<form method="post" action="${base}/dashboard/coupons/${c.id}/use"><input type="hidden" name="_csrf" value="${csrf}" /><input type="hidden" name="undo" value="1" /><button class="btn btn-ghost btn-xs">되돌리기</button></form>` : ""}`}
+          <form method="post" action="${base}/dashboard/coupons/${c.id}/delete" data-confirm="이 쿠폰을 삭제할까요?"><button class="link-danger">삭제</button></form></div></li>`;
       }).join("")}</ul>` : `<p class="empty">등록한 쿠폰이 없습니다. 첫 쿠폰으로 손님을 맞아보세요.</p>`}
       <h3 class="panel-subtitle">쿠폰 추가</h3>
       <form method="post" action="${base}/dashboard/coupons" class="stack-form compact">
@@ -1470,7 +1475,7 @@ export async function admin(ctx) {
   const BIZ_PER = 50;
   const bizPage = Math.max(1, parseInt(query.get("bp") || "1", 10) || 1);
   const inboxStatus = D.LEAD_STATUSES.includes(query.get("is")) ? query.get("is") : "";
-  const [s, all, notices, events, members, admins, notifs, unread, auditLog, met, assocProducts, allRsvps, dueRowsRaw, visitsRaw, popupList, bizPageData, bizCounts, inbox, inboxCounts, topBiz, outcomes, byDay] = await Promise.all([
+  const [s, all, notices, events, members, admins, notifs, unread, auditLog, met, assocProducts, allRsvps, dueRowsRaw, visitsRaw, popupList, bizPageData, bizCounts, inbox, inboxCounts, topBiz, outcomes, byDay, assocCoupons, couponUses, couponUsed30] = await Promise.all([
     D.stats(db, assoc.id),
     D.listAllBusinesses(db, assoc.id),
     D.listNotices(db, assoc.id),
@@ -1493,6 +1498,9 @@ export async function admin(ctx) {
     D.topBusinesses(db, assoc.id, { days: 30, limit: 8 }).catch(() => []),
     D.homeOutcomes(db, assoc.id, 30).catch(() => ({ views: 0, bizviews: 0, finds: 0, signups: 0, calls: 0 })),
     D.visitsByDay(db, assoc.id, 30).catch(() => []),
+    D.listAssocCoupons(db, assoc.id).catch(() => []),
+    D.couponUseCounts(db, assoc.id).catch(() => new Map()),
+    D.couponUseTotal(db, assoc.id, 30).catch(() => 0),
   ]);
   const today = new Date().toISOString().slice(0, 10);
   const visits = { cur: Number(visitsRaw && visitsRaw.cur) || 0, prev: Number(visitsRaw && visitsRaw.prev) || 0 };
@@ -1955,6 +1963,44 @@ export async function admin(ctx) {
   //   ① 사람이 오긴 오나 (방문, 지난주 대비)
   //   ② 와서 가게를 보나 (가게 열람·찾기·전화·입점 신청)
   //   ③ 어느 가게가 잘 됐나 (사장님께 그대로 보여 줄 수 있는 줄)
+  // ── 쿠폰 사용 처리 ────────────────────────────────────────────────
+  //
+  // 쿠폰을 걸어 두기만 하면 "그래서 몇 명이나 썼어요?" 에 답할 수가 없습니다.
+  // 그 질문에 답하지 못하면 상인회는 다음 해 총회에서 홈페이지 예산을 못 지킵니다.
+  //
+  // 결제가 아니라 **세는 장부**입니다. 손님이 매장에서 화면을 보여 주면 한 번 누릅니다.
+  // 가게 사장님이 로그인을 안 쓰는 곳이 많아, 총무가 대신 누르는 길을 여기 둡니다.
+  // 손이 미끄러졌을 때를 대비해 '되돌리기' 가 반드시 함께 있어야 합니다 —
+  // 고칠 수 없는 숫자는 아무도 믿지 않고, 못 믿는 숫자는 총회에서 못 씁니다.
+  const couponPanel = (() => {
+    const rows = assocCoupons.map((c) => {
+      const u = couponUses.get(c.id) || { total: 0, today: 0 };
+      return `<tr>
+        <td data-th="가게"><a class="dt-main" href="${base}/business/${esc(c.biz_slug)}" target="_blank" rel="noopener">${esc(c.biz_name)}</a>
+          <span class="dt-sub">${esc(c.title)}${c.terms ? ` · ${esc(c.terms)}` : ""}</span></td>
+        <td data-th="기한">${c.valid_until ? esc(c.valid_until) : '<span class="txt-muted">기한 없음</span>'}</td>
+        <td data-th="오늘" class="num">${u.today ? `<b>${u.today}</b>회` : '<span class="txt-muted">0</span>'}</td>
+        <td data-th="누적" class="num"><b>${(u.total || 0).toLocaleString("ko-KR")}</b>회</td>
+        <td class="act">
+          <form method="post" action="${base}/admin/coupon/${c.id}/use"><input type="hidden" name="_csrf" value="${csrf}" />
+            <button class="btn btn-primary btn-xs">사용 처리</button></form>
+          ${u.today ? `<form method="post" action="${base}/admin/coupon/${c.id}/use"><input type="hidden" name="_csrf" value="${csrf}" />
+            <input type="hidden" name="undo" value="1" /><button class="btn btn-ghost btn-xs">되돌리기</button></form>` : ""}
+        </td></tr>`;
+    }).join("");
+    return `<section class="panel" id="p-coupons"><div class="panel-head">
+        <h2 class="panel-title">쿠폰 사용 처리 <span class="badge badge-muted">${assocCoupons.length}장</span></h2></div>
+      <p class="panel-hint">손님이 매장에서 쿠폰 화면을 보여 주면 <b>사용 처리</b>를 한 번 누르세요.
+        결제가 아니라 몇 번 쓰였는지를 세는 장부입니다 — 총회에서 이 숫자를 그대로 쓰실 수 있습니다.
+        잘못 눌렀으면 <b>되돌리기</b>로 오늘 것 한 건을 뺍니다.</p>
+      ${assocCoupons.length ? `<div class="dtable-wrap"><table class="dtable">
+          <thead><tr><th>가게 · 혜택</th><th>기한</th><th class="num">오늘</th><th class="num">누적</th><th class="act"></th></tr></thead>
+          <tbody>${rows}</tbody></table></div>`
+        : `<div class="dt-empty"><b>지금 살아 있는 쿠폰이 없습니다</b>
+           쿠폰은 가게 화면(사장님) 또는 가게 관리에서 등록합니다. 기한이 지난 쿠폰은 여기서 사라집니다.</div>`}
+    </section>`;
+  })();
+
   const statsPanel = (() => {
     const n = (v) => (Number(v) || 0).toLocaleString("ko-KR");
     const delta = visits.prev > 0
@@ -2008,6 +2054,14 @@ export async function admin(ctx) {
       <ul class="st-acts">${acts.map(([label, v, why]) => `<li>
         <b>${n(v)}</b><span class="st-act-l">${label}</span>
         <span class="st-act-w">${esc(why)}${thin || !v ? "" : " · " + rate(v)}</span></li>`).join("")}</ul>
+
+      ${assocCoupons.length || couponUsed30 ? `<div class="form-divider">쿠폰</div>
+        <ul class="st-acts"><li>
+          <b>${n(couponUsed30)}</b><span class="st-act-l">쿠폰이 쓰였다</span>
+          <span class="st-act-w">지금 걸려 있는 쿠폰 ${n(assocCoupons.length)}장 · 매장에서 사용 처리한 횟수</span></li></ul>
+        ${couponUsed30 ? "" : `<p class="panel-hint">쿠폰은 걸려 있는데 아직 사용 처리가 한 건도 없습니다.
+          사장님들께 <b>콘텐츠 → 쿠폰 사용 처리</b>에서 눌러 달라고 안내하시거나, 총무님이 대신 눌러 주세요.
+          누르지 않으면 이 숫자는 계속 0입니다.</p>`}` : ""}
 
       <div class="form-divider">많이 본 가게</div>
       ${topBiz.length ? `<div class="dtable-wrap"><table class="dtable">
@@ -2234,6 +2288,7 @@ ${abPanel}`}
           <label class="mini-label">대표 이미지 <small>(선택 · 홈에 포스터형 카드로 표시)</small><input type="file" name="image" accept="image/*" /></label>
           <button class="btn btn-primary btn-sm">등록</button></form>
         <ul class="admin-mini-list">${eventRows}</ul></section></div>`}
+    ${isEsign || isFranchise ? "" : `<div id="p-coupon-wrap">${couponPanel}</div>`}
     ${isEsign || isFranchise ? "" : `<div id="p-popup-wrap">${popupPanel}</div>`}
     ${isEsign ? "" : "</div>"}
 

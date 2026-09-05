@@ -919,6 +919,31 @@ export async function couponDelete(ctx) {
   await D.deleteCoupon(db, c.id);
   return back(base + "/dashboard", "쿠폰을 삭제했습니다.");
 }
+// 점주가 자기 가게 카운터에서 누른다.
+export async function couponUse(ctx) {
+  const { db, base, params, assoc, form } = ctx;
+  const b = await ownBusiness(ctx);
+  const c = await D.getCoupon(db, Number(params.id));
+  if (!b || !c || c.business_id !== b.id) return back(base + "/dashboard", "처리할 수 없습니다.", true);
+  const undo = form.get("undo") === "1";
+  if (undo) { await D.unredeemCoupon(db, c.id); return back(base + "/dashboard#p-sell", "오늘 사용 한 건을 되돌렸습니다."); }
+  await D.redeemCoupon(db, { couponId: c.id, businessId: b.id, associationId: assoc.id });
+  return back(base + "/dashboard#p-sell", `'${c.title}' 사용을 기록했습니다.`);
+}
+// 상인회 총무가 대신 누른다. 가게가 로그인을 안 쓰는 곳이 많아 이쪽이 실제 경로다.
+export async function adminCouponUse(ctx) {
+  const { db, base, params, assoc, form } = ctx;
+  const c = await D.getCoupon(db, Number(params.id));
+  if (!c || c.association_id !== assoc.id) return back(base + "/admin#s-content", "처리할 수 없습니다.", true);
+  if (form.get("undo") === "1") {
+    await D.unredeemCoupon(db, c.id);
+    await audit(ctx, "쿠폰사용취소", `#${c.id} ${c.title}`);
+    return back(base + "/admin#s-content", "오늘 사용 한 건을 되돌렸습니다.");
+  }
+  await D.redeemCoupon(db, { couponId: c.id, businessId: c.business_id, associationId: assoc.id });
+  await audit(ctx, "쿠폰사용", `#${c.id} ${c.title}`);
+  return back(base + "/admin#s-content", `'${c.title}' 사용을 기록했습니다.`);
+}
 // 상인회 관리자: 자기 상인회 점포 제품 숨김/정리 (테넌트 격리)
 export async function adminProductHide(ctx) {
   const { db, base, assoc, params } = ctx;

@@ -585,6 +585,40 @@ export const createCoupon = (db, { businessId, associationId, title, terms = "",
 export const getCoupon = (db, id) => first(db, "SELECT * FROM coupons WHERE id=?", id);
 export const deleteCoupon = (db, id) => run(db, "DELETE FROM coupons WHERE id=?", id);
 
+// ----- 쿠폰 사용 세기 -----
+//
+// 결제가 아니라 장부다. 손님이 매장에서 화면을 보여 주면 가게(또는 총무)가 한 번 누른다.
+// 그래서 되돌리기가 반드시 있어야 한다 — 손이 미끄러진 것을 고칠 방법이 없으면
+// 숫자를 못 믿게 되고, 못 믿는 숫자는 총회에서 못 쓴다.
+export const redeemCoupon = (db, { couponId, businessId, associationId }) =>
+  run(db, `INSERT INTO coupon_uses (coupon_id, business_id, association_id, day, uses) VALUES (?,?,?,?,1)
+    ON CONFLICT(coupon_id, day) DO UPDATE SET uses = uses + 1`, couponId, businessId, associationId, kstToday());
+// 오늘 것부터 하나 뺀다. 오늘 누른 적이 없으면 아무 일도 하지 않는다 —
+// 지난 날짜를 건드리면 "어제 장부" 가 조용히 바뀐다.
+export const unredeemCoupon = (db, couponId) =>
+  run(db, "UPDATE coupon_uses SET uses = uses - 1 WHERE coupon_id=? AND day=? AND uses > 0", couponId, kstToday());
+// 쿠폰별 사용 수 — 전체와 오늘. 화면에서 "오늘 3번" 을 보여 주려면 둘 다 필요하다.
+export const couponUseCounts = async (db, aid) => {
+  const rows = await all(db, `SELECT coupon_id, SUM(uses) AS total,
+      SUM(CASE WHEN day=? THEN uses ELSE 0 END) AS today
+    FROM coupon_uses WHERE association_id=? GROUP BY coupon_id`, kstToday(), aid);
+  const m = new Map();
+  for (const r of rows) m.set(r.coupon_id, { total: Number(r.total) || 0, today: Number(r.today) || 0 });
+  return m;
+};
+// 성과 화면용 — 최근 N일 동안 몇 번 쓰였나. 발행 장수는 coupons 표에서 따로 센다.
+export const couponUseTotal = async (db, aid, days = 30) =>
+  Number((await first(db, `SELECT COALESCE(SUM(uses),0) AS n FROM coupon_uses
+    WHERE association_id=? AND day >= date('now','+9 hours',?)`, aid, `-${Number(days) || 30} days`))?.n) || 0;
+// 상인회 전체 쿠폰 — 관리자가 한 화면에서 사용 처리를 하려면 가게 이름이 함께 와야 한다.
+export const listAssocCoupons = (db, aid) =>
+  all(db, `SELECT c.*, b.name AS biz_name, b.slug AS biz_slug FROM coupons c
+    JOIN businesses b ON b.id = c.business_id
+    WHERE c.association_id=? AND (c.valid_until='' OR c.valid_until >= date('now'))
+    ORDER BY b.name, c.created_at DESC`, aid);
+export const countAssocCoupons = async (db, aid) =>
+  Number((await first(db, "SELECT COUNT(*) AS n FROM coupons WHERE association_id=?", aid))?.n) || 0;
+
 // ----- 가게 소식 (한 줄 피드) -----
 export const listUpdates = (db, businessId, limit = 20) =>
   all(db, "SELECT * FROM updates WHERE business_id=? ORDER BY created_at DESC, id DESC LIMIT ?", businessId, limit);

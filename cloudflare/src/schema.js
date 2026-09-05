@@ -177,6 +177,21 @@ CREATE TABLE IF NOT EXISTS coupons (
 );
 CREATE INDEX IF NOT EXISTS idx_coupons_biz ON coupons(business_id);
 
+-- 쿠폰 사용 (하루 한 줄로 접는다).
+-- 쿠폰을 걸어 두기만 하면 "몇 명이나 썼어요?" 에 답할 수가 없고, 그 질문에 답하지 못하면
+-- 상인회는 다음 해에 홈페이지 예산을 못 지킨다. 손님이 매장에서 화면을 보여 주면
+-- 가게(또는 총무)가 한 번 눌러 숫자를 올린다 — 결제가 아니라 세는 장부다.
+-- 방문 한 건씩 남기지 않는 이유는 business_views 와 같다: 표가 금세 못 쓰게 커진다.
+CREATE TABLE IF NOT EXISTS coupon_uses (
+  coupon_id      INTEGER NOT NULL REFERENCES coupons(id) ON DELETE CASCADE,
+  business_id    INTEGER NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+  association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
+  day            TEXT NOT NULL,               -- KST 기준 YYYY-MM-DD
+  uses           INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (coupon_id, day)
+);
+CREATE INDEX IF NOT EXISTS idx_couponuse_assoc ON coupon_uses(association_id, day);
+
 CREATE TABLE IF NOT EXISTS updates (
   id             INTEGER PRIMARY KEY AUTOINCREMENT,
   business_id    INTEGER NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
@@ -753,7 +768,7 @@ CREATE INDEX IF NOT EXISTS idx_landing_asset_assoc ON landing_assets(association
 // 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
 // 마이그레이션 세대 — migrateColumns 에 단계를 추가할 때마다 +1
 // 36 = 두 갈래(트렁크 33 · 모집형 35)를 합친 세대. 양쪽 DB 모두 다시 한 번 마이그레이션을 타게 한다.
-export const SCHEMA_VERSION = "50";
+export const SCHEMA_VERSION = "51";
 
 export async function ensureSchema(db) {
   const has = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='associations'").first();
@@ -1092,6 +1107,17 @@ async function migrateColumns(db) {
     views          INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (business_id, day))`).run();
   await db.prepare("CREATE INDEX IF NOT EXISTS idx_bizview_assoc ON business_views(association_id, day)").run();
+
+  // v51: 쿠폰 사용. 쿠폰을 걸어 두기만 하고 "몇 명이나 썼어요?" 에 답을 못 하면,
+  // 상인회는 다음 해 총회에서 홈페이지 예산을 못 지킨다. 하루 한 줄로 접어 둔다.
+  await db.prepare(`CREATE TABLE IF NOT EXISTS coupon_uses (
+    coupon_id      INTEGER NOT NULL REFERENCES coupons(id) ON DELETE CASCADE,
+    business_id    INTEGER NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
+    day            TEXT NOT NULL,
+    uses           INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (coupon_id, day))`).run();
+  await db.prepare("CREATE INDEX IF NOT EXISTS idx_couponuse_assoc ON coupon_uses(association_id, day)").run();
 
   // v48: 유어딜 가게 번호. 이 번호가 있는 점포의 이용권을 홈 '우리 골목 이용권' 에 건다.
   // 0 = 유어딜을 안 쓰는 가게 (대부분). 번호는 유어딜이 발급한 셀러 번호를 그대로 적는다.

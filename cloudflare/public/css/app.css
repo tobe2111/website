@@ -864,6 +864,10 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .coupon-admin .ca-text{display:grid;gap:2px}
 .coupon-admin .ca-text small{color:var(--muted)}
 .coupon-admin.is-expired{opacity:.55}
+/* 사용 처리 · 되돌리기 · 삭제 — 좁은 화면에서는 아래로 흘러 내린다 */
+.coupon-admin .ca-acts{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+@media (max-width:560px){ .coupon-admin{flex-direction:column;align-items:stretch}
+  .coupon-admin .ca-acts{justify-content:flex-start} }
 /* 유어딜 연계 */
 .urdeal-promo{border:1px solid var(--line);position:relative}
 .up-badge{position:absolute;top:14px;right:16px;font-size:.68rem;font-weight:800;letter-spacing:.08em;color:var(--muted);border:1px solid var(--line);border-radius:99px;padding:3px 10px}
