@@ -2,7 +2,7 @@
 import * as D from "./db.js";
 import { esc, cap, clip, openBadge, openNow, hoursLine, dongOf, fmtBytes, kstStamp, kstDate, prettyPath, safeNext, parseCookies } from "./util.js";
 import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG, ORIGIN, assetUrl } from "./render.js";
-import { verifyInviteToken, SALES_STAGES, otpRequired, selfSignupOn, MAX_SLOTS, BULK_MAX, BULK_CHUNK, docOf, isPlaceholderEmail } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
+import { verifyInviteToken, verifyPhotoToken, SALES_STAGES, otpRequired, selfSignupOn, MAX_SLOTS, BULK_MAX, BULK_CHUNK, docOf, isPlaceholderEmail } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
 import { html, notFoundResponse, back, redirect } from "./http.js";
 import { deals as urdealDeals, urdealProductUrl } from "./urdeal.js";
 import { countable, countHomeGoal, homeVariantCookie } from "./traffic.js";
@@ -1165,6 +1165,50 @@ export function registerForm(ctx) {
   return html(layout({ title: "가입", assoc, base, body, csrf, scripts: turnstileScript(env) }));
 }
 
+// ================= 사장님 사진 보내기 (로그인 없이, 링크 하나로) =================
+//
+// 이 화면을 여는 사람은 카톡으로 링크를 받은 40~60대 사장님이고, 폰으로 한 손에 들고 봅니다.
+// 그래서 **한 화면에 단추 하나**입니다. 설명을 길게 쓰면 그 자리에서 닫습니다.
+// 로그인도, 앱 설치도, 회원가입도 없습니다 — 사진을 모으는 데 그 셋이 전부 걸림돌이었습니다.
+export async function ownerPhotoPage(ctx) {
+  const { db, env, assoc, base, query, csrf } = ctx;
+  const token = String(ctx.params.token || "");
+  const t = await verifyPhotoToken(env.SESSION_SECRET, token, assoc.id);
+  const shell = (inner, title) => html(layout({ title, assoc, base, body:
+    `<section class="section page-top"><div class="container auth-wrap"><div class="auth-card">${inner}</div></div></section>`,
+    csrf, scripts: `<script src="${assetUrl("/js/upload-resize.js")}" defer></script><script src="${assetUrl("/js/file-preview.js")}" defer></script>` }));
+
+  if (!t) return shell(`${authHead("링크가 만료되었습니다", "사진 보내기 링크는 2주 동안만 열려 있습니다.")}
+    <p class="auth-note">${esc(assoc.name)}에 연락해 새 링크를 요청해 주세요.</p>`, "사진 보내기");
+
+  const b = await D.getBusinessById(db, t.b);
+  if (!b || b.association_id !== assoc.id) return notFoundResponse(ctx);
+
+  const done = Number(query.get("done") || 0);
+  if (done > 0) return shell(`${authHead("보냈습니다. 감사합니다!", `사진 ${done}장이 ${esc(assoc.name)}에 전달됐습니다.`)}
+    <p class="auth-note">가게 페이지에 올라가면 손님이 보게 됩니다. 더 보내실 사진이 있으면 아래에서 이어서 보내셔도 됩니다.</p>
+    <a class="btn btn-outline btn-block" href="${base}/photos/${encodeURIComponent(token)}">사진 더 보내기</a>
+    <p class="auth-note"><a href="${base}/business/${esc(b.slug)}">내 가게 페이지 보기 →</a></p>`, "사진을 보냈습니다");
+
+  const have = (await D.listMedia(db, b.id)).filter((m) => m.kind === "image").length;
+  const plan = planOf(assoc);
+  const room = Math.max(0, plan.maxPhotos - have);
+
+  return shell(`${authHead(`${esc(b.name)} 사장님`, `${esc(assoc.name)} 홈페이지에 올릴 가게 사진을 보내 주세요.`)}${flashOf(query)}
+    <p class="auth-note">가게 바깥 모습, 안쪽 자리, 대표 메뉴 — <b>세 장만 있어도 충분합니다.</b>
+      폰에 있는 사진을 그대로 고르시면 됩니다. ${have ? `지금까지 ${have}장 올라가 있습니다.` : ""}</p>
+    ${room === 0
+      ? `<p class="auth-note"><b>사진이 가득 찼습니다.</b> ${esc(assoc.name)}에 문의해 주세요.</p>`
+      : `<form method="post" action="${base}/photos/upload" enctype="multipart/form-data" class="stack-form">
+      <input type="hidden" name="token" value="${esc(token)}" />
+      <label class="file-drop file-drop-lg"><input type="file" name="files" accept="image/*" multiple required />
+        <span class="file-drop-text">📷 사진 고르기<small>여러 장 한 번에 고를 수 있습니다 (최대 ${Math.min(room, 10)}장)</small></span></label>
+      <button class="btn btn-primary btn-lg btn-block">보내기</button></form>
+    <p class="auth-note">보내신 사진은 ${esc(assoc.name)} 홈페이지의 <b>내 가게 페이지</b>에만 쓰입니다.
+      마음에 안 드는 사진은 상인회에 말씀하시면 내려 드립니다.</p>`}`,
+    `${b.name} 사진 보내기`);
+}
+
 // ================= 초대 링크 가입 (관리자가 가게 정보를 미리 채움) =================
 export async function invitePage(ctx) {
   if (ctx.assoc && ctx.assoc.kind === "esign") return notFoundResponse(ctx);
@@ -1618,7 +1662,10 @@ export async function admin(ctx) {
   //  비밀번호 발급처럼 한 사람에 대한 일은 그 가게 화면의 [사장님 로그인] 에 모여 있다.)
   // ── 회원 추가 —— 예전에는 접힌 상자 안 맨 아래에 있어 아무도 못 찾았다.
   // 상인회장이 명단을 먼저 넣는 것이 실제 시작 방식이므로, 이건 눈에 보이는 자리에 있어야 한다.
-  const kakaoReady = !!String(env.KAKAO_REST_KEY || "").trim();
+  // 가게 찾기는 카카오·네이버 **둘 중 하나만** 있어도 된다 — 소상공인은 네이버에만
+  // 등록한 경우가 흔해, 카카오만 보면 "우리 가게가 없다" 가 된다.
+  const kakaoReady = !!(String(env.KAKAO_REST_KEY || "").trim()
+    || (String(env.NAVER_SEARCH_ID || "").trim() && String(env.NAVER_SEARCH_SECRET || "").trim()));
   const addMemberPanel = `<section class="panel panel-accent" id="p-addmember">
     <h2 class="panel-title">회원 추가</h2>
     <p class="panel-hint">사장님 대신 등록합니다. <b>이메일은 없어도 됩니다</b> — 이메일을 비우면 <b>휴대폰 번호가 곧 아이디</b>가 되고,
@@ -1634,7 +1681,7 @@ export async function admin(ctx) {
       // 키가 없다고 이 자리를 통째로 지우면, 이런 기능이 있다는 것 자체를 관리자가 알 수 없다.
       // 꺼져 있다는 사실과 켜는 방법을 한 줄로 남긴다 — 없는 것과 꺼진 것은 다르다.
       : `<p class="panel-hint">가게 이름만으로 주소·전화·업종·지도 위치를 채워 넣는 <b>지도에서 찾기</b>는 지금 꺼져 있습니다 —
-      운영사가 카카오 지도 키를 등록하면 이 자리에 검색 칸이 생깁니다. 그때까지는 아래에 직접 적어 주세요.</p>`}
+      운영사가 카카오 또는 네이버 지도 키를 등록하면 이 자리에 검색 칸이 생깁니다. 그때까지는 아래에 직접 적어 주세요.</p>`}
     <form method="post" action="${base}/admin/members/add" class="stack-form">
       <div class="form-two"><label>사장님 성함<input type="text" name="name" required maxlength="60" autocomplete="name" /></label>
         <label>휴대폰 <small>(알림톡·연락용)</small>
@@ -2773,7 +2820,10 @@ export async function adminBusinessEdit(ctx) {
   if (!b || b.association_id !== assoc.id) return notFoundResponse(ctx);
   const opts = CATEGORIES.map((c) => `<option value="${esc(c)}"${c === b.category ? " selected" : ""}>${esc(c)}</option>`).join("");
   const owner = b.owner_id ? await D.getUserById(db, b.owner_id) : null;
-  const kakaoOn = !!String(env.KAKAO_REST_KEY || "").trim();
+  const kakaoOn = !!(String(env.KAKAO_REST_KEY || "").trim()
+    || (String(env.NAVER_SEARCH_ID || "").trim() && String(env.NAVER_SEARCH_SECRET || "").trim()));
+  // 사진 찾기는 카카오 이미지 검색 전용이다 — 네이버만 넣은 조직에 되지도 않는 칸을 띄우지 않는다.
+  const imageSearchOn = !!String(env.KAKAO_REST_KEY || "").trim();
   // 무엇이 비어 있어서 손님에게 어떻게 보이는지 — 숫자가 아니라 결과로 말한다
   const gaps = [
     !b.address && "주소가 없어 <b>지도에 뜨지 않습니다</b>",
@@ -2790,15 +2840,32 @@ export async function adminBusinessEdit(ctx) {
   const plan = planOf(assoc);
   const delForm = (m) => `<form method="post" action="${base}/admin/business/${b.id}/media/${m.id}/delete" class="inline-form"
       data-confirm="이 ${m.kind === "image" ? "사진" : "영상"}을 지울까요?"><button class="btn btn-xs btn-ghost">지우기</button></form>`;
-  const mediaPanel = `<section class="panel"><h2 class="panel-title">사진·영상
+  // 사장님께 링크 하나 보내면 폰에서 직접 올린다 — 사진을 모으는 가장 깨끗한 길.
+  // 회장님이 남의 가게 사진을 대신 구할 방법은 사실상 이것뿐이다.
+  const photoLink = query.get("photolink");
+  const photoLinkBox = photoLink ? `<div class="invite-box">
+    <p class="invite-box-title">사진 요청 링크가 만들어졌습니다 <small>(2주 유효)</small></p>
+    <input type="text" class="invite-url" value="${esc(`${ORIGIN}${base}/photos/${encodeURIComponent(photoLink)}`)}" readonly data-select-all />
+    <span class="pill-row"><button type="button" class="btn btn-sm btn-primary" data-share
+      data-share-url="${esc(`${ORIGIN}${base}/photos/${encodeURIComponent(photoLink)}`)}"
+      data-share-title="${esc(b.name)} 가게 사진 보내기">카톡으로 보내기 / 복사</button></span>
+    <p class="panel-hint">사장님이 이 링크를 열면 <b>로그인 없이</b> 폰에서 바로 사진을 올립니다.
+      올라오면 알림으로 알려 드립니다.</p></div>` : "";
+  const mediaPanel = `<section class="panel" id="p-photos"><h2 class="panel-title">사진·영상
       <span class="badge badge-muted">사진 ${shots.length}/${plan.maxPhotos} · 영상 ${clips.length}/${plan.maxEmbeds}</span></h2>
     <p class="panel-hint">사장님께 카톡으로 받은 사진을 여기서 대신 올립니다. 맨 앞 사진이 목록·카톡 공유의 대표 사진이 됩니다.
       맨 앞 사진이 목록·카톡 공유의 대표 사진이 됩니다.</p>
+    ${photoLinkBox}
+    <form method="post" action="${base}/admin/business/${b.id}/photo-link" class="inline-form">
+      <button class="btn btn-outline btn-block">📷 사장님께 사진 요청 링크 보내기</button></form>
+    <p class="panel-hint">사장님이 링크를 열어 <b>로그인 없이</b> 폰에서 직접 올립니다.
+      본인이 찍은 사진이라 저작권 문제가 없고, 네이버에 올려 둔 사진을 그대로 주시는 경우가 많습니다.</p>
+    <div class="form-divider">직접 올리기</div>
     <form method="post" action="${base}/admin/business/${b.id}/media" enctype="multipart/form-data" class="upload-form">
       <label class="file-drop"><input type="file" name="files" accept="image/*" multiple /><span class="file-drop-text">사진 선택 (한 장당 최대 8MB · 여러 장 가능)</span></label>
       <input type="text" name="caption" placeholder="설명 (선택)" class="caption-input" maxlength="200" />
       <button class="btn btn-primary btn-block">사진 올리기</button></form>
-    ${kakaoOn ? `<div class="form-divider">웹에서 찾아 담기 <small>(최대 ${5}장)</small></div>
+    ${imageSearchOn ? `<div class="form-divider">웹에서 찾아 담기 <small>(최대 ${5}장)</small></div>
     <p class="panel-hint"><b>여기 뜨는 것은 그 가게의 공식 사진이 아니라, 웹에서 그 이름으로 검색된 사진입니다.</b>
       다른 지점이나 상관없는 사진이 섞여 나오니 <b>눈으로 확인하고</b> 골라 주세요.
       남이 찍은 사진이므로 <b>출처를 함께 저장</b>하고, 사장님 사진이 들어오면 바꿔 주시는 것이 좋습니다.</p>
@@ -2880,7 +2947,7 @@ export async function adminBusinessEdit(ctx) {
       <p class="panel-hint" data-place-msg hidden></p>
       <ul class="place-list" data-place-list hidden></ul>
       <p class="panel-hint">카카오맵에서 찾은 값을 아래 칸에 채워 넣습니다. <b>저장은 확인하고 직접 누르셔야 합니다</b> — 지도의 정보가 늘 최신인 것은 아닙니다.</p>`
-        : `<p class="panel-hint">지도에서 자동으로 채우는 기능은 운영사가 카카오 키를 등록하면 열립니다.</p>`}
+        : `<p class="panel-hint">지도에서 자동으로 채우는 기능은 운영사가 카카오 또는 네이버 지도 키를 등록하면 열립니다.</p>`}
       <form method="post" action="${base}/admin/business/${b.id}" class="stack-form">
         <label>업체명<input type="text" name="name" data-place="name" value="${esc(b.name)}" required maxlength="100" autocomplete="organization" /></label>
         <label>업종<select name="category" data-place="category">${opts}</select></label>
@@ -2911,7 +2978,7 @@ export async function adminBusinessEdit(ctx) {
     </div></section>`;
   return html(layout({ title: `${b.name} 정보`, assoc, base, user, body, csrf,
     scripts: `<script src="${assetUrl("/js/place.js")}" defer></script>${
-      kakaoOn ? `<script src="${assetUrl("/js/photo-pick.js")}" defer></script>` : ""}` }));
+      imageSearchOn ? `<script src="${assetUrl("/js/photo-pick.js")}" defer></script>` : ""}` }));
 }
 
 // 우리 상인회 서식 관리 — 만든 문서를 서식으로 저장해 다음부터 재사용
@@ -3965,8 +4032,11 @@ export async function superConsole(ctx) {
     ["네이버 지도", !!env.NAVER_MAP_CLIENT_ID, "NAVER_MAP_CLIENT_ID", "상인회 홈의 점포 지도. 지도가 안 뜨면 Maps 콘솔의 Web 서비스 URL 에 이 사이트 도메인이 등록됐는지 확인하세요."],
     ["사진 직접 서빙", !!env.MEDIA_PUBLIC_BASE, "MEDIA_PUBLIC_BASE", "R2 버킷에 공개 도메인을 켜고 그 주소를 워커 변수에 넣으면 사진이 워커를 거치지 않고 CDN 직행합니다."],
     ["방문 통계", !!env.CF_ANALYTICS_TOKEN, "CF_ANALYTICS_TOKEN", "Cloudflare Web Analytics 에서 사이트를 추가하고 발급된 토큰을 넣으면 모든 페이지에 자동 삽입됩니다."],
-    ["지도에서 가게 찾기", !!String(env.KAKAO_REST_KEY || "").trim(), "KAKAO_REST_KEY",
-      "카카오 개발자센터에서 앱을 만들고 <b>REST API 키</b>를 넣으면, 관리자가 점포 정보를 채울 때 가게 이름만으로 주소·전화·업종·좌표가 채워집니다. 없으면 손으로 적으면 됩니다."],
+    ["지도에서 가게 찾기 (카카오)", !!String(env.KAKAO_REST_KEY || "").trim(), "KAKAO_REST_KEY",
+      "카카오 개발자센터에서 앱을 만들고 <b>REST API 키</b>를 넣으면, 관리자가 점포 정보를 채울 때 가게 이름만으로 주소·전화·업종·좌표가 채워집니다. 같은 키로 <b>가게 사진 찾기</b>도 함께 열립니다."],
+    ["지도에서 가게 찾기 (네이버)", !!(String(env.NAVER_SEARCH_ID || "").trim() && String(env.NAVER_SEARCH_SECRET || "").trim()), "NAVER_SEARCH_ID · NAVER_SEARCH_SECRET",
+      "네이버 개발자센터에서 <b>검색 API</b> 애플리케이션을 만들어 Client ID·Secret 을 넣습니다. <b>소상공인은 네이버에만 등록한 경우가 많아, 카카오에 없는 가게가 여기서 나옵니다.</b> 둘 다 넣으면 두 곳을 함께 찾아 한 줄로 합쳐 보여 줍니다. (지도를 그리는 NAVER_MAP_CLIENT_ID 와는 다른 키입니다)"],
+
   ];
   const supers = await soft("슈퍼 계정 목록", () => D.listSuperAdmins(db), []);
   const superPanel = `<section class="panel"><h2 class="panel-title">이 콘솔에 접근 가능한 계정 <span class="badge ${supers.length > 1 ? "badge-wait" : "badge-ok"}">${supers.length}개</span></h2>

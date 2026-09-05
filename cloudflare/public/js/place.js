@@ -70,7 +70,11 @@
         var t = document.createElement("b");
         t.textContent = p.name;
         var s = document.createElement("small");
+        // 어느 지도에서 온 것인지 밝힌다 — 카카오에 없는 가게가 흔해서, 네이버에서 온 것을
+        // 구분해 보여 주면 "왜 아까는 안 나왔지" 가 설명된다. 두 곳 다 있으면 둘 다 적는다.
+        var src = (p.sources || []).join("·");
         s.textContent = [p.address, p.phone, p.category].filter(Boolean).join(" · ") || "주소 정보 없음";
+        if (src) { var tag = document.createElement("em"); tag.className = "place-src"; tag.textContent = src; b.appendChild(tag); }
         b.appendChild(t); b.appendChild(s);
         b.addEventListener("click", function () { fill(p); });
         li.appendChild(b);

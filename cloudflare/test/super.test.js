@@ -253,7 +253,7 @@ test("연동 값이 있으면 켜짐으로 바뀌고 값 자체는 안 보인다
     body: new URLSearchParams({ _csrf: tk, email: "s2@platform.kr", password: "super1234" }) });
   const jar = [seed, ...(lr.headers.getSetCookie?.() || []).map((c) => c.split(";")[0])].join("; ");
   const html = await (await fetch2("/super", { headers: { cookie: jar } })).text();
-  assert.match(html, /2\/5 켜짐/, "설정한 두 항목이 켜짐으로 세어져야 함");
+  assert.match(html, /2\/6 켜짐/, "설정한 두 항목이 켜짐으로 세어져야 함 (지도 검색이 카카오·네이버 둘로 갈려 항목이 하나 늘었다)");
   // 값 자체는 패널에 찍지 않습니다. (CF 방문 통계 토큰은 비콘 스크립트에 들어가는 공개 값이라
   //  페이지 다른 곳에는 정상적으로 나타납니다 — 그래서 패널 구간만 잘라 확인합니다.)
   // 패널 이름이 '선택 연동 점검' → '있으면 좋은 것' 으로 바뀐 뒤로 이 자르기가 -1 을 집어

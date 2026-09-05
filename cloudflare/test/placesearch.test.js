@@ -102,7 +102,9 @@ test("검색어는 두 글자부터 — 한 글자로 남의 서버를 두드리
   } finally { spy.restore(); }
 });
 
-test("카카오가 아프면 사장님 화면이 아니라 안내 문구로 끝난다", async () => {
+// 지도가 둘이 되면서 "한쪽이 아프다" 는 더 이상 실패가 아니다 — 다른 쪽으로 일이 된다.
+// 여기서는 **네이버 열쇠가 없는 조직**을 재므로, 카카오가 죽으면 기댈 곳이 없어 502 가 맞다.
+test("기댈 지도가 하나뿐인데 그것이 아프면, 사장님 화면이 아니라 안내 문구로 끝난다", async () => {
   const env = makeEnv({ KAKAO_REST_KEY: "test-key" });
   const { j } = await seed(env);
   for (const [reply, status] of [

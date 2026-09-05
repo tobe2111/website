@@ -109,11 +109,11 @@ test("카카오 키가 없으면 그 사실을 말해 주고, 화면도 그 기�
   const j = await login(env, "ad@s.kr");
   const html = await (await get(env, j, `/t/seocho/admin/business/${b.id}`)).text();
   assert.ok(!/data-place-find/.test(html), "키가 없으면 찾기 칸을 그리지 않는다");
-  assert.match(html, /운영사가 카카오 키를 등록하면/);
+  assert.match(html, /운영사가 카카오 또는 네이버 지도 키를 등록하면/);
 
   const r = await get(env, j, "/t/seocho/admin/place-search?q=버들카페");
   assert.equal(r.status, 503);
-  assert.match((await r.json()).message, /카카오 REST 키/);
+  assert.match((await r.json()).message, /지도 검색 열쇠가 등록되지 않았습니다/);
 });
 
 test("지도 검색은 카카오가 준 값만 넘기고, 업종은 맨 끝 낱말만 쓴다", async () => {

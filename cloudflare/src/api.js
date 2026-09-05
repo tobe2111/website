@@ -548,45 +548,124 @@ export async function adminDeleteMedia(ctx) {
 // 가입 점포 수가 사실과 달라지기 때문이다. 여기서는 **관리자가 이름을 치고 눈으로 고른** 한 곳만
 // 채운다 — 출처가 분명하고, 저장은 사람이 누른다.
 export async function adminPlaceSearch(ctx) {
-  const { env, query } = ctx;
+  const { env, query, db, assoc } = ctx;
   const json = (o, status = 200) => new Response(JSON.stringify(o), {
     status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
-  const key = String(env.KAKAO_REST_KEY || "").trim();
-  if (!key) return json({ error: "not_configured", message: "카카오 REST 키가 등록되지 않았습니다. 운영사에 문의해 주세요." }, 503);
+  const kakaoKey = String(env.KAKAO_REST_KEY || "").trim();
+  const nId = String(env.NAVER_SEARCH_ID || "").trim();
+  const nSecret = String(env.NAVER_SEARCH_SECRET || "").trim();
+  if (!kakaoKey && !(nId && nSecret))
+    return json({ error: "not_configured", message: "지도 검색 열쇠가 등록되지 않았습니다. 운영사에 문의해 주세요." }, 503);
   const q = cap((query.get("q") || "").trim(), 60);
   if (q.length < 2) return json({ places: [] });
-  const url = new URL("https://dapi.kakao.com/v2/local/search/keyword.json");
-  url.searchParams.set("query", q);
-  url.searchParams.set("size", "10");
-  // 좌표를 주면 그 근처를 먼저 보여 준다 — 같은 상호가 전국에 있을 때 골목 것이 위로 온다
-  const x = Number(query.get("x")), y = Number(query.get("y"));
-  if (Number.isFinite(x) && Number.isFinite(y) && x && y) {
-    url.searchParams.set("x", String(x)); url.searchParams.set("y", String(y));
-    url.searchParams.set("radius", "5000"); url.searchParams.set("sort", "distance");
+
+  // 검색 중심 — 같은 상호는 전국에 있다. 우리 골목 것을 위로 올리려면 '어디쯤' 인지가 필요하다.
+  // 화면이 좌표를 주면 그것을, 없으면 **이미 등록된 우리 가게들의 한가운데**를 쓴다.
+  // (첫 가게를 넣을 때는 중심이 없다 — 그때는 전국 검색이지만, 두 번째부터는 골목이 잡힌다)
+  let cx = Number(query.get("x")), cy = Number(query.get("y"));
+  if (!(Number.isFinite(cx) && Number.isFinite(cy) && cx && cy) && db && assoc) {
+    try {
+      const pts = await D.listBusinessMarkers(db, assoc.id);
+      if (pts.length) {
+        cx = pts.reduce((a, p) => a + Number(p.lng), 0) / pts.length;
+        cy = pts.reduce((a, p) => a + Number(p.lat), 0) / pts.length;
+      }
+    } catch { /* 중심이 없으면 그냥 전국 검색 */ }
   }
-  let r;
-  try {
-    r = await fetch(url, { headers: { Authorization: `KakaoAK ${key}` } });
-  } catch {
-    return json({ error: "unreachable", message: "카카오에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요." }, 502);
+  const hasCenter = Number.isFinite(cx) && Number.isFinite(cy) && cx && cy;
+
+  // ── 카카오 로컬 ──
+  async function fromKakao() {
+    if (!kakaoKey) return [];
+    const url = new URL("https://dapi.kakao.com/v2/local/search/keyword.json");
+    url.searchParams.set("query", q);
+    url.searchParams.set("size", "15");
+    if (hasCenter) {
+      url.searchParams.set("x", String(cx)); url.searchParams.set("y", String(cy));
+      url.searchParams.set("radius", "20000"); url.searchParams.set("sort", "distance");
+    }
+    const r = await fetch(url, { headers: { Authorization: `KakaoAK ${kakaoKey}` } });
+    if (!r.ok) throw new Error(`kakao ${r.status}`);
+    const data = await r.json().catch(() => null);
+    return (data && Array.isArray(data.documents) ? data.documents : []).map((d) => ({
+      source: "카카오",
+      name: cap(String(d.place_name || ""), 100),
+      address: cap(String(d.road_address_name || d.address_name || ""), 200),
+      phone: cap(String(d.phone || ""), 40),
+      category: cap(String(d.category_name || "").split(">").pop().trim(), 40),
+      categoryPath: cap(String(d.category_name || "").trim(), 120),
+      lat: Number(d.y) || null, lng: Number(d.x) || null,
+      url: /^https?:\/\//.test(String(d.place_url || "")) ? String(d.place_url) : "",
+    }));
   }
-  if (!r.ok) return json({ error: "upstream", message: `카카오가 ${r.status} 로 답했습니다. 키를 확인해 주세요.` }, 502);
-  const data = await r.json().catch(() => null);
-  const docs = (data && Array.isArray(data.documents) ? data.documents : []).slice(0, 10);
-  // 카카오가 주는 값만 그대로 넘긴다 — 우리가 지어내지 않는다
-  return json({ places: docs.map((d) => ({
-    name: cap(String(d.place_name || ""), 100),
-    address: cap(String(d.road_address_name || d.address_name || ""), 200),
-    phone: cap(String(d.phone || ""), 40),
-    // 화면에 보일 때는 맨 끝 낱말만 ('음식점 > 한식 > 국밥' → '국밥').
-    // 다만 우리 업종 목록으로 옮길 때는 전체 갈래가 있어야 한다 — '커피전문점' 만 보면
-    // 카페인지 알 수 없지만 '음식점 > 카페 > 커피전문점' 이면 분명하다.
-    category: cap(String(d.category_name || "").split(">").pop().trim(), 40),
-    categoryPath: cap(String(d.category_name || "").trim(), 120),
-    lat: Number(d.y) || null, lng: Number(d.x) || null,
-    url: /^https?:\/\//.test(String(d.place_url || "")) ? String(d.place_url) : "",
-  })) });
+
+  // ── 네이버 지역 검색 ──
+  // 소상공인은 네이버 스마트플레이스에만 등록한 경우가 많아, 카카오에는 없는 가게가 흔하다.
+  // 두 곳을 함께 물어야 "우리 가게가 안 나와요" 가 줄어든다.
+  async function fromNaver() {
+    if (!(nId && nSecret)) return [];
+    const url = new URL("https://openapi.naver.com/v1/search/local.json");
+    url.searchParams.set("query", q);
+    url.searchParams.set("display", "5");     // 지역 검색은 최대 5건까지만 준다
+    const r = await fetch(url, { headers: { "X-Naver-Client-Id": nId, "X-Naver-Client-Secret": nSecret } });
+    if (!r.ok) throw new Error(`naver ${r.status}`);
+    const data = await r.json().catch(() => null);
+    return (data && Array.isArray(data.items) ? data.items : []).map((d) => {
+      // 검색어에 <b> 태그가 씌워져 온다 — 태그를 벗기고 실체를 남긴다
+      const name = String(d.title || "").replace(/<[^>]*>/g, "").trim();
+      // mapx·mapy 는 두 가지 체계가 섞여 온다: 옛 KATECH(6자리대)와 WGS84×10^7(10자리대).
+      // 자릿수로 갈라 낸다 — 잘못 읽으면 지도 핀이 엉뚱한 곳에 찍힌다.
+      const nx = Number(d.mapx), ny = Number(d.mapy);
+      const wgs = Math.abs(nx) > 1e6;
+      return {
+        source: "네이버",
+        name: cap(name, 100),
+        address: cap(String(d.roadAddress || d.address || ""), 200),
+        phone: cap(String(d.telephone || ""), 40),
+        category: cap(String(d.category || "").split(">").pop().trim(), 40),
+        categoryPath: cap(String(d.category || "").trim(), 120),
+        lat: wgs && Number.isFinite(ny) ? ny / 1e7 : null,
+        lng: wgs && Number.isFinite(nx) ? nx / 1e7 : null,
+        url: /^https?:\/\//.test(String(d.link || "")) ? String(d.link) : "",
+      };
+    });
+  }
+
+  // **실제로 물어본 곳**만 센다. 열쇠가 없어 아예 묻지 않은 곳을 '성공' 으로 치면,
+  // 카카오가 죽었을 때 빈 목록이 200 으로 나가 관리자는 "그런 가게가 없다" 고 읽는다.
+  // 그러면 상호만 계속 고쳐 치게 된다 — 지도가 아픈 것을 지도가 아프다고 말해야 한다.
+  const tried = [];
+  if (kakaoKey) tried.push(fromKakao());
+  if (nId && nSecret) tried.push(fromNaver());
+  const settled = await Promise.allSettled(tried);
+  const got = settled.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
+  if (settled.every((r) => r.status === "rejected"))
+    return json({ error: "upstream", message: "지도 검색에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요." }, 502);
+
+  // 같은 가게가 두 곳에서 오면 한 줄로 합친다 — 관리자는 같은 이름 두 개를 보고 어느 쪽인지 모른다.
+  // 전화번호가 같으면 확실히 같은 가게고, 없으면 이름+번지로 본다.
+  const keyOf = (p) => (p.phone ? p.phone.replace(/\D/g, "")
+    : (p.name.replace(/\s/g, "") + "|" + p.address.replace(/\s/g, "").slice(0, 14)));
+  const merged = new Map();
+  for (const p of got) {
+    const k2 = keyOf(p);
+    const prev = merged.get(k2);
+    if (!prev) { merged.set(k2, { ...p, sources: [p.source] }); continue; }
+    prev.sources.push(p.source);
+    // 빈 칸은 다른 쪽 값으로 메운다 — 카카오에 좌표가, 네이버에 도로명이 있는 식이다
+    for (const f of ["address", "phone", "category", "categoryPath", "lat", "lng", "url"])
+      if (!prev[f] && p[f]) prev[f] = p[f];
+  }
+  // 중심이 있으면 가까운 순 — 골목 것이 위로 온다
+  const out = [...merged.values()].map(({ source, ...p }) => p);
+  if (hasCenter) {
+    const d2 = (p) => (p.lat == null || p.lng == null) ? Infinity
+      : (p.lat - cy) ** 2 + ((p.lng - cx) * 0.8) ** 2;
+    out.sort((a, b) => d2(a) - d2(b));
+  }
+  return json({ places: out.slice(0, 12), center: hasCenter });
 }
+
 
 // ---------- 웹에서 가게 사진 찾아 담기 ----------
 //
@@ -2643,6 +2722,72 @@ export async function verifyInviteToken(secret, token, assocId) {
   if (!data || data.a !== assocId || !data.x || Date.now() > data.x) return null;
   return data;
 }
+// ---------- 사장님 사진 요청 링크 ----------
+//
+// 사진을 모으는 유일하게 깨끗한 길이다. 지도에서 긁어 오는 것은 남의 저작물이고, 웹 이미지
+// 검색은 그 가게 사진이 아니다. **사장님이 자기 사진을 올리는 것**만 문제가 없다.
+//
+// 그런데 사장님께 "로그인해서 올려 주세요" 라고 하면 거기서 끊긴다 — 아이디를 잊었거나,
+// 비밀번호를 못 찾거나, 그냥 귀찮다. 그래서 **로그인 없이 링크 하나로** 올리게 한다.
+// 회장님이 카톡으로 링크를 보내면, 사장님은 폰에서 열어 사진을 고르고 보내면 끝이다.
+//
+// 그 대신 이 링크로 할 수 있는 일은 **그 가게에 사진을 올리는 것 하나뿐**이다.
+// 남의 가게도, 글 수정도, 기존 사진 삭제도 안 된다. 링크가 새어 나가도 잃을 것이 적어야 한다.
+const PHOTO_TTL_MS = 14 * 24 * 60 * 60 * 1000;   // 2주 — 카톡으로 받은 뒤 주말에 올리는 분이 많다
+export async function makePhotoToken(secret, assocId, bizId) {
+  const json = JSON.stringify({ a: assocId, b: bizId, x: Date.now() + PHOTO_TTL_MS });
+  const sig = await hmacSign(secret, "photo|" + json);
+  return `${b64uFromBytes(new TextEncoder().encode(json))}.${sig}`;
+}
+export async function verifyPhotoToken(secret, token, assocId) {
+  const parts = String(token || "").split(".");
+  if (parts.length !== 2) return null;
+  let raw;
+  try { raw = new TextDecoder().decode(bytesFromB64u(parts[0])); } catch { return null; }
+  // 서명 문맥이 "photo|" 다 — 초대 링크 토큰을 사진 링크로 돌려 쓸 수 없다.
+  if (!(await hmacVerify(secret, "photo|" + raw, parts[1]))) return null;
+  let data;
+  try { data = JSON.parse(raw); } catch { return null; }
+  if (!data || data.a !== assocId || !data.b || !data.x || Date.now() > data.x) return null;
+  return data;
+}
+
+export async function adminCreatePhotoLink(ctx) {
+  const { db, env, base, assoc } = ctx;
+  const b = await D.getBusinessById(db, Number(ctx.params.id) || 0);
+  if (!b || b.association_id !== assoc.id) return back(`${base}/admin`, "업체를 찾을 수 없습니다.", true);
+  const token = await makePhotoToken(env.SESSION_SECRET, assoc.id, b.id);
+  await audit(ctx, "사진요청링크생성", b.name);
+  return redirect(`${base}/admin/business/${b.id}?photolink=${encodeURIComponent(token)}#p-photos`);
+}
+
+// 사장님이 링크를 열고 사진을 보낸다. 로그인 없음 — 토큰이 곧 권한이다.
+export async function ownerPhotoUpload(ctx) {
+  const { db, env, form, assoc, ip } = ctx;
+  const token = String(form.get("token") || "");
+  const at = (m, bad) => back(`${ctx.base}/photos/${encodeURIComponent(token)}`, m, bad);
+  if (rateLimited(ip)) return at("잠시 후 다시 시도해 주세요.", true);
+  const t = await verifyPhotoToken(env.SESSION_SECRET, token, assoc.id);
+  if (!t) { recordFail(ip); return at("링크가 만료되었습니다. 상인회에 새 링크를 요청해 주세요.", true); }
+  const b = await D.getBusinessById(db, t.b);
+  if (!b || b.association_id !== assoc.id) return at("가게를 찾을 수 없습니다.", true);
+
+  const plan = planOf(assoc);
+  const have = await D.countBusinessImages(db, b.id);
+  if (have >= plan.maxPhotos) return at(`사진이 이미 가득 찼습니다 (${plan.maxPhotos}장). 상인회에 문의해 주세요.`, true);
+  const room = plan.maxPhotos - have;
+  const up = await saveImages(env, form.getAll("files"), Math.min(room, 10));
+  if (up.error) return at(up.error, true);
+  if (!up.images.length) return at("사진을 한 장 이상 골라 주세요.", true);
+  for (const im of up.images)
+    await D.addMedia(db, { businessId: b.id, kind: "image", filename: im.filename, size: im.size });
+  // 회장님이 "보냈다" 를 알아야 다음 가게로 넘어간다
+  await D.createNotification(db, { associationId: assoc.id, kind: "new_media",
+    message: `'${b.name}' 사장님이 사진 ${up.images.length}장을 보내 주셨습니다.`,
+    link: `${ctx.base}/admin/business/${b.id}` });
+  return redirect(`${ctx.base}/photos/${encodeURIComponent(token)}?done=${up.images.length}`);
+}
+
 export async function adminCreateInvite(ctx) {
   const { env, form, base, assoc } = ctx;
   const bizName = cap((form.get("biz_name") || "").trim(), 100);
