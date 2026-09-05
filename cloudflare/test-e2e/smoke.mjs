@@ -209,7 +209,9 @@ const ok = (cond, name) => { if (cond) { pass++; console.log("  ✓", name); } e
 {
   const p = await browser.newPage();
   await p.goto(`http://localhost:${PORT}/login.html`);
-  await p.fill('input[name="email"]', "x@x.kr");
+  // 로그인 칸 이름은 email 이 아니라 login 이다 — 이메일이 없는 사장님이 휴대폰 번호로도
+  // 들어오기 때문이다. 이 시험은 배포 검사(npm test)에 안 들어가서 한동안 못 보고 지나갔다.
+  await p.fill('input[name="login"]', "x@x.kr");
   await p.fill('input[name="password"]', "12345678");
   await p.evaluate(() => {
     const f = document.querySelector('form[method="post"]');
