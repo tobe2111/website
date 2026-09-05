@@ -269,3 +269,39 @@ test("콘솔 카드 위에 가로줄을 얹지 않는다", async () => {
   }
   assert.deepEqual(bad, [], `카드 위에 선을 긋는 규칙이 있습니다:\n  ${bad.join("\n  ")}`);
 });
+
+// 고정 하단 바가 페이지 끝을 가리지 않는가.
+//
+// 예전에는 CSS `body:has(.fr-sticky)` 로 "바가 있으면 아래 여백을 준다" 를 판정했습니다.
+// 그런데 `:has()` 는 파이어폭스 ESR 에서 안 돕니다 — 관공서·학교 PC 에 그게 남아 있습니다.
+// 거기서는 여백이 안 붙어 **바가 푸터를 덮었습니다.**
+//
+// 서버는 자기가 바를 그렸는지 이미 알고 있으므로, 클래스로 말하게 했습니다.
+// 둘이 어긋나면(바는 있는데 클래스가 없거나, 반대거나) 같은 사고가 다시 납니다.
+test("고정 하단 바를 그리면 body 에 has-sticky 가 함께 붙는다", async () => {
+  const { layout } = await import("../src/render.js");
+  const mk = (assoc, body) => layout({ title: "t", assoc, base: "/t/x", body });
+  const franchise = { id: 1, name: "다뽕고", kind: "franchise", phone: "1600-0000", brand_color: "#e8b400" };
+  const merchant = { id: 2, name: "방배카페골목 상인회", kind: "merchant", brand_color: "#1B6B45" };
+
+  const landing = mk(franchise, `<section class="section"><p>랜딩</p></section>`);
+  assert.match(landing, /class="[^"]*has-sticky/, "바를 그렸으면 클래스도 붙어야 한다");
+  assert.match(landing, /fr-sticky/, "바가 실제로 있어야 한다");
+
+  const shop = mk(merchant, `<section class="section"><p>상인회 홈</p></section>`);
+  assert.ok(!/has-sticky/.test(shop), "바가 없으면 클래스도 없어야 한다 — 헛여백이 남는다");
+  assert.ok(!/fr-sticky/.test(shop));
+
+  // 업무 콘솔에는 바를 안 그린다 — 클래스도 안 붙어야 한다
+  const console_ = mk(franchise, `<section class="dash"><p>콘솔</p></section>`);
+  assert.equal(/fr-sticky/.test(console_), /has-sticky/.test(console_),
+    "바와 클래스는 언제나 같이 있거나 같이 없어야 한다");
+});
+
+// 고정 바 여백을 :has() 로 되돌리면 파이어폭스 ESR 에서 다시 가려집니다.
+test("고정 바 여백을 :has() 로 판정하지 않는다", async () => {
+  const { readFileSync } = await import("node:fs");
+  const css = readFileSync(new URL("../public/css/app.css", import.meta.url), "utf8");
+  assert.ok(!/:has\s*\(\s*\.fr-sticky/.test(css),
+    "body:has(.fr-sticky) 가 돌아왔습니다 — 서버가 붙이는 .has-sticky 를 쓰세요");
+});

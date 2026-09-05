@@ -105,8 +105,13 @@ ${ogImgAbs ? `<meta property="og:image" content="${esc(ogImgAbs)}" />` : ""}
   const isDone = /<section class="done-screen"/.test(String(body));
   // 완료 화면·외부 서명자(로그인 없음) 화면에는 하단 탭을 그리지 않는다 — 그 사람은 이 조직의 손님이 아니다
   const bnav = assoc && !isConsole(body) && !isDone && !kindById(assoc.kind).usesLanding ? bottomNav(base, activeNav, assoc.kind, user) : "";
+  // 고정 하단 바를 그리는가. 예전에는 CSS `body:has(.fr-sticky)` 로 알아냈는데,
+  // `:has()` 는 파이어폭스 ESR(관공서·학교 PC 에 남아 있다)에서 안 돌아 **바가 페이지 끝을
+  // 가렸다.** 서버는 자기가 바를 그렸는지 이미 알고 있으니, 그냥 여기서 표시한다.
+  const sticky = !!(assoc && kindById(assoc.kind).usesLanding && !isConsole(body));
   // 어두운 '완료' 화면이면 머리·바닥도 같은 어둠으로 — 흰 띠가 남으면 화면이 둘로 갈린다
-  const bodyClass = [bnav ? "has-bnav" : "", isDone ? "is-done" : "", workScreen ? "is-console" : ""].filter(Boolean).join(" ");
+  const bodyClass = [bnav ? "has-bnav" : "", isDone ? "is-done" : "", workScreen ? "is-console" : "",
+    sticky ? "has-sticky" : ""].filter(Boolean).join(" ");
   // 모든 POST 폼에 CSRF 히든 필드 주입
   const injected = csrf
     ? String(body).replace(/(<form\b[^>]*\bmethod\s*=\s*["']post["'][^>]*>)/gi, `$1<input type="hidden" name="_csrf" value="${csrf}">`)
@@ -147,7 +152,7 @@ ${consoleKind === "super" ? `<div class="console-strip"><div class="container co
   </div>
 </header>
 <main id="main">${injected}</main>
-${assoc && kindById(assoc.kind).usesLanding && !isConsole(body) ? stickyBar(assoc, base) : ""}
+${sticky ? stickyBar(assoc, base) : ""}
 ${bnav}
 ${workScreen ? "" : `<footer class="site-footer"><div class="container">
   <div class="foot-top">
