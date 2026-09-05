@@ -2722,6 +2722,72 @@ export async function verifyInviteToken(secret, token, assocId) {
   if (!data || data.a !== assocId || !data.x || Date.now() > data.x) return null;
   return data;
 }
+// ---------- 사장님 사진 요청 링크 ----------
+//
+// 사진을 모으는 유일하게 깨끗한 길이다. 지도에서 긁어 오는 것은 남의 저작물이고, 웹 이미지
+// 검색은 그 가게 사진이 아니다. **사장님이 자기 사진을 올리는 것**만 문제가 없다.
+//
+// 그런데 사장님께 "로그인해서 올려 주세요" 라고 하면 거기서 끊긴다 — 아이디를 잊었거나,
+// 비밀번호를 못 찾거나, 그냥 귀찮다. 그래서 **로그인 없이 링크 하나로** 올리게 한다.
+// 회장님이 카톡으로 링크를 보내면, 사장님은 폰에서 열어 사진을 고르고 보내면 끝이다.
+//
+// 그 대신 이 링크로 할 수 있는 일은 **그 가게에 사진을 올리는 것 하나뿐**이다.
+// 남의 가게도, 글 수정도, 기존 사진 삭제도 안 된다. 링크가 새어 나가도 잃을 것이 적어야 한다.
+const PHOTO_TTL_MS = 14 * 24 * 60 * 60 * 1000;   // 2주 — 카톡으로 받은 뒤 주말에 올리는 분이 많다
+export async function makePhotoToken(secret, assocId, bizId) {
+  const json = JSON.stringify({ a: assocId, b: bizId, x: Date.now() + PHOTO_TTL_MS });
+  const sig = await hmacSign(secret, "photo|" + json);
+  return `${b64uFromBytes(new TextEncoder().encode(json))}.${sig}`;
+}
+export async function verifyPhotoToken(secret, token, assocId) {
+  const parts = String(token || "").split(".");
+  if (parts.length !== 2) return null;
+  let raw;
+  try { raw = new TextDecoder().decode(bytesFromB64u(parts[0])); } catch { return null; }
+  // 서명 문맥이 "photo|" 다 — 초대 링크 토큰을 사진 링크로 돌려 쓸 수 없다.
+  if (!(await hmacVerify(secret, "photo|" + raw, parts[1]))) return null;
+  let data;
+  try { data = JSON.parse(raw); } catch { return null; }
+  if (!data || data.a !== assocId || !data.b || !data.x || Date.now() > data.x) return null;
+  return data;
+}
+
+export async function adminCreatePhotoLink(ctx) {
+  const { db, env, base, assoc } = ctx;
+  const b = await D.getBusinessById(db, Number(ctx.params.id) || 0);
+  if (!b || b.association_id !== assoc.id) return back(`${base}/admin`, "업체를 찾을 수 없습니다.", true);
+  const token = await makePhotoToken(env.SESSION_SECRET, assoc.id, b.id);
+  await audit(ctx, "사진요청링크생성", b.name);
+  return redirect(`${base}/admin/business/${b.id}?photolink=${encodeURIComponent(token)}#p-photos`);
+}
+
+// 사장님이 링크를 열고 사진을 보낸다. 로그인 없음 — 토큰이 곧 권한이다.
+export async function ownerPhotoUpload(ctx) {
+  const { db, env, form, assoc, ip } = ctx;
+  const token = String(form.get("token") || "");
+  const at = (m, bad) => back(`${ctx.base}/photos/${encodeURIComponent(token)}`, m, bad);
+  if (rateLimited(ip)) return at("잠시 후 다시 시도해 주세요.", true);
+  const t = await verifyPhotoToken(env.SESSION_SECRET, token, assoc.id);
+  if (!t) { recordFail(ip); return at("링크가 만료되었습니다. 상인회에 새 링크를 요청해 주세요.", true); }
+  const b = await D.getBusinessById(db, t.b);
+  if (!b || b.association_id !== assoc.id) return at("가게를 찾을 수 없습니다.", true);
+
+  const plan = planOf(assoc);
+  const have = await D.countBusinessImages(db, b.id);
+  if (have >= plan.maxPhotos) return at(`사진이 이미 가득 찼습니다 (${plan.maxPhotos}장). 상인회에 문의해 주세요.`, true);
+  const room = plan.maxPhotos - have;
+  const up = await saveImages(env, form.getAll("files"), Math.min(room, 10));
+  if (up.error) return at(up.error, true);
+  if (!up.images.length) return at("사진을 한 장 이상 골라 주세요.", true);
+  for (const im of up.images)
+    await D.addMedia(db, { businessId: b.id, kind: "image", filename: im.filename, size: im.size });
+  // 회장님이 "보냈다" 를 알아야 다음 가게로 넘어간다
+  await D.createNotification(db, { associationId: assoc.id, kind: "new_media",
+    message: `'${b.name}' 사장님이 사진 ${up.images.length}장을 보내 주셨습니다.`,
+    link: `${ctx.base}/admin/business/${b.id}` });
+  return redirect(`${ctx.base}/photos/${encodeURIComponent(token)}?done=${up.images.length}`);
+}
+
 export async function adminCreateInvite(ctx) {
   const { env, form, base, assoc } = ctx;
   const bizName = cap((form.get("biz_name") || "").trim(), 100);
