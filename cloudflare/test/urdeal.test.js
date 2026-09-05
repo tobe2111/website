@@ -52,9 +52,11 @@ function stubUrdeal(bySeller) {
   };
   return { calls, restore: () => { globalThis.fetch = real; } };
 }
-const DEAL = (id, name, price, was, seller) => ({
+// 실제 응답에는 seller_id 가 늘 들어 있다(가게 것이 아니면 null). 그 모양을 그대로 흉내낸다 —
+// 예전 이 자리에 0 을 박아 두었는데, 그건 실제로는 오지 않는 값이라 시험이 헐거웠다.
+const DEAL = (id, name, price, was, seller, sellerId) => ({
   id, name, price, original_price: was, image_url: "https://cdn.example.com/a.jpg",
-  seller_name: seller, sold_count: 12, seller_id: 0,
+  seller_name: seller, sold_count: 12, seller_id: sellerId === undefined ? null : sellerId,
 });
 
 test("이용권이 없어도 섹션이 비지 않는다 — 사장님을 부르는 칸이 남는다", async () => {
@@ -71,8 +73,8 @@ test("가게 번호를 넣으면 그 가게의 이용권이 홈에 걸린다", a
   await D.setUrdealSeller(env.DB, b1.id, b1.association_id, 128);
   await D.setUrdealSeller(env.DB, b2.id, b2.association_id, 300);
   const s = stubUrdeal({
-    128: [DEAL(9001, "아메리카노 5잔 이용권", 17000, 20000, "방배 커피")],
-    300: [DEAL(9002, "삼겹살 600g 교환권", 19900, 24000, "방배 정육점")],
+    128: [DEAL(9001, "아메리카노 5잔 이용권", 17000, 20000, "방배 커피", 128)],
+    300: [DEAL(9002, "삼겹살 600g 교환권", 19900, 24000, "방배 정육점", 300)],
   });
   try {
     const html = await (await get(env, jar(), "/t/seocho/")).text();
@@ -106,7 +108,7 @@ test("한 가게가 실패해도 나머지 가게 이용권은 나온다", async
   const env = makeEnv(); const { b1, b2 } = await seed(env);
   await D.setUrdealSeller(env.DB, b1.id, b1.association_id, 128);
   await D.setUrdealSeller(env.DB, b2.id, b2.association_id, 300);
-  const s = stubUrdeal({ 128: "500", 300: [DEAL(9002, "삼겹살 교환권", 19900, 24000, "방배 정육점")] });
+  const s = stubUrdeal({ 128: "500", 300: [DEAL(9002, "삼겹살 교환권", 19900, 24000, "방배 정육점", 300)] });
   try {
     const html = await (await get(env, jar(), "/t/seocho/")).text();
     assert.match(html, /삼겹살 교환권/, "살아 있는 쪽은 나와야");
@@ -116,10 +118,10 @@ test("한 가게가 실패해도 나머지 가게 이용권은 나온다", async
 test("남의 서비스가 준 값을 그대로 화면에 흘리지 않는다", async () => {
   const env = makeEnv();
   const s = stubUrdeal({ 7: [
-    { id: 1, name: "정상", price: 1000, original_price: 500, image_url: "javascript:alert(1)", seller_name: "가게" },
-    { id: 0, name: "번호 없음", price: 100 },        // 상품 번호가 없으면 사러 갈 곳이 없다
-    { id: 2, name: "", price: 100 },                 // 이름이 없으면 카드가 성립하지 않는다
-    { id: 3, name: "값 이상", price: -5 },
+    { id: 1, name: "정상", price: 1000, original_price: 500, image_url: "javascript:alert(1)", seller_name: "가게", seller_id: 7 },
+    { id: 0, name: "번호 없음", price: 100, seller_id: 7 },   // 상품 번호가 없으면 사러 갈 곳이 없다
+    { id: 2, name: "", price: 100, seller_id: 7 },            // 이름이 없으면 카드가 성립하지 않는다
+    { id: 3, name: "값 이상", price: -5, seller_id: 7 },
   ] });
   try {
     const out = await fetchDeals(env, [7]);
@@ -177,4 +179,63 @@ test("유어딜 주소는 한 곳에서만 정한다", () => {
   assert.equal(urdealBase(env), "https://live.ur-team.com");
   assert.equal(urdealBase({ URDEAL_BASE: "https://stage.ur-team.com/" }), "https://stage.ur-team.com");
   assert.match(urdealProductUrl(env, 42), /^https:\/\/live\.ur-team\.com\/products\/42$/);
+});
+
+// ── 거르개가 조용히 무시되는 문제 ────────────────────────────────────────────
+//
+// 2026-09-05 에 실제 유어딜을 불러 재 봤다:
+//   seller_id=1     → 0건
+//   seller_id=1,2   → 100건 (거르지 않은 전체)
+//   seller_ids=1,2  → 100건 (그런 이름의 칸이 없어 그냥 무시)
+//
+// 즉 숫자가 아닌 값을 주면 오류가 나는 게 아니라 **남의 가게 상품이 전부 돌아온다.**
+// 그러면 상인회 홈에 우리 골목과 아무 상관 없는 상품이 우리 가게 이름을 달고 걸린다.
+// "호출을 줄이자" 며 번호를 쉼표로 잇는 순간 나는 사고라, 두 겹으로 막아 둔다.
+
+test("가게 번호를 쉼표로 이어 붙이지 않는다 — 주소에는 숫자 하나만 실린다", async () => {
+  const env = makeEnv();
+  const s = stubUrdeal({});
+  try {
+    await fetchDeals(env, [128, 300, 411]);
+    assert.equal(s.calls.length, 3, "한 번에 몰아 부르지 않는다 (유어딜에 그런 칸이 없다)");
+    for (const u of s.calls) {
+      const v = new URL(u).searchParams.get("seller_id");
+      assert.match(v, /^\d+$/, `seller_id 에 숫자 아닌 값이 실렸다: ${v}`);
+      assert.doesNotMatch(u, /seller_ids=/, "유어딜에 없는 칸을 보내면 거르개가 통째로 무시된다");
+    }
+  } finally { s.restore(); }
+});
+
+test("숫자가 아닌 가게 번호는 부르지도 않는다", async () => {
+  const env = makeEnv();
+  const s = stubUrdeal({});
+  try {
+    const out = await fetchDeals(env, ["1,2", "abc", -3, 0, 1.5, NaN]);
+    assert.equal(s.calls.length, 0, "이런 값이 주소에 실리면 남의 가게 것이 통째로 돌아온다");
+    assert.deepEqual(out, []);
+  } finally { s.restore(); }
+});
+
+test("거르개가 무시돼 남의 상품이 와도 홈에 걸지 않는다", async () => {
+  const env = makeEnv();
+  // 128번 가게를 물었는데 유어딜이 거르지 않고 전체를 준 상황
+  const s = stubUrdeal({ 128: [
+    DEAL(9001, "우리 가게 이용권", 17000, 20000, "방배 커피", 128),
+    DEAL(9002, "남의 가게 이용권", 9900, 20000, "강남 어딘가", 999),
+    DEAL(9003, "플랫폼 상품", 300000, 300000, "연타발", null),
+  ] });
+  try {
+    const out = await fetchDeals(env, [128]);
+    assert.deepEqual(out.map((x) => x.name), ["우리 가게 이용권"],
+      "번호가 다르거나 비어 있는 줄은 우리 골목 것이 아니다");
+  } finally { s.restore(); }
+});
+
+test("상품에 적힌 가게 번호를 우리가 물어본 번호로 덮어쓰지 않는다", async () => {
+  const env = makeEnv();
+  const s = stubUrdeal({ 128: [DEAL(9001, "이용권", 1000, 2000, "방배 커피", 128)] });
+  try {
+    const out = await fetchDeals(env, [128]);
+    assert.equal(out[0].sellerId, 128);
+  } finally { s.restore(); }
 });
