@@ -206,6 +206,8 @@ export const TENANT = [
   ["POST", "/admin/dues", api.adminDueToggle, "ADMIN"],
   ["POST", "/admin/dues/amount", api.adminDuesAmount, "ADMIN"],
   ["POST", "/admin/coupon/:id/use", api.adminCouponUse, "ADMIN"],
+  ["POST", "/admin/dues/account", api.adminDuesAccount, "ADMIN"],
+  ["POST", "/admin/dues/remind", api.adminDuesRemind, "ADMIN"],
   ["GET", "/admin/dues/unpaid.csv", pages.adminExportUnpaid, "ADMIN"],
   ["POST", "/admin/product/:id/hide", api.adminProductHide, "ADMIN"],
   ["GET", "/admin/members.csv", pages.adminExportMembers, "ADMIN"],

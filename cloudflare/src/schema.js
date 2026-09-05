@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS associations (
   google_verification TEXT NOT NULL DEFAULT '', -- 구글 서치콘솔 소유 확인 코드
   ga_measurement_id TEXT NOT NULL DEFAULT '',  -- 구글 애널리틱스(GA4) 측정 ID 'G-XXXXXXX'
   dues_amount INTEGER NOT NULL DEFAULT 0,      -- 기본 월 회비(원). 0 = 안 정함(금액 없이 체크만)
+  dues_account TEXT NOT NULL DEFAULT '',       -- 회비 입금 계좌 (독촉 문구에 그대로 들어간다)
   plan        TEXT NOT NULL DEFAULT 'free',   -- 요금제(free|basic|pro)
   -- 조직 유형. merchant  = 상인회 홈페이지(점포·지도·공지 + 전자계약),
   --            esign     = 전자계약만 쓰는 조직(법무·부동산 등),
@@ -768,7 +769,7 @@ CREATE INDEX IF NOT EXISTS idx_landing_asset_assoc ON landing_assets(association
 // 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
 // 마이그레이션 세대 — migrateColumns 에 단계를 추가할 때마다 +1
 // 36 = 두 갈래(트렁크 33 · 모집형 35)를 합친 세대. 양쪽 DB 모두 다시 한 번 마이그레이션을 타게 한다.
-export const SCHEMA_VERSION = "51";
+export const SCHEMA_VERSION = "52";
 
 export async function ensureSchema(db) {
   const has = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='associations'").first();
@@ -1118,6 +1119,11 @@ async function migrateColumns(db) {
     uses           INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (coupon_id, day))`).run();
   await db.prepare("CREATE INDEX IF NOT EXISTS idx_couponuse_assoc ON coupon_uses(association_id, day)").run();
+
+  // v52: 회비 입금 계좌. 독촉 문구에 "어디로 넣으시라" 가 없으면 받는 사람은 결국
+  // 총무에게 전화해서 물어야 하고, 그러면 독촉을 보낸 의미가 없다.
+  if (cols.length && !cols.some((c) => c.name === "dues_account"))
+    await db.prepare("ALTER TABLE associations ADD COLUMN dues_account TEXT NOT NULL DEFAULT ''").run();
 
   // v48: 유어딜 가게 번호. 이 번호가 있는 점포의 이용권을 홈 '우리 골목 이용권' 에 건다.
   // 0 = 유어딜을 안 쓰는 가게 (대부분). 번호는 유어딜이 발급한 셀러 번호를 그대로 적는다.

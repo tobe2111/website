@@ -1838,6 +1838,45 @@ export async function admin(ctx) {
   const collected = dueRowsRaw.reduce((n, r) => n + (Number(r.amount) || 0), 0);
   const expected = (assoc.dues_amount || 0) * members.length;
   const unpaidN = Math.max(0, members.length - paidSet.size);
+  // ── 미납 독촉 ────────────────────────────────────────────────────
+  // 명단만 뽑히고 사람이 하나씩 보내야 하면, 총무는 결국 단톡방에 "회비 내세요" 한 줄을
+  // 던지고 만다 — 그러면 이미 낸 사람도 같이 읽는다. 그게 상인회에서 실제로 감정이 상하는 자리다.
+  //
+  // 다만 **보낼 수 없는 상태를 숨기지 않는다.** 조용히 "보냈습니다" 라고 하면 총무는
+  // 회원들이 받은 줄 알고 기다린다. 그게 가장 나쁜 실패다.
+  const duesTplCode = unpaidN ? await D.getSetting(db, "tpl_dues_remind").catch(() => "") : "";
+  const duesRemindBox = (() => {
+    if (!unpaidN) return "";
+    const tplCode = duesTplCode;
+    const talkReady = notifyEnabled(env) && autoNotifyOn(assoc) && !!tplCode;
+    const mailReady = emailOn(env);
+    const blockers = [];
+    if (!notifyEnabled(env)) blockers.push("운영사에 알림톡 발송 키가 아직 등록되지 않았습니다");
+    else if (!autoNotifyOn(assoc)) blockers.push("이 상인회의 알림 발송 스위치가 꺼져 있습니다 (알림톡 탭에서 켜세요)");
+    else if (!tplCode) blockers.push("회비 안내 문구가 카카오 심사에 아직 올라가지 않았습니다");
+    if (!mailReady) blockers.push("이메일 발송이 연결되지 않았습니다");
+    const canSend = talkReady || mailReady;
+    // 몇 명에게 실제로 닿는지를 미리 센다. "20명에게 보냈습니다" 라고 해 놓고 12명만 받는 것이
+    // 이 화면에서 가장 나쁜 실패다 — 총무는 나머지 8명이 읽고도 안 낸 줄 안다.
+    const unpaidList = members.filter((m) => !paidSet.has(m.id));
+    const reach = unpaidList.filter((m) => (talkReady && m.phone) || (mailReady && m.email)).length;
+    const miss = unpaidList.length - reach;
+    const csvLink = `<a href="${base}/admin/dues/unpaid.csv?period=${encodeURIComponent(duePeriod)}">명단 CSV</a>`;
+    return `<div class="due-remind">
+      <form method="post" action="${base}/admin/dues/remind" class="inline-form"
+        data-confirm="${esc(duePeriod)} 미납자 ${reach}명에게 회비 안내를 보낼까요?&#10;이미 내신 분께는 가지 않습니다.">
+        <input type="hidden" name="_csrf" value="${csrf}" />
+        <input type="hidden" name="period" value="${esc(duePeriod)}" />
+        <button class="btn btn-primary btn-sm"${canSend && reach ? "" : " disabled"}>미납 ${unpaidN}명에게 안내 보내기</button>
+      </form>
+      <p class="panel-hint">${canSend
+        ? `${talkReady ? "휴대폰 번호가 있는 분께는 알림톡" : ""}${talkReady && mailReady ? ", " : ""}${mailReady ? `${talkReady ? "나머지는 " : ""}이메일` : ""}로 나갑니다.
+           금액과 계좌는 위에 적어 두신 값이 그대로 들어갑니다.
+           ${miss ? `<br /><b>${miss}명은 연락처가 없어 닿지 않습니다</b> — ${csvLink}로 받아 직접 연락해 주세요.` : ""}`
+        : `지금은 보낼 수 있는 길이 없습니다 — ${csvLink}를 받아 직접 연락해 주세요.
+           <br /><span class="txt-muted">막고 있는 것: ${blockers.map(esc).join(" · ")}</span>`}</p>
+    </div>`;
+  })();
   const duesPanel = `<section class="panel" id="p-dues"><div class="panel-head">
       <h2 class="panel-title">회비 장부 <span class="badge badge-muted">${paidSet.size}/${members.length} 납부</span></h2>
       <form method="get" action="${base}/admin" class="inline-form"><input type="month" name="due_period" value="${esc(duePeriod)}" aria-label="회비를 볼 월" data-autosubmit /><button class="btn btn-xs btn-ghost">이동</button></form></div>
@@ -1858,6 +1897,16 @@ export async function admin(ctx) {
       <button class="btn btn-ghost btn-sm">저장</button>
       <span class="panel-hint">한 번 정해 두면 납부 체크할 때 이 금액이 자동으로 들어갑니다. 사람마다 다르면 그 자리에서 고치면 됩니다.</span>
     </form>
+
+    <form method="post" action="${base}/admin/dues/account" class="inline-form due-set">
+      <label class="mini-label">입금 계좌
+        <input type="text" name="dues_account" maxlength="120"
+          value="${esc(assoc.dues_account || "")}" placeholder="예: 국민 123456-01-789012 (방배카페골목상인회)" /></label>
+      <button class="btn btn-ghost btn-sm">저장</button>
+      <span class="panel-hint">독촉 안내에 이 문구가 그대로 들어갑니다. 없으면 받는 분이 총무님께 전화해서 물어야 합니다.</span>
+    </form>
+
+    ${duesRemindBox}
 
     <div class="dtable-wrap"><table class="dtable">
       <thead><tr><th>회원</th><th>${esc(duePeriod)}</th><th class="num">금액</th><th class="act">처리</th></tr></thead>

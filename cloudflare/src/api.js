@@ -1558,6 +1558,66 @@ export async function adminDuesAmount(ctx) {
   return back(base + "/admin#p-dues", raw ? `기본 월 회비를 ${Number(raw).toLocaleString("ko-KR")}원으로 정했습니다.` : "기본 회비를 지웠습니다 — 금액 없이 체크만 합니다.");
 }
 
+export async function adminDuesAccount(ctx) {
+  const { db, form, base, assoc } = ctx;
+  const text = String(form.get("dues_account") || "").trim().slice(0, 120);
+  await D.setDuesAccount(db, assoc.id, text);
+  await audit(ctx, "회비계좌변경", text ? "설정" : "지움");   // 계좌번호는 감사 기록에 남기지 않는다
+  return back(base + "/admin#p-dues", text ? "회비 입금 계좌를 저장했습니다." : "회비 입금 계좌를 지웠습니다.");
+}
+
+// 미납자에게 한 번에 독촉을 보낸다.
+//
+// 지금까지는 명단만 뽑히고 사람이 하나씩 보내야 했다. 스무 명이면 스무 번이라
+// 총무가 결국 단톡방에 "회비 내세요" 한 줄을 던지고 만다 — 그러면 낸 사람도 같이 읽는다.
+//
+// 자동 발송이 아니라 **총무가 누른** 발송이다. 그래도 알림톡 경로는 조직 스위치를 따른다:
+// 모르는 새 크레딧이 빠져나가는 쪽이 더 나쁘고, 나머지는 이메일로 나간다.
+export async function adminDuesRemind(ctx) {
+  const { db, env, base, assoc, form } = ctx;
+  const period = /^\d{4}-\d{2}$/.test(form.get("period") || "") ? form.get("period") : D.kstToday().slice(0, 7);
+  const targets = await D.unpaidMembers(db, assoc.id, period);
+  if (!targets.length) return back(base + "/admin#p-dues", `${period} 미납자가 없습니다. 보낼 곳이 없습니다.`);
+
+  const amount = assoc.dues_amount ? `${Number(assoc.dues_amount).toLocaleString("ko-KR")}원` : "총무에게 문의";
+  const account = (assoc.dues_account || "").trim() || "총무에게 문의";
+  const link = `${new URL(ctx.request.url).origin}${base}/dashboard`;
+
+  const canTalk = canAutoSend(env, assoc);
+  const byPhone = canTalk ? targets.filter((m) => m.phone) : [];
+  const parts = [];
+  if (byPhone.length) {
+    const r = await sendMany(env, db, {
+      assoc, kind: "dues_remind", recipients: byPhone,
+      textFor: (m) => renderTemplate("dues_remind", { 상호: assoc.name, 이름: m.name, 납부월: period, 금액: amount, 계좌: account }),
+      buttonName: templateButton("dues_remind"), buttonUrl: link,
+    });
+    parts.push(`알림톡 ${r.sent}건${r.cost ? ` (${r.cost.toLocaleString("ko-KR")}원 차감)` : ""}`);
+    if (r.failed) parts.push(`실패 ${r.failed}건`);
+    if (r.stopped) parts.push("잔액이 부족해 중단되었습니다");
+  }
+  const byMail = targets.filter((m) => (!canTalk || !m.phone) && m.email);
+  if (byMail.length && emailEnabled(env)) {
+    await Promise.all(byMail.map((m) => sendEmailFor(env, db, assoc, {
+      kind: "dues_remind", to: m.email, subject: `[${assoc.name}] ${period} 회비 납부 안내`,
+      html: mailShell(`${esc(assoc.name)} 회비 안내`,
+        `<p>${esc(m.name)}님, ${esc(period)} 회비 납부가 확인되지 않아 안내드립니다.</p>
+         <p>납부 금액: <b>${esc(amount)}</b><br />입금 계좌: <b>${esc(account)}</b></p>
+         <p>입금하신 뒤 총무에게 알려 주시면 장부에 반영해 드립니다. 이미 납부하셨다면 이 안내는 무시하셔도 됩니다.</p>`),
+    }).catch(() => {})));
+    parts.push(`이메일 ${byMail.length}건`);
+  }
+  await audit(ctx, "회비독촉", `${period} 대상 ${targets.length}명`);
+  if (!parts.length) {
+    // 아무 경로도 안 열려 있으면 그렇게 말한다. 조용히 "보냈습니다" 라고 하면
+    // 총무는 회원들이 받은 줄 알고 기다린다 — 그게 가장 나쁜 실패다.
+    const why = !canTalk ? "알림톡이 아직 켜져 있지 않고" : "휴대폰 번호가 있는 미납자가 없고";
+    return back(base + "/admin#p-dues",
+      `한 건도 보내지 못했습니다 — ${why}, 이메일 주소가 있는 분도 없습니다. 명단 CSV로 받아 직접 연락해 주세요.`, true);
+  }
+  return back(base + "/admin#p-dues", `${period} 미납 ${targets.length}명에게 보냈습니다 — ${parts.join(" · ")}.`);
+}
+
 // 권한 회수 — 계정을 지우지 않고 역할만 내린다.
 // 서명 이력·감사 추적이 계정에 매달려 있으므로 삭제하면 증거가 사라진다.
 export async function adminRevokeRole(ctx) {

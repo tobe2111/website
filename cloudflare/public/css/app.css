@@ -3297,6 +3297,10 @@ a.deal-card:hover{border-color:var(--deal);transition:border-color .18s}
 .due-set .panel-hint{flex:1 1 260px;margin:0 0 4px}
 .due-form{display:inline-flex;align-items:center;gap:6px}
 .due-amt{width:104px;text-align:right}
+/* 독촉 보내기 — 장부 위에 붙는 한 덩어리. 못 보내는 이유까지 같은 상자 안에서 읽힌다 */
+.due-remind{margin:14px 0 4px;padding:14px;background:var(--bg-alt);border-radius:10px}
+.due-remind .panel-hint{margin:8px 0 0}
+.due-remind button[disabled]{opacity:.5;cursor:not-allowed}
 @media (max-width:520px){ .due-sum{grid-template-columns:minmax(0,1fr)} }
 
 /* 입력칸 밑 한 줄 안내 —— "몇 자리를 넣어야 하는지" 를 다 치기 전에 알려 준다.

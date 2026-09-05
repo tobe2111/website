@@ -715,6 +715,10 @@ export const listRsvpsByAssoc = (db, aid) =>
 // ----- 회비 장부 (납부 기록만 — 결제 아님) -----
 export const setDuesAmount = (db, aid, won) =>
   run(db, "UPDATE associations SET dues_amount=? WHERE id=?", Math.max(0, Number(won) || 0), aid);
+// 독촉 문자에 "어디로 넣으시라" 가 없으면 받는 사람은 총무에게 전화해서 물어야 한다.
+// 그러면 독촉을 보낸 의미가 없다 — 계좌를 한 번 적어 두고 문구에 끼운다.
+export const setDuesAccount = (db, aid, text) =>
+  run(db, "UPDATE associations SET dues_account=? WHERE id=?", String(text || "").slice(0, 120), aid);
 
 // 이번 달 회비가 얼마나 걷혔나 — 임원이 총회에서 읽는 두 줄(걷힘 / 받을 것)이다.
 // 금액 없이 체크만 한 옛 기록(amount=0)은 '냈다' 로는 세되 금액에는 더하지 않는다.
@@ -731,7 +735,7 @@ export async function duesSummary(db, aid, period, dueAmount) {
 }
 // 미납 명단 — 임원이 실제로 하는 일은 이 명단을 들고 전화를 도는 것이다.
 export const unpaidMembers = (db, aid, period) =>
-  all(db, `SELECT u.id, u.name, u.phone, b.name AS business_name
+  all(db, `SELECT u.id, u.name, u.phone, u.email, b.name AS business_name
     FROM users u LEFT JOIN businesses b ON b.owner_id = u.id
     WHERE u.association_id=? AND u.role='MERCHANT'
       AND NOT EXISTS (SELECT 1 FROM dues d WHERE d.association_id=u.association_id AND d.user_id=u.id AND d.period=?)
