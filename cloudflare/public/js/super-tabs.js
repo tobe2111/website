@@ -29,6 +29,15 @@
   var initial = (location.hash || "").replace(/^#s-/, "");
   if (!initial) { try { initial = sessionStorage.getItem(KEY) || ""; } catch (e) {} }
   show(initial || groups[0].dataset.tab, false);
+  // 주소에 #s-… 가 붙어 있으면 브라우저가 그 칸까지 **스스로** 스크롤합니다.
+  // (공지를 저장하고 /admin#s-content 로 되돌아올 때가 그렇습니다.)
+  // 그러면 탭줄이 화면 위로 밀려 나가, 지금 어느 탭을 보고 있는지가 안 보입니다.
+  // 우리가 이미 그 묶음을 펴 놓았으므로 브라우저의 이동은 필요 없습니다 — 맨 위로 되돌립니다.
+  if (initial) {
+    var top = function () { window.scrollTo(0, 0); };
+    requestAnimationFrame(top);
+    window.addEventListener("load", top, { once: true });
+  }
 
   // 접힌 서랍으로 보내는 링크는 펴 준다.
   // 예전엔 '＋ 새 조직'을 눌러도 닫힌 '➕ 새 조직 만들기' 앞까지만 가서, 한 번 더 눌러야 했다.

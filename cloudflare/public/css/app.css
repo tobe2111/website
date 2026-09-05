@@ -759,7 +759,7 @@ body[data-console="super"] .site-header .nav-logout .btn:hover{color:#fff;backgr
 .notif-list li:hover{background:#eef4f1}
 .notif-dot{flex:none;width:8px;height:8px;border-radius:50%;background:transparent}
 .notif-list li.unread .notif-dot{background:var(--amber)}
-.notif-msg{flex:1;color:var(--ink);font-size:.94rem}
+.notif-msg{flex:1;color:var(--ink);font-size:.94rem;display:flex;align-items:center;min-height:24px}
 .notif-list li.unread .notif-msg{font-weight:600}
 .notif-list time{flex:none;color:var(--muted);font-size:.8rem}
 
@@ -864,6 +864,10 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .coupon-admin .ca-text{display:grid;gap:2px}
 .coupon-admin .ca-text small{color:var(--muted)}
 .coupon-admin.is-expired{opacity:.55}
+/* 사용 처리 · 되돌리기 · 삭제 — 좁은 화면에서는 아래로 흘러 내린다 */
+.coupon-admin .ca-acts{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+@media (max-width:560px){ .coupon-admin{flex-direction:column;align-items:stretch}
+  .coupon-admin .ca-acts{justify-content:flex-start} }
 /* 유어딜 연계 */
 .urdeal-promo{border:1px solid var(--line);position:relative}
 .up-badge{position:absolute;top:14px;right:16px;font-size:.68rem;font-weight:800;letter-spacing:.08em;color:var(--muted);border:1px solid var(--line);border-radius:99px;padding:3px 10px}
@@ -2101,14 +2105,6 @@ input:not([type]),input[type="text"],input[type="email"],input[type="tel"],input
    특정도로 눌러 버리고 있었습니다. 그래서 휴대폰에서도 184px 짜리 차림표가 그대로 남고,
    메뉴 글자가 13.5px·패딩 8px 로 돌아가 손가락으로 누르기 어려웠습니다.
    관리자 화면을 휴대폰으로 여는 상인회 사무국이 실제로 겪는 일입니다. 여기서 다시 정합니다. */
-@media (max-width:860px){
-  .dash .console-grid{grid-template-columns:1fr;gap:0}
-  .dash .console-main{border-left:0;padding-left:0;padding-top:18px}
-  .dash .console-side nav{flex-direction:row;flex-wrap:wrap;gap:6px;padding:0}
-  .dash .console-side a{min-height:44px;padding:0 14px;font-size:14px;flex:1 1 auto;
-    justify-content:center;border-left:0;border-radius:var(--r-md)}
-}
-
 .dash .console-side a:hover{background:none;color:var(--ink);border-left-color:var(--line)}
 .dash .console-side a.on,
 .dash .console-side a[aria-current]{color:var(--ink);font-weight:700;border-left-color:var(--ink)}
@@ -2116,12 +2112,18 @@ input:not([type]),input[type="text"],input[type="email"],input[type="tel"],input
 .dash .console-side .side-badge{
   background:none;color:var(--wait-fg);font-weight:700;font-variant-numeric:tabular-nums;padding:0;
 }
+/* 좁은 화면에서는 왼쪽 세로 메뉴가 가로 탭줄이 된다.
+   ⚠️ 예전에는 이 규칙이 두 벌로 나뉘어 있었다 — 앞 벌이 준 가로 여백을 뒤 벌이 지워
+   메뉴 한 칸이 29px 까지 줄었다. 손가락으로 누르는 화면에서 44px 에 한참 못 미친다.
+   같은 화면 폭을 두 곳에서 손보지 않도록 한 덩어리로 합쳐 둔다. */
 @media (max-width:860px){
-  .dash .console-grid{grid-template-columns:minmax(0,1fr)}
+  .dash .console-grid{grid-template-columns:minmax(0,1fr);gap:0}
   .dash .console-main{border-left:0;padding-left:0;padding-top:18px}
   .dash .console-side nav{border-bottom:1px solid var(--line-soft);flex-direction:row;
-    flex-wrap:wrap;gap:0 18px;padding:0 0 10px}
-  .dash .console-side a{border-left:0;border-bottom:2px solid transparent;padding:6px 0}
+    flex-wrap:wrap;gap:0 14px;padding:0 0 10px}
+  .dash .console-side a{flex:0 0 auto;border-left:0;border-bottom:2px solid transparent;
+    border-radius:0;padding:6px 8px;min-height:44px;min-width:44px;
+    justify-content:center;font-size:14px}
   .dash .console-side a.on,.dash .console-side a[aria-current]{border-left:0;border-bottom-color:var(--ink)}
 }
 
@@ -2629,9 +2631,11 @@ body.is-done .foot-copy,body.is-done .site-footer p{color:var(--dk-muted)}
 .hot + .hot{margin-top:10px}
 .hot-h{display:flex;align-items:center;gap:12px;padding-bottom:12px;border-bottom:1px solid rgba(255,255,255,.28)}
 .hot-n{font-size:40px;font-weight:800;line-height:1;letter-spacing:-.04em;font-variant-numeric:tabular-nums}
-.hot-h h3{font-size:17px;font-weight:700;margin:0;letter-spacing:-.02em}
-.hot-h h3 small{display:block;font-size:13px;font-weight:500;color:rgba(255,255,255,.82);margin-top:3px}
-.hot-all{margin-left:auto;flex:none;color:#fff;font-size:13px;font-weight:700;opacity:.88}
+.hot-h h2{font-size:17px;font-weight:700;margin:0;letter-spacing:-.02em}
+.hot-h h2 small{display:block;font-size:13px;font-weight:500;color:rgba(255,255,255,.82);margin-top:3px}
+/* 누르는 칸은 24px 아래로 내려가지 않는다 (WCAG 2.5.8). 글자만 작게 두고 칸은 키운다. */
+.hot-all{margin-left:auto;flex:none;color:#fff;font-size:13px;font-weight:700;opacity:.88;
+  display:inline-flex;align-items:center;min-height:24px}
 .hot-all:hover{opacity:1;text-decoration:underline}
 .hot-row{display:flex;align-items:center;gap:14px;padding:14px 0;border-bottom:1px solid rgba(255,255,255,.18)}
 .hot-row:last-of-type{border-bottom:0}
@@ -2654,7 +2658,7 @@ body.is-done .foot-copy,body.is-done .site-footer p{color:var(--dk-muted)}
   letter-spacing:.02em;padding-bottom:7px;border-bottom:1px solid var(--line-soft);margin:0 0 2px}
 .quiet-h .inline-form{display:inline-flex;margin-left:auto;flex:none}
 .btn-linkish{background:none;border:0;padding:0;font:inherit;font-size:12.5px;font-weight:700;
-  color:var(--brand-text);cursor:pointer}
+  color:var(--brand-text);cursor:pointer;display:inline-flex;align-items:center;min-height:24px}
 .btn-linkish:hover{text-decoration:underline}
 .home-sheet .notif-list{margin-top:0}
 .home-sheet .notif-list li{padding:11px 2px;border-radius:0;border-bottom:1px solid var(--line-soft);gap:9px}
@@ -3025,7 +3029,7 @@ table.dtable .act{text-align:right;white-space:nowrap;width:1%}
 table.dtable .act form{display:inline-flex}
 table.dtable .act > * + *{margin-left:6px}
 /* 첫 칸은 그 줄이 무엇인지 — 굵게, 그리고 상세로 가는 길 */
-.dt-main{display:block;font-weight:700;color:var(--ink)}
+.dt-main{display:flex;align-items:center;min-height:24px;font-weight:700;color:var(--ink)}
 a.dt-main:hover{color:var(--brand-text);text-decoration:underline}
 .dt-sub{display:block;margin-top:2px;font-size:12.5px;color:var(--muted)}
 .dt-empty{padding:44px 16px;text-align:center;color:var(--muted)}
@@ -3077,6 +3081,22 @@ a.dt-main:hover{color:var(--brand-text);text-decoration:underline}
   .dash .panel-hint{font-size:13px;line-height:1.55}
 }
 
+/* 손가락으로 누르는 화면에서는 콘솔 조작칸도 44px 을 지킨다.
+   임원이 총회장에서 휴대폰으로 명단을 여는 일이 실제로 있다. 데스크톱 기준으로
+   조여 둔 도구줄·표·금액칸이 거기서는 24~36px 짜리 과녁이 된다. */
+/* 마우스 화면에서도 24px 아래로는 내려가지 않는다 (WCAG 2.5.8).
+   type=month 는 브라우저 기본 높이가 21px 이라 그냥 두면 걸린다. */
+.dash .inline-form input[type=month]{min-height:26px}
+@media (hover:none),(pointer:coarse){
+  .tbar-search input{height:44px}
+  .tbar-chip{height:44px;padding:0 14px}
+  .dtable a.dt-main{min-height:44px}
+  /* input[type=text] 를 잡는 일반 규칙(26px)보다 좁아야 이긴다 — 태그까지 적는다 */
+  input.due-amt{min-height:44px}
+  .dash .inline-form input[type=month]{min-height:44px}
+  .hot-all,.btn-linkish{min-height:44px}
+}
+
 /* 데스크톱에서 '급한 일' 덩어리를 조인다.
    파랗게 키운 것은 눈에 띄게 하려던 것인데, 다섯 줄이 화면의 절반을 먹으면
    '급한 일' 이 아니라 '화면 전부' 가 됩니다. 크게 만드는 것과 눈에 띄는 것은 다릅니다.
@@ -3086,7 +3106,7 @@ a.dt-main:hover{color:var(--brand-text);text-decoration:underline}
   .hot{padding:16px 18px 6px}
   .hot-n{font-size:30px}
   .hot-h{padding-bottom:10px}
-  .hot-h h3{font-size:15.5px}
+  .hot-h h2{font-size:15.5px}
   .hot-row{padding:9px 0}
 }
 
@@ -3114,6 +3134,10 @@ a.dt-main:hover{color:var(--brand-text);text-decoration:underline}
 .mini-edit > .mini-del{padding:12px 0 14px;border-top:1px solid var(--line-soft);margin-top:14px}
 .mini-edit .dtable-wrap{margin-bottom:10px}
 .mini-edit .dtable thead th{position:static}   /* 펼친 상자 안에서는 붙어 있을 필요가 없습니다 */
+/* 투표 카드 안의 고치기 서랍 — 카드 바닥에 붙습니다 (제목 줄이 따로 없어 여백만 맞춥니다) */
+.poll-edit{margin-top:14px}
+.poll-edit > summary{padding:10px 14px}
+.poll-edit > summary .mini-edit-hint{margin-left:0}
 
 /* 문의함 — 안 읽은 것은 거르개에서도 눈에 띄어야 합니다 */
 .tbar-chip.is-alert{border-color:var(--wait-fg);color:var(--wait-fg)}
@@ -3169,7 +3193,7 @@ a.dt-main:hover{color:var(--brand-text);text-decoration:underline}
 }
 
 /* 콘솔 머리말의 '홈페이지 보기' — 관리자가 가장 자주 누르는 것이라 글자 링크가 아니라 단추로 */
-body.is-console .main-nav a.cnav-out{display:inline-flex;align-items:center;gap:6px;min-height:38px;
+body.is-console .main-nav a.cnav-out{display:inline-flex;align-items:center;gap:6px;min-height:44px;
   padding:0 14px;border-radius:var(--r-pill);border:1px solid var(--line);
   background:var(--surface);color:var(--ink)!important;font-weight:600}
 body.is-console .main-nav a.cnav-out:hover{border-color:var(--ink);background:var(--surface-2)}
@@ -3273,6 +3297,10 @@ a.deal-card:hover{border-color:var(--deal);transition:border-color .18s}
 .due-set .panel-hint{flex:1 1 260px;margin:0 0 4px}
 .due-form{display:inline-flex;align-items:center;gap:6px}
 .due-amt{width:104px;text-align:right}
+/* 독촉 보내기 — 장부 위에 붙는 한 덩어리. 못 보내는 이유까지 같은 상자 안에서 읽힌다 */
+.due-remind{margin:14px 0 4px;padding:14px;background:var(--bg-alt);border-radius:10px}
+.due-remind .panel-hint{margin:8px 0 0}
+.due-remind button[disabled]{opacity:.5;cursor:not-allowed}
 @media (max-width:520px){ .due-sum{grid-template-columns:minmax(0,1fr)} }
 
 /* 입력칸 밑 한 줄 안내 —— "몇 자리를 넣어야 하는지" 를 다 치기 전에 알려 준다.

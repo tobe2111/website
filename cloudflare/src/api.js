@@ -919,6 +919,31 @@ export async function couponDelete(ctx) {
   await D.deleteCoupon(db, c.id);
   return back(base + "/dashboard", "쿠폰을 삭제했습니다.");
 }
+// 점주가 자기 가게 카운터에서 누른다.
+export async function couponUse(ctx) {
+  const { db, base, params, assoc, form } = ctx;
+  const b = await ownBusiness(ctx);
+  const c = await D.getCoupon(db, Number(params.id));
+  if (!b || !c || c.business_id !== b.id) return back(base + "/dashboard", "처리할 수 없습니다.", true);
+  const undo = form.get("undo") === "1";
+  if (undo) { await D.unredeemCoupon(db, c.id); return back(base + "/dashboard#p-sell", "오늘 사용 한 건을 되돌렸습니다."); }
+  await D.redeemCoupon(db, { couponId: c.id, businessId: b.id, associationId: assoc.id });
+  return back(base + "/dashboard#p-sell", `'${c.title}' 사용을 기록했습니다.`);
+}
+// 상인회 총무가 대신 누른다. 가게가 로그인을 안 쓰는 곳이 많아 이쪽이 실제 경로다.
+export async function adminCouponUse(ctx) {
+  const { db, base, params, assoc, form } = ctx;
+  const c = await D.getCoupon(db, Number(params.id));
+  if (!c || c.association_id !== assoc.id) return back(base + "/admin#s-content", "처리할 수 없습니다.", true);
+  if (form.get("undo") === "1") {
+    await D.unredeemCoupon(db, c.id);
+    await audit(ctx, "쿠폰사용취소", `#${c.id} ${c.title}`);
+    return back(base + "/admin#s-content", "오늘 사용 한 건을 되돌렸습니다.");
+  }
+  await D.redeemCoupon(db, { couponId: c.id, businessId: c.business_id, associationId: assoc.id });
+  await audit(ctx, "쿠폰사용", `#${c.id} ${c.title}`);
+  return back(base + "/admin#s-content", `'${c.title}' 사용을 기록했습니다.`);
+}
 // 상인회 관리자: 자기 상인회 점포 제품 숨김/정리 (테넌트 격리)
 export async function adminProductHide(ctx) {
   const { db, base, assoc, params } = ctx;
@@ -1445,6 +1470,39 @@ export async function adminClosePoll(ctx) {
   await audit(ctx, "투표마감", p.title);
   return back(base + "/polls", "투표를 마감했습니다.");
 }
+// 공지·행사는 그 자리에서 고칠 수 있는데 투표만 안 됐다. 오타 하나 때문에 지우고 다시 만들면
+// 이미 들어온 표가 함께 사라진다 — 회장님 입장에서는 "고쳤다" 가 아니라 "무르고 다시 물었다" 다.
+export async function adminUpdatePoll(ctx) {
+  const { db, form, base, assoc, params } = ctx;
+  const p = await D.getPoll(db, Number(params.id));
+  if (!p || p.association_id !== assoc.id) return back(base + "/polls", "투표를 찾을 수 없습니다.", true);
+  const title = cap((form.get("title") || "").trim(), 200);
+  if (!title) return back(base + "/polls", "안건 제목을 입력해 주세요.", true);
+  const rawClose = (form.get("closes_at") || "").trim();
+  await D.updatePoll(db, p.id, assoc.id, {
+    title, body: cap((form.get("body") || "").trim(), 2000),
+    closesAt: /^\d{4}-\d{2}-\d{2}$/.test(rawClose) ? rawClose : "",
+  });
+  await audit(ctx, "투표수정", `#${p.id} ${title}`);
+  return back(base + "/polls", "안건을 고쳤습니다. 이미 들어온 표는 그대로 남습니다.");
+}
+export async function adminReopenPoll(ctx) {
+  const { db, base, assoc, params } = ctx;
+  const p = await D.getPoll(db, Number(params.id));
+  if (!p || p.association_id !== assoc.id) return back(base + "/polls", "투표를 찾을 수 없습니다.", true);
+  await D.reopenPoll(db, p.id);
+  await audit(ctx, "투표재개", `#${p.id} ${p.title}`);
+  return back(base + "/polls", "투표를 다시 열었습니다. 마감일이 지나 있었으면 함께 지웠습니다.");
+}
+export async function adminDeletePoll(ctx) {
+  const { db, base, assoc, params } = ctx;
+  const p = await D.getPoll(db, Number(params.id));
+  if (!p || p.association_id !== assoc.id) return back(base + "/polls", "투표를 찾을 수 없습니다.", true);
+  const votes = await D.countPollVotes(db, p.id);
+  await D.deletePoll(db, p.id, assoc.id);
+  await audit(ctx, "투표삭제", `#${p.id} ${p.title} (표 ${votes})`);
+  return back(base + "/polls", `안건을 지웠습니다.${votes ? ` 들어와 있던 표 ${votes}개도 함께 사라졌습니다.` : ""}`);
+}
 export async function pollVote(ctx) {
   const { db, form, base, assoc, user, params } = ctx;
   const p = await D.getPoll(db, Number(params.id));
@@ -1498,6 +1556,66 @@ export async function adminDuesAmount(ctx) {
   await D.setDuesAmount(db, assoc.id, raw ? Number(raw) : 0);
   await audit(ctx, "회비금액변경", raw ? `${Number(raw).toLocaleString("ko-KR")}원` : "안 정함");
   return back(base + "/admin#p-dues", raw ? `기본 월 회비를 ${Number(raw).toLocaleString("ko-KR")}원으로 정했습니다.` : "기본 회비를 지웠습니다 — 금액 없이 체크만 합니다.");
+}
+
+export async function adminDuesAccount(ctx) {
+  const { db, form, base, assoc } = ctx;
+  const text = String(form.get("dues_account") || "").trim().slice(0, 120);
+  await D.setDuesAccount(db, assoc.id, text);
+  await audit(ctx, "회비계좌변경", text ? "설정" : "지움");   // 계좌번호는 감사 기록에 남기지 않는다
+  return back(base + "/admin#p-dues", text ? "회비 입금 계좌를 저장했습니다." : "회비 입금 계좌를 지웠습니다.");
+}
+
+// 미납자에게 한 번에 독촉을 보낸다.
+//
+// 지금까지는 명단만 뽑히고 사람이 하나씩 보내야 했다. 스무 명이면 스무 번이라
+// 총무가 결국 단톡방에 "회비 내세요" 한 줄을 던지고 만다 — 그러면 낸 사람도 같이 읽는다.
+//
+// 자동 발송이 아니라 **총무가 누른** 발송이다. 그래도 알림톡 경로는 조직 스위치를 따른다:
+// 모르는 새 크레딧이 빠져나가는 쪽이 더 나쁘고, 나머지는 이메일로 나간다.
+export async function adminDuesRemind(ctx) {
+  const { db, env, base, assoc, form } = ctx;
+  const period = /^\d{4}-\d{2}$/.test(form.get("period") || "") ? form.get("period") : D.kstToday().slice(0, 7);
+  const targets = await D.unpaidMembers(db, assoc.id, period);
+  if (!targets.length) return back(base + "/admin#p-dues", `${period} 미납자가 없습니다. 보낼 곳이 없습니다.`);
+
+  const amount = assoc.dues_amount ? `${Number(assoc.dues_amount).toLocaleString("ko-KR")}원` : "총무에게 문의";
+  const account = (assoc.dues_account || "").trim() || "총무에게 문의";
+  const link = `${new URL(ctx.request.url).origin}${base}/dashboard`;
+
+  const canTalk = canAutoSend(env, assoc);
+  const byPhone = canTalk ? targets.filter((m) => m.phone) : [];
+  const parts = [];
+  if (byPhone.length) {
+    const r = await sendMany(env, db, {
+      assoc, kind: "dues_remind", recipients: byPhone,
+      textFor: (m) => renderTemplate("dues_remind", { 상호: assoc.name, 이름: m.name, 납부월: period, 금액: amount, 계좌: account }),
+      buttonName: templateButton("dues_remind"), buttonUrl: link,
+    });
+    parts.push(`알림톡 ${r.sent}건${r.cost ? ` (${r.cost.toLocaleString("ko-KR")}원 차감)` : ""}`);
+    if (r.failed) parts.push(`실패 ${r.failed}건`);
+    if (r.stopped) parts.push("잔액이 부족해 중단되었습니다");
+  }
+  const byMail = targets.filter((m) => (!canTalk || !m.phone) && m.email);
+  if (byMail.length && emailEnabled(env)) {
+    await Promise.all(byMail.map((m) => sendEmailFor(env, db, assoc, {
+      kind: "dues_remind", to: m.email, subject: `[${assoc.name}] ${period} 회비 납부 안내`,
+      html: mailShell(`${esc(assoc.name)} 회비 안내`,
+        `<p>${esc(m.name)}님, ${esc(period)} 회비 납부가 확인되지 않아 안내드립니다.</p>
+         <p>납부 금액: <b>${esc(amount)}</b><br />입금 계좌: <b>${esc(account)}</b></p>
+         <p>입금하신 뒤 총무에게 알려 주시면 장부에 반영해 드립니다. 이미 납부하셨다면 이 안내는 무시하셔도 됩니다.</p>`),
+    }).catch(() => {})));
+    parts.push(`이메일 ${byMail.length}건`);
+  }
+  await audit(ctx, "회비독촉", `${period} 대상 ${targets.length}명`);
+  if (!parts.length) {
+    // 아무 경로도 안 열려 있으면 그렇게 말한다. 조용히 "보냈습니다" 라고 하면
+    // 총무는 회원들이 받은 줄 알고 기다린다 — 그게 가장 나쁜 실패다.
+    const why = !canTalk ? "알림톡이 아직 켜져 있지 않고" : "휴대폰 번호가 있는 미납자가 없고";
+    return back(base + "/admin#p-dues",
+      `한 건도 보내지 못했습니다 — ${why}, 이메일 주소가 있는 분도 없습니다. 명단 CSV로 받아 직접 연락해 주세요.`, true);
+  }
+  return back(base + "/admin#p-dues", `${period} 미납 ${targets.length}명에게 보냈습니다 — ${parts.join(" · ")}.`);
 }
 
 // 권한 회수 — 계정을 지우지 않고 역할만 내린다.

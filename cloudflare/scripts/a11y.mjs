@@ -48,20 +48,20 @@ for (const [n, ph, r, b] of [["김창업", "010-1234-5678", "수원 영통", "1�
   await D.createLead(env.DB, { associationId: a.id, name: n, phone: ph, region: r, budget: b, funnel: "네이버 검색", message: "문의" });
 for (let i = 0; i < 60; i++) await D.bumpLandingView(env.DB, a.id, "");
 
-let cookie = "";
-{
+async function loginAs(email, password) {
   const g = await worker.fetch(new Request("http://localhost/login"), env);
   const seed = (g.headers.getSetCookie?.() || []).find((c) => c.startsWith("sc_csrf_seed="))?.split(";")[0] || "";
   const tk = (/name="_csrf" value="([^"]+)"/.exec(await g.text()) || [])[1];
   const lr = await worker.fetch(new Request("http://localhost/login", {
     method: "POST", headers: { cookie: seed, "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ _csrf: tk, email: "admin@e.kr", password: "admin1234" }).toString(),
+    body: new URLSearchParams({ _csrf: tk, email, password }).toString(),
   }), env);
-  cookie = [seed, ...(lr.headers.getSetCookie?.() || []).map((c) => c.split(";")[0])].join("; ");
+  return [seed, ...(lr.headers.getSetCookie?.() || []).map((c) => c.split(";")[0])].join("; ");
 }
+const cookie = await loginAs("admin@e.kr", "admin1234");
 async function grab(p, file, auth) {
   const res = await worker.fetch(new Request("http://localhost" + p, {
-    headers: { ...(auth ? { cookie } : {}), "user-agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)" },
+    headers: { ...(auth ? { cookie: auth === true ? cookie : auth } : {}), "user-agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)" },
   }), env);
   writeFileSync(path.join(DIR, file), (await res.text()).replace(/<link[^>]*jsdelivr[^>]*>/g, "").replace(/\?v=[a-z0-9]+/g, ""));
 }
@@ -89,6 +89,20 @@ await grab("/t/market/notices", "market-notices.html");
 await grab("/t/market/map", "market-map.html");
 await grab("/t/market/events", "market-events.html");
 await grab("/t/market/business/goeul-gukbap", "market-biz.html");
+
+// ── 상인회 관리자 콘솔 —— 상인회 임원이 하루 종일 켜 두고 일하는 화면이다.
+// 손님 화면만 재고 있으면, 정작 매일 쓰는 사람이 측정 밖에 남는다.
+// 탭마다 다른 표·폼이 들어 있어 한 장만 재서는 안 된다 — 묶음별로 따로 연다.
+const mad = await hashPassword("market1234");
+await D.createUser(env.DB, { email: "office@market.kr", passwordHash: mad.hash, salt: mad.salt, name: "총무", role: "ADMIN", associationId: m.id });
+for (const [n, ct, ms] of [
+  ["박손님", "010-3333-4444", "주차장이 어디인지 알고 싶습니다."],
+  ["최방문", "guest@example.com", "단체로 20명 예약이 되는 가게가 있을까요?"],
+])
+  await D.createLead(env.DB, { associationId: m.id, name: n, phone: /@/.test(ct) ? "" : ct, email: /@/.test(ct) ? ct : "", message: ms, source: "contact" });
+await D.setDuesAmount(env.DB, m.id, 30000);
+const marketCookie = await loginAs("office@market.kr", "market1234");
+await grab("/t/market/admin", "market-admin.html", marketCookie);
 
 const MIME = { ".html": "text/html; charset=utf-8", ".css": "text/css", ".js": "text/javascript", ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg" };
 const srv = http.createServer((req, res) => {
@@ -225,12 +239,22 @@ const PAGES = [
   ["행사 (모바일)", "market-events.html", { width: 390, height: 844, isMobile: true }],
   ["상담 DB 콘솔", "leads.html", { width: 1280, height: 900 }],
   ["랜딩 편집기", "editor.html", { width: 1280, height: 900 }],
+  // 관리자 콘솔 — 탭마다 다른 표와 폼이 들어 있어 묶음별로 연다(#s-…).
+  ["관리자 콘솔 · 현황", "market-admin.html", { width: 1280, height: 900 }, "s-home"],
+  ["관리자 콘솔 · 회원·점포", "market-admin.html", { width: 1280, height: 900 }, "s-people"],
+  ["관리자 콘솔 · 콘텐츠", "market-admin.html", { width: 1280, height: 900 }, "s-content"],
+  ["관리자 콘솔 · 문의", "market-admin.html", { width: 1280, height: 900 }, "s-inbox"],
+  ["관리자 콘솔 · 성과", "market-admin.html", { width: 1280, height: 900 }, "s-stats"],
+  ["관리자 콘솔 · 설정", "market-admin.html", { width: 1280, height: 900 }, "s-settings"],
+  // 임원이 총회장에서 휴대폰으로 여는 일이 실제로 있다.
+  ["관리자 콘솔 · 현황 (모바일)", "market-admin.html", { width: 390, height: 844, isMobile: true }, "s-home"],
+  ["관리자 콘솔 · 회원·점포 (모바일)", "market-admin.html", { width: 390, height: 844, isMobile: true }, "s-people"],
 ];
 let problems = 0;
-for (const [label, file, vp] of PAGES) {
+for (const [label, file, vp, hash] of PAGES) {
   const ctx = await browser.newContext({ viewport: { width: vp.width, height: vp.height }, isMobile: !!vp.isMobile, hasTouch: !!vp.isMobile, reducedMotion: "reduce" });
   const p = await ctx.newPage();
-  await p.goto(`http://localhost:${PORT}/${file}`, { waitUntil: "networkidle" });
+  await p.goto(`http://localhost:${PORT}/${file}${hash ? "#" + hash : ""}`, { waitUntil: "networkidle" });
   await p.waitForTimeout(300);
   await p.evaluate((t) => { window.__touch = t; }, !!vp.isMobile);
   const r = await p.evaluate(AUDIT);
@@ -257,8 +281,11 @@ for (const [label, file, vp] of PAGES) {
     if (!arr.length) { console.log(`   ✓ ${name}`); return; }
     problems += arr.length;
     console.log(`   ✗ ${name} — ${arr.length}건`);
-    arr.slice(0, 6).forEach((x) => console.log(`       ${fmt(x)}`));
-    if (arr.length > 6) console.log(`       … 외 ${arr.length - 6}건`);
+    // 기본은 6건까지만 — 같은 원인이 표 한 장에서 스무 번 나오면 목록이 화면을 덮는다.
+    // 고치는 동안에는 전부 봐야 하므로 A11Y_ALL=1 로 다 편다.
+    const cap = process.env.A11Y_ALL ? arr.length : 6;
+    arr.slice(0, cap).forEach((x) => console.log(`       ${fmt(x)}`));
+    if (arr.length > cap) console.log(`       … 외 ${arr.length - cap}건 (A11Y_ALL=1 로 전부 보기)`);
   };
   show("글자 대비 (WCAG AA)", r.contrast, (x) => `${x.got}:1 (필요 ${x.need}) ${x.size}px/${x.weight} · ${x.sel} · "${x.text}"`);
   show(`터치 목표 ${vp.isMobile ? 44 : 24}px`, r.tap, (x) => `${x.w}×${x.h} · ${x.sel} · "${x.text}"`);

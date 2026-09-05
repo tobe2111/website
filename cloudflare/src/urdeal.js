@@ -9,11 +9,24 @@
 //     → { success, data: [{ id, name, description, price, original_price,
 //                           discount_rate, image_url, stock, seller_name, sold_count }] }
 //
-// ── 없는 것
+// ── 없는 것 (2026-09-05 실제 호출로 확인)
 //   지역·상인회 단위 조회, 여러 가게 한 번에 조회, 웹훅.
 //   그래서 가게마다 한 번씩 부른다. 점포가 늘면 호출도 느는 구조라 캐시가 필수다.
 //
-// 나중에 유어딜에 seller_ids=1,2,3 같은 필터가 생기면 이 파일만 고치면 된다.
+// ⚠️ 여기서 조심할 것 — **거르개가 조용히 무시된다.**
+//   seller_id 에 숫자가 아닌 값을 주면(예: "1,2") 유어딜은 오류를 내지 않고
+//   **거르지 않은 전체 목록**을 돌려준다. 실제로 재 봤다:
+//     seller_id=1     → 0건
+//     seller_id=1,2   → 100건 (남의 가게 것 전부)
+//     seller_ids=1,2  → 100건 (그런 이름의 칸이 없어 그냥 무시)
+//   그래서 "호출을 줄이자" 며 번호를 쉼표로 이어 붙이면, 상인회 홈에
+//   **우리 골목과 아무 상관 없는 상품이 우리 가게 이름을 달고 걸린다.**
+//   1) 주소를 만들기 전에 양의 정수인지 확인하고,
+//   2) 돌아온 줄이 그 가게 것이 맞는지 다시 본다.
+//   둘 다 둔다 — 하나는 우리 실수를 막고, 하나는 남의 변경을 막는다.
+//
+// 나중에 유어딜에 여러 가게를 한 번에 부르는 칸이 생기면 이 파일만 고치면 된다.
+// 무엇이 필요한지는 docs/urdeal-api-request.md 에 적어 두었다.
 
 const DEFAULT_BASE = "https://live.ur-team.com";
 const CACHE_TTL = 600;        // 우리 쪽 10분. 이용권 값은 분 단위로 바뀌지 않는다.
@@ -42,17 +55,35 @@ function normalize(raw, sellerId) {
     image: /^https?:\/\//.test(String(raw.image_url || "")) ? String(raw.image_url).slice(0, 500) : "",
     shop: String(raw.seller_name || "").trim().slice(0, 60),
     sold: num(raw.sold_count),
-    sellerId: Number(sellerId) || num(raw.seller_id),
+    // 유어딜이 말한 번호를 먼저 믿는다. 우리가 요청에 쓴 번호를 그대로 붙이면,
+    // 거르개가 무시됐을 때 남의 상품에 우리 가게 번호를 달게 된다.
+    sellerId: num(raw.seller_id) || Number(sellerId) || 0,
   };
 }
 
+// 양의 정수만 통과. "1,2" 같은 값이 주소에 실리면 유어딜이 거르개를 통째로 무시한다.
+const sellerNo = (v) => {
+  const n = Number(v);
+  return Number.isInteger(n) && n > 0 && n <= Number.MAX_SAFE_INTEGER ? n : 0;
+};
+// 돌아온 줄이 정말 그 가게 것인가.
+// 번호가 적혀 있는데 다르면 버린다 — 거르개가 무시된 응답이다.
+// 번호가 비어 있으면(플랫폼 상품이 그렇다) 가게 것이 아니므로 역시 버린다.
+export function belongsToSeller(raw, sellerId) {
+  const want = sellerNo(sellerId);
+  const got = sellerNo(raw && raw.seller_id);
+  return !!want && got === want;
+}
+
 async function fetchSeller(env, sellerId, signal) {
-  const url = `${urdealBase(env)}/api/products?deal_only=1&seller_id=${Number(sellerId)}&limit=${PER_SELLER}&sort=discount`;
+  const id = sellerNo(sellerId);
+  if (!id) return [];
+  const url = `${urdealBase(env)}/api/products?deal_only=1&seller_id=${id}&limit=${PER_SELLER}&sort=discount`;
   const r = await fetch(url, { signal, headers: { accept: "application/json" }, cf: { cacheTtl: 300, cacheEverything: true } });
   if (!r.ok) return [];
   const j = await r.json();
   const rows = Array.isArray(j && j.data) ? j.data : [];
-  return rows.map((x) => normalize(x, sellerId)).filter(Boolean);
+  return rows.filter((x) => belongsToSeller(x, id)).map((x) => normalize(x, id)).filter(Boolean);
 }
 
 // 여러 가게의 이용권을 한 벌로. 한 가게가 실패해도 나머지는 그대로 나온다 —
