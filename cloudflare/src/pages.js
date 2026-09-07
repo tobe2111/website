@@ -26,6 +26,12 @@ import { emailEnabled as emailOn } from "./email.js";
 import { CRON, CRON_JOBS, cronRunKey } from "./scheduled.js";
 
 const DOC_EVENT_LABEL = { created: "문서 생성", viewed: "계약서 열람", otp_sent: "인증번호 발송", otp_ok: "휴대폰 본인확인", signed: "전자서명 완료", declined: "서명 거절", reminded: "재알림 발송", notified: "알림 발송", edited: "문서 수정", sealed: "직인 날인 (보내는 쪽)", expired: "기한 경과로 마감" };
+// 콘솔 v6 아이콘 — 레퍼런스의 '자동 입력' 반짝임, '직접 입력' 사람, 완성도 사람들, 확인, 화살표
+const SPARK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 16l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7z"/></svg>';
+const PERSON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg>';
+const PEOPLE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><circle cx="17" cy="9" r="3"/><path d="M15.5 14.2c3.3.3 6 2.6 6 5.8"/></svg>';
+const CHECK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="14" height="14"><circle cx="12" cy="12" r="9"/><path d="M8.5 12.5l2.3 2.3L15.5 10"/></svg>';
+const ARROW_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>';
 const CATEGORIES = ["음식점", "카페·디저트", "생활·서비스", "패션·잡화", "농수축산", "교육·문화", "기타"];
 // 업종마다 고정된 색. 레퍼런스(카카오임팩트)의 카드처럼 **본문을 색으로 채우기** 위한 것이다.
 //
@@ -1715,29 +1721,32 @@ export async function admin(ctx) {
     <h2 class="panel-title">회원 추가</h2>
     <p class="panel-hint">사장님 대신 등록합니다. <b>이메일은 없어도 됩니다</b> — 이메일을 비우면 <b>휴대폰 번호가 곧 아이디</b>가 되고,
       등록을 마치면 임시 비밀번호가 바로 나옵니다. 그 둘을 사장님께 불러 주시면 됩니다.</p>
-    ${kakaoReady ? `<div class="form-divider">지도에서 찾아 간편 등록</div>
-    <div class="place-find" data-place-find>
-      <input type="text" data-place-q placeholder="가게 이름 (예: 방배 버들카페)" aria-label="가게 이름으로 찾기" autocomplete="off" />
-      <button type="button" class="btn btn-ghost btn-sm" data-place-go>찾기</button>
+    ${kakaoReady ? `<p class="col-head">${SPARK_SVG} 지도에서 찾아 간편 등록 <span class="ai">자동</span></p>
+    <p class="col-sub">가게 이름만 치면 업체명·업종·주소·전화·좌표가 아래에 채워집니다. <b>사장님 성함과 휴대폰만 더 적으면 끝</b>입니다.</p>
+    <div class="auto-box" data-place-find>
+      <div class="place-find">
+        <input type="text" data-place-q placeholder="가게 이름 (예: 방배 버들카페)" aria-label="가게 이름으로 찾기" autocomplete="off" />
+        <button type="button" class="btn btn-ghost btn-sm" data-place-go>찾기</button>
+      </div>
+      <p data-place-msg hidden></p>
+      <ul class="place-list" data-place-list hidden></ul>
     </div>
-    <p class="panel-hint" data-place-msg hidden></p>
-    <ul class="place-list" data-place-list hidden></ul>
-    <p class="panel-hint">고르면 업체명·업종·주소·전화·좌표가 아래에 채워집니다. <b>사장님 성함과 휴대폰만 더 적으면 끝</b>입니다.</p>`
+    <p class="col-head" style="margin-top:22px">${PERSON_SVG} 또는 직접 입력</p>`
       // 키가 없다고 이 자리를 통째로 지우면, 이런 기능이 있다는 것 자체를 관리자가 알 수 없다.
       // 꺼져 있다는 사실과 켜는 방법을 한 줄로 남긴다 — 없는 것과 꺼진 것은 다르다.
       : `<p class="panel-hint">가게 이름만으로 주소·전화·업종·지도 위치를 채워 넣는 <b>지도에서 찾기</b>는 지금 꺼져 있습니다 —
       운영사가 카카오 또는 네이버 지도 키를 등록하면 이 자리에 검색 칸이 생깁니다. 그때까지는 아래에 직접 적어 주세요.</p>`}
     <form method="post" action="${base}/admin/members/add" class="stack-form">
-      <div class="form-two"><label>사장님 성함<input type="text" name="name" required maxlength="60" autocomplete="name" /></label>
-        <label>휴대폰 <small>(알림톡·연락용)</small>
+      <div class="form-two"><label>사장님 성함 <em class="tag req">필수</em><input type="text" name="name" required maxlength="60" autocomplete="name" /></label>
+        <label>휴대폰 <em class="tag opt">선택</em> <small>알림톡·연락용 · 이메일이 없으면 이 번호가 아이디</small>
           <input type="tel" name="phone" maxlength="13" inputmode="numeric" placeholder="010-0000-0000"
             autocomplete="tel" data-phone-help="id" aria-describedby="addMemberPhoneHelp" />
           <span class="field-help" id="addMemberPhoneHelp" aria-live="polite">숫자만 눌러도 자동으로 끊어집니다.</span></label></div>
-      <div class="form-two"><label>업체명<input type="text" name="business_name" data-place="name" required maxlength="100" autocomplete="organization" /></label>
-        <label>업종<select name="category" data-place="category">${CATEGORIES.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("")}</select></label></div>
-      <div class="form-two"><label>가게 주소 <small>(선택 · 지도에 뜨려면 필요합니다)</small><input type="text" name="address" data-place="address" maxlength="200" autocomplete="street-address" /></label>
-        <label>가게 전화 <small>(선택)</small><input type="tel" name="biz_phone" data-place="phone" maxlength="40" /></label></div>
-      <label>이메일 <small>(선택 · 있으면 바로 로그인할 수 있습니다)</small><input type="email" name="email" maxlength="120" autocomplete="email" /></label>
+      <div class="form-two"><label>업체명 <em class="tag req">필수</em><input type="text" name="business_name" data-place="name" required maxlength="100" autocomplete="organization" /></label>
+        <label>업종 <em class="tag req">필수</em><select name="category" data-place="category">${CATEGORIES.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("")}</select></label></div>
+      <div class="form-two"><label>가게 주소 <em class="tag opt">선택</em> <small>지도에 뜨려면 필요합니다</small><input type="text" name="address" data-place="address" maxlength="200" autocomplete="street-address" /></label>
+        <label>가게 전화 <em class="tag opt">선택</em><input type="tel" name="biz_phone" data-place="phone" maxlength="40" /></label></div>
+      <label>이메일 <em class="tag opt">선택</em> <small>있으면 바로 로그인할 수 있습니다</small><input type="email" name="email" maxlength="120" autocomplete="email" /></label>
       <input type="hidden" name="lat" data-place="lat" /><input type="hidden" name="lng" data-place="lng" />
       <button class="btn btn-primary">회원 추가</button></form>
     <p class="panel-hint">등록한 뒤 <b>[정보 채우기]</b> 에서 주소·전화·사진을 채우면 손님 화면에 제대로 뜹니다.
@@ -2972,6 +2981,30 @@ export async function adminBusinessEdit(ctx) {
     !b.hours && "영업시간이 없어 <b>'지금 문 연 곳'에 안 뜹니다</b>",
     (b.lat == null || b.lng == null) && "좌표가 없어 <b>지도 위 핀이 찍히지 않습니다</b>",
   ].filter(Boolean);
+  // ── 완성도 — 레퍼런스의 '프로필 완성도 100%'.
+  // 숫자 하나가 "뭐가 비었지" 를 대신 말한다. 100 이 아니면 무엇을 채워야 하는지 한 줄로 잇는다.
+  // 사진은 이 폼 밖(아래 패널)에서 올리지만 손님 화면에는 가장 크게 보이므로 완성도에 넣는다.
+  const photoCount = (await D.listMedia(db, b.id)).filter((m) => m.kind === "image").length;
+  const fields = [
+    ["업체명", !!b.name], ["업종", !!b.category], ["전화", !!b.phone], ["영업시간", !!b.hours],
+    ["주소", !!b.address], ["소개", !!b.description], ["지도 위치", b.lat != null && b.lng != null],
+    ["사진", photoCount > 0],
+  ];
+  const filled = fields.filter((f) => f[1]).length;
+  const pct = Math.round((filled / fields.length) * 100);
+  const missing = fields.filter((f) => !f[1]).map((f) => f[0]);
+  const doneBar = `<div class="finish-bar">
+    <div class="done-card">
+      <div class="done-head"><span class="done-label">${PEOPLE_SVG} 정보 완성도</span>
+        <span class="done-pct${pct < 60 ? " is-low" : ""}">${pct}%</span></div>
+      <div class="done-bar${pct < 60 ? " is-low" : ""}"><i style="width:${pct}%"></i></div>
+      <p class="done-sub">${pct === 100
+        ? `${CHECK_SVG} 손님 화면에 빠짐없이 보입니다`
+        : `${CHECK_SVG} <b>${esc(missing.slice(0, 3).join(" · "))}</b>${missing.length > 3 ? ` 외 ${missing.length - 3}개` : ""} 를 채우면 지도·검색에 다 뜹니다`}</p>
+      ${gaps.length ? `<ul class="done-gaps">${gaps.map((g) => `<li><span>${g}</span></li>`).join("")}</ul>` : ""}
+    </div>
+    <button class="btn btn-cta">저장 ${ARROW_SVG}</button>
+  </div>`;
   // ── 사진·영상 —— 사장님이 카톡으로 보내 온 것을 관리자가 대신 올린다.
   // 지도에서 긁어 오지 않는다: 그 사진들은 사장님·손님·플랫폼이 각각 찍은 남의 저작물이라,
   // 우리 서버에 복사해 우리 페이지에 거는 순간 재배포가 된다. 링크(네이버 플레이스)는 괜찮다.
@@ -3085,45 +3118,57 @@ export async function adminBusinessEdit(ctx) {
         : "· 연결된 사장님 계정 없음"}</p></div>
       <div class="dash-head-actions">${b.status === "approved" ? `<a class="btn btn-ghost btn-sm" href="${base}/business/${esc(b.slug)}" target="_blank">가게 페이지 보기 ↗</a>` : ""}</div>
     </div>${flashOf(query)}
-    ${gaps.length ? `<div class="flash flash-warn"><b>아직 덜 채운 것</b><ul class="gap-list">${gaps.map((g) => `<li>${g}</li>`).join("")}</ul></div>` : ""}
     ${ownerLoginPanel}
     <section class="panel">
       <h2 class="panel-title">가게 정보</h2>
       <p class="panel-hint">사장님 대신 채워 두는 자리입니다. 사장님이 로그인하면 자기 화면에서 이어서 고칠 수 있습니다.</p>
-      ${kakaoOn ? `<div class="form-divider">지도에서 찾아 채우기</div>
-      <div class="place-find" data-place-find>
-        <input type="text" data-place-q value="${esc(b.name)}" placeholder="가게 이름 (예: 방배 버들카페)" aria-label="가게 이름으로 찾기" autocomplete="off" />
-        <button type="button" class="btn btn-ghost btn-sm" data-place-go>찾기</button>
-      </div>
-      <p class="panel-hint" data-place-msg hidden></p>
-      <ul class="place-list" data-place-list hidden></ul>
-      <p class="panel-hint">카카오맵에서 찾은 값을 아래 칸에 채워 넣습니다. <b>저장은 확인하고 직접 누르셔야 합니다</b> — 지도의 정보가 늘 최신인 것은 아닙니다.</p>`
-        : `<p class="panel-hint">지도에서 자동으로 채우는 기능은 운영사가 카카오 또는 네이버 지도 키를 등록하면 열립니다.</p>`}
       <form method="post" action="${base}/admin/business/${b.id}" class="stack-form">
-        <label>업체명<input type="text" name="name" data-place="name" value="${esc(b.name)}" required maxlength="100" autocomplete="organization" /></label>
-        <label>업종<select name="category" data-place="category">${opts}</select></label>
-        <div class="form-two">
-          <label>전화<input type="tel" name="phone" data-place="phone" value="${esc(b.phone || "")}" maxlength="40" autocomplete="tel" /></label>
-          <label>영업시간 <small>(예: 10:00-21:00 · 일요일 휴무)</small><input type="text" name="hours" id="bizHours" value="${esc(b.hours || "")}" maxlength="100" /></label>
+      <div class="split-even">
+        <div class="dash-col">
+          <p class="col-head">${SPARK_SVG} 지도에서 찾아 자동 입력${kakaoOn ? ` <span class="ai">자동</span>` : ""}</p>
+          <p class="col-sub">${kakaoOn
+            ? "가게 이름만 치면 주소·전화·업종·지도 위치를 찾아 오른쪽에 채워 드릴게요"
+            : "운영사가 카카오 또는 네이버 지도 키를 등록하면 이 자리에 검색 칸이 생깁니다"}</p>
+          ${kakaoOn ? `<div class="auto-box" data-place-find>
+            <div class="place-find">
+              <input type="text" data-place-q value="${esc(b.name)}" placeholder="가게 이름 (예: 방배 버들카페)" aria-label="가게 이름으로 찾기" autocomplete="off" />
+              <button type="button" class="btn btn-ghost btn-sm" data-place-go>찾기</button>
+            </div>
+            <p data-place-msg hidden></p>
+            <ul class="place-list" data-place-list hidden></ul>
+          </div>
+          <p class="panel-hint" style="margin-top:12px">찾은 값은 오른쪽 칸에 채워집니다. <b>저장은 확인하고 직접 누르셔야 합니다</b> — 지도의 정보가 늘 최신인 것은 아닙니다.</p>`
+          : `<p class="panel-hint">지도에서 자동으로 채우는 기능은 운영사가 카카오 또는 네이버 지도 키를 등록하면 열립니다.</p>`}
         </div>
-        <label>주소<input type="text" name="address" data-place="address" value="${esc(b.address || "")}" maxlength="200" autocomplete="street-address" /></label>
-        <label>소개<textarea name="description" rows="4" maxlength="2000">${esc(b.description || "")}</textarea></label>
-        <label>네이버 플레이스 <small>(선택 · 리뷰·길찾기 연결)</small>
-          <input type="url" name="sns_naver" value="${esc(b.sns_naver || "")}" placeholder="naver.me/…" /></label>
-        <div class="form-divider">유어딜 (이용권 판매)</div>
-        <p class="panel-hint">이 가게가 유어딜에서 이용권을 팔고 있으면 <b>가게 번호</b>를 넣어 주세요.
-          그러면 그 이용권이 상인회 홈의 <b>우리 골목 이용권</b> 자리에 자동으로 걸립니다.
-          번호는 유어딜 가게 화면 주소 끝의 숫자입니다 (예: live.ur-team.com/seller/<b>128</b> → 128).
-          안 팔면 비워 두세요.</p>
-        <label>유어딜 가게 번호 <small>(선택)</small>
-          <input type="text" inputmode="numeric" name="urdeal_seller_id" maxlength="12"
-            value="${b.urdeal_seller_id ? esc(String(b.urdeal_seller_id)) : ""}" placeholder="예: 128" /></label>
-        <div class="form-divider">지도 위치</div>
-        <div class="form-two">
-          <label>위도<input type="text" inputmode="decimal" name="lat" data-place="lat" value="${b.lat != null ? esc(String(b.lat)) : ""}" /></label>
-          <label>경도<input type="text" inputmode="decimal" name="lng" data-place="lng" value="${b.lng != null ? esc(String(b.lng)) : ""}" /></label>
+        <div class="dash-col">
+          <p class="col-head">${PERSON_SVG} 또는 직접 입력</p>
+          <p class="col-sub">지도에 없는 가게라면 여기에 직접 적어 주세요. 찾은 값을 고칠 수도 있어요</p>
+          <label>업체명 <em class="tag req">필수</em><input type="text" name="name" data-place="name" value="${esc(b.name)}" required maxlength="100" autocomplete="organization" /></label>
+          <label>업종 <em class="tag req">필수</em><select name="category" data-place="category">${opts}</select></label>
+          <div class="form-two">
+            <label>전화 <em class="tag opt">선택</em><input type="tel" name="phone" data-place="phone" value="${esc(b.phone || "")}" maxlength="40" autocomplete="tel" /></label>
+            <label>영업시간 <em class="tag opt">선택</em> <small>예: 10:00-21:00 · 일요일 휴무</small><input type="text" name="hours" id="bizHours" value="${esc(b.hours || "")}" maxlength="100" /></label>
+          </div>
+          <label>주소 <em class="tag opt">선택</em> <small>지도에 뜨려면 필요합니다</small><input type="text" name="address" data-place="address" value="${esc(b.address || "")}" maxlength="200" autocomplete="street-address" /></label>
+          <label>어떤 가게인가요? <em class="tag opt">선택</em><textarea name="description" rows="4" maxlength="2000" placeholder="대표 메뉴, 자랑거리, 손님께 한마디">${esc(b.description || "")}</textarea></label>
+          <label>네이버 플레이스 <em class="tag opt">선택</em> <small>리뷰·길찾기 연결</small>
+            <input type="url" name="sns_naver" value="${esc(b.sns_naver || "")}" placeholder="naver.me/…" /></label>
+          <div class="form-divider">유어딜 (이용권 판매)</div>
+          <p class="panel-hint">이 가게가 유어딜에서 이용권을 팔고 있으면 <b>가게 번호</b>를 넣어 주세요.
+            그러면 그 이용권이 상인회 홈의 <b>우리 골목 이용권</b> 자리에 자동으로 걸립니다.
+            번호는 유어딜 가게 화면 주소 끝의 숫자입니다 (예: live.ur-team.com/seller/<b>128</b> → 128).
+            안 팔면 비워 두세요.</p>
+          <label>유어딜 가게 번호 <em class="tag opt">선택</em>
+            <input type="text" inputmode="numeric" name="urdeal_seller_id" maxlength="12"
+              value="${b.urdeal_seller_id ? esc(String(b.urdeal_seller_id)) : ""}" placeholder="예: 128" /></label>
+          <div class="form-divider">지도 위치</div>
+          <div class="form-two">
+            <label>위도 <em class="tag opt">선택</em><input type="text" inputmode="decimal" name="lat" data-place="lat" value="${b.lat != null ? esc(String(b.lat)) : ""}" /></label>
+            <label>경도 <em class="tag opt">선택</em><input type="text" inputmode="decimal" name="lng" data-place="lng" value="${b.lng != null ? esc(String(b.lng)) : ""}" /></label>
+          </div>
         </div>
-        <button class="btn btn-primary">저장</button>
+      </div>
+      ${doneBar}
       </form></section>
     ${mediaPanel}
     </div></section>`;

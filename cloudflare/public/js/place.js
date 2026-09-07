@@ -58,6 +58,8 @@
       set("lng", p.lng);
       setCategory(p.categoryPath || p.category);
       list.hidden = true;
+      // 레퍼런스의 '✓ 완료' — 상자가 초록 확인 상태로 바뀐다 (CSS 가 data-place-done 을 본다)
+      box.setAttribute("data-place-done", "");
       say("채웠습니다. 확인하고 저장을 눌러 주세요. 영업시간은 지도에 없어 직접 적으셔야 합니다.");
     }
     function render(places) {
@@ -87,6 +89,7 @@
       if (busy) return;
       if (term.length < 2) { say("가게 이름을 두 글자 이상 적어 주세요."); return; }
       busy = true; btn.disabled = true; say("찾는 중…"); list.hidden = true;
+      box.removeAttribute("data-place-done");
       // 지금 좌표가 있으면 그 근처를 먼저 본다 — 같은 상호가 전국에 있다
       var lat = (field("lat") || {}).value;
       var lng = (field("lng") || {}).value;

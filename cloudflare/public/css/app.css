@@ -3354,3 +3354,104 @@ a.deal-card:hover{border-color:var(--deal);transition:border-color .18s}
 .aud-opt input{margin-top:3px;width:18px;height:18px;accent-color:var(--brand);flex:none}
 .aud-opt b{display:block;font-size:.94rem;font-weight:600}
 .aud-opt small{display:block;margin-top:2px;font-size:.82rem;color:var(--muted);line-height:1.5}
+
+/* =========================================================
+   디자인 시스템 v6 — 업무 콘솔 (레퍼런스: '회사를 소개해주세요' 입력 화면)
+   ---------------------------------------------------------
+   왼쪽에 '자동 입력', 오른쪽에 '또는 직접 입력'. 라벨은 14px 굵게에 필수/선택 칩.
+   입력칸은 흰 바탕에 얇은 테두리 46px. 맨 아래에 '완성도' 카드와 큰 단추가 나란히.
+   크기·간격은 레퍼런스를 그대로 옮겼고, 색만 상인회 브랜드색을 쓴다 —
+   상인회마다 자기 색을 고르는 서비스에서 콘솔만 남의 파랑이면 앞뒤가 안 맞는다.
+   앞선 v3 규칙보다 뒤에 있어 캐스케이드로 이긴다. 공개 화면(.dash 밖)은 건드리지 않는다.
+   ========================================================= */
+.dash .container{max-width:1240px}
+.dash .dash-head{margin-bottom:24px}
+.dash .dash-title{font-size:26px;font-weight:700;letter-spacing:-.02em;line-height:1.3}
+.dash .dash-sub{font-size:14px;margin-top:6px}
+
+/* 카드: 흰 바탕 · 12px 라운드 · 얇은 테두리 · 24px 안쪽 여백 */
+.dash .panel,.dash details.panel{border:1px solid var(--line-soft);border-radius:12px;padding:24px;margin:0 0 16px}
+.dash details.panel:not([open]){padding:18px 24px}
+.dash .panel-title{display:flex;align-items:center;gap:8px;font-size:16px;font-weight:700;letter-spacing:-.01em;margin-bottom:6px}
+.dash .panel-title .badge{margin-left:2px}
+.dash .panel-hint{font-size:13px;line-height:1.55;color:var(--muted);margin:0 0 18px}
+.dash .form-divider{font-size:14px;font-weight:700;color:var(--ink);border-top:1px solid var(--line-soft);padding-top:18px;margin:6px 0 4px}
+
+/* 두 칸: 왼쪽 자동 입력, 오른쪽 직접 입력. 레퍼런스 비율(48:52) */
+.dash .split-even{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.08fr);gap:28px;align-items:start}
+.dash .col-head{display:flex;align-items:center;gap:8px;font-size:16px;font-weight:700;margin-bottom:4px}
+.dash .col-head svg{width:20px;height:20px;color:var(--brand-text);flex:none}
+.dash .col-head .ai{font-size:11px;font-weight:700;color:var(--brand-text);background:var(--brand-tint);border-radius:6px;padding:2px 7px;margin-left:2px}
+.dash .col-sub{font-size:13px;color:var(--muted);margin:0 0 16px;line-height:1.55}
+
+/* 자동 입력 상자 — 레퍼런스의 '소개서 업로드' 카드. 브랜드 옅은 바탕에 얇은 브랜드 테두리 */
+.dash .auto-box{background:var(--brand-tint);border:1px solid var(--brand-100);border-radius:8px;padding:14px 16px}
+.dash .auto-box .place-find{display:flex;gap:8px;align-items:center}
+.dash .auto-box .place-find input{flex:1;min-width:0;background:var(--surface)}
+.dash .auto-box .place-find .btn{flex:none}
+.dash .auto-box [data-place-msg]{margin:10px 0 0;font-size:13px;color:var(--brand-text)}
+.dash .auto-box .place-list{margin-top:10px}
+.dash .auto-done{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;font-weight:700;color:var(--ok-fg)}
+.dash .auto-done::before{content:"✓";display:inline-grid;place-items:center;width:16px;height:16px;border-radius:50%;background:var(--ok);color:#fff;font-size:11px}
+
+/* 라벨 14px 굵게 + 필수/선택 칩. 설명은 칩 뒤에 12px 회색 */
+.dash .stack-form{gap:18px}
+.dash .stack-form.compact{gap:12px}
+.dash .stack-form label{font-size:14px;font-weight:700;gap:8px;color:var(--ink)}
+.dash .stack-form label small{font-size:12px;font-weight:400;color:var(--muted)}
+.dash .tag{display:inline-block;font-size:12px;font-weight:600;line-height:1;padding:3px 7px;border-radius:5px;vertical-align:1px;margin-left:6px}
+.dash .tag.req{color:var(--brand-text);background:var(--brand-tint)}
+.dash .tag.opt{color:var(--muted);background:var(--bg-alt)}
+
+/* 입력칸: 흰 바탕 · 1px 테두리 · 8px 라운드 · 46px · 15px */
+.dash .stack-form input,.dash .stack-form select,.dash .stack-form textarea,.dash .caption-input,.dash .place-find input{
+  background:var(--surface);border:1px solid var(--line);border-radius:8px;min-height:46px;padding:12px 14px;font-size:15px;line-height:1.4}
+.dash .stack-form textarea{min-height:140px;line-height:1.6}
+.dash .stack-form input:focus,.dash .stack-form select:focus,.dash .stack-form textarea:focus,.dash .place-find input:focus{
+  border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-ring,rgba(31,108,255,.18))}
+.dash .form-two{gap:16px}
+/* 콘솔은 데스크톱 작업 화면이라 이전 벌이 입력칸을 40px 로 조였는데, 레퍼런스는 46px 다.
+   같은 화면 폭에서 두 벌이 싸우지 않게 여기서 한 번만 정한다. */
+.dash .stack-form input[type="text"],.dash .stack-form input[type="tel"],.dash .stack-form input[type="email"],.dash .stack-form input[type="url"]{min-height:46px}
+
+/* 초록 확인 상자 — 레퍼런스의 '충분한 정보!' */
+.dash .hint-ok{display:flex;align-items:center;gap:8px;background:var(--ok-bg);color:var(--ok-fg);border-radius:8px;padding:12px 14px;font-size:13px;font-weight:600;margin-top:12px}
+.dash .field-help{font-size:12px}
+
+/* 맨 아래: 완성도 카드 + 큰 단추가 나란히 (레퍼런스 '프로필 완성도 100% | 다음 단계 →') */
+.dash .finish-bar{display:grid;grid-template-columns:minmax(0,1fr) 150px;gap:16px;align-items:stretch;margin-top:24px}
+.dash .done-card{background:var(--surface);border:1px solid var(--line-soft);border-radius:12px;padding:18px 22px;display:flex;flex-direction:column;justify-content:center;gap:10px}
+.dash .done-head{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.dash .done-label{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:700}
+.dash .done-label svg{width:18px;height:18px;color:var(--ink-soft)}
+.dash .done-pct{font-size:16px;font-weight:700;color:var(--ok-fg);font-variant-numeric:tabular-nums}
+.dash .done-pct.is-low{color:var(--wait-fg)}
+.dash .done-bar{height:6px;border-radius:3px;background:var(--bg-alt);overflow:hidden}
+.dash .done-bar i{display:block;height:100%;border-radius:3px;background:var(--ok);transition:width .3s}
+.dash .done-bar.is-low i{background:var(--wait)}
+.dash .done-sub{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.dash .done-sub b{color:var(--ink-soft);font-weight:600}
+.dash .btn-cta{min-height:100px;font-size:16px;font-weight:700;border-radius:10px;padding:0 18px;gap:8px;background:var(--brand);color:var(--on-brand,#fff)}
+.dash .btn-cta:hover{background:var(--brand-800)}
+.dash .btn-cta svg{width:18px;height:18px}
+
+@media (max-width:900px){
+  .dash .split-even{grid-template-columns:minmax(0,1fr);gap:22px}
+  .dash .finish-bar{grid-template-columns:minmax(0,1fr)}
+  .dash .btn-cta{min-height:56px}
+  .dash .panel,.dash details.panel{padding:20px}
+}
+/* 자동 입력이 끝나면 상자 안내가 초록 '✓ 완료' 가 된다 (레퍼런스: 파일명 옆 '✓ 완료') */
+.dash .auto-box[data-place-done] [data-place-msg]{color:var(--ok-fg);font-weight:700;display:flex;align-items:center;gap:8px}
+.dash .auto-box[data-place-done] [data-place-msg]::before{content:"✓";display:inline-grid;place-items:center;flex:none;width:16px;height:16px;border-radius:50%;background:var(--ok);color:#fff;font-size:11px}
+.dash .done-gaps{margin:2px 0 0;padding:0;list-style:none;display:grid;gap:4px;font-size:12px;color:var(--muted)}
+.dash .done-gaps li{display:flex;gap:6px;align-items:flex-start}
+.dash .done-gaps li::before{content:"·";color:var(--wait);font-weight:700}
+.dash .done-gaps b{color:var(--ink-soft);font-weight:600}
+/* 라벨은 grid 라 자식마다 줄이 갈린다 — 칩이 제 줄을 통째로 먹어 막대가 됐다.
+   콘솔에서는 라벨을 블록으로 두고 글자·칩은 한 줄, 입력칸은 그 밑에 온다 (레퍼런스와 같다). */
+.dash .stack-form label{display:block}
+.dash .stack-form label > input,.dash .stack-form label > select,.dash .stack-form label > textarea{display:block;width:100%;margin-top:8px}
+.dash .stack-form label > small{display:block;margin-top:4px}
+.dash .stack-form label > .tag{display:inline-block;width:auto}
+.dash .stack-form label > .field-help{margin-top:6px}
