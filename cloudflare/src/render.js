@@ -115,11 +115,11 @@ ${ogImgAbs ? `<meta property="og:image" content="${esc(ogImgAbs)}" />` : ""}
   // 어두운 '완료' 화면이면 머리·바닥도 같은 어둠으로 — 흰 띠가 남으면 화면이 둘로 갈린다
   const bodyClass = [bnav ? "has-bnav" : "", isDone ? "is-done" : "", workScreen ? "is-console" : "",
     sticky ? "has-sticky" : ""].filter(Boolean).join(" ");
-  // 모든 POST 폼에 CSRF 히든 필드 주입
-  const injected = csrf
-    ? String(body).replace(/(<form\b[^>]*\bmethod\s*=\s*["']post["'][^>]*>)/gi, `$1<input type="hidden" name="_csrf" value="${csrf}">`)
-    : body;
-  return `<!doctype html><html lang="ko" data-theme="light"><head>
+  // 모든 POST 폼에 CSRF 히든 필드 주입 — 본문뿐 아니라 **머리말·바닥글까지** 포함한 문서 전체에.
+  // 예전에는 본문(body)에만 넣었는데, 로그아웃 단추는 머리말 안에서 따로 만들어지는 폼이라
+  // 토큰이 붙지 않았다. 그래서 로그아웃을 누르면 어느 화면에서든 '403 잘못된 요청(CSRF)' 이 떴다.
+  // 화면마다 손으로 붙이는 방식은 새 폼을 만들 때 반드시 또 빠뜨린다 — 조립이 끝난 뒤 한 번에 넣는다.
+  const page = `<!doctype html><html lang="ko" data-theme="light"><head>
 <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>${esc(title ? title + " · " : "")}${brand}</title>${meta}${og}${ldScript}
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
@@ -154,7 +154,7 @@ ${consoleKind === "super" ? `<div class="console-strip"><div class="container co
     <nav class="main-nav" id="mainNav">${nav}</nav>
   </div>
 </header>
-<main id="main">${injected}</main>
+<main id="main">${body}</main>
 ${sticky ? stickyBar(assoc, base) : ""}
 ${bnav}
 ${workScreen ? "" : `<footer class="site-footer"><div class="container">
@@ -176,6 +176,9 @@ ${workScreen ? "" : `<footer class="site-footer"><div class="container">
   /type="tel"/.test(body) ? `<script src="${assetUrl("/js/phone.js")}" defer></script>` : ""
 }${scripts}
 </body></html>`;
+  return csrf
+    ? page.replace(/(<form\b[^>]*\bmethod\s*=\s*["']post["'][^>]*>)/gi, `$1<input type="hidden" name="_csrf" value="${csrf}">`)
+    : page;
 }
 
 // 관리자·점주가 일하는 화면인가. 이 프로젝트의 콘솔 화면은 예외 없이 <section class="dash"> 로 시작한다.
