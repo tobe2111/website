@@ -1,5 +1,6 @@
 // SSR 레이아웃 + 공통 조각 (문자열 템플릿, 런타임 독립)
 import { esc } from "./util.js";
+import { bundledBrand } from "./brandAssets.js";
 import { kindById, termsOf } from "./kinds.js";
 
 // 디자인 시스템 v2 — 브랜드 매장 아이콘(스토어프론트)
@@ -80,7 +81,9 @@ export function layout({ title, assoc, base = "", user = null, body, activeNav =
   const meta = description ? `<meta name="description" content="${esc(description)}" />` : "";
   // 카카오톡·SNS 공유 미리보기 (og:image 는 절대 URL 필수)
   // ogImage: R2 키 또는 URL. 미지정 시 상인회 로고 사용.
-  const ogRaw = ogImage || (assoc && assoc.logo) || ""; // 제품 화면은 assoc 가 없으므로 상인회 로고가 붙지 않는다
+  const bundled = bundledBrand(assoc);
+  // 공유 미리보기는 정사각 마크보다 가로형 로고(1200×630)가 낫다 — 꾸러미가 있으면 그것을 쓴다
+  const ogRaw = ogImage || (bundled ? bundled.og : "") || (assoc && assoc.logo) || ""; // 제품 화면은 assoc 가 없으므로 상인회 로고가 붙지 않는다
   const ogUrl = ogRaw ? mediaUrl(ogRaw) : "";
   const ogImgAbs = ogUrl ? (/^https?:\/\//.test(ogUrl) ? ogUrl : ORIGIN + ogUrl) : "";
   const og = `
@@ -136,8 +139,8 @@ ${gaId ? `<link rel="preconnect" href="https://www.googletagmanager.com" crossor
 ${assoc ? `<link rel="alternate" type="application/rss+xml" title="${brand} 공지·소식" href="${base}/feed.xml" />` : ""}
 <meta property="og:locale" content="ko_KR" />
 <meta name="theme-color" content="${brandColor}" />
-<link rel="icon" href="/img/icon.svg" />
-<link rel="apple-touch-icon" href="/img/icon-180.png" />
+<link rel="icon" href="${bundled ? esc(bundled.mark) : "/img/icon.svg"}" />
+<link rel="apple-touch-icon" href="${bundled ? esc(bundled.icon) : "/img/icon-180.png"}" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" /></head>
 <body${consoleKind ? ` data-console="${esc(consoleKind)}"` : ""}${assoc && kindById(assoc.kind).usesLanding ? ` data-base="${esc(base)}" data-csrf="${esc(csrf || "")}"` : ""}${bodyClass ? ` class="${bodyClass}"` : ""}>
@@ -146,7 +149,7 @@ ${consoleKind === "super" ? `<div class="console-strip"><div class="container co
   <b>운영사 콘솔</b><span>여기서 하는 일은 <b>모든 고객사</b>에 적용됩니다</span></div></div>` : ""}
 <header class="site-header" id="siteHeader">
   <div class="container header-inner">
-    <a class="brand" href="${consoleKind === "super" ? "/super" : product ? product.home || "/esign" : base || "/"}">${assoc && assoc.logo ? `<img class="brand-logo" src="${esc(mediaUrl(assoc.logo))}" alt="" />` : `<span class="brand-mark">${mark}</span>`}<span>${brand}</span></a>
+    <a class="brand" href="${consoleKind === "super" ? "/super" : product ? product.home || "/esign" : base || "/"}">${assoc && assoc.logo ? `<img class="brand-logo" src="${esc(mediaUrl(assoc.logo))}" alt="" />` : bundled ? `<img class="brand-logo brand-logo-bundled" src="${esc(bundled.mark)}" alt="" width="34" height="28" />` : `<span class="brand-mark">${mark}</span>`}<span>${brand}</span></a>
     <button class="nav-toggle" id="navToggle" aria-label="메뉴 열기" aria-expanded="false"><span></span><span></span><span></span></button>
     <nav class="main-nav" id="mainNav">${nav}</nav>
   </div>
@@ -159,7 +162,7 @@ ${workScreen ? "" : `<footer class="site-footer"><div class="container">
     <nav class="foot-policy"><a href="/privacy" class="strong">개인정보처리방침</a><span class="sep"></span><a href="/terms">이용약관</a>${assoc ? `<span class="sep"></span><a href="${base}/contact">문의하기</a>` : ""}</nav>
   </div>
   <div class="foot-bottom">
-    <span class="foot-mark" aria-hidden="true">${mark}</span>
+    ${bundled ? `<span class="foot-logo"><img src="${esc(bundled.wide)}" alt="${brand} 로고" width="258" height="50" loading="lazy" /></span>` : `<span class="foot-mark" aria-hidden="true">${mark}</span>`}
     <div class="foot-info">
       <strong>${brand}</strong>
       ${assoc && (assoc.phone || assoc.address) ? `<p>${assoc.address ? esc(assoc.address) : ""}${assoc.phone ? `${assoc.address ? " · " : ""}문의 ${esc(assoc.phone)}` : ""}</p>` : ""}

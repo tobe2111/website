@@ -1992,7 +1992,6 @@ export async function admin(ctx) {
     <p class="panel-hint">실패한 건은 자동으로 환불되어 잔액이 복구됩니다. 수신번호는 개인정보 보호를 위해 가려서 저장합니다.</p>
     </${balance < unitPrice ? "section" : "details"}>`;
 
-  const notifRows = notifs.length ? notifs.map((n) => `<li class="${n.is_read ? "" : "unread"}"><span class="notif-dot"></span><a href="${esc(n.link || base + "/admin")}" class="notif-msg">${esc(n.message)}</a><time>${esc(kstStamp(n.created_at, { year: false }))}</time></li>`).join("") : `<li class="empty">알림이 없습니다.</li>`;
   const noticeCats = NOTICE_CATEGORIES.map((c) => `<option value="${esc(c)}"${c === "안내" ? " selected" : ""}>${esc(c)}</option>`).join("");
   // 어떤 패널을 띄울지는 제품 유형 레지스트리가 정한다 (kinds.js console 스위치).
   // 안 쓰는 화면을 띄우면 콘솔이 어지럽고, 새 제품마다 여기에 if 를 더하면 금세 손을 못 댄다.
@@ -2002,6 +2001,17 @@ export async function admin(ctx) {
   const isEsign = K.id === "esign";
   const isFranchise = C.landing;
   const docs = await D.listDocuments(db, assoc.id);
+  // 최근 활동 — 알림함이 비어도 "요즘 무슨 일이 있었나" 는 보여야 한다.
+  // 알림(사람이 한 일에 대한 통지)에 가입·공지·행사·계약 기록을 시간순으로 섞는다. 알림이 하나도 없는
+  // 새 상인회에서 "알림이 없습니다" 한 줄만 뜨면 화면 반이 비고, 회장님은 홈페이지가 죽은 줄 안다.
+  const feed = [
+    ...notifs.map((n) => ({ t: n.created_at, msg: n.message, link: n.link || base + "/admin", unread: !n.is_read })),
+    ...all.filter((b) => b.status === "approved").map((b) => ({ t: b.created_at, msg: `${b.name} 점포가 가입했습니다`, link: `${base}/admin/business/${b.id}` })),
+    ...notices.map((n) => ({ t: n.created_at, msg: `공지 「${n.title}」 을 올렸습니다`, link: `${base}/notices/${n.id}` })),
+    ...events.map((e) => ({ t: e.created_at, msg: `행사 「${e.title}」 을 열었습니다`, link: `${base}/events` })),
+    ...docs.map((d) => ({ t: d.created_at, msg: `계약서 「${d.title}」 ${d.closed ? "체결 완료" : "서명 요청"}`, link: `${base}/admin/documents` })),
+  ].filter((x) => x.t && x.msg).sort((a, b) => String(b.t).localeCompare(String(a.t))).slice(0, 8);
+  const notifRows = feed.length ? feed.map((n) => `<li class="${n.unread ? "unread" : ""}"><span class="notif-dot"></span><a href="${esc(n.link)}" class="notif-msg">${esc(n.msg)}</a><time>${esc(kstStamp(n.t, { year: false }))}</time></li>`).join("") : `<li class="empty">알림이 없습니다.</li>`;
   const docCount = docs.length;
   const leads = isFranchise ? await D.leadStats(db, assoc.id) : null;
   // 아직 연락하지 않은 상담 — 현황 화면에서 이름·연락처까지 보여야 그 자리에서 전화를 건다
