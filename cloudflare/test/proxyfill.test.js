@@ -294,7 +294,13 @@ test("회원 추가 폼이 접힌 상자 안이 아니라 눈에 보이는 자�
   // 여는 태그를 함께 본다 — 접힌 상자(details)면 회장님이 못 찾는다
   assert.match(html.slice(Math.max(0, at - 120), at + 40), /<section class="panel panel-accent"/, "접힌 상자가 아니라 패널로");
   assert.match(html.slice(at, at + 1600), /name="phone"/, "휴대폰 칸이 있어야 — 알림톡이 나가는 곳이다");
-  assert.match(html.slice(at, at + 1800), /이메일은 없어도 됩니다/);
+  // 칸이 일곱이라 "뭘 다 채워야 하나" 로 읽혔다. 꼭 필요한 셋만 보이고 나머지는 접는다 —
+  // 다만 '이메일 없이도 된다' 는 사실은 접히면 안 된다. 그걸 몰라서 명단 입력을 포기한다.
+  assert.match(html.slice(at, at + 1800), /이메일은 없어도 되고/, "이메일 없이 된다는 안내는 늘 보여야");
+  const panel = html.slice(at, at + 4000);
+  assert.match(panel, /업종·주소·이메일을 지금 적기/, "덜 급한 칸은 접혀 있어야");
+  for (const must of [/name="business_name"/, /name="name"/, /name="phone"/])
+    assert.match(panel.slice(0, panel.indexOf("more-fields")), must, "꼭 필요한 칸은 접히지 않아야");
 });
 
 test("이메일 없이 휴대폰만으로 회원을 추가할 수 있다", async () => {

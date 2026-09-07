@@ -174,6 +174,7 @@ export const TENANT = [
   ["POST", "/admin/notice", api.adminCreateNotice, "ADMIN"],
   ["POST", "/admin/notice/:id", api.adminUpdateNotice, "ADMIN"],
   ["POST", "/admin/notice/:id/delete", api.adminDeleteNotice, "ADMIN"],
+  ["POST", "/admin/notices/bulk", api.adminNoticesBulk, "ADMIN"],
   ["POST", "/admin/event", api.adminCreateEvent, "ADMIN"],
   ["POST", "/admin/event/:id", api.adminUpdateEvent, "ADMIN"],
   ["GET", "/admin/event/:id/rsvps.csv", pages.adminExportRsvps, "ADMIN"],
