@@ -185,8 +185,6 @@ export const TENANT = [
   ["POST", "/admin/layout", api.adminSaveLayout, "ADMIN"],
   ["POST", "/admin/layout/reset", api.adminResetLayout, "ADMIN"],
   // 상인회 홈 A/B — 사본 만들기·지우기
-  ["POST", "/admin/home-variant", api.adminCreateHomeVariant, "ADMIN"],
-  ["POST", "/admin/home-variant/:slug/delete", api.adminDeleteHomeVariant, "ADMIN"],
   ["POST", "/admin/notifications/read", api.adminReadNotifications, "ADMIN"],
   ["POST", "/admin/user/:id/reset-password", api.adminResetUserPassword, "ADMIN"],
   ["POST", "/admin/members/add", api.adminAddMember, "ADMIN"],
@@ -206,7 +204,6 @@ export const TENANT = [
   ["POST", "/admin/polls/:id", api.adminUpdatePoll, "ADMIN"],
   ["POST", "/admin/dues", api.adminDueToggle, "ADMIN"],
   ["POST", "/admin/dues/amount", api.adminDuesAmount, "ADMIN"],
-  ["POST", "/admin/coupon/:id/use", api.adminCouponUse, "ADMIN"],
   ["POST", "/admin/dues/account", api.adminDuesAccount, "ADMIN"],
   ["POST", "/admin/dues/remind", api.adminDuesRemind, "ADMIN"],
   ["GET", "/admin/dues/unpaid.csv", pages.adminExportUnpaid, "ADMIN"],
@@ -339,7 +336,9 @@ function securityHeaders(env, opts = {}) {
 // GET 만 넘긴다 — POST 를 로그인 뒤에 다시 실행하면 안 된다.
 function authorize(user, auth, assoc, wantPath = "") {
   if (!auth) return true;
-  if (!user) return "/login?err=1&msg=" + encodeURIComponent("로그인이 필요합니다.")
+  // 상인회 안에서 막혔으면 그 상인회의 로그인으로 보낸다. 공용 로그인으로 보내면
+  // 로고도 이름도 남의 것("리스터코퍼레이션")이 떠서, 손님은 다른 사이트로 튕긴 줄 안다.
+  if (!user) return (assoc && assoc._base ? assoc._base : "") + "/login?err=1&msg=" + encodeURIComponent("로그인이 필요합니다.")
     + (safeNext(wantPath) ? "&next=" + encodeURIComponent(wantPath) : "");
   if (auth === "USER") return true;
   if (auth === "SUPERADMIN") return user.role === ROLES.SUPERADMIN;

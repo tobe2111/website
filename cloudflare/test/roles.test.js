@@ -422,7 +422,9 @@ test("관리자 화면은 로그인·소속·권한 세 가지를 모두 본다"
   for (const p of ["/t/seocho/admin", "/t/seocho/admin/documents", "/t/seocho/admin/api", "/super"]) {
     const r = await f(p);
     assert.equal(r.status, 303, `${p}: 비로그인인데 막지 않았다`);
-    assert.match(r.headers.get("location") || "", /^\/login\?/, `${p}: 로그인으로 보내야`);
+    // 상인회 안이면 그 상인회 로그인으로, 플랫폼(/super)이면 공용 로그인으로
+    const want = p.startsWith("/t/seocho/") ? /^\/t\/seocho\/login\?/ : /^\/login\?/;
+    assert.match(r.headers.get("location") || "", want, `${p}: 그 화면이 속한 로그인으로 보내야`);
   }
   // ② 남의 상인회 관리 화면은 로그인해도 못 연다
   const adminJar = await login("admin@a.kr");
@@ -440,6 +442,7 @@ test("관리자 화면은 로그인·소속·권한 세 가지를 모두 본다"
   const anon = await (await f("/t/seocho/")).text();
   assert.match(anon, /href="[^"]*\/login"/, "비로그인 화면에 로그인 링크가 있어야");
   const inside = await (await f("/t/seocho/", { headers: { cookie: adminJar } })).text();
-  assert.match(inside, /action="\/logout"/, "로그인한 화면에 로그아웃이 있어야");
+  // 로그아웃도 그 상인회 주소로 — 눌렀을 때 플랫폼 첫 화면으로 튕기면 안 된다
+  assert.match(inside, /action="\/t\/seocho\/logout"/, "로그인한 화면에 그 상인회의 로그아웃이 있어야");
   assert.match(inside, /\/t\/seocho\/admin/, "관리자에게 관리 화면 입구가 보여야");
 });

@@ -97,7 +97,7 @@ test("사본을 보고 온 사람의 입점 신청이 그 사본 앞으로 잡�
   assert.equal(Number((await statOf(env, a.id, "b")).signups), 1, "입점 신청이 사본 앞으로 잡혀야");
 });
 
-test("관리 화면에 비교표가 있고, 표본이 얇으면 그렇게 말해 준다", async () => {
+test("콘솔에서 A/B 비교표는 걷어냈다 — 쓰지 않는 화면이 자리를 차지하고 있었다", async () => {
   const { env } = await seed();
   const g = await visit(env, "/login");
   const seedC = cookieOf(g);
@@ -107,14 +107,8 @@ test("관리 화면에 비교표가 있고, 표본이 얇으면 그렇게 말해
     body: new URLSearchParams({ _csrf: tk, email: "ad@s.kr", password: "pass1234" }) }), env, { waitUntil() {}, passThroughOnException() {} });
   const jar = [seedC, cookieOf(lr)].filter(Boolean).join("; ");
   const html = await (await visit(env, "/t/s/admin", jar)).text();
-  assert.match(html, /홈 비교하기 \(A\/B\)/);
-  assert.match(html, /가게 먼저/, "만들어 둔 사본이 표에 있어야");
-  assert.match(html, /입점 신청<\/th>/);
-  assert.match(html, /표본 부족/, "방문 100회 전에는 비교하지 말라고 해야");
-  assert.match(html, /사본 만들기/);
-  // 두 갈래 프리셋 — 첫 화면이 무엇을 앞세우는지만 다르게 해서 복사한다
-  assert.match(html, /가게가 먼저/);
-  assert.match(html, /찾는 게 먼저/);
+  assert.doesNotMatch(html, /홈 비교하기/, "다시 붙지 않아야");
+  assert.doesNotMatch(html, /사본 만들기/);
 });
 
 // 전자계약 조직은 홈에 비교할 구성이 없다 — 없는 기능을 화면에 띄우지 않는다.

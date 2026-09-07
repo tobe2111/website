@@ -198,7 +198,7 @@ function consoleNav(assoc, base, user) {
   if (user && user.role === "SUPERADMIN") out.push(`<a href="/super">운영사 콘솔</a>`);
   if (user) {
     out.push(`<a href="/account">${esc(user.name || "내 계정")}</a>`);
-    out.push(`<form method="post" action="/logout" class="cnav-out-form"><button class="btn btn-ghost btn-xs">로그아웃</button></form>`);
+    out.push(`<form method="post" action="${base || ""}/logout" class="cnav-out-form"><button class="btn btn-ghost btn-xs">로그아웃</button></form>`);
   }
   return out.join("");
 }
@@ -306,9 +306,9 @@ function navHtml(base, user, active, kind = "merchant", preset = "") {
     // 담당자는 /admin 이 403 이다 — 갈 수 있는 곳(계약서 목록)으로 보낸다
     else if (user.role === "STAFF") ops.push(link(`${base}/admin/documents`, "계약서"));
     if (ops.length) items.push(`<span class="nav-ops">${ops.join("")}</span>`);
-    items.push(`<form method="post" action="/logout" class="nav-logout"><button class="btn btn-ghost btn-sm">로그아웃</button></form>`);
+    items.push(`<form method="post" action="${base || ""}/logout" class="nav-logout"><button class="btn btn-ghost btn-sm">로그아웃</button></form>`);
   } else {
-    items.push(link(`/login`, "로그인"));
+    items.push(link(`${base}/login`, "로그인"));
     if (franchise) items.push(`<a href="${base}/#apply" class="btn btn-primary btn-sm">${esc(T.consult)}</a>`);
     // "가입" 만으로는 회원가입인지 입점인지 알 수 없다. 이 버튼이 하는 일을 그대로 적는다 —
     // 상인회 홈이 이루려는 첫째 목표라, 어느 화면에서든 머리말에 늘 보여야 한다.

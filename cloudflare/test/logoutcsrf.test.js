@@ -59,9 +59,9 @@ test("관리자가 로그아웃을 누르면 실제로 로그아웃된다", asyn
   const env = makeEnv(); const { j } = await seed(env);
   const html = await (await get(env, j, "/t/bb/admin")).text();
   // 머리말의 로그아웃 폼에 실제로 박힌 토큰만 쓴다 — 다른 데서 가져오면 사고를 못 잡는다
-  const tok = (/<form[^>]*action="\/logout"[^>]*>\s*<input type="hidden" name="_csrf" value="([^"]+)"/.exec(html) || [])[1];
+  const tok = (/<form[^>]*action="\/t\/bb\/logout"[^>]*>\s*<input type="hidden" name="_csrf" value="([^"]+)"/.exec(html) || [])[1];
   assert.ok(tok, "로그아웃 폼 안에 토큰이 있어야");
-  const out = await post(env, j, "/logout", { _csrf: tok });
+  const out = await post(env, j, "/t/bb/logout", { _csrf: tok });
   assert.equal(out.status, 303, "403 이 아니라 정상 이동이어야");
   const after = await get(env, j, "/t/bb/admin");
   assert.equal(after.status, 303, "로그아웃 뒤에는 관리자 화면에 못 들어간다");
@@ -70,8 +70,8 @@ test("관리자가 로그아웃을 누르면 실제로 로그아웃된다", asyn
 
 test("토큰 없는 POST 는 그대로 막힌다 — 고치면서 검사를 풀지 않았다", async () => {
   const env = makeEnv(); const { j } = await seed(env);
-  const r = await post(env, j, "/logout", {});
+  const r = await post(env, j, "/t/bb/logout", {});
   assert.equal(r.status, 403, "토큰이 없으면 403");
-  const bad = await post(env, j, "/logout", { _csrf: "aaaaaaaaaaaaaaaaaaaa" });
+  const bad = await post(env, j, "/t/bb/logout", { _csrf: "aaaaaaaaaaaaaaaaaaaa" });
   assert.equal(bad.status, 403, "남의 토큰·가짜 토큰도 403");
 });

@@ -829,7 +829,7 @@ export async function businessDetail(ctx) {
 }
 
 export function loginForm(ctx) {
-  const { env, query, csrf, assoc } = ctx;
+  const { env, query, csrf, assoc, base = "" } = ctx;
   // 전자계약만 쓰는 조직·플랫폼 전역에서 "상인회 회원 로그인"은 남의 옷이다
   const esign = assoc && assoc.kind === "esign";
   const sub = esign ? "계약서를 만들고 보내는 분들의 로그인" : assoc ? "상인회 회원·관리자 로그인" : "로그인 후 이용하실 수 있습니다";
@@ -838,7 +838,7 @@ export function loginForm(ctx) {
   const body = `<section class="section page-top"><div class="container auth-wrap"><div class="auth-card">
     ${authHead("로그인", sub)}
     ${flash(query.get("msg") || "", query.get("err") ? "err" : "ok")}
-    <form method="post" action="/login" class="stack-form">
+    <form method="post" action="${base}/login" class="stack-form">
       ${nextTo ? `<input type="hidden" name="next" value="${esc(nextTo)}" />` : ""}
       <label>이메일 또는 휴대폰 번호
         <input type="text" name="login" required autocomplete="username" inputmode="email"
@@ -850,8 +850,9 @@ export function loginForm(ctx) {
       ${turnstileWidget(env)}
       <button class="btn btn-primary btn-block">로그인</button>
     </form>
-    <p class="auth-note"><a href="/forgot">비밀번호를 잊으셨나요?</a></p>
-    ${assoc ? "" : `<p class="auth-note">계정이 없으신가요? <a href="/esign/signup">전자계약 시작하기</a></p>`}
+    <p class="auth-note"><a href="${base}/forgot">비밀번호를 잊으셨나요?</a></p>
+    ${assoc && assoc.kind === "merchant" ? `<p class="auth-note">아직 회원이 아니신가요? <a href="${base}/register">우리 가게 등록하기</a></p>`
+      : assoc ? "" : `<p class="auth-note">계정이 없으신가요? <a href="/esign/signup">전자계약 시작하기</a></p>`}
     </div></div></section>`;
   return html(layout({ title: "로그인", assoc: ctx.assoc, base: ctx.base, body, csrf, scripts: turnstileScript(env) }));
 }
@@ -1554,51 +1555,6 @@ export async function admin(ctx) {
   // 점주를 늘리는 것(입점 신청)과 손님을 가게로 보내는 것(가게 열람·찾기).
   // 하나의 '전환율' 로 뭉개면 어느 쪽이 좋아졌는지 알 수 없다.
   const isMerchant = kindOf(assoc).home === "merchant";
-  const homeVariants = isMerchant ? await D.listLandingVariants(db, assoc.id).catch(() => []) : [];
-  const abStats = isMerchant ? await D.homeVariantStats(db, assoc.id, 30).catch(() => []) : [];
-  const abPanel = !isMerchant ? "" : (() => {
-    const by = new Map(abStats.map((r) => [r.variant || "", r]));
-    const pct = (n, d) => (d > 0 ? `${((n / d) * 100).toFixed(1)}%` : "—");
-    const rows = [{ slug: "", name: "지금 쓰는 홈" }, ...homeVariants.map((v) => ({ slug: v.slug, name: v.name || v.slug }))]
-      .map((v) => {
-        const r = by.get(v.slug) || {};
-        const w = Number(r.views) || 0;
-        // 방문이 얇으면 비율은 우연이다. 숫자를 보여 주되 "아직 비교하지 마세요" 를 같이 말한다.
-        const thin = w < 100;
-        return `<tr><td><b>${esc(v.name)}</b>${v.slug
-            ? `<br /><small><code>${esc(prettyPath(`${base}/l/${v.slug}`))}</code></small>` : ""}</td>
-          <td>${w.toLocaleString()}</td>
-          <td>${(Number(r.signups) || 0).toLocaleString()}<br /><small>${pct(Number(r.signups) || 0, w)}</small></td>
-          <td>${(Number(r.bizviews) || 0).toLocaleString()}<br /><small>${pct(Number(r.bizviews) || 0, w)}</small></td>
-          <td>${(Number(r.finds) || 0).toLocaleString()}<br /><small>${pct(Number(r.finds) || 0, w)}</small></td>
-          <td>${thin ? '<span class="badge badge-muted" title="방문 100회가 넘기 전에는 우연히 높거나 낮게 나옵니다.">표본 부족</span>' : '<span class="badge badge-ok">비교 가능</span>'}
-            ${v.slug ? `<form method="post" action="${base}/admin/home-variant/${esc(v.slug)}/delete" class="inline-form" data-confirm="'${esc(v.name)}' 사본을 지울까요?&#10;쌓인 성과 기록은 남습니다."><button class="btn btn-xs btn-ghost">삭제</button></form>` : ""}</td></tr>`;
-      }).join("");
-    return `<details class="panel panel-fold" id="p-ab"${homeVariants.length ? " open" : ""}>
-      <summary class="panel-title">홈 비교하기 (A/B) ${homeVariants.length
-        ? `<span class="badge badge-info">사본 ${homeVariants.length}</span>` : '<span class="badge badge-muted">아직 없음</span>'}</summary>
-      <p class="panel-hint">지금 쓰는 홈을 그대로 두고 <b>사본</b>을 하나 만들어, 사본 주소를 전단 QR·카톡·인스타에 뿌립니다.
-        어느 쪽이 실제로 <b>입점 신청</b>과 <b>가게 열람</b>을 만들었는지 아래 표에 쌓입니다.
-        사본을 만들면 지금 구성이 그대로 복사되므로, 복사한 뒤 사본만 고치면 됩니다.</p>
-      <div class="table-scroll"><table class="admin-table">
-        <thead><tr><th>홈</th><th>방문</th><th>입점 신청</th><th>가게 열람</th><th>검색·지도</th><th>판정</th></tr></thead>
-        <tbody>${rows}</tbody></table></div>
-      <p class="panel-hint">최근 30일. 비율은 <b>방문 대비</b>입니다. 방문 100회가 넘기 전에는 숫자가 우연히 흔들리니
-        <b>비교하지 마세요</b> — 하루 방문이 적은 상권이면 한두 달은 그냥 두고 보셔야 합니다.</p>
-      <form method="post" action="${base}/admin/home-variant" class="stack-form compact">
-        <div class="form-two"><label>사본 이름 <small>(나만 봅니다 — 예: 가게 먼저 보여주기)</small>
-            <input type="text" name="name" required maxlength="40" autocomplete="name" /></label>
-          <label>주소 <small>(영문 소문자·숫자·하이픈)</small>
-            <span class="slug-row"><span class="slug-pre">${esc(prettyPath(base + "/l/"))}</span>
-            <input type="text" name="slug" required maxlength="40" pattern="[a-z0-9\-]+" placeholder="b" /></span></label></div>
-        <label>첫 화면 구성 <small>(나머지 구역은 지금 홈 그대로 복사됩니다)</small>
-          <select name="preset">
-            <option value="">지금 홈을 그대로 복사</option>
-            ${Object.entries(HOME_PRESETS).map(([k, p]) => `<option value="${esc(k)}">${esc(p.label)}</option>`).join("")}
-          </select></label>
-        <button class="btn btn-primary btn-sm">사본 만들기</button></form>
-    </details>`;
-  })();
   // 핵심 가설 계측: "회원이 스스로 채운다"가 성립하는가. 셀프 등록률 30% 이상이면 성립 신호.
   const selfOk = met.total >= 5 && met.selfRate >= 30;
   const productModPanel = assocProducts.length ? `<section class="panel"><h2 class="panel-title">제품 진열 관리 <span class="badge badge-muted">${assocProducts.length}</span></h2>
@@ -2077,34 +2033,6 @@ export async function admin(ctx) {
   // 가게 사장님이 로그인을 안 쓰는 곳이 많아, 총무가 대신 누르는 길을 여기 둡니다.
   // 손이 미끄러졌을 때를 대비해 '되돌리기' 가 반드시 함께 있어야 합니다 —
   // 고칠 수 없는 숫자는 아무도 믿지 않고, 못 믿는 숫자는 총회에서 못 씁니다.
-  const couponPanel = (() => {
-    const rows = assocCoupons.map((c) => {
-      const u = couponUses.get(c.id) || { total: 0, today: 0 };
-      return `<tr>
-        <td data-th="가게"><a class="dt-main" href="${base}/business/${esc(c.biz_slug)}" target="_blank" rel="noopener">${esc(c.biz_name)}</a>
-          <span class="dt-sub">${esc(c.title)}${c.terms ? ` · ${esc(c.terms)}` : ""}</span></td>
-        <td data-th="기한">${c.valid_until ? esc(c.valid_until) : '<span class="txt-muted">기한 없음</span>'}</td>
-        <td data-th="오늘" class="num">${u.today ? `<b>${u.today}</b>회` : '<span class="txt-muted">0</span>'}</td>
-        <td data-th="누적" class="num"><b>${(u.total || 0).toLocaleString("ko-KR")}</b>회</td>
-        <td class="act">
-          <form method="post" action="${base}/admin/coupon/${c.id}/use"><input type="hidden" name="_csrf" value="${csrf}" />
-            <button class="btn btn-primary btn-xs">사용 처리</button></form>
-          ${u.today ? `<form method="post" action="${base}/admin/coupon/${c.id}/use"><input type="hidden" name="_csrf" value="${csrf}" />
-            <input type="hidden" name="undo" value="1" /><button class="btn btn-ghost btn-xs">되돌리기</button></form>` : ""}
-        </td></tr>`;
-    }).join("");
-    return `<section class="panel" id="p-coupons"><div class="panel-head">
-        <h2 class="panel-title">쿠폰 사용 처리 <span class="badge badge-muted">${assocCoupons.length}장</span></h2></div>
-      <p class="panel-hint">손님이 매장에서 쿠폰 화면을 보여 주면 <b>사용 처리</b>를 한 번 누르세요.
-        결제가 아니라 몇 번 쓰였는지를 세는 장부입니다 — 총회에서 이 숫자를 그대로 쓰실 수 있습니다.
-        잘못 눌렀으면 <b>되돌리기</b>로 오늘 것 한 건을 뺍니다.</p>
-      ${assocCoupons.length ? `<div class="dtable-wrap"><table class="dtable">
-          <thead><tr><th>가게 · 혜택</th><th>기한</th><th class="num">오늘</th><th class="num">누적</th><th class="act"></th></tr></thead>
-          <tbody>${rows}</tbody></table></div>`
-        : `<div class="dt-empty"><b>지금 살아 있는 쿠폰이 없습니다</b>
-           쿠폰은 가게 화면(사장님) 또는 가게 관리에서 등록합니다. 기한이 지난 쿠폰은 여기서 사라집니다.</div>`}
-    </section>`;
-  })();
 
   const statsPanel = (() => {
     const n = (v) => (Number(v) || 0).toLocaleString("ko-KR");
@@ -2410,7 +2338,7 @@ ${isFranchise ? `    <section class="panel panel-accent" id="p-home"><h2 class="
   : isEsign ? "" : `    <details class="panel panel-fold" id="p-home"><summary class="panel-title">홈페이지 구성 편집 <span class="badge badge-muted">한 번 정해 두는 것</span></summary>
       <p class="panel-hint">섹션을 켜고 끄거나 순서(▲▼)를 바꾸고 문구를 직접 수정할 수 있습니다.</p>
       ${layoutEditor(base, lay)}</details>
-${abPanel}`}
+`}
     ${isEsign ? "" : `<div id="p-products">${productModPanel}</div>`}
     ${isEsign ? "" : `<div class="dash-grid" id="p-content">
       <section class="panel"><h2 class="panel-title">공지·소식</h2>
@@ -2427,7 +2355,6 @@ ${abPanel}`}
           <label class="mini-label">대표 이미지 <small>(선택 · 홈에 포스터형 카드로 표시)</small><input type="file" name="image" accept="image/*" /></label>
           <button class="btn btn-primary btn-sm">등록</button></form>
         <ul class="admin-mini-list">${eventRows}</ul></section></div>`}
-    ${isEsign || isFranchise ? "" : `<div id="p-coupon-wrap">${couponPanel}</div>`}
     ${isEsign || isFranchise ? "" : `<div id="p-popup-wrap">${popupPanel}</div>`}
     ${isEsign ? "" : "</div>"}
 

@@ -146,7 +146,9 @@ export async function login(ctx) {
 
 export async function logout(ctx) {
   ctx.addCookie(clearSessionCookie());
-  return redirect("/");
+  // 상인회 관리자가 로그아웃하면 그 상인회 홈으로 돌아간다.
+  // 플랫폼 첫 화면으로 보내면 자기 홈페이지에서 남의 회사 화면으로 튕긴 것이 된다.
+  return redirect((ctx.base || "") + "/");
 }
 
 // ---------- 회원가입 ----------
