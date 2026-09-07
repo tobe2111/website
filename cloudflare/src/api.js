@@ -1155,6 +1155,26 @@ export async function adminCreateEvent(ctx) {
   await D.createEvent(db, { associationId: assoc.id, title: cap(form.get("title").trim(), 200), event_date: cap(form.get("event_date"), 10), place: cap(form.get("place"), 120), description: cap(form.get("description"), 2000), image: up.images[0]?.filename || "" });
   return back(base + "/admin", "행사를 등록했습니다.");
 }
+// 행사도 여러 건을 한 번에 지운다 — 공지와 같은 방식.
+// 지난 행사는 계속 쌓이는데 한 건씩 펼쳐 지워야 하면 아무도 안 치운다.
+export async function adminEventsBulk(ctx) {
+  const { db, env, form, base, assoc } = ctx;
+  const act = String(form.get("act") || "");
+  const ids = form.getAll("ids").map((v) => Number(v)).filter((n) => Number.isInteger(n) && n > 0).slice(0, 200);
+  if (!ids.length) return back(base + "/admin#s-content", "고른 행사가 없습니다.", true);
+  // 번호가 이 상인회 것인지 서버에서 다시 본다 — 폼은 고칠 수 있다
+  const mine = [];
+  for (const id of ids) {
+    const e = await D.getEvent(db, id);
+    if (e && e.association_id === assoc.id) mine.push(e);
+  }
+  if (!mine.length) return back(base + "/admin#s-content", "고른 행사를 찾지 못했습니다.", true);
+  if (act !== "delete") return back(base + "/admin#s-content", "알 수 없는 작업입니다.", true);
+  for (const e of mine) { if (e.image) await storage.remove(env, e.image); await D.deleteEvent(db, e.id); }
+  await audit(ctx, "행사 여러 건 삭제", `${mine.length}건`);
+  return back(base + "/admin#s-content", `행사 ${mine.length}건을 삭제했습니다. 참가 신청도 함께 사라졌습니다.`);
+}
+
 export async function adminUpdateEvent(ctx) {
   const { db, env, form, base, assoc, params } = ctx;
   const e = await D.getEvent(db, Number(params.id) || 0);

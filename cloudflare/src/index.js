@@ -179,6 +179,7 @@ export const TENANT = [
   ["POST", "/admin/event/:id", api.adminUpdateEvent, "ADMIN"],
   ["GET", "/admin/event/:id/rsvps.csv", pages.adminExportRsvps, "ADMIN"],
   ["POST", "/admin/event/:id/delete", api.adminDeleteEvent, "ADMIN"],
+  ["POST", "/admin/events/bulk", api.adminEventsBulk, "ADMIN"],
   ["POST", "/admin/popup", api.adminCreatePopup, "ADMIN"],
   ["POST", "/admin/popup/:id/delete", api.adminDeletePopup, "ADMIN"],
   ["POST", "/admin/popup/:id/toggle", api.adminTogglePopup, "ADMIN"],
