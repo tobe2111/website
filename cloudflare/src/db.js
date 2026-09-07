@@ -1013,7 +1013,18 @@ const DOC_STAT = `
     + (SELECT COUNT(*) FROM external_signers e WHERE e.document_id=d.id) AS total,
   (SELECT COUNT(*) FROM signatures s WHERE s.document_id=d.id) AS signed,
   (SELECT COUNT(*) FROM signature_requests r WHERE r.document_id=d.id AND r.declined_at!='')
-    + (SELECT COUNT(*) FROM external_signers e WHERE e.document_id=d.id AND e.declined_at!='') AS declined`;
+    + (SELECT COUNT(*) FROM external_signers e WHERE e.document_id=d.id AND e.declined_at!='') AS declined,
+  -- 누구에게 보냈는가. 목록에서 "전체 회원 · 회장" 만 보여서는 이 계약이 누구 앞으로 간
+  -- 것인지 알 수 없었다 — 관리자가 목록을 보는 이유의 절반이 그것이다.
+  -- 순차 서명이면 서명 순서대로 읽혀야 뜻이 맞는다.
+  (SELECT group_concat(nm, ', ') FROM (
+     SELECT u.name AS nm FROM signature_requests r JOIN users u ON u.id=r.user_id
+       WHERE r.document_id=d.id ORDER BY r.sign_order ASC, u.name
+   )) AS signer_names,
+  (SELECT group_concat(nm, ', ') FROM (
+     SELECT CASE WHEN e.org != '' THEN e.org || ' ' || e.name ELSE e.name END AS nm
+       FROM external_signers e WHERE e.document_id=d.id ORDER BY e.id
+   )) AS ext_names`;
 const DOC_STATUS = `CASE
   WHEN d.closed=1 THEN 'closed'
   WHEN (SELECT COUNT(*) FROM signature_requests r WHERE r.document_id=d.id AND r.declined_at!='')

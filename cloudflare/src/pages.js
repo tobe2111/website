@@ -919,8 +919,12 @@ const BELL_SVG = '<svg viewBox="0 0 24 24" width="19" height="19" fill="none" st
 const SEND_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>';
 const DOC_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h6"/></svg>';
 const noticeIco = (n) => n.pinned ? BELL_SVG : (/모집|참여|이벤트/.test(n.tag) ? SEND_SVG : DOC_SVG);
-function noticeRows(base, list) {
-  return list.length ? list.map((n) => `<li><a href="${base}/notices/${n.id}">
+// pick 을 주면 각 줄 앞에 고르기 칸이 붙는다 — 관리자가 목록을 보다가 그 자리에서
+// 지우거나 고정할 수 있게. 손님에게는 이 칸이 아예 그려지지 않는다.
+function noticeRows(base, list, pick = false) {
+  return list.length ? list.map((n) => `<li${pick ? ' class="has-pick"' : ""}>${pick
+    ? `<label class="rowpick"><input type="checkbox" name="ids" value="${n.id}" form="noticePick" aria-label="${esc(n.title)} 고르기" /></label>`
+    : ""}<a href="${base}/notices/${n.id}">
     ${n.image ? `<img class="notice-ico notice-thumb-img" src="${esc(mediaUrl(n.image))}" alt="" loading="lazy" />` : `<span class="notice-ico${n.pinned ? " is-pinned" : ""}${/모집|참여|이벤트/.test(n.tag) ? " is-recruit" : ""}">${noticeIco(n)}</span>`}
     <span class="notice-main">
       <span class="notice-title">${n.pinned ? '<em class="pin-mini">고정</em>' : ""}${esc(n.title)}</span>
@@ -972,12 +976,24 @@ export async function notices(ctx) {
       <input type="search" name="q" value="${esc(q)}" placeholder="제목·내용 검색" aria-label="공지 검색" />
       <button class="btn btn-ghost">검색</button></form></div>
     ${tags.length > 1 ? `<div class="chip-filters">${chips}</div>` : ""}
+    ${canAdmin && items.length ? `<form method="post" action="${base}/admin/notices/bulk" id="noticePick" class="pick-bar" data-bulk>
+      <input type="hidden" name="_csrf" value="${csrf}" />
+      <input type="hidden" name="back" value="${esc(base)}/notices" />
+      <label class="pick-all"><input type="checkbox" data-bulk-all aria-label="전체 고르기" /><span>전체</span></label>
+      <span class="pick-count" data-bulk-count>고른 것 없음</span>
+      <button name="act" value="pin" class="btn btn-xs btn-ghost">상단 고정</button>
+      <button name="act" value="unpin" class="btn btn-xs btn-ghost">고정 해제</button>
+      <button name="act" value="delete" class="btn btn-xs btn-danger"
+        data-confirm="고른 공지를 지울까요?&#10;이미 돌린 링크가 죽습니다 — 되돌릴 수 없습니다.">선택 삭제</button>
+    </form>` : ""}
     <div class="grow">${items.length
-      ? `<ul class="notice-list">${noticeRows(base, items)}</ul>${pager((i) => `${base}/notices${qs({ q, tag, page: i })}`, cur, pages)}`
+      ? `<ul class="notice-list${canAdmin ? " list-pick" : ""}">${noticeRows(base, items, canAdmin)}</ul>${pager((i) => `${base}/notices${qs({ q, tag, page: i })}`, cur, pages)}`
       : emptyNote}</div>
   </div></section>`;
   return html(layout({ title: "공지사항", assoc, base, user, body, activeNav: `${base}/notices`, csrf,
-    description: `${assoc.name} 공지사항 — 안내·행사·혜택 등 우리 동네 상권 소식 ${total}건.` }));
+    description: `${assoc.name} 공지사항 — 안내·행사·혜택 등 우리 동네 상권 소식 ${total}건.`,
+    // 고른 건수를 세는 것은 관리자에게만 필요하다 — 손님 화면에 스크립트를 하나 더 얹지 않는다
+    scripts: canAdmin ? `<script src="${assetUrl("/js/bulk-select.js")}" defer></script>` : "" }));
 }
 export async function noticeDetail(ctx) {
   const { db, assoc, base, user, params, csrf } = ctx;
@@ -2459,8 +2475,8 @@ ${isFranchise ? `    <section class="panel panel-accent" id="p-home"><h2 class="
             <button class="btn btn-primary btn-sm">등록</button></form></div></details>
         ${notices.length ? `<form method="post" action="${base}/admin/notices/bulk" id="noticeBulk" class="pick-bar" data-bulk>
             <input type="hidden" name="_csrf" value="${csrf}" />
-            <label class="bulk-all"><input type="checkbox" data-bulk-all aria-label="전체 고르기" /><span>전체</span></label>
-            <span class="bulk-count" data-bulk-count>고른 것 없음</span>
+            <label class="pick-all"><input type="checkbox" data-bulk-all aria-label="전체 고르기" /><span>전체</span></label>
+            <span class="pick-count" data-bulk-count>고른 것 없음</span>
             <button name="act" value="pin" class="btn btn-xs btn-ghost">상단 고정</button>
             <button name="act" value="unpin" class="btn btn-xs btn-ghost">고정 해제</button>
             <button name="act" value="delete" class="btn btn-xs btn-danger"
@@ -2479,8 +2495,8 @@ ${isFranchise ? `    <section class="panel panel-accent" id="p-home"><h2 class="
             <button class="btn btn-primary btn-sm">등록</button></form></div></details>
         ${eventCount ? `<form method="post" action="${base}/admin/events/bulk" id="eventBulk" class="pick-bar" data-bulk>
             <input type="hidden" name="_csrf" value="${csrf}" />
-            <label class="bulk-all"><input type="checkbox" data-bulk-all aria-label="전체 고르기" /><span>전체</span></label>
-            <span class="bulk-count" data-bulk-count>고른 것 없음</span>
+            <label class="pick-all"><input type="checkbox" data-bulk-all aria-label="전체 고르기" /><span>전체</span></label>
+            <span class="pick-count" data-bulk-count>고른 것 없음</span>
             <button name="act" value="delete" class="btn btn-xs btn-danger"
               data-confirm="고른 행사를 지울까요?&#10;참가 신청도 함께 사라집니다 — 되돌릴 수 없습니다.">선택 삭제</button>
           </form>
@@ -2767,7 +2783,20 @@ export async function adminDocuments(ctx) {
   const chip = (key, label, n) => `<a class="doc-chip${stat === key ? " on" : ""}${n && (key === "overdue" || key === "declined") ? " is-alert" : ""}" href="${qs({ stat: key, p: 1 })}">${esc(label)} <b>${n}</b></a>`;
   const chips = `<div class="doc-chips">${chip("", "전체", counts.all)}${D.DOC_STATUSES.map((k) => chip(k, D.DOC_STATUS_LABEL[k], counts[k])).join("")}</div>`;
 
-  // 계약 한 건 = 티켓 카드 한 장 (디자인 시스템 v3 · 레퍼런스 '나의 티켓').
+  // '전체 회원' 으로 보낸 계약은 서명 요청 줄을 만들지 않는다 — 그래서 목록에서 늘
+  // "전체 —" 로 나왔다. 몇 명 앞으로 간 것인지는 지금 회원 수가 답이므로 미리 세어 둔다.
+  const members = await D.listSignerCandidates(db, assoc.id, assoc.kind);
+  const memberCount = members.length;
+  // 받는 사람 한 줄. 이름이 많으면 앞 셋만 쓰고 "외 N명" 으로 접는다 —
+// 스무 명을 다 늘어놓으면 카드가 이름표가 되어 정작 제목이 안 읽힌다.
+// 아무도 지정하지 않은 계약은 '전체 회원' 이다: 그때는 몇 명 앞으로 열려 있는지를 말한다.
+function signerLine(d, memberCount) {
+  const names = [d.signer_names, d.ext_names].filter(Boolean).join(", ").split(", ").map((x) => x.trim()).filter(Boolean);
+  if (!names.length) return `<span class="tk-who-all">전체 회원</span>${memberCount ? ` <span class="tk-who-n">${memberCount}명</span>` : ""}`;
+  const head = names.slice(0, 3).map(esc).join(" · ");
+  return head + (names.length > 3 ? ` <span class="tk-who-n">외 ${names.length - 3}명</span>` : "");
+}
+// 계약 한 건 = 티켓 카드 한 장 (디자인 시스템 v3 · 레퍼런스 '나의 티켓').
   // 머리띠에 기한과 '며칠 남음', 이름표 줄에 제목과 서명자 수, 큰 숫자 두 개로 서명 진행.
   // 표를 버린 이유: 휴대폰에서 다섯 칸 표는 가로로 넘치고, 관리자는 대부분 휴대폰으로 확인한다.
   const rows = docs.length ? `<div class="tk-list">${docs.map((d) => {
@@ -2779,11 +2808,12 @@ export async function adminDocuments(ctx) {
     return `<article class="tk-card${tone}">
       <div class="tk-band"><span>${esc(ymdDow(when))}${d.due_date ? "" : " 보냄"}</span><b>${esc(right)}</b></div>
       <div class="tk-body">
-        <div class="tk-row"><span>${esc(d.title)}${d.ordered ? " · 순차" : ""}</span><small>${d.total ? `${d.total}명` : "전체 회원"}${d.author_name ? ` · ${esc(d.author_name)}` : ""}</small></div>
+        <div class="tk-row"><span>${esc(d.title)}${d.ordered ? " · 순차" : ""}</span><small>${d.author_name ? `${esc(d.author_name)} 보냄` : ""}</small></div>
+        <p class="tk-who"><span class="tk-who-k">받는 사람</span>${signerLine(d, memberCount)}</p>
         <div class="tk-route">
           <div class="tk-pt"><small>서명함</small><b>${d.signed}</b></div>
           <div class="tk-arrow" aria-hidden="true"><svg viewBox="0 0 26 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 7h20"/><path d="M17 2l5 5-5 5"/></svg></div>
-          <div class="tk-pt"><small>전체</small><b>${d.total || "—"}</b></div>
+          <div class="tk-pt"><small>전체</small><b>${d.total || memberCount || "—"}</b></div>
         </div>
       </div>
       <div class="tk-actions"><a class="btn btn-outline" href="${base}/admin/documents/${d.id}">계약서 확인</a></div>
@@ -2795,7 +2825,6 @@ export async function adminDocuments(ctx) {
     <span>${page} / ${pages}</span>
     ${page < pages ? `<a class="btn btn-ghost btn-sm" href="${qs({ p: page + 1 })}">다음 →</a>` : ""}</div>` : "";
 
-  const members = await D.listSignerCandidates(db, assoc.id, assoc.kind);
   const checks = members.length ? members.map((m) => `<label class="check member-check"><input type="checkbox" name="members" value="${m.id}" /> ${esc(m.name)} <small>${esc(m.email)}</small></label>`).join("") : `<p class="empty">회원이 없습니다.</p>`;
   // 작성 중(초안) — 아직 계약이 아니다. 보내는 순간 비로소 계약이 된다.
   const drafts = await D.listDrafts(db, assoc.id, { assoc, user });
@@ -2822,18 +2851,7 @@ export async function adminDocuments(ctx) {
       <p class="panel-hint">조·항·호를 버튼으로 넣고 오른쪽에서 <b>실제 지면</b>을 보며 씁니다.
         쓰다 말면 <b>임시저장</b>해 두고 다음에 이어 쓰면 됩니다 — 보내기 전에는 서명 요청도 과금도 없습니다.</p>
       ${draftRows}</section>
-    ${canAdmin ? `<details class="panel"${assoc.seal_media ? "" : " open"}><summary class="panel-title">우리 직인 ${assoc.seal_media ? "<span class=\"badge badge-ok\">등록됨</span>" : "<span class=\"badge badge-wait\">없음</span>"}</summary>
-      <p class="panel-hint">회사는 계약마다 서명하지 않습니다 — <b>직인이 이미 찍힌 계약서</b>를 보내고 상대방만 서명합니다.
-        여기에 한 번 올려 두면, 도장 자리를 <b>우리 직인</b>으로 지정할 때마다 자동으로 찍힙니다.
-        직인은 서명이 아니라 <b>보내는 쪽이 미리 찍는 표시</b>입니다 — 상대방의 전자서명과 같은 것으로 취급하지 않습니다.</p>
-      ${assoc.seal_media ? `<div class="seal-now"><img src="${esc(mediaUrl(assoc.seal_media))}" alt="등록된 직인" />
-        <form method="post" action="${base}/admin/seal/delete" data-confirm="직인을 지울까요? 이미 보낸 계약서의 도장은 그대로 남습니다.">
-          <button class="btn btn-ghost btn-sm">직인 지우기</button></form></div>` : ""}
-      <form method="post" action="${base}/admin/seal" class="stack-form" enctype="multipart/form-data">
-        <label class="mini-label">직인 이미지 <small>(PNG 권장 · 배경이 투명하면 글자를 가리지 않습니다 · 8MB 이하)</small>
-          <input type="file" name="seal" accept="image/*" required /></label>
-        <button class="btn btn-primary btn-sm">${assoc.seal_media ? "직인 바꾸기" : "직인 등록"}</button></form></details>` : ""}
-    <details class="panel" id="pdfPanel"><summary class="panel-title">받은 PDF 양식으로 만들기</summary>
+    <details class="panel" id="pdfPanel"><summary class="panel-title">받은 PDF 양식으로 만들기<span class="panel-sub">상대방이 보낸 PDF 를 옮겨 적지 않고 그대로 쓰고, 그 위에 서명 자리만 놓습니다</span><span class="fold-cue"><span class="fold-open">펼치기</span><span class="fold-close">접기</span></span></summary>
       <p class="panel-hint">상대방이 보낸 <b>표준근로계약서·정부 서식·회사 양식</b>을 옮겨 적지 않고 그대로 씁니다.
         PDF 를 고르면 이 화면에서 쪽마다 지면으로 만들고, 그 위에 서명·도장 자리를 놓습니다.
         <b>계약 원문은 올리신 PDF 그대로</b>이며, 그 파일의 해시가 봉인에 들어갑니다.</p>
@@ -2853,7 +2871,7 @@ export async function adminDocuments(ctx) {
         <div class="member-picker">${checks}</div>
         <p class="panel-hint">만든 뒤 <b>서명 자리 배치</b> 화면에서 서명·도장 자리를 놓습니다. 놓기 전에는 아무도 서명할 수 없습니다.</p>
         <button class="btn btn-primary" id="pdfSubmit" disabled>이 양식으로 계약서 만들기</button></form></details>
-    <details class="panel"><summary class="panel-title">직접 입력해서 만들기</summary>
+    <details class="panel"><summary class="panel-title">직접 입력해서 만들기<span class="panel-sub">본문을 붙여넣거나 직접 씁니다 — 제N조·①·1. 로 시작하는 줄은 자동으로 조판됩니다</span><span class="fold-cue"><span class="fold-open">펼치기</span><span class="fold-close">접기</span></span></summary>
       <p class="panel-hint">본문을 붙여넣거나 직접 씁니다. <b>제N조</b>·<b>①</b>·<b>1.</b> 로 시작하는 줄은 계약서 조판으로 자동 정리되고,
         그 규칙을 안 따르는 글은 그대로 문단으로 나옵니다.</p>
       <form method="post" action="${base}/admin/documents" class="stack-form" enctype="multipart/form-data">
@@ -2876,7 +2894,18 @@ export async function adminDocuments(ctx) {
         </form></div>
       ${chips}
       ${rows}
-      ${pager}</section>`;
+      ${pager}</section>
+    ${canAdmin ? `<details class="panel"${assoc.seal_media ? "" : " open"}><summary class="panel-title">우리 직인 ${assoc.seal_media ? "<span class=\"badge badge-ok\">등록됨</span>" : "<span class=\"badge badge-wait\">없음</span>"}<span class="panel-sub">계약마다 서명하는 대신, 도장 자리에 자동으로 찍히는 우리 쪽 표시</span><span class="fold-cue"><span class="fold-open">펼치기</span><span class="fold-close">접기</span></span></summary>
+      <p class="panel-hint">회사는 계약마다 서명하지 않습니다 — <b>직인이 이미 찍힌 계약서</b>를 보내고 상대방만 서명합니다.
+        여기에 한 번 올려 두면, 도장 자리를 <b>우리 직인</b>으로 지정할 때마다 자동으로 찍힙니다.
+        직인은 서명이 아니라 <b>보내는 쪽이 미리 찍는 표시</b>입니다 — 상대방의 전자서명과 같은 것으로 취급하지 않습니다.</p>
+      ${assoc.seal_media ? `<div class="seal-now"><img src="${esc(mediaUrl(assoc.seal_media))}" alt="등록된 직인" />
+        <form method="post" action="${base}/admin/seal/delete" data-confirm="직인을 지울까요? 이미 보낸 계약서의 도장은 그대로 남습니다.">
+          <button class="btn btn-ghost btn-sm">직인 지우기</button></form></div>` : ""}
+      <form method="post" action="${base}/admin/seal" class="stack-form" enctype="multipart/form-data">
+        <label class="mini-label">직인 이미지 <small>(PNG 권장 · 배경이 투명하면 글자를 가리지 않습니다 · 8MB 이하)</small>
+          <input type="file" name="seal" accept="image/*" required /></label>
+        <button class="btn btn-primary btn-sm">${assoc.seal_media ? "직인 바꾸기" : "직인 등록"}</button></form></details>` : ""}`;
   const body = canAdmin
     ? await consoleShell(ctx, { title: "전자서명 문서", sub: esc(assoc.name),
         actions: `<a href="${base}/admin/templates" class="btn btn-ghost btn-sm">서식 관리</a>`,

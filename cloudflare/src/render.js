@@ -195,7 +195,10 @@ function consoleNav(assoc, base, user) {
   // (예전에는 제목 아래에 `홈페이지: /t/우리동네` 라고 주소를 적어 뒀는데, 관리자에게 주소 조각은
   //  아무 쓸모가 없고 누를 수 있는지도 잘 안 보였다. 그 줄을 지우고 이 단추 하나로 모았다.)
   if (assoc) out.push(`<a class="cnav-out" href="${base}/" target="_blank" rel="noopener">홈페이지 보기 <span aria-hidden="true">↗</span></a>`);
-  if (user && user.role === "SUPERADMIN") out.push(`<a href="/super">운영사 콘솔</a>`);
+  // 운영사 콘솔로 가는 문은 여기 두지 않는다. 이 화면은 그 상인회의 관리 화면이고,
+  // 상인회 임원이 옆에서 함께 보는 화면이기도 하다. 거기에 플랫폼 쪽 메뉴가 섞이면
+  // "이 홈페이지는 우리 것이 아니라 남의 시스템"으로 읽힌다. 운영자는 계정 설정에
+  // 있는 입구로 간다 (pages.js 의 account 참고) — 같은 이유로 그 자리에 둔 것이다.
   if (user) {
     out.push(`<a href="/account">${esc(user.name || "내 계정")}</a>`);
     out.push(`<form method="post" action="${base || ""}/logout" class="cnav-out-form"><button class="btn btn-ghost btn-xs">로그아웃</button></form>`);
