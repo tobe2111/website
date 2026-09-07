@@ -2551,6 +2551,12 @@ body{background:var(--bg)}
 .tk-row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-size:16px;font-weight:700;padding-bottom:12px;border-bottom:1px solid var(--line-soft)}
 .tk-row span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tk-row small{flex:none;font-size:16px;font-weight:500;color:var(--ink-soft)}
+/* 받는 사람 — 관리자가 목록에서 가장 먼저 찾는 것이다. 제목 바로 아래에 둔다. */
+.tk-who{display:flex;align-items:baseline;gap:8px;margin:10px 0 0;font-size:14px;
+  font-weight:600;color:var(--ink);min-width:0}
+.tk-who-k{flex:none;font-size:12px;font-weight:700;color:var(--muted)}
+.tk-who-all{color:var(--brand-text)}
+.tk-who-n{font-weight:500;color:var(--muted)}
 .tk-route{display:grid;grid-template-columns:1fr auto 1fr;align-items:end;gap:12px;padding:22px 8px 8px;text-align:center}
 .tk-pt small{display:block;font-size:16px;font-weight:600;color:var(--ink);margin-bottom:8px}
 .tk-pt b{display:block;font-size:32px;font-weight:800;letter-spacing:-.02em;line-height:1;font-variant-numeric:tabular-nums}
@@ -3505,8 +3511,24 @@ a.deal-card:hover{border-color:var(--deal);transition:border-color .18s}
 .dash .panel-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px}
 .dash .panel-head .panel-title{margin-bottom:0}
 .dash .panel-hint{font-size:12.5px;line-height:1.55;color:var(--muted);margin:0 0 12px;max-width:none}
-.dash details.panel:not([open]){padding:0 20px;margin-bottom:12px}
+/* 접힌 판이 위아래 여백 0 이라 글자 한 줄짜리 띠로 눌려 있었다. 그러면 "이걸 눌러야
+   하나, 그냥 제목인가" 가 구분되지 않는다 — 실제로 그 질문을 받았다.
+   접혔든 펼쳐졌든 같은 카드로 보이게 하고, 오른쪽에 펼침 표시를 둔다. */
+.dash details.panel:not([open]){padding:14px 20px;margin-bottom:12px}
 .dash details.panel:not([open]) + details.panel{border-top:1px solid var(--line-soft)}
+.dash details.panel > summary.panel-title{display:flex;align-items:center;gap:10px;cursor:pointer;
+  list-style:none;margin:0;padding:2px 0}
+.dash details.panel > summary.panel-title::-webkit-details-marker{display:none}
+/* 무엇이 들어 있는지 접힌 채로도 한 줄 읽히게 — 열어 봐야 아는 제목은 안 여는 제목이 된다 */
+.dash .panel-sub{flex:1;min-width:0;font-size:12.5px;font-weight:500;color:var(--muted);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dash details.panel > summary.panel-title .fold-cue{flex:none;display:inline-flex;align-items:center;gap:4px;
+  font-size:12px;font-weight:700;color:var(--brand-text)}
+.dash details.panel > summary.panel-title .fold-cue::after{content:"⌄";font-size:15px;line-height:1;transform:translateY(-1px)}
+.dash details.panel[open] > summary.panel-title{margin-bottom:8px}
+.dash details.panel[open] > summary.panel-title .fold-cue::after{content:"⌃"}
+.dash details.panel[open] > summary.panel-title .fold-open{display:none}
+.dash details.panel:not([open]) > summary.panel-title .fold-close{display:none}
 .dash .panel-fold > summary{padding:12px 0;font-size:14px}
 .dash .form-divider{font-size:13px;font-weight:700;margin:14px 0 8px;padding-top:12px;border-top:1px solid var(--line-soft)}
 .dash .dash-grid{gap:12px}
@@ -3815,13 +3837,18 @@ a.deal-card:hover{border-color:var(--deal);transition:border-color .18s}
 }
 
 /* 여러 줄 고르기 — 표 위 도구줄 */
-.dash .pick-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 12px;margin:0 0 10px;
+/* 이 도구줄은 콘솔 안에서만 쓰지 않는다 — 공개 공지 화면에서 관리자가
+   그 자리에서 바로 고르고 지운다. 그래서 .dash 울타리를 두지 않는다. */
+.pick-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 12px;margin:0 0 10px;
   background:var(--bg-alt);border:1px solid var(--line-soft);border-radius:8px}
-.dash .pick-bar.has-sel{background:var(--brand-tint);border-color:var(--brand-100)}
-.dash .bulk-all{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--ink)}
-.dash .bulk-count{font-size:12.5px;font-weight:700;color:var(--muted);margin-right:auto}
-.dash .pick-bar.has-sel .bulk-count{color:var(--brand-text)}
-.dash .pick-bar button[disabled]{opacity:.45;cursor:not-allowed}
+.pick-bar.has-sel{background:var(--brand-tint);border-color:var(--brand-100)}
+.pick-all{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--ink)}
+/* 이름을 .bulk-count 로 두면 발송 진행 표시(.bulk-count)의 아래 여백 12px 을 물려받아
+   가운데 정렬에서 6px 위로 떠오른다 — .bulk-bar 때와 같은 이름 충돌이라 이름을 갈랐다.
+   margin 을 0 으로 못 박아, 뒤에 또 겹치는 규칙이 생겨도 줄이 어긋나지 않게 한다. */
+.pick-count{margin:0 auto 0 0;font-size:12.5px;font-weight:700;color:var(--muted)}
+.pick-bar.has-sel .pick-count{color:var(--brand-text)}
+.pick-bar button[disabled]{opacity:.45;cursor:not-allowed}
 .dash .btn-danger{background:var(--no-bg);color:var(--no-fg);border:1px solid transparent}
 .dash .btn-danger:hover:not([disabled]){background:var(--no-fg);color:#fff}
 .dash .notice-table{width:100%;border-collapse:separate;border-spacing:0;font-size:14px;
@@ -3840,13 +3867,24 @@ a.deal-card:hover{border-color:var(--deal);transition:border-color .18s}
 .dash .notice-table .mini-edit-hint{flex:none;font-size:12px;color:var(--brand-text);font-weight:600}
 .dash .notice-table .mini-edit[open]{padding-bottom:8px}
 /* 손가락·마우스 과녁 24px (WCAG 2.5.8) — 표에서 여러 줄 고르는 체크 상자와 켜고 끄기 스위치 */
+/* 고르기 네모칸은 감싼 이름표가 아니라 네모 자체도 보여야 누를 곳으로 읽힌다.
+   공개 공지 목록에는 .notice-table 이 없으므로 .rowpick 으로도 잡는다 — 안 그러면
+   브라우저 기본 13px 로 남아, 과녁은 넉넉해도 눈에는 점처럼 보인다. */
 .dash .notice-table input[type=checkbox],
-.dash .bulk-all input[type=checkbox]{width:24px;height:24px;min-width:24px;min-height:24px;
+.rowpick input[type=checkbox],
+.pick-all input[type=checkbox]{width:24px;height:24px;min-width:24px;min-height:24px;
   margin:0;accent-color:var(--brand);cursor:pointer}
 .dash .notice-table .nc{padding:8px 6px 8px 12px;width:44px}
 /* 네모칸을 이름표로 감싸 글자 없이도 칸 전체가 과녁이 되게 한다. 감싼 이름표가
    네모칸보다 작으면 오히려 과녁이 줄어드니 최소 높이를 함께 준다. */
-.dash .rowpick{display:flex;align-items:center;justify-content:center;min-height:24px;cursor:pointer}
+.rowpick{display:flex;align-items:center;justify-content:center;min-height:24px;cursor:pointer}
+
+/* 공개 공지 목록에서 관리자가 고를 때 — 줄 앞에 고르기 칸이 하나 붙는다.
+   손님 화면에는 이 칸 자체가 그려지지 않으므로 목록 모양은 지금 그대로다. */
+.notice-list .has-pick{display:flex;align-items:stretch;gap:2px}
+.notice-list .has-pick > .rowpick{flex:none;width:44px;border-bottom:1px solid var(--line-soft)}
+.notice-list .has-pick > a{flex:1;min-width:0}
+.notice-list.list-pick{padding-left:0}
 .dash .layout-row-head .switch{min-width:44px;min-height:26px;display:inline-flex;align-items:center}
 .dash .layout-row-head .switch .track{width:34px;height:20px}
 /* 200% 확대에서 표가 가로로 밀지 않게 — 좁아지면 표만 스스로 스크롤한다 */
@@ -3890,13 +3928,13 @@ a.deal-card:hover{border-color:var(--deal);transition:border-color .18s}
      선택 상자가 19px 이라 휴대폰에서 거의 눌리지 않았다 */
   .dash .layout-fields input:not([type=checkbox]):not([type=radio]):not([type=file]),
   .dash .layout-fields select,.dash .layout-fields textarea{min-height:44px}
-  .dash .notice-table input[type=checkbox],.dash .bulk-all input[type=checkbox]{width:26px;height:26px}
+  .dash .notice-table input[type=checkbox],.rowpick input[type=checkbox],.pick-all input[type=checkbox]{width:26px;height:26px}
   /* 네모칸 자체는 26px 로 둔다 — 표 안에서 44px 네모는 줄을 밀어낸다. 대신 감싼 이름표를
      44px 로 키워, 글자든 네모든 어디를 눌러도 켜지게 한다. */
-  .dash label.check,.dash label.bulk-all,.dash label.rowpick{min-height:44px}
+  .dash label.check,label.pick-all,label.rowpick{min-height:44px}
   /* 표의 고르기 칸은 세로뿐 아니라 가로도 44px 이 되게 칸 여백을 줄이고 이름표를 채운다 */
   .dash .notice-table .nc{padding:4px;width:52px}
-  .dash label.rowpick{min-width:44px}
+  label.rowpick{min-width:44px}
   .brand{min-height:44px}
   .foot-policy a{display:inline-flex;align-items:center;min-height:44px}
   /* 지우기처럼 글자만 있는 조작칸도 손가락 과녁은 44px 이어야 한다 */
