@@ -293,7 +293,22 @@ for (const [label, file, vp, hash] of PAGES) {
   show("제목 순서", r.heading, (x) => `${x.from} → ${x.to} · "${x.text}"`);
   show("이미지 대체텍스트", r.alt, (x) => x.src);
   if (focus) { if (focus.visible) console.log("   ✓ 키보드 초점 표시"); else { problems++; console.log(`   ✗ 키보드 초점이 보이지 않음 (${focus.sel})`); } }
-  if (zoom.overflow) { problems++; console.log(`   ✗ 글자 200% 확대 시 가로 스크롤 (${zoom.sw}px > ${zoom.iw}px)`); }
+  if (zoom.overflow) { problems++; console.log(`   ✗ 글자 200% 확대 시 가로 스크롤 (${zoom.sw}px > ${zoom.iw}px)`);
+    // 어느 칸이 미는지 없이 숫자만 있으면 고칠 수가 없다 — 부모는 안 넘는데 자기만 넘는 칸을 짚는다
+    const who = await p.evaluate(() => {
+      const W = window.innerWidth, out = [];
+      document.querySelectorAll("*").forEach((el) => {
+        const r = el.getBoundingClientRect();
+        if (r.width > 0 && r.right > W + 1) {
+          const par = el.parentElement;
+          if (par && par.getBoundingClientRect().right <= W + 1)
+            out.push(`${el.tagName.toLowerCase()}.${String(el.className || "").trim().split(/\s+/).slice(0, 2).join(".")} → ${Math.round(r.right)}px`);
+        }
+      });
+      return out.slice(0, 5);
+    });
+    who.forEach((x) => console.log(`       ${x}`));
+  }
   else console.log("   ✓ 글자 200% 확대에도 가로 스크롤 없음");
   r.misc.forEach((m) => { problems++; console.log(`   ✗ ${m}`); });
   await ctx.close();

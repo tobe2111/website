@@ -1117,6 +1117,36 @@ export async function adminDeleteNotice(ctx) {
   if (n && n.association_id === assoc.id) { if (n.image) await storage.remove(env, n.image); await D.deleteNotice(db, n.id); await audit(ctx, "공지삭제", n.title); }
   return back(base + "/admin", "공지를 삭제했습니다.");
 }
+// 여러 건을 한 번에 — 지우기·상단 고정·고정 해제.
+// 예전에는 공지를 지우려면 한 건씩 펼쳐 삭제 단추를 눌러야 했다. 지난 행사 안내 열 건을
+// 치우는 데 열 번을 눌러야 하니, 결국 아무도 안 치우고 목록이 계속 길어졌다.
+export async function adminNoticesBulk(ctx) {
+  const { db, env, form, base, assoc } = ctx;
+  const act = String(form.get("act") || "");
+  // 체크한 줄만 손댄다. id 는 반드시 이 상인회 것인지 다시 확인한다 —
+  // 폼을 고쳐 남의 상인회 공지 번호를 보내는 것을 화면이 막아 주지는 않는다.
+  const ids = form.getAll("ids").map((v) => Number(v)).filter((n) => Number.isInteger(n) && n > 0).slice(0, 200);
+  if (!ids.length) return back(base + "/admin#s-content", "고른 공지가 없습니다.", true);
+  const mine = [];
+  for (const id of ids) {
+    const n = await D.getNotice(db, id);
+    if (n && n.association_id === assoc.id) mine.push(n);
+  }
+  if (!mine.length) return back(base + "/admin#s-content", "고른 공지를 찾지 못했습니다.", true);
+  if (act === "delete") {
+    for (const n of mine) { if (n.image) await storage.remove(env, n.image); await D.deleteNotice(db, n.id); }
+    await audit(ctx, "공지 여러 건 삭제", `${mine.length}건`);
+    return back(base + "/admin#s-content", `공지 ${mine.length}건을 삭제했습니다.`);
+  }
+  if (act === "pin" || act === "unpin") {
+    const on = act === "pin" ? 1 : 0;
+    for (const n of mine) await D.updateNotice(db, n.id, assoc.id, { title: n.title, body: n.body, tag: n.tag, pinned: on });
+    await audit(ctx, on ? "공지 상단 고정" : "공지 고정 해제", `${mine.length}건`);
+    return back(base + "/admin#s-content", `${mine.length}건을 ${on ? "상단에 고정했습니다." : "고정 해제했습니다."}`);
+  }
+  return back(base + "/admin#s-content", "알 수 없는 작업입니다.", true);
+}
+
 export async function adminCreateEvent(ctx) {
   const { db, env, form, base, assoc } = ctx;
   if (!(form.get("title") || "").trim() || !(form.get("event_date") || "").trim()) return back(base + "/admin", "행사명과 날짜를 입력하세요.", true);

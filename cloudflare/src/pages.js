@@ -344,11 +344,19 @@ function layoutEditor(base, layoutArr, opts = {}) {
         ${safeSrc(val) ? `<span class="img-field-preview"><img src="${esc(safeSrc(val))}" alt="" loading="lazy" /></span>` : ""}</div>`;
       return `<label class="mini-label">${esc(f.label)}<input type="text" name="${name}" value="${esc(val || "")}" /></label>`;
     }).join("");
-    return `<div class="layout-row" data-index="${i}"><div class="layout-row-head">
-      <div class="row-toggle"><label class="switch"><input type="checkbox" name="en_${i}" value="1"${sec.enabled ? " checked" : ""} /><span class="track"></span></label> <strong>${esc(cat.label)}</strong></div>
-      <input type="hidden" name="ty_${i}" value="${esc(sec.type)}" />
+    // 한 구역 = 한 줄. 예전에는 열여섯 구역의 입력칸이 한꺼번에 펼쳐져 있어
+    // 화면이 8,000px 이 넘었고, 무엇을 고치는 중인지 알 수 없었다.
+    // 켜고 끄기와 순서는 줄에서 바로, 문구는 그 줄을 열어야 나온다.
+    const cur = String(sec.title || sec.eyebrow || "").trim();
+    return `<details class="layout-row" data-index="${i}"><summary class="layout-row-head">
+      <label class="switch" title="${sec.enabled ? "지금 켜져 있습니다" : "지금 꺼져 있습니다"}"><input type="checkbox" name="en_${i}" value="1"${sec.enabled ? " checked" : ""} aria-label="${esc(cat.label)} 켜고 끄기" /><span class="track"></span></label>
+      <span class="lname"><strong>${esc(cat.label)}</strong>${cur ? `<small>${esc(cur)}</small>` : ""}</span>
+      <span class="lstate">${sec.enabled ? "켜짐" : "꺼짐"}</span>
+      <span class="lopen">문구 고치기</span>
       <span class="layout-move"><button type="button" class="move-btn" data-dir="up" aria-label="위로">▲</button><button type="button" class="move-btn" data-dir="down" aria-label="아래로">▼</button></span>
-    </div><div class="layout-fields">${fields}</div></div>`;
+    </summary>
+      <input type="hidden" name="ty_${i}" value="${esc(sec.type)}" />
+      <div class="layout-fields">${fields}</div></details>`;
   }).join("");
   return `<form method="post" action="${action}" class="layout-editor" id="layoutEditor"${opts.upload ? ' enctype="multipart/form-data"' : ""}>
     <input type="hidden" name="order" id="layoutOrder" value="${layoutArr.map((_, i) => i).join(",")}" />
@@ -887,8 +895,8 @@ export async function mapPage(ctx) {
   const naver = assoc.map_client_id || env.NAVER_MAP_CLIENT_ID; // 상인회 전용 지도 키 우선
   const chips = `<a href="${base}/map" class="chip-filter${!cat ? " active" : ""}">전체</a>` +
     cats.map((c) => `<a href="${base}/map?category=${encodeURIComponent(c.category)}" class="chip-filter${cat === c.category ? " active" : ""}">${esc(c.category)}</a>`).join("");
-  const listRows = markers.length ? markers.map((m) => `<li class="map-store" data-lat="${m.lat}" data-lng="${m.lng}">
-      <a href="${base}/business/${esc(m.slug)}" class="map-store-name">${esc(m.name)}</a><span class="chip">${esc(m.category)}</span>
+  const listRows = markers.length ? markers.map((m) => `<li class="map-store scard" data-lat="${m.lat}" data-lng="${m.lng}">
+      <a href="${base}/business/${esc(m.slug)}" class="map-store-name">${esc(m.name)}</a><span class="chip s-cat">${esc(m.category)}</span>
       ${m.address ? `<span class="map-store-addr">${PIN_SVG} ${esc(m.address)}</span>` : ""}
       <a class="map-store-link" href="${esc(m.sns_naver || `https://map.naver.com/p/search/${encodeURIComponent(m.address || m.name)}`)}" target="_blank" rel="noopener">네이버 지도에서 열기 →</a></li>`).join("")
     : `<li class="empty">지도에 표시할 좌표가 등록된 점포가 없습니다.</li>`;
@@ -897,10 +905,14 @@ export async function mapPage(ctx) {
     : `<div class="map-fallback"><span class="mf-ico" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg></span><p>인터랙티브 지도는 관리자가 네이버 지도 키를 설정하면 표시됩니다. 아래 목록에서 각 점포의 네이버 지도를 열 수 있습니다.</p></div>`;
   const loader = naver ? `<script src="https://oapi.map.naver.com/openapi/v3/maps.js?${esc(env.NAVER_MAP_PARAM || "ncpClientId")}=${esc(naver)}"></script><script src="${assetUrl("/js/map.js")}" defer></script>` : "";
   const markerData = markers.map((m) => ({ name: m.name, slug: m.slug, category: m.category, lat: m.lat, lng: m.lng, address: m.address || "", phone: m.phone || "" }));
-  const body = `<section class="section page-top"><div class="container">
-    <div class="section-head"><h1 class="section-title">가입 점포 지도</h1><p class="section-lead">${esc(assoc.name)} 가입 점포 ${markers.length}곳</p></div>
-    <div class="chip-filters">${chips}</div>${mapEl}
-    <ul class="map-list">${listRows}</ul>
+  // 지도 키가 없으면 예전에는 안내 줄 하나와 카드 목록뿐이라, 지도 화면인데 지도가 없었다.
+  // 골목과 위치를 그린 자리를 두어 '여기가 지도' 임을 보이게 한다 — 키를 넣으면 그 자리에 실제 지도가 들어온다.
+  const mapArea = naver ? mapEl : mapCanvas(markers.length);
+  const body = `<section class="section pubpage"><div class="container">
+    <div class="pg-head"><div><h1 class="pg-title">가입 점포 지도</h1>
+      <p class="pg-sub">${esc(assoc.name)} 가입 점포 ${markers.length}곳</p></div></div>
+    <div class="pg-tools"><div class="chip-filters">${chips}</div></div>${mapArea}
+    <ul class="map-list sgrid grow">${listRows}</ul>
     <script type="application/json" id="mapData">${JSON.stringify(markerData).replace(/</g, "\\u003c")}</script>
   </div></section>`;
   return html(layout({ title: "점포 지도", assoc, base, user, body, activeNav: `${base}/map`, csrf, scripts: loader }));
@@ -942,18 +954,33 @@ ${items.map((n) => `<item><title>${x(n.title)}</title><link>${x(`${link}/notices
 }
 export async function notices(ctx) {
   const { db, assoc, base, user, query, csrf } = ctx;
+  // 공지를 올리는 자리는 관리 화면이다 — 관리자에게만 그 길을 보여 준다
+  const canAdmin = !!user && (user.role === "ADMIN" || user.role === "SUPERADMIN");
   const page = parseInt(query.get("page") || "1", 10) || 1;
   const q = (query.get("q") || "").trim().slice(0, 60), tag = (query.get("tag") || "").trim().slice(0, 20);
   const { items, total, page: cur, pages } = await D.listNoticesPaged(db, assoc.id, { page, q: q || null, tag: tag || null });
   const tags = await D.distinctNoticeTags(db, assoc.id);
   const chips = `<a href="${base}/notices${qs({ q })}" class="chip-filter${!tag ? " active" : ""}">전체</a>` +
     tags.map((t) => `<a href="${base}/notices${qs({ tag: t.tag, q })}" class="chip-filter${tag === t.tag ? " active" : ""}">${esc(t.tag)} <em>${t.n}</em></a>`).join("");
-  const body = `<section class="section page-top"><div class="container">
-    <div class="section-head"><h1 class="section-title">공지사항</h1><p class="section-lead">총 ${total}건</p></div>
-    <form method="get" action="${base}/notices" class="board-search">${tag ? `<input type="hidden" name="tag" value="${esc(tag)}">` : ""}<input type="search" name="q" value="${esc(q)}" placeholder="제목·내용 검색" aria-label="공지 제목·내용 검색"><button class="btn btn-ghost btn-sm">검색</button></form>
+  // 검색·거르기를 먼저, 목록이 그다음. 아무것도 없을 때는 회색 한 줄 대신 안내 카드.
+  const emptyNote = q || tag
+    ? emptyCard("notice", "조건에 맞는 공지가 없습니다", "검색어나 분류를 바꿔 보세요.",
+        `<a class="btn btn-ghost" href="${base}/notices">전체 공지 보기</a>`)
+    : emptyCard("notice", "아직 올라온 공지가 없습니다",
+        "총회 안내·행사·휴무처럼 손님과 회원이 알아야 할 소식이 여기에 쌓입니다.",
+        canAdmin ? `<a class="btn btn-primary" href="${base}/admin#s-content">공지 올리러 가기</a>` : "");
+  const body = `<section class="section pubpage"><div class="container">
+    <div class="pg-head"><div><h1 class="pg-title">공지·소식</h1>
+      <p class="pg-sub">상인회가 알리는 소식입니다. 누구나 볼 수 있습니다. 총 ${total}건</p></div>
+      ${canAdmin ? `<a class="btn btn-primary btn-sm" href="${base}/admin#s-content">＋ 새 공지 쓰기</a>` : ""}</div>
+    <div class="pg-tools"><form method="get" action="${base}/notices" class="srch" role="search">
+      ${tag ? `<input type="hidden" name="tag" value="${esc(tag)}">` : ""}
+      <input type="search" name="q" value="${esc(q)}" placeholder="제목·내용 검색" aria-label="공지 검색" />
+      <button class="btn btn-ghost">검색</button></form></div>
     ${tags.length > 1 ? `<div class="chip-filters">${chips}</div>` : ""}
-    <ul class="notice-list">${items.length ? noticeRows(base, items) : `<li class="empty">${q || tag ? "조건에 맞는 공지가 없습니다." : "등록된 공지가 없습니다."}</li>`}</ul>
-    ${pager((i) => `${base}/notices${qs({ q, tag, page: i })}`, cur, pages)}
+    <div class="grow">${items.length
+      ? `<ul class="notice-list">${noticeRows(base, items)}</ul>${pager((i) => `${base}/notices${qs({ q, tag, page: i })}`, cur, pages)}`
+      : emptyNote}</div>
   </div></section>`;
   return html(layout({ title: "공지사항", assoc, base, user, body, activeNav: `${base}/notices`, csrf,
     description: `${assoc.name} 공지사항 — 안내·행사·혜택 등 우리 동네 상권 소식 ${total}건.` }));
@@ -1068,19 +1095,27 @@ export async function polls(ctx) {
       </details>` : ""}
     </section>`);
   }
-  const createForm = isAdmin ? `<section class="panel panel-accent"><h2 class="panel-title">새 안건 올리기</h2>
+  const createForm = isAdmin ? `<details class="fold-write"><summary>새 안건 올리기</summary><div class="fold-body">
     <form method="post" action="${base}/admin/polls" class="stack-form compact">
       <label>안건 제목<input name="title" required maxlength="200" placeholder="예: 가을 골목축제 공동 부스 운영 여부" /></label>
       <label>설명 (선택)<textarea name="body" rows="3" maxlength="2000"></textarea></label>
       <label>마감일 (선택·비우면 수동 마감)<input type="date" name="closes_at" /></label>
-      <button class="btn btn-primary btn-sm">투표 시작</button></form></section>` : "";
-  const body = `<section class="section page-top"><div class="container narrow">
-    <div class="section-head"><h1 class="section-title">안건 투표</h1>
-      <p class="section-lead">총회에 못 오셔도 폰에서 의견을 남길 수 있습니다. 1인 1표, 마감 전 변경 가능.</p></div>
-    ${flashOf(query)}
-    ${createForm}
-    ${cards.join("") || `<p class="empty">진행 중인 안건이 없습니다.</p>`}
-  </div></section>`;
+      <button class="btn btn-primary btn-sm">투표 시작</button></form></div></details>` : "";
+  // 목록이 먼저, 글쓰기는 접어 둔다 — 예전에는 '새 안건 올리기' 폼이 화면을 다 먹고
+  // 정작 안건 목록은 그 아래 회색 한 줄이었다.
+  const pollList = cards.join("") || emptyCard("poll", "진행 중인 안건이 없습니다",
+    isAdmin ? "회비 인상, 축제 참가처럼 회원 뜻을 물어야 하는 일을 안건으로 올리면 결과가 숫자로 남습니다."
+      : "상인회에서 물어볼 일이 생기면 여기에 올라옵니다. 올라오면 알림으로 알려 드립니다.");
+  const inner = `${flashOf(query)}${createForm}<div class="grow">${pollList}</div>`;
+  // 관리자는 콘솔 차림표를 달고 온다 — 콘솔에서 건너온 화면이라 길이 끊기면 안 된다.
+  const body = isAdmin
+    ? await consoleShell(ctx, { title: "안건 투표",
+        sub: "총회에 못 오셔도 폰에서 의견을 남길 수 있습니다. 1인 1표, 마감 전 변경 가능.",
+        active: "polls", body: inner })
+    : `<section class="section pubpage"><div class="container narrow">
+        <div class="pg-head"><div><h1 class="pg-title">안건 투표</h1>
+          <p class="pg-sub">총회에 못 오셔도 폰에서 의견을 남길 수 있습니다. 1인 1표, 마감 전 변경 가능.</p></div></div>
+        ${inner}</div></section>`;
   return html(layout({ title: "안건 투표", assoc, base, user, body, activeNav: `${base}/polls`, csrf }));
 }
 
@@ -1100,12 +1135,15 @@ export async function board(ctx) {
       <a href="${base}/board/${p.id}" class="board-title">${p.audience === "officer" ? `<span class="board-only">임원</span> ` : ""}${esc(p.title)}${cnt ? ` <span class="board-clip">사진 ${cnt}</span>` : ""}</a>
       <span class="board-meta">${esc(p.author_name || "(탈퇴)")} · ${esc(kstDate(p.created_at, "."))}${p.comment_count ? ` · 댓글 ${p.comment_count}` : ""}</span></li>`;
   }).join("") : `<li class="empty">${q ? "검색 결과가 없습니다." : "아직 게시글이 없습니다."}</li>`;
-  const body = `<section class="section page-top"><div class="container">
-    <div class="section-head"><h1 class="section-title">회원 게시판</h1>
-      <p class="section-lead">글 ${total}개${officer ? " · <b>임원 전용 글까지 보고 있습니다</b>" : ""}</p></div>
+  // 목록이 먼저, 글쓰기는 접어 둔다 — 예전에는 폼이 화면을 다 먹고 목록은 그 아래 한 줄이었다.
+  const body = `<section class="section pubpage"><div class="container">
+    <div class="pg-head"><div><h1 class="pg-title">회원 게시판</h1>
+      <p class="pg-sub">상인회 회원끼리 쓰는 공간입니다. 글 ${total}개${officer ? " · <b>임원 전용 글까지 보고 있습니다</b>" : ""}</p></div></div>
     ${flashOf(query)}
-    <form method="get" action="${base}/board" class="board-search"><input type="search" name="q" value="${esc(q)}" placeholder="제목·내용 검색"><button class="btn btn-ghost btn-sm">검색</button></form>
-    <section class="panel"><h2 class="panel-title">새 글 쓰기</h2>
+    <div class="pg-tools"><form method="get" action="${base}/board" class="srch" role="search">
+      <input type="search" name="q" value="${esc(q)}" placeholder="제목·내용 검색" aria-label="게시글 검색" />
+      <button class="btn btn-ghost btn-sm">검색</button></form></div>
+    <details class="fold-write"><summary>새 글 쓰기</summary><div class="fold-body">
       <form method="post" action="${base}/board" class="stack-form compact" enctype="multipart/form-data">
         <input type="text" name="title" placeholder="제목" required maxlength="200" />
         <textarea name="body" rows="4" placeholder="내용" required></textarea>
@@ -1116,9 +1154,15 @@ export async function board(ctx) {
           <label class="aud-opt"><input type="radio" name="audience" value="officer" />
             <span><b>임원만</b><small>일반 회원에게는 목록에도 안 보입니다</small></span></label>
         </fieldset>` : ""}
-        <button class="btn btn-primary btn-sm">등록</button></form></section>
-    <ul class="board-list">${rows}</ul>
-    ${pager((i) => `${base}/board${qs({ q, page: i })}`, cur, pages)}</div></section>`;
+        <button class="btn btn-primary btn-sm">등록</button></form></div></details>
+    <div class="grow">${items.length
+      ? `<ul class="board-list">${rows}</ul>${pager((i) => `${base}/board${qs({ q, page: i })}`, cur, pages)}`
+      : q
+        ? emptyCard("board", "조건에 맞는 글이 없습니다", "검색어를 바꿔 보세요.",
+            `<a class="btn btn-ghost" href="${base}/board">전체 글 보기</a>`)
+        : emptyCard("board", "아직 올라온 글이 없습니다",
+            "회원끼리 나눌 이야기를 첫 글로 남겨 보세요. 사진을 함께 올릴 수 있고, 임원끼리만 볼 글로 지정할 수도 있습니다.")}</div>
+  </div></section>`;
   return html(layout({ title: "회원 게시판", assoc, base, user, body, activeNav: `${base}/board`, csrf, scripts: `<script src="${assetUrl("/js/upload-resize.js")}" defer></script><script src="${assetUrl("/js/file-preview.js")}" defer></script>` }));
 }
 export async function postDetail(ctx) {
@@ -1508,6 +1552,101 @@ const csvCell = (v) => {
 };
 
 // ================= 관리자 =================
+// ── 공개 목록 화면의 빈 상태 ────────────────────────────────────────────────
+// "등록된 공지가 없습니다" 회색 한 줄은 화면이 덜 만들어진 것처럼 보인다.
+// 무엇을 올리는 자리인지, 누가 올리는지까지 적어 준다.
+const EMPTY_ICO = {
+  board: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9h10M7 13h7"/></svg>',
+  notice: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11v2a1 1 0 0 0 1 1h3l5 4V6L7 10H4a1 1 0 0 0-1 1z"/><path d="M17 9a4 4 0 0 1 0 6"/></svg>',
+  poll: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 20V12M12 20V5M18 20v-6"/></svg>',
+};
+const emptyCard = (ico, title, note, action = "") =>
+  `<div class="empty-card"><div class="ec-ico">${EMPTY_ICO[ico]}</div>
+    <b>${esc(title)}</b><p>${note}</p>${action}</div>`;
+
+// 지도 자리 — 지도 키가 없어도 '지도 화면' 으로 읽히도록 골목과 위치를 그린다.
+// 예전에는 안내 줄 하나와 카드 목록뿐이라, 지도 페이지인데 지도가 어디에도 없었다.
+const mapCanvas = (n) => `<div class="mapbox">
+  <svg viewBox="0 0 800 400" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+    <rect width="800" height="400" fill="var(--bg-alt)"/>
+    <path d="M0 250 H800" stroke="var(--line)" stroke-width="26" fill="none"/>
+    <path d="M300 0 V400" stroke="var(--line)" stroke-width="18" fill="none"/>
+    <path d="M560 0 V400" stroke="var(--line)" stroke-width="12" fill="none"/>
+    <path d="M0 110 H800" stroke="var(--line-soft)" stroke-width="10" fill="none"/>
+    ${[[180,180],[360,160],[250,300],[470,290],[620,200],[700,320]].slice(0, Math.max(1, Math.min(6, n)))
+      .map(([x,y])=>`<g><circle cx="${x}" cy="${y}" r="13" fill="var(--brand)"/><circle cx="${x}" cy="${y}" r="4.5" fill="#fff"/></g>`).join("")}
+  </svg>
+  <div class="mapbox-note"><b>지도 키를 넣으면 여기에 실제 지도가 뜹니다</b>
+    <span>지금은 위치만 표시한 그림입니다 · 아래 목록에서 각 가게의 지도를 열 수 있습니다</span></div>
+</div>`;
+
+// ── 콘솔 왼쪽 차림표 ──────────────────────────────────────────────────────────
+// 관리 화면(/admin)과 그 곁가지(투표·계약서·서식·API·상담 DB)가 같은 차림표를 쓴다.
+// 곁가지에서 차림표가 사라지면 다른 탭으로 가려고 브라우저 뒤로 가기를 눌러야 한다 —
+// 하루에 수십 번 오가는 화면에서 그건 길이 끊긴 것과 같다.
+const CI = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+const TAB_ICO = {
+  home: CI('<path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>'),
+  people: CI('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7"/><path d="M17.5 14a5 5 0 0 1 4 5.5"/>'),
+  content: CI('<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/>'),
+  inbox: CI('<path d="M3 13l2.5-8h13L21 13v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M3 13h5l1.5 3h5L16 13h5"/>'),
+  stats: CI('<path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/>'),
+  notify: CI('<path d="M6 17V11a6 6 0 0 1 12 0v6l1.5 2h-15z"/><path d="M10 21a2 2 0 0 0 4 0"/>'),
+  settings: CI('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'),
+};
+
+// 탭 목록 — 제품 유형마다 있는 탭이 다르다. counts 는 배지(승인 대기·안 읽은 문의 등).
+function consoleTabs(kind, counts = {}) {
+  const isEsign = kind === "esign", isFranchise = kind === "franchise";
+  return [
+    ["home", "현황", TAB_ICO.home, counts.unread || 0],
+    ["people", isEsign ? "담당자" : "회원·점포", TAB_ICO.people, isEsign ? 0 : (counts.pending || 0)],
+    ...(isEsign ? [] : [["content", isFranchise ? "가맹점·콘텐츠" : "콘텐츠", TAB_ICO.content, 0]]),
+    ...(isEsign || isFranchise ? [] : [["inbox", "문의", TAB_ICO.inbox, counts.inbox || 0]]),
+    ...(isEsign || isFranchise ? [] : [["stats", "성과", TAB_ICO.stats, 0]]),
+    ["notify", "알림톡", TAB_ICO.notify, 0],
+    ["settings", "설정", TAB_ICO.settings, 0],
+  ];
+}
+
+// inPage=true 면 관리 화면 자기 안의 탭(#s-…), 아니면 관리 화면으로 건너간다(/admin#s-…).
+// active 는 곁가지 화면 이름(polls·documents·templates·api·leads·landing).
+function consoleSide({ base, kind, counts = {}, active = "", inPage = false }) {
+  const isEsign = kind === "esign", isFranchise = kind === "franchise";
+  const ext = (href, label, key, badge = 0) =>
+    `<a href="${href}" class="side-ext${active === key ? " on" : ""}"${active === key ? ' aria-current="page"' : ""}>${esc(label)}${badge ? ` <span class="side-badge">${badge}</span>` : ""}</a>`;
+  return `<aside class="console-side"><nav id="consoleNav">
+    ${consoleTabs(kind, counts).map(([id, label, ico, badge]) =>
+      `<a href="${inPage ? "" : `${base}/admin`}#s-${id}"${inPage ? ` data-tab="${id}"` : ""}>${ico} ${esc(label)}${badge ? ` <span class="side-badge">${badge}</span>` : ""}</a>`).join("")}
+    <span class="side-sep"></span>
+    ${isFranchise ? ext(`${base}/admin/leads`, "상담 DB", "leads", counts.leads || 0) + ext(`${base}/admin/landing`, "랜딩페이지", "landing") : ""}
+    ${isEsign || isFranchise ? "" : ext(`${base}/polls`, "안건 투표", "polls")}
+    ${ext(`${base}/admin/documents`, "계약서", "documents")}
+    ${ext(`${base}/admin/templates`, "서식", "templates")}
+    ${ext(`${base}/admin/api`, "API 연동", "api")}
+    <a href="${base}" target="_blank" class="side-ext">사이트 보기 ↗</a>
+  </nav></aside>`;
+}
+
+// 곁가지 화면을 콘솔 껍데기(제목줄 + 왼쪽 차림표 + 본문)에 담는다.
+async function consoleShell(ctx, { title, sub = "", actions = "", active = "", body }) {
+  const { db, assoc, base, query } = ctx;
+  const kind = assoc.kind;
+  // 배지는 두 번의 조회로 끝난다 — 없으면 다른 탭으로 옮길 때 숫자가 사라져 보인다
+  const [s, unread] = await Promise.all([
+    D.stats(db, assoc.id).catch(() => ({})),
+    D.unreadCount(db, assoc.id).catch(() => 0),
+  ]);
+  const counts = { pending: s.pending || 0, unread: unread || 0 };
+  return `<section class="dash dash-shell"><div class="container">
+    <div class="dash-head"><div><h1 class="dash-title">${esc(title)}</h1>${sub ? `<p class="dash-sub">${sub}</p>` : ""}</div>
+      ${actions ? `<div class="dash-head-actions">${actions}</div>` : ""}</div>
+    ${query ? flashOf(query) : ""}
+    <div class="console-grid">${consoleSide({ base, kind, counts, active })}
+    <div class="console-main">${body}</div></div>
+  </div></section>`;
+}
+
 export async function admin(ctx) {
   const { db, env, assoc, base, user, query, csrf } = ctx;
   // 독립 쿼리 병렬화 — D1 은 쿼리마다 왕복이라 직렬 대기가 관리자 TTFB 의 주범이었음
@@ -1675,8 +1814,8 @@ export async function admin(ctx) {
     || (String(env.NAVER_SEARCH_ID || "").trim() && String(env.NAVER_SEARCH_SECRET || "").trim()));
   const addMemberPanel = `<section class="panel panel-accent" id="p-addmember">
     <h2 class="panel-title">회원 추가</h2>
-    <p class="panel-hint">사장님 대신 등록합니다. <b>이메일은 없어도 됩니다</b> — 이메일을 비우면 <b>휴대폰 번호가 곧 아이디</b>가 되고,
-      등록을 마치면 임시 비밀번호가 바로 나옵니다. 그 둘을 사장님께 불러 주시면 됩니다.</p>
+    <p class="panel-hint">사장님 대신 등록합니다. <b>세 칸이면 끝납니다</b> — 나머지는 나중에 [정보 채우기] 에서 채워도 됩니다.
+      이메일은 없어도 되고, 등록을 마치면 임시 비밀번호가 바로 나옵니다. 그 둘을 사장님께 불러 주시면 됩니다.</p>
     ${kakaoReady ? `<p class="col-head">${SPARK_SVG} 지도에서 찾아 간편 등록 <span class="ai">자동</span></p>
     <p class="col-sub">가게 이름만 치면 업체명·업종·주소·전화·좌표가 아래에 채워집니다. <b>사장님 성함과 휴대폰만 더 적으면 끝</b>입니다.</p>
     <div class="auto-box" data-place-find>
@@ -1693,16 +1832,19 @@ export async function admin(ctx) {
       : `<p class="panel-hint">가게 이름만으로 주소·전화·업종·지도 위치를 채워 넣는 <b>지도에서 찾기</b>는 지금 꺼져 있습니다 —
       운영사가 카카오 또는 네이버 지도 키를 등록하면 이 자리에 검색 칸이 생깁니다. 그때까지는 아래에 직접 적어 주세요.</p>`}
     <form method="post" action="${base}/admin/members/add" class="stack-form">
-      <div class="form-two"><label>사장님 성함 <em class="tag req">필수</em><input type="text" name="name" required maxlength="60" autocomplete="name" /></label>
-        <label>휴대폰 <em class="tag opt">선택</em> <small>알림톡·연락용 · 이메일이 없으면 이 번호가 아이디</small>
-          <input type="tel" name="phone" maxlength="13" inputmode="numeric" placeholder="010-0000-0000"
-            autocomplete="tel" data-phone-help="id" aria-describedby="addMemberPhoneHelp" />
-          <span class="field-help" id="addMemberPhoneHelp" aria-live="polite">숫자만 눌러도 자동으로 끊어집니다.</span></label></div>
       <div class="form-two"><label>업체명 <em class="tag req">필수</em><input type="text" name="business_name" data-place="name" required maxlength="100" autocomplete="organization" /></label>
-        <label>업종 <em class="tag req">필수</em><select name="category" data-place="category">${CATEGORIES.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("")}</select></label></div>
-      <div class="form-two"><label>가게 주소 <em class="tag opt">선택</em> <small>지도에 뜨려면 필요합니다</small><input type="text" name="address" data-place="address" maxlength="200" autocomplete="street-address" /></label>
-        <label>가게 전화 <em class="tag opt">선택</em><input type="tel" name="biz_phone" data-place="phone" maxlength="40" /></label></div>
-      <label>이메일 <em class="tag opt">선택</em> <small>있으면 바로 로그인할 수 있습니다</small><input type="email" name="email" maxlength="120" autocomplete="email" /></label>
+        <label>사장님 성함 <em class="tag req">필수</em><input type="text" name="name" required maxlength="60" autocomplete="name" /></label></div>
+      <label>휴대폰 <em class="tag req">필수</em> <small>이 번호가 곧 아이디가 됩니다 · 알림톡도 이리로 갑니다</small>
+        <input type="tel" name="phone" maxlength="13" inputmode="numeric" placeholder="010-0000-0000"
+          autocomplete="tel" data-phone-help="id" aria-describedby="addMemberPhoneHelp" />
+        <span class="field-help" id="addMemberPhoneHelp" aria-live="polite">숫자만 눌러도 자동으로 끊어집니다.</span></label>
+      <details class="more-fields"><summary>업종·주소·이메일을 지금 적기</summary>
+        <div class="more-body">
+          <div class="form-two"><label>업종 <em class="tag opt">선택</em><select name="category" data-place="category">${CATEGORIES.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("")}</select></label>
+            <label>가게 전화 <em class="tag opt">선택</em><input type="tel" name="biz_phone" data-place="phone" maxlength="40" /></label></div>
+          <label>가게 주소 <em class="tag opt">선택</em> <small>지도에 뜨려면 필요합니다</small><input type="text" name="address" data-place="address" maxlength="200" autocomplete="street-address" /></label>
+          <label>이메일 <em class="tag opt">선택</em> <small>있으면 사장님이 이메일로도 로그인할 수 있습니다</small><input type="email" name="email" maxlength="120" autocomplete="email" /></label>
+        </div></details>
       <input type="hidden" name="lat" data-place="lat" /><input type="hidden" name="lng" data-place="lng" />
       <button class="btn btn-primary">회원 추가</button></form>
     <p class="panel-hint">등록한 뒤 <b>[정보 채우기]</b> 에서 주소·전화·사진을 채우면 손님 화면에 제대로 뜹니다.
@@ -1716,23 +1858,25 @@ export async function admin(ctx) {
       <input type="file" name="image" accept="image/*" /></label>
     ${cur ? `<label class="check"><input type="checkbox" name="drop_image" value="1" /> 지금 사진 지우기</label>` : ""}
     <p class="panel-hint">사진을 새로 고르지 않으면 지금 사진이 그대로 남습니다.</p>`;
-  const noticeRows2 = notices.map((n) => `<li class="mini-item">
-    <details class="mini-edit"><summary>
-      <span class="notice-tag${n.pinned ? " tag-important" : ""}">${esc(n.tag)}</span>
-      <span class="notice-title">${esc(n.title)}</span><span class="mini-edit-hint">고치기</span></summary>
-      <form method="post" action="${base}/admin/notice/${n.id}" enctype="multipart/form-data" class="stack-form compact">
-        <input type="text" name="title" value="${esc(n.title)}" required maxlength="200" aria-label="공지 제목" />
-        <textarea name="body" rows="4" aria-label="공지 내용">${esc(n.body || "")}</textarea>
-        <div class="form-two"><label class="mini-label">카테고리<select name="tag">${
-          NOTICE_CATEGORIES.map((c) => `<option value="${esc(c)}"${c === n.tag ? " selected" : ""}>${esc(c)}</option>`).join("")}</select></label>
-          <label class="check"><input type="checkbox" name="pinned" value="1"${n.pinned ? " checked" : ""} /> 상단 고정</label></div>
-        ${imgSwap(n.image, "대표 이미지 바꾸기 <small>(선택)</small>")}
-        <span class="pill-row"><button class="btn btn-primary btn-sm">고친 내용 저장</button>
-          <a class="btn btn-ghost btn-sm" href="${base}/notices/${n.id}" target="_blank" rel="noopener">공지 보기 ↗</a></span>
-      </form>
-      <form method="post" action="${base}/admin/notice/${n.id}/delete" class="mini-del"
-        data-confirm="'${esc(n.title)}' 공지를 지울까요?&#10;이미 돌린 링크가 죽습니다 — 내용만 고치실 거면 위에서 고치세요."><button class="link-danger">이 공지 지우기</button></form>
-    </details></li>`).join("") || `<li class="empty">공지가 없습니다.</li>`;
+  // 표 한 장으로 — 체크해서 여러 건을 한 번에 지우거나 상단에 고정한다.
+  // 예전에는 한 건씩 펼쳐 삭제를 눌러야 해서, 지난 안내가 계속 쌓이기만 했다.
+  const noticeRows2 = notices.map((n) => `<tr>
+    <td class="nc"><input type="checkbox" name="ids" value="${n.id}" form="noticeBulk" aria-label="${esc(n.title)} 고르기" /></td>
+    <td class="nt">
+      <details class="mini-edit"><summary>${n.pinned ? '<em class="pin-mini">고정</em>' : ""}<span class="notice-title">${esc(n.title)}</span><span class="mini-edit-hint">고치기</span></summary>
+        <form method="post" action="${base}/admin/notice/${n.id}" enctype="multipart/form-data" class="stack-form compact">
+          <input type="text" name="title" value="${esc(n.title)}" required maxlength="200" aria-label="공지 제목" />
+          <textarea name="body" rows="4" aria-label="공지 내용">${esc(n.body || "")}</textarea>
+          <div class="form-two"><label class="mini-label">카테고리<select name="tag">${
+            NOTICE_CATEGORIES.map((c) => `<option value="${esc(c)}"${c === n.tag ? " selected" : ""}>${esc(c)}</option>`).join("")}</select></label>
+            <label class="check"><input type="checkbox" name="pinned" value="1"${n.pinned ? " checked" : ""} /> 상단 고정</label></div>
+          ${imgSwap(n.image, "대표 이미지 바꾸기 <small>(선택)</small>")}
+          <span class="pill-row"><button class="btn btn-primary btn-sm">고친 내용 저장</button>
+            <a class="btn btn-ghost btn-sm" href="${base}/notices/${n.id}" target="_blank" rel="noopener">공지 보기 ↗</a></span>
+        </form>
+      </details></td>
+    <td><span class="notice-tag${n.pinned ? " tag-important" : ""}">${esc(n.tag)}</span></td>
+    <td class="nd">${esc(kstDate(n.created_at, "."))}</td></tr>`).join("");
   const rsvpsByEvent = new Map();
   for (const r of allRsvps) { if (!rsvpsByEvent.has(r.event_id)) rsvpsByEvent.set(r.event_id, []); rsvpsByEvent.get(r.event_id).push(r); }
   let eventRows = "";
@@ -2107,26 +2251,7 @@ export async function admin(ctx) {
   })();
 
   // 왼쪽 메뉴 아이콘 — 글자만 일곱 줄이면 눈이 훑을 자리가 없다. 16px 선 아이콘 하나씩.
-  const I = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
-  const TAB_ICO = {
-    home: I('<path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>'),
-    people: I('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7"/><path d="M17.5 14a5 5 0 0 1 4 5.5"/>'),
-    content: I('<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/>'),
-    inbox: I('<path d="M3 13l2.5-8h13L21 13v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M3 13h5l1.5 3h5L16 13h5"/>'),
-    stats: I('<path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/>'),
-    notify: I('<path d="M6 17V11a6 6 0 0 1 12 0v6l1.5 2h-15z"/><path d="M10 21a2 2 0 0 0 4 0"/>'),
-    settings: I('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'),
-  };
-  const ADMIN_TABS = [
-    ["home", "현황", TAB_ICO.home, unread || 0],
-    [isEsign ? "people" : "people", isEsign ? "담당자" : "회원·점포", TAB_ICO.people, isEsign ? 0 : (s.pending || 0)],
-    ...(isEsign ? [] : [["content", isFranchise ? "가맹점·콘텐츠" : "콘텐츠", TAB_ICO.content, 0]]),
-    // 문의함 — 아직 답 안 한 건수를 그대로 단다. 0 이면 배지가 없다.
-    ...(isEsign || isFranchise ? [] : [["inbox", "문의", TAB_ICO.inbox, inboxCounts.new || 0]]),
-    ...(isEsign || isFranchise ? [] : [["stats", "성과", TAB_ICO.stats, 0]]),
-    ["notify", "알림톡", TAB_ICO.notify, 0],
-    ["settings", "설정", TAB_ICO.settings, 0],
-  ];
+  const ADMIN_TABS = consoleTabs(assoc.kind, { unread: unread || 0, pending: s.pending || 0, inbox: inboxCounts.new || 0 });
 
   // ── 며칠 기다렸는지 —— "승인 대기 3" 을 보고도 오늘 온 것인지 일주일 묵은 것인지
   // 알 수 없으면, 그 숫자는 아무 결정도 만들지 못한다.
@@ -2258,18 +2383,7 @@ export async function admin(ctx) {
         : `<a href="${base}/admin/documents" class="btn btn-primary btn-sm">계약서 만들기</a>`}</div></div>
     ${flashOf(query)}
     <div class="console-grid">
-    <aside class="console-side"><nav id="consoleNav">
-      ${ADMIN_TABS.map(([id, label, ico, badge]) =>
-        `<a href="#s-${id}" data-tab="${id}">${ico} ${esc(label)}${badge ? ` <span class="side-badge">${badge}</span>` : ""}</a>`).join("")}
-      <span class="side-sep"></span>
-      ${isFranchise ? `<a href="${base}/admin/leads" class="side-ext">상담 DB${leads.fresh ? ` <span class="side-badge">${leads.fresh}</span>` : ""}</a>
-      <a href="${base}/admin/landing" class="side-ext">랜딩페이지</a>` : ""}
-      ${isEsign || isFranchise ? "" : `<a href="${base}/polls" class="side-ext">안건 투표</a>`}
-      <a href="${base}/admin/documents" class="side-ext">계약서</a>
-      <a href="${base}/admin/templates" class="side-ext">서식</a>
-      <a href="${base}/admin/api" class="side-ext">API 연동</a>
-      <a href="${base}" target="_blank" class="side-ext">사이트 보기 ↗</a>
-    </nav></aside>
+    ${consoleSide({ base, kind: assoc.kind, counts: { unread: unread || 0, pending: s.pending || 0, inbox: inboxCounts.new || 0 }, inPage: true })}
     <div class="console-main">
     <div class="sgroup" id="s-home" data-tab="home">
     <div class="home-sheet">
@@ -2341,13 +2455,26 @@ ${isFranchise ? `    <section class="panel panel-accent" id="p-home"><h2 class="
 `}
     ${isEsign ? "" : `<div id="p-products">${productModPanel}</div>`}
     ${isEsign ? "" : `<div class="dash-grid" id="p-content">
-      <section class="panel"><h2 class="panel-title">공지·소식</h2>
-        <form method="post" action="${base}/admin/notice" enctype="multipart/form-data" class="stack-form compact">
-          <input type="text" name="title" placeholder="제목" aria-label="새 공지 제목" required /><textarea name="body" rows="3" placeholder="내용" aria-label="새 공지 내용"></textarea>
-          <div class="form-two"><label class="mini-label">카테고리<select name="tag">${noticeCats}</select></label><label class="check"><input type="checkbox" name="pinned" value="1" /> 상단 고정</label></div>
-          <label class="mini-label">대표 이미지 <small>(선택)</small><input type="file" name="image" accept="image/*" /></label>
-          <button class="btn btn-primary btn-sm">등록</button></form>
-        <ul class="admin-mini-list">${noticeRows2}</ul></section>
+      <section class="panel"><div class="panel-head"><h2 class="panel-title">공지·소식 <span class="badge badge-muted">${notices.length}건</span></h2></div>
+        <details class="fold-write"><summary>새 공지 쓰기</summary><div class="fold-body">
+          <form method="post" action="${base}/admin/notice" enctype="multipart/form-data" class="stack-form compact">
+            <input type="text" name="title" placeholder="제목" aria-label="새 공지 제목" required /><textarea name="body" rows="3" placeholder="내용" aria-label="새 공지 내용"></textarea>
+            <div class="form-two"><label class="mini-label">카테고리<select name="tag">${noticeCats}</select></label><label class="check"><input type="checkbox" name="pinned" value="1" /> 상단 고정</label></div>
+            <label class="mini-label">대표 이미지 <small>(선택)</small><input type="file" name="image" accept="image/*" /></label>
+            <button class="btn btn-primary btn-sm">등록</button></form></div></details>
+        ${notices.length ? `<form method="post" action="${base}/admin/notices/bulk" id="noticeBulk" class="pick-bar" data-bulk>
+            <input type="hidden" name="_csrf" value="${csrf}" />
+            <label class="bulk-all"><input type="checkbox" data-bulk-all aria-label="전체 고르기" /><span>전체</span></label>
+            <span class="bulk-count" data-bulk-count>고른 것 없음</span>
+            <button name="act" value="pin" class="btn btn-xs btn-ghost">상단 고정</button>
+            <button name="act" value="unpin" class="btn btn-xs btn-ghost">고정 해제</button>
+            <button name="act" value="delete" class="btn btn-xs btn-danger"
+              data-confirm="고른 공지를 지울까요?&#10;이미 돌린 링크가 죽습니다 — 되돌릴 수 없습니다.">선택 삭제</button>
+          </form>
+          <div class="table-scroll"><table class="notice-table">
+            <thead><tr><th class="nc"></th><th>제목</th><th>분류</th><th class="nd">올린 날</th></tr></thead>
+            <tbody>${noticeRows2}</tbody></table></div>`
+          : `<p class="dt-empty"><b>아직 올린 공지가 없습니다</b>위 [새 공지 쓰기] 로 첫 소식을 올려 보세요.</p>`}</section>
       <section class="panel"><h2 class="panel-title">행사</h2>
         <form method="post" action="${base}/admin/event" enctype="multipart/form-data" class="stack-form compact">
           <input type="text" name="title" placeholder="행사명" aria-label="새 행사명" required /><input type="date" name="event_date" aria-label="행사 날짜" required />
@@ -2398,7 +2525,7 @@ ${isFranchise ? `    <section class="panel panel-accent" id="p-home"><h2 class="
     </div>
         </div></div></div></section>`;
   return html(layout({ title: "관리자", assoc, base, user, body, activeNav: `${base}/admin`, csrf,
-    scripts: `<script src="${assetUrl("/js/layout-editor.js")}" defer></script><script src="${assetUrl("/js/upload-resize.js")}" defer></script><script src="${assetUrl("/js/file-preview.js")}" defer></script><script src="${assetUrl("/js/share.js")}" defer></script><script src="${assetUrl("/js/super-tabs.js")}" defer></script>${kakaoReady ? `<script src="${assetUrl("/js/place.js")}" defer></script>` : ""}` }));
+    scripts: `<script src="${assetUrl("/js/layout-editor.js")}" defer></script><script src="${assetUrl("/js/upload-resize.js")}" defer></script><script src="${assetUrl("/js/file-preview.js")}" defer></script><script src="${assetUrl("/js/share.js")}" defer></script><script src="${assetUrl("/js/super-tabs.js")}" defer></script><script src="${assetUrl("/js/bulk-select.js")}" defer></script>${kakaoReady ? `<script src="${assetUrl("/js/place.js")}" defer></script>` : ""}` }));
 }
 
 // 기한이 지났는가 — due_date 는 'YYYY-MM-DD' 이고 그날 자정까지로 본다(KST 기준).
@@ -2677,11 +2804,9 @@ export async function adminDocuments(ctx) {
     <span class="tpl-meta">${t.vars.length ? `빈칸 ${t.vars.length}` : "빈칸 없음"} · 자리 ${t.fields.length}개${t.ordered ? " · 순차" : ""}</span></a>`;
   const tplCards = builtinsFor(assoc.kind).map(normalizeTemplate).map(card).join("");
   const myCards = myTpls.map(card).join("");
-  const body = `<section class="dash"><div class="container">
-    <div class="dash-head"><div><p class="section-eyebrow">전자계약 · ${esc(assoc.name)}</p><h1 class="dash-title">전자서명 문서</h1>
-      <p class="dash-sub">${canAdmin ? `<a href="${base}/admin">← 관리자</a>` : `담당자 · ${esc(user.name)}`}</p></div>
-      <div class="dash-head-actions"><a href="${base}/admin/templates" class="btn btn-ghost btn-sm">서식 관리</a>${canAdmin ? `<a href="${base}/admin/api" class="btn btn-ghost btn-sm">API 연동</a>` : ""}</div></div>${flashOf(query)}
-    <section class="panel panel-accent"><h2 class="panel-title">서식으로 만들기</h2>
+  // 관리자는 콘솔에서 이 화면으로 건너온다 — 왼쪽 차림표가 사라지면 길이 끊긴다.
+  // 담당자(STAFF)는 /admin 에 못 들어가므로 차림표를 주면 눌러도 403 이다. 그분들께는 지금 그대로.
+  const inner = `    <section class="panel panel-accent"><h2 class="panel-title">서식으로 만들기</h2>
       <p class="panel-hint">표준 서식을 고르면 본문과 <b>서명·도장 자리까지</b> 그대로 들어옵니다. 빈칸만 채우면 끝입니다.</p>
       <div class="tpl-grid">${tplCards}</div>
       ${myTpls.length ? `<div class="form-divider">${assoc.kind === "esign" ? "우리 서식" : "우리 상인회 서식"}</div><div class="tpl-grid">${myCards}</div>` : ""}
@@ -2745,7 +2870,16 @@ export async function adminDocuments(ctx) {
         </form></div>
       ${chips}
       ${rows}
-      ${pager}</section></div></section>`;
+      ${pager}</section>`;
+  const body = canAdmin
+    ? await consoleShell(ctx, { title: "전자서명 문서", sub: esc(assoc.name),
+        actions: `<a href="${base}/admin/templates" class="btn btn-ghost btn-sm">서식 관리</a>`,
+        active: "documents", body: inner })
+    : `<section class="dash"><div class="container">
+        <div class="dash-head"><div><p class="section-eyebrow">전자계약 · ${esc(assoc.name)}</p><h1 class="dash-title">전자서명 문서</h1>
+          <p class="dash-sub">담당자 · ${esc(user.name)}</p></div>
+          <div class="dash-head-actions"><a href="${base}/admin/templates" class="btn btn-ghost btn-sm">서식 관리</a></div></div>${flashOf(query)}
+        ${inner}</div></section>`;
   return html(layout({ title: "전자서명 문서", assoc, base, user, body, csrf,
     scripts: `<script src="${assetUrl("/js/pdf-form.js")}" defer></script>` }));
 }
@@ -3164,10 +3298,7 @@ export async function adminTemplates(ctx) {
         <form method="post" action="${base}/admin/templates/${n.id}/delete" data-confirm="'${esc(n.title)}' 서식을 삭제할까요?"><button class="btn btn-xs btn-ghost">삭제</button></form></td></tr>`;
   }).join("") : `<tr><td colspan="4" class="empty">저장한 서식이 없습니다.</td></tr>`;
   const docOpts = docs.map((d) => `<option value="${d.id}">${esc(d.title)}</option>`).join("");
-  const body = `<section class="dash"><div class="container">
-    <div class="dash-head"><div><p class="section-eyebrow">전자계약 · 서식</p><h1 class="dash-title">${assoc.kind === "esign" ? "우리 서식" : "우리 상인회 서식"}</h1>
-      <p class="dash-sub"><a href="${base}/admin/documents">← 문서 목록</a></p></div></div>${flashOf(query)}
-    ${lead ? `<div class="flash flash-ok">상담 신청자 <b>${esc(lead.name)}</b>(${esc(lead.phone)})님에게 보낼 계약서입니다. 서식을 고르면 이어서 서명 링크를 발급합니다.</div>` : ""}
+  const inner = `    ${lead ? `<div class="flash flash-ok">상담 신청자 <b>${esc(lead.name)}</b>(${esc(lead.phone)})님에게 보낼 계약서입니다. 서식을 고르면 이어서 서명 링크를 발급합니다.</div>` : ""}
     <section class="panel panel-accent"><h2 class="panel-title">문서를 서식으로 저장</h2>
       <p class="panel-hint">이미 만든 문서를 서식으로 저장하면 <b>배치된 서명 자리까지</b> 함께 보관됩니다.
         본문에서 매번 달라지는 부분은 <code>{{보증금}}</code> 처럼 바꿔 두면 다음부터 그 칸만 채우면 됩니다.</p>
@@ -3183,7 +3314,10 @@ export async function adminTemplates(ctx) {
       <div class="tpl-grid">${builtinsFor(assoc.kind).map(normalizeTemplate).map((t) => `<a class="tpl-card" href="${base}/admin/documents/new?tpl=${t.id}${leadQ}">
         <span class="tpl-title">${esc(t.title)}</span><span class="tpl-sum">${esc(t.summary)}</span>
         <span class="tpl-meta">빈칸 ${t.vars.length} · 자리 ${t.fields.length}개</span></a>`).join("")}</div></section>
-    </div></section>`;
+    `;
+  const body = await consoleShell(ctx, { title: assoc.kind === "esign" ? "우리 서식" : "우리 상인회 서식",
+    actions: `<a href="${base}/admin/documents" class="btn btn-ghost btn-sm">문서 목록</a>`,
+    active: "templates", body: inner });
   return html(layout({ title: "계약서 서식", assoc, base, user, body, csrf }));
 }
 
@@ -3208,11 +3342,7 @@ export async function adminApi(ctx) {
       <span class="audit-detail">${w.delivered_at ? "전송 완료" : w.attempts >= 6 ? `포기 — ${esc(w.last_error)}` : `대기/재시도 ${w.attempts}회${w.last_error ? ` — ${esc(w.last_error)}` : ""}`}</span>
       <span class="audit-meta">${esc(kstStamp(w.created_at, { year: false }))}</span></li>`).join("")
     : `<li class="empty">전송 이력이 없습니다.</li>`;
-  const body = `<section class="dash"><div class="container">
-    <div class="dash-head"><div><p class="section-eyebrow">전자계약 · API</p><h1 class="dash-title">API 연동</h1>
-      <p class="dash-sub"><a href="${base}/admin/documents">← 문서 목록</a> · 우리 시스템에서 계약을 자동으로 만들고 보냅니다</p></div>
-      <div class="dash-head-actions"><a href="/api/v1/docs" target="_blank" class="btn btn-ghost btn-sm">API 문서</a></div></div>${flashOf(query)}
-    ${fresh ? `<div class="invite-box"><p class="invite-box-title">새 API 키 — <b>지금만 보입니다</b></p>
+  const inner = `    ${fresh ? `<div class="invite-box"><p class="invite-box-title">새 API 키 — <b>지금만 보입니다</b></p>
       <input type="text" class="invite-url" value="${esc(fresh)}" readonly data-select-all />
       <p class="panel-hint">이 값은 저장하지 않으므로 다시 볼 수 없습니다. 안전한 곳에 옮겨 두세요.
         잃어버리면 새 키를 발급하고 이 키를 폐기하면 됩니다.</p></div>` : ""}
@@ -3244,7 +3374,11 @@ export async function adminApi(ctx) {
     "ordered": true
   }'</pre>
       <p class="panel-hint">응답의 <code>sign_url</code> 로 상대방이 가입 없이 바로 서명합니다. 전체 명세는 <a href="/api/v1/docs" target="_blank">/api/v1/docs</a>.</p></section>
-    </div></section>`;
+    `;
+  const body = await consoleShell(ctx, { title: "API 연동",
+    sub: "우리 시스템에서 계약을 자동으로 만들고 보냅니다.",
+    actions: `<a href="/api/v1/docs" target="_blank" class="btn btn-ghost btn-sm">API 문서</a>`,
+    active: "api", body: inner });
   return html(layout({ title: "API 연동", assoc, base, user, body, csrf }));
 }
 
