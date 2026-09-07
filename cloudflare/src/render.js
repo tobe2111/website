@@ -178,7 +178,8 @@ ${workScreen ? "" : `<footer class="site-footer"><div class="container">
 // 관리자·점주가 일하는 화면인가. 이 프로젝트의 콘솔 화면은 예외 없이 <section class="dash"> 로 시작한다.
 // 손님용 고정 바를 업무 화면에 띄우면 표를 가리는 방해물일 뿐이라, 화면 종류로 갈라 준다.
 // (페이지마다 플래그를 넘기는 방식은 새 콘솔 화면을 만들 때 빠뜨리기 쉬워 쓰지 않는다.)
-const isConsole = (body) => /<section class="dash"/.test(String(body));
+// 껍데기 클래스(dash-shell 등)가 붙어도 콘솔이다 — 따옴표 하나에 매달리면 공개용 메뉴·고정 바가 콘솔에 새어 들어온다
+const isConsole = (body) => /<section class="dash[" ]/.test(String(body));
 
 // 업무 화면의 상단 줄 — 손님용 메뉴 대신 '지금 어느 조직에서 일하는가' 와 나가는 길만.
 // 화면 이동은 왼쪽 사이드바가 맡으므로 여기에 메뉴를 또 늘어놓지 않는다.

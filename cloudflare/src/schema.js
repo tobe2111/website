@@ -88,6 +88,9 @@ CREATE TABLE IF NOT EXISTS users (
   totp_secret     TEXT NOT NULL DEFAULT '',    -- 2FA base32 시크릿(빈 값=미설정)
   totp_enabled    INTEGER NOT NULL DEFAULT 0,  -- 2FA 활성화 여부
   team_id         INTEGER NOT NULL DEFAULT 0,  -- 소속 부서 (0 = 부서 없음). 담당자에게만 의미가 있다
+  -- 상인회 임원인가. 게시판의 '임원 전용' 글을 볼 수 있는지만 정한다 —
+  -- 회원 승인·설정 변경 같은 관리 권한은 role 이 정하고 이 값과 무관하다.
+  officer         INTEGER NOT NULL DEFAULT 0,
   created_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -303,6 +306,10 @@ CREATE TABLE IF NOT EXISTS posts (
   body           TEXT NOT NULL DEFAULT '',
   image          TEXT NOT NULL DEFAULT '',
   pinned         INTEGER NOT NULL DEFAULT 0,
+  -- 누가 볼 수 있는가. 'all' = 상인회 회원 전체, 'officer' = 임원만.
+  -- 기본이 'all' 인 이유: 실수로 임원 전용이 되면 회원들이 글이 사라진 줄 안다.
+  -- 반대(공개될 것이 임원 전용이 됨)는 눈에 띄지만, 안 보이는 것은 아무도 신고하지 않는다.
+  audience       TEXT NOT NULL DEFAULT 'all',
   updated_at     TEXT NOT NULL DEFAULT '',
   created_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -823,6 +830,22 @@ async function migrateColumns(db) {
       if (!mcols.some((c) => c.name === col)) {
         await db.prepare(`ALTER TABLE media ADD COLUMN ${col} TEXT NOT NULL DEFAULT ''`).run();
       }
+    }
+  }
+
+  // 임원 표시 · 게시글 공개 범위 (기존 배포 업그레이드)
+  const postTbl = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='posts'").first();
+  if (postTbl) {
+    const pcols = (await db.prepare("PRAGMA table_info(posts)").all()).results || [];
+    if (!pcols.some((c) => c.name === "audience")) {
+      await db.prepare("ALTER TABLE posts ADD COLUMN audience TEXT NOT NULL DEFAULT 'all'").run();
+    }
+  }
+  const userTbl = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='users'").first();
+  if (userTbl) {
+    const ucols = (await db.prepare("PRAGMA table_info(users)").all()).results || [];
+    if (!ucols.some((c) => c.name === "officer")) {
+      await db.prepare("ALTER TABLE users ADD COLUMN officer INTEGER NOT NULL DEFAULT 0").run();
     }
   }
 

@@ -165,6 +165,7 @@ export const TENANT = [
   ["POST", "/admin/business/:id/media", api.adminUploadMedia, "ADMIN"],
   ["POST", "/admin/business/:id/photos/import", api.adminImportPhotos, "ADMIN"],
   ["POST", "/admin/business/:id/photo-link", api.adminCreatePhotoLink, "ADMIN"],
+  ["POST", "/admin/user/:id/officer", api.adminSetOfficer, "ADMIN"],
   ["POST", "/admin/business/:id/embed", api.adminAddEmbed, "ADMIN"],
   ["POST", "/admin/business/:id/media/:mid/delete", api.adminDeleteMedia, "ADMIN"],
   // 이메일 없이 등록해 둔 사장님에게 나중에 로그인 주소를 지정한다

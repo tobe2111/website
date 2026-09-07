@@ -26,6 +26,12 @@ import { emailEnabled as emailOn } from "./email.js";
 import { CRON, CRON_JOBS, cronRunKey } from "./scheduled.js";
 
 const DOC_EVENT_LABEL = { created: "문서 생성", viewed: "계약서 열람", otp_sent: "인증번호 발송", otp_ok: "휴대폰 본인확인", signed: "전자서명 완료", declined: "서명 거절", reminded: "재알림 발송", notified: "알림 발송", edited: "문서 수정", sealed: "직인 날인 (보내는 쪽)", expired: "기한 경과로 마감" };
+// 콘솔 v6 아이콘 — 레퍼런스의 '자동 입력' 반짝임, '직접 입력' 사람, 완성도 사람들, 확인, 화살표
+const SPARK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 16l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7z"/></svg>';
+const PERSON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg>';
+const PEOPLE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><circle cx="17" cy="9" r="3"/><path d="M15.5 14.2c3.3.3 6 2.6 6 5.8"/></svg>';
+const CHECK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="14" height="14"><circle cx="12" cy="12" r="9"/><path d="M8.5 12.5l2.3 2.3L15.5 10"/></svg>';
+const ARROW_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>';
 const CATEGORIES = ["음식점", "카페·디저트", "생활·서비스", "패션·잡화", "농수축산", "교육·문화", "기타"];
 // 업종마다 고정된 색. 레퍼런스(카카오임팩트)의 카드처럼 **본문을 색으로 채우기** 위한 것이다.
 //
@@ -1082,17 +1088,20 @@ export async function board(ctx) {
   const { db, assoc, base, user, query, csrf } = ctx;
   const page = parseInt(query.get("page") || "1", 10) || 1;
   const q = (query.get("q") || "").trim().slice(0, 60);
-  const { items, total, page: cur, pages } = await D.listPostsPaged(db, assoc.id, { page, q: q || null });
+  // 임원인가 — 회장은 표시가 없어도 늘 임원으로 본다
+  const officer = D.canSeeOfficer(user);
+  const { items, total, page: cur, pages } = await D.listPostsPaged(db, assoc.id, { page, q: q || null, officer });
   const rows = items.length ? items.map((p) => {
     const thumb = p.pi_thumb || p.pi_file || p.image;
     const cnt = (p.image_count || 0) + (p.image ? 1 : 0);
     return `<li class="board-row${p.pinned ? " pinned" : ""}">${p.pinned ? `<span class="board-pin">고정</span>` : ""}
       ${thumb ? `<a href="${base}/board/${p.id}" class="board-thumb"><img src="${esc(mediaUrl(thumb))}" alt="" loading="lazy" /></a>` : ""}
-      <a href="${base}/board/${p.id}" class="board-title">${esc(p.title)}${cnt ? ` <span class="board-clip">사진 ${cnt}</span>` : ""}</a>
+      <a href="${base}/board/${p.id}" class="board-title">${p.audience === "officer" ? `<span class="board-only">임원</span> ` : ""}${esc(p.title)}${cnt ? ` <span class="board-clip">사진 ${cnt}</span>` : ""}</a>
       <span class="board-meta">${esc(p.author_name || "(탈퇴)")} · ${esc(kstDate(p.created_at, "."))}${p.comment_count ? ` · 댓글 ${p.comment_count}` : ""}</span></li>`;
   }).join("") : `<li class="empty">${q ? "검색 결과가 없습니다." : "아직 게시글이 없습니다."}</li>`;
   const body = `<section class="section page-top"><div class="container">
-    <div class="section-head"><h1 class="section-title">회원 게시판</h1><p class="section-lead">글 ${total}개</p></div>
+    <div class="section-head"><h1 class="section-title">회원 게시판</h1>
+      <p class="section-lead">글 ${total}개${officer ? " · <b>임원 전용 글까지 보고 있습니다</b>" : ""}</p></div>
     ${flashOf(query)}
     <form method="get" action="${base}/board" class="board-search"><input type="search" name="q" value="${esc(q)}" placeholder="제목·내용 검색"><button class="btn btn-ghost btn-sm">검색</button></form>
     <section class="panel"><h2 class="panel-title">새 글 쓰기</h2>
@@ -1100,6 +1109,12 @@ export async function board(ctx) {
         <input type="text" name="title" placeholder="제목" required maxlength="200" />
         <textarea name="body" rows="4" placeholder="내용" required></textarea>
         <label class="file-inline">사진 첨부 <small>(선택 · 최대 6장)</small><input type="file" name="images" accept="image/*" multiple /><span class="fi-btn">사진 고르기<span class="fi-name"></span></span></label>
+        ${officer ? `<fieldset class="aud-pick"><legend>누가 볼 수 있나요?</legend>
+          <label class="aud-opt"><input type="radio" name="audience" value="all" checked />
+            <span><b>회원 전체</b><small>상인회 회원 누구나 봅니다</small></span></label>
+          <label class="aud-opt"><input type="radio" name="audience" value="officer" />
+            <span><b>임원만</b><small>일반 회원에게는 목록에도 안 보입니다</small></span></label>
+        </fieldset>` : ""}
         <button class="btn btn-primary btn-sm">등록</button></form></section>
     <ul class="board-list">${rows}</ul>
     ${pager((i) => `${base}/board${qs({ q, page: i })}`, cur, pages)}</div></section>`;
@@ -1109,6 +1124,9 @@ export async function postDetail(ctx) {
   const { db, assoc, base, user, params, query, csrf } = ctx;
   const p = await D.getPost(db, Number(params.id));
   if (!p || p.association_id !== assoc.id) return notFoundResponse(ctx);
+  // 목록에서 걸러 냈어도 주소를 직접 치면 열린다 — 여기서 한 번 더 막는다.
+  // 없는 글처럼 답한다: "임원 전용입니다" 라고 알려 주면 '무슨 글이 있다' 는 사실이 새어 나간다.
+  if (p.audience === "officer" && !D.canSeeOfficer(user)) return notFoundResponse(ctx);
   const comments = await D.listComments(db, p.id);
   const imgs = await D.listPostImages(db, p.id);
   const mod = canModerate(user, assoc), isAuthor = user && p.author_id === user.id;
@@ -1123,6 +1141,7 @@ export async function postDetail(ctx) {
   const body = `<section class="section page-top"><div class="container narrow">
     <a href="${base}/board" class="back-link">← 게시판</a>
     <div class="article-head">${p.pinned ? `<span class="notice-tag tag-important">고정</span>` : ""}<time>${esc(kstStamp(p.created_at))}</time></div>
+    ${p.audience === "officer" ? `<p class="post-only">임원만 볼 수 있는 글입니다 — 일반 회원에게는 목록에도 안 보입니다.</p>` : ""}
     <h1 class="article-title">${esc(p.title)}</h1>
     <p class="post-author">작성자: ${esc(p.author_name || "(탈퇴)")}${p.updated_at ? ` · <span class="post-edited">수정됨</span>` : ""}</p>
     <div class="article-body">${esc(p.body).replace(/\n/g, "<br />")}</div>
@@ -1141,6 +1160,7 @@ export async function editPost(ctx) {
   const { db, assoc, base, user, params, query, csrf } = ctx;
   const p = await D.getPost(db, Number(params.id));
   if (!p || p.association_id !== assoc.id) return notFoundResponse(ctx);
+  if (p.audience === "officer" && !D.canSeeOfficer(user)) return notFoundResponse(ctx);
   if (!(canModerate(user, assoc) || (user && p.author_id === user.id))) return notFoundResponse(ctx);
   const imgs = await D.listPostImages(db, p.id);
   const existing = (imgs.length || p.image) ? `<div class="edit-images"><p class="mini-label">현재 사진 <small>(삭제할 사진 체크)</small></p><div class="edit-thumbs">
@@ -1154,6 +1174,12 @@ export async function editPost(ctx) {
       <label>내용<textarea name="body" rows="8" required>${esc(p.body)}</textarea></label>
       ${existing}
       <label class="file-inline">사진 추가 <small>(총 6장까지)</small><input type="file" name="images" accept="image/*" multiple /><span class="fi-btn">사진 고르기<span class="fi-name"></span></span></label>
+      ${D.canSeeOfficer(user) ? `<fieldset class="aud-pick"><legend>누가 볼 수 있나요?</legend>
+        <label class="aud-opt"><input type="radio" name="audience" value="all"${p.audience === "officer" ? "" : " checked"} />
+          <span><b>회원 전체</b><small>상인회 회원 누구나 봅니다</small></span></label>
+        <label class="aud-opt"><input type="radio" name="audience" value="officer"${p.audience === "officer" ? " checked" : ""} />
+          <span><b>임원만</b><small>일반 회원에게는 목록에도 안 보입니다</small></span></label>
+      </fieldset>` : ""}
       <div class="post-actions"><button class="btn btn-primary">저장</button><a href="${base}/board/${p.id}" class="btn btn-ghost">취소</a></div>
     </form></div></section>`;
   return html(layout({ title: "글 수정", assoc, base, user, body, activeNav: `${base}/board`, csrf, scripts: `<script src="${assetUrl("/js/upload-resize.js")}" defer></script><script src="${assetUrl("/js/file-preview.js")}" defer></script>` }));
@@ -1438,7 +1464,7 @@ export async function dashboard(ctx) {
       <input type="url" name="url" placeholder="영상 주소(링크)" required /><input type="text" name="caption" placeholder="설명 (선택)" maxlength="200" />
       <button class="btn btn-primary btn-sm">영상 링크 추가</button></form>
     <h3 class="panel-subtitle">등록된 미디어 (${media.length})</h3><div class="media-grid">${grid}</div></section>`;
-  const body = `<section class="dash"><div class="container">
+  const body = `<section class="dash dash-shell"><div class="container">
     <div class="dash-head"><div><h1 class="dash-title">${esc(b.name)} ${statusBadge(b.status)}</h1>
       <p class="dash-sub">공개 주소: <a href="${base}/business/${esc(b.slug)}" target="_blank">${esc(prettyPath(base))}/business/${esc(b.slug)}</a></p></div>
       <div class="dash-head-actions">
@@ -1695,29 +1721,32 @@ export async function admin(ctx) {
     <h2 class="panel-title">회원 추가</h2>
     <p class="panel-hint">사장님 대신 등록합니다. <b>이메일은 없어도 됩니다</b> — 이메일을 비우면 <b>휴대폰 번호가 곧 아이디</b>가 되고,
       등록을 마치면 임시 비밀번호가 바로 나옵니다. 그 둘을 사장님께 불러 주시면 됩니다.</p>
-    ${kakaoReady ? `<div class="form-divider">지도에서 찾아 간편 등록</div>
-    <div class="place-find" data-place-find>
-      <input type="text" data-place-q placeholder="가게 이름 (예: 방배 버들카페)" aria-label="가게 이름으로 찾기" autocomplete="off" />
-      <button type="button" class="btn btn-ghost btn-sm" data-place-go>찾기</button>
+    ${kakaoReady ? `<p class="col-head">${SPARK_SVG} 지도에서 찾아 간편 등록 <span class="ai">자동</span></p>
+    <p class="col-sub">가게 이름만 치면 업체명·업종·주소·전화·좌표가 아래에 채워집니다. <b>사장님 성함과 휴대폰만 더 적으면 끝</b>입니다.</p>
+    <div class="auto-box" data-place-find>
+      <div class="place-find">
+        <input type="text" data-place-q placeholder="가게 이름 (예: 방배 버들카페)" aria-label="가게 이름으로 찾기" autocomplete="off" />
+        <button type="button" class="btn btn-ghost btn-sm" data-place-go>찾기</button>
+      </div>
+      <p data-place-msg hidden></p>
+      <ul class="place-list" data-place-list hidden></ul>
     </div>
-    <p class="panel-hint" data-place-msg hidden></p>
-    <ul class="place-list" data-place-list hidden></ul>
-    <p class="panel-hint">고르면 업체명·업종·주소·전화·좌표가 아래에 채워집니다. <b>사장님 성함과 휴대폰만 더 적으면 끝</b>입니다.</p>`
+    <p class="col-head" style="margin-top:22px">${PERSON_SVG} 또는 직접 입력</p>`
       // 키가 없다고 이 자리를 통째로 지우면, 이런 기능이 있다는 것 자체를 관리자가 알 수 없다.
       // 꺼져 있다는 사실과 켜는 방법을 한 줄로 남긴다 — 없는 것과 꺼진 것은 다르다.
       : `<p class="panel-hint">가게 이름만으로 주소·전화·업종·지도 위치를 채워 넣는 <b>지도에서 찾기</b>는 지금 꺼져 있습니다 —
       운영사가 카카오 또는 네이버 지도 키를 등록하면 이 자리에 검색 칸이 생깁니다. 그때까지는 아래에 직접 적어 주세요.</p>`}
     <form method="post" action="${base}/admin/members/add" class="stack-form">
-      <div class="form-two"><label>사장님 성함<input type="text" name="name" required maxlength="60" autocomplete="name" /></label>
-        <label>휴대폰 <small>(알림톡·연락용)</small>
+      <div class="form-two"><label>사장님 성함 <em class="tag req">필수</em><input type="text" name="name" required maxlength="60" autocomplete="name" /></label>
+        <label>휴대폰 <em class="tag opt">선택</em> <small>알림톡·연락용 · 이메일이 없으면 이 번호가 아이디</small>
           <input type="tel" name="phone" maxlength="13" inputmode="numeric" placeholder="010-0000-0000"
             autocomplete="tel" data-phone-help="id" aria-describedby="addMemberPhoneHelp" />
           <span class="field-help" id="addMemberPhoneHelp" aria-live="polite">숫자만 눌러도 자동으로 끊어집니다.</span></label></div>
-      <div class="form-two"><label>업체명<input type="text" name="business_name" data-place="name" required maxlength="100" autocomplete="organization" /></label>
-        <label>업종<select name="category" data-place="category">${CATEGORIES.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("")}</select></label></div>
-      <div class="form-two"><label>가게 주소 <small>(선택 · 지도에 뜨려면 필요합니다)</small><input type="text" name="address" data-place="address" maxlength="200" autocomplete="street-address" /></label>
-        <label>가게 전화 <small>(선택)</small><input type="tel" name="biz_phone" data-place="phone" maxlength="40" /></label></div>
-      <label>이메일 <small>(선택 · 있으면 바로 로그인할 수 있습니다)</small><input type="email" name="email" maxlength="120" autocomplete="email" /></label>
+      <div class="form-two"><label>업체명 <em class="tag req">필수</em><input type="text" name="business_name" data-place="name" required maxlength="100" autocomplete="organization" /></label>
+        <label>업종 <em class="tag req">필수</em><select name="category" data-place="category">${CATEGORIES.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("")}</select></label></div>
+      <div class="form-two"><label>가게 주소 <em class="tag opt">선택</em> <small>지도에 뜨려면 필요합니다</small><input type="text" name="address" data-place="address" maxlength="200" autocomplete="street-address" /></label>
+        <label>가게 전화 <em class="tag opt">선택</em><input type="tel" name="biz_phone" data-place="phone" maxlength="40" /></label></div>
+      <label>이메일 <em class="tag opt">선택</em> <small>있으면 바로 로그인할 수 있습니다</small><input type="email" name="email" maxlength="120" autocomplete="email" /></label>
       <input type="hidden" name="lat" data-place="lat" /><input type="hidden" name="lng" data-place="lng" />
       <button class="btn btn-primary">회원 추가</button></form>
     <p class="panel-hint">등록한 뒤 <b>[정보 채우기]</b> 에서 주소·전화·사진을 채우면 손님 화면에 제대로 뜹니다.
@@ -2139,15 +2168,26 @@ export async function admin(ctx) {
     </section>`;
   })();
 
+  // 왼쪽 메뉴 아이콘 — 글자만 일곱 줄이면 눈이 훑을 자리가 없다. 16px 선 아이콘 하나씩.
+  const I = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+  const TAB_ICO = {
+    home: I('<path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>'),
+    people: I('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7"/><path d="M17.5 14a5 5 0 0 1 4 5.5"/>'),
+    content: I('<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/>'),
+    inbox: I('<path d="M3 13l2.5-8h13L21 13v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M3 13h5l1.5 3h5L16 13h5"/>'),
+    stats: I('<path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/>'),
+    notify: I('<path d="M6 17V11a6 6 0 0 1 12 0v6l1.5 2h-15z"/><path d="M10 21a2 2 0 0 0 4 0"/>'),
+    settings: I('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'),
+  };
   const ADMIN_TABS = [
-    ["home", "현황", "", unread || 0],
-    [isEsign ? "people" : "people", isEsign ? "담당자" : "회원·점포", "", isEsign ? 0 : (s.pending || 0)],
-    ...(isEsign ? [] : [["content", isFranchise ? "가맹점·콘텐츠" : "콘텐츠", "", 0]]),
+    ["home", "현황", TAB_ICO.home, unread || 0],
+    [isEsign ? "people" : "people", isEsign ? "담당자" : "회원·점포", TAB_ICO.people, isEsign ? 0 : (s.pending || 0)],
+    ...(isEsign ? [] : [["content", isFranchise ? "가맹점·콘텐츠" : "콘텐츠", TAB_ICO.content, 0]]),
     // 문의함 — 아직 답 안 한 건수를 그대로 단다. 0 이면 배지가 없다.
-    ...(isEsign || isFranchise ? [] : [["inbox", "문의", "", inboxCounts.new || 0]]),
-    ...(isEsign || isFranchise ? [] : [["stats", "성과", "", 0]]),
-    ["notify", "알림톡", "", 0],
-    ["settings", "설정", "", 0],
+    ...(isEsign || isFranchise ? [] : [["inbox", "문의", TAB_ICO.inbox, inboxCounts.new || 0]]),
+    ...(isEsign || isFranchise ? [] : [["stats", "성과", TAB_ICO.stats, 0]]),
+    ["notify", "알림톡", TAB_ICO.notify, 0],
+    ["settings", "설정", TAB_ICO.settings, 0],
   ];
 
   // ── 며칠 기다렸는지 —— "승인 대기 3" 을 보고도 오늘 온 것인지 일주일 묵은 것인지
@@ -2171,9 +2211,9 @@ export async function admin(ctx) {
   // ── 참고 숫자 —— 매일 볼 필요 없는 것들. 예전에는 이 넷이 카드로 화면 맨 위를 차지했는데,
   // 넷이 같은 크기라 그중 손이 필요한 하나가 묻혔다. 알약 한 줄로 맨 아래로 내린다.
   const fact = (label, num, up = "") =>
-    `<span>${esc(label)} <b>${num}</b>${up ? ` <u>${esc(up)}</u>` : ""}</span>`;
+    `<div class="kpi"><span class="kpi-l">${esc(label)}</span><b class="kpi-v">${num}</b>${up ? `<u class="kpi-d">${esc(up)}</u>` : ""}</div>`;
   // 제품마다 궁금한 숫자가 다르다 — 모집 랜딩에 '가입 점포' 를 보여 줘도 쓸모가 없다
-  const factRow = `<div class="quiet-sec" id="p-stats"><p class="quiet-h">이번 주</p><p class="facts">${isEsign
+  const factRow = `<div class="kpi-sec" id="p-stats"><p class="quiet-h">이번 주</p><div class="kpi-grid">${isEsign
     ? fact("진행 중", `${openDocs.length}건`) + fact("체결 완료", `${docCount - openDocs.length}건`)
       + fact("기한 지남", `${lateDocs.length}건`) + fact("담당자", `${staffList.length}명`)
     : isFranchise
@@ -2184,7 +2224,7 @@ export async function admin(ctx) {
         + fact("가입 점포", `${Number(s.businesses).toLocaleString()}곳`, newBiz30 ? `+${newBiz30}` : "")
         + fact("올린 소식", `${(Number(s.notices) + Number(s.events)).toLocaleString()}건`)
         + fact("체결 완료", `${docCount - openDocs.length}건`)
-  }</p></div>`;
+  }</div></div>`;
 
   // ── 왼쪽 칸 = 처리할 것 · 오른쪽 칸 = 지나간 것.
   //
@@ -2255,7 +2295,25 @@ export async function admin(ctx) {
   const hotPanels = [applyHot, leadHot, signHot].filter(Boolean).join("");
   const queuePanel = hotPanels || `<p class="all-clear">지금 처리할 일이 없습니다</p>`;
 
-  const body = `<section class="dash"><div class="container">
+  // 바로 가기 — 매일 하는 일 네댓 개. 탭을 뒤지지 않고 첫 화면에서 바로 간다.
+  const quick = (href, label, sub) => `<li><a href="${href}"><b>${esc(label)}</b><small>${esc(sub)}</small></a></li>`;
+  const quickLinks = (isEsign
+    ? [quick(`${base}/admin/documents`, "계약서 만들기", "서식을 골라 바로 보냅니다"),
+       quick("#p-members", "담당자 추가", "계약을 만들 수 있는 사람"),
+       quick(`${base}/admin/templates`, "서식 관리", "자주 쓰는 계약서 틀"),
+       quick("#p-brand", "조직 정보", "이름·로고·색")]
+    : isFranchise
+      ? [quick(`${base}/admin/leads`, "상담 DB", `아직 연락 못 한 ${leads.fresh}건`),
+         quick(`${base}/admin/landing`, "랜딩페이지 편집", "문구·순서·표시 여부"),
+         quick("#p-addmember", "가맹점 추가", "지도에서 찾아 바로 등록"),
+         quick("#p-brand", "브랜드 정보", "이름·로고·색")]
+      : [quick("#p-content", "공지 올리기", "회원 모두에게 알립니다"),
+         quick("#p-addmember", "회원·점포 추가", "지도에서 찾아 바로 등록"),
+         quick("#p-popup-wrap", "홈 팝업", "기간을 정해 첫 화면에 띄웁니다"),
+         quick("#p-dues", "회비 장부", "이번 달 납부 체크"),
+         quick("#p-brand", "상인회 정보", "이름·로고·색·검색 등록")]).join("");
+
+  const body = `<section class="dash dash-shell"><div class="container">
     <div class="dash-head"><div><h1 class="dash-title">${esc(kindOf(assoc).dashTitle)}</h1></div>
       <div class="dash-head-actions">${isFranchise ? `<a href="${base}/admin/leads" class="btn btn-primary btn-sm">상담 DB ${leads.total}건</a>
         <a href="${base}/admin/landing" class="btn btn-ghost btn-sm">랜딩 편집</a>`
@@ -2278,11 +2336,16 @@ export async function admin(ctx) {
     <div class="sgroup" id="s-home" data-tab="home">
     <div class="home-sheet">
       ${queuePanel}
-      <div class="quiet-sec" id="p-notif">
-        <div class="quiet-h">최근 활동${unread ? ` <span class="side-badge">${unread}</span>` : ""}
-          ${unread ? `<form method="post" action="${base}/admin/notifications/read" class="inline-form"><button class="btn-linkish">모두 읽음</button></form>` : ""}</div>
-        <ul class="notif-list">${notifRows}</ul></div>
       ${factRow}
+      <div class="home-grid">
+      <section class="panel panel-quiet" id="p-notif">
+        <div class="panel-head"><h2 class="panel-title">최근 활동${unread ? ` <span class="side-badge">${unread}</span>` : ""}</h2>
+          ${unread ? `<form method="post" action="${base}/admin/notifications/read" class="inline-form"><button class="btn-linkish">모두 읽음</button></form>` : ""}</div>
+        <ul class="notif-list">${notifRows}</ul></section>
+      <section class="panel panel-quiet" id="p-quick">
+        <div class="panel-head"><h2 class="panel-title">바로 가기</h2></div>
+        <ul class="quick-list">${quickLinks}</ul></section>
+      </div>
     </div></div>
 
     <div class="sgroup" id="s-people" data-tab="people">
@@ -2952,6 +3015,30 @@ export async function adminBusinessEdit(ctx) {
     !b.hours && "영업시간이 없어 <b>'지금 문 연 곳'에 안 뜹니다</b>",
     (b.lat == null || b.lng == null) && "좌표가 없어 <b>지도 위 핀이 찍히지 않습니다</b>",
   ].filter(Boolean);
+  // ── 완성도 — 레퍼런스의 '프로필 완성도 100%'.
+  // 숫자 하나가 "뭐가 비었지" 를 대신 말한다. 100 이 아니면 무엇을 채워야 하는지 한 줄로 잇는다.
+  // 사진은 이 폼 밖(아래 패널)에서 올리지만 손님 화면에는 가장 크게 보이므로 완성도에 넣는다.
+  const photoCount = (await D.listMedia(db, b.id)).filter((m) => m.kind === "image").length;
+  const fields = [
+    ["업체명", !!b.name], ["업종", !!b.category], ["전화", !!b.phone], ["영업시간", !!b.hours],
+    ["주소", !!b.address], ["소개", !!b.description], ["지도 위치", b.lat != null && b.lng != null],
+    ["사진", photoCount > 0],
+  ];
+  const filled = fields.filter((f) => f[1]).length;
+  const pct = Math.round((filled / fields.length) * 100);
+  const missing = fields.filter((f) => !f[1]).map((f) => f[0]);
+  const doneBar = `<div class="finish-bar">
+    <div class="done-card">
+      <div class="done-head"><span class="done-label">${PEOPLE_SVG} 정보 완성도</span>
+        <span class="done-pct${pct < 60 ? " is-low" : ""}">${pct}%</span></div>
+      <div class="done-bar${pct < 60 ? " is-low" : ""}"><i style="width:${pct}%"></i></div>
+      <p class="done-sub">${pct === 100
+        ? `${CHECK_SVG} 손님 화면에 빠짐없이 보입니다`
+        : `${CHECK_SVG} <b>${esc(missing.slice(0, 3).join(" · "))}</b>${missing.length > 3 ? ` 외 ${missing.length - 3}개` : ""} 를 채우면 지도·검색에 다 뜹니다`}</p>
+      ${gaps.length ? `<ul class="done-gaps">${gaps.map((g) => `<li><span>${g}</span></li>`).join("")}</ul>` : ""}
+    </div>
+    <button class="btn btn-cta">저장 ${ARROW_SVG}</button>
+  </div>`;
   // ── 사진·영상 —— 사장님이 카톡으로 보내 온 것을 관리자가 대신 올린다.
   // 지도에서 긁어 오지 않는다: 그 사진들은 사장님·손님·플랫폼이 각각 찍은 남의 저작물이라,
   // 우리 서버에 복사해 우리 페이지에 거는 순간 재배포가 된다. 링크(네이버 플레이스)는 괜찮다.
@@ -3043,7 +3130,17 @@ export async function adminBusinessEdit(ctx) {
       ${noLogin ? `<div class="form-divider">또는 이메일로</div>
       <form method="post" action="${base}/admin/business/${b.id}/owner-email" class="stack-form compact">
         <label>사장님 이메일<input type="email" name="email" required maxlength="120" autocomplete="email" placeholder="사장님이 쓰시는 이메일" /></label>
-        <button class="btn btn-primary btn-sm">지정하고 임시 비밀번호 발급</button></form>` : ""}</section>`;
+        <button class="btn btn-primary btn-sm">지정하고 임시 비밀번호 발급</button></form>` : ""}
+      <div class="form-divider">상인회 임원</div>
+      <p class="panel-hint">임원으로 두면 게시판의 <b>임원 전용 글</b>을 볼 수 있고, 글을 쓸 때
+        공개 범위를 고를 수 있습니다. 그 밖의 권한(회원 승인·설정 변경 등)은 <b>바뀌지 않습니다</b> —
+        관리 권한이 필요하시면 운영사에 문의해 주세요.</p>
+      <form method="post" action="${base}/admin/user/${owner.id}/officer" class="inline-form">
+        <input type="hidden" name="on" value="${Number(owner.officer) === 1 ? "0" : "1"}" />
+        <button class="btn btn-${Number(owner.officer) === 1 ? "ghost" : "outline"} btn-sm">${
+          Number(owner.officer) === 1 ? "임원에서 내리기" : "임원으로 지정"}</button>
+        <span class="badge ${Number(owner.officer) === 1 ? "badge-ok" : "badge-muted"}">${
+          Number(owner.officer) === 1 ? "임원" : "일반 회원"}</span></form></section>`;
 
   const body = `<section class="dash"><div class="container">
     <div class="dash-head"><div><p class="section-eyebrow"><a href="${base}/admin#s-people">← 회원·점포</a></p>
@@ -3055,45 +3152,57 @@ export async function adminBusinessEdit(ctx) {
         : "· 연결된 사장님 계정 없음"}</p></div>
       <div class="dash-head-actions">${b.status === "approved" ? `<a class="btn btn-ghost btn-sm" href="${base}/business/${esc(b.slug)}" target="_blank">가게 페이지 보기 ↗</a>` : ""}</div>
     </div>${flashOf(query)}
-    ${gaps.length ? `<div class="flash flash-warn"><b>아직 덜 채운 것</b><ul class="gap-list">${gaps.map((g) => `<li>${g}</li>`).join("")}</ul></div>` : ""}
     ${ownerLoginPanel}
     <section class="panel">
       <h2 class="panel-title">가게 정보</h2>
       <p class="panel-hint">사장님 대신 채워 두는 자리입니다. 사장님이 로그인하면 자기 화면에서 이어서 고칠 수 있습니다.</p>
-      ${kakaoOn ? `<div class="form-divider">지도에서 찾아 채우기</div>
-      <div class="place-find" data-place-find>
-        <input type="text" data-place-q value="${esc(b.name)}" placeholder="가게 이름 (예: 방배 버들카페)" aria-label="가게 이름으로 찾기" autocomplete="off" />
-        <button type="button" class="btn btn-ghost btn-sm" data-place-go>찾기</button>
-      </div>
-      <p class="panel-hint" data-place-msg hidden></p>
-      <ul class="place-list" data-place-list hidden></ul>
-      <p class="panel-hint">카카오맵에서 찾은 값을 아래 칸에 채워 넣습니다. <b>저장은 확인하고 직접 누르셔야 합니다</b> — 지도의 정보가 늘 최신인 것은 아닙니다.</p>`
-        : `<p class="panel-hint">지도에서 자동으로 채우는 기능은 운영사가 카카오 또는 네이버 지도 키를 등록하면 열립니다.</p>`}
       <form method="post" action="${base}/admin/business/${b.id}" class="stack-form">
-        <label>업체명<input type="text" name="name" data-place="name" value="${esc(b.name)}" required maxlength="100" autocomplete="organization" /></label>
-        <label>업종<select name="category" data-place="category">${opts}</select></label>
-        <div class="form-two">
-          <label>전화<input type="tel" name="phone" data-place="phone" value="${esc(b.phone || "")}" maxlength="40" autocomplete="tel" /></label>
-          <label>영업시간 <small>(예: 10:00-21:00 · 일요일 휴무)</small><input type="text" name="hours" id="bizHours" value="${esc(b.hours || "")}" maxlength="100" /></label>
+      <div class="split-even">
+        <div class="dash-col">
+          <p class="col-head">${SPARK_SVG} 지도에서 찾아 자동 입력${kakaoOn ? ` <span class="ai">자동</span>` : ""}</p>
+          <p class="col-sub">${kakaoOn
+            ? "가게 이름만 치면 주소·전화·업종·지도 위치를 찾아 오른쪽에 채워 드릴게요"
+            : "운영사가 카카오 또는 네이버 지도 키를 등록하면 이 자리에 검색 칸이 생깁니다"}</p>
+          ${kakaoOn ? `<div class="auto-box" data-place-find>
+            <div class="place-find">
+              <input type="text" data-place-q value="${esc(b.name)}" placeholder="가게 이름 (예: 방배 버들카페)" aria-label="가게 이름으로 찾기" autocomplete="off" />
+              <button type="button" class="btn btn-ghost btn-sm" data-place-go>찾기</button>
+            </div>
+            <p data-place-msg hidden></p>
+            <ul class="place-list" data-place-list hidden></ul>
+          </div>
+          <p class="panel-hint" style="margin-top:12px">찾은 값은 오른쪽 칸에 채워집니다. <b>저장은 확인하고 직접 누르셔야 합니다</b> — 지도의 정보가 늘 최신인 것은 아닙니다.</p>`
+          : `<p class="panel-hint">지도에서 자동으로 채우는 기능은 운영사가 카카오 또는 네이버 지도 키를 등록하면 열립니다.</p>`}
         </div>
-        <label>주소<input type="text" name="address" data-place="address" value="${esc(b.address || "")}" maxlength="200" autocomplete="street-address" /></label>
-        <label>소개<textarea name="description" rows="4" maxlength="2000">${esc(b.description || "")}</textarea></label>
-        <label>네이버 플레이스 <small>(선택 · 리뷰·길찾기 연결)</small>
-          <input type="url" name="sns_naver" value="${esc(b.sns_naver || "")}" placeholder="naver.me/…" /></label>
-        <div class="form-divider">유어딜 (이용권 판매)</div>
-        <p class="panel-hint">이 가게가 유어딜에서 이용권을 팔고 있으면 <b>가게 번호</b>를 넣어 주세요.
-          그러면 그 이용권이 상인회 홈의 <b>우리 골목 이용권</b> 자리에 자동으로 걸립니다.
-          번호는 유어딜 가게 화면 주소 끝의 숫자입니다 (예: live.ur-team.com/seller/<b>128</b> → 128).
-          안 팔면 비워 두세요.</p>
-        <label>유어딜 가게 번호 <small>(선택)</small>
-          <input type="text" inputmode="numeric" name="urdeal_seller_id" maxlength="12"
-            value="${b.urdeal_seller_id ? esc(String(b.urdeal_seller_id)) : ""}" placeholder="예: 128" /></label>
-        <div class="form-divider">지도 위치</div>
-        <div class="form-two">
-          <label>위도<input type="text" inputmode="decimal" name="lat" data-place="lat" value="${b.lat != null ? esc(String(b.lat)) : ""}" /></label>
-          <label>경도<input type="text" inputmode="decimal" name="lng" data-place="lng" value="${b.lng != null ? esc(String(b.lng)) : ""}" /></label>
+        <div class="dash-col">
+          <p class="col-head">${PERSON_SVG} 또는 직접 입력</p>
+          <p class="col-sub">지도에 없는 가게라면 여기에 직접 적어 주세요. 찾은 값을 고칠 수도 있어요</p>
+          <label>업체명 <em class="tag req">필수</em><input type="text" name="name" data-place="name" value="${esc(b.name)}" required maxlength="100" autocomplete="organization" /></label>
+          <label>업종 <em class="tag req">필수</em><select name="category" data-place="category">${opts}</select></label>
+          <div class="form-two">
+            <label>전화 <em class="tag opt">선택</em><input type="tel" name="phone" data-place="phone" value="${esc(b.phone || "")}" maxlength="40" autocomplete="tel" /></label>
+            <label>영업시간 <em class="tag opt">선택</em> <small>예: 10:00-21:00 · 일요일 휴무</small><input type="text" name="hours" id="bizHours" value="${esc(b.hours || "")}" maxlength="100" /></label>
+          </div>
+          <label>주소 <em class="tag opt">선택</em> <small>지도에 뜨려면 필요합니다</small><input type="text" name="address" data-place="address" value="${esc(b.address || "")}" maxlength="200" autocomplete="street-address" /></label>
+          <label>어떤 가게인가요? <em class="tag opt">선택</em><textarea name="description" rows="4" maxlength="2000" placeholder="대표 메뉴, 자랑거리, 손님께 한마디">${esc(b.description || "")}</textarea></label>
+          <label>네이버 플레이스 <em class="tag opt">선택</em> <small>리뷰·길찾기 연결</small>
+            <input type="url" name="sns_naver" value="${esc(b.sns_naver || "")}" placeholder="naver.me/…" /></label>
+          <div class="form-divider">유어딜 (이용권 판매)</div>
+          <p class="panel-hint">이 가게가 유어딜에서 이용권을 팔고 있으면 <b>가게 번호</b>를 넣어 주세요.
+            그러면 그 이용권이 상인회 홈의 <b>우리 골목 이용권</b> 자리에 자동으로 걸립니다.
+            번호는 유어딜 가게 화면 주소 끝의 숫자입니다 (예: live.ur-team.com/seller/<b>128</b> → 128).
+            안 팔면 비워 두세요.</p>
+          <label>유어딜 가게 번호 <em class="tag opt">선택</em>
+            <input type="text" inputmode="numeric" name="urdeal_seller_id" maxlength="12"
+              value="${b.urdeal_seller_id ? esc(String(b.urdeal_seller_id)) : ""}" placeholder="예: 128" /></label>
+          <div class="form-divider">지도 위치</div>
+          <div class="form-two">
+            <label>위도 <em class="tag opt">선택</em><input type="text" inputmode="decimal" name="lat" data-place="lat" value="${b.lat != null ? esc(String(b.lat)) : ""}" /></label>
+            <label>경도 <em class="tag opt">선택</em><input type="text" inputmode="decimal" name="lng" data-place="lng" value="${b.lng != null ? esc(String(b.lng)) : ""}" /></label>
+          </div>
         </div>
-        <button class="btn btn-primary">저장</button>
+      </div>
+      ${doneBar}
       </form></section>
     ${mediaPanel}
     </div></section>`;
@@ -4618,7 +4727,7 @@ export async function superConsole(ctx) {
   // 제품이 셋이므로 "몇 곳"만으로는 무엇을 파는 회사인지 화면에서 읽히지 않는다.
   const kindCounts = KIND_KEYS.map((k) => [k, KINDS[k].label, list.filter((a) => (a.kind || "merchant") === k).length])
     .filter(([, , n]) => n > 0);
-  const body = `<section class="dash"><div class="container">
+  const body = `<section class="dash dash-shell"><div class="container">
     <div class="dash-head"><div><h1 class="dash-title">운영사 콘솔</h1>
       <p class="dash-sub">고객사 ${ps.associations}곳 · 사용자 ${ps.users}명 — ${kindCounts.map(([, label, n]) => `${esc(label)} ${n}`).join(" · ")}</p></div>
       <div class="dash-head-actions"><a href="#new-assoc" class="btn btn-primary btn-sm" data-goto="home">＋ 새 조직</a></div></div>${flashOf(query)}
