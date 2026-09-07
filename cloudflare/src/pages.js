@@ -1082,17 +1082,20 @@ export async function board(ctx) {
   const { db, assoc, base, user, query, csrf } = ctx;
   const page = parseInt(query.get("page") || "1", 10) || 1;
   const q = (query.get("q") || "").trim().slice(0, 60);
-  const { items, total, page: cur, pages } = await D.listPostsPaged(db, assoc.id, { page, q: q || null });
+  // 임원인가 — 회장은 표시가 없어도 늘 임원으로 본다
+  const officer = D.canSeeOfficer(user);
+  const { items, total, page: cur, pages } = await D.listPostsPaged(db, assoc.id, { page, q: q || null, officer });
   const rows = items.length ? items.map((p) => {
     const thumb = p.pi_thumb || p.pi_file || p.image;
     const cnt = (p.image_count || 0) + (p.image ? 1 : 0);
     return `<li class="board-row${p.pinned ? " pinned" : ""}">${p.pinned ? `<span class="board-pin">고정</span>` : ""}
       ${thumb ? `<a href="${base}/board/${p.id}" class="board-thumb"><img src="${esc(mediaUrl(thumb))}" alt="" loading="lazy" /></a>` : ""}
-      <a href="${base}/board/${p.id}" class="board-title">${esc(p.title)}${cnt ? ` <span class="board-clip">사진 ${cnt}</span>` : ""}</a>
+      <a href="${base}/board/${p.id}" class="board-title">${p.audience === "officer" ? `<span class="board-only">임원</span> ` : ""}${esc(p.title)}${cnt ? ` <span class="board-clip">사진 ${cnt}</span>` : ""}</a>
       <span class="board-meta">${esc(p.author_name || "(탈퇴)")} · ${esc(kstDate(p.created_at, "."))}${p.comment_count ? ` · 댓글 ${p.comment_count}` : ""}</span></li>`;
   }).join("") : `<li class="empty">${q ? "검색 결과가 없습니다." : "아직 게시글이 없습니다."}</li>`;
   const body = `<section class="section page-top"><div class="container">
-    <div class="section-head"><h1 class="section-title">회원 게시판</h1><p class="section-lead">글 ${total}개</p></div>
+    <div class="section-head"><h1 class="section-title">회원 게시판</h1>
+      <p class="section-lead">글 ${total}개${officer ? " · <b>임원 전용 글까지 보고 있습니다</b>" : ""}</p></div>
     ${flashOf(query)}
     <form method="get" action="${base}/board" class="board-search"><input type="search" name="q" value="${esc(q)}" placeholder="제목·내용 검색"><button class="btn btn-ghost btn-sm">검색</button></form>
     <section class="panel"><h2 class="panel-title">새 글 쓰기</h2>
@@ -1100,6 +1103,12 @@ export async function board(ctx) {
         <input type="text" name="title" placeholder="제목" required maxlength="200" />
         <textarea name="body" rows="4" placeholder="내용" required></textarea>
         <label class="file-inline">사진 첨부 <small>(선택 · 최대 6장)</small><input type="file" name="images" accept="image/*" multiple /><span class="fi-btn">사진 고르기<span class="fi-name"></span></span></label>
+        ${officer ? `<fieldset class="aud-pick"><legend>누가 볼 수 있나요?</legend>
+          <label class="aud-opt"><input type="radio" name="audience" value="all" checked />
+            <span><b>회원 전체</b><small>상인회 회원 누구나 봅니다</small></span></label>
+          <label class="aud-opt"><input type="radio" name="audience" value="officer" />
+            <span><b>임원만</b><small>일반 회원에게는 목록에도 안 보입니다</small></span></label>
+        </fieldset>` : ""}
         <button class="btn btn-primary btn-sm">등록</button></form></section>
     <ul class="board-list">${rows}</ul>
     ${pager((i) => `${base}/board${qs({ q, page: i })}`, cur, pages)}</div></section>`;
@@ -1109,6 +1118,9 @@ export async function postDetail(ctx) {
   const { db, assoc, base, user, params, query, csrf } = ctx;
   const p = await D.getPost(db, Number(params.id));
   if (!p || p.association_id !== assoc.id) return notFoundResponse(ctx);
+  // 목록에서 걸러 냈어도 주소를 직접 치면 열린다 — 여기서 한 번 더 막는다.
+  // 없는 글처럼 답한다: "임원 전용입니다" 라고 알려 주면 '무슨 글이 있다' 는 사실이 새어 나간다.
+  if (p.audience === "officer" && !D.canSeeOfficer(user)) return notFoundResponse(ctx);
   const comments = await D.listComments(db, p.id);
   const imgs = await D.listPostImages(db, p.id);
   const mod = canModerate(user, assoc), isAuthor = user && p.author_id === user.id;
@@ -1123,6 +1135,7 @@ export async function postDetail(ctx) {
   const body = `<section class="section page-top"><div class="container narrow">
     <a href="${base}/board" class="back-link">← 게시판</a>
     <div class="article-head">${p.pinned ? `<span class="notice-tag tag-important">고정</span>` : ""}<time>${esc(kstStamp(p.created_at))}</time></div>
+    ${p.audience === "officer" ? `<p class="post-only">임원만 볼 수 있는 글입니다 — 일반 회원에게는 목록에도 안 보입니다.</p>` : ""}
     <h1 class="article-title">${esc(p.title)}</h1>
     <p class="post-author">작성자: ${esc(p.author_name || "(탈퇴)")}${p.updated_at ? ` · <span class="post-edited">수정됨</span>` : ""}</p>
     <div class="article-body">${esc(p.body).replace(/\n/g, "<br />")}</div>
@@ -1141,6 +1154,7 @@ export async function editPost(ctx) {
   const { db, assoc, base, user, params, query, csrf } = ctx;
   const p = await D.getPost(db, Number(params.id));
   if (!p || p.association_id !== assoc.id) return notFoundResponse(ctx);
+  if (p.audience === "officer" && !D.canSeeOfficer(user)) return notFoundResponse(ctx);
   if (!(canModerate(user, assoc) || (user && p.author_id === user.id))) return notFoundResponse(ctx);
   const imgs = await D.listPostImages(db, p.id);
   const existing = (imgs.length || p.image) ? `<div class="edit-images"><p class="mini-label">현재 사진 <small>(삭제할 사진 체크)</small></p><div class="edit-thumbs">
@@ -1154,6 +1168,12 @@ export async function editPost(ctx) {
       <label>내용<textarea name="body" rows="8" required>${esc(p.body)}</textarea></label>
       ${existing}
       <label class="file-inline">사진 추가 <small>(총 6장까지)</small><input type="file" name="images" accept="image/*" multiple /><span class="fi-btn">사진 고르기<span class="fi-name"></span></span></label>
+      ${D.canSeeOfficer(user) ? `<fieldset class="aud-pick"><legend>누가 볼 수 있나요?</legend>
+        <label class="aud-opt"><input type="radio" name="audience" value="all"${p.audience === "officer" ? "" : " checked"} />
+          <span><b>회원 전체</b><small>상인회 회원 누구나 봅니다</small></span></label>
+        <label class="aud-opt"><input type="radio" name="audience" value="officer"${p.audience === "officer" ? " checked" : ""} />
+          <span><b>임원만</b><small>일반 회원에게는 목록에도 안 보입니다</small></span></label>
+      </fieldset>` : ""}
       <div class="post-actions"><button class="btn btn-primary">저장</button><a href="${base}/board/${p.id}" class="btn btn-ghost">취소</a></div>
     </form></div></section>`;
   return html(layout({ title: "글 수정", assoc, base, user, body, activeNav: `${base}/board`, csrf, scripts: `<script src="${assetUrl("/js/upload-resize.js")}" defer></script><script src="${assetUrl("/js/file-preview.js")}" defer></script>` }));
@@ -3043,7 +3063,17 @@ export async function adminBusinessEdit(ctx) {
       ${noLogin ? `<div class="form-divider">또는 이메일로</div>
       <form method="post" action="${base}/admin/business/${b.id}/owner-email" class="stack-form compact">
         <label>사장님 이메일<input type="email" name="email" required maxlength="120" autocomplete="email" placeholder="사장님이 쓰시는 이메일" /></label>
-        <button class="btn btn-primary btn-sm">지정하고 임시 비밀번호 발급</button></form>` : ""}</section>`;
+        <button class="btn btn-primary btn-sm">지정하고 임시 비밀번호 발급</button></form>` : ""}
+      <div class="form-divider">상인회 임원</div>
+      <p class="panel-hint">임원으로 두면 게시판의 <b>임원 전용 글</b>을 볼 수 있고, 글을 쓸 때
+        공개 범위를 고를 수 있습니다. 그 밖의 권한(회원 승인·설정 변경 등)은 <b>바뀌지 않습니다</b> —
+        관리 권한이 필요하시면 운영사에 문의해 주세요.</p>
+      <form method="post" action="${base}/admin/user/${owner.id}/officer" class="inline-form">
+        <input type="hidden" name="on" value="${Number(owner.officer) === 1 ? "0" : "1"}" />
+        <button class="btn btn-${Number(owner.officer) === 1 ? "ghost" : "outline"} btn-sm">${
+          Number(owner.officer) === 1 ? "임원에서 내리기" : "임원으로 지정"}</button>
+        <span class="badge ${Number(owner.officer) === 1 ? "badge-ok" : "badge-muted"}">${
+          Number(owner.officer) === 1 ? "임원" : "일반 회원"}</span></form></section>`;
 
   const body = `<section class="dash"><div class="container">
     <div class="dash-head"><div><p class="section-eyebrow"><a href="${base}/admin#s-people">← 회원·점포</a></p>

@@ -832,20 +832,34 @@ export const deletePopup = (db, id) => run(db, "DELETE FROM popups WHERE id=?", 
 export const setPopupEnabled = (db, id, on) => run(db, "UPDATE popups SET enabled=? WHERE id=?", on ? 1 : 0, id);
 
 // ----- Board -----
+// 임원 글을 볼 수 있는 사람인가.
+//
+// 회장(ADMIN)과 운영사는 표시가 없어도 늘 볼 수 있다 — 회장이 자기가 쓴 임원 글을
+// 못 보면 그건 버그로 신고된다. 일반 회원은 officer 표시가 있어야 본다.
+export const canSeeOfficer = (user) =>
+  !!user && (user.role === "SUPERADMIN" || user.role === "ADMIN" || Number(user.officer) === 1);
+
 export const getPost = (db, id) =>
   first(db, "SELECT p.*, u.name AS author_name FROM posts p LEFT JOIN users u ON u.id=p.author_id WHERE p.id=?", id);
-export async function createPost(db, { associationId, authorId, title, body, image = "" }) {
-  await run(db, "INSERT INTO posts (association_id, author_id, title, body, image) VALUES (?,?,?,?,?)",
-    associationId, authorId, title, body || "", image || "");
+export async function createPost(db, { associationId, authorId, title, body, image = "", audience = "all" }) {
+  await run(db, "INSERT INTO posts (association_id, author_id, title, body, image, audience) VALUES (?,?,?,?,?,?)",
+    associationId, authorId, title, body || "", image || "", audience === "officer" ? "officer" : "all");
   return getPost(db, await lastId(db));
 }
-export const updatePost = (db, id, { title, body, image }) =>
-  run(db, "UPDATE posts SET title=?, body=?, image=?, updated_at=datetime('now') WHERE id=?", title, body || "", image || "", id);
+export const updatePost = (db, id, { title, body, image, audience }) =>
+  run(db, "UPDATE posts SET title=?, body=?, image=?, audience=?, updated_at=datetime('now') WHERE id=?",
+    title, body || "", image || "", audience === "officer" ? "officer" : "all", id);
+// 임원 표시 켜고 끄기 — 회장이 명단에서 누른다
+export const setUserOfficer = (db, id, aid, on) =>
+  run(db, "UPDATE users SET officer=? WHERE id=? AND association_id=?", on ? 1 : 0, id, aid);
 export const setPostPinned = (db, id, p) => run(db, "UPDATE posts SET pinned=? WHERE id=?", p ? 1 : 0, id);
 export const deletePost = (db, id) => run(db, "DELETE FROM posts WHERE id=?", id);
-export async function listPostsPaged(db, aid, { page = 1, perPage = 15, q = null } = {}) {
+export async function listPostsPaged(db, aid, { page = 1, perPage = 15, q = null, officer = false } = {}) {
   let w = " WHERE p.association_id = ?"; const a = [aid];
   let cw = " WHERE association_id = ?"; const ca = [aid];
+  // 임원이 아니면 임원 글을 **SQL 에서** 걷어낸다. 화면에서 숨기면 총 건수와 쪽수가
+  // 어긋나 "3건이라는데 2개만 보인다" 가 되고, 무엇보다 주소를 직접 치면 그대로 보인다.
+  if (!officer) { w += " AND p.audience = 'all'"; cw += " AND audience = 'all'"; }
   if (q) { const l = likeParam(q); w += " AND (p.title LIKE ? ESCAPE '\\' OR p.body LIKE ? ESCAPE '\\')"; a.push(l, l); cw += " AND (title LIKE ? ESCAPE '\\' OR body LIKE ? ESCAPE '\\')"; ca.push(l, l); }
   const total = (await first(db, "SELECT COUNT(*) AS n FROM posts" + cw, ...ca)).n;
   const pages = Math.max(1, Math.ceil(total / perPage));

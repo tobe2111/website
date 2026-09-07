@@ -961,7 +961,10 @@ export async function createPost(ctx) {
   if (!title || !body) return back(base + "/board", "제목과 내용을 입력하세요.", true);
   const up = await saveImages(env, form.getAll("images"), BOARD_MAX_IMAGES);
   if (up.error) return back(base + "/board", up.error, true);
-  const p = await D.createPost(db, { associationId: assoc.id, authorId: user.id, title, body });
+  // 공개 범위는 **임원만** 정할 수 있다. 일반 회원이 폼을 고쳐 officer 를 보내도 무시한다 —
+  // 화면에서 칸을 안 보여 주는 것은 안내이지 방어가 아니다.
+  const audience = D.canSeeOfficer(user) && form.get("audience") === "officer" ? "officer" : "all";
+  const p = await D.createPost(db, { associationId: assoc.id, authorId: user.id, title, body, audience });
   if (up.images.length) await D.addPostImages(db, p.id, up.images);
   return back(base + "/board/" + p.id, "글을 등록했습니다.");
 }
@@ -969,6 +972,8 @@ export async function updatePost(ctx) {
   const { db, env, form, user, base, assoc, params } = ctx;
   const p = await D.getPost(db, Number(params.id));
   if (!p || p.association_id !== assoc.id) return back(base + "/board", "게시글을 찾을 수 없습니다.", true);
+  // 임원 글은 볼 수 있는 사람만 손댈 수 있다 — 못 보는 글을 고칠 수는 없어야 한다
+  if (p.audience === "officer" && !D.canSeeOfficer(user)) return back(base + "/board", "게시글을 찾을 수 없습니다.", true);
   if (!(canModerateBoard(user, assoc) || p.author_id === user.id)) return back(base + "/board/" + p.id, "수정 권한이 없습니다.", true);
   const editUrl = base + "/board/" + p.id + "/edit";
   const title = cap((form.get("title") || "").trim(), 200), body = cap((form.get("body") || "").trim(), 10000);
@@ -983,7 +988,10 @@ export async function updatePost(ctx) {
   let imageKey = p.image;
   if (form.get("remove_image") === "1" && p.image) { await storage.remove(env, p.image); imageKey = ""; }
   if (up.images.length) await D.addPostImages(db, p.id, up.images);
-  await D.updatePost(db, p.id, { title, body, image: imageKey });
+  // 고칠 때도 임원만 범위를 바꾼다. 일반 회원이 고치면 원래 범위를 그대로 지킨다 —
+  // 값을 안 보내면 'all' 로 떨어져 임원 글이 조용히 공개되기 때문이다.
+  const audience = D.canSeeOfficer(user) ? (form.get("audience") === "officer" ? "officer" : "all") : p.audience;
+  await D.updatePost(db, p.id, { title, body, image: imageKey, audience });
   return back(base + "/board/" + p.id, "글을 수정했습니다.");
 }
 export async function deletePost(ctx) {
@@ -2840,6 +2848,23 @@ export async function verifyInviteToken(secret, token, assocId) {
   if (!data || data.a !== assocId || !data.x || Date.now() > data.x) return null;
   return data;
 }
+// 임원 지정 — 게시판의 임원 전용 글을 볼 수 있게 한다.
+//
+// ⚠️ 이것은 **읽기 범위**만 바꾼다. 회원 승인·설정 변경 같은 관리 권한은 role 이 정하고,
+//    여기서는 손대지 않는다. 둘을 한 단추에 묶으면 "게시판 좀 보게 해 주세요" 가
+//    관리자 권한 부여가 되어 버린다.
+export async function adminSetOfficer(ctx) {
+  const { db, form, base, assoc, params } = ctx;
+  const u = await D.getUserById(db, Number(params.id) || 0);
+  if (!u || u.association_id !== assoc.id) return back(`${base}/admin`, "회원을 찾을 수 없습니다.", true);
+  const on = form.get("on") === "1";
+  await D.setUserOfficer(db, u.id, assoc.id, on);
+  await audit(ctx, on ? "임원지정" : "임원해제", u.name || u.email);
+  const b = await D.getBusinessByOwner(db, u.id);
+  return back(b ? `${base}/admin/business/${b.id}` : `${base}/admin`,
+    on ? `${u.name || "회원"}님을 임원으로 지정했습니다.` : `${u.name || "회원"}님을 임원에서 내렸습니다.`);
+}
+
 // ---------- 사장님 사진 요청 링크 ----------
 //
 // 사진을 모으는 유일하게 깨끗한 길이다. 지도에서 긁어 오는 것은 남의 저작물이고, 웹 이미지

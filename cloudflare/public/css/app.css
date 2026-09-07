@@ -3340,3 +3340,17 @@ a.deal-card:hover{border-color:var(--deal);transition:border-color .18s}
 .file-drop-lg{padding:44px 20px;border-width:2px}
 .file-drop-lg .file-drop-text{font-size:1.15rem;font-weight:700;color:var(--ink)}
 .file-drop-lg .file-drop-text small{display:block;margin-top:8px;font-size:.88rem;font-weight:400;color:var(--muted)}
+
+/* 임원 전용 글 —— 지금 보는 글이 **회원들에게는 안 보인다**는 것을 쓰는 사람이 알아야 한다.
+   모르면 공지를 임원 게시판에 써 놓고 "왜 아무도 안 보냐" 가 된다. */
+.board-only{display:inline-block;font-size:.72rem;font-weight:700;vertical-align:1px;
+  color:var(--wait-fg);background:var(--wait-bg);border-radius:4px;padding:1px 6px;margin-right:2px}
+.post-only{display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:9px 13px;border-radius:var(--r-sm,8px);
+  font-size:.88rem;font-weight:600;color:var(--wait-fg);background:var(--wait-bg)}
+/* 공개 범위 고르기 — 라디오를 글자와 함께 큰 덩어리로 눌리게 (엄지로 누르는 화면) */
+.aud-pick{border:1px solid var(--line-soft);border-radius:var(--r-md);padding:12px 14px 6px;margin:0}
+.aud-pick legend{font-size:.86rem;font-weight:700;padding:0 4px}
+.aud-opt{display:flex;align-items:flex-start;gap:10px;padding:9px 2px;cursor:pointer;min-height:44px}
+.aud-opt input{margin-top:3px;width:18px;height:18px;accent-color:var(--brand);flex:none}
+.aud-opt b{display:block;font-size:.94rem;font-weight:600}
+.aud-opt small{display:block;margin-top:2px;font-size:.82rem;color:var(--muted);line-height:1.5}
