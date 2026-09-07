@@ -98,3 +98,37 @@ test("콘솔에 표와 도구줄이 있고, 새 공지 폼은 접혀 있다", as
   assert.match(html, /class="fold-write"[\s\S]{0,80}새 공지 쓰기/, "쓰기는 접힌 자리에서 연다");
   assert.match(html, /form="noticeBulk"/, "체크 상자가 도구줄의 폼에 이어져야");
 });
+
+// ── 행사도 같은 방식 ──
+// 공지만 표로 바꾸고 바로 옆 행사는 옛 방식으로 두면, 한 화면에 두 가지 조작법이 섞인다.
+test("행사도 고른 것만 한 번에 지운다 — 참가 신청도 함께", async () => {
+  const env = makeEnv(); const { a } = await seed(env);
+  const e1 = await D.createEvent(env.DB, { associationId: a.id, title: "가을 축제", event_date: "2026-10-01", place: "골목 광장" });
+  const e2 = await D.createEvent(env.DB, { associationId: a.id, title: "대청소", event_date: "2026-10-08", place: "입구" });
+  const j = await login(env);
+  await post(env, j, "/t/bb/admin/events/bulk", { act: "delete", ids: [String(e1.id)] }, "/t/bb/admin");
+  const left = await D.listEvents(env.DB, a.id);
+  assert.equal(left.length, 1);
+  assert.equal(left[0].id, e2.id, "고르지 않은 행사는 남아야");
+});
+
+test("남의 상인회 행사는 번호를 보내도 지워지지 않는다", async () => {
+  const env = makeEnv(); await seed(env);
+  const other = await D.createAssociation(env.DB, { slug: "gn2", name: "강남 상인회", kind: "merchant" });
+  const foreign = await D.createEvent(env.DB, { associationId: other.id, title: "남의 행사", event_date: "2026-10-01" });
+  const j = await login(env);
+  await post(env, j, "/t/bb/admin/events/bulk", { act: "delete", ids: [String(foreign.id)] }, "/t/bb/admin");
+  assert.equal((await D.listEvents(env.DB, other.id)).length, 1, "남의 상인회 행사가 지워지면 안 된다");
+});
+
+test("공지와 행사가 같은 조작법을 쓴다 — 한 화면에 두 방식이 섞이지 않게", async () => {
+  const env = makeEnv(); const { a } = await seed(env);
+  await D.createEvent(env.DB, { associationId: a.id, title: "가을 축제", event_date: "2026-10-01" });
+  const j = await login(env);
+  const html = await (await get(env, j, "/t/bb/admin")).text();
+  assert.match(html, /form="noticeBulk"/, "공지 표");
+  assert.match(html, /form="eventBulk"/, "행사도 같은 표");
+  // 콘텐츠 탭 안(공지·행사)만 본다 — 팝업·문의함은 아직 옛 목록을 쓰고, 그건 이번 범위가 아니다
+  const tab = html.slice(html.indexOf('id="p-content"'), html.indexOf('id="p-popup-wrap"'));
+  assert.doesNotMatch(tab, /class="admin-mini-list"/, "공지·행사에 옛 목록이 남아 있으면 안 된다");
+});

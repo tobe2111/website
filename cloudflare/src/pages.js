@@ -487,11 +487,7 @@ export async function adminLanding(ctx) {
     <form method="post" action="${base}/admin/landing/asset/${a.id}/delete" data-confirm="이 사진을 지울까요?&#10;섹션에 넣어 둔 곳이 있으면 사진이 사라집니다."><button class="link-danger">삭제</button></form>
   </li>`).join("") : `<li class="empty">아직 올린 사진이 없습니다.</li>`;
 
-  const body = `<section class="dash"><div class="container">
-    <div class="dash-head"><div><p class="section-eyebrow">모집 랜딩 · ${esc(assoc.name)}</p><h1 class="dash-title">랜딩페이지 편집</h1>
-      <p class="dash-sub">공개 주소: <a href="${publicUrl}" target="_blank">${esc(prettyPath(publicUrl))}</a>${hasDraft ? ` · <b class="draft-mark">발행되지 않은 수정본 있음</b>` : ""}</p></div>
-      <div class="dash-head-actions"><a href="${base}/admin/leads" class="btn btn-primary btn-sm">상담 DB ${stats.total}건</a>
-        <a href="${base}/admin" class="btn btn-ghost btn-sm">관리자</a></div></div>
+  const inner = `
     ${flashOf(query)}
     ${assoc.kind === "franchise" ? "" : `<div class="flash flash-warn">이 조직의 유형이 <b>프랜차이즈</b>가 아니라서, 발행해도 공개 홈에는 이 랜딩이 아닌 기존 홈페이지가 나옵니다.
       유형은 플랫폼 운영자가 바꿔 드립니다.</div>`}
@@ -538,7 +534,8 @@ export async function adminLanding(ctx) {
       <form method="post" action="${base}/admin/landing/retention" class="stack-form compact">
         <label>보관 기간 <small>(일)</small><input type="number" name="days" value="${retention}" min="30" max="3650" required /></label>
         <button class="btn btn-primary btn-sm">저장</button></form></section>
-  </div></section>`;
+  `;
+  const body = await consoleShell(ctx, { title: "랜딩페이지 편집", sub: `공개 주소: <a href="${publicUrl}" target="_blank">${esc(prettyPath(publicUrl))}</a>${hasDraft ? ` · <b class="draft-mark">발행되지 않은 수정본 있음</b>` : ""}`, actions: `<a href="${base}/admin/leads" class="btn btn-primary btn-sm">상담 DB ${stats.total}건</a>`, active: "landing", body: inner });
   return html(layout({ title: "랜딩페이지 편집", assoc, base, user, body, csrf,
     scripts: `<script src="${assetUrl("/js/layout-editor.js")}" defer></script><script src="${assetUrl("/js/upload-resize.js")}" defer></script>` }));
 }
@@ -623,11 +620,7 @@ export async function adminLeads(ctx) {
         <td><b>${rate(n + c, w)}</b>${thin ? ` <small class="thin-warn" title="방문 100회 미만입니다. 우연히 높거나 낮게 나올 수 있어 아직 비교하지 마세요.">표본 부족</small>` : ""}</td></tr>`;
     }).join("");
 
-  const body = `<section class="dash"><div class="container">
-    <div class="dash-head"><div><p class="section-eyebrow">상담 신청 · ${esc(assoc.name)}</p><h1 class="dash-title">가맹 상담 DB</h1>
-      <p class="dash-sub">랜딩페이지로 들어온 상담 신청입니다. 연락 결과를 상태로 남기면 어디까지 진행됐는지 한눈에 보입니다.</p></div>
-      <div class="dash-head-actions"><a href="${base}/admin/leads.csv" class="btn btn-ghost btn-sm">CSV 내려받기</a>
-        <a href="${base}/admin/landing" class="btn btn-primary btn-sm">랜딩 편집</a></div></div>
+  const inner = `
     ${flashOf(query)}
     <div class="stat-cards">
       <div class="stat-card"><span class="stat-num">${stats.total}</span><span class="stat-label">전체 신청</span></div>
@@ -658,7 +651,8 @@ export async function adminLeads(ctx) {
         전화를 빼고 보면 실제보다 낮게 나옵니다. 방문 100회가 넘기 전에는 사본끼리 비교하지 마세요.</p>
       <div class="table-scroll"><table class="admin-table"><thead><tr><th>랜딩</th><th>방문</th><th>신청</th><th>전화</th><th>전환율</th></tr></thead>
         <tbody>${variantRows}</tbody></table></div></section>
-  </div></section>`;
+  `;
+  const body = await consoleShell(ctx, { title: "가맹 상담 DB", sub: `랜딩페이지로 들어온 상담 신청입니다. 연락 결과를 상태로 남기면 어디까지 진행됐는지 한눈에 보입니다.`, actions: `<a href="${base}/admin/leads.csv" class="btn btn-ghost btn-sm">CSV 내려받기</a><a href="${base}/admin/landing" class="btn btn-primary btn-sm">랜딩 편집</a>`, active: "leads", body: inner });
   return html(layout({ title: "가맹 상담 DB", assoc, base, user, body, csrf }));
 }
 
@@ -1246,7 +1240,7 @@ export function registerForm(ctx) {
       <label>비밀번호 (8자 이상)<input type="password" name="password" required minlength="8" autocomplete="new-password" /></label>
       <label>점포명<input type="text" name="business_name" required maxlength="100" autocomplete="organization" /></label>
       <label>업종<select name="category">${opts}</select></label>
-      <label class="check"><input type="checkbox" name="agree" value="1" required /> <a href="/privacy" target="_blank">개인정보 수집·이용</a>에 동의합니다.</label>
+      <label class="check check-tap"><input type="checkbox" name="agree" value="1" required /> <a href="/privacy" target="_blank">개인정보 수집·이용</a>에 동의합니다.</label>
       ${turnstileWidget(env)}
       <button class="btn btn-primary btn-block">가입 신청</button>
     </form><p class="auth-note">가입 후 관리자 승인 시 일반에 공개됩니다.</p></div></div></section>`;
@@ -1316,7 +1310,7 @@ export async function invitePage(ctx) {
       <label>사장님 성함<input type="text" name="name" required maxlength="60" autocomplete="name" /></label>
       <label>이메일<input type="email" name="email" required autocomplete="email" /></label>
       <label>비밀번호 (8자 이상)<input type="password" name="password" required minlength="8" autocomplete="new-password" /></label>
-      <label class="check"><input type="checkbox" name="agree" value="1" required /> <a href="/privacy" target="_blank">개인정보 수집·이용</a>에 동의합니다.</label>
+      <label class="check check-tap"><input type="checkbox" name="agree" value="1" required /> <a href="/privacy" target="_blank">개인정보 수집·이용</a>에 동의합니다.</label>
       <button class="btn btn-primary btn-block">가게 열기</button>
     </form><p class="auth-note">관리자 초대라 승인 절차 없이 바로 공개됩니다.</p></div></div></section>`;
   return html(layout({ title: "초대 가입", assoc, base, body, csrf }));
@@ -1359,7 +1353,7 @@ export function contactForm(ctx) {
       <div class="form-two"><label>성함<input type="text" name="name" required maxlength="60" autocomplete="name" /></label>
         <label>연락처 (전화 또는 이메일)<input type="text" name="contact" required maxlength="120" /></label></div>
       <label>문의 내용<textarea name="message" rows="6" required maxlength="2000"></textarea></label>
-      <label class="check"><input type="checkbox" name="agree" value="1" required /> 회신 목적의 <a href="/privacy" target="_blank">개인정보 수집·이용</a>에 동의합니다.</label>
+      <label class="check check-tap"><input type="checkbox" name="agree" value="1" required /> 회신 목적의 <a href="/privacy" target="_blank">개인정보 수집·이용</a>에 동의합니다.</label>
       ${turnstileWidget(env)}
       <button class="btn btn-primary btn-block">문의 보내기</button>
     </form>${assoc.phone ? `<p class="auth-note">급하신 경우 전화 ${esc(assoc.phone)}</p>` : ""}</div></div></section>`;
@@ -1861,7 +1855,7 @@ export async function admin(ctx) {
   // 표 한 장으로 — 체크해서 여러 건을 한 번에 지우거나 상단에 고정한다.
   // 예전에는 한 건씩 펼쳐 삭제를 눌러야 해서, 지난 안내가 계속 쌓이기만 했다.
   const noticeRows2 = notices.map((n) => `<tr>
-    <td class="nc"><input type="checkbox" name="ids" value="${n.id}" form="noticeBulk" aria-label="${esc(n.title)} 고르기" /></td>
+    <td class="nc"><label class="rowpick"><input type="checkbox" name="ids" value="${n.id}" form="noticeBulk" aria-label="${esc(n.title)} 고르기" /></label></td>
     <td class="nt">
       <details class="mini-edit"><summary>${n.pinned ? '<em class="pin-mini">고정</em>' : ""}<span class="notice-title">${esc(n.title)}</span><span class="mini-edit-hint">고치기</span></summary>
         <form method="post" action="${base}/admin/notice/${n.id}" enctype="multipart/form-data" class="stack-form compact">
@@ -1890,27 +1884,28 @@ export async function admin(ctx) {
             <td data-th="연락처">${r.phone ? esc(D.formatPhone(r.phone)) : '<span class="txt-muted">번호 없음</span>'}</td></tr>`).join("")
         }</tbody></table></div>
         <span class="pill-row"><a class="btn btn-ghost btn-sm" href="${base}/admin/event/${e.id}/rsvps.csv">참가자 명단 CSV</a></span>`;
-    eventRows += `<li class="mini-item">
-      <details class="mini-edit"><summary>
-        <span class="event-mini-date">${esc(e.event_date)}</span>
-        <span class="notice-title">${esc(e.title)}</span>
-        <span class="mini-edit-hint">${rsvps.length ? `참가 ${rsvps.length}곳 · 고치기` : "고치기"}</span></summary>
-        <form method="post" action="${base}/admin/event/${e.id}" enctype="multipart/form-data" class="stack-form compact">
-          <input type="text" name="title" value="${esc(e.title)}" required maxlength="200" aria-label="행사명" />
-          <div class="form-two"><label class="mini-label">날짜<input type="date" name="event_date" value="${esc(String(e.event_date || "").slice(0, 10))}" required /></label>
-            <label class="mini-label">장소<input type="text" name="place" value="${esc(e.place || "")}" maxlength="120" /></label></div>
-          <textarea name="description" rows="3" aria-label="행사 설명">${esc(e.description || "")}</textarea>
-          ${imgSwap(e.image, "대표 이미지 바꾸기 <small>(선택 · 홈에 포스터형 카드로 표시)</small>")}
-          <span class="pill-row"><button class="btn btn-primary btn-sm">고친 내용 저장</button>
-            <a class="btn btn-ghost btn-sm" href="${base}/events" target="_blank" rel="noopener">행사 보기 ↗</a></span>
-        </form>
-        <div class="form-divider">참가 신청 ${rsvps.length}곳</div>
-        ${rsvpBlock}
-        <form method="post" action="${base}/admin/event/${e.id}/delete" class="mini-del"
-          data-confirm="'${esc(e.title)}' 행사를 지울까요?&#10;참가 신청 ${rsvps.length}건도 함께 사라집니다."><button class="link-danger">이 행사 지우기</button></form>
-      </details></li>`;
+    eventRows += `<tr>
+      <td class="nc"><label class="rowpick"><input type="checkbox" name="ids" value="${e.id}" form="eventBulk" aria-label="${esc(e.title)} 고르기" /></label></td>
+      <td class="nt">
+        <details class="mini-edit"><summary>
+          <span class="notice-title">${esc(e.title)}</span>
+          <span class="mini-edit-hint">${rsvps.length ? `참가 ${rsvps.length}곳 · 고치기` : "고치기"}</span></summary>
+          <form method="post" action="${base}/admin/event/${e.id}" enctype="multipart/form-data" class="stack-form compact">
+            <input type="text" name="title" value="${esc(e.title)}" required maxlength="200" aria-label="행사명" />
+            <div class="form-two"><label class="mini-label">날짜<input type="date" name="event_date" value="${esc(String(e.event_date || "").slice(0, 10))}" required /></label>
+              <label class="mini-label">장소<input type="text" name="place" value="${esc(e.place || "")}" maxlength="120" /></label></div>
+            <textarea name="description" rows="3" aria-label="행사 설명">${esc(e.description || "")}</textarea>
+            ${imgSwap(e.image, "대표 이미지 바꾸기 <small>(선택 · 홈에 포스터형 카드로 표시)</small>")}
+            <span class="pill-row"><button class="btn btn-primary btn-sm">고친 내용 저장</button>
+              <a class="btn btn-ghost btn-sm" href="${base}/events" target="_blank" rel="noopener">행사 보기 ↗</a></span>
+          </form>
+          <div class="form-divider">참가 신청 ${rsvps.length}곳</div>
+          ${rsvpBlock}
+        </details></td>
+      <td class="nd">${esc(String(e.event_date || "").slice(0, 10))}</td>
+      <td class="nd">${rsvps.length ? `${rsvps.length}곳` : "—"}</td></tr>`;
   }
-  eventRows = eventRows || `<li class="empty">행사가 없습니다.</li>`;
+  const eventCount = events.length;
   // ── 홈 팝업 —— 목록에는 "지금 뜨는가"를 상태로 적습니다.
   // 켜 두고 기간이 지난 것과, 아예 내려 둔 것은 다릅니다. 둘을 같은 회색으로 그리면
   // 왜 안 뜨는지 관리자가 화면만 보고는 알 수 없습니다.
@@ -2475,13 +2470,24 @@ ${isFranchise ? `    <section class="panel panel-accent" id="p-home"><h2 class="
             <thead><tr><th class="nc"></th><th>제목</th><th>분류</th><th class="nd">올린 날</th></tr></thead>
             <tbody>${noticeRows2}</tbody></table></div>`
           : `<p class="dt-empty"><b>아직 올린 공지가 없습니다</b>위 [새 공지 쓰기] 로 첫 소식을 올려 보세요.</p>`}</section>
-      <section class="panel"><h2 class="panel-title">행사</h2>
-        <form method="post" action="${base}/admin/event" enctype="multipart/form-data" class="stack-form compact">
-          <input type="text" name="title" placeholder="행사명" aria-label="새 행사명" required /><input type="date" name="event_date" aria-label="행사 날짜" required />
-          <input type="text" name="place" placeholder="장소" aria-label="행사 장소" /><textarea name="description" rows="2" placeholder="설명" aria-label="행사 설명"></textarea>
-          <label class="mini-label">대표 이미지 <small>(선택 · 홈에 포스터형 카드로 표시)</small><input type="file" name="image" accept="image/*" /></label>
-          <button class="btn btn-primary btn-sm">등록</button></form>
-        <ul class="admin-mini-list">${eventRows}</ul></section></div>`}
+      <section class="panel"><div class="panel-head"><h2 class="panel-title">행사 <span class="badge badge-muted">${eventCount}건</span></h2></div>
+        <details class="fold-write"><summary>새 행사 열기</summary><div class="fold-body">
+          <form method="post" action="${base}/admin/event" enctype="multipart/form-data" class="stack-form compact">
+            <input type="text" name="title" placeholder="행사명" aria-label="새 행사명" required /><input type="date" name="event_date" aria-label="행사 날짜" required />
+            <input type="text" name="place" placeholder="장소" aria-label="행사 장소" /><textarea name="description" rows="2" placeholder="설명" aria-label="행사 설명"></textarea>
+            <label class="mini-label">대표 이미지 <small>(선택 · 홈에 포스터형 카드로 표시)</small><input type="file" name="image" accept="image/*" /></label>
+            <button class="btn btn-primary btn-sm">등록</button></form></div></details>
+        ${eventCount ? `<form method="post" action="${base}/admin/events/bulk" id="eventBulk" class="pick-bar" data-bulk>
+            <input type="hidden" name="_csrf" value="${csrf}" />
+            <label class="bulk-all"><input type="checkbox" data-bulk-all aria-label="전체 고르기" /><span>전체</span></label>
+            <span class="bulk-count" data-bulk-count>고른 것 없음</span>
+            <button name="act" value="delete" class="btn btn-xs btn-danger"
+              data-confirm="고른 행사를 지울까요?&#10;참가 신청도 함께 사라집니다 — 되돌릴 수 없습니다.">선택 삭제</button>
+          </form>
+          <div class="table-scroll"><table class="notice-table">
+            <thead><tr><th class="nc"></th><th>행사</th><th class="nd">날짜</th><th class="nd">참가</th></tr></thead>
+            <tbody>${eventRows}</tbody></table></div>`
+          : `<p class="dt-empty"><b>아직 연 행사가 없습니다</b>위 [새 행사 열기] 로 첫 행사를 올려 보세요.</p>`}</section></div>`}
     ${isEsign || isFranchise ? "" : `<div id="p-popup-wrap">${popupPanel}</div>`}
     ${isEsign ? "" : "</div>"}
 
@@ -3410,7 +3416,7 @@ export async function esignSignupForm(ctx) {
           <small class="field-note">이 주소로 로그인합니다.</small></label>
         <label>비밀번호<input type="password" name="password" required minlength="8" maxlength="200" autocomplete="new-password" />
           <small class="field-note">8자 이상</small></label>
-        <label class="check"><input type="checkbox" name="agree" value="1" required />
+        <label class="check check-tap"><input type="checkbox" name="agree" value="1" required />
           <a href="/terms" target="_blank">이용약관</a>과 <a href="/privacy" target="_blank">개인정보처리방침</a>에 동의합니다.</label>
         ${turnstileWidget(env)}
         <button class="btn btn-primary btn-block">무료로 시작하기</button>
@@ -5066,7 +5072,7 @@ export function applyForm(ctx) {
       <label>연락받을 이메일<input type="email" name="contact_email" required autocomplete="email" /></label>
       <label>연락처(선택)<input type="tel" name="contact_phone" maxlength="40" autocomplete="tel" /></label>
       <label>남기실 말(선택)<textarea name="message" rows="3" maxlength="2000" placeholder="점포 수, 원하는 기능 등 자유롭게"></textarea></label>
-      <label class="check"><input type="checkbox" name="agree" value="1" required /> <a href="/privacy" target="_blank">개인정보 수집·이용</a>에 동의합니다.</label>
+      <label class="check check-tap"><input type="checkbox" name="agree" value="1" required /> <a href="/privacy" target="_blank">개인정보 수집·이용</a>에 동의합니다.</label>
       ${turnstileWidget(env)}
       <button class="btn btn-primary btn-block">신청하기</button>
     </form><p class="auth-note">이미 계정이 있으신가요? <a href="/login">로그인</a></p></div></div></section>`;
