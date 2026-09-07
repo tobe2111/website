@@ -149,7 +149,7 @@ ${consoleKind === "super" ? `<div class="console-strip"><div class="container co
   <b>운영사 콘솔</b><span>여기서 하는 일은 <b>모든 고객사</b>에 적용됩니다</span></div></div>` : ""}
 <header class="site-header" id="siteHeader">
   <div class="container header-inner">
-    <a class="brand" href="${consoleKind === "super" ? "/super" : product ? product.home || "/esign" : base || "/"}">${assoc && assoc.logo ? `<img class="brand-logo" src="${esc(mediaUrl(assoc.logo))}" alt="" />` : bundled ? `<img class="brand-logo brand-logo-bundled" src="${esc(bundled.mark)}" alt="" width="34" height="28" />` : `<span class="brand-mark">${mark}</span>`}<span>${brand}</span></a>
+    <a class="brand" href="${consoleKind === "super" ? "/super" : product ? product.home || "/esign" : base || "/"}">${assoc && assoc.logo ? `<img class="brand-logo" src="${esc(mediaUrl(assoc.logo))}" alt="" /><span>${brand}</span>` : bundled ? `<img class="brand-logo-wide" src="${esc(bundled.wide)}" alt="${brand}" width="227" height="44" />` : `<span class="brand-mark">${mark}</span><span>${brand}</span>`}</a>
     <button class="nav-toggle" id="navToggle" aria-label="메뉴 열기" aria-expanded="false"><span></span><span></span><span></span></button>
     <nav class="main-nav" id="mainNav">${nav}</nav>
   </div>
