@@ -3439,7 +3439,6 @@ a.deal-card:hover{border-color:var(--deal);transition:border-color .18s}
   .dash .split-even{grid-template-columns:minmax(0,1fr);gap:22px}
   .dash .finish-bar{grid-template-columns:minmax(0,1fr)}
   .dash .btn-cta{min-height:56px}
-  .dash .panel,.dash details.panel{padding:20px}
 }
 /* 자동 입력이 끝나면 상자 안내가 초록 '✓ 완료' 가 된다 (레퍼런스: 파일명 옆 '✓ 완료') */
 .dash .auto-box[data-place-done] [data-place-msg]{color:var(--ok-fg);font-weight:700;display:flex;align-items:center;gap:8px}
@@ -3455,3 +3454,231 @@ a.deal-card:hover{border-color:var(--deal);transition:border-color .18s}
 .dash .stack-form label > small{display:block;margin-top:4px}
 .dash .stack-form label > .tag{display:inline-block;width:auto}
 .dash .stack-form label > .field-help{margin-top:6px}
+
+/* ==========================================================================
+   v7 콘솔 — 대기업 관리 화면의 밀도
+   v6(레퍼런스 폼)까지는 "한 화면 = 한 폼" 이라 여백을 넉넉히 뒀는데, 실제 콘솔은
+   가운데 정렬 컨테이너 때문에 1366px 화면의 절반이 회색으로 비고, 입력칸 한 줄이
+   46px, 단추가 전체 폭이라 스크롤을 두 번 넘겨야 다음 구역이 보였다.
+   관리 화면은 하루에 수십 번 여는 도구다. 도구의 기준은 '한 화면에 얼마나 보이나' 다.
+   · 껍데기: 고정 왼쪽 메뉴(224px) + 본문 전체 폭. 제목줄은 얇은 띠 하나.
+   · 구역: 흰 카드 · 1px 테두리 · 8px 라운드 · 16/20px 안쪽 여백 · 카드 사이 12px
+   · 입력칸 36px · 13.5px, 라벨 13px, 단추 34px, 표 8px 줄 간격
+   · 현황: 할 일 → 숫자 타일 4개 → (최근 활동 | 바로 가기) 두 기둥
+   .dash-shell 은 왼쪽 메뉴가 있는 세 콘솔(운영사·상인회·사장님)에만 붙는다.
+   밀도 규칙은 .dash 전체(점포 정보 편집 등)에 적용된다. 휴대폰(≤860px)은 손가락 기준을 지킨다.
+   ========================================================================== */
+@media (min-width:861px){
+  .dash-shell{padding:0;background:var(--bg-alt);min-height:calc(100vh - 64px)}
+  /* body.is-console .container 이 좌우 여백을 주므로 한 단 더 특정하게 */
+  .dash.dash-shell > .container{max-width:none;padding:0;margin:0;display:grid;grid-template-columns:224px minmax(0,1fr);align-items:start;
+    background:linear-gradient(90deg,var(--surface) 0,var(--surface) 224px,var(--line-soft) 224px,var(--line-soft) 225px,var(--bg-alt) 225px);
+    min-height:calc(100vh - 64px)}
+  .dash-shell .console-grid{display:contents}
+  .dash-shell > .container > *,.dash-shell .console-main{grid-column:2;min-width:0}
+  .dash-shell .console-side{grid-column:1;grid-row:1/span 8;position:sticky;top:0;align-self:start;max-height:100dvh;overflow:auto;
+    background:none;border:0;padding:14px 12px 24px}
+  .dash-shell > .container > .dash-head{margin:0;padding:12px 28px;background:var(--surface);border-bottom:1px solid var(--line-soft);align-items:center;min-height:56px}
+  .dash-shell > .container > .flash,.dash-shell > .container > .approve-banner,.dash-shell > .container > .todo-bar,.dash-shell > .container > .onboard{margin:16px 28px 0}
+  .dash-shell .console-main{border-left:0;padding:20px 28px 56px}
+  .dash-shell .dash-title{font-size:20px;font-weight:700;letter-spacing:-.02em;line-height:1.3}
+  .dash-shell .dash-sub{font-size:13px;margin-top:2px}
+  .dash-shell .dash-head-actions .btn{min-height:34px;font-size:13px;padding:0 12px;border-radius:6px}
+  /* 왼쪽 메뉴: 먹빛 막대 → 옅은 브랜드색 채움 (대기업 콘솔의 관례). 배지는 오른쪽 끝 */
+  .dash-shell .console-side nav{padding:0;gap:2px;display:flex;flex-direction:column}
+  .dash-shell .console-side a{display:flex;align-items:center;gap:9px;border:0;border-radius:6px;padding:7px 10px;min-height:36px;font-size:13.5px;font-weight:500;color:var(--ink-soft)}
+  .dash-shell .console-side a svg{width:16px;height:16px;flex:none;color:var(--muted)}
+  .dash-shell .console-side a:hover{background:var(--bg-alt);color:var(--ink)}
+  .dash-shell .console-side a.on,.dash-shell .console-side a[aria-current]{background:var(--brand-tint);color:var(--brand-text);font-weight:700}
+  .dash-shell .console-side a.on svg,.dash-shell .console-side a[aria-current] svg{color:var(--brand-text)}
+  .dash-shell .console-side .side-badge{margin-left:auto;background:var(--wait-bg);color:var(--wait-fg);font-size:11px;font-weight:700;line-height:1;padding:3px 6px;border-radius:4px}
+  .dash-shell .console-side .side-sep{display:block;height:1px;background:var(--line-soft);margin:10px 4px}
+  .dash-shell .console-side .side-ext:first-of-type{border-top:0;margin-top:0;padding-top:7px}
+  .dash-shell .console-side .side-ext{font-size:13px;color:var(--muted)}
+}
+
+/* 구역 카드 — 모든 콘솔 화면 */
+.dash .panel,.dash details.panel{background:var(--surface);border:1px solid var(--line-soft);border-radius:8px;padding:16px 20px 18px;margin:0 0 12px;box-shadow:none}
+@media (max-width:900px){ .dash .panel,.dash details.panel{padding:16px} }
+.dash .panel-title{font-size:15px;font-weight:700;letter-spacing:-.01em;margin-bottom:4px}
+.dash .panel-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.dash .panel-head .panel-title{margin-bottom:0}
+.dash .panel-hint{font-size:12.5px;line-height:1.55;color:var(--muted);margin:0 0 12px;max-width:none}
+.dash details.panel:not([open]){padding:0 20px;margin-bottom:12px}
+.dash details.panel:not([open]) + details.panel{border-top:1px solid var(--line-soft)}
+.dash .panel-fold > summary{padding:12px 0;font-size:14px}
+.dash .form-divider{font-size:13px;font-weight:700;margin:14px 0 8px;padding-top:12px;border-top:1px solid var(--line-soft)}
+.dash .dash-grid{gap:12px}
+.dash .badge{font-size:11.5px;padding:2px 7px;border-radius:4px}
+
+/* 현황 탭 — 할 일 상자의 밀도는 마우스 화면에서만 조인다 (휴대폰은 640px 구간의 엄지 기준) */
+.dash .home-sheet{background:none}
+@media (min-width:641px){
+  .dash .home-sheet{padding:0;border-radius:0}
+  .dash .hot{padding:12px 18px 2px;border-radius:8px}
+  .dash .hot + .hot{margin-top:8px}
+  .dash .hot-h{padding-bottom:9px;gap:10px}
+  .dash .hot-n{font-size:28px}
+  .dash .hot-h h2{font-size:15px}
+  .dash .hot-h h2 small{font-size:12.5px;margin-top:2px}
+  .dash .hot-row{padding:8px 0;gap:12px}
+  .dash .hot-m b{font-size:14px}
+  .dash .hot-m small{font-size:12.5px}
+  .dash .hot-acts .btn{min-height:30px;font-size:12.5px;padding:0 11px}
+  .dash .hot-more{padding:9px 0 6px;font-size:13px}
+  .dash .all-clear{padding:10px 14px;font-size:13.5px;border-radius:8px;margin:0}
+}
+.dash .kpi-sec{margin-top:12px}
+.dash .kpi-sec .quiet-h{font-size:12px;margin:0 0 6px;padding:0;border:0}
+.dash .kpi-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.dash .kpi{display:flex;flex-direction:column;gap:3px;background:var(--surface);border:1px solid var(--line-soft);border-radius:8px;padding:12px 16px 13px}
+.dash .kpi-l{font-size:12px;font-weight:500;color:var(--muted)}
+.dash .kpi-v{font-size:24px;font-weight:700;letter-spacing:-.02em;line-height:1.1;color:var(--ink);font-variant-numeric:tabular-nums}
+.dash .kpi-d{text-decoration:none;font-size:12px;font-weight:700;color:var(--ok-fg)}
+.dash .home-grid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:12px;margin-top:12px;align-items:start}
+.dash .home-grid .panel{margin:0}
+.dash .home-grid .notif-list{margin-top:0;border-top:0}
+.dash .home-grid .notif-list li{padding:8px 2px;font-size:13px;gap:8px;border-bottom:1px solid var(--line-soft)}
+.dash .home-grid .notif-list li:last-child{border-bottom:0}
+.dash .home-grid .notif-list li.empty{padding:8px 0;color:var(--muted)}
+.dash .quick-list{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.dash .quick-list a{display:flex;flex-direction:column;gap:1px;padding:8px 12px;border:1px solid var(--line-soft);border-radius:6px;color:var(--ink);text-decoration:none}
+.dash .quick-list a:hover{background:var(--bg-alt);border-color:var(--line)}
+.dash .quick-list b{font-size:13.5px;font-weight:700}
+.dash .quick-list small{font-size:12px;color:var(--muted)}
+
+/* 표 */
+.dash .admin-table th,.dash .admin-table td{padding:8px 10px;font-size:13px}
+.dash .admin-table th{font-size:12px;font-weight:600;color:var(--muted);background:var(--bg-alt)}
+.dash .admin-table small{font-size:12px}
+.dash .dtable-wrap{border-radius:8px}
+.dash table.dtable{font-size:13px}
+@media (min-width:721px){
+  .dash table.dtable thead th{padding:8px 10px;font-size:12px}
+  .dash table.dtable tbody td{padding:8px 10px}
+}
+.dash .table-scroll{margin:0}
+
+/* 단추·입력 — 마우스 화면 */
+@media (min-width:861px){
+  .dash .btn{min-height:34px;font-size:13px;padding:0 12px;border-radius:6px}
+  .dash .btn-sm{min-height:30px;font-size:12.5px;padding:0 10px}
+  .dash .btn-xs{min-height:26px}
+  .dash .btn-block,.dash .stack-form .btn-block{display:inline-flex;width:auto;min-width:160px;align-self:flex-start}
+  .dash .btn-lg{min-height:40px;font-size:14px}
+  .dash .stack-form{gap:12px}
+  .dash .stack-form.compact{gap:10px}
+  .dash .stack-form label,.dash .form-two > label{font-size:13px;font-weight:600;color:var(--ink-soft)}
+  .dash .stack-form label > input,.dash .stack-form label > select,.dash .stack-form label > textarea{margin-top:5px}
+  .dash .stack-form label > small{margin-top:2px;font-size:12px}
+  .dash .stack-form input:not([type=checkbox]):not([type=radio]):not([type=color]),.dash .stack-form select,.dash .caption-input,.dash .place-find input,
+  .dash .form-two input:not([type=checkbox]):not([type=radio]):not([type=color]),.dash .form-two select{
+    min-height:36px;height:auto;padding:7px 10px;font-size:13.5px;border-radius:6px;line-height:1.4}
+  .dash .stack-form input[type="text"],.dash .stack-form input[type="tel"],.dash .stack-form input[type="email"],.dash .stack-form input[type="url"]{min-height:36px}
+  .dash .stack-form input[type="color"]{min-height:36px;height:36px;padding:3px;border-radius:6px}
+  .dash .stack-form textarea{min-height:96px;padding:8px 10px;font-size:13.5px;border-radius:6px}
+  .dash .form-two{gap:12px 16px}
+  .dash .tag{font-size:11px;padding:2px 6px;border-radius:4px;margin-left:5px}
+  .dash .split-even{gap:20px}
+  .dash .col-head{font-size:14px;margin-bottom:3px}
+  .dash .col-sub{font-size:12.5px;margin-bottom:10px}
+  .dash .auto-box{padding:10px 12px}
+  .dash .finish-bar{grid-template-columns:minmax(0,1fr) 140px;gap:12px;margin-top:16px}
+  .dash .done-card{padding:12px 16px;gap:6px;border-radius:8px}
+  .dash .done-label{font-size:13px}
+  .dash .done-pct{font-size:15px}
+  .dash .btn-cta{min-height:56px;font-size:15px;border-radius:8px}
+  .dash .theme-pick{padding:10px 12px}
+  .dash .theme-sw{min-height:32px;font-size:12.5px}
+  .dash .hint-ok{padding:9px 12px;font-size:12.5px;margin-top:8px}
+}
+@media (max-width:900px){
+  .dash .kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .dash .home-grid{grid-template-columns:minmax(0,1fr)}
+}
+/* 폼은 grid 라 직계 단추가 전체 폭으로 늘어난다 — 마우스 화면에서는 폼 끝의 표시면 된다 */
+@media (min-width:861px){
+  .dash .stack-form > .btn,.dash .stack-form > form > .btn{justify-self:start;min-width:160px}
+}
+/* 왼쪽 메뉴 아이콘 크기는 화면 폭과 무관하다 — 휴대폰 가로 탭줄에서 24px 로 커져 글자가 줄바꿈됐다 */
+.dash .console-side a svg{width:16px;height:16px;flex:none}
+.dash .console-side a{white-space:nowrap}
+@media (max-width:860px){
+  .dash .console-side a{gap:6px;padding:6px 10px}
+  .dash .console-side .side-badge{margin-left:2px}
+}
+
+/* ==========================================================================
+   홈 v6 — 공개 홈을 콘솔과 같은 언어로
+   회색 바탕 위 흰 카드(1px 테두리 · 12px 라운드), 굵은 제목 + 회색 부제,
+   칩은 알약이 아니라 6px 태그, 입력칸 46px 흰 바탕, 큰 단추 10px 라운드.
+   색은 상인회 브랜드색(토큰)을 그대로 쓴다 — 프리셋을 바꾸면 여기도 따라간다.
+   히어로에 사진·영상을 올린 상인회(.has-photo)는 사진 히어로를 그대로 둔다 —
+   카드 히어로는 사진이 없을 때의 모양이다.
+   ========================================================================== */
+.hero-pro:not(.has-photo){background:transparent;padding:28px 0 8px}
+.hero-pro:not(.has-photo) .hp-inner{background:var(--surface);border:1px solid var(--line-soft);border-radius:12px;padding:32px 32px 28px}
+.hero-pro:not(.has-photo) .hp-eyebrow{font-size:13px;font-weight:600;color:var(--brand-text);margin-bottom:8px}
+.hero-pro:not(.has-photo) .hp-title{font-size:30px;line-height:1.3;font-weight:700;letter-spacing:-.02em;color:var(--ink);max-width:none}
+.hero-pro:not(.has-photo) .hp-sub{font-size:15px;line-height:1.6;color:var(--muted);margin:10px 0 18px;max-width:640px}
+.hero-pro:not(.has-photo) .hp-search{max-width:640px;display:flex;gap:8px}
+.hero-pro:not(.has-photo) .hp-search input{min-height:46px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px;font-size:15px;box-shadow:none;color:var(--ink)}
+.hero-pro:not(.has-photo) .hp-search input::placeholder{color:var(--muted)}
+.hero-pro:not(.has-photo) .hp-search .btn-primary{min-height:46px;border-radius:8px;font-size:15px;font-weight:700;padding:0 20px;background:var(--brand);color:var(--on-brand,#fff);box-shadow:none}
+.hero-pro:not(.has-photo) .hp-actions{margin-top:18px;display:flex;align-items:center;flex-wrap:wrap}
+.hero-pro:not(.has-photo) .hp-facts-line{display:flex;align-items:center;gap:14px;background:var(--surface);border:1px solid var(--line-soft);border-radius:12px;padding:12px 16px;font-size:13px;color:var(--muted);margin:0}
+.hero-pro:not(.has-photo) .hp-facts-line b{font-size:15px;font-weight:700;color:var(--ink)}
+.hero-pro:not(.has-photo) .hp-facts-line a{color:var(--muted)}
+.hero-pro:not(.has-photo) .hp-actions .btn{min-height:46px;border-radius:10px;font-size:15px;font-weight:700}
+/* 구역 머리: 굵은 제목 + 회색 부제, 아래 선 없음 */
+.sec-v5 .section-head.head-row{border-bottom:0;padding-bottom:0;margin-bottom:16px}
+.sec-v5 .head-row .section-title{font-weight:700;letter-spacing:-.02em;color:var(--ink)}
+/* 크기·간격은 마우스 화면에서만 — 휴대폰 값은 앞의 640px 구간이 정한다 */
+@media (min-width:641px){
+  .sec-v5{padding-block:26px}
+  .sec-v5.section-sub,.sec-v5.section-note{padding-block:22px}
+  .sec-v5 .section-head.head-row{align-items:flex-end}
+  .sec-v5 .head-row .section-title{font-size:22px;line-height:1.3}
+}
+.sec-v5.section-sub .head-row .section-title{font-size:18px}
+.sec-v5.section-note .head-row .section-title{font-size:16px;color:var(--ink-soft)}
+.sec-v5 .head-row .section-lead{font-size:14px;color:var(--muted);margin-top:6px}
+.sec-v5 .section-more-link{font-size:14px;font-weight:600;color:var(--brand-text)}
+/* 칩: 알약 → 태그 */
+.sec-v5 .cat-tabs{border-bottom:0;gap:8px;padding-bottom:0}
+.sec-v5 .cat-tab{border-radius:6px;border:1px solid var(--line);background:var(--surface);padding:8px 12px;font-size:13px;font-weight:600;color:var(--ink-soft);min-height:38px}
+.sec-v5 .cat-tab.on,.sec-v5 .cat-tab[aria-current]{background:var(--brand-tint);border-color:var(--brand-100);color:var(--brand-text)}
+/* 카드: 1px 테두리 · 12px 라운드 · 흰 바탕 */
+.sec-v5 .market-rail .market-card,.sec-v5 .market-card,.sec-v5 .update-card,.sec-v5 .event-card,
+.sec-v5 .notice-list,.sec-v5 .contact-card,.sec-v5 .map-banner,.sec-v5 .deal-card,.sec-v5 .gal-grid figure{
+  background:var(--surface);border:1px solid var(--line-soft);border-radius:12px;box-shadow:none}
+.sec-v5 .market-rail .mc-cat{font-size:12px;font-weight:600;color:var(--muted)}
+.sec-v5 .market-rail .market-body h3 a{font-weight:700;color:var(--ink)}
+.sec-v5 .market-rail .mc-meta{font-size:13px;color:var(--muted)}
+.sec-v5 .update-card{padding:16px 18px}
+.sec-v5 .uc-tag{display:inline-block;font-size:12px;font-weight:600;color:var(--brand-text);background:var(--brand-tint);border-radius:5px;padding:3px 7px}
+.sec-v5 .uc-text{line-height:1.55;color:var(--ink)}
+@media (min-width:641px){
+  .sec-v5 .market-rail .market-body{padding:14px 16px 16px}
+  .sec-v5 .market-rail .market-body h3 a{font-size:16px}
+  .sec-v5 .uc-text{font-size:15px}
+}
+.sec-v5 .uc-body time{font-size:12px;color:var(--muted)}
+.sec-v5 .rail-btn{border-radius:8px;border:1px solid var(--line);background:var(--surface)}
+/* 마무리(가입) 카드는 브랜드색 카드 그대로 둔다 — 흰 카드로 바꾸면 흰 글자가 사라진다(실측 대비 1:1) */
+.sec-v5 .notice-list li{font-size:15px}
+@media (min-width:601px){ .sec-v5 .contact-card{padding:20px 22px} }
+@media (max-width:640px){
+  .hero-pro:not(.has-photo) .hp-inner{padding:22px 18px 20px;border-radius:12px}
+  .hero-pro:not(.has-photo) .hp-title{font-size:24px}
+  .hero-pro:not(.has-photo) .hp-sub{font-size:14px}
+  .sec-v5 .head-row .section-title{font-size:20px;text-align:left}
+  .sec-v5 .cat-tab{min-height:44px}   /* 엄지 과녁 */
+}
+/* 왼쪽 메뉴가 없는 콘솔 화면(점포 정보 편집 등)도 제목줄은 얇게 */
+@media (min-width:861px){
+  .dash:not(.dash-shell){padding:20px 0 48px}
+  .dash:not(.dash-shell) .dash-head{margin-bottom:14px;align-items:center}
+  .dash:not(.dash-shell) .dash-title{font-size:20px;font-weight:700;letter-spacing:-.02em}
+  .dash:not(.dash-shell) .dash-sub{font-size:13px}
+}

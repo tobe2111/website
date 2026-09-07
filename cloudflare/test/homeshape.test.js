@@ -225,7 +225,10 @@ test("사이드바에 뜻 없는 아이콘이 다시 붙지 않는다", async ()
   const html = await (await jget(env, j, "/t/s/admin")).text();
   const nav = html.slice(html.indexOf('id="consoleNav"'), html.indexOf("</nav>", html.indexOf('id="consoleNav"')));
   assert.ok(nav.length > 50, "사이드바를 찾아야 한다");
-  assert.ok(!nav.includes("<svg"), "열 칸 중 넷이 같은 그림이었다 — 구분해 주지 않는 아이콘은 장식일 뿐이다");
+  // 예전에 열 칸 중 넷이 같은 그림이라 아이콘을 걷어냈다. 다시 붙인 지금은 칸마다 다른 그림이어야 한다 —
+  // 구분해 주지 않는 아이콘은 장식일 뿐이다.
+  const icons = [...nav.matchAll(/<svg[\s\S]*?<\/svg>/g)].map((m) => m[0]);
+  assert.equal(new Set(icons).size, icons.length, "같은 아이콘이 두 칸에 붙어 있다");
   assert.match(nav, /현황/);
   assert.match(nav, /계약서/);
 });

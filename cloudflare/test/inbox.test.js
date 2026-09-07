@@ -87,7 +87,7 @@ test("안 읽은 건수가 탭에 배지로 붙고, 다 읽으면 사라진다",
   const j = await login(env);
   let html = await (await get(env, j, "/t/seocho/admin")).text();
   // 차림표 항목은 `> 문의 <span class="side-badge">3</span>` 꼴로 그려진다(아이콘 자리가 비어 앞에 공백이 하나 붙는다)
-  const tabOf = (h) => (/data-tab="inbox"[^>]*>\s*문의(?:\s*<span class="side-badge">(\d+)<\/span>)?/.exec(h) || [])[1];
+  const tabOf = (h) => (/data-tab="inbox"[^>]*>\s*(?:<svg[\s\S]*?<\/svg>)?\s*문의(?:\s*<span class="side-badge">(\d+)<\/span>)?/.exec(h) || [])[1];
   assert.equal(tabOf(html), "3", "안 읽은 3건이 배지로: " + (tabOf(html) || "없음"));
 
   for (const l of await D.listLeads(env.DB, a.id, { source: "contact" }))

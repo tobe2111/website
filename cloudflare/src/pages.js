@@ -1464,7 +1464,7 @@ export async function dashboard(ctx) {
       <input type="url" name="url" placeholder="영상 주소(링크)" required /><input type="text" name="caption" placeholder="설명 (선택)" maxlength="200" />
       <button class="btn btn-primary btn-sm">영상 링크 추가</button></form>
     <h3 class="panel-subtitle">등록된 미디어 (${media.length})</h3><div class="media-grid">${grid}</div></section>`;
-  const body = `<section class="dash"><div class="container">
+  const body = `<section class="dash dash-shell"><div class="container">
     <div class="dash-head"><div><h1 class="dash-title">${esc(b.name)} ${statusBadge(b.status)}</h1>
       <p class="dash-sub">공개 주소: <a href="${base}/business/${esc(b.slug)}" target="_blank">${esc(prettyPath(base))}/business/${esc(b.slug)}</a></p></div>
       <div class="dash-head-actions">
@@ -2168,15 +2168,26 @@ export async function admin(ctx) {
     </section>`;
   })();
 
+  // 왼쪽 메뉴 아이콘 — 글자만 일곱 줄이면 눈이 훑을 자리가 없다. 16px 선 아이콘 하나씩.
+  const I = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+  const TAB_ICO = {
+    home: I('<path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>'),
+    people: I('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7"/><path d="M17.5 14a5 5 0 0 1 4 5.5"/>'),
+    content: I('<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/>'),
+    inbox: I('<path d="M3 13l2.5-8h13L21 13v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M3 13h5l1.5 3h5L16 13h5"/>'),
+    stats: I('<path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/>'),
+    notify: I('<path d="M6 17V11a6 6 0 0 1 12 0v6l1.5 2h-15z"/><path d="M10 21a2 2 0 0 0 4 0"/>'),
+    settings: I('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'),
+  };
   const ADMIN_TABS = [
-    ["home", "현황", "", unread || 0],
-    [isEsign ? "people" : "people", isEsign ? "담당자" : "회원·점포", "", isEsign ? 0 : (s.pending || 0)],
-    ...(isEsign ? [] : [["content", isFranchise ? "가맹점·콘텐츠" : "콘텐츠", "", 0]]),
+    ["home", "현황", TAB_ICO.home, unread || 0],
+    [isEsign ? "people" : "people", isEsign ? "담당자" : "회원·점포", TAB_ICO.people, isEsign ? 0 : (s.pending || 0)],
+    ...(isEsign ? [] : [["content", isFranchise ? "가맹점·콘텐츠" : "콘텐츠", TAB_ICO.content, 0]]),
     // 문의함 — 아직 답 안 한 건수를 그대로 단다. 0 이면 배지가 없다.
-    ...(isEsign || isFranchise ? [] : [["inbox", "문의", "", inboxCounts.new || 0]]),
-    ...(isEsign || isFranchise ? [] : [["stats", "성과", "", 0]]),
-    ["notify", "알림톡", "", 0],
-    ["settings", "설정", "", 0],
+    ...(isEsign || isFranchise ? [] : [["inbox", "문의", TAB_ICO.inbox, inboxCounts.new || 0]]),
+    ...(isEsign || isFranchise ? [] : [["stats", "성과", TAB_ICO.stats, 0]]),
+    ["notify", "알림톡", TAB_ICO.notify, 0],
+    ["settings", "설정", TAB_ICO.settings, 0],
   ];
 
   // ── 며칠 기다렸는지 —— "승인 대기 3" 을 보고도 오늘 온 것인지 일주일 묵은 것인지
@@ -2200,9 +2211,9 @@ export async function admin(ctx) {
   // ── 참고 숫자 —— 매일 볼 필요 없는 것들. 예전에는 이 넷이 카드로 화면 맨 위를 차지했는데,
   // 넷이 같은 크기라 그중 손이 필요한 하나가 묻혔다. 알약 한 줄로 맨 아래로 내린다.
   const fact = (label, num, up = "") =>
-    `<span>${esc(label)} <b>${num}</b>${up ? ` <u>${esc(up)}</u>` : ""}</span>`;
+    `<div class="kpi"><span class="kpi-l">${esc(label)}</span><b class="kpi-v">${num}</b>${up ? `<u class="kpi-d">${esc(up)}</u>` : ""}</div>`;
   // 제품마다 궁금한 숫자가 다르다 — 모집 랜딩에 '가입 점포' 를 보여 줘도 쓸모가 없다
-  const factRow = `<div class="quiet-sec" id="p-stats"><p class="quiet-h">이번 주</p><p class="facts">${isEsign
+  const factRow = `<div class="kpi-sec" id="p-stats"><p class="quiet-h">이번 주</p><div class="kpi-grid">${isEsign
     ? fact("진행 중", `${openDocs.length}건`) + fact("체결 완료", `${docCount - openDocs.length}건`)
       + fact("기한 지남", `${lateDocs.length}건`) + fact("담당자", `${staffList.length}명`)
     : isFranchise
@@ -2213,7 +2224,7 @@ export async function admin(ctx) {
         + fact("가입 점포", `${Number(s.businesses).toLocaleString()}곳`, newBiz30 ? `+${newBiz30}` : "")
         + fact("올린 소식", `${(Number(s.notices) + Number(s.events)).toLocaleString()}건`)
         + fact("체결 완료", `${docCount - openDocs.length}건`)
-  }</p></div>`;
+  }</div></div>`;
 
   // ── 왼쪽 칸 = 처리할 것 · 오른쪽 칸 = 지나간 것.
   //
@@ -2284,7 +2295,25 @@ export async function admin(ctx) {
   const hotPanels = [applyHot, leadHot, signHot].filter(Boolean).join("");
   const queuePanel = hotPanels || `<p class="all-clear">지금 처리할 일이 없습니다</p>`;
 
-  const body = `<section class="dash"><div class="container">
+  // 바로 가기 — 매일 하는 일 네댓 개. 탭을 뒤지지 않고 첫 화면에서 바로 간다.
+  const quick = (href, label, sub) => `<li><a href="${href}"><b>${esc(label)}</b><small>${esc(sub)}</small></a></li>`;
+  const quickLinks = (isEsign
+    ? [quick(`${base}/admin/documents`, "계약서 만들기", "서식을 골라 바로 보냅니다"),
+       quick("#p-members", "담당자 추가", "계약을 만들 수 있는 사람"),
+       quick(`${base}/admin/templates`, "서식 관리", "자주 쓰는 계약서 틀"),
+       quick("#p-brand", "조직 정보", "이름·로고·색")]
+    : isFranchise
+      ? [quick(`${base}/admin/leads`, "상담 DB", `아직 연락 못 한 ${leads.fresh}건`),
+         quick(`${base}/admin/landing`, "랜딩페이지 편집", "문구·순서·표시 여부"),
+         quick("#p-addmember", "가맹점 추가", "지도에서 찾아 바로 등록"),
+         quick("#p-brand", "브랜드 정보", "이름·로고·색")]
+      : [quick("#p-content", "공지 올리기", "회원 모두에게 알립니다"),
+         quick("#p-addmember", "회원·점포 추가", "지도에서 찾아 바로 등록"),
+         quick("#p-popup-wrap", "홈 팝업", "기간을 정해 첫 화면에 띄웁니다"),
+         quick("#p-dues", "회비 장부", "이번 달 납부 체크"),
+         quick("#p-brand", "상인회 정보", "이름·로고·색·검색 등록")]).join("");
+
+  const body = `<section class="dash dash-shell"><div class="container">
     <div class="dash-head"><div><h1 class="dash-title">${esc(kindOf(assoc).dashTitle)}</h1></div>
       <div class="dash-head-actions">${isFranchise ? `<a href="${base}/admin/leads" class="btn btn-primary btn-sm">상담 DB ${leads.total}건</a>
         <a href="${base}/admin/landing" class="btn btn-ghost btn-sm">랜딩 편집</a>`
@@ -2307,11 +2336,16 @@ export async function admin(ctx) {
     <div class="sgroup" id="s-home" data-tab="home">
     <div class="home-sheet">
       ${queuePanel}
-      <div class="quiet-sec" id="p-notif">
-        <div class="quiet-h">최근 활동${unread ? ` <span class="side-badge">${unread}</span>` : ""}
-          ${unread ? `<form method="post" action="${base}/admin/notifications/read" class="inline-form"><button class="btn-linkish">모두 읽음</button></form>` : ""}</div>
-        <ul class="notif-list">${notifRows}</ul></div>
       ${factRow}
+      <div class="home-grid">
+      <section class="panel panel-quiet" id="p-notif">
+        <div class="panel-head"><h2 class="panel-title">최근 활동${unread ? ` <span class="side-badge">${unread}</span>` : ""}</h2>
+          ${unread ? `<form method="post" action="${base}/admin/notifications/read" class="inline-form"><button class="btn-linkish">모두 읽음</button></form>` : ""}</div>
+        <ul class="notif-list">${notifRows}</ul></section>
+      <section class="panel panel-quiet" id="p-quick">
+        <div class="panel-head"><h2 class="panel-title">바로 가기</h2></div>
+        <ul class="quick-list">${quickLinks}</ul></section>
+      </div>
     </div></div>
 
     <div class="sgroup" id="s-people" data-tab="people">
@@ -4693,7 +4727,7 @@ export async function superConsole(ctx) {
   // 제품이 셋이므로 "몇 곳"만으로는 무엇을 파는 회사인지 화면에서 읽히지 않는다.
   const kindCounts = KIND_KEYS.map((k) => [k, KINDS[k].label, list.filter((a) => (a.kind || "merchant") === k).length])
     .filter(([, , n]) => n > 0);
-  const body = `<section class="dash"><div class="container">
+  const body = `<section class="dash dash-shell"><div class="container">
     <div class="dash-head"><div><h1 class="dash-title">운영사 콘솔</h1>
       <p class="dash-sub">고객사 ${ps.associations}곳 · 사용자 ${ps.users}명 — ${kindCounts.map(([, label, n]) => `${esc(label)} ${n}`).join(" · ")}</p></div>
       <div class="dash-head-actions"><a href="#new-assoc" class="btn btn-primary btn-sm" data-goto="home">＋ 새 조직</a></div></div>${flashOf(query)}
