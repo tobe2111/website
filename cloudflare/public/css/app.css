@@ -3476,11 +3476,12 @@ a.deal-card:hover{border-color:var(--deal);transition:border-color .18s}
     min-height:calc(100vh - 64px)}
   .dash-shell .console-grid{display:contents}
   .dash-shell > .container > *,.dash-shell .console-main{grid-column:2;min-width:0}
-  .dash-shell .console-side{grid-column:1;grid-row:1/span 8;position:sticky;top:0;align-self:start;max-height:100dvh;overflow:auto;
+  /* 머리말도 sticky 라 top:0 이면 첫 항목이 머리말 밑에 숨는다 — 머리말 높이만큼 내려 붙인다 */
+  .dash-shell .console-side{grid-column:1;grid-row:1/span 8;position:sticky;top:var(--header-h);align-self:start;max-height:calc(100dvh - var(--header-h));overflow:auto;
     background:none;border:0;padding:14px 12px 24px}
   .dash-shell > .container > .dash-head{margin:0;padding:12px 28px;background:var(--surface);border-bottom:1px solid var(--line-soft);align-items:center;min-height:56px}
   .dash-shell > .container > .flash,.dash-shell > .container > .approve-banner,.dash-shell > .container > .todo-bar,.dash-shell > .container > .onboard{margin:16px 28px 0}
-  .dash-shell .console-main{border-left:0;padding:20px 28px 56px}
+  .dash-shell .console-main{border-left:0;padding:20px 28px 20px}
   .dash-shell .dash-title{font-size:20px;font-weight:700;letter-spacing:-.02em;line-height:1.3}
   .dash-shell .dash-sub{font-size:13px;margin-top:2px}
   .dash-shell .dash-head-actions .btn{min-height:34px;font-size:13px;padding:0 12px;border-radius:6px}
@@ -3682,3 +3683,27 @@ a.deal-card:hover{border-color:var(--deal);transition:border-color .18s}
   .dash:not(.dash-shell) .dash-title{font-size:20px;font-weight:700;letter-spacing:-.02em}
   .dash:not(.dash-shell) .dash-sub{font-size:13px}
 }
+
+/* ── 빈 아래쪽을 남기지 않는다 ──────────────────────────────────────────────
+   내용이 짧은 탭(현황·알림톡·성과)에서 화면 아래 절반이 회색으로 비어 있었다. 본문 기둥을 세로 flex 로
+   두고, 보이는 탭과 그 마지막 구역이 남는 높이를 가져간다. 현황은 두 기둥(최근 활동 | 바로 가기)이
+   같은 높이로 늘어난다. 폼 화면은 마지막 카드가 바닥까지 내려온다. */
+@media (min-width:861px){
+  .dash-shell .console-main{display:flex;flex-direction:column;min-height:calc(100dvh - var(--header-h) - 57px)}
+  .dash-shell .console-main > .sgroup.on{display:flex;flex-direction:column;flex:1 1 auto;min-height:0}
+  .dash-shell .console-main > .sgroup.on > :last-child{flex:1 1 auto}
+  .dash-shell .console-main > .sgroup.on > details.panel:last-child:not([open]){flex:0 0 auto}
+  .dash .home-sheet{display:flex;flex-direction:column;flex:1 1 auto}
+  .dash .home-grid{flex:1 1 auto;align-items:stretch}
+  .dash .home-grid .panel{display:flex;flex-direction:column}
+  .dash .home-grid .notif-list{flex:1 1 auto}
+}
+
+/* ── 꾸러미 로고 ────────────────────────────────────────────────────────── */
+.brand-logo-bundled{width:auto;height:28px;max-width:44px;border-radius:0;background:transparent;object-fit:contain}
+.foot-logo{flex:none;display:inline-flex;align-items:center;background:#fff;border-radius:8px;padding:8px 12px}
+.foot-logo img{display:block;width:auto;height:44px;max-width:240px}
+@media (max-width:640px){ .foot-logo img{height:36px} }
+/* 가로형 로고를 머리말 왼쪽 위에 그대로 — 글자(금색)가 읽히려면 36px 은 되어야 한다 */
+.brand-logo-wide{display:block;height:44px;width:auto;max-width:min(60vw,280px);object-fit:contain}
+@media (max-width:640px){ .brand-logo-wide{height:34px} }
