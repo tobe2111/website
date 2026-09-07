@@ -327,7 +327,8 @@ test("서명 링크를 눌러 로그인해도 그 문서로 돌아온다", async
   const want = `/t/s/sign/${doc.id}`;
   const r = await req("GET", want);
   const loc = r.headers.get("location") || "";
-  assert.match(loc, /^\/login\?/, "로그인으로 보내야");
+  // 상인회 안에서 막혔으면 그 상인회 로그인으로 — 공용 로그인은 남의 회사 이름이 뜬다
+  assert.match(loc, /^\/t\/s\/login\?/, "그 상인회의 로그인으로 보내야");
   assert.ok(decodeURIComponent(loc).includes(`next=${want}`), `돌아갈 자리를 들고 가야: ${loc}`);
 
   const g = await req("GET", loc);

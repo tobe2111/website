@@ -6,6 +6,9 @@
 // 결제가 아니라 세는 장부다. 그래서 두 가지를 반드시 지킨다:
 //   ① 되돌릴 수 있어야 한다 (손이 미끄러진 숫자를 못 고치면 아무도 안 믿는다)
 //   ② 되돌리기는 오늘 것만 건드린다 (지난 날짜를 조용히 바꾸면 장부가 아니다)
+//
+// 예전에는 관리자 콘솔에도 '쿠폰 사용 처리' 표가 있어 총무가 대신 눌렀다. 화면이 어수선해져
+// 걷어냈다 — 세는 일은 사장님 화면에서 그대로 된다. 숫자를 지키는 규칙은 그대로 검사한다.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import worker from "../src/index.js";
@@ -39,11 +42,11 @@ async function seed(env) {
 const loginAdmin = async (env) => { const j = jar(); await post(env, j, "/login", { login: "ad@s.kr", password: "pass1234" }); return j; };
 const loginOwner = async (env) => { const j = jar(); await post(env, j, "/login", { login: "own@s.kr", password: "pass1234" }); return j; };
 
-test("총무가 사용 처리를 누르면 숫자가 오른다", async () => {
+test("사용 처리를 누르면 숫자가 오른다", async () => {
   const env = makeEnv(); const { a, c } = await seed(env);
-  const j = await loginAdmin(env);
-  await post(env, j, `/t/seocho/admin/coupon/${c.id}/use`, {}, "/t/seocho/admin");
-  await post(env, j, `/t/seocho/admin/coupon/${c.id}/use`, {}, "/t/seocho/admin");
+  const j = await loginOwner(env);
+  await post(env, j, `/t/seocho/dashboard/coupons/${c.id}/use`, {}, "/t/seocho/dashboard");
+  await post(env, j, `/t/seocho/dashboard/coupons/${c.id}/use`, {}, "/t/seocho/dashboard");
   const m = await D.couponUseCounts(env.DB, a.id);
   assert.equal(m.get(c.id).total, 2);
   assert.equal(m.get(c.id).today, 2);
@@ -52,17 +55,17 @@ test("총무가 사용 처리를 누르면 숫자가 오른다", async () => {
 
 test("되돌리기는 오늘 것 한 건만 뺀다", async () => {
   const env = makeEnv(); const { a, c } = await seed(env);
-  const j = await loginAdmin(env);
-  await post(env, j, `/t/seocho/admin/coupon/${c.id}/use`, {}, "/t/seocho/admin");
-  await post(env, j, `/t/seocho/admin/coupon/${c.id}/use`, {}, "/t/seocho/admin");
-  await post(env, j, `/t/seocho/admin/coupon/${c.id}/use`, { undo: "1" }, "/t/seocho/admin");
+  const j = await loginOwner(env);
+  await post(env, j, `/t/seocho/dashboard/coupons/${c.id}/use`, {}, "/t/seocho/dashboard");
+  await post(env, j, `/t/seocho/dashboard/coupons/${c.id}/use`, {}, "/t/seocho/dashboard");
+  await post(env, j, `/t/seocho/dashboard/coupons/${c.id}/use`, { undo: "1" }, "/t/seocho/dashboard");
   assert.equal((await D.couponUseCounts(env.DB, a.id)).get(c.id).total, 1);
 });
 
 test("0에서 되돌리기를 눌러도 음수가 되지 않는다", async () => {
   const env = makeEnv(); const { a, c } = await seed(env);
-  const j = await loginAdmin(env);
-  await post(env, j, `/t/seocho/admin/coupon/${c.id}/use`, { undo: "1" }, "/t/seocho/admin");
+  const j = await loginOwner(env);
+  await post(env, j, `/t/seocho/dashboard/coupons/${c.id}/use`, { undo: "1" }, "/t/seocho/dashboard");
   const m = await D.couponUseCounts(env.DB, a.id);
   assert.equal(m.get(c.id) ? m.get(c.id).total : 0, 0);
   assert.equal(await D.couponUseTotal(env.DB, a.id, 30), 0);
@@ -108,20 +111,19 @@ test("옆 상인회 쿠폰은 건드릴 수 없다 (테넌트 격리)", async ()
   await D.createCoupon(env.DB, { businessId: bz.id, associationId: b2.id, title: "남의 혜택" });
   const foreign = (await D.listCoupons(env.DB, bz.id))[0];
 
-  const j = await loginAdmin(env);               // seocho 관리자
-  await post(env, j, `/t/seocho/admin/coupon/${foreign.id}/use`, {}, "/t/seocho/admin");
+  const j = await loginOwner(env);               // seocho 소속 사장님
+  await post(env, j, `/t/seocho/dashboard/coupons/${foreign.id}/use`, {}, "/t/seocho/dashboard");
   assert.equal(await D.couponUseTotal(env.DB, b2.id, 30), 0, "남의 상인회 숫자가 올라가면 안 된다");
 });
 
-test("콘솔에 사용 처리 줄이 뜨고, 성과에 쿠폰 숫자가 잡힌다", async () => {
+test("콘솔에서 사용 처리 표는 걷어냈지만, 성과의 쿠폰 숫자는 그대로 잡힌다", async () => {
   const env = makeEnv(); const { c } = await seed(env);
+  const jo = await loginOwner(env);
+  await post(env, jo, `/t/seocho/dashboard/coupons/${c.id}/use`, {}, "/t/seocho/dashboard");
   const j = await loginAdmin(env);
-  await post(env, j, `/t/seocho/admin/coupon/${c.id}/use`, {}, "/t/seocho/admin");
   const html = await (await get(env, j, "/t/seocho/admin")).text();
-  assert.match(html, /쿠폰 사용 처리/);
-  assert.match(html, /공깃밥 서비스/);
-  assert.match(html, /되돌리기/, "오늘 누른 뒤에는 되돌리기가 보여야 한다");
-  assert.match(html, /쿠폰이 쓰였다/, "성과에 쿠폰 줄이 있어야 한다");
+  assert.doesNotMatch(html, /쿠폰 사용 처리/, "콘솔에서 걷어낸 표가 다시 붙지 않아야");
+  assert.match(html, /쿠폰이 쓰였다/, "세는 일은 사장님이 해도 성과에는 그대로 잡혀야 한다");
 });
 
 test("기한 지난 쿠폰은 사용 처리 목록에서 빠진다", async () => {
