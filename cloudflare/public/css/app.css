@@ -1523,6 +1523,10 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .auth-wrap{position:relative}
 .auth-card{position:relative;z-index:1;box-shadow:0 18px 48px rgba(20,30,28,.09),0 3px 10px rgba(20,30,28,.05)}
 .auth-mark{background:var(--brand-700);color:#fff} /* 그라디언트 → 단색 (버튼·마크 규칙 통일) */
+/* 로그인·가입 카드의 간판. 가로형 로고는 글자까지 들어 있어 정사각 마크보다 크게 놓는다 —
+   "여기가 어디인가" 에 답하는 것이 이 자리의 유일한 일이다. */
+.auth-brand{display:block;margin:0 auto 18px;text-align:center}
+.auth-logo{height:52px;width:auto;max-width:min(260px,80%);object-fit:contain}
 
 /* ===================== 안내 섹션 (v7) =====================
    점포가 아직 없는 상권에서도 홈이 비지 않도록, 상인회 자신의 정보로 밀도를 만드는 블록들.

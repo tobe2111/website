@@ -1,7 +1,7 @@
 // 공개/인증 페이지 핸들러 (async). ctx = { env, db, assoc, base, user, url, query, csrf, params }
 import * as D from "./db.js";
 import { esc, cap, clip, openBadge, openNow, hoursLine, dongOf, fmtBytes, kstStamp, kstDate, prettyPath, safeNext, parseCookies } from "./util.js";
-import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG, ORIGIN, assetUrl } from "./render.js";
+import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG, ORIGIN, assetUrl, brandLogo } from "./render.js";
 import { verifyInviteToken, verifyPhotoToken, SALES_STAGES, otpRequired, selfSignupOn, MAX_SLOTS, BULK_MAX, BULK_CHUNK, docOf, isPlaceholderEmail } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
 import { html, notFoundResponse, back, redirect } from "./http.js";
 import { deals as urdealDeals, urdealProductUrl } from "./urdeal.js";
@@ -838,7 +838,7 @@ export function loginForm(ctx) {
   // 서명 링크를 눌렀다가 로그인 화면으로 온 사람은, 로그인이 끝나면 그 문서로 돌아가야 한다
   const nextTo = safeNext(query.get("next") || "");
   const body = `<section class="section page-top"><div class="container auth-wrap"><div class="auth-card">
-    ${authHead("로그인", sub)}
+    ${authHead("로그인", sub, assoc)}
     ${flash(query.get("msg") || "", query.get("err") ? "err" : "ok")}
     <form method="post" action="${base}/login" class="stack-form">
       ${nextTo ? `<input type="hidden" name="next" value="${esc(nextTo)}" />` : ""}
@@ -876,7 +876,16 @@ export function daysLeftText(due, today) {
   return n > 0 ? `${n}일 남음` : n === 0 ? "오늘까지" : `${-n}일 지남`;
 } // get() 이 이미 디코드 — 이중 디코드는 %25 등에서 URIError
 // 디자인 v2: 인증 카드 브랜드 아이콘 헤더
-const authHead = (title, sub) => `<div class="auth-head"><span class="mark auth-mark">${STOREFRONT_SVG}</span><h1 class="auth-title">${esc(title)}</h1><p class="auth-sub">${esc(sub)}</p></div>`;
+// 로그인·가입·비밀번호 찾기 카드의 머리. 상인회 화면이면 그 상인회의 간판을 쓴다 —
+// 여기만 회색 상자 아이콘이면, 사장님은 "여기가 우리 상인회 맞나" 하는 화면에서
+// 비밀번호를 넣게 된다. 간판이 없는 플랫폼 화면에서만 기본 아이콘으로 돌아간다.
+const authHead = (title, sub, assoc = null) => {
+  const logo = brandLogo(assoc, { wide: true, cls: "auth-logo", w: 227, h: 44 });
+  return `<div class="auth-head">${logo
+    ? `<span class="auth-brand">${logo}</span>`
+    : `<span class="mark auth-mark">${STOREFRONT_SVG}</span>`}
+    <h1 class="auth-title">${esc(title)}</h1><p class="auth-sub">${esc(sub)}</p></div>`;
+};
 
 // ================= 점포 지도 =================
 export async function mapPage(ctx) {
@@ -1248,7 +1257,7 @@ export function registerForm(ctx) {
   const { env, assoc, base, query, csrf } = ctx;
   const opts = CATEGORIES.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
   const body = `<section class="section page-top"><div class="container auth-wrap"><div class="auth-card">
-    ${authHead(assoc.name + " 가입", "점포 정보를 등록하고 사진·소식을 공유하세요.")}${flashOf(query)}
+    ${authHead(assoc.name + " 가입", "점포 정보를 등록하고 사진·소식을 공유하세요.", assoc)}${flashOf(query)}
     <form method="post" action="${base}/register" class="stack-form">
       <label>대표자 성함<input type="text" name="name" required maxlength="60" autocomplete="name" /></label>
       <label>휴대폰 <small>(선택 · 계약서 서명 요청을 카카오 알림톡으로 받습니다)</small><input type="tel" name="phone" maxlength="13" inputmode="numeric" placeholder="010-1234-5678" autocomplete="tel" /></label>
@@ -1276,14 +1285,14 @@ export async function ownerPhotoPage(ctx) {
     `<section class="section page-top"><div class="container auth-wrap"><div class="auth-card">${inner}</div></div></section>`,
     csrf, scripts: `<script src="${assetUrl("/js/upload-resize.js")}" defer></script><script src="${assetUrl("/js/file-preview.js")}" defer></script>` }));
 
-  if (!t) return shell(`${authHead("링크가 만료되었습니다", "사진 보내기 링크는 2주 동안만 열려 있습니다.")}
+  if (!t) return shell(`${authHead("링크가 만료되었습니다", "사진 보내기 링크는 2주 동안만 열려 있습니다.", assoc)}
     <p class="auth-note">${esc(assoc.name)}에 연락해 새 링크를 요청해 주세요.</p>`, "사진 보내기");
 
   const b = await D.getBusinessById(db, t.b);
   if (!b || b.association_id !== assoc.id) return notFoundResponse(ctx);
 
   const done = Number(query.get("done") || 0);
-  if (done > 0) return shell(`${authHead("보냈습니다. 감사합니다!", `사진 ${done}장이 ${esc(assoc.name)}에 전달됐습니다.`)}
+  if (done > 0) return shell(`${authHead("보냈습니다. 감사합니다!", `사진 ${done}장이 ${esc(assoc.name)}에 전달됐습니다.`, assoc)}
     <p class="auth-note">가게 페이지에 올라가면 손님이 보게 됩니다. 더 보내실 사진이 있으면 아래에서 이어서 보내셔도 됩니다.</p>
     <a class="btn btn-outline btn-block" href="${base}/photos/${encodeURIComponent(token)}">사진 더 보내기</a>
     <p class="auth-note"><a href="${base}/business/${esc(b.slug)}">내 가게 페이지 보기 →</a></p>`, "사진을 보냈습니다");
@@ -1292,7 +1301,7 @@ export async function ownerPhotoPage(ctx) {
   const plan = planOf(assoc);
   const room = Math.max(0, plan.maxPhotos - have);
 
-  return shell(`${authHead(`${esc(b.name)} 사장님`, `${esc(assoc.name)} 홈페이지에 올릴 가게 사진을 보내 주세요.`)}${flashOf(query)}
+  return shell(`${authHead(`${esc(b.name)} 사장님`, `${esc(assoc.name)} 홈페이지에 올릴 가게 사진을 보내 주세요.`, assoc)}${flashOf(query)}
     <p class="auth-note">가게 바깥 모습, 안쪽 자리, 대표 메뉴 — <b>세 장만 있어도 충분합니다.</b>
       폰에 있는 사진을 그대로 고르시면 됩니다. ${have ? `지금까지 ${have}장 올라가 있습니다.` : ""}</p>
     ${room === 0
@@ -1314,12 +1323,12 @@ export async function invitePage(ctx) {
   const inv = await verifyInviteToken(env.SESSION_SECRET, query.get("t"), assoc.id);
   if (!inv) {
     const body = `<section class="section page-top"><div class="container auth-wrap"><div class="auth-card">
-      ${authHead("초대 링크 만료", "링크가 만료되었거나 올바르지 않습니다.")}
+      ${authHead("초대 링크 만료", "링크가 만료되었거나 올바르지 않습니다.", assoc)}
       <p class="auth-note">상인회 관리자에게 새 초대 링크를 요청해 주세요. 직접 가입하려면 <a href="${base}/register">가입 신청</a>을 이용할 수 있습니다.</p></div></div></section>`;
     return html(layout({ title: "초대", assoc, base, body, csrf }));
   }
   const body = `<section class="section page-top"><div class="container auth-wrap"><div class="auth-card">
-    ${authHead(`${inv.b} 사장님, 환영합니다!`, `${assoc.name}에서 초대했습니다. 아래만 입력하면 가게 페이지가 바로 열립니다.`)}${flashOf(query)}
+    ${authHead(`${inv.b} 사장님, 환영합니다!`, `${assoc.name}에서 초대했습니다. 아래만 입력하면 가게 페이지가 바로 열립니다.`, assoc)}${flashOf(query)}
     <div class="invite-summary"><span class="chip">${esc(inv.c || "기타")}</span> <strong>${esc(inv.b)}</strong></div>
     <form method="post" action="${base}/invite" class="stack-form">
       <input type="hidden" name="token" value="${esc(query.get("t") || "")}" />
@@ -1363,7 +1372,7 @@ export function urdealPage(ctx) {
 export function contactForm(ctx) {
   const { env, assoc, base, query, csrf, user } = ctx;
   const body = `<section class="section page-top"><div class="container auth-wrap"><div class="auth-card">
-    ${authHead(`${assoc.name}에 문의`, "가입·행사·제휴 등 무엇이든 남겨주세요. 확인 후 연락드립니다.")}${flashOf(query)}
+    ${authHead(`${assoc.name}에 문의`, "가입·행사·제휴 등 무엇이든 남겨주세요. 확인 후 연락드립니다.", assoc)}${flashOf(query)}
     <form method="post" action="${base}/contact" class="stack-form">
       <input type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px" />
       <div class="form-two"><label>성함<input type="text" name="name" required maxlength="60" autocomplete="name" /></label>
@@ -5000,7 +5009,7 @@ export function forgotForm(ctx) {
   const { env, query, csrf } = ctx;
   const auto = emailOn(env);
   const body = `<section class="section page-top"><div class="container auth-wrap"><div class="auth-card">
-    ${authHead("비밀번호 찾기", auto ? "가입한 이메일로 재설정 링크를 보내드립니다." : `가입한 이메일을 입력하면 ${ctx.assoc && ctx.assoc.kind === "esign" ? "조직 관리자" : "상인회 관리자"}에게 재설정 요청이 전달됩니다.`)}
+    ${authHead("비밀번호 찾기", auto ? "가입한 이메일로 재설정 링크를 보내드립니다." : `가입한 이메일을 입력하면 ${ctx.assoc && ctx.assoc.kind === "esign" ? "조직 관리자" : "상인회 관리자"}에게 재설정 요청이 전달됩니다.`, ctx.assoc)}
     ${flashOf(query)}
     <form method="post" action="/forgot" class="stack-form"><label>이메일<input type="email" name="email" required autocomplete="email" /></label>
       <button class="btn btn-primary btn-block">${auto ? "재설정 링크 받기" : "재설정 요청"}</button></form>
@@ -5013,7 +5022,7 @@ export function resetForm(ctx) {
   const { query, csrf } = ctx;
   const token = query.get("token") || "";
   const body = `<section class="section page-top"><div class="container auth-wrap"><div class="auth-card">
-    ${authHead("새 비밀번호 설정", "8자 이상으로 입력해 주세요.")}
+    ${authHead("새 비밀번호 설정", "8자 이상으로 입력해 주세요.", ctx.assoc)}
     ${flashOf(query)}
     <form method="post" action="/reset" class="stack-form">
       <input type="hidden" name="token" value="${esc(token)}" />
@@ -5094,7 +5103,7 @@ export async function platformLanding(ctx) {
 export function applyForm(ctx) {
   const { env, query, csrf } = ctx;
   const body = `<section class="section page-top"><div class="container auth-wrap"><div class="auth-card">
-    ${authHead("홈페이지 신청", "간단히 신청하면 검토 후 관리자 계정을 발급해 드립니다. (무료)")}${flashOf(query)}
+    ${authHead("홈페이지 신청", "간단히 신청하면 검토 후 관리자 계정을 발급해 드립니다. (무료)", ctx.assoc)}${flashOf(query)}
     <form method="post" action="/apply" class="stack-form">
       <label>상인회·모임 이름<input type="text" name="assoc_name" required maxlength="100" placeholder="예: 강남시장 상인회" autocomplete="organization" /></label>
       <label>담당자 성함<input type="text" name="contact_name" maxlength="60" autocomplete="name" /></label>

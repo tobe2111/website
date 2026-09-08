@@ -61,6 +61,22 @@ export function brandTextInk(hex) {
 // 이 서비스는 웹으로만 쓰고 설치를 권할 일이 없다(제품마다 간판도 달라 설치 이름이 남의 것이 된다).
 // 아이콘·테마색은 아래 meta/link 로 충분하다. manifest.webmanifest 파일 자체는 남겨 두되
 // display 를 browser 로 두어, 직접 열어 봐도 설치 대상이 되지 않는다.
+// ── 간판(로고)은 한 곳에서만 고른다 ──────────────────────────────────────
+// 화면마다 따로 고르면 어딘가는 반드시 기본 아이콘으로 남는다. 실제로 그랬다:
+// 머리말·바닥글은 연합회 로고인데 로그인·가입·비밀번호 찾기 카드만 회색 상자 아이콘이라,
+// 사장님이 "여기가 우리 상인회 맞나" 싶은 화면에서 비밀번호를 넣고 있었다.
+// 순서: 관리자가 올린 로고 > 우리가 실은 꾸러미 > 글자 없는 기본 아이콘.
+// wide=true 면 가로형 한 벌(글자까지 든 것)을, 아니면 정사각 마크를 쓴다.
+export function brandLogo(assoc, { wide = false, cls = "", w = 0, h = 0, lazy = false } = {}) {
+  const bundled = bundledBrand(assoc);
+  const name = assoc && assoc.name ? esc(assoc.name) : "";
+  const size = w && h ? ` width="${w}" height="${h}"` : "";
+  const load = lazy ? ' loading="lazy"' : "";
+  if (assoc && assoc.logo) return `<img class="${cls}" src="${esc(mediaUrl(assoc.logo))}" alt="${name}"${size}${load} />`;
+  if (bundled) return `<img class="${cls}" src="${esc(wide ? bundled.wide : bundled.mark)}" alt="${name}"${size}${load} />`;
+  return "";
+}
+
 export function layout({ title, assoc, base = "", user = null, body, activeNav = "", description = "", scripts = "", csrf = "", ogImage = "", preloadImage = "", jsonLd = null, product = null, console: consoleKind = "" }) {
   // 업무 화면(콘솔)에는 손님용 메뉴를 걸지 않는다.
   //
@@ -149,7 +165,7 @@ ${consoleKind === "super" ? `<div class="console-strip"><div class="container co
   <b>운영사 콘솔</b><span>여기서 하는 일은 <b>모든 고객사</b>에 적용됩니다</span></div></div>` : ""}
 <header class="site-header" id="siteHeader">
   <div class="container header-inner">
-    <a class="brand" href="${consoleKind === "super" ? "/super" : product ? product.home || "/esign" : base || "/"}">${assoc && assoc.logo ? `<img class="brand-logo" src="${esc(mediaUrl(assoc.logo))}" alt="" /><span>${brand}</span>` : bundled ? `<img class="brand-logo-wide" src="${esc(bundled.wide)}" alt="${brand}" width="227" height="44" />` : `<span class="brand-mark">${mark}</span><span>${brand}</span>`}</a>
+    <a class="brand" href="${consoleKind === "super" ? "/super" : product ? product.home || "/esign" : base || "/"}">${assoc && assoc.logo ? `${brandLogo(assoc, { cls: "brand-logo" })}<span>${brand}</span>` : bundledBrand(assoc) ? brandLogo(assoc, { wide: true, cls: "brand-logo-wide", w: 227, h: 44 }) : `<span class="brand-mark">${mark}</span><span>${brand}</span>`}</a>
     <button class="nav-toggle" id="navToggle" aria-label="메뉴 열기" aria-expanded="false"><span></span><span></span><span></span></button>
     <nav class="main-nav" id="mainNav">${nav}</nav>
   </div>
@@ -162,7 +178,8 @@ ${workScreen ? "" : `<footer class="site-footer"><div class="container">
     <nav class="foot-policy"><a href="/privacy" class="strong">개인정보처리방침</a><span class="sep"></span><a href="/terms">이용약관</a>${assoc ? `<span class="sep"></span><a href="${base}/contact">문의하기</a>` : ""}</nav>
   </div>
   <div class="foot-bottom">
-    ${bundled ? `<span class="foot-logo"><img src="${esc(bundled.wide)}" alt="${brand} 로고" width="258" height="50" loading="lazy" /></span>` : `<span class="foot-mark" aria-hidden="true">${mark}</span>`}
+    ${(() => { const g = brandLogo(assoc, { wide: true, w: 258, h: 50, lazy: true });
+      return g ? `<span class="foot-logo">${g}</span>` : `<span class="foot-mark" aria-hidden="true">${mark}</span>`; })()}
     <div class="foot-info">
       <strong>${brand}</strong>
       ${assoc && (assoc.phone || assoc.address) ? `<p>${assoc.address ? esc(assoc.address) : ""}${assoc.phone ? `${assoc.address ? " · " : ""}문의 ${esc(assoc.phone)}` : ""}</p>` : ""}
