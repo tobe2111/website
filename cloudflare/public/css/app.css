@@ -3545,6 +3545,19 @@ a.deal-card:hover{border-color:var(--deal);transition:border-color .18s}
    직접 적기로 들어간 사람은 칸을 누르는 순간 :focus-within 으로 또렷해진다. */
 .funnel-step2{margin-top:20px}
 
+/* 130곳을 채워 넣는 화면이다. '무엇이 남았나' 가 맨 위에 있어야 한다 —
+   예전에는 같은 내용이 폼 맨 아래에만 있어, 알려면 다 지나쳐 내려가야 했다. */
+.biz-todo{border-left:3px solid var(--brand)}
+.biz-todo.is-done{border-left-color:var(--ok-fg)}
+.biz-todo .done-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+.todo-list{margin:12px 0 0;padding:0;list-style:none;display:grid;gap:7px}
+.todo-list li{position:relative;padding-left:20px;font-size:13.5px;color:var(--ink-soft);line-height:1.5}
+.todo-list li::before{content:"";position:absolute;left:2px;top:.5em;width:7px;height:7px;
+  border-radius:50%;background:var(--brand);opacity:.5}
+.biz-left{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+/* 저장과 '저장하고 다음 가게' 를 나란히 — 좁은 화면에서는 아래로 접힌다 */
+.finish-acts{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+
 /* ==========================================================================
    v7 콘솔 — 대기업 관리 화면의 밀도
    v6(레퍼런스 폼)까지는 "한 화면 = 한 폼" 이라 여백을 넉넉히 뒀는데, 실제 콘솔은

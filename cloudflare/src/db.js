@@ -440,6 +440,25 @@ export const listAllBusinesses = (db, aid) =>
   all(db, `SELECT b.*, u.email AS owner_email, u.name AS owner_name FROM businesses b JOIN users u ON u.id=b.owner_id
            WHERE b.association_id=? ORDER BY CASE b.status WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END, b.created_at DESC`, aid);
 
+// 아직 손이 덜 간 다음 가게 하나. 130곳을 채워 넣을 때 한 곳을 저장하고 목록으로
+// 돌아가 다음 줄을 눈으로 찾는 일이 130번 반복되면 그것만으로 지친다.
+// '사진 없음' 을 가장 앞에 두는 이유: 사진이 없으면 목록에서 회색 상자로 보여
+// 손님이 누를 이유가 없다 — 다른 무엇보다 그게 먼저다.
+export const nextUnfinishedBusiness = (db, aid, exceptId = 0) =>
+  first(db, `SELECT b.id, b.name FROM businesses b
+    WHERE b.association_id=? AND b.id<>?
+      AND (NOT EXISTS (SELECT 1 FROM media m WHERE m.business_id=b.id AND m.kind='image')
+           OR b.address='' OR b.phone='' OR b.hours='' OR b.description='')
+    ORDER BY (SELECT COUNT(*) FROM media m WHERE m.business_id=b.id AND m.kind='image') ASC,
+             b.created_at ASC LIMIT 1`, aid, exceptId);
+
+// 아직 손이 덜 간 가게가 몇 곳 남았나 — "얼마나 남았는지" 를 알아야 끝이 보인다.
+export const countUnfinishedBusinesses = async (db, aid) =>
+  (await first(db, `SELECT COUNT(*) n FROM businesses b
+    WHERE b.association_id=?
+      AND (NOT EXISTS (SELECT 1 FROM media m WHERE m.business_id=b.id AND m.kind='image')
+           OR b.address='' OR b.phone='' OR b.hours='' OR b.description='')`, aid))?.n || 0;
+
 // 관리자 목록 — 찾기·거르개·쪽수.
 //
 // 예전에는 전부를 한 번에 뽑아 한 화면에 늘어놓았다. 34곳에 세로 9,948px 이었고,

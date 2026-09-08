@@ -496,6 +496,17 @@ export async function adminUpdateBusiness(ctx) {
     await D.setUrdealSeller(db, b.id, assoc.id, raw ? Number(raw) : 0);
   }
   await audit(ctx, "점포정보수정", `${name} (관리자 대행)`);
+  // [저장하고 다음 가게] — 130곳을 채워 넣을 때 목록으로 돌아가 다음 줄을 눈으로 찾는 일이
+  // 130번 반복되면 그것만으로 지친다. 화면이 다음 가게를 쥐어 준다.
+  //
+  // 번호는 화면에서 온 값이므로 믿지 않는다. 그 번호가 **이 상인회의** 가게인지 다시 본다 —
+  // 남의 상인회 번호를 적어 보내면 남의 관리 화면으로 넘어가 버린다.
+  const nextId = Number(form.get("next")) || 0;
+  if (nextId && nextId !== b.id) {
+    const nx = await D.getBusinessById(db, nextId);
+    if (nx && nx.association_id === assoc.id)
+      return back(`${base}/admin/business/${nx.id}`, `${name} 저장했습니다. 다음은 ${nx.name} 입니다.`);
+  }
   return back(to, "저장했습니다. 사장님이 로그인하면 이어서 고칠 수 있습니다.");
 }
 
@@ -1556,21 +1567,39 @@ export async function adminAddMember(ctx) {
   const businessName = cap((form.get("business_name") || "").trim(), 100);
   const isEsign = assoc.kind === "esign";
   const to = base + "/admin";
-  if (!name) return back(to, "성함을 입력해 주세요.", true);
   if (!isEsign && !businessName) return back(to, "업체명을 입력해 주세요.", true);
   // 이메일은 이제 선택이다. 상인회 사장님 중에는 이메일이 없는 분이 많고, 이 서비스는
   // 안내를 알림톡으로 보내므로 실제로 필요한 연락처는 휴대폰이다.
   // 다만 로그인은 이메일로 하므로, 없으면 '아직 로그인 못 하는 상태' 로 자리만 잡아 둔다.
   if (email && !EMAIL_RE.test(email)) return back(to, "이메일 형식을 확인해 주세요.", true);
   if (phone && !D.isValidPhone(phone)) return back(to, "휴대폰 번호 형식을 확인해 주세요. (010-1234-5678)", true);
-  if (!email && !phone) return back(to, "이메일이나 휴대폰 중 하나는 있어야 합니다 — 둘 다 없으면 사장님께 연락할 방법이 없습니다.", true);
+
+  // ── 사장님을 몰라도 가게는 먼저 등록한다 ──────────────────────────────
+  //
+  // 130곳짜리 상인회에서 회장님이 130명의 성함과 번호를 미리 알고 있을 리가 없다.
+  // 지도에는 가게가 다 있는데 **연락처를 모른다는 이유로 등록이 막히면** 거기서 끝난다.
+  // 실제로 그렇게 막혔다.
+  //
+  // 그래서 셋(성함·휴대폰·이메일)이 모두 비면 '아직 사장님을 모르는 가게' 로 받는다.
+  // 소유자 자리는 데이터 구조상 비울 수 없으므로(businesses.owner_id NOT NULL),
+  // 로그인할 수 없는 자리지기 계정을 만들어 둔다 — 나중에 성함·번호를 넣으면 그 계정이
+  // 그대로 사장님 계정이 된다. 새로 만들지 않으니 사진·소개가 딸려 사라질 일이 없다.
+  //
+  // 전자계약 조직은 다르다. 거기서 '내부 서명자' 는 사람이 본체라 이름 없이 만들 수 없다.
+  const ownerUnknown = !isEsign && !name && !email && !phone;
+  if (!ownerUnknown && !name) return back(to, "성함을 입력해 주세요.", true);
+  if (!ownerUnknown && !email && !phone)
+    return back(to, "이메일이나 휴대폰 중 하나는 있어야 합니다 — 둘 다 없으면 사장님께 연락할 방법이 없습니다.", true);
   if (email && await D.getUserByEmail(db, email)) return back(to, "이미 가입된 이메일입니다.", true);
   if ((await D.countMembers(db, assoc.id)) >= planOf(assoc).maxMembers)
     return back(to, "회원 정원이 가득 찼습니다.", true);
   const loginEmail = email || `p${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}@${NO_LOGIN_DOMAIN}`;
   const temp = tempPassword();
   const { hash, salt } = await hashPassword(temp);
-  const user = await D.createUser(db, { email: loginEmail, passwordHash: hash, salt, name, role: "MERCHANT", associationId: assoc.id, phone });
+  // 사장님을 아직 모르면 이름 자리에 상호를 둔다. 목록에서 '누구' 칸이 비면
+  // 회장님이 그 줄을 못 읽는다 — 가게 이름이라도 보이는 편이 낫다.
+  const user = await D.createUser(db, { email: loginEmail, passwordHash: hash, salt,
+    name: name || businessName, role: "MERCHANT", associationId: assoc.id, phone });
   if (!isEsign) {
     const biz = await D.createBusiness(db, { associationId: assoc.id, ownerId: user.id, name: businessName, category: cap(form.get("category"), 40), source: "proxy" });
     // 지도에서 찾아 채운 값이 함께 왔으면 그 자리에서 저장한다 — 안 그러면 등록하자마자
@@ -1595,6 +1624,10 @@ export async function adminAddMember(ctx) {
   await audit(ctx, isEsign ? "서명자등록" : "회원대행등록", `${name}${businessName ? " / " + businessName : ""} (${email || "이메일 없음"})`);
   // 이메일이 없으면 휴대폰 번호가 곧 아이디다. 그 자리에서 비밀번호까지 알려 주지 않으면
   // 회장님이 사장님께 전화해 불러 줄 것이 없다.
+  // 사장님을 모르는 채로 넣었으면 임시 비밀번호를 불러 줄 상대가 없다 — 그 말을 하지 않는다.
+  // 대신 다음에 무엇을 하면 되는지를 말한다.
+  if (ownerUnknown)
+    return back(to, `${businessName} 등록 완료 — 사장님 정보는 아직 비어 있습니다. 그 가게 화면의 [사장님 로그인] 에서 성함·휴대폰을 넣으면 그때 로그인이 열립니다.`);
   return back(to, `${isEsign ? "내부 서명자" : "대행"} 등록 완료 — ${name}님 로그인: ${
     email || D.maskPhone(phone) + " (휴대폰 번호로 로그인)"} / 임시비번 ${temp} (본인에게 전달하세요)`);
 }
