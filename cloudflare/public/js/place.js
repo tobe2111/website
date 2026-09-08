@@ -52,6 +52,9 @@
     }
     function fill(p) {
       set("name", p.name);
+      // 지도 상세 주소를 함께 남긴다. 카카오는 장소 정보를 "place_url 로 연결해서만"
+      // 쓰라고 했고, 그 페이지의 대표 사진을 가져올 때도 이 주소가 필요하다.
+      set("map_url", p.url);
       set("address", p.address);
       set("phone", p.phone);
       set("lat", p.lat);

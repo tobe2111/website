@@ -5,6 +5,7 @@ import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG, ORIGIN, as
 import { verifyInviteToken, verifyPhotoToken, SALES_STAGES, otpRequired, selfSignupOn, MAX_SLOTS, BULK_MAX, BULK_CHUNK, docOf, isPlaceholderEmail } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
 import { html, notFoundResponse, back, redirect } from "./http.js";
 import { deals as urdealDeals, urdealProductUrl, urdealSellerUrl, sellerPhotos } from "./urdeal.js";
+import { isPlaceUrl } from "./placePhoto.js";
 import { countable, countHomeGoal, homeVariantCookie } from "./traffic.js";
 import { galleryItem } from "./media-render.js";
 import { priceOf, costOf, jeonToWon, notifyEnabled, autoNotifyOn, canAutoSend, ALIGO_VARS, hasCfg, TEMPLATE_KEYS, TEMPLATES, billingMode, BILLING_MODES } from "./notify.js";
@@ -1511,6 +1512,7 @@ export async function dashboard(ctx) {
       <div class="form-two"><label>네이버 블로그<input type="url" name="sns_blog" value="${esc(b.sns_blog || "")}" placeholder="blog.naver.com/아이디" /></label>
         <label>카카오톡 채널<input type="url" name="sns_kakao" value="${esc(b.sns_kakao || "")}" placeholder="pf.kakao.com/_채널" /></label></div>
       <label>네이버 플레이스 <small>(내 가게 네이버 지도 페이지 — 리뷰·길찾기 연결)</small><input type="url" name="sns_naver" value="${esc(b.sns_naver || "")}" placeholder="naver.me/… 또는 map.naver.com/p/entry/place/…" /></label>
+      <input type="hidden" name="map_url" data-place="map_url" value="${esc(b.map_url || "")}" />
       <div class="form-divider">지도 위치</div>
       ${naver ? `<div class="geo-search"><input type="text" id="geoQuery" value="${esc(b.address)}" placeholder="도로명 주소 (예: 서초대로 123)" aria-label="주소로 좌표 찾기" /><button type="button" class="btn btn-ghost btn-sm" id="geoBtn">주소로 찾기</button></div>
       <p class="geo-msg panel-hint" id="geoMsg" hidden></p>
@@ -3183,6 +3185,13 @@ export async function adminBusinessEdit(ctx) {
   // 그래서 '가져오기' 대신 '열어 보기' 를 준다 — 회장님이 그 화면을 보고 사장님께
   // "이 사진 주세요" 라고 짚어 줄 수 있으면 목적은 달성된다.
   const mapQ = encodeURIComponent([b.name, b.address ? b.address.split(" ").slice(0, 2).join(" ") : ""].filter(Boolean).join(" "));
+  // 지도의 대표 사진 한 장은 가져올 수 있다 — 그 장소 페이지가 og:image 로 스스로 밝힌 값이다.
+  // 갤러리 전체는 못 가져온다(카카오가 "place_url 로 연결해서만" 쓰라고 못 박았다).
+  const canPlacePhoto = isPlaceUrl(b.map_url);
+  const placeStep = !canPlacePhoto ? "" : `<form method="post" action="${base}/admin/business/${b.id}/photos/place" class="ask-place">
+      <button class="btn btn-outline btn-block">🗺️ 지도의 대표 사진 담기 <small>한 장</small></button>
+      <p class="panel-hint">그 가게 지도 페이지에 걸린 대표 사진입니다. 손님이 올린 후기 사진이라
+        <b>출처를 함께 저장</b>하고, 사장님 사진이 들어오면 바꿔 주세요.</p></form>`;
   const mapLinks = `<p class="ask-maps"><span class="ask-maps-k">지도에 올라온 사진 보기</span>
     <a href="${b.sns_naver && /^https:\/\//.test(b.sns_naver) ? esc(b.sns_naver) : `https://map.naver.com/p/search/${mapQ}`}"
       target="_blank" rel="noopener">네이버 지도 <span aria-hidden="true">↗</span></a>
@@ -3224,6 +3233,7 @@ export async function adminBusinessEdit(ctx) {
       ${photoLinkBox}
       <form method="post" action="${base}/admin/business/${b.id}/photo-link" class="inline-form">
         <button class="btn btn-primary btn-block">📷 사진 요청 링크 만들기</button></form>
+      ${placeStep}
       ${mapLinks}
     </div>
 

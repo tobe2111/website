@@ -20,6 +20,7 @@ import { seedDemo } from "./demoContent.js";
 import { seedStarter } from "./starterContent.js";
 import { KINDS, kindById, PRESETS, assocTerms } from "./kinds.js";
 import { sellerPhotos, urdealProductUrl } from "./urdeal.js";
+import { placePhoto, isPlaceUrl } from "./placePhoto.js";
 import { TEMPLATE_KEYS, TEMPLATES, sendTest, listProviderTemplates, matchTemplates, sendMany, sendOne, notifyEnabled, autoNotifyOn, canAutoSend, wonToJeon, renderTemplate, templateButton, billingMode, chargeContract, BILLING_MODES, priceOf } from "./notify.js";
 
 // 계약 한 건을 연다 — 조직 경계와 **부서 경계**를 함께 본다.
@@ -445,6 +446,7 @@ export async function updateBusiness(ctx) {
     address: cap(form.get("address"), 200), hours: cap(form.get("hours"), 100), lat, lng,
     snsInstagram: snsUrl(form.get("sns_instagram")), snsYoutube: snsUrl(form.get("sns_youtube")),
     snsBlog: snsUrl(form.get("sns_blog")), snsKakao: snsUrl(form.get("sns_kakao")), snsNaver: snsUrl(form.get("sns_naver")),
+    mapUrl: b.map_url || "",   // 이 화면에는 칸이 없다 — 있던 값을 지운다
   });
   return back(base + "/dashboard", "업체 정보가 저장되었습니다.");
 }
@@ -474,6 +476,8 @@ export async function adminUpdateBusiness(ctx) {
     // 점주가 넣어 둔 SNS 는 관리자 화면에서 다루지 않는다 — 안 그리는 칸을 빈 값으로 덮어쓰면 지워진다
     snsInstagram: b.sns_instagram, snsYoutube: b.sns_youtube, snsBlog: b.sns_blog,
     snsKakao: b.sns_kakao, snsNaver: snsUrl(form.get("sns_naver")) || b.sns_naver,
+    // 장소 찾기가 채워 넣은 지도 주소. 지도 상세 주소가 아니면 받지 않는다.
+    mapUrl: isPlaceUrl(form.get("map_url")) ? cap(String(form.get("map_url")).trim(), 300) : (b.map_url || ""),
   });
   // 유어딜 가게 번호 — 이 번호가 있는 점포의 이용권이 홈 '우리 골목 이용권' 에 걸린다.
   // 칸을 아예 안 그린 화면(점주 대시보드)에서 온 저장은 건드리지 않는다.
@@ -832,6 +836,47 @@ export async function adminImportUrdealPhotos(ctx) {
   const tail = skipped ? ` (${skipped}장은 가져오지 못했습니다)` : "";
   return saved ? at(`유어딜에서 사진 ${saved}장을 담았습니다.${tail}`)
     : at(`사진을 가져오지 못했습니다.${tail}`, true);
+}
+
+// 지도에 올라온 대표 사진 한 장을 담는다.
+//
+// 그 장소 페이지가 스스로 밝힌 og:image 다 — 카톡·검색엔진이 미리보기를 만들 때 읽는
+// 바로 그 값이라, 내부 주소를 몰래 부르는 것과는 다르다. 자세한 사정은 placePhoto.js 에.
+//
+// 화면이 보낸 주소는 믿지 않는다. 서버가 그 가게에 저장된 지도 주소로 다시 열어,
+// 거기 적힌 사진일 때만 담는다 — 이 칸이 아무 주소나 찌르는 창구가 되면 안 된다.
+export async function adminImportPlacePhoto(ctx) {
+  const { db, env, base, assoc } = ctx;
+  const b = await D.getBusinessById(db, Number(ctx.params.id) || 0);
+  if (!b || b.association_id !== assoc.id) return back(`${base}/admin`, "업체를 찾을 수 없습니다.", true);
+  const at = (m, bad) => back(`${base}/admin/business/${b.id}`, m, bad);
+  if (!isPlaceUrl(b.map_url)) return at("이 가게에는 지도 주소가 없습니다. '장소 찾기' 로 가게를 먼저 골라 주세요.", true);
+  if (!storage.enabled(env)) return at("사진 저장소(R2)가 아직 연결되지 않았습니다.", true);
+
+  const plan = planOf(assoc);
+  if ((await D.countBusinessImages(db, b.id)) >= plan.maxPhotos)
+    return at(`사진은 최대 ${plan.maxPhotos}장까지 올릴 수 있습니다.`, true);
+
+  const pic = await placePhoto(b.map_url);
+  if (!pic) return at("지도에서 이 가게 사진을 찾지 못했습니다. 아직 사진이 올라오지 않았을 수 있습니다.", true);
+  const chk = checkWebhookUrl(pic.url, env.PUBLIC_ORIGIN || "");   // https · 공개 도메인 · 내부망 금지
+  if (!chk.ok) return at("가져올 수 없는 사진 주소입니다.", true);
+
+  let res;
+  try { res = await fetch(pic.url, { redirect: "follow" }); } catch { return at("사진을 받아오지 못했습니다.", true); }
+  if (!res.ok) return at("사진을 받아오지 못했습니다.", true);
+  const len = Number(res.headers.get("content-length") || 0);
+  if (len && len > MAX_IMAGE_BYTES) return at("사진이 너무 큽니다.", true);
+  const buf = new Uint8Array(await res.arrayBuffer());
+  if (buf.byteLength > MAX_IMAGE_BYTES) return at("사진이 너무 큽니다.", true);
+  const real = sniffImage(buf);                    // 확장자가 아니라 실제 바이트로 판정
+  if (!real) return at("사진 파일이 아닙니다.", true);
+
+  const stored = await storage.save(env, buf, real);
+  // 출처는 반드시 남긴다 — 이 사진은 손님이 올린 후기 사진이다.
+  await D.addMedia(db, { businessId: b.id, kind: "image", filename: stored, size: buf.byteLength,
+    caption: "", sourceName: pic.source, sourceUrl: pic.sourceUrl });
+  return at(`${pic.source}의 대표 사진을 담았습니다. 사장님 사진이 들어오면 바꿔 주세요.`);
 }
 
 // ---------- 사진 업로드 (R2) ----------
@@ -1487,7 +1532,7 @@ export async function adminAddMember(ctx) {
     if (address || bizPhone || lat != null) {
       await D.updateBusiness(db, biz.id, {
         name: biz.name, category: biz.category, description: "", phone: bizPhone, address, hours: "", lat, lng,
-        snsInstagram: "", snsYoutube: "", snsBlog: "", snsKakao: "", snsNaver: "",
+        snsInstagram: "", snsYoutube: "", snsBlog: "", snsKakao: "", snsNaver: "", mapUrl: biz.map_url || "",
       });
     }
   }

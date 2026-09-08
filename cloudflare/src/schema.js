@@ -122,6 +122,10 @@ CREATE TABLE IF NOT EXISTS businesses (
   lng            REAL,
   status         TEXT NOT NULL DEFAULT 'pending',
   sns_naver      TEXT NOT NULL DEFAULT '',    -- 네이버 플레이스(스마트플레이스) URL
+  -- 장소 찾기에서 고른 지도 상세 주소 (카카오맵 place_url 등).
+  -- 카카오는 장소 정보를 "place_url 로 연결해서만" 쓰라고 못 박았다 — 그래서 이 주소를
+  -- 버리지 않고 남긴다. 그 페이지의 대표 사진(og:image)을 가져올 때도 쓴다.
+  map_url        TEXT NOT NULL DEFAULT '',
   sns_instagram  TEXT NOT NULL DEFAULT '',
   sns_youtube    TEXT NOT NULL DEFAULT '',
   sns_blog       TEXT NOT NULL DEFAULT '',
@@ -859,7 +863,7 @@ async function migrateColumns(db) {
     if (!bcols.some((c) => c.name === "updated_at")) {
       await db.prepare("ALTER TABLE businesses ADD COLUMN updated_at TEXT").run();
     }
-    for (const col of ["sns_instagram", "sns_youtube", "sns_blog", "sns_kakao", "sns_naver", "day_off_date"]) {
+    for (const col of ["sns_instagram", "sns_youtube", "sns_blog", "sns_kakao", "sns_naver", "day_off_date", "map_url"]) {
       if (!bcols.some((c) => c.name === col)) {
         await db.prepare(`ALTER TABLE businesses ADD COLUMN ${col} TEXT NOT NULL DEFAULT ''`).run();
       }
