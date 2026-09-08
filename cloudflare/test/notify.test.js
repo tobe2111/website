@@ -183,8 +183,12 @@ test("기존 배포 DB(구버전) → 자동 마이그레이션으로 알림톡 
   }
   const ucols = old._db.prepare("PRAGMA table_info(users)").all().map((c) => c.name);
   assert.ok(ucols.includes("phone"), "users.phone 컬럼이 생겨야 함");
+  // 기록되는 값은 '세대.지문' 이다. 세대만 맞으면 건너뛰던 예전 방식이 라이브에서
+  // 'no such column: map_url' 을 냈기 때문에, 마이그레이션 코드의 지문까지 함께 본다.
+  const { schemaStamp } = await import("../src/schema.js");
   const ver = old._db.prepare("SELECT value FROM settings WHERE key='schema_version'").get();
-  assert.ok(Number(ver.value) > 16, `버전이 올라가야 다음 콜드스타트에서 건너뛴다 (현재 ${ver.value})`);
+  assert.equal(ver.value, schemaStamp(), `다음 콜드스타트에서 건너뛰려면 지금 값이 찍혀야 한다 (현재 ${ver.value})`);
+  assert.ok(Number(ver.value.split(".")[0]) > 16, `세대가 올라가야 한다 (현재 ${ver.value})`);
 });
 
 test("상인회별 단가: 전용가 우선, 0이면 플랫폼 기본가", async () => {

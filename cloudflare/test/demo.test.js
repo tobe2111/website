@@ -9,8 +9,10 @@ import { hashPassword } from "../src/crypto.js";
 
 const BASE = "http://localhost";
 const SLUG = "리스터코퍼레이션";
-const T = "/t/" + encodeURIComponent(SLUG);
-let env, assoc, cookie, token;
+// 주소는 상수로 박지 않고 **DB 가 들고 있는 값**에서 받아 온다.
+// 옛 DB 를 올리면 마이그레이션이 한글 주소를 영문으로 바꾸기 때문에(v32),
+// 상수로 박아 두면 그 경로에서만 조용히 깨진다.
+let env, assoc, cookie, token, T;
 
 const req = (method, path, { cookie = "", body = null } = {}) => {
   const headers = {};
@@ -29,6 +31,9 @@ function db() { return env.DB; }
 before(async () => {
   env = makeEnv();
   assoc = await D.createAssociation(db(), { slug: SLUG, name: SLUG });
+  // 스키마를 한 번 올려 두고, **마이그레이션이 정해 준 주소**를 기준으로 삼는다
+  await worker.fetch(new Request(BASE + "/"), env, { waitUntil() {}, passThroughOnException() {} });
+  T = "/t/" + encodeURIComponent((await D.getAssociationById(db(), assoc.id)).slug);
   const pw = await hashPassword("super1234");
   await D.createUser(db(), { email: "super@platform.kr", passwordHash: pw.hash, salt: pw.salt, name: "운영자", role: "SUPERADMIN", associationId: null });
 

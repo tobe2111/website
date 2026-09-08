@@ -784,25 +784,47 @@ CREATE INDEX IF NOT EXISTS idx_landing_asset_assoc ON landing_assets(association
 // 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
 // 마이그레이션 세대 — migrateColumns 에 단계를 추가할 때마다 +1
 // 36 = 두 갈래(트렁크 33 · 모집형 35)를 합친 세대. 양쪽 DB 모두 다시 한 번 마이그레이션을 타게 한다.
-export const SCHEMA_VERSION = "52";
+export const SCHEMA_VERSION = "53";
+
+// ⚠️ 이 숫자를 올리는 걸 잊으면 **마이그레이션이 통째로 안 돈다.**
+//
+// 실제로 그렇게 났다. 52 로 올린 뒤 map_url 을 아래 목록에 더했는데 숫자는 그대로 뒀다.
+// 라이브 DB 에는 이미 52 가 찍혀 있어 아래 패스트패스가 곧장 돌아 나갔고, ALTER TABLE 은
+// 영영 실행되지 않았다. 몇 주 뒤 회장님이 저장을 누르자
+//   D1_ERROR: no such column: map_url
+// 이 떴다. 코드에는 마이그레이션이 멀쩡히 적혀 있었으므로 눈으로는 절대 안 보인다.
+//
+// 그래서 사람이 기억하는 것에 기대지 않는다. 저장하는 값에 **마이그레이션 코드 자체의
+// 지문**을 붙인다. migrateColumns 를 한 글자라도 고치면 지문이 달라져 패스트패스가
+// 저절로 풀린다. 숫자를 잊어도 안전하다.
+//
+// 지문이 바뀌면 마이그레이션이 한 번 더 도는데, 전부 "없으면 더한다" 라 여러 번 돌아도
+// 문제가 없다(idempotent). 잘못 도는 비용은 왕복 몇 번, 안 도는 비용은 라이브 장애다.
+const fingerprint = (src) => {
+  let h = 5381;
+  for (let i = 0; i < src.length; i++) h = ((h * 33) ^ src.charCodeAt(i)) >>> 0;
+  return h.toString(36);
+};
+export const schemaStamp = () => `${SCHEMA_VERSION}.${fingerprint(String(migrateColumns))}`;
 
 export async function ensureSchema(db) {
   const has = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='associations'").first();
+  const stamp = schemaStamp();
   if (has) {
-    // 패스트패스: 버전이 이미 최신이면 마이그레이션 검사(~15회 왕복) 생략 → 콜드스타트 단축
+    // 패스트패스: 세대와 지문이 모두 같을 때만 마이그레이션 검사(~15회 왕복) 생략 → 콜드스타트 단축
     try {
       const v = await db.prepare("SELECT value FROM settings WHERE key='schema_version'").first();
-      if (v && v.value === SCHEMA_VERSION) return false;
+      if (v && v.value === stamp) return false;
     } catch {}
     await migrateColumns(db);
     // 초구버전 DB 엔 settings 자체가 없을 수 있음 (버전 기록 전 보장)
     await db.prepare("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL DEFAULT '')").run();
-    await db.prepare("INSERT INTO settings (key, value) VALUES ('schema_version', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(SCHEMA_VERSION).run();
+    await db.prepare("INSERT INTO settings (key, value) VALUES ('schema_version', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(stamp).run();
     return false;
   }
   const clean = SCHEMA_SQL.replace(/--[^\n]*\n/g, "\n");
   for (const st of clean.split(";").map((s) => s.trim()).filter(Boolean)) await db.prepare(st).run();
-  await db.prepare("INSERT INTO settings (key, value) VALUES ('schema_version', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(SCHEMA_VERSION).run();
+  await db.prepare("INSERT INTO settings (key, value) VALUES ('schema_version', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(stamp).run();
   return true;
 }
 
