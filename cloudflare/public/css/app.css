@@ -4072,3 +4072,14 @@ body.is-console[data-console="super"] .console-strip{border-bottom:1px solid #2b
 .dash .all-done .ad-ico svg{width:18px;height:18px}
 .dash .all-done b{font-weight:700}
 .dash .all-done > span:last-child{color:var(--ok-fg);opacity:.82}
+
+/* 접히는 안내 상자(help-box)도 계약서 판·사진 걸음과 같은 펼침 표시를 쓴다 —
+   한 화면 안에서 접히는 것들이 서로 다르게 생기면 어느 것이 눌리는지 매번 다시 배운다 */
+.dash .help-box > summary{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.dash .help-box > summary .panel-sub{flex:1;min-width:0;font-weight:500}
+.dash .help-box > summary .fold-cue{flex:none;display:inline-flex;align-items:center;gap:4px;
+  font-size:12px;font-weight:700;color:var(--brand-text)}
+.dash .help-box > summary .fold-cue::after{content:"⌄";font-size:15px;line-height:1;transform:translateY(-1px)}
+.dash .help-box[open] > summary .fold-cue::after{content:"⌃"}
+.dash .help-box[open] > summary .fold-open{display:none}
+.dash .help-box:not([open]) > summary .fold-close{display:none}
