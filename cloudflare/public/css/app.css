@@ -3522,6 +3522,17 @@ a.deal-card:hover{border-color:var(--deal);transition:border-color .18s}
    눈에 띄면 실수로 눌리고, 너무 숨으면 못 찾는다. 그래서 표 아래 한 줄이다. */
 .panel-foot-act{margin:14px 0 0;padding-top:12px;border-top:1px solid var(--line);text-align:right}
 
+/* 손님 화면 위의 '고치러 가기' — 관리자·사장님에게만 그려진다.
+   손님 눈에는 이 줄이 서버에서부터 없다. 그러니 여기서는 조용하기만 하면 된다. */
+.owner-edit{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:14px 0 0}
+/* 히어로 안의 단추는 폭을 꽉 채우게 돼 있다(.biz-actions 기준). 이 줄은 안내에 가까우니
+   글자 크기만큼만 차지한다 — 안 그러면 '고치기' 가 화면에서 제일 큰 단추가 된다. */
+.owner-edit > .btn{flex:none;width:auto}
+.owner-edit-why{font-size:13px;color:var(--muted)}
+
+/* 지도와 아직 연결되지 않은 가게 — 사진을 가져올 수 없으니 '연결하러 가는 길' 을 준다 */
+.ask-place.is-off{padding:12px 0 0;border-top:1px dashed var(--line);margin-top:10px}
+
 /* ==========================================================================
    v7 콘솔 — 대기업 관리 화면의 밀도
    v6(레퍼런스 폼)까지는 "한 화면 = 한 폼" 이라 여백을 넉넉히 뒀는데, 실제 콘솔은
