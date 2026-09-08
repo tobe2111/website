@@ -165,6 +165,7 @@ export const TENANT = [
   ["POST", "/admin/business/:id/media", api.adminUploadMedia, "ADMIN"],
   ["POST", "/admin/business/:id/photos/import", api.adminImportPhotos, "ADMIN"],
   ["POST", "/admin/business/:id/photos/urdeal", api.adminImportUrdealPhotos, "ADMIN"],
+  ["POST", "/admin/business/:id/photos/place", api.adminImportPlacePhoto, "ADMIN"],
   ["POST", "/admin/business/:id/photo-link", api.adminCreatePhotoLink, "ADMIN"],
   ["POST", "/admin/user/:id/officer", api.adminSetOfficer, "ADMIN"],
   ["POST", "/admin/business/:id/embed", api.adminAddEmbed, "ADMIN"],
