@@ -2,7 +2,18 @@
 // 네이버 지도 API가 로드된 경우에만 동작(미로드 시 목록 폴백 유지).
 (function () {
   "use strict";
-  if (!window.naver || !naver.maps) return;
+  // 네이버 지도가 안 실려도 화면이 흰 상자로 남지 않게 한다.
+  //
+  // 실제로 라이브에서 그렇게 났다 — 지도 자리가 화면을 가득 채운 채 흰색이었고,
+  // 손님은 "고장 났다" 로 읽었다. 이제 그 자리에는 골목 그림과 안내 줄이 미리 깔려 있고,
+  // 지도가 그려지면 아래에서 비운다. 못 그리면 그림이 그대로 남고 안내 줄만 바뀐다.
+  var slots = [document.getElementById("storeMap"), document.getElementById("bizMap")].filter(Boolean);
+  if (!window.naver || !naver.maps) {
+    for (var i = 0; i < slots.length; i++) slots[i].setAttribute("data-map-failed", "1");
+    return;
+  }
+  // 지도를 그리기 직전에 자리를 비운다 — 안 비우면 그림 위에 지도가 겹쳐 그려진다.
+  for (var j = 0; j < slots.length; j++) slots[j].innerHTML = "";
 
   // 브랜드색 핀 (스토어프론트 글리프) — var(--brand) 로 테넌트 대표색 자동 적용
   var PIN_SVG = '<svg viewBox="0 0 36 46" width="34" height="43" aria-hidden="true">' +
