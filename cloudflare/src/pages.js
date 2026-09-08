@@ -1863,8 +1863,8 @@ export async function admin(ctx) {
     ${kakaoReady ? `<p class="panel-hint"><b>지도에서 가게를 고르는 것으로 시작합니다.</b>
       한 번 고르면 업체명·업종·주소·전화·지도 위치가 다 들어오고, <b>지도 연결</b>까지 함께 남습니다 —
       그래야 나중에 <b>지도의 사진 가져오기</b>·지도 노출·검색 노출이 그대로 열립니다.
-      사장님 성함과 휴대폰만 더 적으면 끝입니다 — <b>이메일은 없어도 되고</b>,
-      등록을 마치면 임시 비밀번호가 바로 나옵니다.</p>
+      <b>사장님 성함·휴대폰은 몰라도 됩니다</b> — 비워 두고 등록한 뒤 나중에 채우면 그때 로그인이 열립니다.
+      <b>이메일도 없어도 되고</b>, 성함·휴대폰을 함께 적으시면 임시 비밀번호가 바로 나옵니다.</p>
     <p class="col-head">${SPARK_SVG} <b>1.</b> 지도에서 가게 찾기 <span class="ai">자동</span></p>
     <div class="auto-box" data-place-find>
       <div class="place-find">
@@ -1874,7 +1874,7 @@ export async function admin(ctx) {
       <p data-place-msg hidden></p>
       <ul class="place-list" data-place-list hidden></ul>
     </div>
-    <p class="col-head funnel-step2">${PERSON_SVG} <b>2.</b> 사장님 연락처</p>`
+    <p class="col-head funnel-step2">${PERSON_SVG} <b>2.</b> 사장님 연락처 <span class="tag opt">나중에 채워도 됨</span></p>`
       // 키가 없다고 이 자리를 통째로 지우면, 이런 기능이 있다는 것 자체를 관리자가 알 수 없다.
       // 꺼져 있다는 사실과 켜는 방법을 한 줄로 남긴다 — 없는 것과 꺼진 것은 다르다.
       : `<p class="panel-hint">가게 이름만으로 주소·전화·업종·지도 위치를 채워 넣는 <b>지도에서 찾기</b>는 지금 꺼져 있습니다 —
@@ -1882,11 +1882,11 @@ export async function admin(ctx) {
       <b>이메일은 없어도 되고</b>, 등록을 마치면 임시 비밀번호가 바로 나옵니다.</p>`}
     <form method="post" action="${base}/admin/members/add" class="stack-form${kakaoReady ? " is-funnel" : ""}">
       <div class="form-two"><label>업체명 <em class="tag req">필수</em><input type="text" name="business_name" data-place="name" required maxlength="100" autocomplete="organization" /></label>
-        <label>사장님 성함 <em class="tag req">필수</em><input type="text" name="name" required maxlength="60" autocomplete="name" /></label></div>
-      <label>휴대폰 <em class="tag req">필수</em> <small>이 번호가 곧 아이디가 됩니다 · 알림톡도 이리로 갑니다</small>
+        <label>사장님 성함 <em class="tag opt">선택</em><input type="text" name="name" maxlength="60" autocomplete="name" placeholder="모르면 비워 두세요" /></label></div>
+      <label>휴대폰 <em class="tag opt">선택</em> <small>넣으면 이 번호가 곧 아이디가 됩니다 · 알림톡도 이리로 갑니다</small>
         <input type="tel" name="phone" maxlength="13" inputmode="numeric" placeholder="010-0000-0000"
           autocomplete="tel" data-phone-help="id" aria-describedby="addMemberPhoneHelp" />
-        <span class="field-help" id="addMemberPhoneHelp" aria-live="polite">숫자만 눌러도 자동으로 끊어집니다.</span></label>
+        <span class="field-help" id="addMemberPhoneHelp" aria-live="polite">숫자만 눌러도 자동으로 끊어집니다. 모르면 비워 두고 나중에 채우셔도 됩니다.</span></label>
       <details class="more-fields"><summary>${kakaoReady ? "지도에 없는 가게예요 — 직접 적을게요" : "업종·주소·이메일을 지금 적기"}</summary>
         <div class="more-body">
           <div class="form-two"><label>업종 <em class="tag opt">선택</em><select name="category" data-place="category">${CATEGORIES.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("")}</select></label>
@@ -3222,6 +3222,24 @@ export async function adminBusinessEdit(ctx) {
   const filled = fields.filter((f) => f[1]).length;
   const pct = Math.round((filled / fields.length) * 100);
   const missing = fields.filter((f) => !f[1]).map((f) => f[0]);
+  // 130곳을 채워 넣는 일이다. 한 곳을 끝내고 목록으로 돌아가 다음 줄을 눈으로 찾는 것을
+  // 130번 반복하면 그것만으로 지친다. 그래서 '다음 가게' 를 이 화면이 직접 쥐어 준다.
+  const [nextBiz, leftN] = await Promise.all([
+    D.nextUnfinishedBusiness(db, assoc.id, b.id).catch(() => null),
+    D.countUnfinishedBusinesses(db, assoc.id).catch(() => 0),
+  ]);
+  // 맨 위에 서는 '남은 일' 카드. 예전에는 같은 내용이 화면 맨 아래에만 있어,
+  // 무엇을 채워야 하는지 알려면 폼을 다 지나쳐 내려가야 했다.
+  const todoCard = `<section class="panel biz-todo${pct === 100 ? " is-done" : ""}">
+    <div class="done-head"><span class="done-label">${PEOPLE_SVG} 이 가게에 남은 일</span>
+      <span class="done-pct${pct < 60 ? " is-low" : ""}">${pct}%</span></div>
+    <div class="done-bar${pct < 60 ? " is-low" : ""}"><i style="width:${pct}%"></i></div>
+    ${pct === 100
+      ? `<p class="done-sub">${CHECK_SVG} 손님 화면에 빠짐없이 보입니다.</p>`
+      : `<ul class="todo-list">${gaps.map((g) => `<li>${g}</li>`).join("")}</ul>`}
+    ${leftN ? `<p class="panel-hint biz-left">이 상인회에 아직 손이 덜 간 가게가 <b>${leftN}곳</b> 남았습니다.${
+      nextBiz ? ` <a href="${base}/admin/business/${nextBiz.id}">다음 가게(${esc(nextBiz.name)})로 →</a>` : ""}</p>` : ""}
+  </section>`;
   const doneBar = `<div class="finish-bar">
     <div class="done-card">
       <div class="done-head"><span class="done-label">${PEOPLE_SVG} 정보 완성도</span>
@@ -3232,7 +3250,10 @@ export async function adminBusinessEdit(ctx) {
         : `${CHECK_SVG} <b>${esc(missing.slice(0, 3).join(" · "))}</b>${missing.length > 3 ? ` 외 ${missing.length - 3}개` : ""} 를 채우면 지도·검색에 다 뜹니다`}</p>
       ${gaps.length ? `<ul class="done-gaps">${gaps.map((g) => `<li><span>${g}</span></li>`).join("")}</ul>` : ""}
     </div>
-    <button class="btn btn-cta">저장 ${ARROW_SVG}</button>
+    <span class="finish-acts">
+      <button class="btn btn-cta">저장 ${ARROW_SVG}</button>
+      ${nextBiz ? `<button class="btn btn-outline" name="next" value="${nextBiz.id}">저장하고 다음 가게 ${ARROW_SVG}</button>` : ""}
+    </span>
   </div>`;
   // ── 사진·영상 —— 사장님이 카톡으로 보내 온 것을 관리자가 대신 올린다.
   // 지도에서 긁어 오지 않는다: 그 사진들은 사장님·손님·플랫폼이 각각 찍은 남의 저작물이라,
@@ -3425,7 +3446,7 @@ export async function adminBusinessEdit(ctx) {
       : "· 연결된 사장님 계정 없음"}`,
     actions: b.status === "approved" ? `<a class="btn btn-ghost btn-sm" href="${base}/business/${esc(b.slug)}" target="_blank">가게 페이지 보기 ↗</a>` : "",
     body: `
-    ${ownerLoginPanel}
+    ${todoCard}
     <section class="panel">
       <h2 class="panel-title" id="p-info">가게 정보</h2>
       <p class="panel-hint">사장님 대신 채워 두는 자리입니다. 사장님이 로그인하면 자기 화면에서 이어서 고칠 수 있습니다.</p>
@@ -3478,7 +3499,8 @@ export async function adminBusinessEdit(ctx) {
       </div>
       ${doneBar}
       </form></section>
-    ${mediaPanel}` });
+    ${mediaPanel}
+    ${ownerLoginPanel}` });
   return html(layout({ title: `${b.name} 정보`, assoc, base, user, body, csrf,
     scripts: `<script src="${assetUrl("/js/place.js")}" defer></script>${
       imageSearchOn ? `<script src="${assetUrl("/js/photo-pick.js")}" defer></script>` : ""}` }));
