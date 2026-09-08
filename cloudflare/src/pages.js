@@ -844,7 +844,7 @@ export function loginForm(ctx) {
       ${nextTo ? `<input type="hidden" name="next" value="${esc(nextTo)}" />` : ""}
       <label>이메일 또는 휴대폰 번호
         <input type="text" name="login" required autocomplete="username" inputmode="email"
-          placeholder="${esign ? "name@company.co.kr" : "name@example.com 또는 010-1234-5678"}" />
+          placeholder="${esign ? "name@company.co.kr" : "name@example.com"}" />
         ${esign ? "" : `<small class="txt-muted">이메일이 없으시면 상인회에 등록된 휴대폰 번호로 들어오세요.</small>`}</label>
       <label>비밀번호<input type="password" name="password" required autocomplete="current-password" /></label>
       <details class="totp-login"><summary>2단계 인증을 쓰고 계신가요?</summary>
