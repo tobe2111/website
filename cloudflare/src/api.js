@@ -1500,24 +1500,43 @@ export async function adminReadNotifications(ctx) {
   await D.markAllNotificationsRead(ctx.db, ctx.assoc.id);
   return back(ctx.base + "/admin", "알림을 모두 읽음 처리했습니다.");
 }
+// 회원·관리자의 비밀번호를 회장님이 바꿔 준다.
+//
+// 두 갈래다. `password` 를 적어 보내면 **그 값으로** 정하고, 비우면 예전처럼 임시
+// 비밀번호를 지어 화면에 한 번 보여 준다.
+//
+// 직접 정하는 길이 필요한 이유: 임시 비밀번호는 화면에 딱 한 번 뜬다. 그 줄을 놓치면
+// (실제로 자주 놓친다) 다시 발급해야 하고, 그러면 이미 알려 준 값이 또 무효가 된다.
+// 회장님이 전화로 불러 줄 값을 미리 정하는 편이 현실에서 훨씬 덜 꼬인다.
 export async function adminResetUserPassword(ctx) {
-  const { db, base, assoc, params } = ctx;
+  const { db, base, assoc, params, form } = ctx;
+  // 돌아갈 자리 — 점포 화면에서 눌렀으면 그 화면으로 돌아와야 한다
+  const rawBack = form && safeNext(form.get("back"));
+  const to = rawBack && rawBack.startsWith(base + "/") ? rawBack : base + "/admin#s-people";
   const target = await D.getUserById(db, Number(params.id));
-  if (!target || target.association_id !== assoc.id) return back(base + "/admin", "대상 회원을 찾을 수 없습니다.", true);
-  if (target.role === "SUPERADMIN") return back(base + "/admin", "플랫폼 운영자 계정은 여기서 바꿀 수 없습니다.", true);
+  if (!target || target.association_id !== assoc.id) return back(to, "대상 회원을 찾을 수 없습니다.", true);
+  if (target.role === "SUPERADMIN") return back(to, "플랫폼 운영자 계정은 여기서 바꿀 수 없습니다.", true);
   // 자기 비밀번호는 계정 설정에서 바꾼다. 여기서 되면 세션 탈취자가 곧바로 계정을 굳혀 버린다.
-  if (target.id === ctx.user.id) return back(base + "/admin", "본인 비밀번호는 계정 설정에서 변경해 주세요.", true);
+  if (target.id === ctx.user.id) return back(to, "본인 비밀번호는 계정 설정에서 변경해 주세요.", true);
   // 이메일 없이 등록한 사장님은 휴대폰 번호로 들어온다. 무엇을 불러 줘야 하는지
   // 여기서 같이 말해 주지 않으면, 회장님이 가짜 주소(@no-login.invalid)를 불러 준다.
   const byPhone = isPlaceholderEmail(target.email);
   if (byPhone && !target.phone)
-    return back(base + "/admin", `${target.name}님은 이메일도 휴대폰 번호도 없어 로그인할 방법이 없습니다. 점포 화면에서 하나를 넣어 주세요.`, true);
-  const temp = tempPassword();
-  const { hash, salt } = await hashPassword(temp);
+    return back(to, `${target.name}님은 이메일도 휴대폰 번호도 없어 로그인할 방법이 없습니다. 점포 화면에서 하나를 넣어 주세요.`, true);
+
+  const given = String((form && form.get("password")) || "");
+  if (given && given.length < 8) return back(to, "비밀번호는 8자 이상이어야 합니다.", true);
+  const chosen = !!given;
+  const pw = given || tempPassword();
+  const { hash, salt } = await hashPassword(pw);
   await D.updateUserPassword(db, target.id, hash, salt);
-  await audit(ctx, "비밀번호재설정", byPhone ? `${target.name} (휴대폰 로그인)` : target.email);
+  await audit(ctx, chosen ? "비밀번호지정" : "비밀번호재설정", byPhone ? `${target.name} (휴대폰 로그인)` : target.email);
   const idLabel = byPhone ? `휴대폰 ${D.maskPhone(target.phone)}` : target.email;
-  return back(base + "/admin", `${target.name}님 — ${idLabel} / 임시 비밀번호 ${temp} (전달 후 변경 안내하세요)`);
+  // 직접 정한 값은 화면에 다시 적지 않는다 — 정한 사람이 이미 알고 있고,
+  // 주소창·방문기록에 남겨 봐야 좋을 것이 없다.
+  return back(to, chosen
+    ? `${target.name}님(${idLabel})의 비밀번호를 정하신 값으로 바꿨습니다. 이제 그 값으로 로그인합니다.`
+    : `${target.name}님 — ${idLabel} / 임시 비밀번호 ${pw} (전달 후 변경 안내하세요)`);
 }
 
 // 관리자 대행 등록: 총무가 사장님 대신 회원+업체를 만들고 임시 비번을 전달.
