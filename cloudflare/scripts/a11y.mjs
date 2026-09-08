@@ -76,7 +76,9 @@ const { seedDemo } = await import("../src/demoContent.js");
 const m = await D.createAssociation(env.DB, { slug: "market", name: "방배 카페골목 상인회", kind: "merchant" });
 await seedDemo(env, env.DB, m, { emailDomain: "market.kr" });
 await D.updateAssociation(env.DB, m.id, {
-  name: "방배 카페골목 상인회", tagline: "커피 한 잔에서 시작하는 골목", brand_color: "#6F4423",
+  // 실제로 배포되는 색으로 잰다 — 로고에서 뽑은 주황이다. 이 색은 흰 글자가 안 읽혀서
+  // (대비 3.6) 화면이 먹 글자로 바꿔 얹는데, 그게 정말 되는지는 여기서만 확인된다.
+  name: "방배 카페골목 상인회", tagline: "커피 한 잔에서 시작하는 골목", brand_color: "#C24310",
   phone: "02-9410-1004", email: "office@market.kr", address: "서울 서초구 방배로 42",
   logo: "", hero_image: "", hero_video: "", naver_verification: "", google_verification: "", ga_measurement_id: "",
 });

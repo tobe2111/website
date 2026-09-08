@@ -1,6 +1,6 @@
 // SSR 레이아웃 + 공통 조각 (문자열 템플릿, 런타임 독립)
 import { esc } from "./util.js";
-import { bundledBrand } from "./brandAssets.js";
+import { bundledBrand, bundledBrandColor } from "./brandAssets.js";
 import { kindById, termsOf } from "./kinds.js";
 
 // 디자인 시스템 v2 — 브랜드 매장 아이콘(스토어프론트)
@@ -114,7 +114,10 @@ ${ogImgAbs ? `<meta property="og:image" content="${esc(ogImgAbs)}" />` : ""}
   const ldScript = jsonLd ? `<script type="application/ld+json">${JSON.stringify(jsonLd).replace(/</g, "\\u003c")}</script>` : "";
   // 테넌트 대표색 하나로 사이트 전체 테마 전환 (900~50 스케일 자동 파생). CSS 주입 방지를 위해 HEX 만 허용.
   // 기본 브랜드색은 app.css 의 --brand 와 같아야 한다 (디자인 시스템 v3 · 앱 컨셉 블루).
-  const brandColor = /^#[0-9a-fA-F]{3,8}$/.test((assoc && assoc.brand_color) || "") ? assoc.brand_color : "#1F6CFF";
+  // 상인회가 고른 색이 언제나 먼저다. 아직 안 골랐고 우리가 그 상인회의 로고를 갖고 있으면
+  // **로고에서 뽑은 색**을 쓴다 — 로고는 주황인데 단추만 파란 화면이 되지 않게.
+  const brandColor = bundledBrandColor(assoc)
+    || (/^#[0-9a-fA-F]{3,8}$/.test((assoc && assoc.brand_color) || "") ? assoc.brand_color : "#1F6CFF");
   const onBrand = onBrandInk(brandColor);
   const brandText = brandTextInk(brandColor);
   // 구글 애널리틱스(GA4) 측정 ID — 관리자가 넣은 값이 <script src> 의 쿼리로 나가므로
@@ -170,7 +173,7 @@ ${consoleKind === "super" ? `<div class="console-strip"><div class="container co
   <b>운영사 콘솔</b><span>여기서 하는 일은 <b>모든 고객사</b>에 적용됩니다</span></div></div>` : ""}
 <header class="site-header" id="siteHeader">
   <div class="container header-inner">
-    <a class="brand" href="${consoleKind === "super" ? "/super" : product ? product.home || "/esign" : base || "/"}">${assoc && assoc.logo ? `${brandLogo(assoc, { cls: "brand-logo" })}<span>${brand}</span>` : bundledBrand(assoc) ? brandLogo(assoc, { wide: true, cls: "brand-logo-wide", w: 227, h: 44 }) : `<span class="brand-mark">${mark}</span><span>${brand}</span>`}</a>
+    <a class="brand" href="${consoleKind === "super" ? "/super" : product ? product.home || "/esign" : base || "/"}">${assoc && assoc.logo ? `${brandLogo(assoc, { cls: "brand-logo" })}<span>${brand}</span>` : bundledBrand(assoc) ? brandLogo(assoc, { wide: true, cls: "brand-logo-wide", w: 108, h: 44 }) : `<span class="brand-mark">${mark}</span><span>${brand}</span>`}</a>
     <button class="nav-toggle" id="navToggle" aria-label="메뉴 열기" aria-expanded="false"><span></span><span></span><span></span></button>
     <nav class="main-nav" id="mainNav">${nav}</nav>
   </div>
@@ -183,7 +186,7 @@ ${workScreen ? "" : `<footer class="site-footer"><div class="container">
     <nav class="foot-policy"><a href="/privacy" class="strong">개인정보처리방침</a><span class="sep"></span><a href="/terms">이용약관</a>${assoc ? `<span class="sep"></span><a href="${base}/contact">문의하기</a>` : ""}</nav>
   </div>
   <div class="foot-bottom">
-    ${(() => { const g = brandLogo(assoc, { wide: true, w: 258, h: 50, lazy: true });
+    ${(() => { const g = brandLogo(assoc, { wide: true, w: 123, h: 50, lazy: true });
       return g ? `<span class="foot-logo">${g}</span>` : `<span class="foot-mark" aria-hidden="true">${mark}</span>`; })()}
     <div class="foot-info">
       <strong>${brand}</strong>

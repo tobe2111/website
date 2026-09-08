@@ -2679,7 +2679,9 @@ body.is-done .foot-copy,body.is-done .site-footer p{color:var(--dk-muted)}
 .hot-h{display:flex;align-items:center;gap:12px;padding-bottom:12px;border-bottom:1px solid rgba(255,255,255,.28)}
 .hot-n{font-size:40px;font-weight:800;line-height:1;letter-spacing:-.04em;font-variant-numeric:tabular-nums}
 .hot-h h2{font-size:17px;font-weight:700;margin:0;letter-spacing:-.02em}
-.hot-h h2 small{display:block;font-size:13px;font-weight:500;color:rgba(255,255,255,.82);margin-top:3px}
+/* 브랜드색 띠 위의 보조 글자 — 82% 흰색은 짙은 색에서만 읽혔다. 주황·파랑 같은 중간 밝기
+   브랜드색에서 대비 3.8 로 미끄러져(실측) 알파를 올린다. 색이 무엇이든 읽혀야 한다. */
+.hot-h h2 small{display:block;font-size:13px;font-weight:500;color:rgba(255,255,255,.94);margin-top:3px}
 /* 누르는 칸은 24px 아래로 내려가지 않는다 (WCAG 2.5.8). 글자만 작게 두고 칸은 키운다. */
 .hot-all{margin-left:auto;flex:none;color:#fff;font-size:13px;font-weight:700;opacity:.88;
   display:inline-flex;align-items:center;min-height:24px}
@@ -2688,7 +2690,7 @@ body.is-done .foot-copy,body.is-done .site-footer p{color:var(--dk-muted)}
 .hot-row:last-of-type{border-bottom:0}
 .hot-m{flex:1;min-width:0}
 .hot-m b{display:block;font-size:15.5px;font-weight:700;letter-spacing:-.015em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.hot-m small{font-size:13px;color:rgba(255,255,255,.8)}
+.hot-m small{font-size:13px;color:rgba(255,255,255,.94)}
 .hot-acts{flex:none;display:flex;gap:7px}
 .hot-acts .btn{background:#fff;color:var(--brand-text);font-weight:700;border:0}
 .hot-acts .btn:hover{background:rgba(255,255,255,.88)}
