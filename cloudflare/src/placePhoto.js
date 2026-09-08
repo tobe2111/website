@@ -90,3 +90,16 @@ export async function placePhoto(mapUrl) {
     clearTimeout(timer);
   }
 }
+
+// 이 가게의 지도 주소로 쓸 만한 것.
+//
+// map_url 은 '장소 찾기' 로 가게를 고른 뒤에야 생긴다. 그런데 그 칸을 만들기 전에
+// 등록된 가게가 이미 많고, 그중 상당수는 **네이버 플레이스 주소를 손으로 넣어 두었다**
+// (sns_naver). 그걸 두고 "장소 찾기를 다시 하세요" 라고 하면 아무도 안 한다.
+// 이미 있는 것을 먼저 쓴다.
+export function placeSourceOf(b) {
+  if (!b) return "";
+  if (isPlaceUrl(b.map_url)) return String(b.map_url).trim();
+  if (isPlaceUrl(b.sns_naver)) return String(b.sns_naver).trim();
+  return "";
+}
