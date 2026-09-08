@@ -5,7 +5,7 @@ import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG, ORIGIN, as
 import { verifyInviteToken, verifyPhotoToken, SALES_STAGES, otpRequired, selfSignupOn, MAX_SLOTS, BULK_MAX, BULK_CHUNK, docOf, isPlaceholderEmail } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
 import { html, notFoundResponse, back, redirect } from "./http.js";
 import { deals as urdealDeals, urdealProductUrl, urdealSellerUrl, sellerPhotos } from "./urdeal.js";
-import { isPlaceUrl } from "./placePhoto.js";
+import { placeSourceOf } from "./placePhoto.js";
 import { countable, countHomeGoal, homeVariantCookie } from "./traffic.js";
 import { galleryItem } from "./media-render.js";
 import { priceOf, costOf, jeonToWon, notifyEnabled, autoNotifyOn, canAutoSend, ALIGO_VARS, hasCfg, TEMPLATE_KEYS, TEMPLATES, billingMode, BILLING_MODES } from "./notify.js";
@@ -3187,7 +3187,7 @@ export async function adminBusinessEdit(ctx) {
   const mapQ = encodeURIComponent([b.name, b.address ? b.address.split(" ").slice(0, 2).join(" ") : ""].filter(Boolean).join(" "));
   // 지도의 대표 사진 한 장은 가져올 수 있다 — 그 장소 페이지가 og:image 로 스스로 밝힌 값이다.
   // 갤러리 전체는 못 가져온다(카카오가 "place_url 로 연결해서만" 쓰라고 못 박았다).
-  const canPlacePhoto = isPlaceUrl(b.map_url);
+  const canPlacePhoto = !!placeSourceOf(b);
   const placeStep = !canPlacePhoto ? "" : `<form method="post" action="${base}/admin/business/${b.id}/photos/place" class="ask-place">
       <button class="btn btn-outline btn-block">🗺️ 지도의 대표 사진 담기 <small>한 장</small></button>
       <p class="panel-hint">그 가게 지도 페이지에 걸린 대표 사진입니다. 손님이 올린 후기 사진이라

@@ -20,7 +20,7 @@ import { seedDemo } from "./demoContent.js";
 import { seedStarter } from "./starterContent.js";
 import { KINDS, kindById, PRESETS, assocTerms } from "./kinds.js";
 import { sellerPhotos, urdealProductUrl } from "./urdeal.js";
-import { placePhoto, isPlaceUrl } from "./placePhoto.js";
+import { placePhoto, isPlaceUrl, placeSourceOf } from "./placePhoto.js";
 import { TEMPLATE_KEYS, TEMPLATES, sendTest, listProviderTemplates, matchTemplates, sendMany, sendOne, notifyEnabled, autoNotifyOn, canAutoSend, wonToJeon, renderTemplate, templateButton, billingMode, chargeContract, BILLING_MODES, priceOf } from "./notify.js";
 
 // 계약 한 건을 연다 — 조직 경계와 **부서 경계**를 함께 본다.
@@ -446,7 +446,7 @@ export async function updateBusiness(ctx) {
     address: cap(form.get("address"), 200), hours: cap(form.get("hours"), 100), lat, lng,
     snsInstagram: snsUrl(form.get("sns_instagram")), snsYoutube: snsUrl(form.get("sns_youtube")),
     snsBlog: snsUrl(form.get("sns_blog")), snsKakao: snsUrl(form.get("sns_kakao")), snsNaver: snsUrl(form.get("sns_naver")),
-    mapUrl: b.map_url || "",   // 이 화면에는 칸이 없다 — 있던 값을 지운다
+    mapUrl: b.map_url || "",   // 이 화면에는 지도 주소 칸이 없다 — 있던 값을 그대로 지킨다
   });
   return back(base + "/dashboard", "업체 정보가 저장되었습니다.");
 }
@@ -850,14 +850,15 @@ export async function adminImportPlacePhoto(ctx) {
   const b = await D.getBusinessById(db, Number(ctx.params.id) || 0);
   if (!b || b.association_id !== assoc.id) return back(`${base}/admin`, "업체를 찾을 수 없습니다.", true);
   const at = (m, bad) => back(`${base}/admin/business/${b.id}`, m, bad);
-  if (!isPlaceUrl(b.map_url)) return at("이 가게에는 지도 주소가 없습니다. '장소 찾기' 로 가게를 먼저 골라 주세요.", true);
+  const src = placeSourceOf(b);
+  if (!src) return at("이 가게에는 지도 주소가 없습니다. '장소 찾기' 로 가게를 고르거나, 네이버 플레이스 주소를 넣어 주세요.", true);
   if (!storage.enabled(env)) return at("사진 저장소(R2)가 아직 연결되지 않았습니다.", true);
 
   const plan = planOf(assoc);
   if ((await D.countBusinessImages(db, b.id)) >= plan.maxPhotos)
     return at(`사진은 최대 ${plan.maxPhotos}장까지 올릴 수 있습니다.`, true);
 
-  const pic = await placePhoto(b.map_url);
+  const pic = await placePhoto(src);
   if (!pic) return at("지도에서 이 가게 사진을 찾지 못했습니다. 아직 사진이 올라오지 않았을 수 있습니다.", true);
   const chk = checkWebhookUrl(pic.url, env.PUBLIC_ORIGIN || "");   // https · 공개 도메인 · 내부망 금지
   if (!chk.ok) return at("가져올 수 없는 사진 주소입니다.", true);

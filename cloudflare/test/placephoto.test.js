@@ -8,7 +8,7 @@
 // https 만 ③ 어디서 왔는지를 사람이 열어 볼 수 있는 페이지로 남긴다.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { placePhoto, isPlaceUrl, kakaoPlaceId } from "../src/placePhoto.js";
+import { placePhoto, isPlaceUrl, kakaoPlaceId, placeSourceOf } from "../src/placePhoto.js";
 
 const realFetch = globalThis.fetch;
 const restore = () => { globalThis.fetch = realFetch; };
@@ -99,4 +99,17 @@ test("isPlaceUrl — 지도 주소만", () => {
   assert.equal(isPlaceUrl("https://naver.me/abc"), true);
   assert.equal(isPlaceUrl("https://instagram.com/x"), false);
   assert.equal(isPlaceUrl("https://map.naver.com.evil.example/x"), false);
+});
+
+test("지도 주소가 없으면 이미 넣어 둔 네이버 플레이스 주소를 쓴다", () => {
+  // '장소 찾기' 칸을 만들기 전에 등록된 가게가 많다. 그중 상당수는 네이버 플레이스
+  // 주소를 손으로 넣어 두었다 — 이미 있는 것을 두고 다시 하라고 하면 아무도 안 한다.
+  assert.equal(placeSourceOf({ map_url: "https://place.map.kakao.com/1", sns_naver: "https://naver.me/x" }),
+    "https://place.map.kakao.com/1", "지도 주소가 있으면 그것이 먼저다");
+  assert.equal(placeSourceOf({ map_url: "", sns_naver: "https://map.naver.com/p/entry/place/9" }),
+    "https://map.naver.com/p/entry/place/9");
+  // 사장님이 넣은 sns_naver 가 지도 주소가 아닐 수도 있다 (블로그·인스타를 잘못 넣는다)
+  assert.equal(placeSourceOf({ map_url: "", sns_naver: "https://blog.naver.com/me" }), "");
+  assert.equal(placeSourceOf({ map_url: "", sns_naver: "" }), "");
+  assert.equal(placeSourceOf(null), "");
 });
