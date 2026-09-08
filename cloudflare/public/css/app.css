@@ -3496,6 +3496,18 @@ a.deal-card:hover{border-color:var(--deal);transition:border-color .18s}
 /* 지도와 아직 연결되지 않은 가게 — 사진을 가져올 수 없으니 '연결하러 가는 길' 을 준다 */
 .ask-place.is-off{padding:12px 0 0;border-top:1px dashed var(--line);margin-top:10px}
 
+/* 회원 추가는 '지도에서 고르기' 로 시작한다.
+   한 번 고르면 업체명·업종·주소·전화·좌표에 더해 **지도 연결**까지 함께 남고,
+   그래야 나중에 지도 사진 가져오기·지도 노출이 전부 열린다. 그래서 그것을 1단계로 둔다.
+   고르기 전에는 2단계(연락처)를 흐리게 두어 순서를 눈으로 알린다 — 막지는 않는다.
+   자바스크립트가 죽었거나 지도에 없는 가게일 때 길이 끊기면 안 되기 때문이다. */
+.is-funnel{opacity:.55;transition:opacity .18s}
+.auto-box[data-place-done] ~ .is-funnel,
+.is-funnel:focus-within{opacity:1}
+/* `:has()` 는 쓰지 않는다 — 파이어폭스 ESR(관공서·학교 PC 에 남아 있다)에서 안 돈다.
+   직접 적기로 들어간 사람은 칸을 누르는 순간 :focus-within 으로 또렷해진다. */
+.funnel-step2{margin-top:20px}
+
 /* ==========================================================================
    v7 콘솔 — 대기업 관리 화면의 밀도
    v6(레퍼런스 폼)까지는 "한 화면 = 한 폼" 이라 여백을 넉넉히 뒀는데, 실제 콘솔은

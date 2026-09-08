@@ -160,3 +160,56 @@ test("남의 가게에는 사장님에게도 고치기가 안 뜬다", async () 
   const html = await (await get(env, j, `/t/bb/business/${theirs.slug}`)).text();
   assert.ok(!html.includes("가게 정보 고치기"), "남의 가게를 고치러 갈 수 있다고 보여 준다");
 });
+
+// ── 같은 실수를 세 번째로 하지 않기 위한 시험 ────────────────────────────
+//
+// map_url 칸이 빠져 있으면 place.js 가 채운 값이 갈 데가 없어 **조용히 사라진다.**
+// 오류도, 경고도 없다. 저장은 성공하고, 다만 연결만 안 남는다.
+//
+// 회원 추가에서 한 번 났고, 고친 뒤 점포 상세에서 또 났다 —
+// "저장했는데 계속 지도와 연결 안 됐다고 뜬다". 그래서 사람이 기억하는 대신
+// **지도 검색칸이 있는 모든 화면**을 여기서 훑는다.
+const SCREENS = [
+  ["관리 홈 (회원 추가)", "/t/bb/admin"],
+  ["점포 상세 (가게 정보)", null],   // 아래에서 가게를 만들어 주소를 채운다
+];
+
+test("지도 검색칸이 있는 화면에는 반드시 map_url 칸이 함께 있다", async () => {
+  const env = makeEnv({ KAKAO_REST_KEY: "k" }); const a = await seed(env);
+  const h = await hashPassword("o1234567");
+  const u = await D.createUser(env.DB, { email: "o@bb.kr", passwordHash: h.hash, salt: h.salt, name: "사장", role: "MERCHANT", associationId: a.id });
+  const biz = await D.createBusiness(env.DB, { associationId: a.id, ownerId: u.id, name: "너나들이", category: "음식점" });
+  SCREENS[1][1] = `/t/bb/admin/business/${biz.id}`;
+  const j = await login(env, "a@bb.kr", "admin1234");
+
+  for (const [label, path] of SCREENS) {
+    const html = await (await get(env, j, path)).text();
+    assert.ok(html.includes("data-place-find"), `${label}: 지도 검색칸이 없다 (시험 전제가 깨졌다)`);
+    assert.ok(/data-place="map_url"/.test(html),
+      `${label}: 지도 검색칸은 있는데 map_url 을 받을 칸이 없다 — 골라도 연결이 조용히 사라진다`);
+    // place.js 는 검색칸이 든 <section> 안에서만 채울 칸을 찾는다.
+    // 다른 구역에 있으면 있으나 마나다.
+    const sections = html.split("<section");
+    const withBox = sections.filter((x) => x.includes("data-place-find"));
+    assert.ok(withBox.length >= 1, `${label}: 구역을 못 찾았다`);
+    assert.ok(withBox.some((x) => /data-place="map_url"/.test(x)),
+      `${label}: map_url 칸이 지도 검색칸과 다른 구역에 있다 — place.js 가 못 찾는다`);
+  }
+});
+
+test("점포 상세에서 지도로 찾아 저장하면 연결이 남는다", async () => {
+  const env = makeEnv({}); const a = await seed(env);
+  const h = await hashPassword("o1234567");
+  const u = await D.createUser(env.DB, { email: "o@bb.kr", passwordHash: h.hash, salt: h.salt, name: "사장", role: "MERCHANT", associationId: a.id });
+  const biz = await D.createBusiness(env.DB, { associationId: a.id, ownerId: u.id, name: "너나들이", category: "음식점" });
+  const j = await login(env, "a@bb.kr", "admin1234");
+  const t = await csrfOf(env, j, `/t/bb/admin/business/${biz.id}`);
+  await post(env, j, `/t/bb/admin/business/${biz.id}`, {
+    _csrf: t, name: "너나들이", category: "음식점", description: "", phone: "02-000-0000",
+    address: "서울 서초구 방배동", hours: "", lat: "", lng: "", map_url: KAKAO_PLACE,
+  });
+  const after = await D.getBusinessById(env.DB, biz.id);
+  assert.equal(after.map_url, KAKAO_PLACE, "점포 상세에서 저장했는데 지도 연결이 안 남았다");
+  const html = await (await get(env, j, `/t/bb/admin/business/${biz.id}`)).text();
+  assert.ok(html.includes("지도에서 사진 가져오기"), "연결됐는데도 계속 '연결 안 됨' 으로 보인다");
+});

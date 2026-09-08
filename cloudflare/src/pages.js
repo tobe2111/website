@@ -1860,10 +1860,12 @@ export async function admin(ctx) {
     || (String(env.NAVER_SEARCH_ID || "").trim() && String(env.NAVER_SEARCH_SECRET || "").trim()));
   const addMemberPanel = `<section class="panel panel-accent" id="p-addmember">
     <h2 class="panel-title">회원 추가</h2>
-    <p class="panel-hint">사장님 대신 등록합니다. <b>세 칸이면 끝납니다</b> — 나머지는 나중에 [정보 채우기] 에서 채워도 됩니다.
-      이메일은 없어도 되고, 등록을 마치면 임시 비밀번호가 바로 나옵니다. 그 둘을 사장님께 불러 주시면 됩니다.</p>
-    ${kakaoReady ? `<p class="col-head">${SPARK_SVG} 지도에서 찾아 간편 등록 <span class="ai">자동</span></p>
-    <p class="col-sub">가게 이름만 치면 업체명·업종·주소·전화·좌표가 아래에 채워집니다. <b>사장님 성함과 휴대폰만 더 적으면 끝</b>입니다.</p>
+    ${kakaoReady ? `<p class="panel-hint"><b>지도에서 가게를 고르는 것으로 시작합니다.</b>
+      한 번 고르면 업체명·업종·주소·전화·지도 위치가 다 들어오고, <b>지도 연결</b>까지 함께 남습니다 —
+      그래야 나중에 <b>지도의 사진 가져오기</b>·지도 노출·검색 노출이 그대로 열립니다.
+      사장님 성함과 휴대폰만 더 적으면 끝입니다 — <b>이메일은 없어도 되고</b>,
+      등록을 마치면 임시 비밀번호가 바로 나옵니다.</p>
+    <p class="col-head">${SPARK_SVG} <b>1.</b> 지도에서 가게 찾기 <span class="ai">자동</span></p>
     <div class="auto-box" data-place-find>
       <div class="place-find">
         <input type="text" data-place-q placeholder="가게 이름 (예: 방배 버들카페)" aria-label="가게 이름으로 찾기" autocomplete="off" />
@@ -1872,19 +1874,20 @@ export async function admin(ctx) {
       <p data-place-msg hidden></p>
       <ul class="place-list" data-place-list hidden></ul>
     </div>
-    <p class="col-head" style="margin-top:22px">${PERSON_SVG} 또는 직접 입력</p>`
+    <p class="col-head funnel-step2">${PERSON_SVG} <b>2.</b> 사장님 연락처</p>`
       // 키가 없다고 이 자리를 통째로 지우면, 이런 기능이 있다는 것 자체를 관리자가 알 수 없다.
       // 꺼져 있다는 사실과 켜는 방법을 한 줄로 남긴다 — 없는 것과 꺼진 것은 다르다.
       : `<p class="panel-hint">가게 이름만으로 주소·전화·업종·지도 위치를 채워 넣는 <b>지도에서 찾기</b>는 지금 꺼져 있습니다 —
-      운영사가 카카오 또는 네이버 지도 키를 등록하면 이 자리에 검색 칸이 생깁니다. 그때까지는 아래에 직접 적어 주세요.</p>`}
-    <form method="post" action="${base}/admin/members/add" class="stack-form">
+      운영사가 카카오 또는 네이버 지도 키를 등록하면 이 자리에 검색 칸이 생깁니다. 그때까지는 아래에 직접 적어 주세요.
+      <b>이메일은 없어도 되고</b>, 등록을 마치면 임시 비밀번호가 바로 나옵니다.</p>`}
+    <form method="post" action="${base}/admin/members/add" class="stack-form${kakaoReady ? " is-funnel" : ""}">
       <div class="form-two"><label>업체명 <em class="tag req">필수</em><input type="text" name="business_name" data-place="name" required maxlength="100" autocomplete="organization" /></label>
         <label>사장님 성함 <em class="tag req">필수</em><input type="text" name="name" required maxlength="60" autocomplete="name" /></label></div>
       <label>휴대폰 <em class="tag req">필수</em> <small>이 번호가 곧 아이디가 됩니다 · 알림톡도 이리로 갑니다</small>
         <input type="tel" name="phone" maxlength="13" inputmode="numeric" placeholder="010-0000-0000"
           autocomplete="tel" data-phone-help="id" aria-describedby="addMemberPhoneHelp" />
         <span class="field-help" id="addMemberPhoneHelp" aria-live="polite">숫자만 눌러도 자동으로 끊어집니다.</span></label>
-      <details class="more-fields"><summary>업종·주소·이메일을 지금 적기</summary>
+      <details class="more-fields"><summary>${kakaoReady ? "지도에 없는 가게예요 — 직접 적을게요" : "업종·주소·이메일을 지금 적기"}</summary>
         <div class="more-body">
           <div class="form-two"><label>업종 <em class="tag opt">선택</em><select name="category" data-place="category">${CATEGORIES.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("")}</select></label>
             <label>가게 전화 <em class="tag opt">선택</em><input type="tel" name="biz_phone" data-place="phone" maxlength="40" /></label></div>
@@ -1896,8 +1899,10 @@ export async function admin(ctx) {
            그래서 [지도의 대표 사진 담기] 단추가 영영 안 떴다. 화면이 값을 버리고 있었던 것이다. -->
       <input type="hidden" name="map_url" data-place="map_url" />
       <button class="btn btn-primary">회원 추가</button></form>
-    <p class="panel-hint">등록한 뒤 <b>[정보 채우기]</b> 에서 주소·전화·사진을 채우면 손님 화면에 제대로 뜹니다.
-      사장님이 직접 하시게 하려면 아래 <b>초대 링크</b>를 카톡으로 보내세요.</p></section>`;
+    <p class="panel-hint">${kakaoReady ? `지도에 없는 가게는 위 <b>[지도에 없는 가게예요]</b> 를 펼쳐 직접 적으시면 됩니다.
+      다만 그렇게 넣은 가게는 <b>지도 사진 가져오기가 안 열립니다</b> — 나중에 [정보 채우기] 에서
+      지도로 한 번 찾아 주시면 그때 열립니다. ` : ""}등록을 마치면 임시 비밀번호가 바로 나옵니다.
+      사장님이 직접 채우시게 하려면 아래 <b>초대 링크</b>를 카톡으로 보내세요.</p></section>`;
   // 고치기는 그 줄 안에서 펼쳐진다.
   //
   // 예전에는 만들기와 지우기만 있었다. 오타 하나를 고치려면 지우고 다시 써야 했는데,
@@ -3188,6 +3193,10 @@ export async function adminBusinessEdit(ctx) {
   const { db, assoc, base, user, query, csrf, env } = ctx;
   const b = await D.getBusinessById(db, Number(ctx.params.id) || 0);
   if (!b || b.association_id !== assoc.id) return notFoundResponse(ctx);
+  // 이 폼에는 map_url 히든 칸이 반드시 있어야 한다. 없으면 place.js 가 채운 '고른 장소' 가
+  // 갈 데가 없어 조용히 사라지고, 저장은 성공하는데 지도 연결만 안 남는다.
+  // 회원 추가 폼에서 그 실수를 고쳐 놓고 이 화면을 빠뜨려, 회장님이
+  // "저장했는데 계속 연결 안 됐다고 뜬다" 를 다시 겪었다. maplink 시험이 두 화면을 함께 본다.
   const opts = CATEGORIES.map((c) => `<option value="${esc(c)}"${c === b.category ? " selected" : ""}>${esc(c)}</option>`).join("");
   const owner = b.owner_id ? await D.getUserById(db, b.owner_id) : null;
   const kakaoOn = !!(String(env.KAKAO_REST_KEY || "").trim()
@@ -3464,6 +3473,7 @@ export async function adminBusinessEdit(ctx) {
             <label>위도 <em class="tag opt">선택</em><input type="text" inputmode="decimal" name="lat" data-place="lat" value="${b.lat != null ? esc(String(b.lat)) : ""}" /></label>
             <label>경도 <em class="tag opt">선택</em><input type="text" inputmode="decimal" name="lng" data-place="lng" value="${b.lng != null ? esc(String(b.lng)) : ""}" /></label>
           </div>
+          <input type="hidden" name="map_url" data-place="map_url" value="${esc(b.map_url || "")}" />
         </div>
       </div>
       ${doneBar}
