@@ -89,7 +89,12 @@ test("돌아갈 자리를 안 주면 관리 화면으로 간다 (기존 동작 �
   const j = await login(env, "a@bb.kr", "admin1234");
   const t = await csrfOf(env, j, "/t/bb/admin");
   const r = await post(env, j, "/t/bb/admin/notices/bulk", { _csrf: t, act: "delete", ids: String(ns[1].id) });
-  assert.ok(r.headers.get("location").startsWith("/t/bb/admin#s-content"), r.headers.get("location"));
+  // 안내(msg)는 조각(#) **앞**에 붙어야 한다 — 뒤에 붙으면 브라우저가 서버에 안 보내
+  // 성공 안내가 통째로 사라진다("눌렀는데 아무 반응이 없다").
+  const loc = r.headers.get("location");
+  assert.ok(loc.startsWith("/t/bb/admin?"), loc);
+  assert.ok(loc.endsWith("#s-content"), loc);
+  assert.ok(/[?&]msg=/.test(loc.split("#")[0]), `안내가 조각 안으로 들어갔다: ${loc}`);
 });
 
 test("돌아갈 자리로 남의 사이트를 적어 보내도 따라가지 않는다", async () => {
@@ -100,7 +105,7 @@ test("돌아갈 자리로 남의 사이트를 적어 보내도 따라가지 않�
     const r = await post(env, j, "/t/bb/admin/notices/bulk",
       { _csrf: t, back: bad, act: "pin", ids: String(ns[2].id) });
     const loc = r.headers.get("location");
-    assert.ok(loc.startsWith("/t/bb/admin#s-content"), `${bad} → ${loc}`);
+    assert.ok(loc.startsWith("/t/bb/admin?") && loc.endsWith("#s-content"), `${bad} → ${loc}`);
   }
 });
 
