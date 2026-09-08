@@ -114,6 +114,7 @@ export const TENANT = [
   ["GET", "/register", pages.registerForm],
   ["POST", "/register", api.register],
   ["POST", "/photos/upload", api.ownerPhotoUpload],
+  ["POST", "/photos/hours", api.ownerHoursUpdate],
   ["GET", "/photos/:token", pages.ownerPhotoPage],
   ["GET", "/invite", pages.invitePage],
   ["POST", "/invite", api.acceptInvite],

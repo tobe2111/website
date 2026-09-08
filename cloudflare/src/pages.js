@@ -1,6 +1,6 @@
 // 공개/인증 페이지 핸들러 (async). ctx = { env, db, assoc, base, user, url, query, csrf, params }
 import * as D from "./db.js";
-import { esc, cap, clip, openBadge, openNow, hoursLine, dongOf, fmtBytes, kstStamp, kstDate, prettyPath, safeNext, parseCookies } from "./util.js";
+import { esc, cap, clip, openBadge, openNow, hoursLine, dongOf, fmtBytes, kstStamp, kstDate, prettyPath, safeNext, parseCookies, decomposeHours } from "./util.js";
 import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG, ORIGIN, assetUrl, brandLogo } from "./render.js";
 import { verifyInviteToken, verifyPhotoToken, SALES_STAGES, otpRequired, selfSignupOn, MAX_SLOTS, BULK_MAX, BULK_CHUNK, docOf, isPlaceholderEmail } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
 import { html, notFoundResponse, back, redirect } from "./http.js";
@@ -1429,11 +1429,59 @@ export async function ownerPhotoPage(ctx) {
 
   const b = await D.getBusinessById(db, t.b);
   if (!b || b.association_id !== assoc.id) return notFoundResponse(ctx);
+  const here = `${base}/photos/${encodeURIComponent(token)}`;
+
+  // ── 영업시간 여쭙기 ──────────────────────────────────────────────────
+  //
+  // 상호·주소·전화·좌표·대표사진은 지도에서 딸려 오는데 **영업시간만 안 옵니다.**
+  // 가게 수만큼 누군가 손으로 적어야 하는 유일한 값이고, 홈페이지의 '지금 문 연 곳' 이
+  // 여기에 걸려 있어 비어 있으면 그 가게는 그 목록에서 계속 빠집니다.
+  //
+  // 그래서 사진을 부탁하는 이 자리에서 함께 여쭙습니다 — 사장님은 자기 가게 시간을
+  // 이미 알고 계시니 회장님이 130번 물어보고 다니는 것보다 압도적으로 쌉니다.
+  //
+  // 글로 적어 달라고 하지 않습니다. 폰 자판으로 "09:00-21:30" 을 정확히 치는 일이고,
+  // 콜론 하나가 어긋나면 저장은 되는데 '지금 문 연 곳' 에서만 조용히 빠집니다.
+  // 시각은 폰이 띄워 주는 시계로 고르고, 쉬는 날은 요일을 눌러 고릅니다.
+  const cur = decomposeHours(b.hours);
+  const pick = cur || { open: "09:00", close: "21:00", off: [] };
+  const days = ["월", "화", "수", "목", "금", "토", "일"].map((d) =>
+    `<label><input type="checkbox" name="off" value="${d}"${pick.off.includes(d) ? " checked" : ""} /><span>${d}</span></label>`).join("");
+  const hoursForm = (btn) => `<form method="post" action="${base}/photos/hours" class="stack-form">
+      <input type="hidden" name="token" value="${esc(token)}" />
+      <div class="form-two">
+        <label>여는 시각<input type="time" name="open" value="${esc(pick.open)}" required /></label>
+        <label>닫는 시각<input type="time" name="close" value="${esc(pick.close)}" required /></label>
+      </div>
+      <fieldset class="day-off"><legend>쉬는 날 <small>(없으면 그냥 두세요)</small></legend>
+        <div class="day-pick">${days}</div></fieldset>
+      <button class="btn btn-primary btn-block">${btn}</button></form>
+    <details class="ask-alt"><summary>요일마다 달라요 — 제가 직접 적을게요</summary>
+      <form method="post" action="${base}/photos/hours" class="stack-form compact">
+        <input type="hidden" name="token" value="${esc(token)}" />
+        <label>영업시간<input type="text" name="raw" maxlength="120" required
+          placeholder="예: 평일 09:00-21:00 · 주말 11:00-20:00 · 월요일 휴무"
+          value="${esc(cur ? "" : (b.hours || ""))}" /></label>
+        <button class="btn btn-outline btn-block">이대로 보내기</button></form></details>`;
+
+  // 사장님이 영업시간을 보내 주신 직후
+  if (query.get("hours")) return shell(`${authHead("고맙습니다. 적어 두었습니다!", `${esc(b.name)} 영업시간이 ${esc(assoc.name)} 홈페이지에 올라갔습니다.`, assoc)}
+    <p class="auth-note">이제 손님이 첫 화면의 <b>'지금 문 연 곳'</b> 에서 우리 가게를 찾을 수 있습니다.
+      적어 주신 시간은 <b>${esc(b.hours)}</b> 입니다.</p>
+    <a class="btn btn-primary btn-block" href="${here}">사진도 보내기</a>
+    <p class="auth-note"><a href="${base}/business/${esc(b.slug)}">내 가게 페이지 보기 →</a></p>`, "영업시간을 보냈습니다");
 
   const done = Number(query.get("done") || 0);
+  // 사진을 막 보내신 참이다. 이미 한 번 손을 대셨으니 지금이 영업시간을 여쭙기
+  // 가장 좋은 순간이다 — 처음부터 두 가지를 나란히 놓으면 둘 다 안 하고 닫으신다.
   if (done > 0) return shell(`${authHead("보냈습니다. 감사합니다!", `사진 ${done}장이 ${esc(assoc.name)}에 전달됐습니다.`, assoc)}
     <p class="auth-note">가게 페이지에 올라가면 손님이 보게 됩니다. 더 보내실 사진이 있으면 아래에서 이어서 보내셔도 됩니다.</p>
-    <a class="btn btn-outline btn-block" href="${base}/photos/${encodeURIComponent(token)}">사진 더 보내기</a>
+    ${b.hours ? "" : `<div class="ask-hours">
+      <p class="ask-title">한 가지만 더 — 영업시간</p>
+      <p class="auth-note">이것만 있으면 손님이 첫 화면의 <b>'지금 문 연 곳'</b> 에서 우리 가게를 찾습니다.
+        비어 있으면 그 목록에 안 뜹니다. 10초면 됩니다.</p>
+      ${hoursForm("영업시간 보내기")}</div>`}
+    <a class="btn btn-outline btn-block" href="${here}">사진 더 보내기</a>
     <p class="auth-note"><a href="${base}/business/${esc(b.slug)}">내 가게 페이지 보기 →</a></p>`, "사진을 보냈습니다");
 
   const have = (await D.listMedia(db, b.id)).filter((m) => m.kind === "image").length;
@@ -1451,7 +1499,14 @@ export async function ownerPhotoPage(ctx) {
         <span class="file-drop-text">📷 사진 고르기<small>여러 장 한 번에 고를 수 있습니다 (최대 ${Math.min(room, 10)}장)</small></span></label>
       <button class="btn btn-primary btn-lg btn-block">보내기</button></form>
     <p class="auth-note">보내신 사진은 ${esc(assoc.name)} 홈페이지의 <b>내 가게 페이지</b>에만 쓰입니다.
-      마음에 안 드는 사진은 상인회에 말씀하시면 내려 드립니다.</p>`}`,
+      마음에 안 드는 사진은 상인회에 말씀하시면 내려 드립니다.</p>`}
+    <div class="ask-hours">
+      <p class="ask-title">영업시간도 알려 주세요${b.hours ? "" : ` <span class="badge badge-wait">아직 비어 있습니다</span>`}</p>
+      ${b.hours
+        ? `<p class="auth-note">지금 홈페이지에는 <b>${esc(b.hours)}</b> 로 올라가 있습니다. 바뀌었으면 여기서 고쳐 주세요.</p>`
+        : `<p class="auth-note">손님은 첫 화면에서 <b>'지금 문 연 곳'</b> 으로 가게를 고릅니다.
+            영업시간이 비어 있으면 우리 가게는 그 목록에 안 뜹니다.</p>`}
+      ${hoursForm(b.hours ? "영업시간 고치기" : "영업시간 보내기")}</div>`,
     `${b.name} 사진 보내기`);
 }
 
@@ -3331,7 +3386,7 @@ export async function adminBusinessEdit(ctx) {
   const gaps = [
     !b.address && "주소가 없어 <b>지도에 뜨지 않습니다</b>",
     !b.phone && "전화번호가 없어 손님이 <b>전화를 걸 수 없습니다</b>",
-    !b.hours && "영업시간이 없어 <b>'지금 문 연 곳'에 안 뜹니다</b>",
+    !b.hours && `영업시간이 없어 <b>'지금 문 연 곳'에 안 뜹니다</b> — <a href="#p-photos">사장님께 여쭤보기</a>`,
     (b.lat == null || b.lng == null) && "좌표가 없어 <b>지도 위 핀이 찍히지 않습니다</b>",
   ].filter(Boolean);
   // ── 완성도 — 레퍼런스의 '프로필 완성도 100%'.
@@ -3392,13 +3447,13 @@ export async function adminBusinessEdit(ctx) {
   // 회장님이 남의 가게 사진을 대신 구할 방법은 사실상 이것뿐이다.
   const photoLink = query.get("photolink");
   const photoLinkBox = photoLink ? `<div class="invite-box">
-    <p class="invite-box-title">사진 요청 링크가 만들어졌습니다 <small>(2주 유효)</small></p>
+    <p class="invite-box-title">사진·영업시간 요청 링크가 만들어졌습니다 <small>(2주 유효)</small></p>
     <input type="text" class="invite-url" value="${esc(`${ORIGIN}${base}/photos/${encodeURIComponent(photoLink)}`)}" readonly data-select-all />
     <span class="pill-row"><button type="button" class="btn btn-sm btn-primary" data-share
       data-share-url="${esc(`${ORIGIN}${base}/photos/${encodeURIComponent(photoLink)}`)}"
-      data-share-title="${esc(b.name)} 가게 사진 보내기">카톡으로 보내기 / 복사</button></span>
-    <p class="panel-hint">사장님이 이 링크를 열면 <b>로그인 없이</b> 폰에서 바로 사진을 올립니다.
-      올라오면 알림으로 알려 드립니다.</p></div>` : "";
+      data-share-title="${esc(b.name)} 가게 사진·영업시간 보내기">카톡으로 보내기 / 복사</button></span>
+    <p class="panel-hint">사장님이 이 링크를 열면 <b>로그인 없이</b> 폰에서 바로 사진을 올리고,
+      <b>영업시간</b>도 같은 자리에서 골라 보냅니다. 올라오면 알림으로 알려 드립니다.</p></div>` : "";
   // 지도에서 이 가게 보기.
   //
   // 카카오맵·네이버지도에 올라온 사진을 프로그램으로 가져올 수는 없다 — 카카오는
@@ -3464,10 +3519,11 @@ export async function adminBusinessEdit(ctx) {
     <div class="ask-owner">
       <p class="ask-title">사장님께 부탁하기 <span class="badge badge-ok">가장 좋은 방법</span></p>
       <p class="panel-hint">링크 하나 보내면 사장님이 <b>로그인 없이</b> 폰에서 직접 올립니다.
-        본인이 찍은 사진이라 저작권 문제가 없고, 네이버에 올려 둔 사진을 그대로 주시는 경우가 많습니다.</p>
+        본인이 찍은 사진이라 저작권 문제가 없고, 네이버에 올려 둔 사진을 그대로 주시는 경우가 많습니다.
+        같은 화면에서 <b>영업시간</b>도 골라 보내십니다 — 지도가 주지 않아 손으로 적어야 하는 유일한 값입니다.</p>
       ${photoLinkBox}
       <form method="post" action="${base}/admin/business/${b.id}/photo-link" class="inline-form">
-        <button class="btn btn-primary btn-block">📷 사진 요청 링크 만들기</button></form>
+        <button class="btn btn-primary btn-block">📷 사진·영업시간 요청 링크 만들기</button></form>
       ${placeStep}
       ${mapLinks}
     </div>

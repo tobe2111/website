@@ -7,7 +7,7 @@ import { back, redirect } from "./http.js";
 import * as storage from "./storage.js";
 import { countable, countHomeGoal } from "./traffic.js";
 import { parseEmbed } from "./embed.js";
-import { cap, sniffImage, EMAIL_RE, MAX_IMAGE_BYTES, slugify, esc, safeNext } from "./util.js";
+import { cap, sniffImage, EMAIL_RE, MAX_IMAGE_BYTES, slugify, esc, safeNext, composeHours } from "./util.js";
 import { contentHash, sealRecord, newVerifyCode, SEAL_VER, fieldsHashOf, keyStorage, verifyChain } from "./esign.js";
 import { isFieldKind, round4, FIELD_KINDS, pageCount, remapFields } from "./paper.js";
 import { parseTable, toCsv, decodeUtf8, headerRole } from "./csv.js";
@@ -3160,8 +3160,14 @@ export async function adminSetOfficer(ctx) {
 // 비밀번호를 못 찾거나, 그냥 귀찮다. 그래서 **로그인 없이 링크 하나로** 올리게 한다.
 // 회장님이 카톡으로 링크를 보내면, 사장님은 폰에서 열어 사진을 고르고 보내면 끝이다.
 //
-// 그 대신 이 링크로 할 수 있는 일은 **그 가게에 사진을 올리는 것 하나뿐**이다.
-// 남의 가게도, 글 수정도, 기존 사진 삭제도 안 된다. 링크가 새어 나가도 잃을 것이 적어야 한다.
+// 그 대신 이 링크로 할 수 있는 일은 **그 가게에 사진을 올리는 것과 영업시간을 적는 것,
+// 둘뿐**이다. 남의 가게도, 상호·소개 수정도, 기존 사진 삭제도 안 된다.
+// 링크가 새어 나가도 잃을 것이 적어야 한다.
+//
+// 영업시간을 여기에 얹은 이유: 지도에서 가게를 고르면 상호·주소·전화·좌표·대표사진이
+// 함께 따라오는데 **영업시간만 안 온다.** 가게 수만큼 누군가 손으로 적어야 하고,
+// 그 '누군가' 를 회장님으로 두면 130곳이면 130번이다. 사장님은 자기 가게 시간을
+// 이미 알고 있으니, 사진을 부탁하는 김에 같이 여쭙는 것이 가장 싸다.
 const PHOTO_TTL_MS = 14 * 24 * 60 * 60 * 1000;   // 2주 — 카톡으로 받은 뒤 주말에 올리는 분이 많다
 export async function makePhotoToken(secret, assocId, bizId) {
   const json = JSON.stringify({ a: assocId, b: bizId, x: Date.now() + PHOTO_TTL_MS });
@@ -3215,6 +3221,33 @@ export async function ownerPhotoUpload(ctx) {
     message: `'${b.name}' 사장님이 사진 ${up.images.length}장을 보내 주셨습니다.`,
     link: `${ctx.base}/admin/business/${b.id}` });
   return redirect(`${ctx.base}/photos/${encodeURIComponent(token)}?done=${up.images.length}`);
+}
+
+// 사장님이 영업시간을 적어 보낸다. 사진과 같은 토큰, 같은 가게, 다른 칸 하나.
+//
+// 화면에서는 여는 시각·닫는 시각·쉬는 요일만 고르게 하고 문자열은 서버에서 만든다.
+// 사장님께 "09:00-21:30 · 일요일 휴무" 를 글로 치라고 하면 한 글자가 어긋나고,
+// 어긋나면 저장은 되는데 '지금 문 연 곳' 에서만 조용히 빠진다 — 오류도 안 난다.
+export async function ownerHoursUpdate(ctx) {
+  const { db, env, form, assoc, ip } = ctx;
+  const token = String(form.get("token") || "");
+  const at = (m, bad) => back(`${ctx.base}/photos/${encodeURIComponent(token)}`, m, bad);
+  if (rateLimited(ip)) return at("잠시 후 다시 시도해 주세요.", true);
+  const t = await verifyPhotoToken(env.SESSION_SECRET, token, assoc.id);
+  if (!t) { recordFail(ip); return at("링크가 만료되었습니다. 상인회에 새 링크를 요청해 주세요.", true); }
+  const b = await D.getBusinessById(db, t.b);
+  if (!b || b.association_id !== assoc.id) return at("가게를 찾을 수 없습니다.", true);
+
+  // 요일마다 다른 가게는 고르는 칸으로 표현할 수 없다. 그때는 직접 적은 줄을 그대로 쓴다.
+  const raw = cap(String(form.get("raw") || "").trim(), 120);
+  const line = raw || composeHours({ open: form.get("open"), close: form.get("close"), off: form.getAll("off") });
+  if (!line) return at("여는 시각과 닫는 시각을 모두 골라 주세요.", true);
+  await D.setBusinessHours(db, b.id, line);
+  // 회장님이 "들어왔다" 를 알아야 안 들어온 곳만 챙긴다
+  await D.createNotification(db, { associationId: assoc.id, kind: "owner_hours",
+    message: `'${b.name}' 사장님이 영업시간을 알려 주셨습니다 — ${line}`,
+    link: `${ctx.base}/admin/business/${b.id}` });
+  return redirect(`${ctx.base}/photos/${encodeURIComponent(token)}?hours=1`);
 }
 
 export async function adminCreateInvite(ctx) {
