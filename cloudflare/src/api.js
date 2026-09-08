@@ -1790,6 +1790,23 @@ export async function adminDuesAccount(ctx) {
   return back(base + "/admin#p-dues", text ? "회비 입금 계좌를 저장했습니다." : "회비 입금 계좌를 지웠습니다.");
 }
 
+// 회비 장부를 쓸지 말지. 끄면 관리 화면에서 그 표가 사라진다.
+//
+// 회비 개념이 없는 상인회가 있다. 그런 곳에 빈 장부를 띄워 두면 "이건 뭐지,
+// 내가 뭘 안 한 건가" 가 되고, 총회 때 안 쓰는 화면을 설명하게 된다.
+//
+// 끈다고 **지우지는 않는다.** 이미 적어 둔 납부 기록·금액·계좌는 그대로 남고,
+// 다시 켜면 있던 그대로 보인다 — 실수로 껐을 때 되돌릴 수 없으면 아무도 못 누른다.
+export async function adminDuesEnabled(ctx) {
+  const { db, form, base, assoc } = ctx;
+  const on = String(form.get("on") || "") === "1";
+  await D.setUsesDues(db, assoc.id, on);
+  await audit(ctx, "회비장부", on ? "쓰기" : "안 쓰기");
+  return on
+    ? back(base + "/admin#p-dues", "회비 장부를 다시 켰습니다. 적어 두셨던 기록은 그대로 있습니다.")
+    : back(base + "/admin#s-settings", "회비 장부를 감췄습니다. 적어 두신 기록은 지워지지 않았고, 설정에서 언제든 다시 켤 수 있습니다.");
+}
+
 // 미납자에게 한 번에 독촉을 보낸다.
 //
 // 지금까지는 명단만 뽑히고 사람이 하나씩 보내야 했다. 스무 명이면 스무 번이라

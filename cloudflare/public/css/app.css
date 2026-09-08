@@ -3481,6 +3481,10 @@ a.deal-card:hover{border-color:var(--deal);transition:border-color .18s}
 /* 아이디(이메일)는 전화로 불러 주는 값이다 — 붙어 보이면 잘못 읽는다 */
 .id-cell{font-size:13px;letter-spacing:.01em;word-break:break-all;user-select:all}
 
+/* 패널 맨 아래의 조용한 스위치 — "이 화면은 우리한테 필요 없다" 를 그 자리에서 말한다.
+   눈에 띄면 실수로 눌리고, 너무 숨으면 못 찾는다. 그래서 표 아래 한 줄이다. */
+.panel-foot-act{margin:14px 0 0;padding-top:12px;border-top:1px solid var(--line);text-align:right}
+
 /* ==========================================================================
    v7 콘솔 — 대기업 관리 화면의 밀도
    v6(레퍼런스 폼)까지는 "한 화면 = 한 폼" 이라 여백을 넉넉히 뒀는데, 실제 콘솔은

@@ -719,6 +719,11 @@ export const setDuesAmount = (db, aid, won) =>
 // 그러면 독촉을 보낸 의미가 없다 — 계좌를 한 번 적어 두고 문구에 끼운다.
 export const setDuesAccount = (db, aid, text) =>
   run(db, "UPDATE associations SET dues_account=? WHERE id=?", String(text || "").slice(0, 120), aid);
+// 회비를 아예 안 걷는 상인회도 있다. 끄면 장부가 화면에서 사라진다 —
+// 기록은 지우지 않는다(다시 켜면 그대로 있다). 안 쓰는 화면을 감추는 것이지 데이터를 버리는 게 아니다.
+export const setUsesDues = (db, aid, on) =>
+  run(db, "UPDATE associations SET uses_dues=? WHERE id=?", on ? 1 : 0, aid);
+export const usesDues = (assoc) => Number(assoc && assoc.uses_dues) !== 0;
 
 // 이번 달 회비가 얼마나 걷혔나 — 임원이 총회에서 읽는 두 줄(걷힘 / 받을 것)이다.
 // 금액 없이 체크만 한 옛 기록(amount=0)은 '냈다' 로는 세되 금액에는 더하지 않는다.
