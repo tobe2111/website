@@ -141,5 +141,42 @@ test("발급하면 관리자 권한 계정이 실제로 생긴다", async () => 
   assert.equal(made.role, "ADMIN");
   assert.equal(made.association_id, a.id, "다른 상인회에 붙었다");
   // 임시 비밀번호를 화면에 돌려줘야 전달할 수 있다
-  assert.ok(/임시비번/.test(decodeURIComponent(r.headers.get("location") || "")), "임시 비밀번호를 알려 주지 않는다");
+  const loc = decodeURIComponent(r.headers.get("location") || "");
+  assert.ok(/임시 비밀번호 \w+/.test(loc), `임시 비밀번호를 알려 주지 않는다: ${loc}`);
+  // 만든 자리(회원·점포)로 돌아가야 한다 — 첫 탭으로 떨어지면 "아무 반응이 없다" 로 보인다
+  assert.ok(loc.endsWith("#s-people"), `만든 자리로 돌아가지 않는다: ${loc}`);
+});
+
+test("비밀번호를 직접 정할 수 있다 — 스쳐 가는 임시 비번을 놓치지 않게", async () => {
+  const env = makeEnv({}); await seed(env);
+  const { jar: j } = await tryLogin(env, "/t/bb/login", "a@bb.kr", "admin1234");
+  const t = (/name="_csrf" value="([^"]+)"/.exec(await (await get(env, j, "/t/bb/admin")).text()) || [])[1];
+  await worker.fetch(new Request(B + "/t/bb/admin/admins/add", { method: "POST",
+    headers: { cookie: ch(j), "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ _csrf: t, name: "김총무", email: "chong2@bb.kr", password: "chongmu1234" }).toString() }), env);
+  // 정한 비밀번호로 실제로 들어와져야 한다
+  const r = await tryLogin(env, "/t/bb/login", "chong2@bb.kr", "chongmu1234");
+  assert.equal(r.to, "/t/bb/admin", `정한 비밀번호로 못 들어온다: ${r.to}`);
+});
+
+test("너무 짧은 비밀번호는 계정을 만들지 않는다", async () => {
+  const env = makeEnv({}); await seed(env);
+  const { jar: j } = await tryLogin(env, "/t/bb/login", "a@bb.kr", "admin1234");
+  const t = (/name="_csrf" value="([^"]+)"/.exec(await (await get(env, j, "/t/bb/admin")).text()) || [])[1];
+  await worker.fetch(new Request(B + "/t/bb/admin/admins/add", { method: "POST",
+    headers: { cookie: ch(j), "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ _csrf: t, name: "김총무", email: "short@bb.kr", password: "123" }).toString() }), env);
+  assert.ok(!await D.getUserByEmail(env.DB, "short@bb.kr"), "짧은 비밀번호로 계정이 생겼다");
+});
+
+test("이미 쓰이는 이메일이면 왜 안 되는지 말해 준다", async () => {
+  const env = makeEnv({}); await seed(env);
+  const { jar: j } = await tryLogin(env, "/t/bb/login", "a@bb.kr", "admin1234");
+  const t = (/name="_csrf" value="([^"]+)"/.exec(await (await get(env, j, "/t/bb/admin")).text()) || [])[1];
+  const r = await worker.fetch(new Request(B + "/t/bb/admin/admins/add", { method: "POST",
+    headers: { cookie: ch(j), "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ _csrf: t, name: "겹침", email: "a@bb.kr" }).toString() }), env);
+  const loc = decodeURIComponent(r.headers.get("location") || "");
+  assert.ok(/이미 쓰이고 있는 아이디/.test(loc), loc);
+  assert.ok(/err=1/.test(loc), "오류로 표시되지 않는다");
 });

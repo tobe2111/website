@@ -81,8 +81,8 @@ test("부관리자: 발급 → 새 관리자로 /admin 접근 가능", async () 
   const j = jar(); await post(env, j, "/login", { email: "a@s.kr", password: "admin1234" });
   const r = await post(env, j, "/t/seocho/admin/admins/add", { name: "총무", email: "cfo@s.kr" }, "/t/seocho/admin");
   assert.equal(r.status, 303);
-  const temp = (/임시비번 (\w+)/.exec(decodeURIComponent(r.headers.get("location"))) || [])[1];
-  assert.ok(temp, "임시 비번 발급");
+  const temp = (/임시 비밀번호 (\w+)/.exec(decodeURIComponent(r.headers.get("location"))) || [])[1];
+  assert.ok(temp, "임시 비밀번호를 알려 주지 않는다");
   assert.equal((await D.getUserByEmail(env.DB, "cfo@s.kr")).role, "ADMIN");
   const j2 = jar(); await post(env, j2, "/login", { email: "cfo@s.kr", password: temp });
   const adm = await get(env, j2, "/t/seocho/admin");

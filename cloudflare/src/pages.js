@@ -2463,13 +2463,16 @@ export async function admin(ctx) {
         <span class="fold-cue"><span class="fold-open">펼치기</span><span class="fold-close">접기</span></span></summary>
         <div class="help-body"><p class="help-lead">이 상인회를 함께 관리할 계정을 발급합니다. 승인·공지·브랜딩 등
           이 콘솔의 모든 기능을 함께 쓰니 <b>믿을 수 있는 분에게만</b> 주세요.
-          만들면 <b>임시 비밀번호</b>가 화면에 뜹니다 — 그대로 전달하고 바꾸시라고 안내하세요.</p>
+          비밀번호를 <b>직접 정해 주시면</b> 그대로 알려 드리면 됩니다. 비우면 임시 비밀번호를 만들어
+          화면에 한 번 보여 드리는데, <b>그 줄을 놓치면 다시 발급해야 합니다.</b></p>
         <p class="panel-hint">지금 이 상인회의 관리자: <b>${admins.length ? admins.map((u) => esc(u.name || u.email)).join(", ") : "없음"}</b>
           ${admins.length <= 1 ? " — 한 분뿐입니다. 그분이 못 들어오면 아무도 못 들어옵니다." : ""}</p>
         <form method="post" action="${base}/admin/admins/add" class="stack-form compact">
           <div class="form-two"><label>성함<input type="text" name="name" required autocomplete="name" placeholder="예: 김총무" /></label>
-            <label>이메일 <small>(이 주소가 아이디가 됩니다)</small><input type="email" name="email" required autocomplete="email" /></label></div>
-          <button class="btn btn-primary btn-sm">관리자 계정 발급 + 임시 비번</button></form></div></details>`}
+            <label>이메일 <small>(이 주소가 아이디가 됩니다)</small><input type="email" name="email" required autocomplete="email" placeholder="chong@example.com" /></label></div>
+          <label>비밀번호 <small>(8자 이상 · 비우면 임시 비밀번호를 만들어 드립니다)</small>
+            <input type="password" name="password" minlength="8" autocomplete="new-password" placeholder="직접 정하시면 바로 알려 드릴 수 있습니다" /></label>
+          <button class="btn btn-primary btn-sm">관리자 계정 만들기</button></form></div></details>`}
       </section>
     ${isEsign ? "" : addMemberPanel}
     ${isEsign ? teamsPanel : ""}

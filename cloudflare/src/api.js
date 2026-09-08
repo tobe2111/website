@@ -1907,14 +1907,28 @@ export async function adminAddAdmin(ctx) {
   const role = picked === "ADMIN" ? "ADMIN"
     : picked === "STAFF" ? "STAFF"
     : (assoc.kind === "esign" ? "STAFF" : "ADMIN");
-  if (!name || !EMAIL_RE.test(email)) return back(base + "/admin", "이름·이메일을 확인해 주세요.", true);
-  if (phone && !D.isValidPhone(phone)) return back(base + "/admin", "휴대폰 번호 형식을 확인해 주세요.", true);
-  if (await D.getUserByEmail(db, email)) return back(base + "/admin", "이미 가입된 이메일입니다.", true);
-  const temp = tempPassword();
+  // 만든 자리로 돌려보낸다. 예전에는 첫 탭(현황)으로 떨어져, 화면 아래에서 단추를 누른
+  // 사람에게는 "아무 반응이 없다" 로 보였다.
+  const at = base + "/admin#s-people";
+  if (!name || !EMAIL_RE.test(email)) return back(at, "이름·이메일을 확인해 주세요.", true);
+  if (phone && !D.isValidPhone(phone)) return back(at, "휴대폰 번호 형식을 확인해 주세요.", true);
+  // 이메일은 이 서비스 전체에서 하나뿐인 아이디다 — 다른 상인회에 이미 있어도 못 쓴다.
+  // 그 사실을 말해 주지 않으면 "왜 안 되는지" 를 알 수 없다.
+  if (await D.getUserByEmail(db, email))
+    return back(at, `${email} 은 이미 쓰이고 있는 아이디입니다. 다른 이메일을 쓰거나, 이미 만든 계정이라면 회원 목록에서 임시 비밀번호를 다시 발급하세요.`, true);
+  // 비밀번호를 적어 주면 그것으로, 비우면 임시 비밀번호를 만들어 화면에 보여 준다.
+  // 직접 정하는 쪽이 안전한 이유: 화면에 한 번 스쳐 가는 임시 비번은 놓치면 끝이라,
+  // 놓친 사람은 계정을 만들어 놓고 들어가지 못한다.
+  const given = String(form.get("password") || "");
+  if (given && given.length < 8) return back(at, "비밀번호는 8자 이상으로 정해 주세요.", true);
+  const temp = given || tempPassword();
   const { hash, salt } = await hashPassword(temp);
   await D.createUser(db, { email, passwordHash: hash, salt, name, role, associationId: assoc.id, phone });
-  await audit(ctx, role === "ADMIN" ? "부관리자추가" : "담당자추가", `${name} (${email}) by ${user.email}`);
-  return back(base + "/admin", `부관리자 발급 완료 — ${name}님 로그인: ${email} / 임시비번 ${temp} (전달 후 비밀번호 변경을 안내하세요)`);
+  await audit(ctx, role === "ADMIN" ? "관리자계정추가" : "담당자추가", `${name} (${email}) by ${user.email}`);
+  const what = role === "ADMIN" ? "관리자" : "담당자";
+  return back(at, given
+    ? `${name}님의 ${what} 계정을 만들었습니다 — 아이디 ${email} (비밀번호는 정하신 그대로입니다)`
+    : `${name}님의 ${what} 계정을 만들었습니다 — 아이디 ${email} / 임시 비밀번호 ${temp} · 이 줄을 지금 복사해 전달하세요. 놓치면 회원 목록에서 다시 발급해야 합니다.`);
 }
 
 // ---------- 전자서명 ----------

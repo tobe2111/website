@@ -22,9 +22,19 @@ export function redirect(location, status = 303, headers = {}) {
   return new Response("", { status, headers: { Location: loc, ...headers } });
 }
 // msg 알림과 함께 뒤로 (PRG 패턴) — 대상에 이미 쿼리가 있으면 & 로 잇는다 (?t=토큰?msg=… 오염 방지)
+//
+// ⚠️ '#조각' 이 든 주소를 조심한다. 뒤에 그냥 '?msg=' 를 붙이면
+//   /admin#s-people?msg=… 이 되어, 물음표가 **조각 안으로** 들어간다.
+//   브라우저는 '#' 앞까지만 서버에 보내므로 안내가 통째로 사라진다 —
+//   "저장을 눌렀는데 아무 반응이 없다" 가 정확히 이 증상이다(실제로 그 말을 들었다).
+//   그래서 쿼리를 조각 **앞에** 끼운다: /admin?msg=…#s-people
 export function back(to, msg, err = false) {
-  const q = msg ? `${to.includes("?") ? "&" : "?"}${err ? "err=1&" : ""}msg=${encodeURIComponent(msg)}` : "";
-  return redirect(to + q);
+  if (!msg) return redirect(to);
+  const h = String(to).indexOf("#");
+  const path = h < 0 ? to : to.slice(0, h);
+  const frag = h < 0 ? "" : to.slice(h);
+  const q = `${path.includes("?") ? "&" : "?"}${err ? "err=1&" : ""}msg=${encodeURIComponent(msg)}`;
+  return redirect(path + q + frag);
 }
 export function notFoundResponse(ctx) {
   const base = (ctx && ctx.base) || "";
