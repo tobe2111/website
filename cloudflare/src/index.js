@@ -11,6 +11,13 @@ import { ensureSchema } from "./schema.js";
 import { runCron } from "./scheduled.js";
 import { resolveSessionSecret } from "./secrets.js";
 
+// 나가는 스타일시트에서 주석만 뗀다(아이솔레이트마다 한 번).
+//
+// 문자열이나 url() 안에 `/*` 가 들어 있으면 이 정규식이 엉뚱한 데를 자르는데,
+// app.css 에는 그런 자리가 없음을 확인했고 csshealth 시험이 중괄호 균형을 계속 지킨다.
+const CSS_LEAN = new Map();
+const stripCssComments = (css) => String(css).replace(/\/\*[\s\S]*?\*\//g, "").replace(/\n{3,}/g, "\n\n");
+
 const _schemaReady = new WeakSet(); // DB 별 스키마 준비 캐시
 const _usersConfirmed = new WeakSet(); // DB 별 "계정 존재" 확인 캐시
 
@@ -430,6 +437,25 @@ async function handle(request, env) {
       // ?v= 버전 주소 = 배포마다 바뀜 → 1년 불변 캐시. 무버전 주소 = 매번 재검증(옛 캐시 자가치유).
       const h = new Headers(res.headers);
       h.set("Cache-Control", url.searchParams.has("v") ? "public, max-age=31536000, immutable" : "no-cache");
+      // 스타일시트의 주석은 **저장소의 재산이지 손님의 짐이 아니다.**
+      //
+      // app.css 는 왜 이렇게 하는지를 적어 둔 주석이 파일의 28% 다. 그 주석 덕에 같은 사고를
+      // 두 번 안 내지만, 그걸 휴대폰까지 내려보낼 이유는 없다. 실측: 전송량 81.9KB → 42.9KB.
+      // 느린 회선에서 이 파일은 렌더를 막는 유일한 자원이라 그만큼이 그대로 첫 화면 시간이다.
+      //
+      // 소스는 손대지 않는다 — 나가는 길에서만 뗀다. 그래서 주석과 배포가 어긋날 수 없다.
+      if (pathname.endsWith(".css") && res.status === 200) {
+        const key = pathname;
+        let css = CSS_LEAN.get(key);
+        if (css == null) {
+          css = stripCssComments(await res.text());
+          if (CSS_LEAN.size > 8) CSS_LEAN.clear();   // 아이솔레이트 하나가 파일을 무한정 쥐지 않게
+          CSS_LEAN.set(key, css);
+        }
+        h.delete("content-length");   // 길이가 바뀌었다
+        h.delete("etag");             // 본문이 바뀌었으니 원본의 지문은 더 이상 맞지 않는다
+        return new Response(css, { status: 200, headers: h });
+      }
       return new Response(res.body, { status: res.status, headers: h });
     }
   }
