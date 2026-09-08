@@ -4035,3 +4035,40 @@ body.is-auth{background:var(--brand-50)}
 .dash .fold-step[open] > summary{border-bottom:1px solid var(--line-soft)}
 .dash .fold-step > *:not(summary){padding-inline:16px}
 .dash .fold-step > *:last-child{padding-bottom:16px}
+
+
+/* ══════════════════════════════════════════════════════════════════════
+   운영사 콘솔 — 머리글이 흰 바탕에 흰 글자였다
+   ──────────────────────────────────────────────────────────────────────
+   머리글을 남색으로 칠하는 규칙(`body[data-console="super"] .site-header`)이
+   있었는데, 뒤에 온 `body.is-console .site-header{background:var(--surface)}` 가
+   **같은 우선순위**라 순서로 이겨 배경만 흰색이 됐다. 글자색 규칙은 선택자가 달라
+   그대로 살아남아, 흰 바탕에 밝은 회색 글자가 남았다 — 사실상 안 보인다.
+   두 조건을 함께 걸어 우선순위를 올린다. 다음에 누가 콘솔 규칙을 하나 더 붙여도
+   이 줄은 밀리지 않는다.
+   ══════════════════════════════════════════════════════════════════════ */
+body.is-console[data-console="super"] .site-header{background:#1e2a44;border-bottom-color:#2b3a5c}
+body.is-console[data-console="super"] .site-header .brand,
+body.is-console[data-console="super"] .site-header .main-nav a{color:#e8eefb}
+body.is-console[data-console="super"] .site-header .main-nav a:hover{color:#fff}
+body.is-console[data-console="super"] .brand-mark{background:#31456f;color:#dbe4f7}
+body.is-console[data-console="super"] .site-header .nav-out{color:#e8eefb;border-color:#4a5f8f}
+body.is-console[data-console="super"] .site-header .nav-out:hover{background:#2b3a5c;color:#fff}
+/* 로그아웃 단추는 배경이 흰색으로 남아 남색 위에 흰 알약이 떠 있었다 */
+body.is-console[data-console="super"] .site-header .nav-logout .btn{
+  background:transparent;color:#dbe4f7;border:1px solid #4a5f8f}
+body.is-console[data-console="super"] .site-header .nav-logout .btn:hover{background:#2b3a5c;color:#fff}
+/* 위 띠와 머리글이 같은 남색 계열이면 두 줄이 한 덩어리로 읽힌다 */
+body.is-console[data-console="super"] .console-strip{border-bottom:1px solid #2b3a5c}
+
+/* '다 처리했다' 는 한 줄이면 된다.
+   가운데 정렬한 큰 빈 카드로 그리면 그것대로 404 화면처럼 보인다 — 실제로 그 말을 들었다.
+   할 일이 있을 때(.super-todo)와 없을 때가 같은 높이를 차지하게 두어, 목록이 비었다고
+   화면이 통째로 달라 보이지 않게 한다. */
+.dash .all-done{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  margin:0 0 18px;padding:11px 14px;font-size:13px;
+  background:var(--ok-bg);color:var(--ok-fg);border-radius:8px}
+.dash .all-done .ad-ico{flex:none;display:inline-flex;width:18px;height:18px}
+.dash .all-done .ad-ico svg{width:18px;height:18px}
+.dash .all-done b{font-weight:700}
+.dash .all-done > span:last-child{color:var(--ok-fg);opacity:.82}

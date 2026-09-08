@@ -1580,6 +1580,8 @@ const EMPTY_ICO = {
   board: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9h10M7 13h7"/></svg>',
   notice: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11v2a1 1 0 0 0 1 1h3l5 4V6L7 10H4a1 1 0 0 0-1 1z"/><path d="M17 9a4 4 0 0 1 0 6"/></svg>',
   poll: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 20V12M12 20V5M18 20v-6"/></svg>',
+  // '아무것도 없다' 가 아니라 '다 처리했다' 는 뜻의 빈 자리 — 체크 표시를 쓴다
+  ok: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8.5 12.2 2.4 2.4 4.6-4.9"/></svg>',
 };
 const emptyCard = (ico, title, note, action = "") =>
   `<div class="empty-card"><div class="ec-ico">${EMPTY_ICO[ico]}</div>
@@ -4891,9 +4893,14 @@ export async function superConsole(ctx) {
     pendCredits.length ? { n: pendCredits.length, label: "충전 승인 대기", tab: "money" } : null,
     dueSoon ? { n: dueSoon, label: "오늘 연락할 영업", tab: "sales" } : null,
   ].filter(Boolean);
+  // 할 일이 없을 때 문장 하나만 회색 바탕에 덩그러니 놓으면 화면이 고장 난 것처럼 보인다
+  // ("404 같다" 는 말을 실제로 들었다). 상인회 콘솔과 같은 안내 카드로 맞춘다 —
+  // 무엇이 없는지, 그래서 지금 무엇을 하면 되는지까지 한 자리에.
   const todoBar = todo.length
     ? `<div class="super-todo">${todo.map((t) => `<a href="#s-${t.tab}" class="super-todo-item"><b>${t.n}</b><span>${esc(t.label)}</span></a>`).join("")}</div>`
-    : `<div class="super-todo is-clear"><span>지금 처리할 일이 없습니다</span></div>`;
+    : `<p class="all-done"><span class="ad-ico">${EMPTY_ICO.ok}</span>
+        <b>지금 처리할 일이 없습니다</b>
+        <span>충전 승인도, 오늘 연락할 영업도 없습니다</span></p>`;
   const TABS = [
     ["home", "고객사"],
     ["sales", "영업", pendingApps.length],
@@ -4908,11 +4915,17 @@ export async function superConsole(ctx) {
     .filter(([, , n]) => n > 0);
   const body = `<section class="dash dash-shell"><div class="container">
     <div class="dash-head"><div><h1 class="dash-title">운영사 콘솔</h1>
-      <p class="dash-sub">고객사 ${ps.associations}곳 · 사용자 ${ps.users}명 — ${kindCounts.map(([, label, n]) => `${esc(label)} ${n}`).join(" · ")}</p></div>
+      <p class="dash-sub">여기서 하는 일은 모든 고객사에 적용됩니다</p></div>
       <div class="dash-head-actions"><a href="#new-assoc" class="btn btn-primary btn-sm" data-goto="home">＋ 새 조직</a></div></div>${flashOf(query)}
+${flashOf(query)}
     ${loadWarnings.length ? `<div class="flash flash-err"><b>일부 정보를 불러오지 못했습니다.</b> 나머지 기능은 그대로 쓰실 수 있습니다.<br />${loadWarnings.map((w) => esc(w)).join("<br />")}</div>` : ""}
-    ${todoBar}
     <div class="console-grid">${sideNav}<div class="console-main">
+      <div class="kpi-sec"><div class="kpi-grid">
+        <div class="kpi"><span class="kpi-k">고객사</span><b class="kpi-v">${ps.associations}</b><span class="kpi-u">곳</span></div>
+        <div class="kpi"><span class="kpi-k">사용자</span><b class="kpi-v">${ps.users}</b><span class="kpi-u">명</span></div>
+        ${kindCounts.map(([, label, n]) => `<div class="kpi"><span class="kpi-k">${esc(label)}</span><b class="kpi-v">${n}</b><span class="kpi-u">곳</span></div>`).join("")}
+      </div></div>
+      ${todoBar}
 
       <div class="sgroup" id="s-home" data-tab="home">
         ${cronAlive ? "" : cronPanel}

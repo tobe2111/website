@@ -595,10 +595,14 @@ test("운영사 콘솔 통계는 조직 유형별로 센다", async () => {
     body: new URLSearchParams({ _csrf: tk, email: "kc@platform.kr", password: "super1234" }) });
   const jar = [seed, ...(lr.headers.getSetCookie?.() || []).map((c) => c.split(";")[0])].join("; ");
   const html = await (await f("/super", { headers: { cookie: jar } })).text();
-  const sub = (/<p class="dash-sub">([\s\S]*?)<\/p>/.exec(html) || [])[1] || "";
-  assert.match(sub, /전자계약 2/, "전자계약 2곳이 따로 세어져야");
-  assert.match(sub, /상인회 1/);
-  assert.match(sub, /고객사 3곳/);
+  // 숫자는 제목 밑 한 줄 문장에서 **숫자 타일**로 옮겼다 — 한 줄에 이어 붙인 문장은
+  // 훑어봐도 눈에 안 들어왔다. 세는 방식은 그대로여야 하므로 새 자리에서 확인한다.
+  const kpi = (/<div class="kpi-sec">([\s\S]*?)<\/div><\/div>/.exec(html) || [])[1] || "";
+  assert.ok(kpi, "숫자 타일을 찾지 못했다");
+  const tile = (label) => new RegExp(`<span class="kpi-k">${label}</span><b class="kpi-v">(\\d+)</b>`).exec(kpi);
+  assert.equal((tile("고객사") || [])[1], "3", "고객사 3곳");
+  assert.equal((tile("상인회") || [])[1], "1", "상인회 1곳");
+  assert.equal((tile("전자계약") || [])[1], "2", "전자계약 2곳이 따로 세어져야");
 });
 
 // ── 조직 하나를 모아 보는 화면

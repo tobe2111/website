@@ -58,8 +58,14 @@ async function saveImages(env, files, max) {
 const canModerateBoard = (user, assoc) => user && (user.role === "SUPERADMIN" || (user.role === "ADMIN" && user.association_id === assoc.id));
 
 // 로그인 후 이동 경로
-export async function postLoginPath(db, user) {
-  if (user.role === "SUPERADMIN") return "/super";
+// 로그인 뒤에 어디로 보내나.
+//
+// assoc: 로그인한 화면이 어느 상인회의 것인가 (공용 /login 이면 없음).
+// 운영사 계정이라고 무조건 운영사 콘솔로 보내면 안 된다 — 방배카페골목 로그인 화면에서
+// 비밀번호를 넣었는데 리스터코퍼레이션 화면이 열리면, 로그인한 사람 눈에는 남의 회사로
+// 튕긴 것이다. **들어온 문으로 들어간다**: 상인회 화면에서 들어왔으면 그 상인회 관리 화면.
+export async function postLoginPath(db, user, assoc = null) {
+  if (user.role === "SUPERADMIN") return assoc && assoc.slug ? `/t/${assoc.slug}/admin` : "/super";
   const a = user.association_id ? await D.getAssociationById(db, user.association_id) : null;
   const base = a ? `/t/${a.slug}` : "";
   const esign = !!(a && a.kind === "esign");
@@ -121,29 +127,32 @@ async function findLoginUser(db, who, password) {
 }
 
 export async function login(ctx) {
-  const { db, form, env, addCookie, isProd, ip } = ctx;
-  if (rateLimited(ip)) return back("/login", "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해 주세요.", true);
-  if (!(await turnstileVerify(env, form.get("cf-turnstile-response"), ip))) return back("/login", "봇 방지 확인에 실패했습니다. 다시 시도해 주세요.", true);
+  const { db, form, env, addCookie, isProd, ip, assoc } = ctx;
+  // 실패해도 들어온 문 앞에 세운다. 공용 /login 으로 되돌리면 방배카페골목에서 비밀번호를
+  // 틀린 사람이 갑자기 남의 회사 로그인 화면을 보게 된다.
+  const at = ctx.base || "";
+  if (rateLimited(ip)) return back(at + "/login", "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해 주세요.", true);
+  if (!(await turnstileVerify(env, form.get("cf-turnstile-response"), ip))) return back(at + "/login", "봇 방지 확인에 실패했습니다. 다시 시도해 주세요.", true);
   // 칸 이름은 login 이지만, 예전 폼·자동완성이 email 로 보내는 경우도 받아 준다.
   const who = (form.get("login") || form.get("email") || "").trim();
   const password = form.get("password") || "";
   const user = await findLoginUser(db, who, password);
   if (!user) {
     recordFail(ip);
-    return back("/login", "이메일·휴대폰 번호 또는 비밀번호가 올바르지 않습니다.", true);
+    return back(at + "/login", "이메일·휴대폰 번호 또는 비밀번호가 올바르지 않습니다.", true);
   }
   if (user.totp_enabled) {
     const { totpVerify } = await import("./totp.js");
     if (!(await totpVerify(user.totp_secret, form.get("totp")))) {
       recordFail(ip);
-      return back("/login", "2단계 인증 코드가 올바르지 않습니다.", true);
+      return back(at + "/login", "2단계 인증 코드가 올바르지 않습니다.", true);
     }
   }
   const token = await sessionTokenForUser(user, env.SESSION_SECRET);
   addCookie(sessionCookie(token, isProd));
   // 서명 링크를 눌렀다가 로그인하러 온 사람은 그 문서로 돌려보낸다.
   // (safeNext 가 같은 사이트 경로만 통과시킨다 — 열린 리다이렉트 차단)
-  return redirect(safeNext(form.get("next")) || (await postLoginPath(db, user)));
+  return redirect(safeNext(form.get("next")) || (await postLoginPath(db, user, assoc)));
 }
 
 export async function logout(ctx) {

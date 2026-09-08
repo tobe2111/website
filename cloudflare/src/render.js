@@ -222,7 +222,12 @@ function consoleNav(assoc, base, user) {
   // "이 홈페이지는 우리 것이 아니라 남의 시스템"으로 읽힌다. 운영자는 계정 설정에
   // 있는 입구로 간다 (pages.js 의 account 참고) — 같은 이유로 그 자리에 둔 것이다.
   if (user) {
-    out.push(`<a href="/account">${esc(user.name || "내 계정")}</a>`);
+    // 여기에 쓰는 이름은 '지금 누구로 일하고 있나' 다. 회장님에게는 "회장" 이 맞다.
+    // 그런데 운영사 계정의 이름은 "플랫폼 운영자" 라, 상인회 관리 화면 맨 위에 그 글자가
+    // 뜨면 임원이 옆에서 볼 때 "이 홈페이지는 남의 시스템" 으로 읽힌다.
+    // 그 계정으로 상인회 안에서 일할 때는 회사 이름표 대신 '내 계정' 이라고만 쓴다.
+    const whoami = user.role === "SUPERADMIN" && assoc ? "내 계정" : (user.name || "내 계정");
+    out.push(`<a href="/account">${esc(whoami)}</a>`);
     out.push(`<form method="post" action="${base || ""}/logout" class="cnav-out-form"><button class="btn btn-ghost btn-xs">로그아웃</button></form>`);
   }
   return out.join("");
