@@ -121,11 +121,14 @@ test("관리자가 한 명뿐이면 '관리자 계정 만들기' 가 펼쳐져 �
   assert.ok(html.includes("한 분뿐입니다"), "관리자가 한 명뿐이라는 사실을 알려 주지 않는다");
 });
 
-test("누가 이 상인회의 관리자인지 늘 보여 준다", async () => {
+test("누가 이 상인회의 관리자인지, 그 아이디가 무엇인지 늘 보여 준다", async () => {
   const env = makeEnv({}); await seed(env);
   const { jar: j } = await tryLogin(env, "/t/bb/login", "a@bb.kr", "admin1234");
   const html = await (await get(env, j, "/t/bb/admin")).text();
-  assert.ok(/지금 이 상인회의 관리자[\s\S]{0,120}회장/.test(html), "현재 관리자 명단이 없다");
+  assert.ok(html.includes("지금 이 상인회의 관리자"), "현재 관리자 명단이 없다");
+  assert.ok(html.includes("회장"), "관리자 이름이 없다");
+  // 이름만으로는 "그 계정이 정확히 뭐냐" 에 답이 안 된다 — 로그인에 쓰는 아이디가 보여야 한다
+  assert.ok(html.includes("a@bb.kr"), "로그인 아이디(이메일)가 없다");
 });
 
 test("발급하면 관리자 권한 계정이 실제로 생긴다", async () => {

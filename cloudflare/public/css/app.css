@@ -3505,6 +3505,19 @@ a.deal-card:hover{border-color:var(--deal);transition:border-color .18s}
 .dash .stack-form label > .tag{display:inline-block;width:auto}
 .dash .stack-form label > .field-help{margin-top:6px}
 
+/* 비밀번호를 그 자리에서 정하는 한 줄 폼 (표 칸 안에 들어간다).
+   임시 비밀번호는 화면에 딱 한 번 뜨고, 그 줄을 놓치면 다시 발급해야 한다 —
+   회장님이 전화로 불러 줄 값을 미리 정하는 편이 실제로 훨씬 덜 꼬인다. */
+/* `.actions-cell>form{display:inline-block}`(0,2,0) 이 더 무거워 그냥 `.pw-set` 으로는
+   안 먹는다 — 표 칸 안쪽을 같은 무게로 한 번 더 짚는다. 이 파일에서 세 번째 겪는 일이라
+   측정으로 확인하고 적는다(브라우저가 고른 display 를 직접 읽어 봤다). */
+.pw-set,
+.actions-cell>form.pw-set{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0}
+.pw-set input[type=password]{flex:1 1 220px;min-width:0;width:auto}
+.pw-set .btn{flex:none}
+/* 아이디(이메일)는 전화로 불러 주는 값이다 — 붙어 보이면 잘못 읽는다 */
+.id-cell{font-size:13px;letter-spacing:.01em;word-break:break-all;user-select:all}
+
 /* ==========================================================================
    v7 콘솔 — 대기업 관리 화면의 밀도
    v6(레퍼런스 폼)까지는 "한 화면 = 한 폼" 이라 여백을 넉넉히 뒀는데, 실제 콘솔은

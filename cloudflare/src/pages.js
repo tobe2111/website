@@ -2598,8 +2598,24 @@ export async function admin(ctx) {
           이 콘솔의 모든 기능을 함께 쓰니 <b>믿을 수 있는 분에게만</b> 주세요.
           비밀번호를 <b>직접 정해 주시면</b> 그대로 알려 드리면 됩니다. 비우면 임시 비밀번호를 만들어
           화면에 한 번 보여 드리는데, <b>그 줄을 놓치면 다시 발급해야 합니다.</b></p>
-        <p class="panel-hint">지금 이 상인회의 관리자: <b>${admins.length ? admins.map((u) => esc(u.name || u.email)).join(", ") : "없음"}</b>
-          ${admins.length <= 1 ? " — 한 분뿐입니다. 그분이 못 들어오면 아무도 못 들어옵니다." : ""}</p>
+        <div class="form-divider">지금 이 상인회의 관리자 <span class="badge badge-muted">${admins.length}명</span></div>
+        ${admins.length <= 1 ? `<p class="panel-hint">한 분뿐입니다. 그분이 못 들어오면 아무도 못 들어옵니다.</p>` : ""}
+        <p class="panel-hint">로그인할 때 쓰는 <b>아이디는 이메일 주소</b>입니다. 아래에 그대로 적혀 있습니다.
+          비밀번호를 잊으셨으면 여기서 <b>직접 정해</b> 주시거나, 비우고 누르면 임시 비밀번호를 만들어 드립니다.</p>
+        <div class="table-scroll"><table class="admin-table"><thead><tr>
+          <th>성함</th><th>아이디 (이메일)</th><th>비밀번호 바꾸기</th></tr></thead><tbody>
+          ${admins.map((u) => `<tr>
+            <td>${esc(u.name || "—")}${u.id === user.id ? ' <span class="badge badge-ok">나</span>' : ""}</td>
+            <td><code class="id-cell">${esc(u.email)}</code></td>
+            <td class="actions-cell">${u.id === user.id
+              ? `<a class="btn btn-xs btn-ghost" href="/account">내 계정에서 변경</a>`
+              : `<form method="post" action="${base}/admin/user/${u.id}/reset-password" class="pw-set">
+                  <input type="hidden" name="back" value="${esc(base)}/admin#s-people" />
+                  <input type="password" name="password" minlength="8" autocomplete="new-password"
+                    placeholder="새 비밀번호 (8자 이상 · 비우면 임시 발급)" aria-label="${esc(u.name || u.email)}님의 새 비밀번호" />
+                  <button class="btn btn-xs btn-primary">바꾸기</button></form>`}</td></tr>`).join("")}
+        </tbody></table></div>
+        <div class="form-divider">관리자 한 명 더 만들기</div>
         <form method="post" action="${base}/admin/admins/add" class="stack-form compact">
           <div class="form-two"><label>성함<input type="text" name="name" required autocomplete="name" placeholder="예: 김총무" /></label>
             <label>이메일 <small>(이 주소가 아이디가 됩니다)</small><input type="email" name="email" required autocomplete="email" placeholder="chong@example.com" /></label></div>
@@ -3444,11 +3460,15 @@ export async function adminBusinessEdit(ctx) {
         ? `이 사장님은 <b>휴대폰 ${esc(D.maskPhone(owner.phone))} 번호가 아이디</b>입니다.
            이메일은 안 넣으셔도 됩니다 — 사장님이 이메일로 들어오길 원하실 때만 아래에서 정해 주세요.`
         : `이메일도 휴대폰 번호도 없는 계정이라 사장님은 <b>아직 로그인할 수 없습니다.</b> 아래에서 둘 중 하나를 넣어 주세요.`}
-        비밀번호를 잊으셨으면 아래 [임시 비밀번호 발급] 을 눌러 새로 알려 드리면 됩니다.</p>
-      <form method="post" action="${base}/admin/user/${owner.id}/reset-password" class="inline-form"
-        data-confirm="${esc(owner.name)}님의 임시 비밀번호를 발급할까요?&#10;기존 비밀번호는 즉시 무효가 됩니다."><button class="btn btn-ghost btn-sm"${
-        noLogin && !owner.phone ? " disabled title=\"아이디가 없어 발급해도 들어올 수 없습니다 — 먼저 아래에서 휴대폰이나 이메일을 넣어 주세요\"" : ""
-      }>임시 비밀번호 발급</button></form>
+        비밀번호는 아래에서 <b>직접 정해</b> 주시거나, 비우고 누르면 임시 비밀번호를 만들어 드립니다.</p>
+      <form method="post" action="${base}/admin/user/${owner.id}/reset-password" class="pw-set"
+        data-confirm="${esc(owner.name)}님의 비밀번호를 바꿀까요?&#10;기존 비밀번호는 즉시 무효가 됩니다.">
+        <input type="hidden" name="back" value="${esc(base)}/admin/business/${b.id}" />
+        <input type="password" name="password" minlength="8" autocomplete="new-password"
+          placeholder="새 비밀번호 (8자 이상 · 비우면 임시 발급)" aria-label="사장님의 새 비밀번호" />
+        <button class="btn btn-primary btn-sm"${
+        noLogin && !owner.phone ? " disabled title=\"아이디가 없어 바꿔도 들어올 수 없습니다 — 먼저 아래에서 휴대폰이나 이메일을 넣어 주세요\"" : ""
+      }>비밀번호 바꾸기</button></form>
       <div class="form-divider">아이디</div>
       <form method="post" action="${base}/admin/business/${b.id}/owner-phone" class="stack-form compact">
         <label>사장님 휴대폰${noLogin ? " (아이디)" : " (알림톡 수신)"}<input type="tel" name="phone" maxlength="20" inputmode="numeric" autocomplete="tel"
