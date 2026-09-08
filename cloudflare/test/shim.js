@@ -4,7 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { SCHEMA_SQL, SCHEMA_VERSION } from "../src/schema.js";
+import { SCHEMA_SQL, schemaStamp } from "../src/schema.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -15,8 +15,10 @@ export function makeD1(bare = false) {
   db.exec("PRAGMA foreign_keys = ON;");
   if (!bare) {
     db.exec(SCHEMA_SQL);
-    // 현행 SCHEMA_SQL 로 만든 DB 는 이미 최신이다 — 버전을 남겨 콜드스타트 마이그레이션을 건너뛴다
-    db.exec(`INSERT INTO settings (key,value) VALUES ('schema_version','${SCHEMA_VERSION}') ON CONFLICT(key) DO UPDATE SET value=excluded.value`);
+    // 현행 SCHEMA_SQL 로 만든 DB 는 이미 최신이다 — 도장을 남겨 콜드스타트 마이그레이션을 건너뛴다.
+    // ensureSchema 가 쓰는 값과 **똑같아야** 한다. 세대 숫자만 찍으면 매 요청이 마이그레이션을
+    // 한 번씩 더 돌아, 쿼리 수를 재는 시험이 엉뚱한 숫자를 본다.
+    db.exec(`INSERT INTO settings (key,value) VALUES ('schema_version','${schemaStamp()}') ON CONFLICT(key) DO UPDATE SET value=excluded.value`);
   }
   const wrap = (stmt, args) => ({
     async first() { const r = stmt.get(...args); return r === undefined ? null : r; },
