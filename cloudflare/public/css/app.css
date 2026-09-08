@@ -4152,3 +4152,37 @@ body.is-console[data-console="super"] .console-strip{border-bottom:1px solid #2b
    대신 **바깥 격자**를 바닥 정렬로 둔다. 라벨 속은 손대지 않으니 칩도 설명도
    원래대로 한 줄에 흐르고, 라벨 상자의 바닥(=입력창의 바닥)만 좌우가 맞는다. */
 .form-two{align-items:end}
+
+/* ---------- 사장님께 영업시간 여쭙기 (사진 요청 링크 화면) ----------
+   이 화면을 여는 사람은 카톡으로 링크를 받은 사장님이고, 폰을 한 손에 들고 봅니다.
+   그래서 영업시간을 **글로 적게 하지 않습니다** — 시각은 폰 시계로 고르고,
+   쉬는 날은 요일 일곱 칸을 눌러 고릅니다. 한 줄짜리 문자열은 서버가 만듭니다. */
+.ask-hours{margin-top:22px;padding-top:18px;border-top:1px solid var(--line)}
+.ask-hours .ask-title{display:flex;flex-wrap:wrap;align-items:center;gap:8px;
+  margin:0 0 6px;font-size:1.02rem;font-weight:800;color:var(--ink)}
+.ask-hours > .auth-note:first-of-type{margin-top:0}
+/* fieldset 은 격자·플렉스 안에서 min-width:auto 때문에 안 줄어듭니다 */
+.day-off{border:0;padding:0;margin:0;min-width:0}
+.day-off > legend{padding:0;margin-bottom:8px;font-weight:600;font-size:.92rem}
+.day-off > legend small{color:var(--muted);font-weight:400}
+.day-pick{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+/* `.stack-form label` 이 display:grid 와 46px 를 걸어 두므로 여기서 되돌립니다.
+   되돌리지 않으면 요일 칸이 세로로 늘어나 일곱 개가 한 화면에서 밀려납니다
+   (동의 체크박스에서 한 번, 전화·영업시간 칸에서 또 한 번 났던 그 사고입니다).
+   클래스를 하나 더 얹어 무게로 이깁니다 — 순서에만 기대지 않습니다. */
+.day-pick label,.stack-form .day-pick label{display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:5px;min-height:56px;padding:7px 0;
+  border:1px solid var(--line);border-radius:10px;background:var(--bg);
+  font-weight:600;font-size:.9rem;cursor:pointer}
+.day-pick input,.stack-form .day-pick input{width:auto;min-height:0;height:20px;
+  margin:0;padding:0;flex:none;accent-color:var(--brand-700)}
+/* 고른 요일이 눈에 남아야 합니다. `:has()` 는 못 씁니다(파이어폭스 ESR) —
+   체크박스 바로 뒤 글자만 물들입니다. */
+.day-pick input:checked + span{color:var(--brand-700)}
+/* 요일마다 시간이 다른 가게. `.fold-step` 은 관리자 콘솔(.dash) 안에서만 꾸며지므로
+   손님·사장님 화면에서는 그 클래스를 쓰지 않습니다 — 썼더니 '펼치기' 와 '접기' 가
+   한 줄에 나란히 찍혔습니다. 여기서는 브라우저가 그리는 삼각형을 그대로 둡니다. */
+.ask-alt{margin-top:12px}
+.ask-alt > summary{cursor:pointer;font-size:.92rem;color:var(--ink-soft);padding:6px 0}
+.ask-alt > summary:hover{color:var(--ink)}
+.ask-alt[open] > summary{margin-bottom:10px;font-weight:600;color:var(--ink)}

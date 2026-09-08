@@ -415,6 +415,10 @@ export function updateBusiness(db, id, f) {
 // 콘텐츠 활동(사진 추가 등) 발생 시 갱신 시각 터치 — '살아있는 홈' 계측용
 export const touchBusiness = (db, id) => run(db, "UPDATE businesses SET updated_at=datetime('now') WHERE id=?", id);
 export const setBusinessStatus = (db, id, status) => run(db, "UPDATE businesses SET status=? WHERE id=?", status, id);
+// 사장님이 사진 요청 링크에서 영업시간만 보내 온다. 이 한 칸만 손대므로
+// 회장님이 채워 둔 소개·주소를 사장님이 덮어쓸 일이 없다.
+export const setBusinessHours = (db, id, hours) =>
+  run(db, "UPDATE businesses SET hours=?, updated_at=datetime('now') WHERE id=?", hours, id);
 export const listBusinessMarkers = (db, aid) =>
   all(db, `SELECT id, name, slug, category, lat, lng, address, phone, sns_naver FROM businesses
            WHERE association_id = ? AND status='approved' AND lat IS NOT NULL AND lng IS NOT NULL`, aid);
