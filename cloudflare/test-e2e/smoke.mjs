@@ -193,7 +193,11 @@ const ok = (cond, name) => { if (cond) { pass++; console.log("  ✓", name); } e
 {
   const p = await browser.newPage();
   await p.goto(`http://localhost:${PORT}/map.html`);
-  ok(await p.locator(".map-fallback").count() > 0, "지도 키 없음 → 목록 폴백 안내");
+  // 지도 키가 없을 때의 자리는 .map-fallback 안내 줄에서 .mapbox 그림으로 바뀌었다.
+  // (지도 화면인데 지도가 어디에도 없던 것을 고치면서.) 시험이 옛 이름을 찾고 있었다 —
+  // 이 시험은 배포 검사에 안 들어가서 한동안 못 보고 지나갔다.
+  ok(await p.locator(".mapbox").count() > 0, "지도 키 없음 → 지도 자리 그림");
+  ok(await p.locator(".mapbox-note").count() > 0, "키를 넣으면 실제 지도가 뜬다고 알려 준다");
   await p.close();
 }
 // 6) QR 위젯 렌더 (대시보드)

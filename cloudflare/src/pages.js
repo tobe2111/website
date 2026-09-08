@@ -148,19 +148,57 @@ function dDayLabel(dateStr) {
   return diff === 0 ? "D-DAY" : "D-" + diff;
 }
 // 행사 카드 (시안: 이미지 16:10 + 오버레이 + 날짜 칩 / 이미지 없으면 날짜 사각형형)
+//
+// 카드 전체가 행사 상세로 가는 링크다. 예전에는 카드를 눌러도 아무 데도 안 갔다 —
+// 손님은 사진과 제목을 보고 당연히 누르는데 아무 일이 없으면 "고장" 으로 읽는다.
+//
+// '캘린더에 추가' 도 상세로 보낸다. 예전에는 여기서 바로 .ics 파일이 떨어졌는데,
+// 이 화면을 여는 사람은 동네 손님과 40~60대 사장님이다. 폰에 정체 모를 파일이
+// 하나 생기면 그걸로 뭘 해야 하는지 모른다. 무엇이 열릴지 고른 다음에 누르게 한다.
 function eventCard(base, e) {
   const d = e.event_date.slice(8, 10), mo = Number(e.event_date.slice(5, 7)) + "월";
   const dd = dDayLabel(e.event_date);
   const ddBadge = dd ? `<span class="dday${dd === "D-DAY" ? " is-today" : ""}">${dd}</span>` : "";
-  const calLink = `<a class="event-cal" href="${base}/events/${e.id}/calendar.ics" title="아이폰·구글 캘린더에 추가">${CAL_SVG} 캘린더에 추가</a>`;
+  const href = `${base}/events/${e.id}`;
+  // 링크가 아니라 **표시**다. 카드를 누르면 상세로 가고, 거기서 어느 캘린더에 넣을지 고른다.
+  // (링크 안에 링크를 넣을 수 없기도 하지만, 그보다 여기서 바로 파일이 떨어지면 안 된다.)
+  const calHint = `<span class="event-cal">${CAL_SVG} 캘린더에 넣기</span>`;
   if (e.image) return `<article class="event-photo-card">
-    <img src="${esc(mediaUrl(e.image))}" alt="" loading="lazy" />
-    <span class="epc-overlay" aria-hidden="true"></span>
+    <a class="epc-link" href="${href}">
+      <img src="${esc(mediaUrl(e.image))}" alt="" loading="lazy" />
+      <span class="epc-overlay" aria-hidden="true"></span>
+      <span class="epc-body"><span class="epc-date">${Number(e.event_date.slice(5, 7))}.${Number(d)}</span><strong>${esc(e.title)}</strong>${e.place ? `<span class="epc-place">${PIN_SVG}${esc(e.place)}</span>` : ""}${calHint}</span>
+    </a>
     ${ddBadge ? `<span class="dday dday-corner${dd === "D-DAY" ? " is-today" : ""}">${dd}</span>` : ""}
-    <span class="epc-body"><span class="epc-date">${Number(e.event_date.slice(5, 7))}.${Number(d)}</span><strong>${esc(e.title)}</strong>${e.place ? `<span class="epc-place">${PIN_SVG}${esc(e.place)}</span>` : ""}${calLink}</span>
   </article>`;
-  return `<article class="event-card"><div class="event-date"><span class="d">${d}</span><span class="m">${mo}</span></div>
-      <div class="event-info">${ddBadge ? `<div class="ev-head"><h3>${esc(e.title)}</h3>${ddBadge}</div>` : `<h3>${esc(e.title)}</h3>`}<p>${esc(e.description)}</p>${e.place ? `<span class="event-place">${PIN_SVG}${esc(e.place)}</span>` : ""}${calLink}</div></article>`;
+  return `<article class="event-card"><a class="event-link" href="${href}">
+      <div class="event-date"><span class="d">${d}</span><span class="m">${mo}</span></div>
+      <div class="event-info">${ddBadge ? `<div class="ev-head"><h3>${esc(e.title)}</h3>${ddBadge}</div>` : `<h3>${esc(e.title)}</h3>`}<p>${esc(e.description)}</p>${e.place ? `<span class="event-place">${PIN_SVG}${esc(e.place)}</span>` : ""}${calHint}</div>
+    </a></article>`;
+}
+
+// ── 캘린더에 넣기 ──────────────────────────────────────────────────────────
+//
+// 예전에는 단추 하나가 곧바로 .ics 파일을 내려받게 했다. 그건 개발자에게만 자연스럽다.
+// 안드로이드·데스크톱에서는 '다운로드 폴더에 파일 하나'로 끝나고, 받은 사람은
+// 그게 뭔지도 모른 채 지운다. 그러면 캘린더에 아무것도 안 들어간다.
+//
+// 그래서 **무엇이 열릴지 고른 다음** 누르게 한다:
+//   · 구글 캘린더  — 새 창에서 구글이 열린다. 안드로이드·컴퓨터 이용자 대부분이 여기다.
+//   · 아이폰 캘린더 — .ics 를 inline 으로 준다. 아이폰 사파리는 이걸 캘린더 앱으로 넘긴다.
+//   · 그리고 **날짜를 큰 글씨로 그냥 적어 둔다.** 종이 달력에 옮겨 적는 분이 제일 많다.
+function googleCalUrl(assoc, e) {
+  const day = String(e.event_date || "").slice(0, 10).replace(/-/g, "");
+  const next = new Date(String(e.event_date).slice(0, 10) + "T00:00:00Z");
+  next.setUTCDate(next.getUTCDate() + 1);
+  const p = new URLSearchParams({
+    action: "TEMPLATE",
+    text: `${e.title} — ${assoc.name}`,
+    dates: `${day}/${next.toISOString().slice(0, 10).replace(/-/g, "")}`,
+  });
+  if (e.place) p.set("location", e.place);
+  if (e.description) p.set("details", String(e.description).slice(0, 800));
+  return `https://calendar.google.com/calendar/render?${p.toString()}`;
 }
 const CAL_SVG = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 9h18M12 13v5M9.5 15.5h5"/></svg>';
 
@@ -181,7 +219,92 @@ export async function eventIcs(ctx) {
     e.place ? `LOCATION:${icsEsc(e.place)}` : "",
     e.description ? `DESCRIPTION:${icsEsc(e.description)}` : "",
     "END:VEVENT", "END:VCALENDAR"].filter(Boolean).join("\r\n");
-  return new Response(ics, { headers: { "content-type": "text/calendar; charset=utf-8", "content-disposition": `attachment; filename="event-${e.id}.ics"`, "cache-control": "public, max-age=600" } });
+  // inline 으로 준다. attachment 를 붙이면 아이폰 사파리도 '파일'로 받아 버려
+  // 캘린더 앱이 안 열린다 — 정체 모를 파일 하나가 생기고 행사는 캘린더에 안 들어간다.
+  // inline 이면 아이폰은 이걸 캘린더로 넘겨 "추가하시겠습니까" 를 띄운다.
+  return new Response(ics, { headers: { "content-type": "text/calendar; charset=utf-8", "content-disposition": `inline; filename="event-${e.id}.ics"`, "cache-control": "public, max-age=600" } });
+}
+
+// ================= 행사 상세 =================
+//
+// 손님은 홈에서 사진과 제목을 보고 카드를 누른다. 예전에는 눌러도 아무 데도 가지 않았다.
+// 공지는 상세가 있는데 행사만 없었다 — 정작 "언제 어디로 가면 되나" 를 알아야 하는 쪽이다.
+export async function eventDetail(ctx) {
+  const { db, assoc, base, user, params, csrf, query } = ctx;
+  const e = await D.getEvent(db, Number(params.id));
+  if (!e || e.association_id !== assoc.id) return notFoundResponse(ctx);
+  const isMember = !!user && (user.association_id === assoc.id || user.role === "SUPERADMIN");
+  const [count, mine] = await Promise.all([
+    D.listRsvps(db, e.id).then((r) => r.length).catch(() => 0),
+    isMember ? D.userRsvped(db, e.id, user.id).catch(() => false) : Promise.resolve(false),
+  ]);
+  const dd = dDayLabel(e.event_date);
+  const past = !dd;                         // 지난 행사는 숨기지 않고 '끝났습니다' 로 적는다
+  const day = String(e.event_date || "").slice(0, 10);
+
+  const rsvpBlock = past
+    ? `<p class="panel-hint">이미 지난 행사입니다.</p>`
+    : `<div class="ed-rsvp">
+        ${count ? `<span class="rsvp-count">참가 신청 ${count}곳</span>` : ""}
+        ${isMember ? (mine
+          ? `<form method="post" action="${base}/events/${e.id}/rsvp/cancel" class="inline-form"><input type="hidden" name="_csrf" value="${csrf}" /><button class="btn btn-ghost">✓ 신청함 (취소하기)</button></form>`
+          : `<form method="post" action="${base}/events/${e.id}/rsvp" class="inline-form"><input type="hidden" name="_csrf" value="${csrf}" /><button class="btn btn-primary">참가 신청하기</button></form>`)
+          : `<p class="panel-hint">참가 신청은 ${esc(assoc.name)} 회원만 할 수 있습니다.
+             <a href="${base}/login">로그인</a> 후 신청해 주세요.</p>`}
+      </div>`;
+
+  const body = `<section class="section page-top"><div class="container narrow">
+    <a href="${base}/events" class="back-link">← 행사 목록</a>
+    <div class="article-head">
+      ${dd ? `<span class="dday${dd === "D-DAY" ? " is-today" : ""}">${dd}</span>` : `<span class="badge badge-muted">지난 행사</span>`}
+      <time datetime="${esc(day)}">${esc(ymdDow(day))}</time></div>
+    <h1 class="article-title">${esc(e.title)}</h1>
+    ${e.image ? `<img class="article-image" src="${esc(mediaUrl(e.image))}" alt="${esc(e.title)}" />` : ""}
+
+    <dl class="ed-facts">
+      <div><dt>언제</dt><dd>${esc(ymdDow(day))}</dd></div>
+      ${e.place ? `<div><dt>어디서</dt><dd>${esc(e.place)}
+        <a class="ed-map" href="https://map.naver.com/p/search/${encodeURIComponent(e.place)}" target="_blank" rel="noopener">지도에서 보기 ↗</a></dd></div>` : ""}
+      ${assoc.phone ? `<div><dt>문의</dt><dd><a href="tel:${esc(assoc.phone)}">${esc(assoc.phone)}</a></dd></div>` : ""}
+    </dl>
+
+    ${e.description ? `<div class="article-body">${esc(e.description).replace(/\n/g, "<br />")}</div>` : ""}
+
+    ${rsvpBlock}
+
+    ${past ? "" : `<section class="ed-cal" id="cal">
+      <h2 class="ed-cal-h">${CAL_SVG} 캘린더에 넣기</h2>
+      <p class="ed-cal-date"><b>${esc(ymdDow(day))}</b>${e.place ? ` · ${esc(e.place)}` : ""}</p>
+      <p class="panel-hint">쓰시는 캘린더를 골라 주세요. 종이 달력에 적으실 거면 위 날짜만 보시면 됩니다.</p>
+      <div class="ed-cal-row">
+        <a class="btn btn-ghost" href="${esc(googleCalUrl(assoc, e))}" target="_blank" rel="noopener">구글 캘린더에 넣기</a>
+        <a class="btn btn-ghost" href="${base}/events/${e.id}/calendar.ics">아이폰 캘린더에 넣기</a>
+      </div>
+      <p class="panel-hint">구글 쪽은 새 창이 열립니다. 아이폰 쪽은 캘린더 앱이 열리면서
+        "추가하시겠습니까" 가 뜹니다 (네이버 캘린더도 같은 방식으로 열립니다).</p>
+    </section>`}
+
+    <div class="article-actions">
+      <button type="button" class="btn btn-share" data-share data-share-title="${esc(e.title)} — ${esc(assoc.name)}">${SHARE_SVG} 행사 공유하기</button>
+    </div>
+    ${flashOf(query)}
+  </div></section>`;
+
+  const eventLd = {
+    "@context": "https://schema.org", "@type": "Event",
+    name: e.title, startDate: day,
+    eventStatus: "https://schema.org/EventScheduled",
+    eventAttendanceMode: "https://schema.org/OfflineEventAttendanceMode",
+    ...(e.place ? { location: { "@type": "Place", name: e.place, address: { "@type": "PostalAddress", streetAddress: e.place, addressCountry: "KR" } } } : {}),
+    ...(e.description ? { description: e.description } : {}),
+    ...(e.image ? { image: /^https?:\/\//.test(mediaUrl(e.image)) ? mediaUrl(e.image) : ORIGIN + mediaUrl(e.image) } : {}),
+    organizer: { "@type": "Organization", name: assoc.name, url: `${ORIGIN}${base}/` },
+    mainEntityOfPage: `${ORIGIN}${base}/events/${e.id}`,
+  };
+  return html(layout({ title: e.title, assoc, base, user, body, activeNav: `${base}/notices`, csrf,
+    description: clip(e.description) || `${ymdDow(day)} · ${e.place || assoc.name}`,
+    ogImage: e.image || "", jsonLd: eventLd,
+    scripts: `<script src="${assetUrl("/js/share.js")}" defer></script>` }));
 }
 
 export async function home(ctx, opts = {}) {
@@ -920,9 +1043,16 @@ export async function mapPage(ctx) {
       ${m.address ? `<span class="map-store-addr">${PIN_SVG} ${esc(m.address)}</span>` : ""}
       <a class="map-store-link" href="${esc(m.sns_naver || `https://map.naver.com/p/search/${encodeURIComponent(m.address || m.name)}`)}" target="_blank" rel="noopener">네이버 지도에서 열기 →</a></li>`).join("")
     : `<li class="empty">지도에 표시할 좌표가 등록된 점포가 없습니다.</li>`;
-  const mapEl = naver
-    ? `<div id="storeMap" class="store-map" data-center-lat="${assoc.map_lat}" data-center-lng="${assoc.map_lng}" data-zoom="${assoc.map_zoom}" data-base="${esc(base)}">${mapSkeleton(markers.length)}</div>`
-    : `<div class="map-fallback"><span class="mf-ico" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg></span><p>인터랙티브 지도는 관리자가 네이버 지도 키를 설정하면 표시됩니다. 아래 목록에서 각 점포의 네이버 지도를 열 수 있습니다.</p></div>`;
+  // 키가 없을 때의 자리는 아래 mapCanvas 가 맡는다 — 여기서는 실제 지도만 만든다.
+  // (예전에는 이 삼항의 else 쪽에도 안내 상자가 있었는데, mapArea 가 갈라지면서
+  //  영영 그려지지 않는 죽은 가지가 됐다. 죽은 가지를 남겨 두면 다음 사람이 그걸 고친다.)
+  //
+  // 자리를 **빈 채로 두지 않는다.** 네이버 지도 스크립트가 안 실리면 높이 60vh 짜리
+  // 흰 네모가 휴대폰 화면을 거의 다 덮는다 — 손님에게는 '고장' 으로 읽힌다.
+  // 지도가 그려지면 map.js 가 이 안을 비운다.
+  const mapEl = `<div id="storeMap" class="store-map" data-center-lat="${assoc.map_lat}" data-center-lng="${assoc.map_lng}" data-zoom="${assoc.map_zoom}" data-base="${esc(base)}">${mapSkeleton(markers.length)}</div>`;
+  // defer 를 빼면 남의 서버 스크립트 하나가 우리 화면의 자바스크립트를 **전부** 붙잡는다
+  // (6초 늦은 스크립트로 실측: 6,055ms → 0ms).
   const loader = naver ? `<script defer src="https://oapi.map.naver.com/openapi/v3/maps.js?${esc(env.NAVER_MAP_PARAM || "ncpClientId")}=${esc(naver)}"></script><script src="${assetUrl("/js/map.js")}" defer></script>` : "";
   const markerData = markers.map((m) => ({ name: m.name, slug: m.slug, category: m.category, lat: m.lat, lng: m.lng, address: m.address || "", phone: m.phone || "" }));
   // 지도 키가 없으면 예전에는 안내 줄 하나와 카드 목록뿐이라, 지도 화면인데 지도가 없었다.
