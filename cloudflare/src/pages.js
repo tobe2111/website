@@ -1776,7 +1776,16 @@ function consoleSide({ base, kind, counts = {}, active = "", inPage = false }) {
 }
 
 // 곁가지 화면을 콘솔 껍데기(제목줄 + 왼쪽 차림표 + 본문)에 담는다.
-async function consoleShell(ctx, { title, sub = "", actions = "", active = "", body }) {
+//
+// 관리자가 들어가는 화면은 **하나도 빠짐없이** 이 껍데기를 쓴다. 한 화면만 차림표가
+// 없으면 회장님은 거기서 길을 잃는다 — 뒤로 가기를 눌러야 다른 메뉴로 갈 수 있고,
+// 그 화면만 다른 사이트처럼 보인다. 실제로 "여기도 또 왼쪽 카테고리가 안 보이네" 라는
+// 말을 여러 번 들었다. 새 관리자 화면을 만들 때는 `<section class="dash">` 를 직접
+// 쓰지 말고 이 함수를 부른다.
+//
+// `title` 은 글자 그대로 넣으므로 이스케이프한다. 배지·상태처럼 표시가 붙는 제목은
+// `titleHtml` 로 준다(부르는 쪽이 이미 이스케이프했다는 뜻이다).
+async function consoleShell(ctx, { title, titleHtml = "", eyebrow = "", sub = "", actions = "", active = "", body }) {
   const { db, assoc, base, query } = ctx;
   const kind = assoc.kind;
   // 배지는 두 번의 조회로 끝난다 — 없으면 다른 탭으로 옮길 때 숫자가 사라져 보인다
@@ -1786,7 +1795,7 @@ async function consoleShell(ctx, { title, sub = "", actions = "", active = "", b
   ]);
   const counts = { pending: s.pending || 0, unread: unread || 0 };
   return `<section class="dash dash-shell"><div class="container">
-    <div class="dash-head"><div><h1 class="dash-title">${esc(title)}</h1>${sub ? `<p class="dash-sub">${sub}</p>` : ""}</div>
+    <div class="dash-head"><div>${eyebrow ? `<p class="section-eyebrow">${eyebrow}</p>` : ""}<h1 class="dash-title">${titleHtml || esc(title)}</h1>${sub ? `<p class="dash-sub">${sub}</p>` : ""}</div>
       ${actions ? `<div class="dash-head-actions">${actions}</div>` : ""}</div>
     ${query ? flashOf(query) : ""}
     <div class="console-grid">${consoleSide({ base, kind, counts, active })}
@@ -3133,16 +3142,17 @@ export async function adminDocumentDetail(ctx) {
       <p class="panel-hint">회원(가입한 사람)은 이 주소에서 서명합니다 — <b>로그인이 필요합니다.</b>
         ${canTalk ? "" : "지금은 자동 발송이 꺼져 있으니 이 링크를 카톡·문자로 직접 보내 주세요."}</p>
       ${linkRow(`${linkOrigin}${base}/sign/${d.id}`, "")}`}</section>` : `<section class="panel"><p class="panel-hint">전체 공개 문서(누구나 서명 가능).</p></section>`;
-  const body = `<section class="dash"><div class="container">
-    <div class="dash-head"><div><h1 class="dash-title">${esc(d.title)} ${d.closed ? '<span class="badge badge-no">마감</span>' : ""}${d.ordered ? ' <span class="badge badge-info">순차</span>' : ""}${d.due_date ? `<span class="badge ${D.isPastDue(d) ? "badge-no" : "badge-wait"}">기한 ${esc(d.due_date)}</span>` : ""}</h1>
-      <p class="dash-sub"><a href="${base}/admin/documents">← 문서 목록</a> · 서명 ${sigs.length}명</p></div>
-      <div class="dash-head-actions">
+  const body = await consoleShell(ctx, { title: d.title, active: "documents",
+    titleHtml: `${esc(d.title)} ${d.closed ? '<span class="badge badge-no">마감</span>' : ""}${d.ordered ? ' <span class="badge badge-info">순차</span>' : ""}${d.due_date ? `<span class="badge ${D.isPastDue(d) ? "badge-no" : "badge-wait"}">기한 ${esc(d.due_date)}</span>` : ""}`,
+    sub: `<a href="${base}/admin/documents">← 문서 목록</a> · 서명 ${sigs.length}명`,
+    actions: `
         ${d.closed || !canTalk ? "" : `<form method="post" action="${base}/admin/documents/${d.id}/remind" class="inline-form" data-confirm="미서명자에게 알림톡으로 리마인더를 보낼까요? (잔액이 차감됩니다)"><button class="btn btn-primary btn-sm">미서명자 재알림</button></form>`}
         ${d.closed || (rc.total > 0 && rc.signed === rc.total) ? "" : `<form method="post" action="${base}/admin/documents/${d.id}/close" class="inline-form" data-confirm="마감할까요? 남은 사람은 더 이상 서명할 수 없습니다."><button class="btn btn-ghost btn-sm">마감</button></form>`}
         <a href="${base}/documents/${d.id}/paper" class="btn btn-ghost btn-sm">완성본 보기</a>
         <a href="${base}/documents/${d.id}/evidence" class="btn btn-ghost btn-sm">증적 패키지</a>
         <a href="${base}/admin/documents/${d.id}/fields" class="btn btn-ghost btn-sm">필드 배치${fieldN ? ` (${fieldN})` : ""}</a>
-        <button type="button" class="btn btn-ghost btn-sm" data-print>인쇄 · PDF</button></div></div>
+        <button type="button" class="btn btn-ghost btn-sm" data-print>인쇄 · PDF</button>`,
+    body: `
     ${reqPanel}
     ${extPanel}
     ${sigs.length || d.closed ? "" : `<details class="panel"><summary class="panel-title">문서 수정 <small>(아직 아무도 서명하지 않았습니다)</small></summary>
@@ -3162,8 +3172,7 @@ export async function adminDocumentDetail(ctx) {
       <p class="panel-hint">누가 언제 열람하고 인증하고 서명했는지의 기록입니다. "받은 적 없다·읽은 적 없다"는 항변에 대한 증거이며, 증적 패키지에 함께 담깁니다.</p>
       <ul class="audit-list">${events.length ? events.slice(-40).reverse().map((e) => `<li><span class="audit-action">${esc(DOC_EVENT_LABEL[e.kind] || e.kind)}</span>
         <span class="audit-detail">${esc(e.actor_name || "")}${e.detail ? ` — ${esc(e.detail)}` : ""}</span>
-        <span class="audit-meta">${esc(kstStamp(e.created_at, { year: false }))}${e.ip ? ` · ${esc(e.ip)}` : ""}</span></li>`).join("") : `<li class="empty">아직 기록이 없습니다.</li>`}</ul></section>
-    </div></section>`;
+        <span class="audit-meta">${esc(kstStamp(e.created_at, { year: false }))}${e.ip ? ` · ${esc(e.ip)}` : ""}</span></li>`).join("") : `<li class="empty">아직 기록이 없습니다.</li>`}</ul></section>` });
   // share.js 가 없으면 '보내기 · 복사' 버튼이 눌러도 아무 일도 안 하는 죽은 버튼이 된다.
   return html(layout({ title: d.title, assoc, base, user, body, csrf,
     scripts: `<script src="${assetUrl("/js/share.js")}" defer></script>` }));
@@ -3218,9 +3227,10 @@ export async function adminDocumentNew(ctx) {
     <textarea name="body" id="tplBody" rows="16" maxlength="20000" spellcheck="false" aria-label="계약서 본문">${esc(t.body)}</textarea>
     ${canEditTpl ? `<label class="check"><input type="checkbox" name="save_tpl" value="1" /> 고친 내용을 <b>이 서식에도 저장</b> — 다음부터 이 내용으로 시작합니다</label>` : ""}
   </details>`;
-  const body = `<section class="dash"><div class="container">
-    <div class="dash-head"><div><p class="section-eyebrow">전자계약 · 서식</p><h1 class="dash-title">${esc(t.title)}</h1>
-      <p class="dash-sub"><a href="${base}/admin/documents">← 문서 목록</a>${t.builtin ? " · 표준 서식" : " · 우리 서식"}</p></div></div>${flashOf(query)}
+  const body = await consoleShell(ctx, { title: t.title, active: "documents",
+    eyebrow: "전자계약 · 서식",
+    sub: `<a href="${base}/admin/documents">← 문서 목록</a>${t.builtin ? " · 표준 서식" : " · 우리 서식"}`,
+    body: `
     <div class="tpl-layout">
       <section class="panel">
         <form method="post" action="${base}/admin/documents" class="stack-form">
@@ -3242,7 +3252,7 @@ export async function adminDocumentNew(ctx) {
       </section>
       <div class="tpl-preview"><p class="tpl-preview-cap">미리보기 — 빈칸은 밑줄로 표시됩니다. 본문을 고치면 여기도 함께 바뀝니다.</p>
         <div class="paper-wrap" id="tplPreview">${preview}</div></div>
-    </div></div></section>`;
+    </div>` });
   return html(layout({ title: t.title, assoc, base, user, body, csrf,
     scripts: `<script src="${assetUrl("/js/paper.js")}" defer></script><script src="${assetUrl("/js/doc-new.js")}" defer></script>` }));
 }
@@ -3459,16 +3469,16 @@ export async function adminBusinessEdit(ctx) {
         <span class="badge ${Number(owner.officer) === 1 ? "badge-ok" : "badge-muted"}">${
           Number(owner.officer) === 1 ? "임원" : "일반 회원"}</span></form></section>`;
 
-  const body = `<section class="dash"><div class="container">
-    <div class="dash-head"><div><p class="section-eyebrow"><a href="${base}/admin#s-people">← 회원·점포</a></p>
-      <h1 class="dash-title">${esc(b.name)}</h1>
-      <p class="dash-sub">${statusBadge(b.status)} ${owner
-        ? `· 사장님 ${esc(owner.name)}${!isPlaceholderEmail(owner.email) ? ` (${esc(owner.email)})` :
-            owner.phone ? ` <span class="badge badge-ok">휴대폰 ${esc(D.maskPhone(owner.phone))} 로 로그인</span>`
-                        : ' <span class="badge badge-wait">로그인 수단 없음</span>'}`
-        : "· 연결된 사장님 계정 없음"}</p></div>
-      <div class="dash-head-actions">${b.status === "approved" ? `<a class="btn btn-ghost btn-sm" href="${base}/business/${esc(b.slug)}" target="_blank">가게 페이지 보기 ↗</a>` : ""}</div>
-    </div>${flashOf(query)}
+  const body = await consoleShell(ctx, {
+    title: b.name, active: "people",
+    eyebrow: `<a href="${base}/admin#s-people">← 회원·점포</a>`,
+    sub: `${statusBadge(b.status)} ${owner
+      ? `· 사장님 ${esc(owner.name)}${!isPlaceholderEmail(owner.email) ? ` (${esc(owner.email)})` :
+          owner.phone ? ` <span class="badge badge-ok">휴대폰 ${esc(D.maskPhone(owner.phone))} 로 로그인</span>`
+                      : ' <span class="badge badge-wait">로그인 수단 없음</span>'}`
+      : "· 연결된 사장님 계정 없음"}`,
+    actions: b.status === "approved" ? `<a class="btn btn-ghost btn-sm" href="${base}/business/${esc(b.slug)}" target="_blank">가게 페이지 보기 ↗</a>` : "",
+    body: `
     ${ownerLoginPanel}
     <section class="panel">
       <h2 class="panel-title">가게 정보</h2>
@@ -3521,8 +3531,7 @@ export async function adminBusinessEdit(ctx) {
       </div>
       ${doneBar}
       </form></section>
-    ${mediaPanel}
-    </div></section>`;
+    ${mediaPanel}` });
   return html(layout({ title: `${b.name} 정보`, assoc, base, user, body, csrf,
     scripts: `<script src="${assetUrl("/js/place.js")}" defer></script>${
       imageSearchOn ? `<script src="${assetUrl("/js/photo-pick.js")}" defer></script>` : ""}` }));
@@ -4227,12 +4236,12 @@ export async function adminDocFields(ctx) {
     : `<option value="0" data-name="">누구나(먼저 서명하는 사람)</option>` +
       reqs.map((r) => `<option value="${r.id}" data-name="${esc(r.name)}">${esc(r.name)}</option>`).join("") +
       extList.map((e) => `<option value="${-e.id}" data-name="${esc(e.name)}">${esc(e.name)} (외부)</option>`).join("");
-  const body = `<section class="dash"><div class="container">
-    <div class="dash-head"><div><p class="section-eyebrow">전자계약 · ${d.draft ? "서명 자리 놓기" : "필드 배치"}</p><h1 class="dash-title">${esc(d.title)}</h1>
-      <p class="dash-sub">${d.draft
-        ? `<a href="${base}/admin/documents/write?doc=${d.id}">← 계속 쓰기</a> · 아직 보내지 않은 계약서`
-        : `<a href="${base}/admin/documents/${d.id}">← 문서로</a> · 서명 대상 ${sigs.total}명`}</p></div></div>
-    ${flashOf(query)}
+  const body = await consoleShell(ctx, { title: d.title, active: "documents",
+    eyebrow: `전자계약 · ${d.draft ? "서명 자리 놓기" : "필드 배치"}`,
+    sub: d.draft
+      ? `<a href="${base}/admin/documents/write?doc=${d.id}">← 계속 쓰기</a> · 아직 보내지 않은 계약서`
+      : `<a href="${base}/admin/documents/${d.id}">← 문서로</a> · 서명 대상 ${sigs.total}명`,
+    body: `
     <p class="fp-hint">놓을 종류를 고른 뒤 <b>계약서 위를 누르면</b> 그 자리에 필드가 생깁니다. 끌어서 옮기고, 오른쪽 아래 손잡이로 크기를 조절하세요.
       ${d.draft
         ? "아직 보내기 전이라 서명자가 정해지지 않았습니다. 그래서 사람 대신 <b>몇 번째 당사자</b>로 놓아 둡니다 — 누가 그 자리인지는 보내기 화면에서 정합니다."
@@ -4262,8 +4271,7 @@ export async function adminDocFields(ctx) {
     </div>
     <div class="paper-wrap">${paper}</div>
     <script type="application/json" id="fieldKinds">${JSON.stringify(FIELD_KINDS)}</script>
-    <script type="application/json" id="partyNames">${JSON.stringify(parties)}</script>
-    </div></section>`;
+    <script type="application/json" id="partyNames">${JSON.stringify(parties)}</script>` });
   return html(layout({ title: "필드 배치", assoc, base, user, body, csrf, scripts: `<script src="${assetUrl("/js/paper.js")}" defer></script>` }));
 }
 
@@ -4412,6 +4420,13 @@ export async function verifyPage(ctx) {
 // 조직 하나에 대한 일이 여섯 탭에 흩어져 있었다 — 주소는 조직 탭, 크레딧은 정산 탭,
 // 사용량은 또 다른 탭. 고객사 한 곳을 손보려면 화면을 세 번 갈아타야 했다.
 // 여기서는 그 조직에 대한 모든 것을 한 화면에 모은다. 고쳐도 이 화면에 남는다.
+// 운영사 콘솔 왼쪽 차림표. 고객사 목록과 고객사 상세가 같은 것을 써야 한다 —
+// 상세로 들어갔을 때만 차림표가 사라지면 거기서 다른 메뉴로 갈 길이 없다.
+function superSide(tabs, { linkBase = "" } = {}) {
+  return `<aside class="console-side"><nav id="superNav">${tabs.map(([id, label, badge]) =>
+    `<a href="${linkBase}#s-${id}"${linkBase ? "" : ` data-tab="${id}"`}>${esc(label)}${badge ? `<span class="side-badge">${badge}</span>` : ""}</a>`).join("")}</nav></aside>`;
+}
+
 export async function superOrg(ctx) {
   const { db, user, query, csrf, params, env } = ctx;
   const id = parseInt(params.id, 10);
@@ -4444,7 +4459,7 @@ export async function superOrg(ctx) {
   const stat = (n, label, hint) => `<div class="stat-card left"><div class="stat-top"><span class="stat-label">${esc(label)}</span></div>
     <span class="stat-num">${n}</span>${hint ? `<div class="stat-delta mut">${hint}</div>` : ""}</div>`;
 
-  const body = `<section class="dash"><div class="container">
+  const body = `<section class="dash dash-shell"><div class="container">
     <div class="dash-head"><div>
       <p class="section-eyebrow"><a href="/super#s-home" data-goto="home">← 고객사 목록</a></p>
       <h1 class="dash-title">${esc(a.name)}
@@ -4456,7 +4471,8 @@ export async function superOrg(ctx) {
         <a href="/t/${esc(a.slug)}/admin" class="btn btn-primary btn-sm">관리 화면 열기</a>
         <a href="/t/${esc(a.slug)}" target="_blank" class="btn btn-ghost btn-sm">고객이 보는 화면</a></div></div>
     ${flashOf(query)}
-
+    <div class="console-grid">${superSide([["home", "고객사"], ["sales", "영업"], ["money", "알림톡·정산"], ["settings", "설정·보안"]], { linkBase: "/super" })}
+    <div class="console-main">
     <div class="stat-cards">
       ${stat(use.members, "회원", "명")}
       ${stat(use.media_count, "사진", `${fmtBytes(use.storage)}`)}
@@ -4546,6 +4562,7 @@ export async function superOrg(ctx) {
           <input type="text" name="confirm_slug" placeholder="${esc(a.slug)}" required autocomplete="off" />
           <button class="btn btn-xs btn-danger">영구 삭제</button></form></details>
     </section>
+    </div></div>
   </div></section>`;
   return html(layout({ title: `${a.name} · 고객사`, console: "super", user, body, csrf }));
 }
@@ -5043,8 +5060,7 @@ export async function superConsole(ctx) {
     ["money", "알림톡·정산", pendCredits.length],
     ["settings", "설정·보안", keyMode === "secret" ? 0 : 1],
   ];
-  const sideNav = `<aside class="console-side"><nav id="superNav">${TABS.map(([id, label, badge]) =>
-    `<a href="#s-${id}" data-tab="${id}">${esc(label)}${badge ? `<span class="side-badge">${badge}</span>` : ""}</a>`).join("")}</nav></aside>`;
+  const sideNav = superSide(TABS);
 
   // 제품이 셋이므로 "몇 곳"만으로는 무엇을 파는 회사인지 화면에서 읽히지 않는다.
   const kindCounts = KIND_KEYS.map((k) => [k, KINDS[k].label, list.filter((a) => (a.kind || "merchant") === k).length])
@@ -5052,8 +5068,8 @@ export async function superConsole(ctx) {
   const body = `<section class="dash dash-shell"><div class="container">
     <div class="dash-head"><div><h1 class="dash-title">운영사 콘솔</h1>
       <p class="dash-sub">여기서 하는 일은 모든 고객사에 적용됩니다</p></div>
-      <div class="dash-head-actions"><a href="#new-assoc" class="btn btn-primary btn-sm" data-goto="home">＋ 새 조직</a></div></div>${flashOf(query)}
-${flashOf(query)}
+      <div class="dash-head-actions"><a href="#new-assoc" class="btn btn-primary btn-sm" data-goto="home">＋ 새 조직</a></div></div>
+    ${flashOf(query)}
     ${loadWarnings.length ? `<div class="flash flash-err"><b>일부 정보를 불러오지 못했습니다.</b> 나머지 기능은 그대로 쓰실 수 있습니다.<br />${loadWarnings.map((w) => esc(w)).join("<br />")}</div>` : ""}
     <div class="console-grid">${sideNav}<div class="console-main">
       <div class="kpi-sec"><div class="kpi-grid">
@@ -5491,12 +5507,11 @@ export async function adminDocumentWrite(ctx) {
     `<button type="button" class="wt-btn" data-ins="${k}" title="${esc(hint)}"><b>${esc(label)}</b><span>${esc(sample)}</span></button>`).join("");
 
   const startBody = doc ? doc.body : "";
-  const body = `<section class="dash"><div class="container">
-    <div class="dash-head"><div><h1 class="dash-title">계약서 쓰기</h1>
-      <p class="dash-sub"><a href="${base}/admin/documents">← 문서 목록</a>${doc ? ` · 작성 중 · 마지막 저장 ${esc(kstStamp(doc.created_at, { year: false }))}` : ""}</p></div>
-      <div class="dash-head-actions"><span class="wt-saved" id="wtSaved" aria-live="polite"></span>
-        <button type="button" class="btn btn-ghost btn-sm" id="wtSave">임시저장</button></div></div>
-    ${flashOf(query)}
+  const body = await consoleShell(ctx, { title: "계약서 쓰기", active: "documents",
+    sub: `<a href="${base}/admin/documents">← 문서 목록</a>${doc ? ` · 작성 중 · 마지막 저장 ${esc(kstStamp(doc.created_at, { year: false }))}` : ""}`,
+    actions: `<span class="wt-saved" id="wtSaved" aria-live="polite"></span>
+        <button type="button" class="btn btn-ghost btn-sm" id="wtSave">임시저장</button>`,
+    body: `
     <div class="write-grid">
       <div class="write-left">
         <label>제목<input type="text" id="wtTitle" maxlength="200" value="${esc(doc ? doc.title : "")}" placeholder="예: 상가건물 임대차계약서" autocomplete="off" /></label>
@@ -5544,8 +5559,7 @@ export async function adminDocumentWrite(ctx) {
       ${doc ? `<a class="btn btn-ghost btn-sm" href="${base}/admin/documents/${doc.id}/bulk">여러 명에게 한꺼번에 →</a>` : ""}
       ${doc ? `<button type="submit" class="btn btn-ghost btn-sm" formaction="${base}/admin/documents/${doc.id}/draft-delete" formnovalidate data-confirm="작성 중인 이 계약서를 지울까요? 되돌릴 수 없습니다.">초안 지우기</button>` : ""}
       ${doc ? "" : `<p class="panel-hint">먼저 <b>임시저장</b>을 눌러 주세요. 저장해야 보낼 수 있습니다.</p>`}
-    </form>
-    </div></section>`;
+    </form>` });
   return html(layout({ title: "계약서 쓰기", assoc, base, user, body, csrf,
     scripts: `<script src="${assetUrl("/js/write.js")}" defer></script>` }));
 }
@@ -5595,10 +5609,9 @@ export async function adminDocBulk(ctx) {
        </tbody></table></div></section>`
     : "";
 
-  const body = `<section class="dash"><div class="container">
-    <div class="dash-head"><div><h1 class="dash-title">여러 명에게 한꺼번에 보내기</h1>
-      <p class="dash-sub"><a href="${base}/admin/documents/write?doc=${d.id}">← ${esc(d.title)}</a></p></div></div>
-    ${flashOf(query)}
+  const body = await consoleShell(ctx, { title: "여러 명에게 한꺼번에 보내기", active: "documents",
+    sub: `<a href="${base}/admin/documents/write?doc=${d.id}">← ${esc(d.title)}</a>`,
+    body: `
     ${fieldN ? "" : `<div class="flash flash-warn">서명 자리를 아직 놓지 않았습니다.
       <a href="${base}/admin/documents/${d.id}/fields">먼저 놓아 두시면</a> 받는 사람마다 자기 자리에서 바로 서명합니다.</div>`}
     <form method="post" action="${base}/admin/documents/${d.id}/bulk" enctype="multipart/form-data" class="panel bulk-form">
@@ -5628,8 +5641,7 @@ export async function adminDocBulk(ctx) {
       <button class="btn btn-primary">명단 확인하기</button>
       <p class="panel-hint">여기서는 아직 아무것도 나가지 않습니다. 다음 화면에서 명단을 보고 보내기를 누릅니다.</p>
     </form>
-    ${history}
-    </div></section>`;
+    ${history}` });
   return html(layout({ title: "여러 명에게 보내기", assoc, base, user, body, csrf,
     scripts: `<script src="${assetUrl("/js/bulk.js")}" defer></script>` }));
 }
@@ -5668,10 +5680,10 @@ export async function adminBulkView(ctx) {
     </tr>`;
   }).join("");
 
-  const body = `<section class="dash"><div class="container">
-    <div class="dash-head"><div><h1 class="dash-title">${titleWithSlots(b.title)}</h1>
-      <p class="dash-sub"><a href="${base}/admin/documents">← 문서 목록</a> · 명단 ${c.total}명${b.due_date ? ` · 기한 ${esc(b.due_date)}` : ""}${b.ordered ? " · 순차 서명" : ""}</p></div></div>
-    ${flashOf(query)}
+  const body = await consoleShell(ctx, { title: b.title, active: "documents",
+    titleHtml: titleWithSlots(b.title),
+    sub: `<a href="${base}/admin/documents">← 문서 목록</a> · 명단 ${c.total}명${b.due_date ? ` · 기한 ${esc(b.due_date)}` : ""}${b.ordered ? " · 순차 서명" : ""}`,
+    body: `
     ${src ? "" : `<div class="flash flash-warn">원본 계약서(초안)가 지워졌습니다. 남은 사람에게는 보낼 수 없습니다.</div>`}
     <section class="panel bulk-run" id="bulkRun"
       data-run="${base}/admin/bulk/${b.id}/run" data-csrf="${esc(csrf)}" data-chunk="${BULK_CHUNK}">
@@ -5694,8 +5706,7 @@ export async function adminBulkView(ctx) {
     </section>
     <form method="post" action="${base}/admin/bulk/${b.id}/delete">
       <button class="btn btn-ghost btn-sm" data-confirm="이 명단을 목록에서 지울까요? 이미 보낸 계약서는 그대로 남습니다.">명단 지우기</button>
-    </form>
-    </div></section>`;
+    </form>` });
   // 브라우저 탭 제목에는 {{ }} 를 벗겨서 — 탭 이름에 괄호가 박히면 무엇인지 알 수 없다
   return html(layout({ title: b.title.replace(/\{\{([^}]+)\}\}/g, "$1"), assoc, base, user, body, csrf,
     scripts: `<script src="${assetUrl("/js/bulk.js")}" defer></script>` }));
