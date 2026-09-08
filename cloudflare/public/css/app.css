@@ -3951,3 +3951,52 @@ a.deal-card:hover{border-color:var(--deal);transition:border-color .18s}
   .market-body h3 a,.map-store-name{display:block;padding:13px 0;margin:-13px 0}
   .board-title{display:flex;align-items:center;min-height:44px}
 }
+
+
+/* ══════════════════════════════════════════════════════════════════════
+   인증 화면 v8 — 카드를 걷는다 (C안)
+   ──────────────────────────────────────────────────────────────────────
+   로그인 화면이 흰 카드 안에 갇혀 있고, 그 안에 회색 상자가 두 장(비밀번호 찾기·
+   가게 등록) 더 쌓여 있었다. 상자 안의 상자 안의 상자다.
+   카드를 걷고 은은한 바탕만 남긴다 — 이 화면에 있는 것은 칸 두 개와 단추 하나뿐이고,
+   그 사실이 그대로 보이는 편이 낫다.
+   로그인·가입·비밀번호 찾기·초대·문의·사진 보내기 — 인증 카드를 쓰는 화면 전부에 걸린다.
+   ══════════════════════════════════════════════════════════════════════ */
+/* 바탕은 그라데이션이 아니라 한 색이다. 이 저장소에는 "브랜드색 그라데이션을 두지
+   않는다" 는 규칙이 있고(test/plain.test.js), 그 규칙이 옳다 — 사선 그라데이션은
+   '예쁘게' 라는 주문에 기계가 내놓는 기본값이지 이 화면이 필요로 하는 것이 아니다.
+   카드를 걷어낸 자리를 채우는 데는 옅은 한 색이면 충분하다. */
+body.is-auth{background:var(--brand-50)}
+/* .auth-wrap 은 .container 이기도 하다 — padding 을 통째로 0 으로 두면 좌우 여백까지
+   사라져 휴대폰에서 글자가 화면 끝에 붙는다(실제로 그렇게 났다). 세로만 걷는다. */
+.is-auth .auth-wrap{padding-block:0}
+.is-auth .section.page-top{padding-top:clamp(20px,5vw,56px);padding-bottom:clamp(28px,6vw,72px)}
+.is-auth .auth-card{max-width:400px;background:none;border:0;box-shadow:none;
+  padding:clamp(18px,4vw,28px) 0;border-radius:0}
+.is-auth .auth-head{margin-bottom:28px}
+.is-auth .auth-logo{height:64px}
+.is-auth .auth-title{font-size:clamp(1.3rem,3.4vw,1.45rem);letter-spacing:-.02em}
+.is-auth .auth-sub{margin-top:6px;font-size:.9rem;line-height:1.6}
+/* 이름표는 작고 조용하게 — 입력칸과 굵기로 다투지 않게 한다 */
+.is-auth .auth-card .stack-form > label{font-size:.85rem;font-weight:700;color:var(--ink-soft);gap:7px}
+/* 칸은 바탕에서 한 겹 떠 있게. 카드가 없어진 자리를 이 그림자가 대신한다. */
+.is-auth .auth-card .stack-form input:not([type=checkbox]):not([type=radio]):not([type=file]),
+.is-auth .auth-card .stack-form select,
+.is-auth .auth-card .stack-form textarea{border-radius:14px;background:var(--surface);
+  border:1px solid var(--line);box-shadow:0 1px 2px rgba(20,30,28,.05)}
+.is-auth .auth-card .stack-form input:not([type=checkbox]):not([type=radio]):not([type=file]),
+.is-auth .auth-card .stack-form select{min-height:54px;font-size:1rem}
+.is-auth .auth-card .stack-form input:focus,
+.is-auth .auth-card .stack-form select:focus,
+.is-auth .auth-card .stack-form textarea:focus{border-color:var(--brand);
+  box-shadow:0 0 0 3px var(--brand-tint)}
+.is-auth .auth-card .txt-muted{font-size:.8rem;margin-top:6px}
+.is-auth .totp-login > summary{font-size:.85rem;color:var(--muted);font-weight:600}
+.is-auth .auth-card .btn-block{min-height:56px;font-size:1.04rem;border-radius:14px;margin-top:8px;
+  /* color-mix() 는 사파리 16.2 부터다. 우리 기준은 15.6 이라, 앞 줄에 평범한 값을
+     한 번 더 둔다 — 안 그러면 구형에서 이 선언이 통째로 버려져 그림자가 사라진다. */
+  box-shadow:0 6px 16px rgba(20,30,28,.18);
+  box-shadow:0 6px 16px color-mix(in srgb,var(--brand) 26%,transparent)}
+/* 회색 상자에 갇혀 있던 안내 줄들 — 상자를 벗기고 글자만 남긴다 */
+.is-auth .auth-note{background:none;padding:0;margin-top:18px;text-align:center;font-size:.88rem}
+.is-auth .auth-note + .auth-note{margin-top:10px}

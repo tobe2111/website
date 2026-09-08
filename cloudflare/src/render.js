@@ -129,8 +129,13 @@ ${ogImgAbs ? `<meta property="og:image" content="${esc(ogImgAbs)}" />` : ""}
   // 가렸다.** 서버는 자기가 바를 그렸는지 이미 알고 있으니, 그냥 여기서 표시한다.
   const sticky = !!(assoc && kindById(assoc.kind).usesLanding && !isConsole(body));
   // 어두운 '완료' 화면이면 머리·바닥도 같은 어둠으로 — 흰 띠가 남으면 화면이 둘로 갈린다
+  // 로그인·가입 같은 인증 화면은 배경을 화면 끝까지 은은하게 깐다. 그 배경을 .container
+  // 안쪽에 그리면 컨테이너 폭에서 잘려 띠처럼 보이고, 100vw 로 늘리면 스크롤바만큼
+  // 가로로 밀린다. 그래서 몸통에 표시를 달아 배경을 몸통이 그리게 한다.
+  // (`:has()` 를 쓰지 않는 이유는 위 sticky 와 같다 — 파이어폭스 ESR 에서 안 돈다.)
+  const isAuth = /<div class="auth-card"/.test(String(body));
   const bodyClass = [bnav ? "has-bnav" : "", isDone ? "is-done" : "", workScreen ? "is-console" : "",
-    sticky ? "has-sticky" : ""].filter(Boolean).join(" ");
+    sticky ? "has-sticky" : "", isAuth ? "is-auth" : ""].filter(Boolean).join(" ");
   // 모든 POST 폼에 CSRF 히든 필드 주입 — 본문뿐 아니라 **머리말·바닥글까지** 포함한 문서 전체에.
   // 예전에는 본문(body)에만 넣었는데, 로그아웃 단추는 머리말 안에서 따로 만들어지는 폼이라
   // 토큰이 붙지 않았다. 그래서 로그아웃을 누르면 어느 화면에서든 '403 잘못된 요청(CSRF)' 이 떴다.
