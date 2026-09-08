@@ -2196,7 +2196,13 @@ export async function admin(ctx) {
 
     <div class="dtable-wrap"><table class="dtable">
       <thead><tr><th>회원</th><th>${esc(duePeriod)}</th><th class="num">금액</th><th class="act">처리</th></tr></thead>
-      <tbody>${dueRows}</tbody></table></div></section>`;
+      <tbody>${dueRows}</tbody></table></div>
+
+    <form method="post" action="${base}/admin/dues/enabled" class="panel-foot-act"
+      data-confirm="회비 장부를 감출까요?&#10;적어 두신 기록은 지워지지 않고, 설정에서 언제든 다시 켤 수 있습니다.">
+      <input type="hidden" name="on" value="0" />
+      <button class="btn-linkish">우리 상인회는 회비를 걷지 않습니다 — 이 표 감추기</button>
+    </form></section>`;
   // ----- 알림톡: 잔액·충전 신청·발송 이력 -----
   const [balance, msgStats, msgs, orders, unitPrice] = await Promise.all([
     D.getBalance(db, assoc.id), D.messageStats(db, assoc.id), D.listMessages(db, assoc.id, 10),
@@ -2530,7 +2536,7 @@ export async function admin(ctx) {
       : [quick("#p-content", "공지 올리기", "회원 모두에게 알립니다"),
          quick("#p-addmember", "회원·점포 추가", "지도에서 찾아 바로 등록"),
          quick("#p-popup-wrap", "홈 팝업", "기간을 정해 첫 화면에 띄웁니다"),
-         quick("#p-dues", "회비 장부", "이번 달 납부 체크"),
+         ...(D.usesDues(assoc) ? [quick("#p-dues", "회비 장부", "이번 달 납부 체크")] : []),
          quick("#p-brand", "상인회 정보", "이름·로고·색·검색 등록")]).join("");
 
   const body = `<section class="dash dash-shell"><div class="container">
@@ -2625,7 +2631,7 @@ export async function admin(ctx) {
       </section>
     ${isEsign ? "" : addMemberPanel}
     ${isEsign ? teamsPanel : ""}
-    ${isEsign || isFranchise ? "" : duesPanel}
+    ${isEsign || isFranchise || !D.usesDues(assoc) ? "" : duesPanel}
     </div>
 
 ${isEsign ? "" : `<div class="sgroup" id="s-content" data-tab="content">`}
@@ -2717,6 +2723,12 @@ ${isFranchise ? `    <section class="panel panel-accent" id="p-home"><h2 class="
           방문자 IP 는 익명화해서 보냅니다.</p>
         <p class="panel-hint">입력하면 모든 페이지에 확인 메타 태그가 자동 삽입됩니다. 등록 후 사이트맵 <code>/sitemap.xml</code> 과 RSS <code>${esc(prettyPath(base))}/feed.xml</code> 을 제출하세요.</p>
         <button class="btn btn-primary btn-sm">브랜딩 저장</button></form></section>
+    ${isEsign || isFranchise || D.usesDues(assoc) ? "" : `<section class="panel" id="p-off"><h2 class="panel-title">쓰지 않기로 한 것</h2>
+      <p class="panel-hint">감춰 둔 화면입니다. 적어 두신 기록은 지워지지 않았습니다 — 다시 켜면 있던 그대로 보입니다.</p>
+      <ul class="wire-list"><li><div><b>회비 장부</b><p>납부 기록·기본 회비·입금 계좌</p></div>
+        <form method="post" action="${base}/admin/dues/enabled" class="inline-form">
+          <input type="hidden" name="on" value="1" />
+          <button class="btn btn-sm btn-ghost">다시 켜기</button></form></li></ul></section>`}
     ${auditPanel}
     </div>
         </div></div></div></section>`;

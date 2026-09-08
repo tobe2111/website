@@ -37,6 +37,10 @@ CREATE TABLE IF NOT EXISTS associations (
   ga_measurement_id TEXT NOT NULL DEFAULT '',  -- 구글 애널리틱스(GA4) 측정 ID 'G-XXXXXXX'
   dues_amount INTEGER NOT NULL DEFAULT 0,      -- 기본 월 회비(원). 0 = 안 정함(금액 없이 체크만)
   dues_account TEXT NOT NULL DEFAULT '',       -- 회비 입금 계좌 (독촉 문구에 그대로 들어간다)
+  -- 회비를 아예 안 걷는 상인회가 있다. 그런 곳에 빈 장부를 띄워 두면
+  -- "이건 뭐지, 내가 뭘 안 한 건가" 가 되고, 총회 때 안 쓰는 화면을 설명하게 된다.
+  -- 1 = 쓴다(기본 · 지금까지의 동작), 0 = 이 상인회는 회비를 안 걷는다 → 장부를 감춘다.
+  uses_dues   INTEGER NOT NULL DEFAULT 1,
   plan        TEXT NOT NULL DEFAULT 'free',   -- 요금제(free|basic|pro)
   -- 조직 유형. merchant  = 상인회 홈페이지(점포·지도·공지 + 전자계약),
   --            esign     = 전자계약만 쓰는 조직(법무·부동산 등),
@@ -1161,6 +1165,10 @@ async function migrateColumns(db) {
   }
   if (!cols.some((c) => c.name === "team_scope"))
     await db.prepare("ALTER TABLE associations ADD COLUMN team_scope INTEGER NOT NULL DEFAULT 0").run();
+
+  // v49: 회비를 안 걷는 상인회는 장부를 감춘다. 기본 1(켜짐) — 이미 쓰던 곳은 그대로다.
+  if (cols.length && !cols.some((c) => c.name === "uses_dues"))
+    await db.prepare("ALTER TABLE associations ADD COLUMN uses_dues INTEGER NOT NULL DEFAULT 1").run();
   for (const [name, ddl, idx] of v17) {
     if (have.has(name)) continue;
     await db.prepare(ddl).run();
