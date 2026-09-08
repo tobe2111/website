@@ -88,6 +88,11 @@ await grab("/t/market/businesses", "market-list.html");
 await grab("/t/market/notices", "market-notices.html");
 await grab("/t/market/map", "market-map.html");
 await grab("/t/market/events", "market-events.html");
+// 행사 상세 — 손님이 홈에서 카드를 눌러 닿는 화면이다. '언제 어디로 가면 되나' 가 여기 있다.
+{
+  const ev = (await D.listEvents(env.DB, m.id))[0];
+  if (ev) await grab(`/t/market/events/${ev.id}`, "market-event.html");
+}
 await grab("/t/market/business/goeul-gukbap", "market-biz.html");
 
 // ── 상인회 관리자 콘솔 —— 상인회 임원이 하루 종일 켜 두고 일하는 화면이다.
@@ -237,6 +242,7 @@ const PAGES = [
   ["공지·소식 (모바일)", "market-notices.html", { width: 390, height: 844, isMobile: true }],
   ["점포 지도 (모바일)", "market-map.html", { width: 390, height: 844, isMobile: true }],
   ["행사 (모바일)", "market-events.html", { width: 390, height: 844, isMobile: true }],
+  ["행사 상세 (모바일)", "market-event.html", { width: 390, height: 844, isMobile: true }],
   ["상담 DB 콘솔", "leads.html", { width: 1280, height: 900 }],
   ["랜딩 편집기", "editor.html", { width: 1280, height: 900 }],
   // 관리자 콘솔 — 탭마다 다른 표와 폼이 들어 있어 묶음별로 연다(#s-…).

@@ -45,11 +45,14 @@ test("주간 백업: scheduled → R2 에 암호화 저장, 복호화하면 원�
   assert.ok(Array.isArray(json.tables.coupons));
 });
 
-test("행사 ics: 캘린더 파일 + 카드에 추가 버튼", async () => {
+test("행사 ics: 캘린더 파일 + 카드에서 상세로 간다", async () => {
   const env = makeEnv();
   const { ev } = await seed(env);
   const page = await (await get(env, jar(), "/t/seocho/events")).text();
-  assert.match(page, /calendar\.ics/);
+  // 카드에서 바로 .ics 를 내려받게 하지 않는다 — 폰에 정체 모를 파일이 하나 생길 뿐이다.
+  // 카드는 상세로 보내고, 어느 캘린더에 넣을지는 거기서 고른다.
+  assert.doesNotMatch(page, /calendar\.ics/, "목록에서 바로 파일을 떨어뜨리면 안 된다");
+  assert.match(page, new RegExp(`/t/seocho/events/${ev.id}"`), "카드가 상세로 가야 한다");
   const r = await worker.fetch(new Request(B + `/t/seocho/events/${ev.id}/calendar.ics`), env);
   assert.equal(r.status, 200);
   assert.match(r.headers.get("content-type"), /text\/calendar/);

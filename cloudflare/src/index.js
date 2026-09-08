@@ -106,6 +106,7 @@ export const TENANT = [
   ["GET", "/notices/:id", pages.noticeDetail],
   ["GET", "/events", pages.events],
   ["GET", "/events/:id/calendar.ics", pages.eventIcs],
+  ["GET", "/events/:id", pages.eventDetail],
   ["POST", "/events/:id/rsvp", api.eventRsvp, "MEMBER"],
   ["POST", "/events/:id/rsvp/cancel", api.eventRsvpCancel, "MEMBER"],
   ["GET", "/polls", pages.polls, "MEMBER"],
