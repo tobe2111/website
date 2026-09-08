@@ -21,6 +21,7 @@ import { seedStarter } from "./starterContent.js";
 import { KINDS, kindById, PRESETS, assocTerms } from "./kinds.js";
 import { sellerPhotos, urdealProductUrl } from "./urdeal.js";
 import { placePhoto, isPlaceUrl, placeSourceOf } from "./placePhoto.js";
+import { pickPlace, placeQuery } from "./placeMatch.js";
 import { TEMPLATE_KEYS, TEMPLATES, sendTest, listProviderTemplates, matchTemplates, sendMany, sendOne, notifyEnabled, autoNotifyOn, canAutoSend, wonToJeon, renderTemplate, templateButton, billingMode, chargeContract, BILLING_MODES, priceOf } from "./notify.js";
 
 // 계약 한 건을 연다 — 조직 경계와 **부서 경계**를 함께 본다.
@@ -574,32 +575,33 @@ export async function adminDeleteMedia(ctx) {
 // 구역을 통째로 긁어 '가입 점포' 로 넣지는 않는다. 동의하지 않은 가게가 홈페이지에 올라가고
 // 가입 점포 수가 사실과 달라지기 때문이다. 여기서는 **관리자가 이름을 치고 눈으로 고른** 한 곳만
 // 채운다 — 출처가 분명하고, 저장은 사람이 누른다.
-export async function adminPlaceSearch(ctx) {
-  const { env, query, db, assoc } = ctx;
-  const json = (o, status = 200) => new Response(JSON.stringify(o), {
-    status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
+// 한 곳을 찾아 주소·전화·업종·좌표·지도주소를 준다.
+//
+// 화면(관리자가 이름을 치고 눈으로 고르는 곳)과 명부 일괄 연결이 **같은 함수**를 쓴다.
+// 두 벌로 두면 한쪽만 고쳐져 "화면에서는 나오는데 일괄에서는 안 나온다" 가 난다.
+export async function searchPlaces(env, { q: rawQ, cx, cy, db, assocId } = {}) {
   const kakaoKey = String(env.KAKAO_REST_KEY || "").trim();
   const nId = String(env.NAVER_SEARCH_ID || "").trim();
   const nSecret = String(env.NAVER_SEARCH_SECRET || "").trim();
   if (!kakaoKey && !(nId && nSecret))
-    return json({ error: "not_configured", message: "지도 검색 열쇠가 등록되지 않았습니다. 운영사에 문의해 주세요." }, 503);
-  const q = cap((query.get("q") || "").trim(), 60);
-  if (q.length < 2) return json({ places: [] });
+    return { error: "not_configured", message: "지도 검색 열쇠가 등록되지 않았습니다. 운영사에 문의해 주세요.", status: 503 };
+  const q = cap(String(rawQ || "").trim(), 60);
+  if (q.length < 2) return { places: [] };
 
   // 검색 중심 — 같은 상호는 전국에 있다. 우리 골목 것을 위로 올리려면 '어디쯤' 인지가 필요하다.
-  // 화면이 좌표를 주면 그것을, 없으면 **이미 등록된 우리 가게들의 한가운데**를 쓴다.
+  // 부르는 쪽이 좌표를 주면 그것을, 없으면 **이미 등록된 우리 가게들의 한가운데**를 쓴다.
   // (첫 가게를 넣을 때는 중심이 없다 — 그때는 전국 검색이지만, 두 번째부터는 골목이 잡힌다)
-  let cx = Number(query.get("x")), cy = Number(query.get("y"));
-  if (!(Number.isFinite(cx) && Number.isFinite(cy) && cx && cy) && db && assoc) {
+  let x = Number(cx), y = Number(cy);
+  if (!(Number.isFinite(x) && Number.isFinite(y) && x && y) && db && assocId) {
     try {
-      const pts = await D.listBusinessMarkers(db, assoc.id);
+      const pts = await D.listBusinessMarkers(db, assocId);
       if (pts.length) {
-        cx = pts.reduce((a, p) => a + Number(p.lng), 0) / pts.length;
-        cy = pts.reduce((a, p) => a + Number(p.lat), 0) / pts.length;
+        x = pts.reduce((a, p) => a + Number(p.lng), 0) / pts.length;
+        y = pts.reduce((a, p) => a + Number(p.lat), 0) / pts.length;
       }
     } catch { /* 중심이 없으면 그냥 전국 검색 */ }
   }
-  const hasCenter = Number.isFinite(cx) && Number.isFinite(cy) && cx && cy;
+  const hasCenter = Number.isFinite(x) && Number.isFinite(y) && !!x && !!y;
 
   // ── 카카오 로컬 ──
   async function fromKakao() {
@@ -608,7 +610,7 @@ export async function adminPlaceSearch(ctx) {
     url.searchParams.set("query", q);
     url.searchParams.set("size", "15");
     if (hasCenter) {
-      url.searchParams.set("x", String(cx)); url.searchParams.set("y", String(cy));
+      url.searchParams.set("x", String(x)); url.searchParams.set("y", String(y));
       url.searchParams.set("radius", "20000"); url.searchParams.set("sort", "distance");
     }
     const r = await fetch(url, { headers: { Authorization: `KakaoAK ${kakaoKey}` } });
@@ -667,7 +669,7 @@ export async function adminPlaceSearch(ctx) {
   const settled = await Promise.allSettled(tried);
   const got = settled.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
   if (settled.every((r) => r.status === "rejected"))
-    return json({ error: "upstream", message: "지도 검색에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요." }, 502);
+    return { error: "upstream", message: "지도 검색에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.", status: 502 };
 
   // 같은 가게가 두 곳에서 오면 한 줄로 합친다 — 관리자는 같은 이름 두 개를 보고 어느 쪽인지 모른다.
   // 전화번호가 같으면 확실히 같은 가게고, 없으면 이름+번지로 본다.
@@ -687,10 +689,22 @@ export async function adminPlaceSearch(ctx) {
   const out = [...merged.values()].map(({ source, ...p }) => p);
   if (hasCenter) {
     const d2 = (p) => (p.lat == null || p.lng == null) ? Infinity
-      : (p.lat - cy) ** 2 + ((p.lng - cx) * 0.8) ** 2;
+      : (p.lat - y) ** 2 + ((p.lng - x) * 0.8) ** 2;
     out.sort((a, b) => d2(a) - d2(b));
   }
-  return json({ places: out.slice(0, 12), center: hasCenter });
+  return { places: out.slice(0, 12), center: hasCenter };
+}
+
+// 화면이 부르는 창구 — 위 함수를 JSON 으로 감싸기만 한다.
+export async function adminPlaceSearch(ctx) {
+  const { env, query, db, assoc } = ctx;
+  const json = (o, status = 200) => new Response(JSON.stringify(o), {
+    status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
+  const r = await searchPlaces(env, {
+    q: query.get("q"), cx: query.get("x"), cy: query.get("y"), db, assocId: assoc && assoc.id,
+  });
+  if (r.error) return json({ error: r.error, message: r.message }, r.status || 502);
+  return json({ places: r.places, center: !!r.center });
 }
 
 
@@ -1630,6 +1644,59 @@ export async function adminAddMember(ctx) {
     return back(to, `${businessName} 등록 완료 — 사장님 정보는 아직 비어 있습니다. 그 가게 화면의 [사장님 로그인] 에서 성함·휴대폰을 넣으면 그때 로그인이 열립니다.`);
   return back(to, `${isEsign ? "내부 서명자" : "대행"} 등록 완료 — ${name}님 로그인: ${
     email || D.maskPhone(phone) + " (휴대폰 번호로 로그인)"} / 임시비번 ${temp} (본인에게 전달하세요)`);
+}
+
+// ---------- 명부의 가게들을 지도에 한꺼번에 연결 ----------
+//
+// 상호만 있어도 지도에는 그 가게가 거의 다 있습니다. 한 번 연결해 두면 그 하나에
+// **좌표(지도 핀) · 가게 대표번호 · 도로명주소 · 대표사진 가져오기 · 검색 노출**이 전부
+// 딸려 옵니다. 그래서 명부를 넣은 다음에 할 일은 이것 하나입니다.
+//
+// 그런데 114곳을 한 요청에서 다 물어볼 수는 없습니다 — 워커가 바깥에 보낼 수 있는 요청
+// 수가 정해져 있고, 넘으면 중간에 끊깁니다. 그래서 **여덟 곳씩 끊어** 돌리고,
+// 어디까지 했는지를 가게 번호(커서)로 넘깁니다. 끊겨도 그 번호부터 다시 시작합니다.
+//
+// 그리고 **확실할 때만 붙입니다.** 틀리게 붙는 것이 안 붙는 것보다 훨씬 나쁩니다 —
+// 엉뚱한 가게에 연결되면 손님이 그 핀을 보고 다른 가게로 걸어가고, 대표사진도 남의 가게
+// 것이 걸립니다. 그런데 화면에는 멀쩡한 가게 하나가 보여서 아무도 눈치채지 못합니다.
+// 애매한 것은 그대로 두고 목록에 남겨, 회장님이 그 가게 화면에서 눈으로 고릅니다.
+export const MAP_CHUNK = 8;
+export async function autoLinkChunk(ctx, { after = 0, limit = MAP_CHUNK } = {}) {
+  const { db, env, assoc } = ctx;
+  const rows = await D.listUnlinkedBusinesses(db, assoc.id, Number(after) || 0, limit);
+  const out = { rows: [], linked: 0, cursor: Number(after) || 0, done: rows.length < limit, error: "" };
+  for (const b of rows) {
+    out.cursor = b.id;
+    const r = await searchPlaces(env, { q: placeQuery(b), db, assocId: assoc.id });
+    if (r.error) {
+      // 열쇠가 없거나 지도가 죽었으면 더 돌려 봐야 소용없습니다. 여기서 멈추고 그렇게 말합니다.
+      out.error = r.message || "지도 검색에 연결하지 못했습니다.";
+      out.done = false;
+      break;
+    }
+    const { place, confidence, why } = pickPlace(b, r.places);
+    if (confidence === "high" && place) {
+      await D.updateBusiness(db, b.id, {
+        // 회장님이 이미 채워 둔 값은 건드리지 않습니다 — 빈 칸만 지도가 메웁니다.
+        name: b.name, category: b.category, description: b.description || "",
+        phone: b.phone || place.phone || "",
+        address: b.address || place.address || "",
+        hours: b.hours || "",
+        lat: b.lat ?? place.lat ?? null, lng: b.lng ?? place.lng ?? null,
+        snsInstagram: b.sns_instagram || "", snsYoutube: b.sns_youtube || "",
+        snsBlog: b.sns_blog || "", snsKakao: b.sns_kakao || "", snsNaver: b.sns_naver || "",
+        mapUrl: place.url || b.map_url || "",
+      });
+      out.linked++;
+      out.rows.push({ id: b.id, name: b.name, status: place.url ? "linked" : "filled",
+        found: place.name, address: place.address, phone: place.phone, why });
+    } else {
+      out.rows.push({ id: b.id, name: b.name, status: place ? "choose" : "none",
+        found: place ? place.name : "", address: place ? place.address : "", phone: "", why });
+    }
+  }
+  if (out.linked) await audit(ctx, "지도일괄연결", `${out.linked}곳 연결`);
+  return out;
 }
 
 // ---------- 명부 붙여넣기로 한 번에 등록 ----------

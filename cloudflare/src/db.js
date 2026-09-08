@@ -415,6 +415,15 @@ export function updateBusiness(db, id, f) {
 // 콘텐츠 활동(사진 추가 등) 발생 시 갱신 시각 터치 — '살아있는 홈' 계측용
 export const touchBusiness = (db, id) => run(db, "UPDATE businesses SET updated_at=datetime('now') WHERE id=?", id);
 export const setBusinessStatus = (db, id, status) => run(db, "UPDATE businesses SET status=? WHERE id=?", status, id);
+// ----- 지도 연결 -----
+// 지도에 아직 연결되지 않은 가게. id 순서로 끊어 가져온다(커서 방식) — 한 번에 다 부르면
+// 지도 검색 요청이 한 요청에서 100번 넘게 나가 워커가 끊긴다.
+export const listUnlinkedBusinesses = (db, aid, afterId, limit) =>
+  all(db, "SELECT * FROM businesses WHERE association_id=? AND id>? AND (map_url IS NULL OR map_url='') ORDER BY id ASC LIMIT ?",
+    aid, afterId | 0, Math.max(1, limit | 0));
+export const countUnlinkedBusinesses = async (db, aid) =>
+  (await first(db, "SELECT COUNT(*) AS n FROM businesses WHERE association_id=? AND (map_url IS NULL OR map_url='')", aid)).n;
+
 // 사장님이 사진 요청 링크에서 영업시간만 보내 온다. 이 한 칸만 손대므로
 // 회장님이 채워 둔 소개·주소를 사장님이 덮어쓸 일이 없다.
 export const setBusinessHours = (db, id, hours) =>
