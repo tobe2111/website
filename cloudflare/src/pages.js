@@ -1,8 +1,9 @@
 // 공개/인증 페이지 핸들러 (async). ctx = { env, db, assoc, base, user, url, query, csrf, params }
 import * as D from "./db.js";
 import { esc, cap, clip, openBadge, openNow, hoursLine, dongOf, fmtBytes, kstStamp, kstDate, prettyPath, safeNext, parseCookies, decomposeHours } from "./util.js";
+import { parseMemberRoster, markExisting, guessPrefix, IMPORT_MAX } from "./roster.js";
 import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG, ORIGIN, assetUrl, brandLogo } from "./render.js";
-import { verifyInviteToken, verifyPhotoToken, SALES_STAGES, otpRequired, selfSignupOn, MAX_SLOTS, BULK_MAX, BULK_CHUNK, docOf, isPlaceholderEmail } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
+import { verifyInviteToken, verifyPhotoToken, SALES_STAGES, otpRequired, selfSignupOn, MAX_SLOTS, BULK_MAX, BULK_CHUNK, docOf, isPlaceholderEmail, importMemberRows } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
 import { html, notFoundResponse, back, redirect } from "./http.js";
 import { deals as urdealDeals, urdealProductUrl, urdealSellerUrl, sellerPhotos } from "./urdeal.js";
 import { placeSourceOf } from "./placePhoto.js";
@@ -1287,6 +1288,109 @@ export function registerForm(ctx) {
   return html(layout({ title: "가입", assoc, base, body, csrf, scripts: turnstileScript(env) }));
 }
 
+// ================= 명부 붙여넣기로 회원 한 번에 등록 =================
+//
+// GET 과 POST 를 **둘 다 여기서** 받습니다. 이 화면의 본체가 '미리보기' 이기 때문입니다 —
+// 붙여넣은 명부를 어떻게 읽었는지(전화번호를 어떻게 고쳤는지, 업종을 어디로 묶었는지)를
+// 표로 보여 준 다음에 넣습니다. 미리보기는 아무것도 바꾸지 않으므로 화면 쪽 일이고,
+// 실제로 쓰는 일(importMemberRows)만 api.js 가 합니다. 두 파일의 방향은 그대로입니다.
+export async function adminMembersImport(ctx) {
+  const { db, assoc, base, user, csrf, form } = ctx;
+  if (assoc.kind === "esign") return notFoundResponse(ctx);
+
+  const posted = !!form;   // ctx.form 은 POST 일 때만 채워집니다
+  const text = posted ? String(form.get("roster") || "") : "";
+  const prefix = posted ? cap(String(form.get("prefix") || "").trim(), 40) : guessPrefix(assoc.address);
+  const confirm = posted && form.get("confirm") === "1";
+
+  let err = "", rows = null, done = null;
+  if (posted && !text.trim()) err = "명부를 붙여넣어 주세요.";
+  else if (posted) {
+    const parsed = parseMemberRoster(text, { prefix });
+    if (parsed.error) err = parsed.error;
+    else {
+      rows = markExisting(parsed.rows, (await D.listAllBusinesses(db, assoc.id)).map((b) => b.name));
+      // 미리보기에서 본 것과 넣는 것이 같은 줄이어야 합니다. 그래서 넣을 때도 같은 글자를
+      // 다시 읽습니다 — 화면이 보낸 '이미 해석된 값' 을 믿지 않습니다.
+      if (confirm) done = await importMemberRows(ctx, rows);
+    }
+  }
+
+  const okN = rows ? rows.filter((r) => r.status === "ok").length : 0;
+  const dupN = rows ? rows.filter((r) => r.status === "dup").length : 0;
+  const badN = rows ? rows.filter((r) => r.status === "bad").length : 0;
+  const fixedN = rows ? rows.filter((r) => r.phoneFixed).length : 0;
+
+  const mark = { ok: ["badge-ok", "등록합니다"], made: ["badge-ok", "등록했습니다"],
+    dup: ["badge-muted", "이미 있음"], bad: ["badge-wait", "확인 필요"] };
+  const table = rows ? `<div class="table-scroll"><table class="admin-table roster-table">
+    <thead><tr><th>#</th><th>상호</th><th>대표자</th><th>휴대폰</th><th>주소</th><th>업종 → 분류</th><th>상태</th></tr></thead>
+    <tbody>${rows.map((r) => `<tr class="rs-${r.status}">
+      <td>${r.seq}</td><td><b>${esc(r.name) || "<i>비었음</i>"}</b></td>
+      <td>${esc(r.owner) || '<span class="muted">모름</span>'}</td>
+      <td>${r.phone ? `${esc(D.formatPhone(r.phone))}${r.phoneFixed ? ' <span class="badge badge-info">0 붙임</span>' : ""}` : '<span class="muted">없음</span>'}</td>
+      <td class="rs-addr">${esc(r.address) || '<span class="muted">없음</span>'}</td>
+      <td>${r.rawCat ? `${esc(r.rawCat)} → ` : ""}<b>${esc(r.category)}</b></td>
+      <td><span class="badge ${mark[r.status][0]}">${mark[r.status][1]}</span>${
+        r.note ? `<br /><small>${esc(r.note)}</small>` : ""}</td></tr>`).join("")}</tbody></table></div>` : "";
+
+  const inner = `
+    ${done ? `<div class="flash flash-ok"><b>${done.made}곳을 등록했습니다.</b>
+      ${done.skipped ? `이미 있던 ${done.skipped}곳은 건너뛰었습니다. ` : ""}${done.failed ? `${done.failed}곳은 넣지 못했습니다 — 아래 표에서 확인해 주세요.` : ""}</div>
+      <p class="panel-hint">이제 각 가게에 <b>사진과 영업시간</b>이 필요합니다.
+        <a href="${base}/admin#s-people">회원·점포 목록</a>에서 한 곳을 열면 남은 일과 다음 가게를 이어서 알려 드립니다.</p>` : ""}
+
+    <section class="panel">
+      <h2 class="panel-title">엑셀 명부를 그대로 붙여넣기</h2>
+      <p class="panel-hint">엑셀에서 <b>머리글 줄을 포함해</b> 칸을 통째로 복사(Ctrl+C)한 뒤 아래에 붙여넣으세요(Ctrl+V).
+        머리글은 <b>상호 · 대표자 · 전화번호 · 주소 · 업종</b> 순서가 아니어도 되고, 없는 칸이 있어도 됩니다 —
+        <b>상호</b> 한 칸만 있으면 넣을 수 있습니다. 한 번에 ${IMPORT_MAX}줄까지.</p>
+      ${err ? `<div class="flash flash-err">${esc(err)}</div>` : ""}
+      <form method="post" action="${base}/admin/members/import" class="stack-form">
+        <input type="hidden" name="_csrf" value="${esc(csrf)}" />
+        <label>주소 앞에 붙일 말 <small>비워 두면 명부에 적힌 주소를 그대로 씁니다</small>
+          <input type="text" name="prefix" maxlength="40" value="${esc(prefix)}" placeholder="예: 서울 서초구" /></label>
+        <label>명부
+          <textarea name="roster" rows="10" required placeholder="상호&#9;대표자&#9;전화번호&#9;주소&#9;업종&#10;버들카페&#9;김방배&#9;010-1234-5678&#9;방배중앙로 174&#9;카페">${esc(text)}</textarea></label>
+        <div class="finish-acts">
+          <button class="btn btn-primary">${rows ? "다시 읽기" : "미리보기"}</button>
+          ${rows && okN ? `<button class="btn btn-cta" name="confirm" value="1">${okN}곳 등록하기</button>` : ""}
+        </div>
+      </form>
+    </section>
+
+    ${rows ? `<section class="panel">
+      <h2 class="panel-title">이렇게 읽었습니다
+        <span class="badge badge-ok">${done ? `${done.made}곳 등록` : `${okN}곳 등록 예정`}</span>
+        ${dupN ? `<span class="badge badge-muted">${dupN}곳 이미 있음</span>` : ""}
+        ${badN ? `<span class="badge badge-wait">${badN}곳 확인 필요</span>` : ""}</h2>
+      <ul class="roster-notes">
+        ${fixedN ? `<li><b>전화번호 ${fixedN}개의 맨 앞 0 을 되살렸습니다.</b>
+          엑셀은 <code>01012345678</code> 을 숫자로 보고 <code>1012345678</code> 로 저장합니다.
+          그대로 두면 저장은 되는데 <b>손님이 걸었을 때만 안 걸립니다</b>.</li>` : ""}
+        <li><b>휴대폰은 사장님 계정에만 넣고, 가게 페이지에는 안 띄웁니다.</b>
+          명부의 번호는 대표자 개인 번호입니다. 손님 화면에 그대로 걸면 개인 번호를 인터넷에 올리는 것이 됩니다.
+          손님이 볼 가게 대표번호는 나중에 <b>지도에서 찾아</b> 채웁니다 — 그건 원래 공개된 번호입니다.</li>
+        <li><b>업종은 손님 화면의 일곱 분류로 묶었습니다.</b> 위 표의 <code>원래 업종 → 분류</code> 를 봐 주세요.
+          다르게 하고 싶은 곳은 등록한 뒤 그 가게 화면에서 고치면 됩니다.</li>
+        <li><b>같은 명부를 다시 넣어도 중복이 안 생깁니다.</b> 이미 있는 상호는 건너뜁니다 —
+          중간에 끊겨도 그대로 다시 붙여넣으면 못 들어간 것만 들어갑니다.</li>
+        <li><b>임시 비밀번호는 만들지 않습니다.</b> ${rows.length}개를 화면에 쏟아 봐야 옮겨 적을 수 없습니다.
+          사장님이 직접 로그인해야 할 때만 회원 목록에서 비밀번호를 정해 주세요.
+          사진·영업시간은 <b>로그인 없이</b> 요청 링크로 받습니다.</li>
+      </ul>
+      ${table}
+    </section>` : ""}`;
+
+  const body = await consoleShell(ctx, {
+    title: "명부로 한 번에 등록", active: "people",
+    eyebrow: `<a href="${base}/admin#s-people">← 회원·점포</a>`,
+    sub: "상인회가 이미 갖고 있는 엑셀 명부를 붙여넣으면 가게가 한 번에 등록됩니다.",
+    body: inner,
+  });
+  return html(layout({ title: "명부로 한 번에 등록", assoc, base, user, body, csrf }));
+}
+
 // ================= 사장님 사진 보내기 (로그인 없이, 링크 하나로) =================
 //
 // 이 화면을 여는 사람은 카톡으로 링크를 받은 40~60대 사장님이고, 폰으로 한 손에 들고 봅니다.
@@ -2518,7 +2622,7 @@ export async function admin(ctx) {
 
     <div class="sgroup" id="s-people" data-tab="people">
     <section class="panel" id="p-members"><div class="panel-head"><h2 class="panel-title">${isEsign ? "담당자 관리" : `${isFranchise ? "가맹점" : "회원·점포"}`} <span class="badge badge-muted">${isEsign ? staffList.length + "명" : bizCounts.all + "곳"}</span></h2>
-      <span class="pill-row">${members.length && !isEsign ? `<a class="btn btn-xs btn-ghost" href="${base}/admin/members.csv">명단 CSV</a>` : ""}<a class="btn btn-xs btn-ghost" href="${base}/admin/export.json">전체 백업(JSON)</a></span></div>
+      <span class="pill-row">${isEsign ? "" : `<a class="btn btn-xs btn-primary" href="${base}/admin/members/import">명부로 한 번에 등록</a>`}${members.length && !isEsign ? `<a class="btn btn-xs btn-ghost" href="${base}/admin/members.csv">명단 CSV</a>` : ""}<a class="btn btn-xs btn-ghost" href="${base}/admin/export.json">전체 백업(JSON)</a></span></div>
       ${isEsign ? `<p class="panel-hint">계약서를 만들고 보내는 사람들입니다. <b>담당자</b>는 계약 업무만 하고 설정·API 키·과금은 볼 수 없습니다.
         권한을 회수해도 계정과 서명 이력은 남습니다 — 지우면 증거가 사라지기 때문입니다.</p>
       <div class="table-scroll"><table class="admin-table"><thead><tr><th>이름</th><th>권한</th>${teams.length ? "<th>부서</th>" : ""}<th>관리</th></tr></thead><tbody>${staffRows}</tbody></table></div>
