@@ -21,6 +21,7 @@ import { text } from "./http.js";
 import { parseLayout, renderHome, SECTION_CATALOG, HOME_PRESETS } from "./homeLayout.js";
 import { parseLandingLayout, renderLanding, LANDING_CATALOG, safeSrc } from "./franchise.js";
 import { KINDS, KIND_KEYS, PRESETS, PRESET_KEYS, kindOf, kindById, assocTerms, AREA_THEMES } from "./kinds.js";
+import { bundledBrand } from "./brandAssets.js";
 import { turnstileWidget, turnstileScript } from "./turnstile.js";
 import { otpauthUri } from "./totp.js";
 import { PLANS, PLAN_KEYS, planPrices, planOf } from "./plans.js";
@@ -896,7 +897,7 @@ export function daysLeftText(due, today) {
 // 여기만 회색 상자 아이콘이면, 사장님은 "여기가 우리 상인회 맞나" 하는 화면에서
 // 비밀번호를 넣게 된다. 간판이 없는 플랫폼 화면에서만 기본 아이콘으로 돌아간다.
 const authHead = (title, sub, assoc = null) => {
-  const logo = brandLogo(assoc, { wide: true, cls: "auth-logo", w: 227, h: 44 });
+  const logo = brandLogo(assoc, { wide: true, cls: "auth-logo", w: 108, h: 44 });
   return `<div class="auth-head">${logo
     ? `<span class="auth-brand">${logo}</span>`
     : `<span class="mark auth-mark">${STOREFRONT_SVG}</span>`}
@@ -2849,7 +2850,14 @@ ${isFranchise ? `    <section class="panel panel-accent" id="p-home"><h2 class="
       <form method="post" action="${base}/admin/settings" enctype="multipart/form-data" class="stack-form">
         <div class="form-two"><label>${isEsign ? "조직" : isFranchise ? "브랜드" : "상인회"} 이름<input type="text" name="name" value="${esc(assoc.name)}" required autocomplete="name" /></label><label>대표 색상<input type="color" name="brand_color" id="brandColor" value="${esc(assoc.brand_color)}" /></label></div>
         ${isEsign ? "" : `<fieldset class="theme-pick"><legend>우리 상권에 어울리는 색 <small>(눌러서 위 색상에 적용)</small></legend>
-          <div class="theme-swatches">${AREA_THEMES.map((t) => `<button type="button" class="theme-sw${t.color.toLowerCase() === String(assoc.brand_color).toLowerCase() ? " is-on" : ""}" data-theme-color="${t.color}"
+          <div class="theme-swatches">${[
+            // 우리가 그 상인회의 로고를 갖고 있으면 **로고에서 뽑은 색**을 맨 앞에 둔다.
+            // 회장님이 색을 눈으로 맞춰 고를 이유가 없다 — 간판 색이 정답이다.
+            ...(bundledBrand(assoc) && bundledBrand(assoc).brand
+              ? [{ color: bundledBrand(assoc).brand, label: "우리 로고 색",
+                   hint: "우리 로고에서 뽑은 색입니다. 흰 글자가 읽히도록 로고보다 아주 조금 어둡습니다." }] : []),
+            ...AREA_THEMES,
+          ].map((t) => `<button type="button" class="theme-sw${t.color.toLowerCase() === String(assoc.brand_color).toLowerCase() ? " is-on" : ""}" data-theme-color="${t.color}"
             style="--sw:${t.color}" title="${esc(t.hint)}"><span class="theme-dot" aria-hidden="true"></span><span class="theme-name">${esc(t.label)}</span></button>`).join("")}</div>
           <p class="panel-hint">여기 있는 색은 모두 <b>흰 글자를 얹어도 읽히는지</b> 미리 재 둔 것입니다.
             나머지 밝기 단계와 글자색은 이 색에서 자동으로 만들어집니다. 원하는 색이 따로 있으면 위 색상 네모에서 직접 고르셔도 됩니다.</p>
