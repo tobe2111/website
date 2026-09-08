@@ -3,7 +3,7 @@ import * as D from "./db.js";
 import { esc, cap, clip, openBadge, openNow, hoursLine, dongOf, fmtBytes, kstStamp, kstDate, prettyPath, safeNext, parseCookies, decomposeHours } from "./util.js";
 import { parseMemberRoster, markExisting, guessPrefix, IMPORT_MAX } from "./roster.js";
 import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG, ORIGIN, assetUrl, brandLogo } from "./render.js";
-import { verifyInviteToken, verifyPhotoToken, SALES_STAGES, otpRequired, selfSignupOn, MAX_SLOTS, BULK_MAX, BULK_CHUNK, docOf, isPlaceholderEmail, importMemberRows } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
+import { verifyInviteToken, verifyPhotoToken, SALES_STAGES, otpRequired, selfSignupOn, MAX_SLOTS, BULK_MAX, BULK_CHUNK, docOf, isPlaceholderEmail, importMemberRows, autoLinkChunk, MAP_CHUNK } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
 import { html, notFoundResponse, back, redirect } from "./http.js";
 import { deals as urdealDeals, urdealProductUrl, urdealSellerUrl, sellerPhotos } from "./urdeal.js";
 import { placeSourceOf } from "./placePhoto.js";
@@ -1337,8 +1337,9 @@ export async function adminMembersImport(ctx) {
   const inner = `
     ${done ? `<div class="flash flash-ok"><b>${done.made}곳을 등록했습니다.</b>
       ${done.skipped ? `이미 있던 ${done.skipped}곳은 건너뛰었습니다. ` : ""}${done.failed ? `${done.failed}곳은 넣지 못했습니다 — 아래 표에서 확인해 주세요.` : ""}</div>
-      <p class="panel-hint">이제 각 가게에 <b>사진과 영업시간</b>이 필요합니다.
-        <a href="${base}/admin#s-people">회원·점포 목록</a>에서 한 곳을 열면 남은 일과 다음 가게를 이어서 알려 드립니다.</p>` : ""}
+      <p class="panel-hint"><b>다음은 지도 연결입니다.</b> 한 번 붙여 두면 지도 위 핀·가게 대표번호·도로명주소·
+        대표사진 가져오기가 함께 열립니다. <a class="btn btn-sm btn-cta" href="${base}/admin/members/map">지도에 한꺼번에 연결 →</a></p>
+      <p class="panel-hint">그다음은 사진과 영업시간입니다 — 사장님께 요청 링크를 보내면 로그인 없이 폰에서 직접 올려 주십니다.</p>` : ""}
 
     <section class="panel">
       <h2 class="panel-title">엑셀 명부를 그대로 붙여넣기</h2>
@@ -1389,6 +1390,100 @@ export async function adminMembersImport(ctx) {
     body: inner,
   });
   return html(layout({ title: "명부로 한 번에 등록", assoc, base, user, body, csrf }));
+}
+
+// ================= 명부의 가게들을 지도에 한꺼번에 연결 =================
+//
+// 상호만 있어도 지도에는 그 가게가 거의 다 있습니다. 한 번 연결해 두면 그 하나에
+// 좌표(지도 핀) · 가게 대표번호 · 도로명주소 · 대표사진 가져오기 · 검색 노출이 전부
+// 딸려 옵니다. 명부를 넣은 다음에 할 일은 사실상 이것 하나입니다.
+//
+// 여덟 곳씩 끊어 돌립니다(워커가 한 요청에서 바깥에 보낼 수 있는 수가 정해져 있습니다).
+// 어디까지 했는지는 가게 번호로 넘기므로, 중간에 끊겨도 그 번호부터 이어집니다.
+export async function adminMembersMap(ctx) {
+  const { db, env, assoc, base, user, csrf, form } = ctx;
+  if (assoc.kind === "esign") return notFoundResponse(ctx);
+
+  const kakaoOn = !!(String(env.KAKAO_REST_KEY || "").trim()
+    || (String(env.NAVER_SEARCH_ID || "").trim() && String(env.NAVER_SEARCH_SECRET || "").trim()));
+
+  let run = null;
+  if (form && kakaoOn) run = await autoLinkChunk(ctx, { after: Number(form.get("after")) || 0 });
+
+  const [total, left] = await Promise.all([
+    D.listAllBusinesses(db, assoc.id).then((l) => l.length).catch(() => 0),
+    D.countUnlinkedBusinesses(db, assoc.id).catch(() => 0),
+  ]);
+  const linkedN = Math.max(0, total - left);
+  const pct = total ? Math.round((linkedN / total) * 100) : 0;
+  // 아직 못 붙인 가게는 회장님이 그 화면에서 눈으로 고릅니다. 자동이 손드는 자리를 숨기지 않습니다.
+  const rest = left ? await D.listUnlinkedBusinesses(db, assoc.id, 0, 60).catch(() => []) : [];
+
+  const mark = {
+    linked: ["badge-ok", "연결했습니다"],
+    filled: ["badge-ok", "정보만 채웠습니다"],
+    choose: ["badge-wait", "직접 고르세요"],
+    none: ["badge-muted", "지도에 없습니다"],
+  };
+  const runTable = run && run.rows.length ? `<div class="table-scroll"><table class="admin-table roster-table">
+    <thead><tr><th>우리 명부</th><th>지도에서 찾은 곳</th><th>주소</th><th>결과</th></tr></thead>
+    <tbody>${run.rows.map((r) => `<tr class="rs-${r.status === "choose" ? "bad" : r.status === "none" ? "dup" : "ok"}">
+      <td><b>${esc(r.name)}</b></td>
+      <td>${esc(r.found) || '<span class="muted">—</span>'}</td>
+      <td class="rs-addr">${esc(r.address) || '<span class="muted">—</span>'}</td>
+      <td><span class="badge ${mark[r.status][0]}">${mark[r.status][1]}</span><br /><small>${esc(r.why)}</small>
+        ${r.status === "choose" ? ` <a href="${base}/admin/business/${r.id}#p-info">고르러 가기 →</a>` : ""}</td>
+    </tr>`).join("")}</tbody></table></div>` : "";
+
+  const goForm = (label, after, auto) => `<form method="post" action="${base}/admin/members/map" class="inline-form"${
+    auto ? ' data-auto-next' : ""}>
+    <input type="hidden" name="_csrf" value="${esc(csrf)}" />
+    <input type="hidden" name="after" value="${after}" />
+    <button class="btn btn-${auto ? "outline" : "cta"}">${label}</button></form>`;
+
+  const inner = `
+    <section class="panel">
+      <h2 class="panel-title">지도에 연결하기 <span class="badge ${left ? "badge-wait" : "badge-ok"}">${linkedN} / ${total}곳</span></h2>
+      <div class="done-bar${pct < 60 ? " is-low" : ""}"><i style="width:${pct}%"></i></div>
+      <p class="panel-hint">상호와 주소로 카카오맵·네이버지도에 물어 그 가게를 찾아 붙입니다.
+        한 번 붙으면 <b>지도 위 핀 · 가게 대표번호 · 도로명주소 · 대표사진 가져오기 · 검색 노출</b>이 함께 열립니다.</p>
+      ${kakaoOn ? "" : `<div class="flash flash-warn">지도 검색 열쇠가 아직 등록되지 않았습니다. 운영사에 문의해 주세요.</div>`}
+      ${run && run.error ? `<div class="flash flash-err">${esc(run.error)}</div>` : ""}
+      <ul class="roster-notes">
+        <li><b>확실할 때만 붙입니다.</b> 전화번호가 같거나, 도로명·번지가 맞거나, 상호가 정확히 같고 후보가 하나일 때입니다.
+          애매한 곳은 그대로 두고 아래 목록에 남깁니다 — <b>틀리게 붙는 것이 안 붙는 것보다 훨씬 나쁩니다.</b>
+          엉뚱한 가게에 연결되면 손님이 그 핀을 보고 다른 가게로 걸어가는데, 화면에는 멀쩡해 보여 아무도 모릅니다.</li>
+        <li><b>회장님이 채워 둔 값은 안 건드립니다.</b> 빈 칸만 지도가 메웁니다.
+          가게 대표번호는 지도에 올라와 있는 <b>공개된 번호</b>라 손님 화면에 띄워도 됩니다.</li>
+        <li><b>${MAP_CHUNK}곳씩 끊어 돌립니다.</b> 중간에 멈춰도 눌렀던 자리부터 이어지고, 이미 붙은 곳은 건너뜁니다.</li>
+      </ul>
+      ${left === 0 && total > 0
+        ? `<p class="panel-hint"><b>${total}곳이 모두 지도에 연결됐습니다.</b> 이제 각 가게 화면에서 <b>지도의 대표 사진</b>을 바로 가져올 수 있습니다.</p>`
+        : total === 0
+          ? `<p class="panel-hint">아직 등록된 가게가 없습니다. 먼저 <a href="${base}/admin/members/import">명부로 한 번에 등록</a>해 주세요.</p>`
+          : kakaoOn ? goForm(run ? `다음 ${MAP_CHUNK}곳 찾기` : `자동으로 찾기 시작 (남은 ${left}곳)`,
+              run && !run.error ? run.cursor : 0, !!(run && !run.error && !run.done)) : ""}
+    </section>
+
+    ${run ? `<section class="panel"><h2 class="panel-title">이번에 돌린 ${run.rows.length}곳
+      ${run.linked ? `<span class="badge badge-ok">${run.linked}곳 연결</span>` : ""}</h2>
+      ${runTable || `<p class="panel-hint">더 돌릴 가게가 없습니다.</p>`}</section>` : ""}
+
+    ${rest.length ? `<section class="panel"><h2 class="panel-title">아직 지도에 없는 가게
+      <span class="badge badge-wait">${left}곳</span></h2>
+      <p class="panel-hint">자동으로는 확신이 서지 않은 가게들입니다. 이름을 눌러 그 화면에서 직접 고르시면 됩니다 —
+        지도 검색칸에 상호가 미리 적혀 있습니다.</p>
+      <ul class="pill-list">${rest.map((b) => `<li><a href="${base}/admin/business/${b.id}#p-info">${esc(b.name)}</a></li>`).join("")}</ul>
+      ${left > rest.length ? `<p class="panel-hint">외 ${left - rest.length}곳</p>` : ""}</section>` : ""}`;
+
+  const body = await consoleShell(ctx, {
+    title: "지도에 한꺼번에 연결", active: "people",
+    eyebrow: `<a href="${base}/admin#s-people">← 회원·점포</a>`,
+    sub: "상호와 주소로 카카오맵·네이버지도에서 그 가게를 찾아 붙입니다.",
+    body: inner,
+  });
+  return html(layout({ title: "지도에 한꺼번에 연결", assoc, base, user, body, csrf,
+    scripts: `<script src="${assetUrl("/js/auto-next.js")}" defer></script>` }));
 }
 
 // ================= 사장님 사진 보내기 (로그인 없이, 링크 하나로) =================
@@ -2622,7 +2717,7 @@ export async function admin(ctx) {
 
     <div class="sgroup" id="s-people" data-tab="people">
     <section class="panel" id="p-members"><div class="panel-head"><h2 class="panel-title">${isEsign ? "담당자 관리" : `${isFranchise ? "가맹점" : "회원·점포"}`} <span class="badge badge-muted">${isEsign ? staffList.length + "명" : bizCounts.all + "곳"}</span></h2>
-      <span class="pill-row">${isEsign ? "" : `<a class="btn btn-xs btn-primary" href="${base}/admin/members/import">명부로 한 번에 등록</a>`}${members.length && !isEsign ? `<a class="btn btn-xs btn-ghost" href="${base}/admin/members.csv">명단 CSV</a>` : ""}<a class="btn btn-xs btn-ghost" href="${base}/admin/export.json">전체 백업(JSON)</a></span></div>
+      <span class="pill-row">${isEsign ? "" : `<a class="btn btn-xs btn-primary" href="${base}/admin/members/import">명부로 한 번에 등록</a><a class="btn btn-xs btn-outline" href="${base}/admin/members/map">지도에 한꺼번에 연결</a>`}${members.length && !isEsign ? `<a class="btn btn-xs btn-ghost" href="${base}/admin/members.csv">명단 CSV</a>` : ""}<a class="btn btn-xs btn-ghost" href="${base}/admin/export.json">전체 백업(JSON)</a></span></div>
       ${isEsign ? `<p class="panel-hint">계약서를 만들고 보내는 사람들입니다. <b>담당자</b>는 계약 업무만 하고 설정·API 키·과금은 볼 수 없습니다.
         권한을 회수해도 계정과 서명 이력은 남습니다 — 지우면 증거가 사라지기 때문입니다.</p>
       <div class="table-scroll"><table class="admin-table"><thead><tr><th>이름</th><th>권한</th>${teams.length ? "<th>부서</th>" : ""}<th>관리</th></tr></thead><tbody>${staffRows}</tbody></table></div>

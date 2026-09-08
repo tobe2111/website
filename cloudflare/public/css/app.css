@@ -4203,3 +4203,12 @@ body.is-console[data-console="super"] .console-strip{border-bottom:1px solid #2b
 .roster-table tr.rs-bad{background:var(--wait-bg)}
 .dash .stack-form textarea[name="roster"]{font-family:var(--font-mono,ui-monospace,SFMono-Regular,Menlo,monospace);
   font-size:13px;line-height:1.5;white-space:pre;overflow-x:auto}
+
+/* 아직 지도에 못 붙인 가게 목록 — 이름만 죽 늘어놓고 누르면 그 화면으로 갑니다.
+   표로 만들 만한 정보가 없고(이름뿐), 60개가 세로로 서면 화면이 그것만으로 찹니다. */
+.pill-list{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:7px}
+.pill-list > li{margin:0}
+.pill-list a{display:inline-block;padding:6px 11px;border:1px solid var(--line);
+  border-radius:var(--r-pill);background:var(--bg);font-size:.86rem;color:var(--ink);
+  text-decoration:none;transition:border-color .15s,color .15s}
+.pill-list a:hover{border-color:var(--brand-600);color:var(--brand-700)}

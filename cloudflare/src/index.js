@@ -196,6 +196,8 @@ export const TENANT = [
   // 명부 붙여넣기 화면은 GET·POST 를 둘 다 pages 가 받는다. 이 화면의 본체가 '미리보기'라
   // POST 의 결과도 표로 그려야 하기 때문이다. 실제로 쓰는 일은 api.importMemberRows 가 한다.
   ["GET", "/admin/members/import", pages.adminMembersImport, "ADMIN"],
+  ["GET", "/admin/members/map", pages.adminMembersMap, "ADMIN"],
+  ["POST", "/admin/members/map", pages.adminMembersMap, "ADMIN"],
   ["POST", "/admin/members/import", pages.adminMembersImport, "ADMIN"],
   ["POST", "/admin/invite", api.adminCreateInvite, "ADMIN"],
   ["POST", "/admin/admins/add", api.adminAddAdmin, "ADMIN"],
