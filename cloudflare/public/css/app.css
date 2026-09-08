@@ -4223,3 +4223,20 @@ body.is-console[data-console="super"] .console-strip{border-bottom:1px solid #2b
 .ask-alt > summary{cursor:pointer;font-size:.92rem;color:var(--ink-soft);padding:6px 0}
 .ask-alt > summary:hover{color:var(--ink)}
 .ask-alt[open] > summary{margin-bottom:10px;font-weight:600;color:var(--ink)}
+
+/* ---------- 명부 붙여넣기 미리보기 ----------
+   114줄을 넣기 전에 "이렇게 읽었다" 를 보여 주는 표입니다. 회장님이 훑어보고
+   틀린 줄을 찾아야 하므로, 세 상태(등록·이미있음·확인필요)가 색으로 갈립니다. */
+.roster-notes{margin:0 0 14px;padding-left:18px;display:grid;gap:7px;
+  font-size:.9rem;line-height:1.6;color:var(--ink-soft)}
+.roster-notes b{color:var(--ink)}
+.roster-table{font-size:.86rem}
+.roster-table td{vertical-align:top}
+.roster-table .rs-addr{min-width:150px}
+.roster-table .muted{color:var(--muted)}
+.roster-table small{color:var(--muted)}
+/* 건너뛰는 줄은 뒤로 물리고, 손봐야 하는 줄만 앞으로 나옵니다 */
+.roster-table tr.rs-dup{opacity:.55}
+.roster-table tr.rs-bad{background:var(--wait-bg)}
+.dash .stack-form textarea[name="roster"]{font-family:var(--font-mono,ui-monospace,SFMono-Regular,Menlo,monospace);
+  font-size:13px;line-height:1.5;white-space:pre;overflow-x:auto}

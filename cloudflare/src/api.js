@@ -1632,6 +1632,50 @@ export async function adminAddMember(ctx) {
     email || D.maskPhone(phone) + " (휴대폰 번호로 로그인)"} / 임시비번 ${temp} (본인에게 전달하세요)`);
 }
 
+// ---------- 명부 붙여넣기로 한 번에 등록 ----------
+//
+// 상인회는 이미 명부를 갖고 있다. 총회 자료로 쓰는 엑셀 한 장에 상호·대표자·전화·주소·업종이
+// 다 들어 있다. 그런데 지금까지는 그걸 두고도 한 곳씩 손으로 다시 쳐야 했다 — 114곳이면
+// 114번이다. 거기서 대부분 그만둔다.
+//
+// 여기서 지키는 것 셋:
+//
+//  1. **사장님 휴대폰을 가게 전화로 공개하지 않는다.** 명부의 번호는 대표자 개인 휴대폰이다.
+//     businesses.phone 은 손님 화면에 그대로 뜨는 칸이라, 거기에 넣으면 114명의 개인 번호를
+//     인터넷에 올리는 것이 된다. 번호는 사장님 계정에만 넣는다(로그인 아이디 겸 알림톡 수신처).
+//     가게 대표번호는 나중에 지도에서 찾아 채운다 — 그건 원래 공개된 번호다.
+//  2. **같은 명부를 다시 넣어도 중복이 안 생긴다.** 이미 있는 상호는 건너뛴다.
+//     114줄을 넣다 중간에 끊겨도 다시 붙여 넣으면 못 들어간 것만 들어간다.
+//  3. **임시 비밀번호를 불러 주지 않는다.** 114개를 화면에 쏟아 봐야 아무도 못 옮겨 적는다.
+//     계정은 만들되 로그인은 잠가 두고, 필요한 사장님만 회원 목록에서 비밀번호를 정해 준다.
+export async function importMemberRows(ctx, rows) {
+  const { db, assoc } = ctx;
+  let room = planOf(assoc).maxMembers - (await D.countMembers(db, assoc.id));
+  let made = 0, skipped = 0, failed = 0;
+  for (const r of rows) {
+    if (r.status === "dup") { skipped++; continue; }
+    if (r.status !== "ok") { failed++; continue; }
+    if (room <= 0) { r.status = "bad"; r.note = "회원 정원이 가득 찼습니다"; failed++; continue; }
+    const { hash, salt } = await hashPassword(tempPassword());
+    const user = await D.createUser(db, {
+      email: `p${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}@${NO_LOGIN_DOMAIN}`,
+      passwordHash: hash, salt,
+      // 대표자를 모르는 줄은 상호를 이름 자리에 둔다 — 목록에서 '누구' 칸이 비면 그 줄을 못 읽는다.
+      name: r.owner || r.name, role: "MERCHANT", associationId: assoc.id, phone: r.phone,
+    });
+    const biz = await D.createBusiness(db, { associationId: assoc.id, ownerId: user.id,
+      name: r.name, category: r.category, source: "proxy" });
+    if (r.address) {
+      await D.updateBusiness(db, biz.id, { name: biz.name, category: biz.category, description: "",
+        phone: "", address: r.address, hours: "", lat: null, lng: null,
+        snsInstagram: "", snsYoutube: "", snsBlog: "", snsKakao: "", snsNaver: "", mapUrl: "" });
+    }
+    r.status = "made"; made++; room--;
+  }
+  if (made) await audit(ctx, "명부일괄등록", `${made}곳 등록 · ${skipped}곳 건너뜀`);
+  return { made, skipped, failed };
+}
+
 // 사장님 휴대폰 번호 수정 — 이메일 없이 등록한 계정에서는 이 번호가 곧 아이디다.
 // 번호를 잘못 받아 적으면 사장님이 영영 못 들어오는데, 예전에는 고칠 화면이 없었다.
 export async function adminSetOwnerPhone(ctx) {
