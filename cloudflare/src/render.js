@@ -222,12 +222,12 @@ function consoleNav(assoc, base, user) {
   // "이 홈페이지는 우리 것이 아니라 남의 시스템"으로 읽힌다. 운영자는 계정 설정에
   // 있는 입구로 간다 (pages.js 의 account 참고) — 같은 이유로 그 자리에 둔 것이다.
   if (user) {
-    // 여기에 쓰는 이름은 '지금 누구로 일하고 있나' 다. 회장님에게는 "회장" 이 맞다.
-    // 그런데 운영사 계정의 이름은 "플랫폼 운영자" 라, 상인회 관리 화면 맨 위에 그 글자가
-    // 뜨면 임원이 옆에서 볼 때 "이 홈페이지는 남의 시스템" 으로 읽힌다.
-    // 그 계정으로 상인회 안에서 일할 때는 회사 이름표 대신 '내 계정' 이라고만 쓴다.
-    const whoami = user.role === "SUPERADMIN" && assoc ? "내 계정" : (user.name || "내 계정");
-    out.push(`<a href="/account">${esc(whoami)}</a>`);
+    // 계정 설정으로 가는 길은 **그 상인회 사람에게만** 둔다.
+    //
+    // 이 홈페이지를 운영하는 것은 상인회지 운영사가 아니다. 운영사 계정으로 들어와 있을 때
+    // 여기에 계정 단추를 두면, 임원이 옆에서 볼 때 "이 홈페이지는 리스터코퍼레이션이
+    // 운영하는 것" 으로 읽힌다. 운영사의 계정 설정은 운영사 콘솔 머리말에 있다.
+    if (!(user.role === "SUPERADMIN" && assoc)) out.push(`<a href="/account">${esc(user.name || "내 계정")}</a>`);
     out.push(`<form method="post" action="${base || ""}/logout" class="cnav-out-form"><button class="btn btn-ghost btn-xs">로그아웃</button></form>`);
   }
   return out.join("");
@@ -251,7 +251,10 @@ function stickyBar(assoc, base) {
 // 간판(로고)은 콘솔 안에서 '홈으로'여야 한다 — 예전엔 여기가 고객용 랜딩(/)으로 빠져서,
 // 일하다 로고를 누르면 콘솔 밖으로 튕겨 나갔다. 랜딩은 따로 버튼을 준다.
 function superNav() {
+  // 계정 설정은 여기에 둔다. 고객사 콘솔에서 뺐기 때문에(그 화면은 그 상인회의 것이다)
+  // 운영자가 자기 계정으로 가는 길은 자기 콘솔에 있어야 한다.
   return `<a href="/" class="nav-out" target="_blank" rel="noopener">랜딩페이지 ↗</a>`
+    + `<a href="/account">내 계정</a>`
     + `<form method="post" action="/logout" class="nav-logout"><button class="btn btn-ghost btn-sm">로그아웃</button></form>`;
 }
 

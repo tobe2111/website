@@ -67,16 +67,35 @@ test("비밀번호를 틀려도 그 상인회 로그인 화면에 남는다", as
   assert.ok(r.to.startsWith("/t/bb/login"), `남의 회사 로그인으로 보냈다: ${r.to}`);
 });
 
-test("상인회 콘솔 머리말에 '플랫폼 운영자' 라고 쓰지 않는다", async () => {
-  // 임원이 옆에서 함께 보는 화면이다. 거기 맨 위에 운영사 이름표가 뜨면
-  // "이 홈페이지는 남의 시스템" 으로 읽힌다.
+test("상인회 콘솔 머리말에 운영사 계정의 자리는 아예 없다", async () => {
+  // 이 홈페이지를 운영하는 것은 상인회지 운영사가 아니다. 임원이 옆에서 함께 보는
+  // 화면에 운영사의 이름표도, 운영사의 계정 단추도 있을 이유가 없다.
   const env = makeEnv({}); await seed(env);
   const { jar: j } = await tryLogin(env, "/t/bb/login", "s@x.kr", "super1234");
   const html = await (await get(env, j, "/t/bb/admin")).text();
   const head = html.slice(html.indexOf('<header class="site-header"'), html.indexOf("</header>"));
   assert.ok(head.length > 0);
   assert.ok(!head.includes("플랫폼 운영자"), "머리말에 운영사 이름표가 있다");
-  assert.ok(head.includes("내 계정"), "계정으로 가는 길이 사라졌다");
+  assert.ok(!/href="\/account"/.test(head), "머리말에 운영사 계정 단추가 있다");
+  // 나가는 길은 남아 있어야 한다 — 없으면 갇힌다
+  assert.ok(head.includes("로그아웃"));
+});
+
+test("운영사 계정 설정은 운영사 콘솔 머리말에 있다", async () => {
+  // 고객사 콘솔에서 뺐으니, 운영자가 자기 계정으로 가는 길은 자기 콘솔에 있어야 한다.
+  const env = makeEnv({}); await seed(env);
+  const { jar: j } = await tryLogin(env, "/login", "s@x.kr", "super1234");
+  const html = await (await get(env, j, "/super")).text();
+  const head = html.slice(html.indexOf('<header class="site-header"'), html.indexOf("</header>"));
+  assert.ok(/href="\/account"/.test(head), "운영사 콘솔에 계정으로 가는 길이 없다");
+});
+
+test("회장님 콘솔에는 자기 계정 단추가 그대로 있다", async () => {
+  const env = makeEnv({}); await seed(env);
+  const { jar: j } = await tryLogin(env, "/t/bb/login", "a@bb.kr", "admin1234");
+  const html = await (await get(env, j, "/t/bb/admin")).text();
+  const head = html.slice(html.indexOf('<header class="site-header"'), html.indexOf("</header>"));
+  assert.ok(/href="\/account"/.test(head), "관리자가 자기 계정으로 갈 길이 사라졌다");
 });
 
 test("회장님 화면에는 자기 이름이 그대로 뜬다", async () => {
@@ -85,4 +104,42 @@ test("회장님 화면에는 자기 이름이 그대로 뜬다", async () => {
   const html = await (await get(env, j, "/t/bb/admin")).text();
   const head = html.slice(html.indexOf('<header class="site-header"'), html.indexOf("</header>"));
   assert.ok(head.includes("회장"), "관리자 본인 이름이 사라졌다");
+});
+
+// ── 관리자 계정을 하나 더 만드는 자리
+//
+// 기능은 있었는데 '부관리자 추가' 라는 우리끼리 쓰는 말로, 접힌 채, 화면 맨 아래에
+// 있었다. 그래서 "그런 계정 만드는 건 어디서 하냐" 는 질문을 받았다.
+// 찾을 수 있는 말로 적혀 있는지, 관리자가 한 명뿐일 때 펼쳐져 있는지를 못 박는다.
+test("관리자가 한 명뿐이면 '관리자 계정 만들기' 가 펼쳐져 있다", async () => {
+  const env = makeEnv({}); await seed(env);
+  const { jar: j } = await tryLogin(env, "/t/bb/login", "a@bb.kr", "admin1234");
+  const html = await (await get(env, j, "/t/bb/admin")).text();
+  assert.ok(html.includes("관리자 계정 만들기"), "찾을 수 있는 말로 적혀 있지 않다");
+  const box = html.slice(html.indexOf("관리자 계정 만들기") - 200, html.indexOf("관리자 계정 만들기"));
+  assert.ok(/<details[^>]*\sopen[^>]*>\s*<summary>$|open/.test(box), "관리자가 한 명뿐인데 접혀 있다");
+  assert.ok(html.includes("한 분뿐입니다"), "관리자가 한 명뿐이라는 사실을 알려 주지 않는다");
+});
+
+test("누가 이 상인회의 관리자인지 늘 보여 준다", async () => {
+  const env = makeEnv({}); await seed(env);
+  const { jar: j } = await tryLogin(env, "/t/bb/login", "a@bb.kr", "admin1234");
+  const html = await (await get(env, j, "/t/bb/admin")).text();
+  assert.ok(/지금 이 상인회의 관리자[\s\S]{0,120}회장/.test(html), "현재 관리자 명단이 없다");
+});
+
+test("발급하면 관리자 권한 계정이 실제로 생긴다", async () => {
+  const env = makeEnv({}); const a = await seed(env);
+  const { jar: j } = await tryLogin(env, "/t/bb/login", "a@bb.kr", "admin1234");
+  const t = (/name="_csrf" value="([^"]+)"/.exec(await (await get(env, j, "/t/bb/admin")).text()) || [])[1];
+  const r = await worker.fetch(new Request(B + "/t/bb/admin/admins/add", { method: "POST",
+    headers: { cookie: ch(j), "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ _csrf: t, name: "김총무", email: "chong@bb.kr" }).toString() }), env);
+  assert.equal(r.status, 303, await r.text());
+  const made = await D.getUserByEmail(env.DB, "chong@bb.kr");
+  assert.ok(made, "계정이 만들어지지 않았다");
+  assert.equal(made.role, "ADMIN");
+  assert.equal(made.association_id, a.id, "다른 상인회에 붙었다");
+  // 임시 비밀번호를 화면에 돌려줘야 전달할 수 있다
+  assert.ok(/임시비번/.test(decodeURIComponent(r.headers.get("location") || "")), "임시 비밀번호를 알려 주지 않는다");
 });

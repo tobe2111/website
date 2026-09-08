@@ -2455,12 +2455,21 @@ export async function admin(ctx) {
               <option value="STAFF">담당자 — 계약서 작성·발송만</option>
               <option value="ADMIN">관리자 — 설정·API·과금 포함</option></select></label></div>
           <button class="btn btn-primary btn-sm">계정 발급 + 임시 비번</button></form></div></details>`
-      : `<details class="help-box" style="margin-top:14px"><summary>부관리자 추가 (회장·총무 공동 운영)</summary>
-        <div class="help-body"><p class="help-lead">관리자 권한 계정을 하나 더 발급합니다. 승인·공지·브랜딩 등 이 콘솔의 모든 기능을 함께 쓸 수 있으니 믿을 수 있는 분에게만 발급하세요.</p>
-        ${admins.length > 1 ? `<p class="panel-hint">현재 관리자: ${admins.map((u) => esc(u.name || u.email)).join(", ")}</p>` : ""}
+      // '부관리자' 는 우리끼리 쓰는 말이다. 회장님이 찾는 것은 "관리자 계정 하나 더" 이고,
+      // 그 말로 적혀 있지 않으면 못 찾는다 — 실제로 "그런 계정 만드는 건 어디서 하냐" 는
+      // 질문을 받았다. 이름을 사람 말로 바꾸고, 관리자가 아직 한 명뿐이면 펼쳐 둔다.
+      // 누가 이 홈페이지를 관리하는지는 늘 보여 준다 — 한 명일 때가 더 알아야 할 때다.
+      : `<details class="help-box" style="margin-top:14px"${admins.length > 1 ? "" : " open"}><summary>관리자 계정 만들기 <span class="panel-sub">회장·총무가 함께 쓰려면</span>
+        <span class="fold-cue"><span class="fold-open">펼치기</span><span class="fold-close">접기</span></span></summary>
+        <div class="help-body"><p class="help-lead">이 상인회를 함께 관리할 계정을 발급합니다. 승인·공지·브랜딩 등
+          이 콘솔의 모든 기능을 함께 쓰니 <b>믿을 수 있는 분에게만</b> 주세요.
+          만들면 <b>임시 비밀번호</b>가 화면에 뜹니다 — 그대로 전달하고 바꾸시라고 안내하세요.</p>
+        <p class="panel-hint">지금 이 상인회의 관리자: <b>${admins.length ? admins.map((u) => esc(u.name || u.email)).join(", ") : "없음"}</b>
+          ${admins.length <= 1 ? " — 한 분뿐입니다. 그분이 못 들어오면 아무도 못 들어옵니다." : ""}</p>
         <form method="post" action="${base}/admin/admins/add" class="stack-form compact">
-          <div class="form-two"><label>성함<input type="text" name="name" required autocomplete="name" /></label><label>이메일<input type="email" name="email" required autocomplete="email" /></label></div>
-          <button class="btn btn-primary btn-sm">부관리자 발급 + 임시 비번</button></form></div></details>`}
+          <div class="form-two"><label>성함<input type="text" name="name" required autocomplete="name" placeholder="예: 김총무" /></label>
+            <label>이메일 <small>(이 주소가 아이디가 됩니다)</small><input type="email" name="email" required autocomplete="email" /></label></div>
+          <button class="btn btn-primary btn-sm">관리자 계정 발급 + 임시 비번</button></form></div></details>`}
       </section>
     ${isEsign ? "" : addMemberPanel}
     ${isEsign ? teamsPanel : ""}
