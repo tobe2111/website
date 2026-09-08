@@ -164,6 +164,7 @@ export const TENANT = [
   // 사장님이 카톡으로 보내 온 사진·릴스를 관리자가 대신 올린다
   ["POST", "/admin/business/:id/media", api.adminUploadMedia, "ADMIN"],
   ["POST", "/admin/business/:id/photos/import", api.adminImportPhotos, "ADMIN"],
+  ["POST", "/admin/business/:id/photos/urdeal", api.adminImportUrdealPhotos, "ADMIN"],
   ["POST", "/admin/business/:id/photo-link", api.adminCreatePhotoLink, "ADMIN"],
   ["POST", "/admin/user/:id/officer", api.adminSetOfficer, "ADMIN"],
   ["POST", "/admin/business/:id/embed", api.adminAddEmbed, "ADMIN"],
