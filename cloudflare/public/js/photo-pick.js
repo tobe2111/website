@@ -68,11 +68,15 @@
         .then(function (d) {
           if (d && d.error) { say(d.message || "찾지 못했습니다."); return; }
           var images = (d && d.images) || [];
-          if (!images.length) { say("그 이름으로는 사진을 찾지 못했습니다. 상호를 조금 더 정확히 적어 보세요."); return; }
+          if (!images.length) { say("그 이름으로는 웹에 사진이 없습니다. 위쪽 [지도의 대표 사진 담기] 나 [사장님께 부탁하기] 를 먼저 써 보세요."); return; }
           // 서버는 **같은 검색어로 다시 검색해서** 그 결과에 있는 주소만 받아 준다.
-          // 그래서 화면이 보낸 검색어와 저장할 때의 검색어가 같아야 한다.
-          if (sent) sent.value = term;
-          say("담을 사진을 고르세요 (최대 " + MAX + "장). 다른 가게 사진이 섞여 있을 수 있습니다.");
+          // 그래서 저장할 때 보낼 검색어는 내가 친 말이 아니라 **서버가 실제로 쓴 말**이어야 한다
+          // (긴 말로 빈손이면 서버가 한 마디씩 줄여 가며 다시 찾는다).
+          var used = (d && d.used) || term;
+          if (sent) sent.value = used;
+          say(d && d.widened
+            ? "\u201C" + term + "\u201D 로는 없어서 \u201C" + used + "\u201D 로 찾았습니다 — 다른 가게 사진이 섞일 가능성이 더 큽니다. 눈으로 꼭 확인하세요. (최대 " + MAX + "장)"
+            : "담을 사진을 고르세요 (최대 " + MAX + "장). 다른 가게 사진이 섞여 있을 수 있습니다.");
           render(images);
         })
         .catch(function () { say("찾지 못했습니다. 잠시 후 다시 시도해 주세요."); })

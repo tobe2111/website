@@ -701,19 +701,40 @@ export async function adminImageSearch(ctx) {
   if (!key) return json({ error: "not_configured", message: "이미지 검색 열쇠가 등록되지 않았습니다. 운영사에 문의해 주세요." }, 503);
   const q = cap((query.get("q") || "").trim(), 60);
   if (q.length < 2) return json({ images: [] });
-  const url = new URL("https://dapi.kakao.com/v2/search/image");
-  url.searchParams.set("query", q);
-  url.searchParams.set("size", "24");
-  let r;
-  try {
-    r = await fetch(url, { headers: { Authorization: `KakaoAK ${key}` } });
-  } catch {
-    return json({ error: "unreachable", message: "이미지 검색에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요." }, 502);
+
+  // 검색어를 뒤에서부터 한 마디씩 줄여 가며 물어본다.
+  //
+  // 화면은 상호에 지역을 붙여("너나들이 서울 서초구") 보낸다 — 그래야 다른 지점이
+  // 안 섞이기 때문이다. 그런데 동네 식당은 그 긴 말로는 웹에 아무것도 안 걸린다.
+  // 그러면 "사진을 찾지 못했습니다" 만 뜨고, 회장님은 이 기능이 고장 난 줄 안다.
+  // 좁은 것부터 물어보고 빈손이면 넓혀 간다 — 정확도를 먼저, 결과를 나중에.
+  const words = q.split(/\s+/).filter(Boolean);
+  const tries = [];
+  for (let n = words.length; n >= 1; n--) {
+    const t = words.slice(0, n).join(" ");
+    if (t.length >= 2 && !tries.includes(t)) tries.push(t);
   }
-  if (!r.ok) return json({ error: "upstream", message: `이미지 검색이 ${r.status} 로 답했습니다.` }, 502);
-  const data = await r.json().catch(() => null);
-  const docs = (data && Array.isArray(data.documents) ? data.documents : []);
-  return json({ max: IMPORT_MAX, images: docs.filter((d) => httpsOnly(d.image_url)).slice(0, 24).map((d) => ({
+
+  let docs = [], used = q;
+  for (const t of tries) {
+    const url = new URL("https://dapi.kakao.com/v2/search/image");
+    url.searchParams.set("query", t);
+    url.searchParams.set("size", "24");
+    let r;
+    try {
+      r = await fetch(url, { headers: { Authorization: `KakaoAK ${key}` } });
+    } catch {
+      return json({ error: "unreachable", message: "이미지 검색에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요." }, 502);
+    }
+    if (!r.ok) return json({ error: "upstream", message: `이미지 검색이 ${r.status} 로 답했습니다.` }, 502);
+    const data = await r.json().catch(() => null);
+    const found = (data && Array.isArray(data.documents) ? data.documents : []).filter((d) => httpsOnly(d.image_url));
+    if (found.length) { docs = found; used = t; break; }
+  }
+
+  // `used` 를 돌려주는 이유: 담을 때 서버가 **같은 검색어로 다시 검색해** 그 결과에
+  // 있는 주소만 통과시킨다. 줄인 말로 찾았으면 담을 때도 그 줄인 말이어야 한다.
+  return json({ max: IMPORT_MAX, used, widened: used !== q, images: docs.slice(0, 24).map((d) => ({
     url: String(d.image_url), thumb: httpsOnly(d.thumbnail_url) ? String(d.thumbnail_url) : String(d.image_url),
     site: cap(String(d.display_sitename || ""), 60),
     doc: httpsOnly(d.doc_url) ? String(d.doc_url) : "",
