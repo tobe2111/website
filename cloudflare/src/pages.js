@@ -887,7 +887,7 @@ export async function businessDetail(ctx) {
   // 네이버 플레이스 링크가 있으면 검색 대신 그 가게 페이지로 직행 (리뷰·길찾기 정확)
   const naverLink = b.sns_naver || `https://map.naver.com/p/search/${encodeURIComponent(b.address || b.name)}`;
   const wayToCome = b.lat != null && b.lng != null ? `<h2 class="biz-section-title">오시는 길</h2>
-    ${hasGeo ? `<div id="bizMap" class="biz-map" data-lat="${b.lat}" data-lng="${b.lng}" data-name="${esc(b.name)}"></div>` : ""}
+    ${hasGeo ? `<div id="bizMap" class="biz-map" data-lat="${b.lat}" data-lng="${b.lng}" data-name="${esc(b.name)}">${mapSkeleton(1)}</div>` : ""}
     <p class="biz-way">${b.address ? `${PIN_SVG} ${esc(b.address)} · ` : ""}<a href="${esc(naverLink)}" target="_blank" rel="noopener">네이버 지도에서 길찾기 →</a></p>` : "";
   // 대표 사진 — 맨 앞 사진 한 장을 이름 위에 크게. 없으면 이 자리가 아예 없다.
   // 회색 상자를 남기면 '아직 아무것도 없는 가게' 라고 먼저 말하는 셈이다.
@@ -967,7 +967,7 @@ export async function businessDetail(ctx) {
     description: clip(b.description) || `${assoc.name} · ${b.category} · ${b.name}`,
     ogImage: cover ? (cover.thumb || cover.filename) : "",
     jsonLd: ld,
-    scripts: `${media.length ? `<script src="${assetUrl("/js/viewer.js")}" defer></script>` : ""}<script src="${assetUrl("/js/share.js")}" defer></script>${hasGeo ? `<script src="https://oapi.map.naver.com/openapi/v3/maps.js?${esc(env.NAVER_MAP_PARAM || "ncpClientId")}=${esc(naverKey)}"></script><script src="${assetUrl("/js/map.js")}" defer></script>` : ""}` }));
+    scripts: `${media.length ? `<script src="${assetUrl("/js/viewer.js")}" defer></script>` : ""}<script src="${assetUrl("/js/share.js")}" defer></script>${hasGeo ? `<script defer src="https://oapi.map.naver.com/openapi/v3/maps.js?${esc(env.NAVER_MAP_PARAM || "ncpClientId")}=${esc(naverKey)}"></script><script src="${assetUrl("/js/map.js")}" defer></script>` : ""}` }));
 }
 
 export function loginForm(ctx) {
@@ -1046,8 +1046,14 @@ export async function mapPage(ctx) {
   // 키가 없을 때의 자리는 아래 mapCanvas 가 맡는다 — 여기서는 실제 지도만 만든다.
   // (예전에는 이 삼항의 else 쪽에도 안내 상자가 있었는데, mapArea 가 갈라지면서
   //  영영 그려지지 않는 죽은 가지가 됐다. 죽은 가지를 남겨 두면 다음 사람이 그걸 고친다.)
-  const mapEl = `<div id="storeMap" class="store-map" data-center-lat="${assoc.map_lat}" data-center-lng="${assoc.map_lng}" data-zoom="${assoc.map_zoom}" data-base="${esc(base)}"></div>`;
-  const loader = naver ? `<script src="https://oapi.map.naver.com/openapi/v3/maps.js?${esc(env.NAVER_MAP_PARAM || "ncpClientId")}=${esc(naver)}"></script><script src="${assetUrl("/js/map.js")}" defer></script>` : "";
+  //
+  // 자리를 **빈 채로 두지 않는다.** 네이버 지도 스크립트가 안 실리면 높이 60vh 짜리
+  // 흰 네모가 휴대폰 화면을 거의 다 덮는다 — 손님에게는 '고장' 으로 읽힌다.
+  // 지도가 그려지면 map.js 가 이 안을 비운다.
+  const mapEl = `<div id="storeMap" class="store-map" data-center-lat="${assoc.map_lat}" data-center-lng="${assoc.map_lng}" data-zoom="${assoc.map_zoom}" data-base="${esc(base)}">${mapSkeleton(markers.length)}</div>`;
+  // defer 를 빼면 남의 서버 스크립트 하나가 우리 화면의 자바스크립트를 **전부** 붙잡는다
+  // (6초 늦은 스크립트로 실측: 6,055ms → 0ms).
+  const loader = naver ? `<script defer src="https://oapi.map.naver.com/openapi/v3/maps.js?${esc(env.NAVER_MAP_PARAM || "ncpClientId")}=${esc(naver)}"></script><script src="${assetUrl("/js/map.js")}" defer></script>` : "";
   const markerData = markers.map((m) => ({ name: m.name, slug: m.slug, category: m.category, lat: m.lat, lng: m.lng, address: m.address || "", phone: m.phone || "" }));
   // 지도 키가 없으면 예전에는 안내 줄 하나와 카드 목록뿐이라, 지도 화면인데 지도가 없었다.
   // 골목과 위치를 그린 자리를 두어 '여기가 지도' 임을 보이게 한다 — 키를 넣으면 그 자리에 실제 지도가 들어온다.
@@ -1943,7 +1949,7 @@ export async function dashboard(ctx) {
       <div class="sgroup" id="s-tell" data-tab="tell">${updatePanel}${qrPanel}${urdealPanel}</div>
     </div></div>
     </div></section>`;
-  const picker = naver ? `<script src="https://oapi.map.naver.com/openapi/v3/maps.js?${esc(env.NAVER_MAP_PARAM || "ncpClientId")}=${esc(naver)}&submodules=geocoder"></script><script src="${assetUrl("/js/map.js")}" defer></script>` : "";
+  const picker = naver ? `<script defer src="https://oapi.map.naver.com/openapi/v3/maps.js?${esc(env.NAVER_MAP_PARAM || "ncpClientId")}=${esc(naver)}&submodules=geocoder"></script><script src="${assetUrl("/js/map.js")}" defer></script>` : "";
   return html(layout({ title: "내 업체 관리", assoc, base, user, body, csrf, scripts: `<script src="${assetUrl("/js/viewer.js")}" defer></script><script src="${assetUrl("/js/upload-resize.js")}" defer></script><script src="${assetUrl("/js/qr.js")}" defer></script><script src="${assetUrl("/js/qr-widget.js")}" defer></script><script src="${assetUrl("/js/super-tabs.js")}" defer></script><script src="${assetUrl("/js/file-preview.js")}" defer></script>${picker}` }));
 }
 
@@ -1982,8 +1988,11 @@ const emptyCard = (ico, title, note, action = "") =>
 
 // 지도 자리 — 지도 키가 없어도 '지도 화면' 으로 읽히도록 골목과 위치를 그린다.
 // 예전에는 안내 줄 하나와 카드 목록뿐이라, 지도 페이지인데 지도가 어디에도 없었다.
-const mapCanvas = (n) => `<div class="mapbox">
-  <svg viewBox="0 0 800 400" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+// 지도 자리에 깔아 두는 그림. 두 곳에서 쓴다 —
+//   ① 지도 키가 아예 없을 때 (mapCanvas)
+//   ② 키는 있지만 아직 지도가 안 그려졌을 때 (mapSkeleton) — 네이버 스크립트가 느리거나 막혀도
+//      **빈 흰 상자**가 남지 않게. 실제로 라이브에서 이 상자가 화면을 가득 채운 채 흰색으로 떴다.
+const mapArt = (n) => `<svg viewBox="0 0 800 400" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
     <rect width="800" height="400" fill="var(--bg-alt)"/>
     <path d="M0 250 H800" stroke="var(--line)" stroke-width="26" fill="none"/>
     <path d="M300 0 V400" stroke="var(--line)" stroke-width="18" fill="none"/>
@@ -1991,10 +2000,16 @@ const mapCanvas = (n) => `<div class="mapbox">
     <path d="M0 110 H800" stroke="var(--line-soft)" stroke-width="10" fill="none"/>
     ${[[180,180],[360,160],[250,300],[470,290],[620,200],[700,320]].slice(0, Math.max(1, Math.min(6, n)))
       .map(([x,y])=>`<g><circle cx="${x}" cy="${y}" r="13" fill="var(--brand)"/><circle cx="${x}" cy="${y}" r="4.5" fill="#fff"/></g>`).join("")}
-  </svg>
+  </svg>`;
+const mapCanvas = (n) => `<div class="mapbox">${mapArt(n)}
   <div class="mapbox-note"><b>지도 키를 넣으면 여기에 실제 지도가 뜹니다</b>
     <span>지금은 위치만 표시한 그림입니다 · 아래 목록에서 각 가게의 지도를 열 수 있습니다</span></div>
 </div>`;
+// 지도가 들어올 자리를 미리 채워 둔다. 네이버 지도가 그려지면 map.js 가 이 안을 비운다.
+// 안 그려지면 이 그림이 그대로 남는다 — 손님이 흰 상자를 보고 "고장 났나" 하지 않게.
+const mapSkeleton = (n) => `${mapArt(n)}<p class="map-skel-note">
+  <b class="ms-load">지도를 불러오는 중입니다…</b><b class="ms-fail">지도를 불러오지 못했습니다</b>
+  <span>아래 목록에서 각 가게의 네이버 지도를 열 수 있습니다.</span></p>`;
 
 // ── 콘솔 왼쪽 차림표 ──────────────────────────────────────────────────────────
 // 관리 화면(/admin)과 그 곁가지(투표·계약서·서식·API·상담 DB)가 같은 차림표를 쓴다.
