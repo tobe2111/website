@@ -19,6 +19,7 @@ import { planOf, PLANS, PLAN_KEYS, planPriceKey } from "./plans.js";
 import { seedDemo } from "./demoContent.js";
 import { seedStarter } from "./starterContent.js";
 import { KINDS, kindById, PRESETS, assocTerms } from "./kinds.js";
+import { sellerPhotos, urdealProductUrl } from "./urdeal.js";
 import { TEMPLATE_KEYS, TEMPLATES, sendTest, listProviderTemplates, matchTemplates, sendMany, sendOne, notifyEnabled, autoNotifyOn, canAutoSend, wonToJeon, renderTemplate, templateButton, billingMode, chargeContract, BILLING_MODES, priceOf } from "./notify.js";
 
 // 계약 한 건을 연다 — 조직 경계와 **부서 경계**를 함께 본다.
@@ -772,6 +773,64 @@ export async function adminImportPhotos(ctx) {
   const tail = skipped ? ` (${skipped}장은 가져오지 못했습니다)` : "";
   return saved
     ? at(`사진 ${saved}장을 담았습니다.${tail} 사장님 사진이 들어오면 바꿔 주세요.`)
+    : at(`사진을 가져오지 못했습니다.${tail}`, true);
+}
+
+// 그 가게가 유어딜에 올린 사진을 가져온다.
+//
+// 카카오맵·네이버지도에서는 못 하는 일이다 — 카카오는 "place_url 로 연결해서만 쓸 수
+// 있다"고 못 박았고, 지도의 사진은 손님이 찍어 올린 것이라 소유권도 남에게 있다.
+// 유어딜은 우리가 만든 서비스이고 거기 사진은 그 가게가 직접 올린 것이라 사정이 다르다.
+//
+// 검색이 아니라 '그 가게 번호로 가져오기' 라, 웹 이미지 검색과 달리 엉뚱한 가게가
+// 섞일 여지가 없다. 그래도 두 겹은 그대로 둔다:
+//   ① 화면이 보낸 주소를 믿지 않고, 서버가 그 가게 번호로 다시 물어 그 목록에 있는 것만
+//   ② https·공개 도메인만 (웹훅 주소와 같은 잣대)
+export async function adminImportUrdealPhotos(ctx) {
+  const { db, env, form, base, assoc } = ctx;
+  const b = await D.getBusinessById(db, Number(ctx.params.id) || 0);
+  if (!b || b.association_id !== assoc.id) return back(`${base}/admin`, "업체를 찾을 수 없습니다.", true);
+  const at = (m, bad) => back(`${base}/admin/business/${b.id}`, m, bad);
+  const seller = Number(b.urdeal_seller_id) || 0;
+  if (!seller) return at("이 가게에는 유어딜 가게 번호가 없습니다.", true);
+  if (!storage.enabled(env)) return at("사진 저장소(R2)가 아직 연결되지 않았습니다.", true);
+
+  const picked = form.getAll("url").map(String).filter(Boolean).slice(0, IMPORT_MAX);
+  if (!picked.length) return at("가져올 사진을 골라 주세요.", true);
+
+  const plan = planOf(assoc);
+  const have = await D.countBusinessImages(db, b.id);
+  if (have >= plan.maxPhotos) return at(`사진은 최대 ${plan.maxPhotos}장까지 올릴 수 있습니다.`, true);
+  const room = Math.min(IMPORT_MAX, plan.maxPhotos - have);
+
+  const allow = new Map();
+  for (const it of await sellerPhotos(env, seller, 48)) allow.set(it.url, it);
+  if (!allow.size) return at("유어딜에서 이 가게 사진을 가져오지 못했습니다. 잠시 후 다시 시도해 주세요.", true);
+
+  let saved = 0, skipped = 0;
+  for (const raw of picked) {
+    if (saved >= room) break;
+    const meta = allow.get(raw);
+    if (!meta) { skipped++; continue; }                       // 목록에 없던 주소 = 손으로 넣은 것
+    const chk = checkWebhookUrl(raw, env.PUBLIC_ORIGIN || "");
+    if (!chk.ok) { skipped++; continue; }
+    let res;
+    try { res = await fetch(raw, { redirect: "follow" }); } catch { skipped++; continue; }
+    if (!res.ok) { skipped++; continue; }
+    const len = Number(res.headers.get("content-length") || 0);
+    if (len && len > MAX_IMAGE_BYTES) { skipped++; continue; }
+    const buf = new Uint8Array(await res.arrayBuffer());
+    if (buf.byteLength > MAX_IMAGE_BYTES) { skipped++; continue; }
+    const real = sniffImage(buf);
+    if (!real) { skipped++; continue; }
+    const stored = await storage.save(env, buf, real);
+    await D.addMedia(db, { businessId: b.id, kind: "image", filename: stored, size: buf.byteLength,
+      caption: cap(meta.name || "", 200), sourceName: "유어딜",
+      sourceUrl: meta.productId ? urdealProductUrl(env, meta.productId) : "" });
+    saved++;
+  }
+  const tail = skipped ? ` (${skipped}장은 가져오지 못했습니다)` : "";
+  return saved ? at(`유어딜에서 사진 ${saved}장을 담았습니다.${tail}`)
     : at(`사진을 가져오지 못했습니다.${tail}`, true);
 }
 

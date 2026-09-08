@@ -4,7 +4,7 @@ import { esc, cap, clip, openBadge, openNow, hoursLine, dongOf, fmtBytes, kstSta
 import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG, ORIGIN, assetUrl, brandLogo } from "./render.js";
 import { verifyInviteToken, verifyPhotoToken, SALES_STAGES, otpRequired, selfSignupOn, MAX_SLOTS, BULK_MAX, BULK_CHUNK, docOf, isPlaceholderEmail } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
 import { html, notFoundResponse, back, redirect } from "./http.js";
-import { deals as urdealDeals, urdealProductUrl } from "./urdeal.js";
+import { deals as urdealDeals, urdealProductUrl, urdealSellerUrl, sellerPhotos } from "./urdeal.js";
 import { countable, countHomeGoal, homeVariantCookie } from "./traffic.js";
 import { galleryItem } from "./media-render.js";
 import { priceOf, costOf, jeonToWon, notifyEnabled, autoNotifyOn, canAutoSend, ALIGO_VARS, hasCfg, TEMPLATE_KEYS, TEMPLATES, billingMode, BILLING_MODES } from "./notify.js";
@@ -3174,40 +3174,94 @@ export async function adminBusinessEdit(ctx) {
       data-share-title="${esc(b.name)} 가게 사진 보내기">카톡으로 보내기 / 복사</button></span>
     <p class="panel-hint">사장님이 이 링크를 열면 <b>로그인 없이</b> 폰에서 바로 사진을 올립니다.
       올라오면 알림으로 알려 드립니다.</p></div>` : "";
+  // 지도에서 이 가게 보기.
+  //
+  // 카카오맵·네이버지도에 올라온 사진을 프로그램으로 가져올 수는 없다 — 카카오는
+  // "해당 정보는 외부에서 임의로 활용할 수 없고 place_url 로 연결해서만 쓸 수 있다"고
+  // 못 박았고, 네이버 지역 검색도 사진을 주지 않는다. 게다가 그 사진들은 손님이 찍어
+  // 올린 후기 사진이라 소유권이 그 사람들에게 있다.
+  // 그래서 '가져오기' 대신 '열어 보기' 를 준다 — 회장님이 그 화면을 보고 사장님께
+  // "이 사진 주세요" 라고 짚어 줄 수 있으면 목적은 달성된다.
+  const mapQ = encodeURIComponent([b.name, b.address ? b.address.split(" ").slice(0, 2).join(" ") : ""].filter(Boolean).join(" "));
+  const mapLinks = `<p class="ask-maps"><span class="ask-maps-k">지도에 올라온 사진 보기</span>
+    <a href="${b.sns_naver && /^https:\/\//.test(b.sns_naver) ? esc(b.sns_naver) : `https://map.naver.com/p/search/${mapQ}`}"
+      target="_blank" rel="noopener">네이버 지도 <span aria-hidden="true">↗</span></a>
+    <a href="https://map.kakao.com/?q=${mapQ}" target="_blank" rel="noopener">카카오맵 <span aria-hidden="true">↗</span></a></p>`;
+
+  // 유어딜에 올린 사진 — 이 가게가 유어딜 판매자면 거기 사진은 그 가게가 직접 올린 것이다.
+  // 지도 사진과 달리 가져와도 되는 유일한 바깥 사진이라 맨 앞에 둔다.
+  // 평소 페이지를 열 때마다 유어딜을 부르면 이 화면이 남의 서버 속도에 묶인다 —
+  // 관리자가 '가져오기' 를 눌렀을 때(?urdeal=1)만 부른다.
+  const urdealNo = Number(b.urdeal_seller_id) || 0;
+  const wantUrdeal = urdealNo > 0 && query.get("urdeal") === "1";
+  const urdealPics = wantUrdeal ? await sellerPhotos(env, urdealNo, 24) : [];
+  const urdealStep = !urdealNo ? "" : `<details class="fold-step"${wantUrdeal ? " open" : ""}><summary>유어딜에 올린 사진 담기
+      <span class="panel-sub">이 가게가 직접 올린 사진입니다 — 가장 확실합니다</span>
+      <span class="fold-cue"><span class="fold-open">펼치기</span><span class="fold-close">접기</span></span></summary>
+    ${!wantUrdeal
+      ? `<p class="panel-hint">유어딜 가게 번호 <b>${urdealNo}</b> 로 등록돼 있습니다. 거기 올린 상품 사진을 그대로 담을 수 있습니다.</p>
+         <a class="btn btn-primary btn-block" href="${base}/admin/business/${b.id}?urdeal=1#p-photos">유어딜에서 사진 불러오기</a>`
+      : urdealPics.length
+      ? `<form method="post" action="${base}/admin/business/${b.id}/photos/urdeal" class="photo-pick">
+          <p class="panel-hint">담을 사진을 고르세요 (최대 5장). 상품 이름이 설명으로 함께 저장됩니다.</p>
+          <ul class="pick-grid">${urdealPics.map((im, i) => `<li><label class="pick-item">
+            <input type="checkbox" name="url" value="${esc(im.url)}" />
+            <img src="${esc(im.url)}" alt="${esc(im.name || `유어딜에 올린 사진 ${i + 1}`)}" loading="lazy" />
+            <small>${esc(im.name || "유어딜")}</small></label></li>`).join("")}</ul>
+          <button class="btn btn-primary btn-block">고른 사진 담기</button></form>`
+      : `<p class="panel-hint">유어딜에서 이 가게 사진을 찾지 못했습니다. 유어딜에 올린 상품이 없거나, 가게 번호가 다를 수 있습니다.
+         <a href="${esc(urdealSellerUrl(env, urdealNo))}" target="_blank" rel="noopener">유어딜에서 이 가게 열기 ↗</a></p>`}
+    </details>`;
+
   const mediaPanel = `<section class="panel" id="p-photos"><h2 class="panel-title">사진·영상
       <span class="badge badge-muted">사진 ${shots.length}/${plan.maxPhotos} · 영상 ${clips.length}/${plan.maxEmbeds}</span></h2>
-    <p class="panel-hint">사장님께 카톡으로 받은 사진을 여기서 대신 올립니다. 맨 앞 사진이 목록·카톡 공유의 대표 사진이 됩니다.
-      맨 앞 사진이 목록·카톡 공유의 대표 사진이 됩니다.</p>
-    ${photoLinkBox}
-    <form method="post" action="${base}/admin/business/${b.id}/photo-link" class="inline-form">
-      <button class="btn btn-outline btn-block">📷 사장님께 사진 요청 링크 보내기</button></form>
-    <p class="panel-hint">사장님이 링크를 열어 <b>로그인 없이</b> 폰에서 직접 올립니다.
-      본인이 찍은 사진이라 저작권 문제가 없고, 네이버에 올려 둔 사진을 그대로 주시는 경우가 많습니다.</p>
-    <div class="form-divider">직접 올리기</div>
-    <form method="post" action="${base}/admin/business/${b.id}/media" enctype="multipart/form-data" class="upload-form">
-      <label class="file-drop"><input type="file" name="files" accept="image/*" multiple /><span class="file-drop-text">사진 선택 (한 장당 최대 8MB · 여러 장 가능)</span></label>
-      <input type="text" name="caption" placeholder="설명 (선택)" class="caption-input" maxlength="200" />
-      <button class="btn btn-primary btn-block">사진 올리기</button></form>
-    ${imageSearchOn ? `<div class="form-divider">웹에서 찾아 담기 <small>(최대 ${5}장)</small></div>
-    <p class="panel-hint"><b>여기 뜨는 것은 그 가게의 공식 사진이 아니라, 웹에서 그 이름으로 검색된 사진입니다.</b>
-      다른 지점이나 상관없는 사진이 섞여 나오니 <b>눈으로 확인하고</b> 골라 주세요.
-      남이 찍은 사진이므로 <b>출처를 함께 저장</b>하고, 사장님 사진이 들어오면 바꿔 주시는 것이 좋습니다.</p>
-    <form method="post" action="${base}/admin/business/${b.id}/photos/import" class="photo-pick" data-photo-pick>
-      <input type="hidden" name="q" data-pick-q-sent value="${esc(b.name)}" />
-      <div class="place-find">
-        <input type="text" data-pick-q value="${esc([b.name, b.address ? b.address.split(" ").slice(0, 2).join(" ") : ""].filter(Boolean).join(" "))}"
-          placeholder="가게 이름 (예: 방배 버들카페)" aria-label="사진을 찾을 가게 이름" autocomplete="off" />
-        <button type="button" class="btn btn-ghost btn-sm" data-pick-go>사진 찾기</button>
-      </div>
-      <p class="panel-hint" data-pick-msg hidden></p>
-      <ul class="pick-grid" data-pick-list hidden></ul>
-      <button class="btn btn-primary btn-block" data-pick-save hidden>고른 사진 담기</button>
-    </form>` : ""}
+    <p class="panel-hint">맨 앞 사진이 목록·카톡 공유의 대표 사진이 됩니다.</p>
+
+    <div class="ask-owner">
+      <p class="ask-title">사장님께 부탁하기 <span class="badge badge-ok">가장 좋은 방법</span></p>
+      <p class="panel-hint">링크 하나 보내면 사장님이 <b>로그인 없이</b> 폰에서 직접 올립니다.
+        본인이 찍은 사진이라 저작권 문제가 없고, 네이버에 올려 둔 사진을 그대로 주시는 경우가 많습니다.</p>
+      ${photoLinkBox}
+      <form method="post" action="${base}/admin/business/${b.id}/photo-link" class="inline-form">
+        <button class="btn btn-primary btn-block">📷 사진 요청 링크 만들기</button></form>
+      ${mapLinks}
+    </div>
+
+    ${urdealStep}
+
+    <details class="fold-step"><summary>내가 가진 사진 올리기
+      <span class="fold-cue"><span class="fold-open">펼치기</span><span class="fold-close">접기</span></span></summary>
+      <p class="panel-hint">사장님께 카톡으로 받은 사진을 여기서 대신 올립니다. 한 장당 최대 8MB.</p>
+      <form method="post" action="${base}/admin/business/${b.id}/media" enctype="multipart/form-data" class="upload-form">
+        <label class="file-drop"><input type="file" name="files" accept="image/*" multiple /><span class="file-drop-text">사진 선택 (여러 장 가능)</span></label>
+        <input type="text" name="caption" placeholder="설명 (선택)" class="caption-input" maxlength="200" />
+        <button class="btn btn-primary btn-block">사진 올리기</button></form></details>
+
+    ${imageSearchOn ? `<details class="fold-step"><summary>웹에서 찾아 담기
+      <span class="panel-sub">그 가게 사진이 아닐 수 있습니다 — 마지막 수단</span>
+      <span class="fold-cue"><span class="fold-open">펼치기</span><span class="fold-close">접기</span></span></summary>
+      <p class="panel-hint"><b>여기 뜨는 것은 그 가게의 공식 사진이 아니라, 웹에서 그 이름으로 검색된 사진입니다.</b>
+        다른 지점이나 상관없는 사진이 섞여 나오니 <b>눈으로 확인하고</b> 골라 주세요.
+        남이 찍은 사진이므로 <b>출처를 함께 저장</b>하고, 사장님 사진이 들어오면 바꿔 주시는 것이 좋습니다.
+        (최대 ${5}장)</p>
+      <form method="post" action="${base}/admin/business/${b.id}/photos/import" class="photo-pick" data-photo-pick>
+        <input type="hidden" name="q" data-pick-q-sent value="${esc(b.name)}" />
+        <div class="place-find">
+          <input type="text" data-pick-q value="${esc([b.name, b.address ? b.address.split(" ").slice(0, 2).join(" ") : ""].filter(Boolean).join(" "))}"
+            placeholder="가게 이름 (예: 방배 버들카페)" aria-label="사진을 찾을 가게 이름" autocomplete="off" />
+          <button type="button" class="btn btn-ghost btn-sm" data-pick-go>사진 찾기</button>
+        </div>
+        <p class="panel-hint" data-pick-msg hidden></p>
+        <ul class="pick-grid" data-pick-list hidden></ul>
+        <button class="btn btn-primary btn-block" data-pick-save hidden>고른 사진 담기</button>
+      </form></details>` : ""}
+
     ${shots.length ? `<div class="admin-shots">${shots.map((m) => `<figure class="admin-shot">
       <img src="${esc(mediaUrl(m.thumb || m.filename))}" alt="${esc(m.caption || "가게 사진")}" loading="lazy" />
       <figcaption>${esc(m.caption || "")}${m.source_name ? `<small class="shot-src">출처 ${m.source_url
         ? `<a href="${esc(m.source_url)}" target="_blank" rel="noopener nofollow">${esc(m.source_name)}</a>`
-        : esc(m.source_name)}</small>` : ""}${delForm(m)}</figcaption></figure>`).join("")}</div>` : `<p class="panel-hint">아직 올린 사진이 없습니다 — 사진이 없으면 목록에서 회색 상자로 보입니다.</p>`}
+        : esc(m.source_name)}</small>` : ""}${delForm(m)}</figcaption></figure>`).join("")}</div>`
+      : `<p class="panel-hint">아직 올린 사진이 없습니다 — 사진이 없으면 목록에서 회색 상자로 보입니다.</p>`}
     <div class="form-divider">영상·릴스·쇼츠</div>
     <p class="panel-hint">유튜브·유튜브 쇼츠·인스타그램 릴스·네이버TV 주소를 붙여넣으세요. 세로 영상은 세로로 열립니다.
       <small>단축 주소(naver.me/…)는 안 됩니다 — 영상을 열어 주소창의 원래 주소를 복사해 주세요.</small></p>

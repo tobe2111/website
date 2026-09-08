@@ -125,3 +125,46 @@ export async function deals(env, sellerIds, { ttl = CACHE_TTL } = {}) {
   }
   return out;
 }
+
+// ── 그 가게가 유어딜에 올린 사진 ──────────────────────────────────────────
+//
+// 카카오맵·네이버지도의 사진은 가져올 수 없다(카카오가 "place_url 로 연결해서만
+// 쓸 수 있다"고 못 박았고, 그 사진들은 손님이 찍어 올린 것이라 소유권도 남에게 있다).
+// 그런데 유어딜은 우리가 만든 서비스이고, 거기 올라간 사진은 그 가게가 직접 올린 것이다.
+// 그래서 여기서는 가져와도 된다 — 상인회 홈에 쓸 사진을 얻는 가장 빠른 길이다.
+//
+// 이용권(deal)만이 아니라 그 가게의 상품 전부를 본다. 사진을 모으는 것이 목적이라
+// 할인 중인지는 상관없다.
+export async function sellerPhotos(env, sellerId, limit = 24) {
+  const id = sellerNo(sellerId);
+  if (!id) return [];
+  const n = Math.max(1, Math.min(48, Number(limit) || 24));
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), TIMEOUT_MS);
+  try {
+    const url = `${urdealBase(env)}/api/products?seller_id=${id}&limit=${n}`;
+    const r = await fetch(url, { signal: ac.signal, headers: { accept: "application/json" } });
+    if (!r.ok) return [];
+    const j = await r.json();
+    const rows = Array.isArray(j && j.data) ? j.data : [];
+    const seen = new Set();
+    const out = [];
+    for (const raw of rows) {
+      // 거르개가 무시된 응답에서 남의 가게 사진을 담지 않는다 (이 파일 맨 위 경고 참고)
+      if (!belongsToSeller(raw, id)) continue;
+      const img = String((raw && raw.image_url) || "");
+      if (!/^https:\/\//.test(img) || seen.has(img)) continue;
+      seen.add(img);
+      out.push({
+        url: img,
+        name: String((raw && raw.name) || "").trim().slice(0, 120),
+        productId: Number(raw && raw.id) || 0,
+      });
+    }
+    return out;
+  } catch {
+    return [];
+  } finally {
+    clearTimeout(timer);
+  }
+}
