@@ -769,6 +769,15 @@ export async function businessDetail(ctx) {
   const coverShot = images[0]
     ? `<span class="biz-cover"><img src="${esc(mediaUrl(images[0].filename))}" alt="${esc(b.name)} 대표 사진" /></span>`
     : "";
+  // 손님 화면을 보다가 빈 데를 발견했을 때, 관리 화면을 다시 찾아 들어가야 하면 아무도 안 고친다.
+  // 그래서 **로그인한 관리자·그 가게 사장님에게만** 고치러 가는 줄을 여기 붙인다.
+  // 손님에게는 이 줄이 아예 그려지지 않는다 — 권한은 화면이 아니라 여기서 정한다.
+  const isOwnerOfBiz = !!(user && b.owner_id && user.id === b.owner_id);
+  const canEditBiz = !!(user && (user.role === "ADMIN" || user.role === "SUPERADMIN" || isOwnerOfBiz));
+  const missingHere = canEditBiz ? [
+    !images.length && "사진", !b.description && "소개", !b.address && "주소",
+    !b.phone && "전화", !b.hours && "영업시간",
+  ].filter(Boolean) : [];
   const body = `
   <section class="biz-hero"><div class="container biz-hero-inner">${pending}
     <div class="biz-hero-lead">
@@ -779,6 +788,11 @@ export async function businessDetail(ctx) {
         <button type="button" class="btn btn-share" data-share data-share-title="${esc(b.name)} — ${esc(assoc.name)}">${SHARE_SVG} 가게 공유하기</button>
         ${snsButtons(b)}
       </div>
+      ${canEditBiz ? `<p class="owner-edit"><a class="btn btn-outline btn-sm" href="${base}/admin/business/${b.id}">${
+        isOwnerOfBiz ? "내 가게 정보 고치기" : "이 가게 정보 고치기"} →</a>
+        <span class="owner-edit-why">${missingHere.length
+          ? `${esc(missingHere.slice(0, 3).join(" · "))}${missingHere.length > 3 ? ` 외 ${missingHere.length - 3}개` : ""} 가 비어 있습니다`
+          : "손님에게 보이는 화면입니다"}</span></p>` : ""}
     </div>
     <aside class="biz-panel">
       <ul class="biz-contact">
@@ -1878,6 +1892,9 @@ export async function admin(ctx) {
           <label>이메일 <em class="tag opt">선택</em> <small>있으면 사장님이 이메일로도 로그인할 수 있습니다</small><input type="email" name="email" maxlength="120" autocomplete="email" /></label>
         </div></details>
       <input type="hidden" name="lat" data-place="lat" /><input type="hidden" name="lng" data-place="lng" />
+      <!-- 지도에서 고른 '그 장소' 의 주소. 이 칸이 없어서 지도로 찾아 등록해도 연결이 안 남았고,
+           그래서 [지도의 대표 사진 담기] 단추가 영영 안 떴다. 화면이 값을 버리고 있었던 것이다. -->
+      <input type="hidden" name="map_url" data-place="map_url" />
       <button class="btn btn-primary">회원 추가</button></form>
     <p class="panel-hint">등록한 뒤 <b>[정보 채우기]</b> 에서 주소·전화·사진을 채우면 손님 화면에 제대로 뜹니다.
       사장님이 직접 하시게 하려면 아래 <b>초대 링크</b>를 카톡으로 보내세요.</p></section>`;
@@ -3240,11 +3257,23 @@ export async function adminBusinessEdit(ctx) {
   // 지도의 대표 사진 한 장은 가져올 수 있다 — 그 장소 페이지가 og:image 로 스스로 밝힌 값이다.
   // 갤러리 전체는 못 가져온다(카카오가 "place_url 로 연결해서만" 쓰라고 못 박았다).
   const canPlacePhoto = !!placeSourceOf(b);
-  const placeStep = !canPlacePhoto ? "" : `<form method="post" action="${base}/admin/business/${b.id}/photos/place" class="ask-place">
-      <button class="btn btn-outline btn-block">🗺️ 지도의 대표 사진 담기 <small>한 장</small></button>
-      <p class="panel-hint">그 가게 지도 페이지에 걸린 대표 사진입니다. 손님이 올린 후기 사진이라
-        <b>출처를 함께 저장</b>하고, 사장님 사진이 들어오면 바꿔 주세요.</p></form>`;
-  const mapLinks = `<p class="ask-maps"><span class="ask-maps-k">지도에 올라온 사진 보기</span>
+  // 지도와 연결돼 있으면 **행동**을 준다. 연결이 안 돼 있으면 연결하는 길을 준다.
+  //
+  // 예전에는 어느 쪽이든 "네이버 지도 ↗ · 카카오맵 ↗" 링크 두 개가 전부였다. 그건
+  // 새 탭을 여는 것이지 이 화면에서 할 수 있는 일이 아니다 — "그냥 페이지 이동 수준"
+  // 이라는 말을 들었고, 맞는 말이다. 링크는 눈으로 확인할 때만 쓰는 곁가지로 내린다.
+  const placeStep = canPlacePhoto
+    ? `<form method="post" action="${base}/admin/business/${b.id}/photos/place" class="ask-place">
+        <button class="btn btn-outline btn-block">🗺️ 지도에서 사진 가져오기 <small>대표 사진 한 장</small></button>
+        <p class="panel-hint">이 가게의 지도 페이지에 걸린 대표 사진을 그대로 담습니다.
+          손님이 올린 후기 사진이라 <b>출처를 함께 저장</b>하고, 사장님 사진이 들어오면 바꿔 주세요.</p></form>`
+    : `<div class="ask-place is-off">
+        <p class="panel-hint"><b>이 가게는 아직 지도와 연결돼 있지 않습니다.</b>
+          연결하면 여기서 <b>지도의 대표 사진을 바로 가져올 수</b> 있습니다.</p>
+        <a class="btn btn-outline btn-block" href="#p-info">🗺️ 먼저 지도에서 이 가게 찾기</a>
+        <p class="panel-hint">위 <b>가게 정보</b> 칸의 <b>[지도에서 찾아 자동 입력]</b> 에서 상호를 치고 고르시면 됩니다.
+          네이버 플레이스 주소를 아신다면 그 칸에 붙여넣으셔도 똑같이 열립니다.</p></div>`;
+  const mapLinks = `<p class="ask-maps"><span class="ask-maps-k">지도에서 눈으로 확인하기</span>
     <a href="${b.sns_naver && /^https:\/\//.test(b.sns_naver) ? esc(b.sns_naver) : `https://map.naver.com/p/search/${mapQ}`}"
       target="_blank" rel="noopener">네이버 지도 <span aria-hidden="true">↗</span></a>
     <a href="https://map.kakao.com/?q=${mapQ}" target="_blank" rel="noopener">카카오맵 <span aria-hidden="true">↗</span></a></p>`;
@@ -3389,7 +3418,7 @@ export async function adminBusinessEdit(ctx) {
     body: `
     ${ownerLoginPanel}
     <section class="panel">
-      <h2 class="panel-title">가게 정보</h2>
+      <h2 class="panel-title" id="p-info">가게 정보</h2>
       <p class="panel-hint">사장님 대신 채워 두는 자리입니다. 사장님이 로그인하면 자기 화면에서 이어서 고칠 수 있습니다.</p>
       <form method="post" action="${base}/admin/business/${b.id}" class="stack-form">
       <div class="split-even">

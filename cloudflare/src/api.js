@@ -1579,10 +1579,16 @@ export async function adminAddMember(ctx) {
     const address = cap((form.get("address") || "").trim(), 200);
     const bizPhone = cap((form.get("biz_phone") || "").trim(), 40);
     const lat = coord(form.get("lat"), -90, 90), lng = coord(form.get("lng"), -180, 180);
-    if (address || bizPhone || lat != null) {
+    // 지도 주소도 '함께 온 값' 에 넣는다. 빼 두면 주소·전화·좌표가 하나도 없는 결과를
+    // 골랐을 때 이 블록을 통째로 건너뛰어 연결이 조용히 사라진다.
+    const pickedPlace = isPlaceUrl(form.get("map_url"));
+    if (address || bizPhone || lat != null || pickedPlace) {
       await D.updateBusiness(db, biz.id, {
         name: biz.name, category: biz.category, description: "", phone: bizPhone, address, hours: "", lat, lng,
-        snsInstagram: "", snsYoutube: "", snsBlog: "", snsKakao: "", snsNaver: "", mapUrl: biz.map_url || "",
+        snsInstagram: "", snsYoutube: "", snsBlog: "", snsKakao: "", snsNaver: "",
+        // 지도에서 골라 등록했으면 그 장소 주소를 지금 남긴다. 여기서 안 남기면
+        // 나중에 '지도의 대표 사진 담기' 를 열 방법이 없다 — 다시 찾아 달라고 해야 한다.
+        mapUrl: isPlaceUrl(form.get("map_url")) ? cap(String(form.get("map_url")).trim(), 300) : (biz.map_url || ""),
       });
     }
   }
