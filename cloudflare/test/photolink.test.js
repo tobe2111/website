@@ -160,10 +160,10 @@ test("관리자가 단추 하나로 링크를 만든다", async () => {
   const loc = r.headers.get("location") || "";
   assert.match(loc, /photolink=/, "만든 링크를 화면으로 돌려준다");
   const page = await (await get(env, j, loc.replace("http://localhost", ""))).text();
-  assert.match(page, /사진·영업시간 요청 링크가 만들어졌습니다/);
+  assert.match(page, /사진 요청 링크가 만들어졌습니다/);
   assert.match(page, /카톡으로 보내기/);
-  // 이 링크는 사진만 받는 것이 아니다. 회장님이 그걸 모르면 영업시간을 130번 직접 적는다.
-  assert.match(page, /<b>영업시간<\/b>도 같은 자리에서/);
+  // 영업시간 안내는 회장님 화면에서 뺐다(회장님 결정) — 사장님 화면이 여쭙는 것과는 별개다.
+  assert.doesNotMatch(page, /<b>영업시간<\/b>도 같은 자리에서/);
 });
 
 test("남의 조직 가게로는 링크를 만들지 못한다", async () => {

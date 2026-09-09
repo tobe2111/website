@@ -2702,6 +2702,12 @@ body.is-done .foot-copy,body.is-done .site-footer p{color:var(--dk-muted)}
 .hot-m b{display:block;font-size:15.5px;font-weight:700;letter-spacing:-.015em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .hot-m small{font-size:13px;color:rgba(255,255,255,.94)}
 .hot-acts{flex:none;display:flex;gap:7px}
+/* 처리할 것 줄 아래 — 어느 가게인지 이름을 든다. 숫자만 보면 무엇을 눌러야 할지 모른다. */
+.hot-names{flex-basis:100%;display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.hot-names a{display:inline-flex;align-items:center;min-height:32px;padding:0 10px;border-radius:8px;background:rgba(255,255,255,.14);color:#fff;font-size:12.5px;text-decoration:none}
+.hot-names a:hover{background:rgba(255,255,255,.26)}
+.hot-names .hot-names-more{background:transparent;border:1px solid rgba(255,255,255,.4);font-weight:700}
+.hot-row{flex-wrap:wrap}
 .hot-acts .btn{background:#fff;color:var(--brand-text);font-weight:700;border:0}
 .hot-acts .btn:hover{background:rgba(255,255,255,.88)}
 .hot-acts .btn.is-ghost{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.5)}
@@ -4048,7 +4054,7 @@ a.deal-card:hover{border-color:var(--deal);transition:border-color .18s}
   .pg-head .btn{min-height:44px}
   /* 폼을 마무리하는 단추가 40px 이었다 — 등록·투표 시작·저장처럼 한 번에 되어야 하는 조작이다.
      좁은 화면에서는 btn-sm 도 44px 로 올린다(넓은 화면의 촘촘함은 그대로 둔다). */
-  .btn,.btn-sm,.btn-outline.btn-xs,.btn-outline.btn-sm{min-height:44px}
+  .btn,.btn-sm,.btn-outline.btn-xs,.btn-outline.btn-sm,.hot-names a{min-height:44px}
   details > summary.panel-title,.mini-edit > summary,.poll-edit > summary,.totp-login > summary{min-height:44px;display:flex;align-items:center}
   /* 콘솔을 휴대폰으로 여는 임원·총무가 있다. 데스크톱 기준으로 조여 둔 조작칸이
      거기서는 26~42px 짜리 과녁이 된다. 좁은 화면에서만 되돌린다. */

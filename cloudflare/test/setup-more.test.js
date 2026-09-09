@@ -146,7 +146,7 @@ test("휴대폰 번호가 있는 가게에는 글과 링크가 채워진 '문자
 });
 
 // ── 현황: 홈페이지 채우기 ───────────────────────────────────────────────
-test("지도·사진·영업시간이 비면 첫 화면에 '홈페이지 채우기' 가 처리할 것으로 선다", async () => {
+test("지도·사진이 비면 첫 화면에 '홈페이지 채우기' 가 가게 이름과 함께 선다", async () => {
   const env = makeEnv(); const a = await seed(env);
   await biz(env, a, { name: "버들카페", lat: 37.48, lng: 126.99, hours: "10:00-22:00" });
   await biz(env, a, { name: "너나들이" });
@@ -155,8 +155,11 @@ test("지도·사진·영업시간이 비면 첫 화면에 '홈페이지 채우�
   assert.match(html, /홈페이지 채우기/);
   assert.match(html, /지도에 안 보이는 가게 · 1곳/);
   assert.match(html, /사진 없는 가게 · 2곳/);
-  assert.match(html, /영업시간 없는 가게 · 1곳/);
-  assert.ok(html.includes("/admin/members/hours"), "숫자 옆 단추가 그 화면으로 간다");
+  assert.doesNotMatch(html, /영업시간 없는 가게/, "영업시간은 회장님 화면에서 뺐다");
+  // 어느 가게인지 이름을 든다
+  const block = /class="hot"[\s\S]*?<\/section>/.exec(html)[0];
+  assert.match(block, /지도에 안 보이는 가게[\s\S]*?hot-names[\s\S]*?너나들이/);
+  assert.match(block, /사진 없는 가게[\s\S]*?hot-names[\s\S]*?버들카페[\s\S]*?너나들이|사진 없는 가게[\s\S]*?hot-names[\s\S]*?너나들이[\s\S]*?버들카페/);
   assert.ok(!html.includes("지금 처리할 일이 없습니다"));
 });
 

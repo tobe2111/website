@@ -1549,7 +1549,7 @@ export async function adminMembersImport(ctx) {
           중간에 끊겨도 그대로 다시 붙여넣으면 못 들어간 것만 들어갑니다.</li>
         <li><b>임시 비밀번호는 만들지 않습니다.</b> ${rows.length}개를 화면에 쏟아 봐야 옮겨 적을 수 없습니다.
           사장님이 직접 로그인해야 할 때만 회원 목록에서 비밀번호를 정해 주세요.
-          사진·영업시간은 <b>로그인 없이</b> 요청 링크로 받습니다.</li>
+          사진은 <b>로그인 없이</b> 요청 링크로 받습니다.</li>
       </ul>
       ${table}
     </section>` : ""}`;
@@ -1564,7 +1564,7 @@ export async function adminMembersImport(ctx) {
     scripts: `<script src="${assetUrl("/js/submit-once.js")}" defer></script>` }));
 }
 
-// ================= 사진·영업시간 요청 링크를 한 번에 뽑기 =================
+// ================= 사진 요청 링크를 한 번에 뽑기 =================
 //
 // 지도가 못 주는 것이 둘 있습니다: **영업시간**과 **사장님이 직접 찍은 사진**.
 // 결국 사장님께 여쭤야 하는데, 링크는 가게 화면에 들어가야 하나씩 만들어졌습니다.
@@ -1598,10 +1598,10 @@ export async function adminMembersLinks(ctx) {
     url: `${ORIGIN}${base}/photos/${encodeURIComponent(await makePhotoToken(env.SESSION_SECRET, assoc.id, b.id))}`,
   })));
   const msgOf = (b) => `[${assoc.name}] ${b.owner_name ? b.owner_name + " 사장님, " : ""}안녕하세요. `
-    + `홈페이지에 올릴 ${b.photos ? "" : "가게 사진과 "}영업시간을 부탁드립니다.\n`
+    + `홈페이지에 올릴 가게 사진을 부탁드립니다.\n`
     + `아래 링크를 누르시면 로그인 없이 휴대폰에서 바로 올리실 수 있습니다. (2주 안에 열어 주세요)\n${b.url}`;
 
-  const needWhat = (b) => [!b.photos && "사진", !String(b.hours || "").trim() && "영업시간"].filter(Boolean).join("·");
+  const needWhat = () => "사진";
   const table = made.length ? `<div class="table-scroll"><table class="admin-table roster-table">
     <thead><tr><th>가게 · 보내기</th><th>사장님</th><th>없는 것</th></tr></thead>
     <tbody>${made.map((b) => `<tr>
@@ -1614,7 +1614,7 @@ export async function adminMembersLinks(ctx) {
   const allText = made.map(msgOf).join("\n\n");
   const inner = `
     <section class="panel">
-      <h2 class="panel-title">사진·영업시간 요청 링크
+      <h2 class="panel-title">사진 요청 링크
         <span class="badge ${total ? "badge-wait" : "badge-ok"}">${total}곳에 부탁드릴 것이 있습니다</span></h2>
       <p class="panel-hint">지도가 못 주는 것이 둘 있습니다 — <b>영업시간</b>과 <b>사장님이 직접 찍은 사진</b>.
         아래 글을 복사해 카톡으로 보내시면, 사장님은 <b>로그인 없이</b> 휴대폰에서 바로 올리십니다.</p>
@@ -1625,7 +1625,7 @@ export async function adminMembersLinks(ctx) {
         <li><b>휴대폰에서 이 화면을 열면 '문자로 보내기' 가 문자 앱을 바로 엽니다.</b> 글과 링크가 채워진 채 열리니 보내기만 누르시면 됩니다. 카카오 심사도, 복사도 필요 없습니다(문자 요금은 회장님 휴대폰 요금제로 나갑니다).</li>
         <li><b>영업시간을 회장님이 아시는 곳</b>은 <a href="${base}/admin/members/hours">영업시간 한꺼번에 적기</a>에서 직접 적으셔도 됩니다.</li>
       </ul>
-      ${total === 0 ? `<p class="panel-hint"><b>부탁드릴 곳이 없습니다.</b> 모든 가게에 사진과 영업시간이 있습니다.</p>` : ""}
+      ${total === 0 ? `<p class="panel-hint"><b>부탁드릴 곳이 없습니다.</b> 모든 가게에 사진이 있습니다.</p>` : ""}
       ${total > 0 ? (talkReady
         ? `<form method="post" action="${base}/admin/members/links/alimtalk" class="inline-form" data-once>
             <input type="hidden" name="_csrf" value="${esc(csrf)}" />
@@ -1648,12 +1648,12 @@ export async function adminMembersLinks(ctx) {
     </section>` : ""}`;
 
   const body = await consoleShell(ctx, {
-    title: "사진·영업시간 요청 링크", active: "people",
+    title: "사진 요청 링크", active: "people",
     eyebrow: `<a href="${base}/admin#s-people">← 회원·점포</a>`,
     sub: "사장님께 보낼 글과 링크를 한 번에 만듭니다. 복사해서 카톡에 붙이시면 됩니다.",
     body: inner,
   });
-  return html(layout({ title: "사진·영업시간 요청 링크", assoc, base, user, body, csrf,
+  return html(layout({ title: "사진 요청 링크", assoc, base, user, body, csrf,
     scripts: `<script src="${assetUrl("/js/super-tabs.js")}" defer></script>` }));
 }
 
@@ -2522,7 +2522,8 @@ export async function admin(ctx) {
     total: all.length,
     pinned: await D.countBusinessMarkers(db, assoc.id).catch(() => 0),
     photo: await D.countBusinessesWithImage(db, assoc.id).catch(() => 0),
-    hours: await D.countBusinessesWithHours(db, assoc.id).catch(() => 0),
+    noPin: await D.listBusinessesNoPin(db, assoc.id, 8).catch(() => []),
+    noImage: await D.listBusinessesNoImage(db, assoc.id, 8).catch(() => []),
   };
   {
     const others = assoc.kind === "esign" ? [] : await D.listBusinessesOther(db, assoc.id).catch(() => []);
@@ -3177,20 +3178,23 @@ export async function admin(ctx) {
   // 상인회 홈페이지가 아직 안 채워졌으면 그것도 '처리할 것' 이다. 가게 123곳을 넣어 놓고
   // 지도에 45곳만 보이면, 손님이 지도를 열었을 때 골목의 절반이 없다. 화면 넷을 따로 열어야
   // 알던 것을 첫 화면에 세운다 — 다 채워지면 이 블록은 사라진다.
+  const nameChips = (rows, total, href) => rows.length
+    ? `<span class="hot-names">${rows.map((r) => `<a href="${base}/admin/business/${r.id}">${esc(r.name)}</a>`).join("")}${
+        total > rows.length ? `<a class="hot-names-more" href="${href}">외 ${total - rows.length}곳 →</a>` : ""}</span>` : "";
   const gaps = !isEsign && !isFranchise && setup.total > 0 ? [
     setup.pinned < setup.total && { title: "지도에 안 보이는 가게", n: setup.total - setup.pinned,
-      sub: "손님 지도에 핀이 없습니다 — 상호로 찾아 한꺼번에 붙입니다", href: `${base}/admin/members/map`, label: "지도에 한꺼번에 연결" },
+      sub: "손님 지도에 핀이 없습니다 — 상호로 찾아 한꺼번에 붙입니다", href: `${base}/admin/members/map`, label: "지도에 한꺼번에 연결",
+      names: nameChips(setup.noPin, setup.total - setup.pinned, `${base}/admin/members/map#no-pin`) },
     setup.photo < setup.total && { title: "사진 없는 가게", n: setup.total - setup.photo,
       sub: "목록에서 회색 상자로 보입니다 — 지도 사진을 담거나 사장님께 부탁합니다", href: `${base}/admin/members/photos`, label: "지도 사진 한꺼번에",
-      href2: `${base}/admin/members/links`, label2: "사장님께 부탁" },
-    setup.hours < setup.total && { title: "영업시간 없는 가게", n: setup.total - setup.hours,
-      sub: "홈의 '지금 문 연 곳' 에 안 뜹니다 — 아시는 곳은 한꺼번에 적으세요", href: `${base}/admin/members/hours`, label: "한꺼번에 적기" },
+      href2: `${base}/admin/members/links`, label2: "사장님께 부탁",
+      names: nameChips(setup.noImage, setup.total - setup.photo, `${base}/admin/members/links`) },
   ].filter(Boolean) : [];
   const setupHot = gaps.length ? hotBlock({
     n: gaps.length, title: "홈페이지 채우기", note: `가게 ${setup.total}곳 중 아직 비어 있는 것`,
     href: `${base}/admin#s-people`, hrefLabel: "회원·점포",
     rows: gaps.map((g) => hotRow(`${g.title} · ${g.n}곳`, g.sub,
-      `<a class="btn btn-sm" href="${g.href}">${esc(g.label)}</a>${g.href2 ? `<a class="btn btn-sm is-ghost" href="${g.href2}">${esc(g.label2)}</a>` : ""}`)),
+      `<a class="btn btn-sm" href="${g.href}">${esc(g.label)}</a>${g.href2 ? `<a class="btn btn-sm is-ghost" href="${g.href2}">${esc(g.label2)}</a>` : ""}`) + (g.names || "")),
   }) : "";
   const hotPanels = [applyHot, leadHot, signHot, setupHot].filter(Boolean).join("");
   const queuePanel = hotPanels || `<p class="all-clear">지금 처리할 일이 없습니다</p>`;
@@ -3239,12 +3243,11 @@ export async function admin(ctx) {
 
     <div class="sgroup" id="s-people" data-tab="people">
     <section class="panel" id="p-members"><div class="panel-head"><h2 class="panel-title">${isEsign ? "담당자 관리" : `${isFranchise ? "가맹점" : "회원·점포"}`} <span class="badge badge-muted">${isEsign ? staffList.length + "명" : bizCounts.all + "곳"}</span></h2>
-      <span class="pill-row">${isEsign ? "" : `<a class="btn btn-xs btn-primary" href="${base}/admin/members/import">명부로 한 번에 등록</a><a class="btn btn-xs btn-outline" href="${base}/admin/members/map">지도에 한꺼번에 연결</a><a class="btn btn-xs btn-outline" href="${base}/admin/members/photos">지도 사진 한꺼번에</a><a class="btn btn-xs btn-outline" href="${base}/admin/members/links">사진·영업시간 요청 링크</a>`}${members.length && !isEsign ? `<a class="btn btn-xs btn-ghost" href="${base}/admin/members.csv">명단 CSV</a>` : ""}<a class="btn btn-xs btn-ghost" href="${base}/admin/export.json">전체 백업(JSON)</a></span></div>
+      <span class="pill-row">${isEsign ? "" : `<a class="btn btn-xs btn-primary" href="${base}/admin/members/import">명부로 한 번에 등록</a><a class="btn btn-xs btn-outline" href="${base}/admin/members/map">지도에 한꺼번에 연결</a><a class="btn btn-xs btn-outline" href="${base}/admin/members/photos">지도 사진 한꺼번에</a><a class="btn btn-xs btn-outline" href="${base}/admin/members/links">사진 요청 링크</a>`}${members.length && !isEsign ? `<a class="btn btn-xs btn-ghost" href="${base}/admin/members.csv">명단 CSV</a>` : ""}<a class="btn btn-xs btn-ghost" href="${base}/admin/export.json">전체 백업(JSON)</a></span></div>
       ${isEsign ? "" : `<p class="setup-strip"><b>지금 어디까지 왔나</b>
         <a href="${base}/admin/members/import">등록 <em>${setup.total}</em></a>
         <a href="${base}/admin/members/map">지도 <em>${setup.pinned}</em></a>
         <a href="${base}/admin/members/photos">사진 <em>${setup.photo}</em></a>
-        <a href="${base}/admin/members/hours">영업시간 <em>${setup.hours}</em></a>
         <small>— 숫자를 누르면 그 일을 하는 화면으로 갑니다. 왼쪽부터 차례로 채우면 됩니다.
           지도 열쇠: 카카오 <b>${mk.kakao ? "있음" : "없음"}</b> · 네이버 검색 <b>${mk.naver ? "있음" : "없음"}</b></small></p>
       ${setup.guessable ? `<form method="post" action="${base}/admin/members/guess-categories" class="setup-guess" data-once>
@@ -4063,13 +4066,12 @@ export async function adminBusinessEdit(ctx) {
   // 회장님이 남의 가게 사진을 대신 구할 방법은 사실상 이것뿐이다.
   const photoLink = query.get("photolink");
   const photoLinkBox = photoLink ? `<div class="invite-box">
-    <p class="invite-box-title">사진·영업시간 요청 링크가 만들어졌습니다 <small>(2주 유효)</small></p>
+    <p class="invite-box-title">사진 요청 링크가 만들어졌습니다 <small>(2주 유효)</small></p>
     <input type="text" class="invite-url" value="${esc(`${ORIGIN}${base}/photos/${encodeURIComponent(photoLink)}`)}" readonly data-select-all />
     <span class="pill-row"><button type="button" class="btn btn-sm btn-primary" data-share
       data-share-url="${esc(`${ORIGIN}${base}/photos/${encodeURIComponent(photoLink)}`)}"
-      data-share-title="${esc(b.name)} 가게 사진·영업시간 보내기">카톡으로 보내기 / 복사</button></span>
-    <p class="panel-hint">사장님이 이 링크를 열면 <b>로그인 없이</b> 폰에서 바로 사진을 올리고,
-      <b>영업시간</b>도 같은 자리에서 골라 보냅니다. 올라오면 알림으로 알려 드립니다.</p></div>` : "";
+      data-share-title="${esc(b.name)} 가게 사진 보내기">카톡으로 보내기 / 복사</button></span>
+    <p class="panel-hint">사장님이 이 링크를 열면 <b>로그인 없이</b> 폰에서 바로 사진을 올립니다. 올라오면 알림으로 알려 드립니다.</p></div>` : "";
   // 지도에서 이 가게 보기.
   //
   // 카카오맵·네이버지도에 올라온 사진을 프로그램으로 가져올 수는 없다 — 카카오는
@@ -4139,7 +4141,7 @@ export async function adminBusinessEdit(ctx) {
         같은 화면에서 <b>영업시간</b>도 골라 보내십니다 — 지도가 주지 않아 손으로 적어야 하는 유일한 값입니다.</p>
       ${photoLinkBox}
       <form method="post" action="${base}/admin/business/${b.id}/photo-link" class="inline-form">
-        <button class="btn btn-primary btn-block">📷 사진·영업시간 요청 링크 만들기</button></form>
+        <button class="btn btn-primary btn-block">📷 사진 요청 링크 만들기</button></form>
       ${placeStep}
       ${mapLinks}
     </div>
