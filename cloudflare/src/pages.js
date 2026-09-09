@@ -3,10 +3,11 @@ import * as D from "./db.js";
 import { esc, cap, clip, openBadge, openNow, hoursLine, dongOf, fmtBytes, kstStamp, kstDate, prettyPath, safeNext, parseCookies, decomposeHours } from "./util.js";
 import { parseMemberRoster, markExisting, guessPrefix, describeColumns, IMPORT_MAX } from "./roster.js";
 import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG, ORIGIN, assetUrl, brandLogo } from "./render.js";
-import { verifyInviteToken, verifyPhotoToken, SALES_STAGES, otpRequired, selfSignupOn, MAX_SLOTS, BULK_MAX, BULK_CHUNK, docOf, isPlaceholderEmail, importMemberRows, autoLinkChunk, MAP_CHUNK } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
+import { verifyInviteToken, verifyPhotoToken, SALES_STAGES, otpRequired, selfSignupOn, MAX_SLOTS, BULK_MAX, BULK_CHUNK, docOf, isPlaceholderEmail, importMemberRows, autoLinkChunk, farFromStreet, unlinkFar, MAP_CHUNK } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
 import { html, notFoundResponse, back, redirect } from "./http.js";
 import { deals as urdealDeals, urdealProductUrl, urdealSellerUrl, sellerPhotos } from "./urdeal.js";
 import { placeSourceOf } from "./placePhoto.js";
+import { NEAR_KM } from "./placeMatch.js";
 import { countable, countHomeGoal, homeVariantCookie } from "./traffic.js";
 import { galleryItem } from "./media-render.js";
 import { priceOf, costOf, jeonToWon, notifyEnabled, autoNotifyOn, canAutoSend, ALIGO_VARS, hasCfg, TEMPLATE_KEYS, TEMPLATES, billingMode, BILLING_MODES } from "./notify.js";
@@ -810,11 +811,13 @@ export async function businesses(ctx) {
     `<a href="${base}/businesses${qs({ q, open: "1" })}" class="chip-filter chip-open${openOnly ? " active" : ""}">지금 문 연 곳</a>` +
     `<button type="button" class="chip-filter chip-fav" id="favFilter" hidden>찜한 가게</button>` +
     cats.map((c) => `<a href="${base}/businesses${qs({ category: c.category, q })}" class="chip-filter${cat === c.category ? " active" : ""}">${esc(c.category)} <em>${c.n}</em></a>`).join("");
+  const mapN = await D.countBusinessMarkers(db, assoc.id);
   const covers = await D.coverImagesFor(db, items.map((b) => b.id));
   const cards = items.map((b) => businessCard(base, b, covers.get(b.id))).join("") || `<p class="empty">${openOnly ? "지금 문 연 가게가 없습니다." : q ? "검색 결과가 없습니다." : "등록된 점포가 없습니다."}</p>`;
   const body = `<section class="section page-top"><div class="container">
     <div class="section-head"><h1 class="section-title">가입 점포 안내</h1><p class="section-lead">총 ${total}곳</p></div>
     <form method="get" action="${base}/businesses" class="board-search"><input type="search" name="q" value="${esc(q)}" placeholder="점포·업종 검색" aria-label="점포·업종 검색" /><button class="btn btn-ghost btn-sm">검색</button></form>
+    <div class="pg-switch">${viewSwitch(base, { on: "list", category: cat, q, mapN })}</div>
     <div class="chip-filters">${chips}</div>
     <!-- 눈에는 안 보이지만 읽어 주는 프로그램에는 들리는 제목.
          페이지 제목(h1) 다음에 가게 이름(h3)이 바로 오면 단계를 하나 건너뛴 것이 되어,
@@ -1027,17 +1030,41 @@ const authHead = (title, sub, assoc = null) => {
     <h1 class="auth-title">${esc(title)}</h1><p class="auth-sub">${esc(sub)}</p></div>`;
 };
 
+// 목록과 지도는 **같은 것을 다르게 보는 것**이지 다른 화면이 아니다.
+// 그래서 두 화면 위에 같은 자리, 같은 모양의 전환 단추를 둔다. 지금 고른 업종과 검색어를
+// 그대로 들고 넘어간다 — 넘어갈 때마다 조건이 풀리면 손님은 두 번째부터는 안 누른다.
+//
+// 지도 쪽에는 찍히는 가게 수를 함께 적는다. 좌표가 아직 없는 가게는 지도에 못 나오는데,
+// 그걸 말 안 하고 빈 지도를 보여 주면 손님은 '고장' 으로 읽는다.
+function viewSwitch(base, { on, category = "", q = "", mapN = null }) {
+  const keep = qs({ category, q });
+  const tab = (href, label, active, extra = "") =>
+    `<a href="${href}" class="view-tab${active ? " active" : ""}"${active ? ' aria-current="page"' : ""}>${label}${extra}</a>`;
+  return `<div class="view-switch" role="group" aria-label="보기 방식">
+    ${tab(`${base}/businesses${keep}`, "목록", on === "list")}
+    ${tab(`${base}/map${keep}`, "지도", on === "map", mapN == null ? "" : ` <em>${mapN}</em>`)}
+  </div>`;
+}
+
 // ================= 점포 지도 =================
 export async function mapPage(ctx) {
   const { db, env, assoc, base, user, query, csrf } = ctx;
   await countHomeGoal(ctx, "find"); // 지도를 여는 것 자체가 '가까운 가게 찾기' 다
   const cat = query.get("category");
+  // 목록에서 검색해 두고 지도로 넘어오면 그 검색어가 살아 있어야 한다.
+  // 여기서 풀어 버리면 손님은 "지도로 보기" 를 한 번 눌러 보고 다시는 안 누른다.
+  const q = (query.get("q") || "").trim().slice(0, 60);
   let markers = await D.listBusinessMarkers(db, assoc.id);
   if (cat) markers = markers.filter((m) => m.category === cat);
+  if (q) {
+    const k = q.replace(/\s+/g, "").toLowerCase();
+    const has = (v) => String(v || "").replace(/\s+/g, "").toLowerCase().includes(k);
+    markers = markers.filter((m) => has(m.name) || has(m.category) || has(m.address));
+  }
   const cats = await D.distinctCategories(db, assoc.id);
   const naver = assoc.map_client_id || env.NAVER_MAP_CLIENT_ID; // 상인회 전용 지도 키 우선
-  const chips = `<a href="${base}/map" class="chip-filter${!cat ? " active" : ""}">전체</a>` +
-    cats.map((c) => `<a href="${base}/map?category=${encodeURIComponent(c.category)}" class="chip-filter${cat === c.category ? " active" : ""}">${esc(c.category)}</a>`).join("");
+  const chips = `<a href="${base}/map${qs({ q })}" class="chip-filter${!cat ? " active" : ""}">전체</a>` +
+    cats.map((c) => `<a href="${base}/map${qs({ category: c.category, q })}" class="chip-filter${cat === c.category ? " active" : ""}">${esc(c.category)}</a>`).join("");
   const listRows = markers.length ? markers.map((m) => `<li class="map-store scard" data-lat="${m.lat}" data-lng="${m.lng}">
       <a href="${base}/business/${esc(m.slug)}" class="map-store-name">${esc(m.name)}</a><span class="chip s-cat">${esc(m.category)}</span>
       ${m.address ? `<span class="map-store-addr">${PIN_SVG} ${esc(m.address)}</span>` : ""}
@@ -1060,7 +1087,8 @@ export async function mapPage(ctx) {
   const mapArea = naver ? mapEl : mapCanvas(markers.length);
   const body = `<section class="section pubpage"><div class="container">
     <div class="pg-head"><div><h1 class="pg-title">가입 점포 지도</h1>
-      <p class="pg-sub">${esc(assoc.name)} 가입 점포 ${markers.length}곳</p></div></div>
+      <p class="pg-sub">${esc(assoc.name)} 가입 점포 ${markers.length}곳${q ? ` · ‘${esc(q)}’ 검색 결과` : ""}</p></div></div>
+    <div class="pg-switch">${viewSwitch(base, { on: "map", category: cat || "", q })}</div>
     <div class="pg-tools"><div class="chip-filters">${chips}</div></div>${mapArea}
     <ul class="map-list sgrid grow">${listRows}</ul>
     <script type="application/json" id="mapData">${JSON.stringify(markerData).replace(/</g, "\\u003c")}</script>
@@ -1549,8 +1577,13 @@ export async function adminMembersMap(ctx) {
   const kakaoOn = !!(String(env.KAKAO_REST_KEY || "").trim()
     || (String(env.NAVER_SEARCH_ID || "").trim() && String(env.NAVER_SEARCH_SECRET || "").trim()));
 
-  let run = null;
-  if (form && kakaoOn) run = await autoLinkChunk(ctx, { after: Number(form.get("after")) || 0 });
+  let run = null, unlinked = null;
+  if (form && form.get("unlink") === "1") unlinked = await unlinkFar(ctx);
+  else if (form && kakaoOn) run = await autoLinkChunk(ctx, { after: Number(form.get("after")) || 0 });
+
+  // 골목에서 멀리 찍힌 가게. 잘못 붙은 것을 화면이 먼저 말해 줘야 회장님이 알 수 있습니다 —
+  // 지도를 열어 핀이 흩어진 것을 눈으로 보고서야 아는 것은 너무 늦습니다.
+  const far = kakaoOn ? await farFromStreet(ctx).catch(() => ({ rows: [] })) : { rows: [] };
 
   const [total, left] = await Promise.all([
     D.listAllBusinesses(db, assoc.id).then((l) => l.length).catch(() => 0),
@@ -1592,7 +1625,10 @@ export async function adminMembersMap(ctx) {
       ${kakaoOn ? "" : `<div class="flash flash-warn">지도 검색 열쇠가 아직 등록되지 않았습니다. 운영사에 문의해 주세요.</div>`}
       ${run && run.error ? `<div class="flash flash-err">${esc(run.error)}</div>` : ""}
       <ul class="roster-notes">
-        <li><b>확실할 때만 붙입니다.</b> 전화번호가 같거나, 도로명·번지가 맞거나, 상호가 정확히 같고 후보가 하나일 때입니다.
+        <li><b>우리 골목 안에서만 찾습니다.</b> 상가연합회는 한 골목이라, 상호가 똑같아도
+          골목에서 ${NEAR_KM}km 넘게 떨어진 곳은 자동으로 붙이지 않습니다. 우리 골목이 어디인지는
+          <b>상인회 주소</b>로 정합니다 — 설정에 주소를 적어 두셔야 이 판정이 됩니다.</li>
+        <li><b>확실할 때만 붙입니다.</b> 전화번호가 같거나, 도로명·번지가 맞거나, 상호가 정확히 같고 골목 안일 때입니다.
           애매한 곳은 그대로 두고 아래 목록에 남깁니다 — <b>틀리게 붙는 것이 안 붙는 것보다 훨씬 나쁩니다.</b>
           엉뚱한 가게에 연결되면 손님이 그 핀을 보고 다른 가게로 걸어가는데, 화면에는 멀쩡해 보여 아무도 모릅니다.</li>
         <li><b>회장님이 채워 둔 값은 안 건드립니다.</b> 빈 칸만 지도가 메웁니다.
@@ -1606,6 +1642,27 @@ export async function adminMembersMap(ctx) {
           : kakaoOn ? goForm(run ? `다음 ${MAP_CHUNK}곳 찾기` : `자동으로 찾기 시작 (남은 ${left}곳)`,
               run && !run.error ? run.cursor : 0, !!(run && !run.error && !run.done)) : ""}
     </section>
+
+    ${unlinked != null ? `<div class="flash flash-ok"><b>${unlinked}곳의 잘못된 지도 연결을 풀었습니다.</b>
+      이제 위에서 <b>자동으로 찾기</b>를 다시 돌리면, 우리 골목 안에서만 찾아 붙입니다.</div>` : ""}
+
+    ${far.rows.length ? `<section class="panel"><h2 class="panel-title">우리 골목에서 멀리 찍힌 가게
+      <span class="badge badge-wait">${far.rows.length}곳</span></h2>
+      <p class="panel-hint"><b>상호가 같은 다른 동네 지점에 붙은 것입니다.</b>
+        "노브랜드버거" 처럼 전국에 같은 이름이 있는 가게에서 일어납니다. 지도를 열면 핀이
+        엉뚱한 동네에 찍히고, 손님이 그 핀을 보고 다른 가게로 걸어갑니다.
+        연결을 풀면 좌표·지도주소와 <b>그 지점에서 딸려 온 대표번호</b>도 함께 지웁니다 —
+        남의 가게 번호를 우리 화면에 걸어 두는 것이 가장 나쁩니다. 명부에서 온 주소는 그대로 둡니다.</p>
+      <div class="table-scroll"><table class="admin-table roster-table">
+        <thead><tr><th>상호</th><th>지금 찍힌 주소</th><th>골목에서</th></tr></thead>
+        <tbody>${far.rows.slice(0, 60).map((r) => `<tr class="rs-bad">
+          <td><b>${esc(r.name)}</b></td><td class="rs-addr">${esc(r.address) || '<span class="muted">—</span>'}</td>
+          <td>${Math.round(r.km)}km</td></tr>`).join("")}</tbody></table></div>
+      ${far.rows.length > 60 ? `<p class="panel-hint">외 ${far.rows.length - 60}곳</p>` : ""}
+      <form method="post" action="${base}/admin/members/map" class="inline-form" data-once>
+        <input type="hidden" name="_csrf" value="${esc(csrf)}" />
+        <input type="hidden" name="unlink" value="1" />
+        <button class="btn btn-cta">${far.rows.length}곳 연결 풀고 다시 찾기</button></form></section>` : ""}
 
     ${run ? `<section class="panel"><h2 class="panel-title">이번에 돌린 ${run.rows.length}곳
       ${run.linked ? `<span class="badge badge-ok">${run.linked}곳 연결</span>` : ""}</h2>
@@ -1625,7 +1682,7 @@ export async function adminMembersMap(ctx) {
     body: inner,
   });
   return html(layout({ title: "지도에 한꺼번에 연결", assoc, base, user, body, csrf,
-    scripts: `<script src="${assetUrl("/js/auto-next.js")}" defer></script>` }));
+    scripts: `<script src="${assetUrl("/js/auto-next.js")}" defer></script><script src="${assetUrl("/js/submit-once.js")}" defer></script>` }));
 }
 
 // ================= 사장님 사진 보내기 (로그인 없이, 링크 하나로) =================

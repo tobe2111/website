@@ -471,11 +471,27 @@ export const setBusinessStatus = (db, id, status) => run(db, "UPDATE businesses 
 // ----- 지도 연결 -----
 // 지도에 아직 연결되지 않은 가게. id 순서로 끊어 가져온다(커서 방식) — 한 번에 다 부르면
 // 지도 검색 요청이 한 요청에서 100번 넘게 나가 워커가 끊긴다.
+// '연결됐다' 는 **지도 페이지 주소가 들어 있다** 는 뜻이다. 비어 있는 것만 세면,
+// 예전에 업체 홈페이지가 잘못 들어간 가게가 영영 다시 안 찾아진다 — 연결됐다고 세어지는데
+// 정작 지도 사진 가져오기는 안 열리는, 눈에 안 보이는 상태로 남는다.
+// (placePhoto.js 의 isPlaceUrl 과 같은 곳들이다. 한쪽만 고치면 어긋난다.)
+const LINKED_SQL = `(map_url LIKE 'http://place.map.kakao.com/%' OR map_url LIKE 'https://place.map.kakao.com/%'
+  OR map_url LIKE 'https://map.kakao.com/%' OR map_url LIKE 'https://map.naver.com/%'
+  OR map_url LIKE 'https://naver.me/%' OR map_url LIKE 'https://m.place.naver.com/%')`;
 export const listUnlinkedBusinesses = (db, aid, afterId, limit) =>
-  all(db, "SELECT * FROM businesses WHERE association_id=? AND id>? AND (map_url IS NULL OR map_url='') ORDER BY id ASC LIMIT ?",
+  all(db, `SELECT * FROM businesses WHERE association_id=? AND id>? AND NOT ${LINKED_SQL} ORDER BY id ASC LIMIT ?`,
     aid, afterId | 0, Math.max(1, limit | 0));
 export const countUnlinkedBusinesses = async (db, aid) =>
-  (await first(db, "SELECT COUNT(*) AS n FROM businesses WHERE association_id=? AND (map_url IS NULL OR map_url='')", aid)).n;
+  (await first(db, `SELECT COUNT(*) AS n FROM businesses WHERE association_id=? AND NOT ${LINKED_SQL}`, aid)).n;
+
+// 잘못 붙은 지도 연결을 푼다 — 좌표·지도주소, 그리고 **그 지도에서 딸려 온 전화번호**.
+//
+// 전화번호까지 지우는 이유: 엉뚱한 지점에 붙으면 그 지점의 대표번호가 우리 가게 화면에
+// 걸린다. 지도 핀이 틀린 것보다 이쪽이 더 나쁘다 — 손님이 실제로 남의 가게에 전화를 건다.
+// 회장님이 손으로 적어 둔 번호도 함께 지워질 수 있지만, 남의 번호를 남겨 두는 쪽이 더 나쁘다.
+// 주소는 건드리지 않는다 — 그건 명부에서 온 우리 값이다.
+export const unlinkBusinessMap = (db, id) =>
+  run(db, "UPDATE businesses SET map_url='', lat=NULL, lng=NULL, phone='', updated_at=datetime('now') WHERE id=?", id);
 
 // 사장님이 사진 요청 링크에서 영업시간만 보내 온다. 이 한 칸만 손대므로
 // 회장님이 채워 둔 소개·주소를 사장님이 덮어쓸 일이 없다.
@@ -484,6 +500,11 @@ export const setBusinessHours = (db, id, hours) =>
 export const listBusinessMarkers = (db, aid) =>
   all(db, `SELECT id, name, slug, category, lat, lng, address, phone, sns_naver FROM businesses
            WHERE association_id = ? AND status='approved' AND lat IS NOT NULL AND lng IS NOT NULL`, aid);
+// 지도에 찍힐 수 있는 가게가 몇 곳인가. 목록 화면의 [지도] 단추에 이 숫자를 적는다 —
+// 손님에게는 "지도로 봐도 되겠구나" 가 되고, 회장님에게는 "아직 몇 곳이 안 붙었구나" 가 된다.
+export const countBusinessMarkers = async (db, aid) =>
+  (await first(db, `SELECT COUNT(*) AS n FROM businesses
+     WHERE association_id=? AND status='approved' AND lat IS NOT NULL AND lng IS NOT NULL`, aid)).n;
 export const distinctCategories = (db, aid) =>
   all(db, "SELECT category, COUNT(*) AS n FROM businesses WHERE association_id=? AND status='approved' GROUP BY category ORDER BY n DESC", aid);
 // 가게 상세 '이런 가게는 어때요' — COUNT 없는 직접 조회 1쿼리
