@@ -77,11 +77,29 @@ test("지도가 죽어 있어도 화면이 같이 죽지 않는다", async () =>
   } finally { restore(); }
 });
 
-test("응답이 너무 크면 우리가 아는 그 페이지가 아니다", async () => {
+test("응답이 커도 앞부분만 읽고 사진을 찾는다 — 네이버 플레이스는 수백 KB 다", async () => {
+  // 예전에는 content-length 가 한도를 넘으면 통째로 거절했다. 카카오 장소 페이지는 4KB 라
+  // 괜찮았지만 네이버 플레이스 페이지는 그보다 훨씬 커서, 그 규칙이 네이버 길을 통째로 막는다.
+  // og 태그는 <head> 에 있으니 앞부분만 읽으면 된다.
   stub(page("//img1.kakaocdn.net/a.png"), { headers: { "content-length": String(9 * 1024 * 1024) } });
   try {
-    assert.equal(await placePhoto("https://place.map.kakao.com/8137464"), null);
+    const r = await placePhoto("https://place.map.kakao.com/8137464");
+    assert.ok(r && r.url === "https://img1.kakaocdn.net/a.png");
   } finally { restore(); }
+});
+
+test("끝나지 않는 응답도 한도만큼 받고 끊는다", async () => {
+  // 서버가 끝없이 흘려보내도 우리 워커가 같이 매달리면 안 된다.
+  const real = globalThis.fetch;
+  let pulls = 0;
+  globalThis.fetch = async () => new Response(new ReadableStream({
+    pull(c) { pulls++; c.enqueue(new TextEncoder().encode(pulls === 1 ? page("//img1.kakaocdn.net/b.png") + " ".repeat(64 * 1024) : " ".repeat(64 * 1024))); },
+  }), { status: 200, headers: { "content-type": "text/html" } });
+  try {
+    const r = await placePhoto("https://place.map.kakao.com/8137464");
+    assert.ok(r && r.url === "https://img1.kakaocdn.net/b.png");
+    assert.ok(pulls < 40, `한도(512KB)에서 끊어야 하는데 ${pulls}번 읽었다`);
+  } finally { globalThis.fetch = real; }
 });
 
 test("네이버 지도 주소도 받는다 (같은 방식)", async () => {

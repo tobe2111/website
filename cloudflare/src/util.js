@@ -185,6 +185,48 @@ export function decomposeHours(s) {
   return { open: m[1], close: m[2], off: m[3] ? m[3].split("·") : [] };
 }
 
+// 사람이 자유롭게 적은 영업시간 한 줄을 composeHours 가 만드는 모양으로 고친다.
+//
+// 회장님이 영업시간을 한꺼번에 적을 때 "10시~22시 일요일휴무", "10-22", "오전 11시 - 오후 9시"
+// 처럼 제각각 적는다. 그대로 저장하면 저장은 되는데 openNow() 가 "HH:MM-HH:MM" 만 읽어서
+// '지금 문 연 곳' 에서만 조용히 빠진다 — 오류도 경고도 없다. 그래서 여기서 규격으로 고치고,
+// 여는 시각·닫는 시각 둘을 못 찾으면 "" 를 돌려줘 화면이 "못 읽었다" 고 말하게 한다.
+export function normalizeHours(text) {
+  const s = String(text || "").trim();
+  if (!s) return "";
+  const okClock = (t) => +t.slice(0, 2) < 24 && +t.slice(3) < 60;
+  const d = decomposeHours(s);
+  if (d) return okClock(d.open) && okClock(d.close) ? s : "";   // 이미 규격이면 그대로 — 25:00 같은 건 빼고
+  const T = "(오전|오후|am|pm|낮|밤|새벽)?\\s*(\\d{1,2})(?::(\\d{2})|시\\s*(?:(\\d{1,2})\\s*분)?)?\\s*(오전|오후|am|pm)?";
+  const m = new RegExp(`${T}\\s*(?:[-~–—]|부터|에서|to)\\s*${T}`, "i").exec(s);
+  if (!m) return "";
+  const clock = (pre, h, mm, mm2, post) => {
+    let hour = +h;
+    const mer = String(pre || post || "").toLowerCase();
+    if (/오후|pm|밤/.test(mer) && hour < 12) hour += 12;
+    if (/오전|am/.test(mer) && hour === 12) hour = 0;
+    return { hour, min: +(mm || mm2 || 0) };
+  };
+  const a = clock(m[1], m[2], m[3], m[4], m[5]);
+  const b = clock(m[6], m[7], m[8], m[9], m[10]);
+  // "10-10" · "11-2" 처럼 오후를 안 적은 닫는 시각 — 여는 시각보다 앞이면 오후로 본다.
+  // "18-2" 는 그래도 앞이니(새벽 2시) 그대로 둔다: 자정 넘김은 openNow 가 안다.
+  if (!m[6] && !m[10] && b.hour <= a.hour && b.hour + 12 > a.hour && b.hour + 12 < 24) b.hour += 12;
+  if (a.hour > 23 || b.hour > 23 || a.min > 59 || b.min > 59) return "";
+  const pad = (n) => String(n).padStart(2, "0");
+  // 쉬는 날. '매일' 의 '일' 을 일요일로 읽으면 안 되므로 앞글자 '매' 는 뺀다.
+  const off = [];
+  if (!/무휴/.test(s)) {
+    for (const h of s.matchAll(/휴무|휴점|정기휴일|쉽니다|쉼/g)) {
+      const before = s.slice(Math.max(0, h.index - 12), h.index);
+      if (/주말/.test(before)) off.push("토", "일");
+      if (/평일/.test(before)) off.push("월", "화", "수", "목", "금");
+      for (const d of before.match(/(?<!매)[월화수목금토일](?=요일|[·,/\s휴]|$)/g) || []) off.push(d);
+    }
+  }
+  return composeHours({ open: `${pad(a.hour)}:${pad(a.min)}`, close: `${pad(b.hour)}:${pad(b.min)}`, off: [...new Set(off)] });
+}
+
 // 주소에서 동네 이름만. 카드에 전체 주소를 넣으면 한가운데서 잘려
 // 정보도 장식도 아닌 것이 남는다 — 손님이 카드에서 알고 싶은 건 "어느 동네냐" 하나다.
 // 전체 주소는 가게 상세에서 그대로 보여준다.

@@ -7,7 +7,7 @@ import { back, redirect } from "./http.js";
 import * as storage from "./storage.js";
 import { countable, countHomeGoal } from "./traffic.js";
 import { parseEmbed } from "./embed.js";
-import { cap, sniffImage, EMAIL_RE, MAX_IMAGE_BYTES, slugify, esc, safeNext, composeHours } from "./util.js";
+import { cap, sniffImage, EMAIL_RE, MAX_IMAGE_BYTES, slugify, esc, safeNext, composeHours, normalizeHours } from "./util.js";
 import { contentHash, sealRecord, newVerifyCode, SEAL_VER, fieldsHashOf, keyStorage, verifyChain } from "./esign.js";
 import { isFieldKind, round4, FIELD_KINDS, pageCount, remapFields } from "./paper.js";
 import { parseTable, toCsv, decodeUtf8, headerRole } from "./csv.js";
@@ -22,6 +22,7 @@ import { KINDS, kindById, PRESETS, assocTerms } from "./kinds.js";
 import { sellerPhotos, urdealProductUrl } from "./urdeal.js";
 import { placePhoto, isPlaceUrl, placeSourceOf } from "./placePhoto.js";
 import { pickPlace, placeQuery, kmApart, NEAR_KM } from "./placeMatch.js";
+import { mapCategory } from "./roster.js";
 import { TEMPLATE_KEYS, TEMPLATES, sendTest, listProviderTemplates, matchTemplates, sendMany, sendOne, notifyEnabled, autoNotifyOn, canAutoSend, wonToJeon, renderTemplate, templateCodeFor, templateButton, billingMode, chargeContract, BILLING_MODES, priceOf } from "./notify.js";
 
 // 계약 한 건을 연다 — 조직 경계와 **부서 경계**를 함께 본다.
@@ -1040,6 +1041,51 @@ export async function adminLinkNaverBulk(ctx) {
   if (noShop.length) parts.push(`명부에 없는 상호 ${noShop.length}곳: ${noShop.slice(0, 5).join(", ")}${noShop.length > 5 ? " 외" : ""}.`);
   if (badUrl.length) parts.push(`지도 주소가 아닌 줄 ${badUrl.length}: ${badUrl.slice(0, 3).join(", ")}${badUrl.length > 3 ? " 외" : ""}.`);
   return back(to, parts.join(" "), !done);
+}
+
+// ---------- 영업시간을 한꺼번에 적기 ----------
+//
+// 영업시간은 지도가 안 준다. 사장님께 여쭤보는 길은 있지만 답이 오기까지 며칠이고, 그동안
+// 홈 첫 화면의 '지금 문 연 곳' 에는 그 가게가 없다. 회장님은 골목 가게 시간을 대개 안다 —
+// 그걸 한 화면에서 적게 한다. 제각각 적은 것은 normalizeHours 가 규격으로 고치고,
+// 못 고친 줄은 이름을 들어 돌려준다. 사장님이 나중에 보내면 그 값이 이긴다(덮어쓴다).
+export async function adminHoursBulk(ctx) {
+  const { db, form, base, assoc } = ctx;
+  const to = `${base}/admin/members/hours`;
+  const rows = await D.listBusinessesNoHours(db, assoc.id, 300);
+  let saved = 0; const bad = [];
+  for (const b of rows) {
+    const v = cap(String(form.get(`h_${b.id}`) || "").trim(), 120);
+    if (!v) continue;
+    const line = normalizeHours(v);
+    if (!line) { bad.push(b.name); continue; }
+    await D.setBusinessHours(db, b.id, line);
+    saved++;
+  }
+  if (saved) await audit(ctx, "영업시간일괄", `${saved}곳`);
+  const parts = [saved ? `${saved}곳의 영업시간을 저장했습니다.` : "저장한 곳이 없습니다."];
+  if (bad.length) parts.push(`읽지 못한 ${bad.length}곳 — 여는 시각과 닫는 시각 둘이 있어야 합니다: ${bad.slice(0, 6).join(", ")}${bad.length > 6 ? " 외" : ""}`);
+  return back(to, parts.join(" "), !saved);
+}
+
+// ---------- '기타' 로 들어간 가게의 업종을 상호로 짐작 ----------
+//
+// 명부에 업종 칸이 없던 시절에 들어간 가게는 전부 '기타' 다. 그러면 손님 화면의 분류
+// 단추(음식점·카페…)에서 그 가게가 빠진다. 새 명부는 넣을 때 짐작하지만, 이미 들어간
+// 가게는 이 단추가 같은 규칙으로 채운다. 짐작이 안 서는 이름은 '기타' 그대로 둔다.
+export async function adminGuessCategories(ctx) {
+  const { db, base, assoc } = ctx;
+  const rows = await D.listBusinessesOther(db, assoc.id);
+  let n = 0;
+  for (const b of rows) {
+    const c = mapCategory(b.name);
+    if (c === "기타") continue;
+    await D.setBusinessCategory(db, b.id, c);
+    n++;
+  }
+  if (n) await audit(ctx, "업종짐작", `${n}곳`);
+  return back(`${base}/admin#s-people`,
+    n ? `${n}곳의 업종을 상호로 짐작해 채웠습니다. 틀린 곳은 가게 화면에서 고쳐 주세요.` : "상호로 짐작할 수 있는 가게가 없습니다.", !n);
 }
 
 // ---------- 지도 사진을 한꺼번에 가져오기 ----------
