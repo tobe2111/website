@@ -19,7 +19,20 @@
       if (on) found = true;
     });
     if (!found) return show(groups[0].dataset.tab, push);
-    nav.querySelectorAll("a").forEach(function (a) { a.classList.toggle("on", a.dataset.tab === tab); });
+    var here = null;
+    nav.querySelectorAll("a").forEach(function (a) {
+      var on = a.dataset.tab === tab;
+      a.classList.toggle("on", on);
+      if (on) here = a;
+    });
+    // 휴대폰에서는 차림표가 한 줄로 서서 옆으로 밀리게 돼 있다(app.css).
+    // 그러면 '설정' 처럼 뒤쪽 칸을 고른 뒤 화면 밖에 남아, 지금 어디인지가 안 보인다.
+    // 가로로만 끌어다 놓는다 — 세로로 움직이면 보고 있던 자리를 잃는다.
+    if (here && nav.scrollWidth > nav.clientWidth) {
+      var l = here.offsetLeft, r = l + here.offsetWidth;
+      if (l < nav.scrollLeft) nav.scrollLeft = Math.max(0, l - 12);
+      else if (r > nav.scrollLeft + nav.clientWidth) nav.scrollLeft = r - nav.clientWidth + 12;
+    }
     try { sessionStorage.setItem(KEY, tab); } catch (e) {}
     if (push && location.hash !== "#s-" + tab) history.replaceState(null, "", "#s-" + tab);
     window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });

@@ -4288,3 +4288,76 @@ body.is-console[data-console="super"] .console-strip{border-bottom:1px solid #2b
   .view-switch{width:100%}
   .view-tab{flex:1;justify-content:center;min-height:44px;padding:0 10px}
 }
+
+/* ══ 관리자 콘솔을 휴대폰에서 ═══════════════════════════════════════════
+   눈으로 보고 고치지 않고 **재서** 고칩니다. 390px 폭에서 실제로 렌더해 재 보니:
+
+     회원·점포 목록   26곳에 16,659px   ← 114곳이면 7만 픽셀. 손가락이 지칩니다.
+     차림표          네 줄로 접혀 300px  ← 본문 전에 화면 하나가 통째로 차림표
+
+   가로로 넘치는 곳은 없었습니다. 깨진 게 아니라 **너무 긴 것**이 문제였습니다.
+   그래서 여기서는 '안 깨지게' 가 아니라 '한 화면에 들어오게' 를 고칩니다. */
+
+/* ── 차림표는 한 줄로 두고 옆으로 민다 ───────────────────────────────
+   열한 칸을 접으면 회장님은 아침마다 차림표를 지나가는 데 화면 하나를 씁니다.
+   한 줄로 두면 48px 입니다. 지금 어느 칸에 있는지는 super-tabs.js 가 그 칸을
+   가로로 끌어다 보여 줍니다 — 자바스크립트가 없으면 그냥 손으로 밀면 됩니다. */
+@media (max-width:640px){
+  .dash .console-side nav{
+    flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;
+    gap:0 2px;padding:0 0 6px;
+    scrollbar-width:none;-ms-overflow-style:none;
+    scroll-snap-type:x proximity;overscroll-behavior-x:contain;
+  }
+  .dash .console-side nav::-webkit-scrollbar{display:none}
+  .dash .console-side a{flex:0 0 auto;white-space:nowrap;padding:6px 12px;scroll-snap-align:start}
+}
+
+/* ── 표의 한 줄을 '카드' 가 아니라 '한 덩어리' 로 ────────────────────
+   좁은 화면에서 칸마다 한 줄씩 쌓고 앞에 이름표를 붙이면, 이름표와 값이 각각 한 줄이
+   되어 가게 하나가 여덟 줄이 됩니다. 이름표는 값을 보면 아는 것들입니다
+   ('가게' 다음에 오는 것이 가게 이름인 줄 모르는 사람은 없습니다).
+   그래서 이름표를 걷고, 상태와 날짜만 오른쪽 위로 보냅니다. */
+@media (max-width:720px){
+  /* 표·묶음까지 블록으로 내려야 합니다. `tr` 만 격자로 바꾸면 표가 만드는 익명 칸이
+     그 격자를 감싸 폭이 3px 로 찌그러집니다 — 실측해 보고서야 알았습니다. */
+  table.dtable,table.dtable tbody{display:block;width:100%}
+  table.dtable tbody tr{
+    display:grid;grid-template-columns:minmax(0,1fr) auto;
+    align-items:start;gap:1px 12px;padding:11px 14px;
+    border-bottom:1px solid var(--line-soft);
+  }
+  table.dtable tbody td{display:block;padding:0;border:0;grid-column:1;min-width:0}
+  table.dtable tbody td:first-child{padding-top:0}
+  table.dtable td[data-th]::before{content:none}
+  table.dtable tbody td.st{grid-column:2;grid-row:1;text-align:right;white-space:nowrap}
+  table.dtable tbody td.num{grid-column:2;grid-row:2;text-align:right;white-space:nowrap}
+  table.dtable tbody td.act{
+    grid-column:1/-1;display:flex;flex-wrap:wrap;gap:8px;
+    padding:10px 0 0;text-align:left;
+    /* 넓은 화면에서는 관리 칸을 `width:1%` 로 좁혀 붙입니다(표에서 쓰는 오랜 수법).
+       그런데 격자 항목에서는 그 1% 가 **진짜 1%** 로 읽혀 칸이 2.9px 이 됩니다.
+       단추가 한 줄에 하나씩 떨어져 회장님은 두 배로 스크롤하게 됩니다. */
+    width:auto;white-space:normal;
+  }
+  /* 관리자도 여기서는 엄지로 누릅니다 — 데스크톱용 btn-xs 를 그대로 두면 안 눌립니다. */
+  /* 단추 하나하나가 제 폼 안에 있습니다. 그 폼을 display:contents 로 없애 단추를 바로
+     flex 항목으로 만들려고 했는데, 크로미움에서 칸 폭이 3px 로 찌그러졌습니다(실측).
+     폼 자체를 flex 항목으로 두는 쪽이 단순하고 확실합니다. */
+  .dash table.dtable tbody td.act form{display:inline-flex;flex:0 0 auto}
+  /* 44px 아래로 내리지 않습니다. 여기서는 관리자도 엄지로 누릅니다 —
+     40px 로 줄였다가 접근성 실측에서 83건이 났습니다(승인·반려·정보 채우기 …). */
+  .dash table.dtable tbody td.act .btn{min-height:44px;padding:0 16px;font-size:14px}
+}
+
+/* ── 손가락으로 누르는 것은 좁은 화면에서 44px ───────────────────────
+   재 보니 '명단 CSV로 받기' 14px · '← 회원·점포' 15px · '네이버 지도 ↗' 21px 이었습니다.
+   글자 링크라 눈에는 안 띄지만, 옆의 다른 것이 눌립니다. */
+@media (max-width:640px){
+  .dash .section-eyebrow a,
+  .dash .panel-hint a,
+  .dash .st-act-w a,
+  .dash .biz-way a,
+  .dash .ask-maps a,
+  .dash .dt-sub a{display:inline-flex;align-items:center;min-height:44px}
+}
