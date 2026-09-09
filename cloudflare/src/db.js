@@ -342,12 +342,15 @@ export async function createUser(db, { email, passwordHash, salt, name, role = "
   return getUserById(db, await lastId(db));
 }
 // 휴대폰: 숫자만 남겨 저장(하이픈·공백 제거). 010으로 시작하는 10~11자리만 유효로 본다.
-export const normalizePhone = (p) => String(p || "").replace(/\D/g, "").slice(0, 11);
+// 050 으로 시작하는 안심번호(0507-1403-1453)는 열두 자리다 — 네이버·배달앱이 가게에 붙여 주는 번호라
+// 명부와 지도에 실제로 이 모양이 많다. 열한 자리에서 자르면 마지막 숫자가 사라져 못 거는 번호가 된다.
+export const normalizePhone = (p) => { const d = String(p || "").replace(/\D/g, ""); return d.slice(0, /^050\d/.test(d) ? 12 : 11); };
 export const isValidPhone = (p) => /^01[016789]\d{7,8}$/.test(normalizePhone(p));
 export const maskPhone = (p) => { const d = normalizePhone(p); return d.length < 8 ? "***" : `${d.slice(0, 3)}****${d.slice(-4)}`; };
 // 화면에 되돌려 보여줄 때만 하이픈을 넣는다 (저장은 숫자만).
 export const formatPhone = (p) => {
   const d = normalizePhone(p);
+  if (d.length === 12 && /^050/.test(d)) return `${d.slice(0, 4)}-${d.slice(4, 8)}-${d.slice(8)}`;
   if (d.length === 11) return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}`;
   if (d.length === 10) return `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
   return d;

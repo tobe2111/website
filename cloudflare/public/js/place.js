@@ -63,6 +63,8 @@
       list.hidden = true;
       // 레퍼런스의 '✓ 완료' — 상자가 초록 확인 상태로 바뀐다 (CSS 가 data-place-done 을 본다)
       box.setAttribute("data-place-done", "");
+      var pin = scope.querySelector("[data-pin-note]");
+      if (pin && field("lat") && field("lat").value) pin.textContent = "지도 핀: 고른 가게 위치로 저장됩니다.";
       say("채웠습니다. 확인하고 저장을 눌러 주세요. 영업시간은 지도에 없어 직접 적으셔야 합니다.");
     }
     function render(places) {
@@ -102,7 +104,17 @@
         .then(function (d) {
           if (d && d.error) { say(d.message || "찾지 못했습니다."); return; }
           var places = (d && d.places) || [];
-          if (!places.length) { say("그 이름으로는 찾지 못했습니다. 상호를 조금 더 정확히 적어 보세요."); return; }
+          if (!places.length) {
+            // 카카오·네이버 검색에 없어도 네이버지도에는 있는 가게가 많다(네이버 '검색 API' 는
+            // 네이버지도의 색인이 아니다). 그때는 사람이 네이버지도에서 열고 '공유' 주소를 붙이면 된다.
+            say("그 이름으로는 찾지 못했습니다. 상호를 조금 더 정확히 적어 보시거나, ");
+            var a = document.createElement("a");
+            a.href = "https://map.naver.com/p/search/" + encodeURIComponent(term);
+            a.target = "_blank"; a.rel = "noopener"; a.textContent = "네이버지도에서 열어";
+            msg.appendChild(a);
+            msg.appendChild(document.createTextNode(" '공유 → 링크 복사' 한 주소를 아래 네이버 플레이스 칸에 붙여넣으세요 — 그러면 사진 가져오기가 열립니다."));
+            return;
+          }
           say("아래에서 맞는 가게를 눌러 주세요.");
           render(places);
         })
