@@ -20,7 +20,7 @@
 //   손님 화면의 분류는 일곱 가지입니다. 27개를 그대로 두면 목록 위 분류 단추가 27개가 되어
 //   아무도 안 누릅니다. 그래서 묶는데, **묶은 결과를 미리 보여 주고 넣습니다.**
 //   조용히 바꾸면 회장님이 나중에 "왜 노래방이 생활·서비스지" 하고 놀라게 됩니다.
-import { cap } from "./util.js";
+import { cap, slugify } from "./util.js";
 import { normalizePhone, isValidPhone } from "./db.js";
 import { parseTable } from "./csv.js";
 
@@ -232,6 +232,10 @@ export function parseMemberRoster(text, { prefix = "" } = {}) {
 
   const rows = [];
   const seen = new Set();
+  // 이름은 다른데 **가게 주소(영문 주소)가 같아지는** 줄이 있습니다("본죽"/"본 죽").
+  // 한 상인회 안에서 그 주소는 하나뿐이라 뒤엣것은 못 들어갑니다. 조용히 빠지면
+  // 회장님은 113곳만 들어간 것을 세어 보고서야 아는데, 그때는 어느 줄인지 모릅니다.
+  const seenSlug = new Set();
   for (let r = 0; r < body.length; r++) {
     const c = body[r];
     const g = (i) => (i >= 0 ? cap(String(c[i] ?? "").replace(/[\x00-\x1f\x7f]/g, " ").trim(), 200) : "");
@@ -250,7 +254,11 @@ export function parseMemberRoster(text, { prefix = "" } = {}) {
     if (!name) { row.status = "bad"; row.note = "상호가 비어 있습니다"; }
     else if (seen.has(norm(name))) { row.status = "bad"; row.note = "위에 같은 상호가 이미 있습니다"; }
     else if (phone && !isValidPhone(phone)) { row.status = "bad"; row.note = `전화번호를 확인해 주세요 (${phone})`; }
-    if (row.status === "ok") seen.add(norm(name));
+    else if (seenSlug.has(slugify(name))) {
+      row.status = "bad";
+      row.note = "위의 어느 상호와 인터넷 주소가 같아집니다 — 한쪽 이름을 조금 다르게 적어 주세요";
+    }
+    if (row.status === "ok") { seen.add(norm(name)); seenSlug.add(slugify(name)); }
     rows.push(row);
   }
   return {

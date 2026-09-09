@@ -4265,3 +4265,7 @@ body.is-console[data-console="super"] .console-strip{border-bottom:1px solid #2b
 .map-skel-note .ms-fail{display:none}
 [data-map-failed] .map-skel-note .ms-load{display:none}
 [data-map-failed] .map-skel-note .ms-fail{display:block}
+
+/* 보내는 중인 단추 — 눌린 것이 보여야 사람이 한 번 더 누르지 않는다.
+   disabled 를 쓰지 않는 이유는 submit-once.js 에 적어 두었다(name/value 가 안 넘어간다). */
+.btn.is-busy { opacity: .6; pointer-events: none; cursor: default; }

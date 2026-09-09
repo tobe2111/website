@@ -1723,19 +1723,43 @@ export async function importMemberRows(ctx, rows) {
     if (r.status === "dup") { skipped++; continue; }
     if (r.status !== "ok") { failed++; continue; }
     if (room <= 0) { r.status = "bad"; r.note = "회원 정원이 가득 찼습니다"; failed++; continue; }
-    const { hash, salt } = await hashPassword(tempPassword());
-    const user = await D.createUser(db, {
-      email: `p${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}@${NO_LOGIN_DOMAIN}`,
-      passwordHash: hash, salt,
-      // 대표자를 모르는 줄은 상호를 이름 자리에 둔다 — 목록에서 '누구' 칸이 비면 그 줄을 못 읽는다.
-      name: r.owner || r.name, role: "MERCHANT", associationId: assoc.id, phone: r.phone,
-    });
-    const biz = await D.createBusiness(db, { associationId: assoc.id, ownerId: user.id,
-      name: r.name, category: r.category, source: "proxy" });
-    if (r.address) {
-      await D.updateBusiness(db, biz.id, { name: biz.name, category: biz.category, description: "",
-        phone: "", address: r.address, hours: "", lat: null, lng: null,
-        snsInstagram: "", snsYoutube: "", snsBlog: "", snsKakao: "", snsNaver: "", mapUrl: "" });
+
+    // 넣기 **바로 앞에서** 다시 확인합니다. 미리보기를 띄운 뒤로 시간이 흘렀고, 그 사이
+    // 같은 명부가 한 번 더 들어갔을 수 있습니다 — 114줄은 오래 걸려서 회장님이
+    // [등록하기] 를 두 번 누르는 일이 실제로 일어납니다. 처음에 한 번만 확인하면
+    // 두 번째 요청은 목록이 빈 것을 보고 114곳을 통째로 다시 만듭니다.
+    if (await D.getBusinessByName(db, assoc.id, r.name)) {
+      r.status = "dup"; r.note = "이미 등록돼 있습니다"; skipped++; continue;
+    }
+
+    // 한 줄이 실패해도 나머지 113줄은 들어가야 합니다. 예전에는 여기서 터지면 화면이
+    // 통째로 오류가 되어, 회장님은 **몇 곳까지 들어갔는지조차** 알 수 없었습니다.
+    let user = null;
+    try {
+      const { hash, salt } = await hashPassword(tempPassword());
+      user = await D.createUser(db, {
+        email: `p${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}@${NO_LOGIN_DOMAIN}`,
+        passwordHash: hash, salt,
+        // 대표자를 모르는 줄은 상호를 이름 자리에 둔다 — 목록에서 '누구' 칸이 비면 그 줄을 못 읽는다.
+        name: r.owner || r.name, role: "MERCHANT", associationId: assoc.id, phone: r.phone,
+      });
+      const biz = await D.createBusinessExact(db, { associationId: assoc.id, ownerId: user.id,
+        name: r.name, category: r.category, source: "proxy" });
+      if (!biz) {   // 넣는 사이에 이미 들어갔습니다 (같은 명부가 두 번 들어오는 중)
+        await D.deleteOrphanUser(db, user.id).catch(() => {});
+        r.status = "dup"; r.note = "이미 등록돼 있습니다"; skipped++; continue;
+      }
+      if (r.address) {
+        await D.updateBusiness(db, biz.id, { name: biz.name, category: biz.category, description: "",
+          phone: "", address: r.address, hours: "", lat: null, lng: null,
+          snsInstagram: "", snsYoutube: "", snsBlog: "", snsKakao: "", snsNaver: "", mapUrl: "" });
+      }
+    } catch {
+      // 가게를 못 만들었으면 방금 만든 계정만 남습니다. 그대로 두면 회원 수만 늘고
+      // 회원 목록에 가게 없는 이름이 떠서, 회장님이 그게 무엇인지 알 수 없습니다.
+      if (user) await D.deleteOrphanUser(db, user.id).catch(() => {});
+      r.status = "bad"; r.note = "이 줄만 넣지 못했습니다 — 다시 붙여넣으면 이 줄부터 들어갑니다";
+      failed++; continue;
     }
     r.status = "made"; made++; room--;
   }

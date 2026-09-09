@@ -332,6 +332,10 @@ export const delSetting = (db, key) => run(db, "DELETE FROM settings WHERE key=?
 export const countUsers = async (db) => (await first(db, "SELECT COUNT(*) AS n FROM users")).n;
 export const getUserByEmail = (db, email) => first(db, "SELECT * FROM users WHERE email = ?", email);
 export const getUserById = (db, id) => first(db, "SELECT * FROM users WHERE id = ?", id);
+// 가게를 못 만들어 주인만 남은 계정을 치웁니다. 그대로 두면 회원 수만 늘어 정원을 갉아먹고,
+// 회원 목록에는 가게 없는 이름이 떠서 회장님이 그게 무엇인지 알 수 없습니다.
+export const deleteOrphanUser = (db, id) =>
+  run(db, "DELETE FROM users WHERE id=? AND NOT EXISTS (SELECT 1 FROM businesses WHERE owner_id=?)", id, id);
 export async function createUser(db, { email, passwordHash, salt, name, role = "MERCHANT", associationId = null, phone = "" }) {
   await run(db, "INSERT INTO users (association_id, email, password_hash, salt, name, role, phone) VALUES (?, ?, ?, ?, ?, ?, ?)",
     associationId, email, passwordHash, salt, name, role, normalizePhone(phone));
@@ -401,10 +405,59 @@ export async function uniqueSlug(db, aid, name) {
   while (await first(db, "SELECT id FROM businesses WHERE association_id = ? AND slug = ?", aid, slug)) slug = `${base}-${++n}`;
   return slug;
 }
+// 주소(slug)가 겹쳐 넣지 못했다 — 다른 요청이 그 사이에 같은 주소를 먼저 넣었다는 뜻.
+export const isSlugTaken = (e) =>
+  /UNIQUE constraint failed:\s*businesses\.association_id,\s*businesses\.slug/i.test(String(e && e.message || e));
+
+// 가게를 만든다.
+//
+// 주소를 고르는 일(uniqueSlug)과 넣는 일 사이에는 **틈이 있습니다.** 그 틈에 다른 요청이
+// 같은 주소를 먼저 넣으면 여기서 UNIQUE 오류가 나고, 예전에는 그게 그대로 500 이 되어
+// **하던 일 전체가 끊겼습니다.** 회장님이 명부 114줄을 넣다가 [등록하기] 를 두 번 누른
+// 것만으로 실제로 그렇게 됐습니다 — 오래 걸리는 화면이라 두 번 누르는 것이 이상한 일이
+// 아닙니다.
+//
+// 그래서 겹치면 다음 번호로 다시 고릅니다. 몇 번을 다시 고르든 끝은 납니다 —
+// 겹칠 때마다 이미 찬 번호가 하나씩 늘어나므로 다음 번호는 반드시 비어 있게 됩니다.
 export async function createBusiness(db, { associationId, ownerId, name, category, source = "self" }) {
-  const slug = await uniqueSlug(db, associationId, name);
-  await run(db, "INSERT INTO businesses (association_id, owner_id, name, slug, category, source) VALUES (?, ?, ?, ?, ?, ?)",
-    associationId, ownerId, name.trim(), slug, category || "기타", source === "proxy" ? "proxy" : "self");
+  const base = slugify(name);
+  let slug = await uniqueSlug(db, associationId, name);
+  for (let n = 2; ; n++) {
+    try {
+      await run(db, "INSERT INTO businesses (association_id, owner_id, name, slug, category, source) VALUES (?, ?, ?, ?, ?, ?)",
+        associationId, ownerId, name.trim(), slug, category || "기타", source === "proxy" ? "proxy" : "self");
+      return getBusinessById(db, await lastId(db));
+    } catch (e) {
+      if (!isSlugTaken(e)) throw e;
+      // **다시 물어보지 않고** 다음 번호로 넘어갑니다. 겹쳤다는 것은 방금 읽은 것이
+      // 이미 낡았다는 뜻이라, 같은 곳에 다시 물으면 같은 답을 받고 같은 자리에서 또
+      // 막힙니다. 여섯 번까지는 번호를 세고, 그래도 안 되면 짧은 임의 글자를 붙여
+      // 끝을 냅니다 — 여기서 못 넣으면 명부 한 줄이 아니라 등록 전체가 끊깁니다.
+      slug = n <= 6 ? `${base}-${n}` : `${base}-${Math.random().toString(36).slice(2, 8)}`;
+      if (n > 12) throw e;
+    }
+  }
+}
+// 명부를 한꺼번에 넣을 때 쓰는 '겹치면 안 넣는' 만들기.
+//
+// 보통의 createBusiness 는 주소가 겹치면 뒤에 번호를 붙여서라도 넣습니다. 손으로 가게를
+// 하나 더 추가할 때는 그게 맞습니다 — 이름이 같은 다른 가게일 수 있으니까요.
+//
+// 그런데 **명부를 통째로 넣을 때는 정반대**입니다. 겹쳤다는 것은 대개 같은 명부가 한 번 더
+// 들어오고 있다는 뜻입니다. 거기서 번호를 붙여 넣으면 114곳이 228곳이 되는데, 그건 오류로
+// 보이지 않습니다 — 목록이 두 배로 길어질 뿐이라 며칠씩 아무도 모릅니다.
+//
+// 그래서 여기서는 **표(UNIQUE 규칙) 가 판정하게 둡니다.** "있는지 물어보고 없으면 넣는다" 는
+// 물어본 뒤 넣기 전 사이에 남이 먼저 넣을 수 있어 소용이 없습니다. 넣어 보고 막히면
+// 이미 있는 것입니다 — 그 판정은 두 요청이 동시에 와도 틀리지 않습니다.
+export async function createBusinessExact(db, { associationId, ownerId, name, category, source = "proxy" }) {
+  try {
+    await run(db, "INSERT INTO businesses (association_id, owner_id, name, slug, category, source) VALUES (?, ?, ?, ?, ?, ?)",
+      associationId, ownerId, name.trim(), slugify(name), category || "기타", source === "self" ? "self" : "proxy");
+  } catch (e) {
+    if (isSlugTaken(e)) return null;   // 이미 있습니다 — 건너뜁니다
+    throw e;
+  }
   return getBusinessById(db, await lastId(db));
 }
 export function updateBusiness(db, id, f) {
@@ -449,6 +502,9 @@ export const visitTrend = (db, aid) => first(db, `SELECT
   FROM landing_views WHERE association_id=?`, aid);
 export const listBusinessHours = (db, aid, limit = 1000) =>
   all(db, "SELECT hours, day_off_date FROM businesses WHERE association_id=? AND status='approved' LIMIT ?", aid, limit);
+export const getBusinessByName = (db, aid, name) =>
+  first(db, "SELECT * FROM businesses WHERE association_id=? AND REPLACE(LOWER(name),' ','')=? LIMIT 1",
+    aid, String(name || "").replace(/\s+/g, "").toLowerCase());
 export const listAllBusinesses = (db, aid) =>
   all(db, `SELECT b.*, u.email AS owner_email, u.name AS owner_name FROM businesses b JOIN users u ON u.id=b.owner_id
            WHERE b.association_id=? ORDER BY CASE b.status WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END, b.created_at DESC`, aid);
