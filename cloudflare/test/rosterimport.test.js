@@ -358,3 +358,78 @@ test("머리글 없는 명부도 그대로 등록된다", async () => {
   assert.equal(one.address, "서울 서초구 방배동 769-10");
   assert.ok(!one.phone, "대표자 개인 번호가 가게 공개 번호로 새면 안 된다");
 });
+
+// ── 같은 명부가 두 번 들어올 때 ──────────────────────────────────────────
+//
+// 실제로 난 사고입니다. 114줄은 넣는 데 시간이 걸리는데 화면이 아무 말이 없어서
+// 회장님이 [등록하기] 를 한 번 더 누르셨고, 그 두 번째가 첫 번째와 겹쳐 돌면서
+// UNIQUE 오류로 화면 전체가 500 이 됐습니다. 겹쳐 돌아도 오류가 아니라 **한 벌**이 되어야 합니다.
+const TWO = [
+  "상호\t대표자\t전화번호",
+  "버들카페\t김방배\t010-1111-2222",
+  "돈거돈락\t최진호\t010-3333-4444",
+  "삼호골프연습장\t이유진\t010-5555-6666",
+].join("\n");
+
+test("[등록하기] 가 겹쳐 눌려도 가게가 두 벌 생기지 않는다", async () => {
+  const env = makeEnv(); const a = await seed(env);
+  const j = await login(env);
+  const t = (/name="_csrf" value="([^"]+)"/.exec(await (await get(env, j, IMPORT)).text()) || [])[1];
+  const body = new URLSearchParams({ _csrf: t, roster: TWO, confirm: "1" }).toString();
+  const fire = () => worker.fetch(new Request(B + IMPORT, { method: "POST",
+    headers: { cookie: ch(j), "content-type": "application/x-www-form-urlencoded" }, body }), env);
+  const rs = await Promise.all([fire(), fire()]);
+  for (const r of rs) assert.equal(r.status, 200, "겹쳐 눌렀다고 화면이 죽으면 안 된다");
+  const list = await D.listAllBusinesses(env.DB, a.id);
+  assert.equal(list.length, 3, `가게가 ${list.length}곳 생겼다 — 한 벌이어야 한다`);
+});
+
+test("겹쳐 눌려도 주인 없는 계정이 남지 않는다", async () => {
+  const env = makeEnv(); const a = await seed(env);
+  const j = await login(env);
+  const t = (/name="_csrf" value="([^"]+)"/.exec(await (await get(env, j, IMPORT)).text()) || [])[1];
+  const body = new URLSearchParams({ _csrf: t, roster: TWO, confirm: "1" }).toString();
+  const fire = () => worker.fetch(new Request(B + IMPORT, { method: "POST",
+    headers: { cookie: ch(j), "content-type": "application/x-www-form-urlencoded" }, body }), env);
+  await Promise.all([fire(), fire()]);
+  // 사장님 계정은 가게마다 하나여야 한다. 가게를 못 만든 자리에 계정만 남으면
+  // 회원 정원(요금제 한도)을 갉아먹고, 회원 목록에 가게 없는 이름이 뜬다.
+  assert.equal(await D.countMembers(env.DB, a.id), 3);
+});
+
+test("이름이 달라도 인터넷 주소가 같아지는 줄은 미리 알려 준다", () => {
+  const r = parseMemberRoster("상호\n버들카페\n버들카페!");
+  assert.equal(r.rows[0].status, "ok");
+  assert.equal(r.rows[1].status, "bad", "조용히 빠지면 113곳만 들어간 것을 세어 보고서야 안다");
+  assert.match(r.rows[1].note, /인터넷 주소/);
+});
+
+test("한 줄이 실패해도 나머지는 들어간다", async () => {
+  const env = makeEnv(); const a = await seed(env);
+  const j = await login(env);
+  // 가운데 줄의 상호를 이미 등록해 둔다 — 그 줄은 건너뛰고 나머지 둘은 들어가야 한다.
+  const p = await hashPassword("x12345678");
+  const u = await D.createUser(env.DB, { email: "x@bb.kr", passwordHash: p.hash, salt: p.salt,
+    name: "최진호", role: "MERCHANT", associationId: a.id });
+  await D.createBusiness(env.DB, { associationId: a.id, ownerId: u.id, name: "돈거돈락", category: "음식점" });
+  await post(env, j, IMPORT, { roster: TWO, confirm: "1" }, IMPORT);
+  const names = (await D.listAllBusinesses(env.DB, a.id)).map((b) => b.name).sort();
+  assert.deepEqual(names, ["돈거돈락", "버들카페", "삼호골프연습장"]);
+});
+
+test("등록 화면이 지금 몇 곳인지를 늘 말해 준다", async () => {
+  const env = makeEnv(); await seed(env);
+  const j = await login(env);
+  assert.match(await (await get(env, j, IMPORT)).text(), /지금 0곳이 등록돼 있습니다/);
+  await post(env, j, IMPORT, { roster: TWO, confirm: "1" }, IMPORT);
+  const html = await (await get(env, j, IMPORT)).text();
+  assert.match(html, /지금 3곳이 등록돼 있습니다/, "두 번 들어가 목록이 두 배가 된 상태는 숫자로만 보인다");
+});
+
+test("오래 걸리는 단추는 두 번 눌리지 않게 막아 둔다", async () => {
+  const env = makeEnv(); await seed(env);
+  const j = await login(env);
+  const html = await (await get(env, j, IMPORT)).text();
+  assert.ok(html.includes("data-once"), "폼에 표시가 없으면 스크립트가 잡을 것이 없다");
+  assert.ok(html.includes("/js/submit-once.js"));
+});

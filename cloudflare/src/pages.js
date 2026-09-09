@@ -1449,6 +1449,9 @@ export async function adminMembersImport(ctx) {
     }
   }
 
+  // 지금 이 상인회에 몇 곳이 들어와 있는지를 늘 적어 둡니다. 명부가 두 번 들어가
+  // 목록이 두 배가 된 상태는 오류로 보이지 않아서, 숫자를 보여 주지 않으면 아무도 모릅니다.
+  const haveN = (await D.listAllBusinesses(db, assoc.id)).length;
   const okN = rows ? rows.filter((r) => r.status === "ok").length : 0;
   const dupN = rows ? rows.filter((r) => r.status === "dup").length : 0;
   const badN = rows ? rows.filter((r) => r.status === "bad").length : 0;
@@ -1469,7 +1472,7 @@ export async function adminMembersImport(ctx) {
 
   const inner = `
     ${done ? `<div class="flash flash-ok"><b>${done.made}곳을 등록했습니다.</b>
-      ${done.skipped ? `이미 있던 ${done.skipped}곳은 건너뛰었습니다. ` : ""}${done.failed ? `${done.failed}곳은 넣지 못했습니다 — 아래 표에서 확인해 주세요.` : ""}</div>
+      ${done.skipped ? `이미 있던 ${done.skipped}곳은 건너뛰었습니다. ` : ""}${done.failed ? `${done.failed}곳은 넣지 못했습니다 — 아래 표에서 확인해 주세요. 그대로 다시 붙여넣으면 그 줄부터 들어갑니다. ` : ""}이제 모두 <b>${haveN}곳</b>입니다.</div>
       <p class="panel-hint"><b>다음은 지도 연결입니다.</b> 한 번 붙여 두면 지도 위 핀·가게 대표번호·도로명주소·
         대표사진 가져오기가 함께 열립니다. <a class="btn btn-sm btn-cta" href="${base}/admin/members/map">지도에 한꺼번에 연결 →</a></p>
       <p class="panel-hint">그다음은 사진과 영업시간입니다 — 사장님께 요청 링크를 보내면 로그인 없이 폰에서 직접 올려 주십니다.</p>` : ""}
@@ -1482,7 +1485,7 @@ export async function adminMembersImport(ctx) {
         아니어도 되고, 없는 칸이 있어도 됩니다 — <b>상호</b> 한 칸만 있으면 넣을 수 있습니다.
         한 번에 ${IMPORT_MAX}줄까지.</p>
       ${err ? `<div class="flash flash-err">${esc(err)}</div>` : ""}
-      <form method="post" action="${base}/admin/members/import" class="stack-form">
+      <form method="post" action="${base}/admin/members/import" class="stack-form" data-once>
         <input type="hidden" name="_csrf" value="${esc(csrf)}" />
         <label>주소 앞에 붙일 말 <small>비워 두면 명부에 적힌 주소를 그대로 씁니다</small>
           <input type="text" name="prefix" maxlength="40" value="${esc(prefix)}" placeholder="예: 서울 서초구" /></label>
@@ -1524,10 +1527,11 @@ export async function adminMembersImport(ctx) {
   const body = await consoleShell(ctx, {
     title: "명부로 한 번에 등록", active: "people",
     eyebrow: `<a href="${base}/admin#s-people">← 회원·점포</a>`,
-    sub: "상인회가 이미 갖고 있는 엑셀 명부를 붙여넣으면 가게가 한 번에 등록됩니다.",
+    sub: `상인회가 이미 갖고 있는 엑셀 명부를 붙여넣으면 가게가 한 번에 등록됩니다. 지금 ${haveN}곳이 등록돼 있습니다.`,
     body: inner,
   });
-  return html(layout({ title: "명부로 한 번에 등록", assoc, base, user, body, csrf }));
+  return html(layout({ title: "명부로 한 번에 등록", assoc, base, user, body, csrf,
+    scripts: `<script src="${assetUrl("/js/submit-once.js")}" defer></script>` }));
 }
 
 // ================= 명부의 가게들을 지도에 한꺼번에 연결 =================
