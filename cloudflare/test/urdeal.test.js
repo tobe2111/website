@@ -67,7 +67,10 @@ test("이용권이 없어도 섹션이 비지 않는다 — 사장님을 부르�
   // 이용권이 0개면 '사장님께' 칸이 지도 배너와 나란히 한 띠가 된다(지도 배너가 뒤에 있을 때). 아니면 그 칸 하나가 섹션 전체.
   assert.ok(/deal-band/.test(html) || /deal-row is-empty/.test(html), "이용권이 0개면 사장님 칸이 지도와 한 띠이거나 섹션 전체");
   assert.ok(!/<section class="section" style="padding-top:0"><div class="container"><a href="[^"]*\/map" class="map-banner">/.test(html), "띠로 합쳐졌으면 지도 배너가 따로 또 서지 않는다");
-  assert.match(html, /이용권 만들러 가기/);
+  // 홈의 단추는 유어딜 판매자 가입으로 곧장 간다(목표는 유어딜 유입). 안내 화면은 작은 링크로.
+  assert.match(html, /urdeal\.kr\/seller\/signup\?from=merchant&amp;assoc=seocho/, "판매자 가입 주소에 상인회 꼬리표");
+  assert.match(html, /유어딜 판매자 가입하기/);
+  assert.match(html, /어떻게 이어지나요\?/);
 });
 
 test("가게 번호를 넣으면 그 가게의 이용권이 홈에 걸린다", async () => {

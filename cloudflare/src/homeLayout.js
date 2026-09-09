@@ -394,7 +394,10 @@ function renderSection(s, deps) {
         <b>우리 가게 이용권 만들어서 홍보하기</b>
         <p>손님이 미리 사고 매장에서 그대로 쓰는 이용권입니다. 만들어 두면 이 골목 화면에 걸리고,
            결제와 정산은 유어딜이 대신합니다.</p>
-        <a class="btn btn-deal" href="${deps.base}/urdeal">이용권 만들러 가기</a>
+        ${deps.urdealSignup
+          ? `<a class="btn btn-deal" href="${esc(deps.urdealSignup)}" target="_blank" rel="noopener">유어딜 판매자 가입하기 ↗</a>
+             <a class="deal-how" href="${deps.base}/urdeal">어떻게 이어지나요?</a>`
+          : `<a class="btn btn-deal" href="${deps.base}/urdeal">이용권 만들러 가기</a>`}
       </div></article>`;
       // 이용권 0개 + 지도 배너가 바로 뒤 → 지도와 '사장님께' 카드를 나란히 한 띠로
       const body = !list.length && deps.bandMap
