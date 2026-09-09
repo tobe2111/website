@@ -227,7 +227,7 @@ test("회장님 화면의 링크 만들기가 영업시간도 받는다고 말�
   const html = await (await get(env, j, `/t/bb/admin/business/${b.id}`)).text();
   assert.ok(html.includes("사진·영업시간 요청 링크 만들기"),
     "회장님이 이 링크로 영업시간까지 받을 수 있다는 걸 모른다 — 그러면 130번 직접 적는다");
-  assert.ok(/영업시간이 없어[^<]*<b>'지금 문 연 곳'에 안 뜹니다<\/b> — <a href="#p-photos">/.test(html),
-    "빠진 영업시간에서 사장님께 여쭙는 길로 이어지지 않는다");
+  // 영업시간은 가게 화면에서 뺐다(회장님 요청). '남은 일' 에도 안 나온다 — 요청 링크가 그 길이다.
+  assert.ok(!/'지금 문 연 곳'에 안 뜹니다/.test(html), "영업시간 줄은 이 화면에서 뺐다");
   assert.equal(a.id, (await D.getBusinessById(env.DB, b.id)).association_id);
 });

@@ -2572,6 +2572,10 @@ body{background:var(--bg)}
 .btn-primary:hover{background:var(--brand-800)}
 .btn-lg{min-height:56px;font-size:18px}
 .btn-outline{background:transparent;border:1.5px solid var(--line);color:var(--brand-text);min-height:56px;font-size:18px;font-weight:700;width:100%}
+/* 위 규칙은 손님 화면의 큰 단추용이다. 관리자 화면의 작은 단추(btn-xs·btn-sm)에 outline 을 섞으면
+   화면 끝까지 늘어난 56px 막대가 됐다 — 회원·점포 머리의 '지도에 한꺼번에 연결' 이 그랬다. */
+.btn-outline.btn-xs{width:auto;min-height:32px;font-size:13px;font-weight:600}
+.btn-outline.btn-sm{width:auto;min-height:40px;font-size:15px;font-weight:600}
 .btn-outline:hover{border-color:var(--brand)}
 /* 필터 칩: 알약. 고른 칩은 채우지 않고 파란 테두리 + 파란 글자 (레퍼런스 '전체 1') */
 .doc-chips{gap:8px;margin:0 0 16px;overflow-x:auto;flex-wrap:nowrap;padding-bottom:2px;scrollbar-width:none}
@@ -4038,7 +4042,7 @@ a.deal-card:hover{border-color:var(--deal);transition:border-color .18s}
   .pg-head .btn{min-height:44px}
   /* 폼을 마무리하는 단추가 40px 이었다 — 등록·투표 시작·저장처럼 한 번에 되어야 하는 조작이다.
      좁은 화면에서는 btn-sm 도 44px 로 올린다(넓은 화면의 촘촘함은 그대로 둔다). */
-  .btn,.btn-sm{min-height:44px}
+  .btn,.btn-sm,.btn-outline.btn-xs,.btn-outline.btn-sm{min-height:44px}
   details > summary.panel-title,.mini-edit > summary,.poll-edit > summary,.totp-login > summary{min-height:44px;display:flex;align-items:center}
   /* 콘솔을 휴대폰으로 여는 임원·총무가 있다. 데스크톱 기준으로 조여 둔 조작칸이
      거기서는 26~42px 짜리 과녁이 된다. 좁은 화면에서만 되돌린다. */

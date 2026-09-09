@@ -41,7 +41,7 @@ test("대행 등록한 점포에 무엇이 비었는지, 그래서 손님에게 
   // 숫자가 아니라 결과로 말한다 — '주소 없음' 이 아니라 '지도에 뜨지 않습니다'
   assert.match(html, /지도에 뜨지 않습니다/);
   assert.match(html, /전화를 걸 수 없습니다/);
-  assert.match(html, /'지금 문 연 곳'에 안 뜹니다/);
+  assert.doesNotMatch(html, /'지금 문 연 곳'에 안 뜹니다/, "영업시간은 이 화면에서 뺐다 — 남은 일에도 안 나온다");
   assert.match(html, /name="address"/, "주소 칸이 관리자에게 열려 있어야");
   // 영업시간 칸은 이 화면에서 뺐다 — 사장님 요청 링크와 '한꺼번에 적기' 가 채운다.
   assert.doesNotMatch(html, /name="hours"/);

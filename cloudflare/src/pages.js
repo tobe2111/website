@@ -2517,6 +2517,7 @@ export async function admin(ctx) {
     <span class="tbar-count">${bizQ || bizStatus ? `${bizCounts.all}곳 중 <b>${bizPageData.total}</b>곳` : `모두 <b>${bizPageData.total}</b>곳`}</span>
   </div>`;
   // "지금 어디까지 왔나" 한 줄. 화면 넷을 따로 열어야 알 수 있던 것을 숫자 넷으로 모은다.
+  const mk = mapKeys(env);
   const setup = {
     total: all.length,
     pinned: await D.countBusinessMarkers(db, assoc.id).catch(() => 0),
@@ -3238,17 +3239,18 @@ export async function admin(ctx) {
 
     <div class="sgroup" id="s-people" data-tab="people">
     <section class="panel" id="p-members"><div class="panel-head"><h2 class="panel-title">${isEsign ? "담당자 관리" : `${isFranchise ? "가맹점" : "회원·점포"}`} <span class="badge badge-muted">${isEsign ? staffList.length + "명" : bizCounts.all + "곳"}</span></h2>
+      <span class="pill-row">${isEsign ? "" : `<a class="btn btn-xs btn-primary" href="${base}/admin/members/import">명부로 한 번에 등록</a><a class="btn btn-xs btn-outline" href="${base}/admin/members/map">지도에 한꺼번에 연결</a><a class="btn btn-xs btn-outline" href="${base}/admin/members/photos">지도 사진 한꺼번에</a><a class="btn btn-xs btn-outline" href="${base}/admin/members/links">사진·영업시간 요청 링크</a>`}${members.length && !isEsign ? `<a class="btn btn-xs btn-ghost" href="${base}/admin/members.csv">명단 CSV</a>` : ""}<a class="btn btn-xs btn-ghost" href="${base}/admin/export.json">전체 백업(JSON)</a></span></div>
       ${isEsign ? "" : `<p class="setup-strip"><b>지금 어디까지 왔나</b>
         <a href="${base}/admin/members/import">등록 <em>${setup.total}</em></a>
         <a href="${base}/admin/members/map">지도 <em>${setup.pinned}</em></a>
         <a href="${base}/admin/members/photos">사진 <em>${setup.photo}</em></a>
         <a href="${base}/admin/members/hours">영업시간 <em>${setup.hours}</em></a>
-        <small>— 숫자를 누르면 그 일을 하는 화면으로 갑니다. 왼쪽부터 차례로 채우면 됩니다.</small></p>
+        <small>— 숫자를 누르면 그 일을 하는 화면으로 갑니다. 왼쪽부터 차례로 채우면 됩니다.
+          지도 열쇠: 카카오 <b>${mk.kakao ? "있음" : "없음"}</b> · 네이버 검색 <b>${mk.naver ? "있음" : "없음"}</b></small></p>
       ${setup.guessable ? `<form method="post" action="${base}/admin/members/guess-categories" class="setup-guess" data-once>
         <input type="hidden" name="_csrf" value="${esc(csrf)}" />
         <span>업종이 '기타' 인 가게 ${setup.other}곳 중 <b>${setup.guessable}곳</b>은 상호로 업종을 짐작할 수 있습니다 — '기타' 는 손님 화면의 분류 단추에서 빠집니다.</span>
         <button class="btn btn-xs btn-outline">상호로 짐작해 채우기</button></form>` : ""}`}
-      <span class="pill-row">${isEsign ? "" : `<a class="btn btn-xs btn-primary" href="${base}/admin/members/import">명부로 한 번에 등록</a><a class="btn btn-xs btn-outline" href="${base}/admin/members/map">지도에 한꺼번에 연결</a><a class="btn btn-xs btn-outline" href="${base}/admin/members/photos">지도 사진 한꺼번에</a><a class="btn btn-xs btn-outline" href="${base}/admin/members/links">사진·영업시간 요청 링크</a>`}${members.length && !isEsign ? `<a class="btn btn-xs btn-ghost" href="${base}/admin/members.csv">명단 CSV</a>` : ""}<a class="btn btn-xs btn-ghost" href="${base}/admin/export.json">전체 백업(JSON)</a></span></div>
       ${isEsign ? `<p class="panel-hint">계약서를 만들고 보내는 사람들입니다. <b>담당자</b>는 계약 업무만 하고 설정·API 키·과금은 볼 수 없습니다.
         권한을 회수해도 계정과 서명 이력은 남습니다 — 지우면 증거가 사라지기 때문입니다.</p>
       <div class="table-scroll"><table class="admin-table"><thead><tr><th>이름</th><th>권한</th>${teams.length ? "<th>부서</th>" : ""}<th>관리</th></tr></thead><tbody>${staffRows}</tbody></table></div>
@@ -3999,7 +4001,6 @@ export async function adminBusinessEdit(ctx) {
   const gaps = [
     !b.address && "주소가 없어 <b>지도에 뜨지 않습니다</b>",
     !b.phone && "전화번호가 없어 손님이 <b>전화를 걸 수 없습니다</b>",
-    !b.hours && `영업시간이 없어 <b>'지금 문 연 곳'에 안 뜹니다</b> — <a href="#p-photos">사장님께 여쭤보기</a>`,
     (b.lat == null || b.lng == null) && "좌표가 없어 <b>지도 위 핀이 찍히지 않습니다</b>",
   ].filter(Boolean);
   // ── 완성도 — 레퍼런스의 '프로필 완성도 100%'.
@@ -4007,7 +4008,9 @@ export async function adminBusinessEdit(ctx) {
   // 사진은 이 폼 밖(아래 패널)에서 올리지만 손님 화면에는 가장 크게 보이므로 완성도에 넣는다.
   const photoCount = (await D.listMedia(db, b.id)).filter((m) => m.kind === "image").length;
   const fields = [
-    ["업체명", !!b.name], ["업종", !!b.category], ["전화", !!b.phone], ["영업시간", !!b.hours],
+    // 영업시간은 이 화면에서 뺐다(사장님 요청 링크·한꺼번에 적기가 채운다). 완성도에서도 뺀다 —
+    // 여기서 채울 수 없는 것을 '남은 일' 로 보여 주면 회장님이 이 화면에서 헤맨다.
+    ["업체명", !!b.name], ["업종", !!b.category], ["전화", !!b.phone],
     ["주소", !!b.address], ["소개", !!b.description], ["지도 위치", b.lat != null && b.lng != null],
     ["사진", photoCount > 0],
   ];
