@@ -914,39 +914,75 @@ export async function adminImportUrdealPhotos(ctx) {
 //
 // 화면이 보낸 주소는 믿지 않는다. 서버가 그 가게에 저장된 지도 주소로 다시 열어,
 // 거기 적힌 사진일 때만 담는다 — 이 칸이 아무 주소나 찌르는 창구가 되면 안 된다.
-export async function adminImportPlacePhoto(ctx) {
-  const { db, env, base, assoc } = ctx;
-  const b = await D.getBusinessById(db, Number(ctx.params.id) || 0);
-  if (!b || b.association_id !== assoc.id) return back(`${base}/admin`, "업체를 찾을 수 없습니다.", true);
-  const at = (m, bad) => back(`${base}/admin/business/${b.id}`, m, bad);
+// 한 곳 담기 — 화면 하나짜리(아래)와 일괄(photoChunk)이 **같은 코드**를 쓴다.
+// 두 벌로 두면 한쪽만 고쳐져 "한 곳씩은 되는데 일괄은 안 된다" 가 난다.
+// { ok, why } 를 돌려준다. 던지지 않는다 — 한 곳이 실패해도 나머지가 계속 가야 한다.
+export async function importPlacePhotoFor(env, db, assoc, b) {
   const src = placeSourceOf(b);
-  if (!src) return at("이 가게에는 지도 주소가 없습니다. '장소 찾기' 로 가게를 고르거나, 네이버 플레이스 주소를 넣어 주세요.", true);
-  if (!storage.enabled(env)) return at("사진 저장소(R2)가 아직 연결되지 않았습니다.", true);
-
+  if (!src) return { ok: false, why: "지도 주소가 없습니다" };
+  if (!storage.enabled(env)) return { ok: false, why: "사진 저장소(R2)가 연결되지 않았습니다", stop: true };
   const plan = planOf(assoc);
   if ((await D.countBusinessImages(db, b.id)) >= plan.maxPhotos)
-    return at(`사진은 최대 ${plan.maxPhotos}장까지 올릴 수 있습니다.`, true);
+    return { ok: false, why: `사진이 이미 ${plan.maxPhotos}장입니다` };
 
   const pic = await placePhoto(src);
-  if (!pic) return at("지도에서 이 가게 사진을 찾지 못했습니다. 아직 사진이 올라오지 않았을 수 있습니다.", true);
+  if (!pic) return { ok: false, why: "지도에 아직 사진이 없습니다" };
   const chk = checkWebhookUrl(pic.url, env.PUBLIC_ORIGIN || "");   // https · 공개 도메인 · 내부망 금지
-  if (!chk.ok) return at("가져올 수 없는 사진 주소입니다.", true);
+  if (!chk.ok) return { ok: false, why: "가져올 수 없는 사진 주소입니다" };
 
   let res;
-  try { res = await fetch(pic.url, { redirect: "follow" }); } catch { return at("사진을 받아오지 못했습니다.", true); }
-  if (!res.ok) return at("사진을 받아오지 못했습니다.", true);
+  try { res = await fetch(pic.url, { redirect: "follow" }); } catch { return { ok: false, why: "사진을 받아오지 못했습니다" }; }
+  if (!res.ok) return { ok: false, why: "사진을 받아오지 못했습니다" };
   const len = Number(res.headers.get("content-length") || 0);
-  if (len && len > MAX_IMAGE_BYTES) return at("사진이 너무 큽니다.", true);
+  if (len && len > MAX_IMAGE_BYTES) return { ok: false, why: "사진이 너무 큽니다" };
   const buf = new Uint8Array(await res.arrayBuffer());
-  if (buf.byteLength > MAX_IMAGE_BYTES) return at("사진이 너무 큽니다.", true);
+  if (buf.byteLength > MAX_IMAGE_BYTES) return { ok: false, why: "사진이 너무 큽니다" };
   const real = sniffImage(buf);                    // 확장자가 아니라 실제 바이트로 판정
-  if (!real) return at("사진 파일이 아닙니다.", true);
+  if (!real) return { ok: false, why: "사진 파일이 아닙니다" };
 
   const stored = await storage.save(env, buf, real);
   // 출처는 반드시 남긴다 — 이 사진은 손님이 올린 후기 사진이다.
   await D.addMedia(db, { businessId: b.id, kind: "image", filename: stored, size: buf.byteLength,
     caption: "", sourceName: pic.source, sourceUrl: pic.sourceUrl });
-  return at(`${pic.source}의 대표 사진을 담았습니다. 사장님 사진이 들어오면 바꿔 주세요.`);
+  return { ok: true, why: `${pic.source}의 대표 사진`, source: pic.source };
+}
+
+export async function adminImportPlacePhoto(ctx) {
+  const { db, env, base, assoc } = ctx;
+  const b = await D.getBusinessById(db, Number(ctx.params.id) || 0);
+  if (!b || b.association_id !== assoc.id) return back(`${base}/admin`, "업체를 찾을 수 없습니다.", true);
+  const at = (m, bad) => back(`${base}/admin/business/${b.id}`, m, bad);
+  if (!placeSourceOf(b))
+    return at("이 가게에는 지도 주소가 없습니다. '장소 찾기' 로 가게를 고르거나, 네이버 플레이스 주소를 넣어 주세요.", true);
+  const r = await importPlacePhotoFor(env, db, assoc, b);
+  if (!r.ok) return at(`${r.why}.`, true);
+  return at(`${r.source}의 대표 사진을 담았습니다. 사장님 사진이 들어오면 바꿔 주세요.`);
+}
+
+// ---------- 지도 사진을 한꺼번에 가져오기 ----------
+//
+// 한 곳씩 누르는 단추는 이미 있었다. 그런데 가게가 114곳이면 **114번 눌러야 한다.**
+// 그 화면을 114번 열고 닫는 사람은 없다. 그래서 기능이 있는데도 사진이 한 장도 안 들어왔다.
+// "사진들 아직까지 불러오질 않아" 라는 말이 그 뜻이었다.
+//
+// 지도 연결과 같은 방식으로 끊어 돌린다. 한 곳당 바깥에 두 번 나가고(장소 페이지 · 사진),
+// R2 에 한 번 쓴다. 여섯 곳씩이면 워커 한 요청이 감당하는 범위 안이다.
+export const PHOTO_CHUNK = 6;
+export async function photoChunk(ctx, { after = 0, limit = PHOTO_CHUNK } = {}) {
+  const { db, env, assoc } = ctx;
+  const rows = await D.listBusinessesForPlacePhoto(db, assoc.id, Number(after) || 0, limit);
+  const out = { rows: [], got: 0, cursor: Number(after) || 0, done: rows.length < limit, error: "" };
+  for (const b of rows) {
+    out.cursor = b.id;
+    let r;
+    try { r = await importPlacePhotoFor(env, db, assoc, b); }
+    catch { r = { ok: false, why: "가져오는 중 끊겼습니다" }; }
+    if (r.stop) { out.error = r.why; out.done = false; break; }   // 저장소가 없으면 더 돌려야 소용없다
+    if (r.ok) out.got++;
+    out.rows.push({ id: b.id, name: b.name, ok: !!r.ok, why: r.why });
+  }
+  if (out.got) await audit(ctx, "지도사진일괄", `${out.got}곳`);
+  return out;
 }
 
 // ---------- 사진 업로드 (R2) ----------

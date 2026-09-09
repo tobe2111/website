@@ -475,9 +475,40 @@ export const setBusinessStatus = (db, id, status) => run(db, "UPDATE businesses 
 // 예전에 업체 홈페이지가 잘못 들어간 가게가 영영 다시 안 찾아진다 — 연결됐다고 세어지는데
 // 정작 지도 사진 가져오기는 안 열리는, 눈에 안 보이는 상태로 남는다.
 // (placePhoto.js 의 isPlaceUrl 과 같은 곳들이다. 한쪽만 고치면 어긋난다.)
-const LINKED_SQL = `(map_url LIKE 'http://place.map.kakao.com/%' OR map_url LIKE 'https://place.map.kakao.com/%'
-  OR map_url LIKE 'https://map.kakao.com/%' OR map_url LIKE 'https://map.naver.com/%'
-  OR map_url LIKE 'https://naver.me/%' OR map_url LIKE 'https://m.place.naver.com/%')`;
+const placeUrlSql = (col) => `(${col} LIKE 'http://place.map.kakao.com/%' OR ${col} LIKE 'https://place.map.kakao.com/%'
+  OR ${col} LIKE 'https://map.kakao.com/%' OR ${col} LIKE 'https://map.naver.com/%'
+  OR ${col} LIKE 'https://naver.me/%' OR ${col} LIKE 'https://m.place.naver.com/%')`;
+const LINKED_SQL = placeUrlSql("map_url");
+// 지도 사진을 가져올 수 있는 가게 = 지도 주소가 있고(placeSourceOf 와 같은 조건),
+// 아직 사진이 한 장도 없는 곳. 이미 있는 가게를 다시 가져오면 남의 후기 사진이
+// 사장님 사진 옆에 쌓입니다.
+const PHOTO_SRC_SQL = `(${placeUrlSql("map_url")} OR ${placeUrlSql("sns_naver")})`;
+const NO_IMAGE_SQL = "NOT EXISTS (SELECT 1 FROM media m WHERE m.business_id=b.id AND m.kind='image')";
+export const listBusinessesForPlacePhoto = (db, aid, afterId, limit) =>
+  all(db, `SELECT b.* FROM businesses b WHERE b.association_id=? AND b.id>?
+           AND ${PHOTO_SRC_SQL} AND ${NO_IMAGE_SQL} ORDER BY b.id ASC LIMIT ?`,
+    aid, afterId | 0, Math.max(1, limit | 0));
+export const countBusinessesForPlacePhoto = async (db, aid) =>
+  (await first(db, `SELECT COUNT(*) AS n FROM businesses b WHERE b.association_id=?
+     AND ${PHOTO_SRC_SQL} AND ${NO_IMAGE_SQL}`, aid)).n;
+// 사진이 한 장이라도 있는 가게 — '몇 곳이 사진을 갖췄나' 를 화면에 적기 위해.
+// 사장님께 사진·영업시간을 부탁해야 하는 가게. 사진이 한 장도 없거나 영업시간이 빈 곳.
+//
+// 이 둘은 **지도가 못 주는 것**입니다. 지도에서 상호·주소·전화·좌표·대표사진까지는 따라오는데
+// 영업시간은 안 오고, 사진도 없는 가게가 많습니다. 결국 사장님께 여쭙는 수밖에 없습니다.
+const NEEDS_ASK = `((SELECT COUNT(*) FROM media m WHERE m.business_id=b.id AND m.kind='image')=0
+  OR COALESCE(b.hours,'')='')`;
+export const listBusinessesToAsk = (db, aid, limit, offset) =>
+  all(db, `SELECT b.id, b.name, b.hours, u.name AS owner_name, u.phone AS owner_phone,
+             (SELECT COUNT(*) FROM media m WHERE m.business_id=b.id AND m.kind='image') AS photos
+           FROM businesses b JOIN users u ON u.id=b.owner_id
+           WHERE b.association_id=? AND ${NEEDS_ASK}
+           ORDER BY b.id ASC LIMIT ? OFFSET ?`, aid, Math.max(1, limit | 0), Math.max(0, offset | 0));
+export const countBusinessesToAsk = async (db, aid) =>
+  (await first(db, `SELECT COUNT(*) AS n FROM businesses b WHERE b.association_id=? AND ${NEEDS_ASK}`, aid)).n;
+export const countBusinessesWithImage = async (db, aid) =>
+  (await first(db, `SELECT COUNT(*) AS n FROM businesses b WHERE b.association_id=?
+     AND EXISTS (SELECT 1 FROM media m WHERE m.business_id=b.id AND m.kind='image')`, aid)).n;
 export const listUnlinkedBusinesses = (db, aid, afterId, limit) =>
   all(db, `SELECT * FROM businesses WHERE association_id=? AND id>? AND NOT ${LINKED_SQL} ORDER BY id ASC LIMIT ?`,
     aid, afterId | 0, Math.max(1, limit | 0));

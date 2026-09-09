@@ -4361,3 +4361,21 @@ body.is-console[data-console="super"] .console-strip{border-bottom:1px solid #2b
   .dash .ask-maps a,
   .dash .dt-sub a{display:inline-flex;align-items:center;min-height:44px}
 }
+
+/* ── 가게 상세를 휴대폰에서 ──────────────────────────────────────────
+   재 보니 4,059px 이었습니다. 넘치는 곳은 없었지만 두 군데가 실제로 어긋났습니다. */
+
+/* ① 한 줄짜리 큰 단추 안의 곁말이 상자 밖으로 밀려 나갔습니다.
+      `[🗺️ 지도에서 사진 가져오기 대표 사진 한 장]` 에서 '한 장' 이 잘렸습니다.
+      단추는 기본이 nowrap 인데(가로로 늘어나는 단추가 맞습니다), 화면 폭을 다 쓰는
+      단추는 늘어날 데가 없습니다. 그런 단추만 줄바꿈을 허락하고 곁말을 아래로 내립니다. */
+@media (max-width:640px){
+  .btn.btn-block{white-space:normal;line-height:1.35;padding-top:10px;padding-bottom:10px}
+  .btn.btn-block small{display:block;width:100%;margin-top:2px;font-weight:600;opacity:.85}
+}
+
+/* ② 위도·경도는 짧은 숫자 두 개입니다. 좁은 화면에서 한 칸씩 세로로 세우면
+      둘이서 260px 을 먹는데, 나란히 두면 130px 입니다. 값이 짧아 좁아도 다 보입니다. */
+@media (max-width:860px){
+  .form-two.form-two-tight{grid-template-columns:1fr 1fr;gap:10px}
+}
