@@ -657,3 +657,55 @@ test("카카오가 못 찾은 주소는 네이버 클라우드로 한 번 더 �
 test("비밀키가 없으면 네이버 클라우드는 조용히 건너뛴다", async () => {
   assert.equal(await geocodeNaver(makeEnv({ NAVER_MAP_CLIENT_ID: "cid" }), "서울 서초구 방배동 1"), null);
 });
+
+// ── 간판 이름과 등록 이름이 다른 가게 (실제 명부에서 가장 흔한 실패)
+import { coreName } from "../src/placeMatch.js";
+test("상호에서 업종 낱말을 떼면 '가게 이름' 이 남는다", () => {
+  assert.equal(coreName("박사부동산"), "박사");
+  assert.equal(coreName("㈜아인종합기획"), "아인");
+  assert.equal(coreName("글라시코안경"), "글라시코");
+  assert.equal(coreName("S헤어"), "", "한 글자는 아무 데나 들어가므로 없는 것으로 본다");
+  assert.equal(coreName("태국마사지"), "태국");
+});
+
+test("같은 번지에 '가게 이름' 이 든 후보 하나면 붙인다 — 박사부동산 ↔ 박사공인중개사사무소", () => {
+  const center = { lat: 37.4893, lng: 126.9878 };
+  const r = pickPlace({ name: "박사부동산", address: "서울 서초구 방배동 2233", phone: "" },
+    [{ name: "박사공인중개사사무소", address: "서울 서초구 방배중앙로21길 55", addressJibun: "서울 서초구 방배동 2233", phone: "", url: "u", lat: 37.492, lng: 126.99 }], { center });
+  assert.equal(r.confidence, "high");
+  assert.match(r.why, /가게 이름\(박사\)/);
+});
+
+test("번지는 달라도 골목 800m 안 후보 하나에만 가게 이름이 들어 있으면 붙인다 — 첼로카페 ↔ 첼로", () => {
+  const center = { lat: 37.4893, lng: 126.9878 };
+  const r = pickPlace({ name: "첼로카페", address: "서울 서초구 방배동 760-2", phone: "" },
+    [{ name: "첼로", address: "서울 서초구 방배중앙로 196", phone: "", url: "u", lat: 37.491, lng: 126.989 },
+     { name: "첼로악기사", address: "서울 강남구 어딘가 1", phone: "", url: "v", lat: 37.51, lng: 127.03 }], { center });
+  assert.equal(r.confidence, "high");
+  assert.match(r.why, /첼로/);
+});
+
+test("가게 이름이 골목 안 후보 둘에 들어 있으면 사람에게 넘긴다 — 제일부동산 ↔ 제일공인중개사 ×2", () => {
+  const center = { lat: 37.4893, lng: 126.9878 };
+  const r = pickPlace({ name: "제일부동산", address: "서울 서초구 방배동 763-17", phone: "" },
+    [{ name: "제일공인중개사사무소", address: "서울 서초구 방배중앙로27길 26", phone: "", url: "u", lat: 37.49, lng: 126.988 },
+     { name: "제일공인중개사사무소", address: "서울 서초구 서초대로1길 19-2", phone: "", url: "v", lat: 37.492, lng: 126.992 }], { center });
+  assert.notEqual(r.confidence, "high");
+});
+
+test("정확히 같은 상호가 골목 밖에 따로 있으면 비슷한 이름에 붙이지 않는다 — 씨티부동산", () => {
+  const center = { lat: 37.4893, lng: 126.9878 };
+  const r = pickPlace({ name: "씨티부동산", address: "", phone: "" },
+    [{ name: "씨티공인중개사사무소", address: "서울 서초구 방배중앙로 149", phone: "", url: "u", lat: 37.49, lng: 126.988 },
+     { name: "씨티부동산", address: "서울 서초구 동광로 181", phone: "", url: "v", lat: 37.50, lng: 126.99 }], { center });
+  assert.notEqual(r.why, "가게 이름(씨티)이 골목 안 후보 하나에만 들어 있습니다");
+  assert.notEqual(r.place && r.place.url, "u");
+});
+
+test("골목 안이라도 구가 다르면 비슷한 이름에 붙이지 않는다 — 한우정육식당 ↔ 동작구 우리집한우정육식당", () => {
+  const center = { lat: 37.4893, lng: 126.9878 };
+  const r = pickPlace({ name: "한우정육식당", address: "서울 서초구 방배동 769-9", phone: "" },
+    [{ name: "방배정육식당", address: "서울 서초구 방배중앙로 188", phone: "", url: "u", lat: 37.49, lng: 126.988 },
+     { name: "우리집한우정육식당", address: "서울 동작구 동작대로29가길 9", phone: "", url: "v", lat: 37.494, lng: 126.982 }], { center });
+  assert.notEqual(r.confidence, "high");
+});

@@ -53,6 +53,25 @@ export function kmApart(a, b) {
   return Math.sqrt(dy * dy + dx * dx);
 }
 
+// 우리 골목 '안' — 상가연합회 한 골목은 길어야 몇백 미터입니다. ④ 규칙은 이 안에서만 씁니다.
+export const STREET_KM = 0.8;
+
+// 상호에서 업종 낱말과 회사 꼬리를 떼고 남는 '가게 이름'. "박사부동산" → "박사", "㈜아인종합기획" → "아인".
+// 두 글자 미만이면 없는 것으로 봅니다 — "S헤어" 의 "s" 는 아무 데나 들어갑니다.
+const TRADE_WORDS = ["공인중개사사무소", "공인중개사", "부동산", "세무사", "회계사", "법무사", "종합기획", "인테리어", "골프연습장", "골프",
+  "미용실", "헤어샵", "헤어", "네일", "안경원", "안경", "정육식당", "식당", "초밥", "카페", "커피", "김밥", "샌드위치", "칼국수", "아구찜",
+  "숯불갈비", "갈비", "노래빠", "노래방", "마사지", "약국", "의원", "한의원", "치과", "학원", "꽃집", "플라워", "베이커리", "제과점",
+  "편의점", "마트", "슈퍼", "상사", "주식회사", "㈜", "(주)", "본점", "지점", "방배점", "방배"];
+// 두 주소가 같은 구(區)인가. 한쪽에 구가 없으면 모른다고 보고 막지 않는다.
+const guOf = (addr) => (String(addr || "").split(/\s+/).find((t) => /구$/.test(t) && t.length >= 2) || "");
+export function sameGu(a, b) { const x = guOf(a), y = guOf(b); return !x || !y || x === y; }
+
+export function coreName(name) {
+  let k = key(name);
+  for (const w of TRADE_WORDS) k = k.split(key(w) || w).join("");
+  return k.length >= 2 ? k : "";
+}
+
 // 이름이 얼마나 같은가 — 3(똑같다) · 2(한쪽이 다른 쪽을 품는다) · 0(남남)
 function nameHit(a, b) {
   const x = key(a), y = key(b);
@@ -98,6 +117,9 @@ export function pickPlace(shop, places, { center = null } = {}) {
   const byTel = scored.find((s) => s.telHit);
   if (byTel) return { place: byTel.p, confidence: "high", why: "전화번호가 같습니다" };
 
+  // 상호에서 업종 낱말을 뗀 '가게 이름' — ②·④ 가 함께 쓴다.
+  const core = coreName(shop.name);
+
   // ② 도로명·번지가 같다. 같은 번지에 여러 가게가 있을 수 있으므로(상가 건물),
   //    그중 이름이 스치는 것이 하나면 그것, 아니면 사람에게 넘깁니다.
   const byAddr = scored.filter((s) => s.addrHit);
@@ -107,6 +129,12 @@ export function pickPlace(shop, places, { center = null } = {}) {
       return { place: named[0].p, confidence: "high", why: "주소와 상호가 맞습니다" };
     if (named.length === 1)
       return { place: named[0].p, confidence: "low", why: `주소·상호는 맞는데 골목에서 ${Math.round(named[0].km)}km 떨어져 있습니다` };
+    // 번지가 같고 **가게 이름**(업종 낱말을 뗀 것)이 그 후보에 들어 있으면 그 가게입니다.
+    // "박사부동산" 과 "박사공인중개사사무소" 가 같은 번지에 있는데 남남일 리 없습니다.
+    // 실제 명부에서 가장 흔한 실패가 이것이었습니다 — 간판과 등록상호가 다른 가게.
+    const cored = core ? byAddr.filter((s) => key(s.p.name).includes(core)) : [];
+    if (named.length === 0 && cored.length === 1 && near(cored[0]))
+      return { place: cored[0].p, confidence: "high", why: `주소가 같고 가게 이름(${core})이 들어 있습니다` };
     if (byAddr.length === 1 && named.length === 0)
       return { place: byAddr[0].p, confidence: "low", why: "주소는 맞는데 상호가 다릅니다" };
     if (named.length > 1) return { place: named[0].p, confidence: "low", why: "같은 번지에 비슷한 이름이 여럿입니다" };
@@ -129,6 +157,21 @@ export function pickPlace(shop, places, { center = null } = {}) {
     return { place: exact[0].p, confidence: "low", why: `상호는 같은데 골목에서 ${Math.round(exact[0].km)}km 떨어져 있습니다` };
   if (exactNear.length > 1) return { place: exactNear[0].p, confidence: "low", why: "같은 상호가 여럿입니다" };
   if (exact.length > 1) return { place: exact[0].p, confidence: "low", why: "같은 상호가 여럿입니다" };
+
+  // ④ 간판 이름과 등록 이름이 다른 가게 — 실제 명부에서 가장 흔한 실패였습니다.
+  //    "박사부동산" 은 지도에 "박사공인중개사사무소", "첼로카페" 는 "첼로", "글라시코안경" 은
+  //    "글라시코옵티컬" 로 올라 있습니다. 업종 낱말(부동산·카페·안경…)만 다르고 **가게 이름
+  //    자체(박사·첼로·글라시코)는 같습니다.** 그 이름이 우리 골목 안(800m) 후보 **하나에만**
+  //    들어 있으면 붙입니다. 두 곳에 들어 있으면(제일공인중개사 ×3) 사람에게 넘기고,
+  //    정확히 같은 상호가 골목 밖에 따로 있으면(씨티부동산 1.3km) 그쪽일 수도 있으니 안 붙입니다.
+  //    그리고 **같은 구 안**이어야 합니다. 800m 는 구 경계를 넘기도 하는데(방배동 ↔ 동작구 사당동),
+  //    "한우정육식당" 이 동작구의 "우리집한우정육식당" 에 붙은 일이 실측에서 실제로 났습니다.
+  if (center && core) {
+    const hits = scored.filter((s) => s.km != null && s.km < STREET_KM && key(s.p.name).includes(core)
+      && sameGu(shop.address, s.p.address || s.p.addressJibun));
+    if (hits.length === 1 && !exact.length)
+      return { place: hits[0].p, confidence: "high", why: `가게 이름(${core})이 골목 안 후보 하나에만 들어 있습니다` };
+  }
 
   const loose = scored.filter((s) => s.nHit === 2);
   if (loose.length) return { place: loose[0].p, confidence: "low", why: "이름이 비슷한 곳을 찾았습니다" };
