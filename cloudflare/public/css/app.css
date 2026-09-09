@@ -4403,3 +4403,6 @@ body.is-console[data-console="super"] .console-strip{border-bottom:1px solid #2b
 .roster-table .act-two{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .hours-table .hours-cell{display:grid;gap:6px;justify-items:start}
 .hours-table .hours-cell input{justify-self:stretch}
+/* 운영사 콘솔 — 지도 열쇠 붙여넣기 칸 */
+.key-form label small{display:block;color:var(--muted);font-weight:400}
+.key-form .key-clear{display:inline-flex;align-items:center;gap:4px;font-weight:600;color:var(--ink);cursor:pointer;min-height:44px}

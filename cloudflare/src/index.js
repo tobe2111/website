@@ -8,6 +8,7 @@ import * as api from "./api.js";
 import { setMediaBase, setOrigin, setAssetVer, layout } from "./render.js";
 import { html, text, redirect, notFoundResponse, forbidden } from "./http.js";
 import { ensureSchema } from "./schema.js";
+import { withStoredKeys } from "./keys.js";
 import { runCron } from "./scheduled.js";
 import { resolveSessionSecret } from "./secrets.js";
 
@@ -102,6 +103,7 @@ export const GLOBAL = [
   ["POST", "/super/prospect", api.superAddProspect, "SUPERADMIN"],
   ["POST", "/super/platform-mode", api.superSetPlatformMode, "SUPERADMIN"],
   ["POST", "/super/platform-info", api.superSetPlatformInfo, "SUPERADMIN"],
+  ["POST", "/super/keys", api.superSetKeys, "SUPERADMIN"],
 ];
 export const TENANT = [
   ["GET", "/", pages.home],
@@ -431,7 +433,7 @@ async function handle(request, env) {
   const timing = { t0: Date.now(), db: { n: 0, ms: 0 } };
   const rawDb = env.DB;
   const db = instrumentDb(rawDb, timing.db);
-  env = { ...env, DB: db }; // 핸들러 내부 D1 사용도 계측에 포함
+  env = { ...env, DB: db, DB_RAW: rawDb }; // 핸들러 내부 D1 사용도 계측에 포함 · DB_RAW 는 아이솔레이트 단위 캐시의 열쇠
   const isProd = (env.PUBLIC_SCHEME || "https") === "https";
   setMediaBase(env.MEDIA_PUBLIC_BASE || "");
   setOrigin(url.origin); // og:image 등 절대 URL 조립용
@@ -485,6 +487,8 @@ async function handle(request, env) {
   // (아래부터는 항상 채워진 상태라 핸들러에서는 출처를 알 수 없다.) 값이 아니라 사실만 넘긴다.
   const secretFromWorker = !!(env.SESSION_SECRET && env.SESSION_SECRET !== "");
   env = { ...env, SESSION_SECRET: await resolveSessionSecret(env), SESSION_SECRET_IS_WORKER: secretFromWorker };
+  // 운영사가 콘솔에서 붙여넣은 지도 열쇠 — 워커 Secret 이 빈 것만 채운다 (keys.js)
+  env = await withStoredKeys(env, db, rawDb);
 
   // 설치 마법사 게이트: 계정이 하나도 없으면 /setup 으로 유도
   if (!_usersConfirmed.has(rawDb)) {

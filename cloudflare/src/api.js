@@ -23,6 +23,7 @@ import { sellerPhotos, urdealProductUrl } from "./urdeal.js";
 import { placePhoto, isPlaceUrl, placeSourceOf } from "./placePhoto.js";
 import { pickPlace, placeQuery, kmApart, NEAR_KM } from "./placeMatch.js";
 import { mapCategory } from "./roster.js";
+import { STORED_KEYS, storeKey, clearKey, forgetStoredKeys, checkKakaoKey } from "./keys.js";
 import { TEMPLATE_KEYS, TEMPLATES, sendTest, listProviderTemplates, matchTemplates, sendMany, sendOne, notifyEnabled, autoNotifyOn, canAutoSend, wonToJeon, renderTemplate, templateCodeFor, templateButton, billingMode, chargeContract, BILLING_MODES, priceOf } from "./notify.js";
 
 // 계약 한 건을 연다 — 조직 경계와 **부서 경계**를 함께 본다.
@@ -4501,6 +4502,36 @@ export async function superSetPlatformInfo(ctx) {
   await D.setSetting(db, "contact_email", cap((form.get("contact_email") || "").trim(), 120));
   await D.setSetting(db, "contact_phone", cap((form.get("contact_phone") || "").trim(), 40));
   return back("/super", "플랫폼 정보를 저장했습니다.");
+}
+
+// ---------- 슈퍼: 지도 열쇠를 화면에서 붙여넣기 ----------
+//
+// 빈 칸은 '그대로', '지우기' 를 켜면 지운다. 값은 다시 보여 주지 않는다(앞 네 글자만).
+// 카카오 열쇠는 저장 전에 카카오에 한 번 물어 틀린 열쇠를 걸러 낸다.
+export async function superSetKeys(ctx) {
+  const { db, form, env } = ctx;
+  const saved = [], cleared = [], bad = [];
+  let kakaoNote = "";
+  for (const [name, label, re] of STORED_KEYS) {
+    if (form.get(`clear_${name}`) === "1") { await clearKey(db, name); cleared.push(label); continue; }
+    const v = cap(String(form.get(name) || "").trim(), 200);
+    if (!v) continue;
+    if (!re.test(v)) { bad.push(label); continue; }
+    if (name === "KAKAO_REST_KEY") {
+      const chk = await checkKakaoKey(v);
+      if (chk === "rejected") { bad.push(`${label} (카카오가 거절한 열쇠입니다 — REST API 키가 맞는지 확인하세요)`); continue; }
+      kakaoNote = chk === "ok" ? " 카카오가 열쇠를 확인해 주었습니다." : " (카카오에 닿지 않아 열쇠 확인은 못 했습니다.)";
+    }
+    await storeKey(db, name, v);
+    saved.push(label);
+  }
+  forgetStoredKeys(env.DB_RAW || null);
+  const parts = [];
+  if (saved.length) parts.push(`${saved.join(" · ")} 저장.${kakaoNote}`);
+  if (cleared.length) parts.push(`${cleared.join(" · ")} 지움.`);
+  if (bad.length) parts.push(`받지 않은 값: ${bad.join(", ")}.`);
+  if (!parts.length) parts.push("바뀐 것이 없습니다.");
+  return back("/super", parts.join(" "), !saved.length && !cleared.length);
 }
 
 // ================= 계약서 작성기 =================

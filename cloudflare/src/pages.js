@@ -2,6 +2,7 @@
 import * as D from "./db.js";
 import { esc, cap, clip, openBadge, openNow, hoursLine, dongOf, fmtBytes, kstStamp, kstDate, prettyPath, safeNext, parseCookies, decomposeHours } from "./util.js";
 import { parseMemberRoster, markExisting, guessPrefix, describeColumns, IMPORT_MAX, mapCategory } from "./roster.js";
+import { STORED_KEYS, storedKeyHint } from "./keys.js";
 import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG, ORIGIN, assetUrl, brandLogo } from "./render.js";
 import { verifyInviteToken, verifyPhotoToken, SALES_STAGES, otpRequired, selfSignupOn, MAX_SLOTS, BULK_MAX, BULK_CHUNK, docOf, isPlaceholderEmail, importMemberRows, autoLinkChunk, farFromStreet, unlinkFar, photoChunk, makePhotoToken, mapKeys, MAP_CHUNK, PHOTO_CHUNK } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
 import { html, notFoundResponse, back, redirect } from "./http.js";
@@ -5371,8 +5372,18 @@ export async function superConsole(ctx) {
       <div><b>${esc(u.email)}</b> <span class="badge ${u.totp_enabled ? "badge-ok" : "badge-muted"}">${u.totp_enabled ? "2단계 인증 사용" : "2단계 인증 없음"}</span>
         <p>${esc(u.name || "")} · 생성 ${esc(kstDate(u.created_at))}</p></div></li>`).join("")}</ul>
     ${supers.some((u) => !u.totp_enabled) ? `<p class="panel-hint">이 계정 하나가 뚫리면 <b>모든 고객사</b>의 데이터가 열립니다. <a href="/account">계정 설정</a>에서 2단계 인증을 켜 두시길 권합니다.</p>` : ""}</section>`;
+  const keyRows = await Promise.all(STORED_KEYS.map(async (k) => [...k, await storedKeyHint(db, k[0]).catch(() => "")]));
   const wiredPanel = `<details class="panel panel-fold"><summary class="panel-title">있으면 좋은 것 <span class="badge ${wired.every((w) => w[1]) ? "badge-ok" : "badge-muted"}">${wired.filter((w) => w[1]).length}/${wired.length} 켜짐</span></summary>
-    <p class="panel-hint">모두 선택 사항입니다. 꺼져 있어도 사이트는 정상 동작하며, 값은 <b>Workers &amp; Pages → 이 워커 → Settings → Variables</b> 에서 넣습니다.</p>
+    <p class="panel-hint">모두 선택 사항입니다. 꺼져 있어도 사이트는 정상 동작합니다. <b>지도 열쇠 넷은 아래 칸에 붙여넣으면 바로 켜집니다.</b>
+      그 밖의 값은 <b>Workers &amp; Pages → 이 워커 → Settings → Variables</b> 에서 넣습니다.</p>
+    <form method="post" action="/super/keys" class="stack-form compact key-form" data-once>
+      <input type="hidden" name="_csrf" value="${esc(csrf)}" />
+      ${keyRows.map(([name, label, , help, hint]) => `<label>${esc(label)} ${hint ? `<span class="badge badge-ok">저장됨 ${esc(hint)}</span>` : (String(env[name] || "").trim() ? `<span class="badge badge-ok">워커 Secret</span>` : "")}
+        <input type="text" name="${name}" placeholder="${hint ? "바꾸려면 새 값을 붙여넣으세요" : "붙여넣기"}" autocomplete="off" spellcheck="false" />
+        <small>${esc(help)}${hint ? ` · <label class="key-clear"><input type="checkbox" name="clear_${name}" value="1" /> 지우기</label>` : ""}</small></label>`).join("")}
+      <div class="finish-acts"><button class="btn btn-outline btn-sm">열쇠 저장</button>
+        <span class="panel-hint">빈 칸은 그대로 둡니다. 카카오 열쇠는 저장 전에 카카오에 한 번 물어봅니다.</span></div>
+    </form>
     <ul class="wire-list">${wired.map(([label, on, keys, help]) => `<li class="${on ? "is-on" : ""}">
       <span class="wire-dot" aria-hidden="true"></span>
       <div><b>${esc(label)}</b> <span class="badge ${on ? "badge-ok" : "badge-muted"}">${on ? "켜짐" : "안 켜짐"}</span>
