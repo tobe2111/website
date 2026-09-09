@@ -287,10 +287,34 @@ export function applyHomePreset(arr, preset) {
 // ----- 렌더링 -----
 // deps: { assoc, base, stats, businessesHtml, noticesHtml, eventsHtml, loggedIn }
 export function renderHome(layout, deps) {
-  return layout
-    .filter((s) => s.enabled)
-    .map((s) => renderSection(s, deps))
-    .join("\n");
+  const on = layout.filter((s) => s.enabled);
+  // 이용권이 아직 하나도 없으면 '사장님께' 카드 하나가 섹션 전체였고, 지도 배너가 따로 한 줄 더
+  // 있었다 — 빈 상자 둘이 세로로 서 있는 모양이다. 둘을 한 띠로 나란히 놓는다(회장님이 고른 시안).
+  // 사이에 사진판·영상처럼 비어서 안 그려지는 섹션이 끼어 있어도 같다. 이용권이 생기면 다시 갈라진다.
+  const dealsAt = on.findIndex((s) => s.type === "deals");
+  const mapAt = on.findIndex((s) => s.type === "mapbanner");
+  const band = dealsAt >= 0 && mapAt > dealsAt && !(deps.deals || []).length;
+  const out = [];
+  for (let i = 0; i < on.length; i++) {
+    const s = on[i];
+    if (band && i === mapAt) continue;
+    if (band && i === dealsAt) { out.push(renderSection(s, { ...deps, bandMap: mapBannerLink(on[mapAt], deps) })); continue; }
+    out.push(renderSection(s, deps));
+  }
+  return out.join("\n");
+}
+
+// 지도 배너 한 장 — 단독 섹션에서도, 이용권 띠 안에서도 같은 것을 쓴다.
+function mapBannerLink(s, deps) {
+  const n = deps.stats ? deps.stats.businesses : 0;
+  if (!n) return "";
+  const sub = s.subtitle || `${n}곳이 지도 위에. 가까운 가게를 한눈에 찾아요.`;
+  return `<a href="${deps.base}/map" class="map-banner">
+          <span class="mb-glow" aria-hidden="true"></span>
+          <span class="mb-text"><strong>${esc(s.title || "우리 동네 점포 지도")}</strong><em>${esc(sub)}</em></span>
+          <span class="mb-map" aria-hidden="true"><svg viewBox="0 0 24 24" width="86" height="86" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg></span>
+          <span class="mb-chev" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></span>
+        </a>`;
 }
 
 function renderSection(s, deps) {
@@ -372,9 +396,13 @@ function renderSection(s, deps) {
            결제와 정산은 유어딜이 대신합니다.</p>
         <a class="btn btn-deal" href="${deps.base}/urdeal">이용권 만들러 가기</a>
       </div></article>`;
+      // 이용권 0개 + 지도 배너가 바로 뒤 → 지도와 '사장님께' 카드를 나란히 한 띠로
+      const body = !list.length && deps.bandMap
+        ? `<div class="deal-band">${deps.bandMap}${join}</div>`
+        : `<div class="deal-row${list.length ? "" : " is-empty"}">${list.slice(0, 5).map(card).join("")}${join}</div>`;
       return sectionWrap("section-deals", s.title || "우리 골목 이용권",
         s.lead || (list.length ? "미리 사 두고 매장에서 그대로 쓰세요." : "우리 골목 가게의 이용권을 미리 사고 매장에서 그대로 씁니다."),
-        `<div class="deal-row${list.length ? "" : " is-empty"}">${list.slice(0, 5).map(card).join("")}${join}</div>`,
+        body,
         list.length ? { href: `${deps.base}/urdeal`, label: "유어딜에서 더 보기" } : null);
     }
     case "photos":
@@ -392,16 +420,8 @@ function renderSection(s, deps) {
           allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture"></iframe></div>`);
     }
     case "mapbanner": {
-      const n = deps.stats ? deps.stats.businesses : 0; // counts.businesses 는 페이지당 카드 수 — 전체 수는 stats
-      if (!n) return ""; // 점포가 0곳이면 빈 지도로 보내는 배너일 뿐이라 숨깁니다
-      const sub = s.subtitle || `${n}곳이 지도 위에. 가까운 가게를 한눈에 찾아요.`;
-      return `<section class="section" style="padding-top:0"><div class="container">
-        <a href="${deps.base}/map" class="map-banner">
-          <span class="mb-glow" aria-hidden="true"></span>
-          <span class="mb-text"><strong>${esc(s.title || "우리 동네 점포 지도")}</strong><em>${esc(sub)}</em></span>
-          <span class="mb-map" aria-hidden="true"><svg viewBox="0 0 24 24" width="86" height="86" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg></span>
-          <span class="mb-chev" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></span>
-        </a></div></section>`;
+      const link = mapBannerLink(s, deps); // 점포가 0곳이면 빈 지도로 보내는 배너일 뿐이라 숨깁니다
+      return link ? `<section class="section" style="padding-top:0"><div class="container">${link}</div></section>` : "";
     }
     case "showcase": {
       // 이 자리는 상인회가 자기 목소리로 한 문장 말하는 곳이다. 그 이상을 넣지 않는다.
