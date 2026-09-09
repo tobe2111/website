@@ -4269,3 +4269,22 @@ body.is-console[data-console="super"] .console-strip{border-bottom:1px solid #2b
 /* 보내는 중인 단추 — 눌린 것이 보여야 사람이 한 번 더 누르지 않는다.
    disabled 를 쓰지 않는 이유는 submit-once.js 에 적어 두었다(name/value 가 안 넘어간다). */
 .btn.is-busy { opacity: .6; pointer-events: none; cursor: default; }
+
+/* 목록 ↔ 지도 전환 — 같은 것을 다르게 보는 것이지 다른 화면이 아니라는 뜻이 보이게,
+   업종 거르개(chip-filter) 와 다른 모양으로 둔다. 두 화면에서 같은 자리에 선다. */
+.pg-switch{display:flex;margin:0 0 12px}
+.view-switch{display:inline-flex;gap:2px;padding:3px;border:1px solid var(--line);
+  border-radius:var(--r-lg);background:var(--surface-2)}
+.view-tab{display:inline-flex;align-items:center;gap:5px;min-height:38px;padding:0 16px;
+  border-radius:var(--r-md);font-size:.92rem;font-weight:600;color:var(--ink-soft);
+  text-decoration:none;white-space:nowrap}
+.view-tab:hover{color:var(--ink);text-decoration:none}
+.view-tab.active{background:var(--surface);color:var(--ink);box-shadow:var(--sh-1)}
+.view-tab em{font-style:normal;font-weight:600;font-size:.82rem;color:var(--ink-soft);
+  padding:1px 6px;border-radius:var(--r-pill);background:var(--line-soft)}
+.view-tab.active em{background:var(--surface-2)}
+@media (max-width:640px){
+  /* 손가락 기준 크기는 좁은 화면에서도 지킨다 — 여기서 줄이면 옆 칸이 눌린다 */
+  .view-switch{width:100%}
+  .view-tab{flex:1;justify-content:center;min-height:44px;padding:0 10px}
+}

@@ -34,6 +34,10 @@ function stubKakao(docs) {
   const real = globalThis.fetch;
   globalThis.fetch = async (req, init) => {
     const u = String(req && req.url ? req.url : req);
+    // 상인회 주소로 '우리 골목이 어디인가' 를 묻는 창구. 가게 검색과 다른 곳이다.
+    if (u.includes("dapi.kakao.com") && u.includes("search/address.json"))
+      return new Response(JSON.stringify({ documents: [{ x: "126.99", y: "37.48" }] }),
+        { headers: { "content-type": "application/json" } });
     if (u.includes("dapi.kakao.com")) {
       const q = decodeURIComponent(new URL(u).searchParams.get("query") || "");
       return new Response(JSON.stringify({ documents: docs(q) }), { headers: { "content-type": "application/json" } });
@@ -50,6 +54,11 @@ const doc = (name, road, phone, id) => ({
 
 async function seed(env) {
   const a = await D.createAssociation(env.DB, { slug: "bb", name: "방배카페골목 상인회", kind: "merchant" });
+  // 우리 골목이 어디인지는 **상인회 주소**로 정한다. 이게 없으면 중심 없이 전국 검색이 되고,
+  // 같은 상호의 다른 지점(부천·성수)에 붙는다. 실제로 그렇게 붙은 적이 있다.
+  await D.updateAssociation(env.DB, a.id, { name: a.name, tagline: "", brand_color: "#1F6CFF",
+    phone: "", email: "", address: "서울 서초구 방배중앙로 166", logo: "", hero_image: "" }).catch(() => {});
+  a.address = "서울 서초구 방배중앙로 166";
   const p = await hashPassword("admin1234");
   await D.createUser(env.DB, { email: "a@bb.kr", passwordHash: p.hash, salt: p.salt, name: "회장", role: "ADMIN", associationId: a.id });
   return a;
@@ -105,10 +114,40 @@ test("같은 상호가 전국에 여럿이면 붙이지 않는다", () => {
   assert.equal(r.confidence, "low", "같은 이름 여럿을 확신해서 붙였다");
 });
 
-test("상호가 정확히 같고 후보가 하나면 주소가 없어도 붙인다", () => {
+// 여기가 이 파일에서 가장 위험한 자리다. "노브랜드버거" 처럼 전국 어디에나 있는 상호는
+// 후보가 하나로 좁혀져도 그게 **우리 가게라는 근거가 되지 못한다.**
+// 실제로 이 규칙 때문에 방배동 가게들이 부천·광명·성수에 붙었다.
+test("상호가 정확히 같고 우리 골목 안이면 주소가 없어도 붙인다", () => {
   const r = pickPlace({ name: "너나들이", address: "" },
-    [{ name: "너나들이", address: "서울 서초구 방배중앙로 9", phone: "", url: "u" }]);
+    [{ name: "너나들이", address: "서울 서초구 방배중앙로 9", phone: "", url: "u", lat: 37.4838, lng: 126.9905 }],
+    { center: { lat: 37.4840, lng: 126.9900 } });
   assert.equal(r.confidence, "high");
+});
+
+test("상호가 같아도 골목에서 멀면 붙이지 않는다", () => {
+  // 방배동 상인회인데 부천 소사구 지점이 나온 경우. 이름은 똑같다.
+  const r = pickPlace({ name: "노브랜드버거", address: "" },
+    [{ name: "노브랜드버거", address: "경기 부천시 소사구 경인로 1", phone: "", url: "u", lat: 37.4820, lng: 126.7920 }],
+    { center: { lat: 37.4840, lng: 126.9900 } });
+  assert.equal(r.confidence, "low", "20km 밖의 다른 지점을 확신해서 붙였다");
+  assert.match(r.why, /km/, "왜 안 붙였는지 거리로 말해 줘야 회장님이 판단한다");
+});
+
+test("우리 골목이 어디인지 모르면 이름만 보고 붙이지 않는다", () => {
+  const r = pickPlace({ name: "너나들이", address: "" },
+    [{ name: "너나들이", address: "서울 서초구 방배중앙로 9", phone: "", url: "u", lat: 37.4838, lng: 126.9905 }]);
+  assert.equal(r.confidence, "low", "중심을 모르면 이름이 같다는 것만으로는 근거가 안 된다");
+});
+
+test("명부는 지번인데 지도는 도로명이어도 같은 자리면 붙인다", () => {
+  // 상인회 명부의 주소는 대개 "방배동 769-10" 같은 지번이고, 지도는 도로명을 준다.
+  // 이 짝이 안 맞으면 주소 규칙이 통째로 안 걸려, 이름만 보고 고르는 위험한 길로 떨어진다.
+  const r = pickPlace({ name: "2001호텔", address: "서울 서초구 방배동 769-10" },
+    [{ name: "2001호텔 방배점", address: "서울 서초구 방배중앙로 174",
+       addressJibun: "서울 서초구 방배동 769-10", phone: "", url: "u", lat: 37.4841, lng: 126.9901 }],
+    { center: { lat: 37.4840, lng: 126.9900 } });
+  assert.equal(r.confidence, "high", "명부의 지번과 지도의 지번이 같으면 같은 자리다");
+  assert.match(r.why, /주소/);
 });
 
 test("짧은 이름이 남의 긴 이름에 우연히 들어간 것을 같다고 하지 않는다", () => {
@@ -273,4 +312,92 @@ test("로그인하지 않으면 열 수 없다", async () => {
   await seed(env);
   const r = await get(env, jar(), MAP);
   assert.ok(r.status !== 200, `누구나 이 화면을 열 수 있다 (${r.status})`);
+});
+
+// ── 잘못 붙은 것을 푸는 길 ──────────────────────────────────────────────
+//
+// 실제로 난 사고입니다. 우리 골목이 어디인지 모른 채 이름만 보고 붙여서, 방배동 가게들이
+// 부천·광명·성수 지점에 연결됐습니다. 규칙은 고쳤지만 **이미 붙어 버린 것은 스스로 안
+// 풀립니다** — 지도 주소가 멀쩡히 들어 있어 '연결됨' 으로 세어지기 때문입니다.
+async function withFar(env, a) {
+  const p = await hashPassword("owner1234");
+  const mk = async (name, lat, lng, phone) => {
+    const u = await D.createUser(env.DB, { email: `${name}@bb.kr`, passwordHash: p.hash, salt: p.salt,
+      name, role: "MERCHANT", associationId: a.id });
+    const b = await D.createBusiness(env.DB, { associationId: a.id, ownerId: u.id, name, category: "음식점" });
+    await D.updateBusiness(env.DB, b.id, { name, category: "음식점", description: "",
+      phone, address: "서울 서초구 방배동 769-10", hours: "", lat, lng,
+      snsInstagram: "", snsYoutube: "", snsBlog: "", snsKakao: "", snsNaver: "",
+      mapUrl: "http://place.map.kakao.com/1" });
+    await D.setBusinessStatus(env.DB, b.id, "approved");
+    return b.id;
+  };
+  return {
+    near: await mk("버들카페", 37.4841, 126.9901, "02-111-1111"),
+    far: await mk("노브랜드버거", 37.4820, 126.7920, "032-999-9999"),   // 부천 소사구
+  };
+}
+
+test("골목에서 멀리 찍힌 가게를 화면이 먼저 짚어 준다", async () => {
+  const env = makeEnv({ KAKAO_REST_KEY: "k" });
+  const a = await seed(env);
+  const ids = await withFar(env, a);
+  const j = await login(env);
+  const stop = stubKakao(() => []);
+  try {
+    const html = await (await get(env, j, MAP)).text();
+    assert.ok(html.includes("우리 골목에서 멀리 찍힌 가게"), "지도를 열어 눈으로 보고서야 아는 것은 너무 늦다");
+    assert.ok(html.includes("노브랜드버거"));
+    assert.ok(!html.includes(">버들카페<"), "골목 안 가게까지 잘못됐다고 하면 안 된다");
+    assert.ok(ids.near && ids.far);
+  } finally { stop(); }
+});
+
+test("연결 풀기는 먼 것만 푼다 — 골목 안 가게는 그대로 둔다", async () => {
+  const env = makeEnv({ KAKAO_REST_KEY: "k" });
+  const a = await seed(env);
+  const ids = await withFar(env, a);
+  const j = await login(env);
+  const stop = stubKakao(() => []);
+  try {
+    await post(env, j, MAP, { unlink: "1" }, MAP);
+    const near = await D.getBusinessById(env.DB, ids.near);
+    const far = await D.getBusinessById(env.DB, ids.far);
+    assert.equal(far.map_url, "", "먼 연결이 안 풀렸다");
+    assert.equal(far.lat, null);
+    assert.equal(far.phone, "", "남의 가게 대표번호를 우리 화면에 남겨 두면 손님이 거기로 전화한다");
+    assert.equal(far.address, "서울 서초구 방배동 769-10", "명부에서 온 주소는 우리 값이라 지우지 않는다");
+    assert.equal(near.map_url, "http://place.map.kakao.com/1", "골목 안 가게까지 풀면 다 다시 해야 한다");
+    assert.equal(near.phone, "02-111-1111");
+  } finally { stop(); }
+});
+
+test("연결을 푼 가게는 다시 '아직 연결 안 됨' 으로 세어진다", async () => {
+  const env = makeEnv({ KAKAO_REST_KEY: "k" });
+  const a = await seed(env);
+  await withFar(env, a);
+  const j = await login(env);
+  const stop = stubKakao(() => []);
+  try {
+    assert.equal(await D.countUnlinkedBusinesses(env.DB, a.id), 0);
+    await post(env, j, MAP, { unlink: "1" }, MAP);
+    assert.equal(await D.countUnlinkedBusinesses(env.DB, a.id), 1, "풀어 놓고 다시 안 찾아 주면 푼 의미가 없다");
+  } finally { stop(); }
+});
+
+test("업체 홈페이지가 지도 주소 칸에 들어 있으면 연결 안 된 것으로 본다", async () => {
+  // 네이버 지역검색의 link 는 그 가게 홈페이지다. 예전에는 이게 지도 주소로 저장돼서
+  // '연결됨' 으로 세어지는데 [지도에서 사진 가져오기] 는 영영 안 떴다.
+  const env = makeEnv({ KAKAO_REST_KEY: "k" });
+  const a = await seed(env);
+  const p = await hashPassword("owner1234");
+  const u = await D.createUser(env.DB, { email: "o@bb.kr", passwordHash: p.hash, salt: p.salt,
+    name: "사장", role: "MERCHANT", associationId: a.id });
+  const b = await D.createBusiness(env.DB, { associationId: a.id, ownerId: u.id, name: "버들카페", category: "카페·디저트" });
+  await D.updateBusiness(env.DB, b.id, { name: "버들카페", category: "카페·디저트", description: "",
+    phone: "", address: "", hours: "", lat: 37.484, lng: 126.99,
+    snsInstagram: "", snsYoutube: "", snsBlog: "", snsKakao: "", snsNaver: "",
+    mapUrl: "https://www.beodeulcafe.co.kr" });
+  assert.equal(await D.countUnlinkedBusinesses(env.DB, a.id), 1,
+    "지도 페이지가 아닌 주소를 '연결됨' 으로 세면 그 가게는 영영 다시 안 찾아진다");
 });

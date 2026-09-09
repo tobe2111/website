@@ -21,7 +21,7 @@ import { seedStarter } from "./starterContent.js";
 import { KINDS, kindById, PRESETS, assocTerms } from "./kinds.js";
 import { sellerPhotos, urdealProductUrl } from "./urdeal.js";
 import { placePhoto, isPlaceUrl, placeSourceOf } from "./placePhoto.js";
-import { pickPlace, placeQuery } from "./placeMatch.js";
+import { pickPlace, placeQuery, kmApart, NEAR_KM } from "./placeMatch.js";
 import { TEMPLATE_KEYS, TEMPLATES, sendTest, listProviderTemplates, matchTemplates, sendMany, sendOne, notifyEnabled, autoNotifyOn, canAutoSend, wonToJeon, renderTemplate, templateButton, billingMode, chargeContract, BILLING_MODES, priceOf } from "./notify.js";
 
 // 계약 한 건을 연다 — 조직 경계와 **부서 경계**를 함께 본다.
@@ -579,7 +579,7 @@ export async function adminDeleteMedia(ctx) {
 //
 // 화면(관리자가 이름을 치고 눈으로 고르는 곳)과 명부 일괄 연결이 **같은 함수**를 쓴다.
 // 두 벌로 두면 한쪽만 고쳐져 "화면에서는 나오는데 일괄에서는 안 나온다" 가 난다.
-export async function searchPlaces(env, { q: rawQ, cx, cy, db, assocId } = {}) {
+export async function searchPlaces(env, { q: rawQ, cx, cy, db, assocId, assoc } = {}) {
   const kakaoKey = String(env.KAKAO_REST_KEY || "").trim();
   const nId = String(env.NAVER_SEARCH_ID || "").trim();
   const nSecret = String(env.NAVER_SEARCH_SECRET || "").trim();
@@ -592,7 +592,8 @@ export async function searchPlaces(env, { q: rawQ, cx, cy, db, assocId } = {}) {
   // 부르는 쪽이 좌표를 주면 그것을, 없으면 **이미 등록된 우리 가게들의 한가운데**를 쓴다.
   // (첫 가게를 넣을 때는 중심이 없다 — 그때는 전국 검색이지만, 두 번째부터는 골목이 잡힌다)
   let x = Number(cx), y = Number(cy);
-  if (!(Number.isFinite(x) && Number.isFinite(y) && x && y) && db && assocId) {
+  const given = () => Number.isFinite(x) && Number.isFinite(y) && !!x && !!y;
+  if (!given() && db && assocId) {
     try {
       const pts = await D.listBusinessMarkers(db, assocId);
       if (pts.length) {
@@ -601,6 +602,10 @@ export async function searchPlaces(env, { q: rawQ, cx, cy, db, assocId } = {}) {
       }
     } catch { /* 중심이 없으면 그냥 전국 검색 */ }
   }
+  // 등록된 가게가 하나도 없을 때(=명부를 막 넣었을 때) 마지막으로 상인회가 정해 둔 중심.
+  // 이건 손대지 않으면 '서울 어딘가' 기본값이라 맨 뒤에 둡니다 — 앞에 두면 회장님이
+  // 고치지 않은 기본값이 진짜 골목을 이깁니다.
+  if (!given() && assoc) { x = Number(assoc.map_lng); y = Number(assoc.map_lat); }
   const hasCenter = Number.isFinite(x) && Number.isFinite(y) && !!x && !!y;
 
   // ── 카카오 로컬 ──
@@ -611,7 +616,8 @@ export async function searchPlaces(env, { q: rawQ, cx, cy, db, assocId } = {}) {
     url.searchParams.set("size", "15");
     if (hasCenter) {
       url.searchParams.set("x", String(x)); url.searchParams.set("y", String(y));
-      url.searchParams.set("radius", "20000"); url.searchParams.set("sort", "distance");
+      // 상가연합회는 한 골목이다. 20km 는 서울을 거의 다 덮어 '가까운 순' 이 뜻이 없었다.
+      url.searchParams.set("radius", "5000"); url.searchParams.set("sort", "distance");
     }
     const r = await fetch(url, { headers: { Authorization: `KakaoAK ${kakaoKey}` } });
     if (!r.ok) throw new Error(`kakao ${r.status}`);
@@ -620,6 +626,7 @@ export async function searchPlaces(env, { q: rawQ, cx, cy, db, assocId } = {}) {
       source: "카카오",
       name: cap(String(d.place_name || ""), 100),
       address: cap(String(d.road_address_name || d.address_name || ""), 200),
+      addressJibun: cap(String(d.address_name || ""), 200),
       phone: cap(String(d.phone || ""), 40),
       category: cap(String(d.category_name || "").split(">").pop().trim(), 40),
       categoryPath: cap(String(d.category_name || "").trim(), 120),
@@ -650,12 +657,19 @@ export async function searchPlaces(env, { q: rawQ, cx, cy, db, assocId } = {}) {
         source: "네이버",
         name: cap(name, 100),
         address: cap(String(d.roadAddress || d.address || ""), 200),
+        addressJibun: cap(String(d.address || ""), 200),
         phone: cap(String(d.telephone || ""), 40),
         category: cap(String(d.category || "").split(">").pop().trim(), 40),
         categoryPath: cap(String(d.category || "").trim(), 120),
         lat: wgs && Number.isFinite(ny) ? ny / 1e7 : null,
         lng: wgs && Number.isFinite(nx) ? nx / 1e7 : null,
-        url: /^https?:\/\//.test(String(d.link || "")) ? String(d.link) : "",
+        // 네이버 지역검색의 link 는 **그 가게의 홈페이지**다 — 지도 페이지가 아니다.
+        // 이걸 지도 주소 칸에 넣어 두면 두 가지가 한꺼번에 조용히 망가진다:
+        //   ① 그 가게는 '지도에 연결됨' 으로 세어져 다시 찾아 주지 않는다
+        //   ② 그런데 지도 페이지가 아니라서 [지도에서 사진 가져오기] 단추는 영영 안 뜬다
+        // 회장님 눈에는 "연결은 됐다는데 사진 가져오기가 없다" 로만 보인다.
+        url: isPlaceUrl(d.link) ? String(d.link).trim() : "",
+        homepage: /^https?:\/\//.test(String(d.link || "")) ? String(d.link).trim() : "",
       };
     });
   }
@@ -682,7 +696,7 @@ export async function searchPlaces(env, { q: rawQ, cx, cy, db, assocId } = {}) {
     if (!prev) { merged.set(k2, { ...p, sources: [p.source] }); continue; }
     prev.sources.push(p.source);
     // 빈 칸은 다른 쪽 값으로 메운다 — 카카오에 좌표가, 네이버에 도로명이 있는 식이다
-    for (const f of ["address", "phone", "category", "categoryPath", "lat", "lng", "url"])
+    for (const f of ["address", "addressJibun", "phone", "category", "categoryPath", "lat", "lng", "url", "homepage"])
       if (!prev[f] && p[f]) prev[f] = p[f];
   }
   // 중심이 있으면 가까운 순 — 골목 것이 위로 온다
@@ -692,7 +706,7 @@ export async function searchPlaces(env, { q: rawQ, cx, cy, db, assocId } = {}) {
       : (p.lat - y) ** 2 + ((p.lng - x) * 0.8) ** 2;
     out.sort((a, b) => d2(a) - d2(b));
   }
-  return { places: out.slice(0, 12), center: hasCenter };
+  return { places: out.slice(0, 12), center: hasCenter, at: hasCenter ? { lat: y, lng: x } : null };
 }
 
 // 화면이 부르는 창구 — 위 함수를 JSON 으로 감싸기만 한다.
@@ -701,7 +715,7 @@ export async function adminPlaceSearch(ctx) {
   const json = (o, status = 200) => new Response(JSON.stringify(o), {
     status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
   const r = await searchPlaces(env, {
-    q: query.get("q"), cx: query.get("x"), cy: query.get("y"), db, assocId: assoc && assoc.id,
+    q: query.get("q"), cx: query.get("x"), cy: query.get("y"), db, assocId: assoc && assoc.id, assoc,
   });
   if (r.error) return json({ error: r.error, message: r.message }, r.status || 502);
   return json({ places: r.places, center: !!r.center });
@@ -1661,20 +1675,90 @@ export async function adminAddMember(ctx) {
 // 것이 걸립니다. 그런데 화면에는 멀쩡한 가게 하나가 보여서 아무도 눈치채지 못합니다.
 // 애매한 것은 그대로 두고 목록에 남겨, 회장님이 그 가게 화면에서 눈으로 고릅니다.
 export const MAP_CHUNK = 8;
+// 우리 골목이 어디인가 — 일괄 연결 한 번에 **딱 한 번** 정합니다.
+//
+// 이게 없으면 무슨 일이 났는가: 명부를 막 넣은 상인회에는 좌표가 하나도 없습니다.
+// 그러면 중심 없이 전국 검색이 되고, "노브랜드버거" 같은 상호가 부천 지점에 붙습니다.
+// 그리고 **그 잘못된 좌표가 다음 검색의 중심**이 되어, 뒤로 갈수록 더 멀리 끌려갑니다.
+// 실제로 방배동 가게들이 부천·광명·성수에 흩어져 찍혔습니다.
+//
+// 그래서 회장님이 적어 둔 **상인회 주소**를 지도에 물어 그 좌표를 씁니다. 이건 가게가
+// 한 곳도 없어도 알 수 있고, 잘못 붙은 가게가 늘어도 흔들리지 않습니다.
+export async function streetCenter(env, db, assoc) {
+  const key = String(env.KAKAO_REST_KEY || "").trim();
+  const addr = String(assoc && assoc.address || "").trim();
+  if (key && addr) {
+    try {
+      const url = new URL("https://dapi.kakao.com/v2/local/search/address.json");
+      url.searchParams.set("query", addr);
+      url.searchParams.set("size", "1");
+      const r = await fetch(url, { headers: { Authorization: `KakaoAK ${key}` } });
+      if (r.ok) {
+        const d = await r.json().catch(() => null);
+        const hit = d && Array.isArray(d.documents) ? d.documents[0] : null;
+        const lat = Number(hit && hit.y), lng = Number(hit && hit.x);
+        if (Number.isFinite(lat) && Number.isFinite(lng) && lat && lng) return { lat, lng };
+      }
+    } catch { /* 주소를 못 찾으면 아래로 */ }
+  }
+  // 이미 붙어 있는 가게들의 한가운데. 잘못 붙은 것이 섞여 있을 수 있어 주소 다음입니다.
+  try {
+    const pts = await D.listBusinessMarkers(db, assoc.id);
+    if (pts.length) return {
+      lat: pts.reduce((a, p) => a + Number(p.lat), 0) / pts.length,
+      lng: pts.reduce((a, p) => a + Number(p.lng), 0) / pts.length,
+    };
+  } catch { /* 없으면 아래로 */ }
+  const lat = Number(assoc && assoc.map_lat), lng = Number(assoc && assoc.map_lng);
+  return (Number.isFinite(lat) && Number.isFinite(lng) && lat && lng) ? { lat, lng } : null;
+}
+
+// 골목에서 멀리 떨어져 찍힌 가게들.
+//
+// 예전 규칙은 "상호가 정확히 같고 후보가 하나면 붙인다" 였는데, 우리 골목이 어디인지를
+// 몰랐습니다. 그래서 방배동 가게가 부천·광명·성수 지점에 붙었고, 지도를 열면 핀이
+// 서울 전역에 흩어져 있었습니다. 규칙은 고쳤지만 **이미 붙어 버린 것은 스스로 안 풀립니다** —
+// 지도 주소가 멀쩡히 들어 있어 '연결됨' 으로 세어지기 때문입니다. 그래서 푸는 길을 둡니다.
+export async function farFromStreet(ctx) {
+  const { db, env, assoc } = ctx;
+  const center = await streetCenter(env, db, assoc);
+  if (!center) return { center: null, rows: [] };
+  const rows = [];
+  for (const m of await D.listBusinessMarkers(db, assoc.id)) {
+    const km = kmApart(center, m);
+    if (km != null && km > NEAR_KM) rows.push({ id: m.id, name: m.name, address: m.address || "", km });
+  }
+  rows.sort((a, b) => b.km - a.km);
+  return { center, rows };
+}
+
+export async function unlinkFar(ctx) {
+  const { db } = ctx;
+  const { rows } = await farFromStreet(ctx);
+  for (const r of rows) await D.unlinkBusinessMap(db, r.id);
+  if (rows.length) await audit(ctx, "지도연결풀기", `골목에서 먼 ${rows.length}곳`);
+  return rows.length;
+}
+
 export async function autoLinkChunk(ctx, { after = 0, limit = MAP_CHUNK } = {}) {
   const { db, env, assoc } = ctx;
   const rows = await D.listUnlinkedBusinesses(db, assoc.id, Number(after) || 0, limit);
-  const out = { rows: [], linked: 0, cursor: Number(after) || 0, done: rows.length < limit, error: "" };
+  const center = await streetCenter(env, db, assoc);
+  const out = { rows: [], linked: 0, cursor: Number(after) || 0, done: rows.length < limit, error: "",
+    center: !!center };
   for (const b of rows) {
     out.cursor = b.id;
-    const r = await searchPlaces(env, { q: placeQuery(b), db, assocId: assoc.id });
+    // 중심을 **줄마다 다시 세지 않습니다.** 그러면 방금 잘못 붙은 가게가 다음 줄의 중심을
+    // 옮겨 놓아, 한 번 어긋나면 뒤로 갈수록 더 멀리 갑니다.
+    const r = await searchPlaces(env, { q: placeQuery(b), db, assocId: assoc.id, assoc,
+      cx: center ? center.lng : undefined, cy: center ? center.lat : undefined });
     if (r.error) {
       // 열쇠가 없거나 지도가 죽었으면 더 돌려 봐야 소용없습니다. 여기서 멈추고 그렇게 말합니다.
       out.error = r.message || "지도 검색에 연결하지 못했습니다.";
       out.done = false;
       break;
     }
-    const { place, confidence, why } = pickPlace(b, r.places);
+    const { place, confidence, why } = pickPlace(b, r.places, { center });
     if (confidence === "high" && place) {
       await D.updateBusiness(db, b.id, {
         // 회장님이 이미 채워 둔 값은 건드리지 않습니다 — 빈 칸만 지도가 메웁니다.
@@ -1685,7 +1769,9 @@ export async function autoLinkChunk(ctx, { after = 0, limit = MAP_CHUNK } = {}) 
         lat: b.lat ?? place.lat ?? null, lng: b.lng ?? place.lng ?? null,
         snsInstagram: b.sns_instagram || "", snsYoutube: b.sns_youtube || "",
         snsBlog: b.sns_blog || "", snsKakao: b.sns_kakao || "", snsNaver: b.sns_naver || "",
-        mapUrl: place.url || b.map_url || "",
+        // 지도 주소는 **지도 페이지일 때만** 남긴다. 예전에 잘못 들어간 값(업체 홈페이지)이
+        // 있으면 여기서 제대로 된 것으로 갈아 끼운다 — 그래야 사진 가져오기가 열린다.
+        mapUrl: place.url || (isPlaceUrl(b.map_url) ? b.map_url : ""),
       });
       out.linked++;
       out.rows.push({ id: b.id, name: b.name, status: place.url ? "linked" : "filled",

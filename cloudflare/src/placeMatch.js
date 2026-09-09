@@ -34,6 +34,25 @@ export function roadKey(address) {
 }
 const sameRoad = (a, b) => !!(a && b && a.road === b.road && a.no === b.no);
 
+// ── 우리 골목에서 얼마나 떨어져 있나
+//
+// 상가연합회는 **한 골목**입니다. 회원 가게가 부천이나 성수에 있을 리가 없습니다.
+// 그런데 상호는 전국에 같은 것이 널려 있어서("노브랜드버거"), 이름만 보고 고르면
+// 20km 밖의 다른 지점에 붙습니다. 실제로 그렇게 붙었고, 지도를 열었을 때
+// 핀이 서울 전역에 흩어져 있었습니다.
+//
+// 그래서 **거리를 마지막 관문으로 둡니다.** 우리 골목 한가운데에서 이만큼 넘게 떨어진
+// 후보는 아무리 이름이 같아도 자동으로 붙이지 않습니다 — 사람에게 넘깁니다.
+export const NEAR_KM = 3;
+export function kmApart(a, b) {
+  if (!a || !b) return null;
+  const [la, ga, lb, gb] = [a.lat, a.lng, b.lat, b.lng].map(Number);
+  if (![la, ga, lb, gb].every(Number.isFinite)) return null;
+  // 서울 위도에서 경도 1도는 위도 1도의 약 0.79 배. 몇 km 를 재는 데는 이 정도로 충분합니다.
+  const dy = (la - lb) * 111, dx = (ga - gb) * 111 * 0.79;
+  return Math.sqrt(dy * dy + dx * dx);
+}
+
 // 이름이 얼마나 같은가 — 3(똑같다) · 2(한쪽이 다른 쪽을 품는다) · 0(남남)
 function nameHit(a, b) {
   const x = key(a), y = key(b);
@@ -53,7 +72,7 @@ const digits = (s) => String(s || "").replace(/\D/g, "");
  * @returns {{place, confidence:"high"|"low"|null, why:string}}
  *   high — 저장해도 됩니다.  low — 후보는 있지만 사람이 골라야 합니다.  null — 후보가 없습니다.
  */
-export function pickPlace(shop, places) {
+export function pickPlace(shop, places, { center = null } = {}) {
   const list = Array.isArray(places) ? places.filter((p) => p && p.name) : [];
   if (!list.length) return { place: null, confidence: null, why: "지도에서 못 찾았습니다" };
 
@@ -61,13 +80,21 @@ export function pickPlace(shop, places) {
   const myTel = digits(shop.phone);
 
   const scored = list.map((p) => {
-    const addrHit = sameRoad(mine, roadKey(p.address));
+    // 명부에는 지번("방배동 769-10"), 지도에는 도로명("방배중앙로 174") 인 경우가 대부분입니다.
+    // 둘 다 견줘야 이 흔한 짝이 맞습니다 — 한쪽만 보면 주소 규칙이 아예 안 걸리고,
+    // 그러면 이름만 보고 고르는 아래 ③ 으로 떨어져 엉뚱한 지점에 붙습니다.
+    const addrHit = sameRoad(mine, roadKey(p.address)) || sameRoad(mine, roadKey(p.addressJibun));
     const nHit = nameHit(shop.name, p.name);
     const telHit = !!(myTel && myTel.length >= 9 && digits(p.phone) === myTel);
-    return { p, addrHit, nHit, telHit };
+    const km = kmApart(center, p);
+    return { p, addrHit, nHit, telHit, far: km != null && km > NEAR_KM, km };
   });
 
-  // ① 전화번호가 같다 — 더 볼 것이 없습니다
+  // 우리 골목에서 너무 먼 곳은 어떤 규칙으로도 자동으로 붙이지 않습니다.
+  const near = (s2) => !s2.far;
+
+  // ① 전화번호가 같다 — 더 볼 것이 없습니다. 같은 번호를 쓰는 다른 가게는 없으므로
+  //    이것만은 거리를 따지지 않습니다(가게가 이사했을 수도 있습니다).
   const byTel = scored.find((s) => s.telHit);
   if (byTel) return { place: byTel.p, confidence: "high", why: "전화번호가 같습니다" };
 
@@ -76,7 +103,10 @@ export function pickPlace(shop, places) {
   const byAddr = scored.filter((s) => s.addrHit);
   if (byAddr.length) {
     const named = byAddr.filter((s) => s.nHit > 0);
-    if (named.length === 1) return { place: named[0].p, confidence: "high", why: "주소와 상호가 맞습니다" };
+    if (named.length === 1 && near(named[0]))
+      return { place: named[0].p, confidence: "high", why: "주소와 상호가 맞습니다" };
+    if (named.length === 1)
+      return { place: named[0].p, confidence: "low", why: `주소·상호는 맞는데 골목에서 ${Math.round(named[0].km)}km 떨어져 있습니다` };
     if (byAddr.length === 1 && named.length === 0)
       return { place: byAddr[0].p, confidence: "low", why: "주소는 맞는데 상호가 다릅니다" };
     if (named.length > 1) return { place: named[0].p, confidence: "low", why: "같은 번지에 비슷한 이름이 여럿입니다" };
@@ -85,8 +115,19 @@ export function pickPlace(shop, places) {
 
   // ③ 주소가 안 맞을 때 — 이름이 정확히 같고 그런 후보가 하나뿐이어야 붙입니다.
   //    명부 주소가 비었거나("?"), 지도가 도로명 대신 지번을 준 가게가 여기로 옵니다.
+  //
+  //    여기가 가장 위험한 자리입니다. "노브랜드버거" 처럼 전국 어디에나 있는 상호는
+  //    후보가 하나로 좁혀져도 그게 **우리 가게라는 근거가 되지 못합니다.**
+  //    그래서 우리 골목 한가운데를 알 때, 그리고 그 근처일 때만 붙입니다.
   const exact = scored.filter((s) => s.nHit === 3);
-  if (exact.length === 1) return { place: exact[0].p, confidence: "high", why: "상호가 정확히 같고 후보가 하나입니다" };
+  const exactNear = exact.filter(near);
+  if (center && exactNear.length === 1)
+    return { place: exactNear[0].p, confidence: "high", why: "상호가 정확히 같고 우리 골목 안입니다" };
+  if (exact.length === 1 && !center)
+    return { place: exact[0].p, confidence: "low", why: "상호는 같은데 우리 골목인지 확인이 안 됩니다" };
+  if (exact.length === 1)
+    return { place: exact[0].p, confidence: "low", why: `상호는 같은데 골목에서 ${Math.round(exact[0].km)}km 떨어져 있습니다` };
+  if (exactNear.length > 1) return { place: exactNear[0].p, confidence: "low", why: "같은 상호가 여럿입니다" };
   if (exact.length > 1) return { place: exact[0].p, confidence: "low", why: "같은 상호가 여럿입니다" };
 
   const loose = scored.filter((s) => s.nHit === 2);

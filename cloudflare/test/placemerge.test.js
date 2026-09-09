@@ -120,7 +120,8 @@ test("이미 등록된 가게들의 한가운데를 검색 중심으로 쓴다 �
   try {
     await get(env, j, "/t/bb/admin/place-search?q=너나들이");
     const call = it.seen.find((u) => u.includes("dapi.kakao.com"));
-    assert.match(call, /radius=20000/, "반경을 걸어야 한다");
+    // 20km 는 서울을 거의 다 덮어 '가까운 순' 이 뜻이 없었다 — 상가연합회는 한 골목이다.
+    assert.match(call, /radius=5000/, "반경을 골목 크기로 걸어야 한다");
     assert.match(call, /sort=distance/, "가까운 순으로 봐야 골목 것이 위로 온다");
     assert.match(call, /y=37\.484/, "우리 골목 좌표가 중심이어야 한다");
   } finally { it.stop(); }
