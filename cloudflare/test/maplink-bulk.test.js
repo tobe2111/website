@@ -187,7 +187,10 @@ test("확실한 가게는 붙고, 애매한 가게는 그대로 남는다", asyn
     assert.ok(after1.lat && after1.lng, "지도 핀이 찍힐 좌표가 안 들어갔다");
     const after2 = await D.getBusinessById(env.DB, vague.id);
     assert.equal(after2.map_url || "", "", "확신도 없이 붙였다");
-    assert.ok(html.includes("직접 고르세요"));
+    // 가게는 못 특정했어도 주소가 있으면 지도 핀은 찍는다 — 특정하는 것과 지도에
+    // 보이는 것은 다른 일이다. 사진 가져오기는 여전히 안 된다(장소 페이지가 없으므로).
+    assert.ok(html.includes("지도 핀만 찍었습니다") || html.includes("직접 고르세요"),
+      "애매한 가게를 어떻게 했는지 화면이 말해 주지 않는다");
   } finally { un(); }
 });
 
@@ -469,4 +472,117 @@ test("기준점을 찾았으면 어디를 기준으로 삼았는지 적어 준�
     assert.ok(html.includes("우리 골목 기준점"));
     assert.ok(html.includes("상인회 주소"));
   } finally { stop(); }
+});
+
+// ── 카카오와 네이버가 여는 문이 다르다 ─────────────────────────────────
+//
+// 실제로 난 일: 지도 연결이 35곳쯤에서 더 안 늘었다. 화면은 "열쇠 있음" 으로만 보였다.
+// 그런데 **지도 주소(장소 페이지)를 주는 곳은 카카오뿐**이다 — 네이버 지역검색의 link 는
+// 그 가게 홈페이지지 지도 페이지가 아니다. 주소를 좌표로 바꾸는 창구도 카카오에만 있다.
+// 카카오 없이 네이버만 있으면 검색은 되는데 연결도 사진도 거의 안 되는데, 화면이
+// 그 말을 안 하면 회장님 눈에는 그냥 "안 늘어나네" 로만 보인다.
+import { mapKeys } from "../src/api.js";
+
+test("어떤 열쇠가 무엇을 여는지 가른다", () => {
+  assert.deepEqual(mapKeys({ KAKAO_REST_KEY: "k" }),
+    { kakao: true, naver: false, any: true, canLink: true, canGeocode: true });
+  const naverOnly = mapKeys({ NAVER_SEARCH_ID: "i", NAVER_SEARCH_SECRET: "s" });
+  assert.equal(naverOnly.any, true, "검색은 된다");
+  assert.equal(naverOnly.canLink, false, "그런데 지도 주소는 못 얻는다 — 사진이 여기 걸려 있다");
+  assert.equal(mapKeys({}).any, false);
+});
+
+test("네이버만 있으면 무엇이 되고 무엇이 안 되는지 갈라 말한다", async () => {
+  // 네이버로도 **지도에 보이게 하는 것** 은 된다(좌표를 준다). 안 되는 것은
+  // **가게를 특정하는 것** 이고, 사진 가져오기가 거기에 걸려 있다.
+  // 뭉뚱그려 "안 됩니다" 라고 하면 회장님은 쓸 수 있는 것도 안 쓰게 된다.
+  const env = makeEnv({ NAVER_SEARCH_ID: "i", NAVER_SEARCH_SECRET: "s" });
+  await seed(env);
+  const j = await login(env);
+  const html = await (await get(env, j, MAP)).text();
+  assert.ok(html.includes("지금은 네이버로만 찾고 있습니다"));
+  assert.ok(html.includes("지도에 보이게 하는 것(①)은 됩니다"), "되는 것을 안 된다고 하면 안 쓴다");
+  assert.ok(html.includes("카카오 열쇠가 있어야"), "사진이 왜 안 되는지를 말해 줘야 한다");
+  assert.ok(html.includes("카카오 <b>없음</b>"), "지금 무엇이 있고 없는지를 숫자처럼 보여 줘야 한다");
+});
+
+test("지도에 보이는 곳과 사진 가져올 수 있는 곳을 따로 센다", async () => {
+  // 하나로만 세면, 네이버로만 찾아지는 상인회는 핀이 아무리 늘어도 숫자가 안 움직인다.
+  // "35곳에서 더 안 늘어난다" 가 그 뜻이었다.
+  const env = makeEnv({ KAKAO_REST_KEY: "k" });
+  const a = await seed(env);
+  const pinOnly = await biz(env, a, { name: "핀만있는가게", address: "서울 서초구 방배동 1" });
+  await D.updateBusiness(env.DB, pinOnly.id, { name: "핀만있는가게", category: "음식점", description: "",
+    phone: "", address: "서울 서초구 방배동 1", hours: "", lat: 37.4816, lng: 126.9938,
+    snsInstagram: "", snsYoutube: "", snsBlog: "", snsKakao: "", snsNaver: "", mapUrl: "" });
+  await D.setBusinessStatus(env.DB, pinOnly.id, "approved");
+  const j = await login(env);
+  const un = stubKakao(() => []);
+  try {
+    const html = await (await get(env, j, MAP)).text();
+    assert.ok(html.includes("지도에 보이는 곳 1 /"), "핀은 찍혔는데 화면이 0 이라고 하면 멈춘 줄 안다");
+    assert.ok(html.includes("사진 가져올 수 있는 곳 0 /"), "특정하지 못한 것도 정직하게 세야 한다");
+  } finally { un(); }
+});
+
+test("카카오가 있으면 무엇이 있는지 적어 준다", async () => {
+  const env = makeEnv({ KAKAO_REST_KEY: "k" });
+  await seed(env);
+  const j = await login(env);
+  const html = await (await get(env, j, MAP)).text();
+  assert.ok(html.includes("카카오 <b>있음</b>"));
+  assert.ok(!html.includes("카카오 열쇠가 없어"));
+});
+
+test("가게를 못 특정해도 주소가 있으면 지도 핀은 찍는다", async () => {
+  // 명부의 주소는 "방배동 2233" 같은 지번뿐이라 이름으로는 못 찾는 가게가 많다.
+  // 그렇다고 지도에서 통째로 빠지면, 손님에게는 그 가게가 없는 것과 같다.
+  const env = makeEnv({ KAKAO_REST_KEY: "k" });
+  const a = await seed(env);
+  const b = await biz(env, a, { name: "이름이제각각인가게", address: "서울 서초구 방배동 2233" });
+  const real = globalThis.fetch;
+  globalThis.fetch = async (req, init) => {
+    const u = String(req && req.url ? req.url : req);
+    if (u.includes("search/address.json"))     // 주소 → 좌표
+      return new Response(JSON.stringify({ documents: [{ x: "126.9938", y: "37.4816" }] }),
+        { headers: { "content-type": "application/json" } });
+    if (u.includes("dapi.kakao.com"))          // 이름으로는 못 찾는다
+      return new Response(JSON.stringify({ documents: [] }), { headers: { "content-type": "application/json" } });
+    if (u.includes("openapi.naver.com"))
+      return new Response(JSON.stringify({ items: [] }), { headers: { "content-type": "application/json" } });
+    return real(req, init);
+  };
+  try {
+    const j = await login(env);
+    const html = await (await post(env, j, MAP, { after: "0" }, MAP)).text();
+    const after = await D.getBusinessById(env.DB, b.id);
+    assert.ok(after.lat && after.lng, "주소가 있는데도 지도에서 빠졌다");
+    assert.equal(after.map_url || "", "", "가게를 특정하지 못했는데 지도 주소를 붙이면 안 된다");
+    assert.ok(html.includes("지도 핀만 찍었습니다"), "무엇을 했는지 화면이 말해 줘야 한다");
+  } finally { globalThis.fetch = real; }
+});
+
+test("이미 좌표가 있는 가게는 주소로 다시 찍지 않는다", async () => {
+  const env = makeEnv({ KAKAO_REST_KEY: "k" });
+  const a = await seed(env);
+  const b = await biz(env, a, { name: "버들카페", address: "서울 서초구 방배동 2233" });
+  await D.updateBusiness(env.DB, b.id, { name: "버들카페", category: "음식점", description: "",
+    phone: "", address: "서울 서초구 방배동 2233", hours: "", lat: 37.9, lng: 127.9,
+    snsInstagram: "", snsYoutube: "", snsBlog: "", snsKakao: "", snsNaver: "", mapUrl: "" });
+  const real = globalThis.fetch;
+  globalThis.fetch = async (req, init) => {
+    const u = String(req && req.url ? req.url : req);
+    if (u.includes("search/address.json"))
+      return new Response(JSON.stringify({ documents: [{ x: "126.9938", y: "37.4816" }] }),
+        { headers: { "content-type": "application/json" } });
+    if (u.includes("dapi.kakao.com")) return new Response(JSON.stringify({ documents: [] }), { headers: { "content-type": "application/json" } });
+    if (u.includes("openapi.naver.com")) return new Response(JSON.stringify({ items: [] }), { headers: { "content-type": "application/json" } });
+    return real(req, init);
+  };
+  try {
+    const j = await login(env);
+    await post(env, j, MAP, { after: "0" }, MAP);
+    const after = await D.getBusinessById(env.DB, b.id);
+    assert.equal(Number(after.lat), 37.9, "회장님이 지도에서 직접 찍어 둔 자리를 덮어썼다");
+  } finally { globalThis.fetch = real; }
 });

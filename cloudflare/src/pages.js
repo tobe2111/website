@@ -3,7 +3,7 @@ import * as D from "./db.js";
 import { esc, cap, clip, openBadge, openNow, hoursLine, dongOf, fmtBytes, kstStamp, kstDate, prettyPath, safeNext, parseCookies, decomposeHours } from "./util.js";
 import { parseMemberRoster, markExisting, guessPrefix, describeColumns, IMPORT_MAX } from "./roster.js";
 import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG, ORIGIN, assetUrl, brandLogo } from "./render.js";
-import { verifyInviteToken, verifyPhotoToken, SALES_STAGES, otpRequired, selfSignupOn, MAX_SLOTS, BULK_MAX, BULK_CHUNK, docOf, isPlaceholderEmail, importMemberRows, autoLinkChunk, farFromStreet, unlinkFar, photoChunk, makePhotoToken, MAP_CHUNK, PHOTO_CHUNK } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
+import { verifyInviteToken, verifyPhotoToken, SALES_STAGES, otpRequired, selfSignupOn, MAX_SLOTS, BULK_MAX, BULK_CHUNK, docOf, isPlaceholderEmail, importMemberRows, autoLinkChunk, farFromStreet, unlinkFar, photoChunk, makePhotoToken, mapKeys, MAP_CHUNK, PHOTO_CHUNK } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
 import { html, notFoundResponse, back, redirect } from "./http.js";
 import { deals as urdealDeals, urdealProductUrl, urdealSellerUrl, sellerPhotos } from "./urdeal.js";
 import { placeSourceOf } from "./placePhoto.js";
@@ -1726,8 +1726,8 @@ export async function adminMembersMap(ctx) {
   const { db, env, assoc, base, user, csrf, form } = ctx;
   if (assoc.kind === "esign") return notFoundResponse(ctx);
 
-  const kakaoOn = !!(String(env.KAKAO_REST_KEY || "").trim()
-    || (String(env.NAVER_SEARCH_ID || "").trim() && String(env.NAVER_SEARCH_SECRET || "").trim()));
+  const keys = mapKeys(env);
+  const kakaoOn = keys.any;
 
   let run = null, unlinked = null;
   if (form && form.get("unlink") === "1") unlinked = await unlinkFar(ctx);
@@ -1737,18 +1737,25 @@ export async function adminMembersMap(ctx) {
   // 지도를 열어 핀이 흩어진 것을 눈으로 보고서야 아는 것은 너무 늦습니다.
   const far = kakaoOn ? await farFromStreet(ctx).catch(() => ({ rows: [], center: null })) : { rows: [], center: null };
 
-  const [total, left] = await Promise.all([
+  // **목표가 둘입니다. 예전에는 하나로만 셌습니다.**
+  //   ① 지도에 보이는가 (좌표) — 손님이 핀을 보고 찾아온다
+  //   ② 가게를 특정했는가 (지도 주소) — 사진·대표번호가 여기에 딸려 온다
+  // ②만 세면, 네이버로만 찾아지는 상인회에서는 ①이 아무리 늘어도 숫자가 안 움직입니다.
+  // 실제로 "35곳에서 더 안 늘어난다" 가 그 뜻이었습니다.
+  const [total, left, pinnedN] = await Promise.all([
     D.listAllBusinesses(db, assoc.id).then((l) => l.length).catch(() => 0),
     D.countUnlinkedBusinesses(db, assoc.id).catch(() => 0),
+    D.countBusinessMarkers(db, assoc.id).catch(() => 0),
   ]);
   const linkedN = Math.max(0, total - left);
-  const pct = total ? Math.round((linkedN / total) * 100) : 0;
+  const pct = total ? Math.round((pinnedN / total) * 100) : 0;
   // 아직 못 붙인 가게는 회장님이 그 화면에서 눈으로 고릅니다. 자동이 손드는 자리를 숨기지 않습니다.
   const rest = left ? await D.listUnlinkedBusinesses(db, assoc.id, 0, 60).catch(() => []) : [];
 
   const mark = {
     linked: ["badge-ok", "연결했습니다"],
     filled: ["badge-ok", "정보만 채웠습니다"],
+    coord: ["badge-info", "지도 핀만 찍었습니다"],
     choose: ["badge-wait", "직접 고르세요"],
     none: ["badge-muted", "지도에 없습니다"],
   };
@@ -1770,11 +1777,28 @@ export async function adminMembersMap(ctx) {
 
   const inner = `
     <section class="panel">
-      <h2 class="panel-title">지도에 연결하기 <span class="badge ${left ? "badge-wait" : "badge-ok"}">${linkedN} / ${total}곳</span></h2>
+      <h2 class="panel-title">지도에 연결하기
+        <span class="badge ${pinnedN >= total && total ? "badge-ok" : "badge-wait"}">지도에 보이는 곳 ${pinnedN} / ${total}</span>
+        <span class="badge ${left ? "badge-muted" : "badge-ok"}">사진 가져올 수 있는 곳 ${linkedN} / ${total}</span></h2>
       <div class="done-bar${pct < 60 ? " is-low" : ""}"><i style="width:${pct}%"></i></div>
       <p class="panel-hint">상호와 주소로 카카오맵·네이버지도에 물어 그 가게를 찾아 붙입니다.
-        한 번 붙으면 <b>지도 위 핀 · 가게 대표번호 · 도로명주소 · 대표사진 가져오기 · 검색 노출</b>이 함께 열립니다.</p>
-      ${kakaoOn ? "" : `<div class="flash flash-warn">지도 검색 열쇠가 아직 등록되지 않았습니다. 운영사에 문의해 주세요.</div>`}
+        <b>여기서 하는 일은 둘입니다.</b>
+        <b>①</b> 지도에 보이게 하기 — 주소만 있으면 됩니다. 손님이 핀을 보고 찾아옵니다.
+        <b>②</b> 가게를 특정하기 — 그 가게의 지도 페이지를 찾는 것입니다.
+        여기에 <b>사진 가져오기·대표번호·도로명주소</b>가 딸려 옵니다.
+        ①은 거의 다 되지만 ②는 지도에 그 가게가 없으면 안 됩니다 — 두 숫자가 다른 것이 정상입니다.</p>
+      <!-- 카카오와 네이버가 여는 문이 다르다. 예전에는 둘 중 하나만 있어도 '열쇠 있음' 으로
+           쳐서, 네이버만 있는 조직은 아무것도 안 붙는데 화면이 아무 말도 하지 않았다. -->
+      ${keys.any ? "" : `<div class="flash flash-warn">지도 검색 열쇠가 아직 등록되지 않았습니다. 운영사에 문의해 주세요.</div>`}
+      ${keys.any && !keys.kakao ? `<div class="flash flash-warn"><b>지금은 네이버로만 찾고 있습니다.</b>
+        <b>지도에 보이게 하는 것(①)은 됩니다</b> — 네이버 검색이 좌표를 주므로 핀은 찍힙니다.
+        그런데 <b>가게를 특정하는 것(②)은 거의 안 됩니다.</b> 네이버 검색이 주는 링크는 그 가게
+        <b>홈페이지</b>지 지도 페이지가 아니라서, 사진을 가져올 자리가 없습니다.
+        <b>지도 사진은 카카오 열쇠가 있어야 됩니다</b> — 운영사에 카카오 REST 열쇠를 요청해 주세요.
+        그때까지 사진은 <a href="${base}/admin/members/links">사장님께 요청 링크</a>로 받는 쪽이 빠릅니다.</div>` : ""}
+      <p class="panel-hint">지도 열쇠: 카카오 <b>${keys.kakao ? "있음" : "없음"}</b> ·
+        네이버 <b>${keys.naver ? "있음" : "없음"}</b>
+        <small>(카카오 = 지도 주소·사진·좌표 / 네이버 = 검색 보완)</small></p>
       ${run && run.error ? `<div class="flash flash-err">${esc(run.error)}</div>` : ""}
       <!-- 기준점이 틀리면 멀쩡한 우리 가게가 전부 거부된다(실제로 45곳에서 멈췄다).
            그런데 그건 화면에 오류로 안 뜬다 — "그냥 더 안 늘어나네" 로만 보인다.
@@ -1797,8 +1821,14 @@ export async function adminMembersMap(ctx) {
           엉뚱한 가게에 연결되면 손님이 그 핀을 보고 다른 가게로 걸어가는데, 화면에는 멀쩡해 보여 아무도 모릅니다.</li>
         <li><b>회장님이 채워 둔 값은 안 건드립니다.</b> 빈 칸만 지도가 메웁니다.
           가게 대표번호는 지도에 올라와 있는 <b>공개된 번호</b>라 손님 화면에 띄워도 됩니다.</li>
+        <li><b>가게를 못 특정해도 주소가 있으면 지도 핀은 찍습니다.</b>
+          가게를 특정하는 것(사진·대표번호가 딸려 옵니다)과 지도에 보이는 것은 다른 일입니다.
+          핀만 찍힌 곳은 손님 지도에는 나오지만 <b>사진 가져오기는 안 됩니다</b> — 그건 장소 페이지가 있어야 합니다.</li>
         <li><b>${MAP_CHUNK}곳씩 끊어 돌립니다.</b> 중간에 멈춰도 눌렀던 자리부터 이어지고, 이미 붙은 곳은 건너뜁니다.</li>
       </ul>
+      ${pinnedN >= total && total > 0 && left > 0
+        ? `<p class="panel-hint"><b>${total}곳이 모두 지도에 보입니다.</b> 아직 가게를 특정하지 못한 ${left}곳은
+            사진을 가져올 수 없습니다 — <a href="${base}/admin/members/links">사장님께 요청 링크</a>로 받으시면 됩니다.</p>` : ""}
       ${left === 0 && total > 0
         ? `<p class="panel-hint"><b>${total}곳이 모두 지도에 연결됐습니다.</b> 다음은 사진입니다 —
               한 곳씩 누르지 마시고 한 번에 가져오세요.
@@ -1831,7 +1861,8 @@ export async function adminMembersMap(ctx) {
         <button class="btn btn-cta">${far.rows.length}곳 연결 풀고 다시 찾기</button></form></section>` : ""}
 
     ${run ? `<section class="panel"><h2 class="panel-title">이번에 돌린 ${run.rows.length}곳
-      ${run.linked ? `<span class="badge badge-ok">${run.linked}곳 연결</span>` : ""}</h2>
+      ${run.linked ? `<span class="badge badge-ok">${run.linked}곳 연결</span>` : ""}
+      ${run.pinned ? `<span class="badge badge-info">${run.pinned}곳 핀만</span>` : ""}</h2>
       ${runTable || `<p class="panel-hint">더 돌릴 가게가 없습니다.</p>`}</section>` : ""}
 
     ${rest.length ? `<section class="panel"><h2 class="panel-title">아직 지도에 없는 가게
