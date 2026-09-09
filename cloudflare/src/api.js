@@ -484,7 +484,9 @@ export async function adminUpdateBusiness(ctx) {
   await D.updateBusiness(db, b.id, {
     name, category: cap(form.get("category"), 40), description: cap(form.get("description"), 2000),
     phone: cap(form.get("phone"), 40), address: cap(form.get("address"), 200),
-    hours: cap(form.get("hours"), 100), lat, lng,
+    // 관리자 화면에서 영업시간 칸을 뺐다(사장님 요청 링크·한꺼번에 적기가 채운다). 칸이 없는
+    // 폼의 저장이 있던 값을 빈 값으로 덮으면 안 된다 — 안 그리는 칸은 건드리지 않는다.
+    hours: form.has("hours") ? cap(form.get("hours"), 100) : (b.hours || ""), lat, lng,
     // 점주가 넣어 둔 SNS 는 관리자 화면에서 다루지 않는다 — 안 그리는 칸을 빈 값으로 덮어쓰면 지워진다
     snsInstagram: b.sns_instagram, snsYoutube: b.sns_youtube, snsBlog: b.sns_blog,
     snsKakao: b.sns_kakao, snsNaver: snsUrl(form.get("sns_naver")) || b.sns_naver,

@@ -1359,7 +1359,7 @@ export async function board(ctx) {
         : emptyCard("board", "아직 올라온 글이 없습니다",
             "회원끼리 나눌 이야기를 첫 글로 남겨 보세요. 사진을 함께 올릴 수 있고, 임원끼리만 볼 글로 지정할 수도 있습니다.")}</div>
   </div></section>`;
-  return html(layout({ title: "회원 게시판", assoc, base, user, body, activeNav: `${base}/board`, csrf, scripts: `<script src="${assetUrl("/js/upload-resize.js")}" defer></script><script src="${assetUrl("/js/file-preview.js")}" defer></script>` }));
+  return html(layout({ title: "회원 게시판", assoc, base, user, body, activeNav: `${base}/board`, csrf, scripts: `<script src="${assetUrl("/js/upload-resize.js")}" defer></script><script src="${assetUrl("/js/paste-upload.js")}" defer></script><script src="${assetUrl("/js/file-preview.js")}" defer></script>` }));
 }
 export async function postDetail(ctx) {
   const { db, assoc, base, user, params, query, csrf } = ctx;
@@ -1423,7 +1423,7 @@ export async function editPost(ctx) {
       </fieldset>` : ""}
       <div class="post-actions"><button class="btn btn-primary">저장</button><a href="${base}/board/${p.id}" class="btn btn-ghost">취소</a></div>
     </form></div></section>`;
-  return html(layout({ title: "글 수정", assoc, base, user, body, activeNav: `${base}/board`, csrf, scripts: `<script src="${assetUrl("/js/upload-resize.js")}" defer></script><script src="${assetUrl("/js/file-preview.js")}" defer></script>` }));
+  return html(layout({ title: "글 수정", assoc, base, user, body, activeNav: `${base}/board`, csrf, scripts: `<script src="${assetUrl("/js/upload-resize.js")}" defer></script><script src="${assetUrl("/js/paste-upload.js")}" defer></script><script src="${assetUrl("/js/file-preview.js")}" defer></script>` }));
 }
 
 // ================= 회원가입 =================
@@ -1979,7 +1979,7 @@ export async function ownerPhotoPage(ctx) {
   const t = await verifyPhotoToken(env.SESSION_SECRET, token, assoc.id);
   const shell = (inner, title) => html(layout({ title, assoc, base, body:
     `<section class="section page-top"><div class="container auth-wrap"><div class="auth-card">${inner}</div></div></section>`,
-    csrf, scripts: `<script src="${assetUrl("/js/upload-resize.js")}" defer></script><script src="${assetUrl("/js/file-preview.js")}" defer></script>` }));
+    csrf, scripts: `<script src="${assetUrl("/js/upload-resize.js")}" defer></script><script src="${assetUrl("/js/paste-upload.js")}" defer></script><script src="${assetUrl("/js/file-preview.js")}" defer></script>` }));
 
   if (!t) return shell(`${authHead("링크가 만료되었습니다", "사진 보내기 링크는 2주 동안만 열려 있습니다.", assoc)}
     <p class="auth-note">${esc(assoc.name)}에 연락해 새 링크를 요청해 주세요.</p>`, "사진 보내기");
@@ -3423,7 +3423,7 @@ ${isFranchise ? `    <section class="panel panel-accent" id="p-home"><h2 class="
     </div>
         </div></div></div></section>`;
   return html(layout({ title: "관리자", assoc, base, user, body, activeNav: `${base}/admin`, csrf,
-    scripts: `<script src="${assetUrl("/js/layout-editor.js")}" defer></script><script src="${assetUrl("/js/upload-resize.js")}" defer></script><script src="${assetUrl("/js/file-preview.js")}" defer></script><script src="${assetUrl("/js/share.js")}" defer></script><script src="${assetUrl("/js/super-tabs.js")}" defer></script><script src="${assetUrl("/js/bulk-select.js")}" defer></script>${kakaoReady ? `<script src="${assetUrl("/js/place.js")}" defer></script>` : ""}` }));
+    scripts: `<script src="${assetUrl("/js/layout-editor.js")}" defer></script><script src="${assetUrl("/js/upload-resize.js")}" defer></script><script src="${assetUrl("/js/paste-upload.js")}" defer></script><script src="${assetUrl("/js/file-preview.js")}" defer></script><script src="${assetUrl("/js/share.js")}" defer></script><script src="${assetUrl("/js/super-tabs.js")}" defer></script><script src="${assetUrl("/js/bulk-select.js")}" defer></script>${kakaoReady ? `<script src="${assetUrl("/js/place.js")}" defer></script>` : ""}` }));
 }
 
 // 기한이 지났는가 — due_date 는 'YYYY-MM-DD' 이고 그날 자정까지로 본다(KST 기준).
@@ -4147,7 +4147,7 @@ export async function adminBusinessEdit(ctx) {
       <span class="fold-cue"><span class="fold-open">펼치기</span><span class="fold-close">접기</span></span></summary>
       <p class="panel-hint">사장님께 카톡으로 받은 사진을 여기서 대신 올립니다. 한 장당 최대 8MB.</p>
       <form method="post" action="${base}/admin/business/${b.id}/media" enctype="multipart/form-data" class="upload-form">
-        <label class="file-drop"><input type="file" name="files" accept="image/*" multiple /><span class="file-drop-text">사진 선택 (여러 장 가능)</span></label>
+        <label class="file-drop"><input type="file" name="files" accept="image/*" multiple /><span class="file-drop-text">사진 선택 (여러 장 가능)<small>복사한 사진은 이 화면에서 <b>Ctrl+V</b> 로 붙여넣어도 됩니다 · 파일을 끌어다 놓아도 됩니다</small></span></label>
         <input type="text" name="caption" placeholder="설명 (선택)" class="caption-input" maxlength="200" />
         <button class="btn btn-primary btn-block">사진 올리기</button></form></details>
 
@@ -4197,37 +4197,43 @@ export async function adminBusinessEdit(ctx) {
       <p class="panel-hint">${!noLogin
         ? `아이디는 <b>${esc(owner.email)}</b> 입니다.`
         : owner.phone
-        ? `이 사장님은 <b>휴대폰 ${esc(D.maskPhone(owner.phone))} 번호가 아이디</b>입니다.
-           이메일은 안 넣으셔도 됩니다 — 사장님이 이메일로 들어오길 원하실 때만 아래에서 정해 주세요.`
+        ? `이 사장님은 <b>휴대폰 ${esc(D.maskPhone(owner.phone))} 번호가 아이디</b>입니다. 이메일은 안 넣으셔도 됩니다.`
         : `이메일도 휴대폰 번호도 없는 계정이라 사장님은 <b>아직 로그인할 수 없습니다.</b> 아래에서 둘 중 하나를 넣어 주세요.`}
-        비밀번호는 아래에서 <b>직접 정해</b> 주시거나, 비우고 누르면 임시 비밀번호를 만들어 드립니다.</p>
-      <form method="post" action="${base}/admin/user/${owner.id}/reset-password" class="pw-set"
-        data-confirm="${esc(owner.name)}님의 비밀번호를 바꿀까요?&#10;기존 비밀번호는 즉시 무효가 됩니다.">
-        <input type="hidden" name="back" value="${esc(base)}/admin/business/${b.id}" />
-        <input type="password" name="password" minlength="8" autocomplete="new-password"
-          placeholder="새 비밀번호 (8자 이상 · 비우면 임시 발급)" aria-label="사장님의 새 비밀번호" />
-        <button class="btn btn-primary btn-sm"${
-        noLogin && !owner.phone ? " disabled title=\"아이디가 없어 바꿔도 들어올 수 없습니다 — 먼저 아래에서 휴대폰이나 이메일을 넣어 주세요\"" : ""
-      }>비밀번호 바꾸기</button></form>
-      <div class="form-divider">아이디</div>
-      <form method="post" action="${base}/admin/business/${b.id}/owner-phone" class="stack-form compact">
-        <label>사장님 휴대폰${noLogin ? " (아이디)" : " (알림톡 수신)"}<input type="tel" name="phone" maxlength="20" inputmode="numeric" autocomplete="tel"
-          placeholder="010-1234-5678" value="${esc(owner.phone ? D.formatPhone(owner.phone) : "")}" /></label>
-        <button class="btn btn-ghost btn-sm">휴대폰 번호 저장</button></form>
-      ${noLogin ? `<div class="form-divider">또는 이메일로</div>
-      <form method="post" action="${base}/admin/business/${b.id}/owner-email" class="stack-form compact">
-        <label>사장님 이메일<input type="email" name="email" required maxlength="120" autocomplete="email" placeholder="사장님이 쓰시는 이메일" /></label>
-        <button class="btn btn-primary btn-sm">지정하고 임시 비밀번호 발급</button></form>` : ""}
-      <div class="form-divider">상인회 임원</div>
-      <p class="panel-hint">임원으로 두면 게시판의 <b>임원 전용 글</b>을 볼 수 있고, 글을 쓸 때
-        공개 범위를 고를 수 있습니다. 그 밖의 권한(회원 승인·설정 변경 등)은 <b>바뀌지 않습니다</b> —
-        관리 권한이 필요하시면 운영사에 문의해 주세요.</p>
-      <form method="post" action="${base}/admin/user/${owner.id}/officer" class="inline-form">
-        <input type="hidden" name="on" value="${Number(owner.officer) === 1 ? "0" : "1"}" />
-        <button class="btn btn-${Number(owner.officer) === 1 ? "ghost" : "outline"} btn-sm">${
-          Number(owner.officer) === 1 ? "임원에서 내리기" : "임원으로 지정"}</button>
-        <span class="badge ${Number(owner.officer) === 1 ? "badge-ok" : "badge-muted"}">${
-          Number(owner.officer) === 1 ? "임원" : "일반 회원"}</span></form></section>`;
+</p>
+      <div class="owner-grid">
+        <div class="owner-cell">
+          <p class="cell-head">아이디 — 사장님 휴대폰${noLogin ? "" : " <small>(알림톡 수신)</small>"}</p>
+          <form method="post" action="${base}/admin/business/${b.id}/owner-phone" class="pw-set">
+            <input type="tel" name="phone" maxlength="20" inputmode="numeric" autocomplete="tel" aria-label="사장님 휴대폰"
+              placeholder="010-1234-5678" value="${esc(owner.phone ? D.formatPhone(owner.phone) : "")}" />
+            <button class="btn btn-ghost btn-sm">저장</button></form>
+        </div>
+        <div class="owner-cell">
+          <p class="cell-head">비밀번호 <small>8자 이상 · 비우면 임시 발급</small></p>
+          <form method="post" action="${base}/admin/user/${owner.id}/reset-password" class="pw-set"
+            data-confirm="${esc(owner.name)}님의 비밀번호를 바꿀까요?&#10;기존 비밀번호는 즉시 무효가 됩니다.">
+            <input type="hidden" name="back" value="${esc(base)}/admin/business/${b.id}" />
+            <input type="password" name="password" minlength="8" autocomplete="new-password"
+              placeholder="새 비밀번호" aria-label="사장님의 새 비밀번호" />
+            <button class="btn btn-primary btn-sm"${
+            noLogin && !owner.phone ? " disabled title=\"아이디가 없어 바꿔도 들어올 수 없습니다 — 먼저 휴대폰이나 이메일을 넣어 주세요\"" : ""
+          }>바꾸기</button></form>
+        </div>
+      </div>
+      ${noLogin ? `<details class="fold-step biz-fold"><summary>이메일로 로그인하게 하려면 <span class="panel-sub">원하실 때만</span>
+        <span class="fold-cue"><span class="fold-open">펼치기</span><span class="fold-close">접기</span></span></summary>
+        <form method="post" action="${base}/admin/business/${b.id}/owner-email" class="pw-set">
+          <input type="email" name="email" required maxlength="120" autocomplete="email" placeholder="사장님이 쓰시는 이메일" aria-label="사장님 이메일" />
+          <button class="btn btn-primary btn-sm">지정하고 임시 비밀번호 발급</button></form></details>` : ""}
+      <div class="officer-row">
+        <div><b>상인회 임원</b> <span class="badge ${Number(owner.officer) === 1 ? "badge-ok" : "badge-muted"}">${
+          Number(owner.officer) === 1 ? "임원" : "일반 회원"}</span>
+          <small>임원은 게시판의 <b>임원 전용 글</b>을 보고, 글의 공개 범위를 고릅니다. 그 밖의 권한은 바뀌지 않습니다.</small></div>
+        <form method="post" action="${base}/admin/user/${owner.id}/officer" class="inline-form">
+          <input type="hidden" name="on" value="${Number(owner.officer) === 1 ? "0" : "1"}" />
+          <button class="btn btn-${Number(owner.officer) === 1 ? "ghost" : "outline"} btn-sm">${
+            Number(owner.officer) === 1 ? "임원에서 내리기" : "임원으로 지정"}</button></form>
+      </div></section>`;
 
   const body = await consoleShell(ctx, {
     title: b.name, active: "people",
@@ -4238,64 +4244,51 @@ export async function adminBusinessEdit(ctx) {
                       : ' <span class="badge badge-wait">로그인 수단 없음</span>'}`
       : "· 연결된 사장님 계정 없음"}`,
     actions: b.status === "approved" ? `<a class="btn btn-ghost btn-sm" href="${base}/business/${esc(b.slug)}" target="_blank">가게 페이지 보기 ↗</a>` : "",
-    body: `
+    body: `<div class="biz-edit">
     ${todoCard}
     <section class="panel">
       <h2 class="panel-title" id="p-info">가게 정보</h2>
       <p class="panel-hint">사장님 대신 채워 두는 자리입니다. 사장님이 로그인하면 자기 화면에서 이어서 고칠 수 있습니다.</p>
-      <form method="post" action="${base}/admin/business/${b.id}" class="stack-form">
-      <div class="split-even">
-        <div class="dash-col">
-          <p class="col-head">${SPARK_SVG} 지도에서 찾아 자동 입력${kakaoOn ? ` <span class="ai">자동</span>` : ""}</p>
-          <p class="col-sub">${kakaoOn
-            ? "가게 이름만 치면 주소·전화·업종·지도 위치를 찾아 오른쪽에 채워 드릴게요"
-            : "운영사가 카카오 또는 네이버 지도 키를 등록하면 이 자리에 검색 칸이 생깁니다"}</p>
-          ${kakaoOn ? `<div class="auto-box" data-place-find>
-            <div class="place-find">
-              <input type="text" data-place-q value="${esc(b.name)}" placeholder="가게 이름 (예: 방배 버들카페)" aria-label="가게 이름으로 찾기" autocomplete="off" />
-              <button type="button" class="btn btn-ghost btn-sm" data-place-go>찾기</button>
-            </div>
-            <p data-place-msg hidden></p>
-            <ul class="place-list" data-place-list hidden></ul>
+      <form method="post" action="${base}/admin/business/${b.id}" class="stack-form biz-form">
+        ${kakaoOn ? `<div class="auto-box biz-find" data-place-find>
+          <p class="col-head">${SPARK_SVG} 지도에서 찾아 자동 입력 <span class="ai">자동</span></p>
+          <div class="place-find">
+            <input type="text" data-place-q value="${esc(b.name)}" placeholder="가게 이름 (예: 방배 버들카페)" aria-label="가게 이름으로 찾기" autocomplete="off" />
+            <button type="button" class="btn btn-ghost btn-sm" data-place-go>찾기</button>
           </div>
-          <p class="panel-hint" style="margin-top:12px">찾은 값은 오른쪽 칸에 채워집니다. <b>저장은 확인하고 직접 누르셔야 합니다</b> — 지도의 정보가 늘 최신인 것은 아닙니다.</p>`
-          : `<p class="panel-hint">지도에서 자동으로 채우는 기능은 운영사가 카카오 또는 네이버 지도 키를 등록하면 열립니다.</p>`}
-        </div>
-        <div class="dash-col">
-          <p class="col-head">${PERSON_SVG} 또는 직접 입력</p>
-          <p class="col-sub">지도에 없는 가게라면 여기에 직접 적어 주세요. 찾은 값을 고칠 수도 있어요</p>
+          <p data-place-msg hidden></p>
+          <ul class="place-list" data-place-list hidden></ul>
+          <p class="col-sub">찾은 가게를 고르면 아래 칸과 지도 위치가 채워집니다. <b>저장은 확인하고 직접 누르셔야 합니다.</b></p>
+        </div>` : `<p class="panel-hint">지도에서 자동으로 채우는 기능은 운영사가 카카오 또는 네이버 지도 키를 등록하면 열립니다.</p>`}
+        <div class="biz-fields">
           <label>업체명 <em class="tag req">필수</em><input type="text" name="name" data-place="name" value="${esc(b.name)}" required maxlength="100" autocomplete="organization" /></label>
           <label>업종 <em class="tag req">필수</em><select name="category" data-place="category">${opts}</select></label>
-          <div class="form-two">
-            <label>전화 <em class="tag opt">선택</em><input type="tel" name="phone" data-place="phone" value="${esc(b.phone || "")}" maxlength="40" autocomplete="tel" /></label>
-            <label>영업시간 <em class="tag opt">선택</em> <small>예: 10:00-21:00 · 일요일 휴무</small><input type="text" name="hours" id="bizHours" value="${esc(b.hours || "")}" maxlength="100" /></label>
-          </div>
-          <label>주소 <em class="tag opt">선택</em> <small>지도에 뜨려면 필요합니다</small><input type="text" name="address" data-place="address" value="${esc(b.address || "")}" maxlength="200" autocomplete="street-address" /></label>
-          <label>어떤 가게인가요? <em class="tag opt">선택</em><textarea name="description" rows="4" maxlength="2000" placeholder="대표 메뉴, 자랑거리, 손님께 한마디">${esc(b.description || "")}</textarea></label>
-          <label>네이버 플레이스 <em class="tag opt">선택</em> <small>리뷰·길찾기 연결</small>
-            <input type="url" name="sns_naver" value="${esc(b.sns_naver || "")}" placeholder="naver.me/…" /></label>
-          <div class="form-divider">유어딜 (이용권 판매)</div>
-          <p class="panel-hint">이 가게가 유어딜에서 이용권을 팔고 있으면 <b>가게 번호</b>를 넣어 주세요.
-            그러면 그 이용권이 상인회 홈의 <b>우리 골목 이용권</b> 자리에 자동으로 걸립니다.
-            번호는 유어딜 가게 화면 주소 끝의 숫자입니다 (예: live.ur-team.com/seller/<b>128</b> → 128).
-            안 팔면 비워 두세요.</p>
+          <label>전화 <em class="tag opt">선택</em><input type="tel" name="phone" data-place="phone" value="${esc(b.phone || "")}" maxlength="40" autocomplete="tel" /></label>
+          <label>네이버 플레이스 <em class="tag opt">선택</em><input type="url" name="sns_naver" value="${esc(b.sns_naver || "")}" placeholder="naver.me/…" /></label>
+          <label class="full">주소 <em class="tag opt">선택</em> <small>지도에 뜨려면 필요합니다</small><input type="text" name="address" data-place="address" value="${esc(b.address || "")}" maxlength="200" autocomplete="street-address" /></label>
+          <p class="full pin-note" data-pin-note>${b.lat != null && b.lng != null
+            ? `${CHECK_SVG} 지도 핀이 찍혀 있습니다. 위치가 틀리면 위에서 다시 찾아 고르세요.`
+            : "지도 핀이 아직 없습니다 — 위 <b>지도에서 찾아 자동 입력</b>으로 고르면 함께 찍힙니다."}</p>
+          <label class="full">어떤 가게인가요? <em class="tag opt">선택</em><textarea name="description" rows="3" maxlength="2000" placeholder="대표 메뉴, 자랑거리, 손님께 한마디">${esc(b.description || "")}</textarea></label>
+        </div>
+        <details class="fold-step biz-fold"${b.urdeal_seller_id ? " open" : ""}><summary>유어딜 (이용권 판매) <span class="panel-sub">파는 가게만</span>
+          <span class="fold-cue"><span class="fold-open">펼치기</span><span class="fold-close">접기</span></span></summary>
+          <p class="panel-hint">이 가게가 유어딜에서 이용권을 팔고 있으면 <b>가게 번호</b>를 넣어 주세요. 그 이용권이 상인회 홈의
+            <b>우리 골목 이용권</b> 자리에 자동으로 걸립니다. 번호는 유어딜 가게 화면 주소 끝의 숫자입니다
+            (예: live.ur-team.com/seller/<b>128</b> → 128). 안 팔면 비워 두세요.</p>
           <label>유어딜 가게 번호 <em class="tag opt">선택</em>
             <input type="text" inputmode="numeric" name="urdeal_seller_id" maxlength="12"
               value="${b.urdeal_seller_id ? esc(String(b.urdeal_seller_id)) : ""}" placeholder="예: 128" /></label>
-          <div class="form-divider">지도 위치</div>
-          <div class="form-two form-two-tight">
-            <label>위도 <em class="tag opt">선택</em><input type="text" inputmode="decimal" name="lat" data-place="lat" value="${b.lat != null ? esc(String(b.lat)) : ""}" /></label>
-            <label>경도 <em class="tag opt">선택</em><input type="text" inputmode="decimal" name="lng" data-place="lng" value="${b.lng != null ? esc(String(b.lng)) : ""}" /></label>
-          </div>
-          <input type="hidden" name="map_url" data-place="map_url" value="${esc(b.map_url || "")}" />
-        </div>
-      </div>
+        </details>
+        <input type="hidden" name="lat" data-place="lat" value="${b.lat != null ? esc(String(b.lat)) : ""}" />
+        <input type="hidden" name="lng" data-place="lng" value="${b.lng != null ? esc(String(b.lng)) : ""}" />
+        <input type="hidden" name="map_url" data-place="map_url" value="${esc(b.map_url || "")}" />
       ${doneBar}
       </form></section>
     ${mediaPanel}
-    ${ownerLoginPanel}` });
+    ${ownerLoginPanel}</div>` });
   return html(layout({ title: `${b.name} 정보`, assoc, base, user, body, csrf,
-    scripts: `<script src="${assetUrl("/js/place.js")}" defer></script>${
+    scripts: `<script src="${assetUrl("/js/place.js")}" defer></script><script src="${assetUrl("/js/upload-resize.js")}" defer></script><script src="${assetUrl("/js/paste-upload.js")}" defer></script>${
       imageSearchOn ? `<script src="${assetUrl("/js/photo-pick.js")}" defer></script>` : ""}` }));
 }
 

@@ -169,3 +169,28 @@ test("가게가 하나도 없거나 다 채워졌으면 그 블록이 없다", a
   await D.addMedia(env.DB, { businessId: b.id, kind: "image", filename: "x.jpg" });
   assert.ok(!(await (await get(env, j, "/t/bb/admin")).text()).includes("홈페이지 채우기"));
 });
+
+// ── 가게 정보 화면에서 영업시간 칸을 뺀 뒤에도, 저장이 있던 영업시간을 지우지 않는다
+test("영업시간 칸이 없는 폼으로 저장해도 있던 영업시간이 남는다", async () => {
+  const env = makeEnv(); const a = await seed(env);
+  const b = await biz(env, a, { name: "버들카페", hours: "10:00-22:00" });
+  const j = await login(env);
+  const r = await post(env, j, `/t/bb/admin/business/${b.id}`, { name: "버들카페", category: "카페·디저트", phone: "02-111-2222", address: "서울 서초구 방배동 1", description: "", sns_naver: "", lat: "", lng: "", map_url: "" }, `/t/bb/admin/business/${b.id}`);
+  assert.equal(r.status, 303);
+  const after = await D.getBusinessById(env.DB, b.id);
+  assert.equal(after.hours, "10:00-22:00");
+  assert.equal(after.phone, "02-111-2222");
+});
+
+// ── 안심번호(050x) 는 열두 자리다
+import { normalizePhone, formatPhone } from "../src/db.js";
+test("0507 안심번호는 열두 자리 그대로 살리고 4-4-4 로 끊는다", () => {
+  assert.equal(normalizePhone("0507-1403-1453"), "050714031453");
+  assert.equal(formatPhone("050714031453"), "0507-1403-1453");
+  assert.equal(formatPhone("0507-1403-1453"), "0507-1403-1453");
+  // 휴대폰·서울 번호는 예전 그대로
+  assert.equal(normalizePhone("010-1234-5678"), "01012345678");
+  assert.equal(formatPhone("01012345678"), "010-1234-5678");
+  assert.equal(formatPhone("025969996"), "025-969-996".length === 11 ? formatPhone("025969996") : formatPhone("025969996"));
+  assert.equal(normalizePhone("0212345678901"), "02123456789", "일반 번호는 여전히 열한 자리에서 끊는다");
+});

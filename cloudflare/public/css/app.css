@@ -3487,10 +3487,28 @@ a.deal-card:hover{border-color:var(--deal);transition:border-color .18s}
 .dash .btn-cta:hover{background:var(--brand-800)}
 .dash .btn-cta svg{width:18px;height:18px}
 
+/* 가게 편집 화면 — 넓은 모니터에서 입력칸이 화면 끝까지 늘어나면 눈이 왕복해야 해서 읽기 힘들다.
+   읽는 폭(860px)으로 묶고, 짧은 값은 두 칸, 긴 값은 한 칸에 둔다. */
+.dash .biz-edit{max-width:860px}
+.dash .biz-form .biz-find{margin-bottom:6px}
+.dash .biz-form .biz-find .col-head{margin-bottom:10px}
+.dash .biz-form .biz-find .col-sub{margin:10px 0 0}
+.dash .biz-fields{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px 18px}
+.dash .biz-fields .full{grid-column:1/-1}
+.dash .biz-fields .pin-note{margin:-4px 0 0;font-size:13px;color:var(--muted);display:flex;align-items:center;gap:6px}
+.dash .biz-fields .pin-note svg{width:16px;height:16px;color:var(--ok-fg)}
+.dash .biz-fold{margin-top:4px}
+.dash .owner-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px 22px;margin-bottom:14px}
+.dash .owner-cell .cell-head{font-size:13px;font-weight:700;margin:0 0 8px}
+.dash .owner-cell .cell-head small{font-weight:400;color:var(--muted)}
+.dash .owner-cell .pw-set input{flex:1 1 160px}
+.dash .officer-row{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;border-top:1px solid var(--line-soft);padding-top:14px;margin-top:6px}
+.dash .officer-row small{display:block;color:var(--muted);font-size:13px;margin-top:4px}
 @media (max-width:900px){
   .dash .split-even{grid-template-columns:minmax(0,1fr);gap:22px}
   .dash .finish-bar{grid-template-columns:minmax(0,1fr)}
   .dash .btn-cta{min-height:56px}
+  .dash .biz-fields,.dash .owner-grid{grid-template-columns:minmax(0,1fr)}
 }
 /* 자동 입력이 끝나면 상자 안내가 초록 '✓ 완료' 가 된다 (레퍼런스: 파일명 옆 '✓ 완료') */
 .dash .auto-box[data-place-done] [data-place-msg]{color:var(--ok-fg);font-weight:700;display:flex;align-items:center;gap:8px}
@@ -4406,3 +4424,6 @@ body.is-console[data-console="super"] .console-strip{border-bottom:1px solid #2b
 /* 운영사 콘솔 — 지도 열쇠 붙여넣기 칸 */
 .key-form label small{display:block;color:var(--muted);font-weight:400}
 .key-form .key-clear{display:inline-flex;align-items:center;gap:4px;font-weight:600;color:var(--ink);cursor:pointer;min-height:44px}
+/* 사진 붙여넣기 — 칸 안의 안내 두 줄, 붙여넣은 뒤 올리기 단추가 눈에 띈다 */
+.file-drop-text small{display:block;margin-top:4px}
+.btn.is-armed{box-shadow:0 0 0 3px var(--brand-ring)}

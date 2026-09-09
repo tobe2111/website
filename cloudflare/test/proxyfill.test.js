@@ -43,7 +43,9 @@ test("대행 등록한 점포에 무엇이 비었는지, 그래서 손님에게 
   assert.match(html, /전화를 걸 수 없습니다/);
   assert.match(html, /'지금 문 연 곳'에 안 뜹니다/);
   assert.match(html, /name="address"/, "주소 칸이 관리자에게 열려 있어야");
-  assert.match(html, /name="hours"/);
+  // 영업시간 칸은 이 화면에서 뺐다 — 사장님 요청 링크와 '한꺼번에 적기' 가 채운다.
+  assert.doesNotMatch(html, /name="hours"/);
+  assert.doesNotMatch(html, /name="lat"[^>]*type="text"|type="text"[^>]*name="lat"/, "위도·경도는 손으로 치는 칸이 아니다");
 });
 
 test("관리자가 채운 주소·전화가 저장되고, 점주 화면에도 같은 값이 보인다", async () => {

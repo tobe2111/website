@@ -27,6 +27,13 @@
       if (d.length <= 9) return d.slice(0, 2) + "-" + d.slice(2, 5) + "-" + d.slice(5);
       return d.slice(0, 2) + "-" + d.slice(2, 6) + "-" + d.slice(6);
     }
+    // 안심번호(0502~0508) — 열두 자리, 4-4-4. 열한 자리에서 자르면 마지막 숫자가 사라진다
+    if (/^050\d/.test(d)) {
+      d = d.slice(0, 12);
+      if (d.length <= 4) return d;
+      if (d.length <= 8) return d.slice(0, 4) + "-" + d.slice(4);
+      return d.slice(0, 4) + "-" + d.slice(4, 8) + "-" + d.slice(8);
+    }
     // 대표번호(1588·1666·1899…) — 지역번호가 없고 4-4 로 끊는다
     if (/^1[5678]/.test(d)) {
       d = d.slice(0, 8);
