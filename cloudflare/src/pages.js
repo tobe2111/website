@@ -1,7 +1,7 @@
 // 공개/인증 페이지 핸들러 (async). ctx = { env, db, assoc, base, user, url, query, csrf, params }
 import * as D from "./db.js";
 import { esc, cap, clip, openBadge, openNow, hoursLine, dongOf, fmtBytes, kstStamp, kstDate, prettyPath, safeNext, parseCookies, decomposeHours } from "./util.js";
-import { parseMemberRoster, markExisting, guessPrefix, describeColumns, IMPORT_MAX } from "./roster.js";
+import { parseMemberRoster, markExisting, guessPrefix, describeColumns, IMPORT_MAX, mapCategory } from "./roster.js";
 import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG, ORIGIN, assetUrl, brandLogo } from "./render.js";
 import { verifyInviteToken, verifyPhotoToken, SALES_STAGES, otpRequired, selfSignupOn, MAX_SLOTS, BULK_MAX, BULK_CHUNK, docOf, isPlaceholderEmail, importMemberRows, autoLinkChunk, farFromStreet, unlinkFar, photoChunk, makePhotoToken, mapKeys, MAP_CHUNK, PHOTO_CHUNK } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
 import { html, notFoundResponse, back, redirect } from "./http.js";
@@ -1602,12 +1602,12 @@ export async function adminMembersLinks(ctx) {
 
   const needWhat = (b) => [!b.photos && "사진", !String(b.hours || "").trim() && "영업시간"].filter(Boolean).join("·");
   const table = made.length ? `<div class="table-scroll"><table class="admin-table roster-table">
-    <thead><tr><th>가게</th><th>사장님</th><th>없는 것</th><th>보낼 글</th></tr></thead>
+    <thead><tr><th>가게 · 보내기</th><th>사장님</th><th>없는 것</th></tr></thead>
     <tbody>${made.map((b) => `<tr>
-      <td><a href="${base}/admin/business/${b.id}"><b>${esc(b.name)}</b></a></td>
+      <td><a href="${base}/admin/business/${b.id}"><b>${esc(b.name)}</b></a>
+        <div class="act-two">${b.owner_phone ? `<a class="btn btn-xs btn-primary" href="sms:${esc(String(b.owner_phone).replace(/\D/g, ""))}?&body=${encodeURIComponent(msgOf(b))}">문자로 보내기</a>` : ""}<button type="button" class="btn btn-xs btn-outline" data-copy="${esc(msgOf(b))}">이 글 복사</button></div></td>
       <td>${esc(b.owner_name || "")}${b.owner_phone ? `<br /><small><a href="tel:${esc(b.owner_phone)}">${esc(D.formatPhone(b.owner_phone))}</a></small>` : '<br /><small class="muted">번호 없음</small>'}</td>
       <td><span class="badge badge-wait">${esc(needWhat(b))}</span></td>
-      <td><button type="button" class="btn btn-xs btn-outline" data-copy="${esc(msgOf(b))}">이 글 복사</button></td>
     </tr>`).join("")}</tbody></table></div>` : "";
 
   const allText = made.map(msgOf).join("\n\n");
@@ -1621,6 +1621,8 @@ export async function adminMembersLinks(ctx) {
         <li><b>링크는 2주 동안만 열립니다.</b> 지나면 이 화면에서 다시 뽑으시면 됩니다.</li>
         <li><b>사장님이 올리면 회장님께 알림이 남습니다.</b> 안 들어온 곳만 챙기시면 됩니다.</li>
         <li><b>이미 다 갖춘 가게는 여기 안 나옵니다.</b> 사진도 있고 영업시간도 있는 곳은 부탁드릴 것이 없습니다.</li>
+        <li><b>휴대폰에서 이 화면을 열면 '문자로 보내기' 가 문자 앱을 바로 엽니다.</b> 글과 링크가 채워진 채 열리니 보내기만 누르시면 됩니다. 카카오 심사도, 복사도 필요 없습니다(문자 요금은 회장님 휴대폰 요금제로 나갑니다).</li>
+        <li><b>영업시간을 회장님이 아시는 곳</b>은 <a href="${base}/admin/members/hours">영업시간 한꺼번에 적기</a>에서 직접 적으셔도 됩니다.</li>
       </ul>
       ${total === 0 ? `<p class="panel-hint"><b>부탁드릴 곳이 없습니다.</b> 모든 가게에 사진과 영업시간이 있습니다.</p>` : ""}
       ${total > 0 ? (talkReady
@@ -1727,6 +1729,57 @@ export async function adminMembersPhotos(ctx) {
   });
   return html(layout({ title: "지도 사진 한꺼번에 가져오기", assoc, base, user, body, csrf,
     scripts: `<script src="${assetUrl("/js/auto-next.js")}" defer></script><script src="${assetUrl("/js/submit-once.js")}" defer></script>` }));
+}
+
+// ================= 영업시간 한꺼번에 적기 =================
+//
+// 네 숫자(등록·지도·사진·영업시간) 가운데 영업시간만 지도가 못 준다. 사장님께 여쭤보는
+// 링크는 있지만 답은 며칠 뒤에 오고 반은 안 온다. 회장님은 골목 가게가 몇 시에 여닫는지
+// 대개 안다 — 한 화면에서 쭉 적게 한다. 비슷한 가게가 많으니 "빈 칸 모두 채우기" 와
+// "위와 같게" 두 단추로 대부분은 두세 번 눌러 끝난다.
+export async function adminMembersHours(ctx) {
+  const { db, assoc, base, user, csrf } = ctx;
+  if (assoc.kind === "esign") return notFoundResponse(ctx);
+  const rows = await D.listBusinessesNoHours(db, assoc.id, 300).catch(() => []);
+  const total = await D.countBusinessesWithHours(db, assoc.id).catch(() => 0);
+  const inner = `
+    <section class="panel">
+      <h2 class="panel-title">영업시간 한꺼번에 적기 ${rows.length ? `<span class="badge badge-wait">${rows.length}곳 비어 있음</span>` : `<span class="badge badge-ok">다 채워짐</span>`}</h2>
+      <p class="panel-hint">영업시간이 없는 가게는 홈 첫 화면의 <b>'지금 문 연 곳'</b> 에 안 뜹니다. 사장님께 여쭤보는 것이
+        가장 정확하지만(<a href="${base}/admin/members/links">요청 링크</a>), 회장님이 아시는 곳은 여기서 한 번에 적으시면 됩니다.
+        사장님이 나중에 보내시면 그 값으로 바뀝니다.</p>
+      <ul class="roster-notes">
+        <li><b>적는 법</b> — <code>10:00-22:00</code>, <code>10시~22시 일요일 휴무</code>, <code>오전 11시 - 오후 9시 · 월 휴무</code>
+          처럼 적으면 알아서 정리합니다. 여는 시각과 닫는 시각 둘이 있어야 합니다.</li>
+        <li><b>골목 가게는 시간이 비슷합니다.</b> 맨 위 칸에 한 번 적고 <b>빈 칸 모두 채우기</b> 를 누른 뒤, 다른 곳만 고치세요.
+          모르는 가게는 비워 두면 됩니다 — 빈 칸은 저장하지 않습니다.</li>
+      </ul>
+      ${rows.length ? `<form method="post" action="${base}/admin/members/hours" class="stack-form" data-once>
+        <input type="hidden" name="_csrf" value="${esc(csrf)}" />
+        <div class="hours-fill">
+          <label>빈 칸에 한 번에 넣을 값 <input type="text" id="hours-fill" placeholder="예: 10:00-22:00 · 일요일 휴무" autocomplete="off" /></label>
+          <button type="button" class="btn btn-outline" data-fill-empty="hours-fill">빈 칸 모두 채우기</button>
+        </div>
+        <div class="table-scroll"><table class="admin-table roster-table hours-table">
+          <thead><tr><th>가게</th><th>영업시간</th></tr></thead>
+          <tbody>${rows.map((b, i) => `<tr>
+            <td><b>${esc(b.name)}</b><br /><small>${esc(b.category || "")}</small></td>
+            <td class="hours-cell">
+              <input type="text" name="h_${b.id}" data-hours-input placeholder="10:00-22:00" autocomplete="off" aria-label="${esc(b.name)} 영업시간" />
+              ${i ? `<button type="button" class="btn btn-xs btn-ghost" data-same-as-above>위와 같게</button>` : ""}</td>
+          </tr>`).join("")}</tbody></table></div>
+        <div class="finish-acts"><button class="btn btn-cta">적은 것 모두 저장</button>
+          <span class="panel-hint">지금까지 ${total}곳에 영업시간이 있습니다.</span></div>
+      </form>` : `<p class="panel-hint"><b>비어 있는 가게가 없습니다.</b> ${total}곳 모두 영업시간이 있습니다.</p>`}
+    </section>`;
+  const body = await consoleShell(ctx, {
+    title: "영업시간 한꺼번에 적기", active: "people",
+    eyebrow: `<a href="${base}/admin#s-people">← 회원·점포</a>`,
+    sub: "회장님이 아시는 가게의 영업시간을 한 화면에서 적습니다.",
+    body: inner,
+  });
+  return html(layout({ title: "영업시간 한꺼번에 적기", assoc, base, user, body, csrf,
+    scripts: `<script src="${assetUrl("/js/hours-bulk.js")}" defer></script><script src="${assetUrl("/js/submit-once.js")}" defer></script>` }));
 }
 
 // ================= 명부의 가게들을 지도에 한꺼번에 연결 =================
@@ -2469,6 +2522,11 @@ export async function admin(ctx) {
     photo: await D.countBusinessesWithImage(db, assoc.id).catch(() => 0),
     hours: await D.countBusinessesWithHours(db, assoc.id).catch(() => 0),
   };
+  {
+    const others = assoc.kind === "esign" ? [] : await D.listBusinessesOther(db, assoc.id).catch(() => []);
+    setup.other = others.length;
+    setup.guessable = others.filter((b) => mapCategory(b.name) !== "기타").length;
+  }
   const loginCell = (b) => !isPlaceholderEmail(b.owner_email) ? esc(b.owner_email)
     : b.owner_phone ? `<span class="badge badge-ok">휴대폰</span> ${esc(D.maskPhone(b.owner_phone))}`
     : '<span class="badge badge-wait">로그인 수단 없음</span>';
@@ -3114,7 +3172,25 @@ export async function admin(ctx) {
     more: leads.fresh > 5 ? `새 상담 ${leads.fresh}건 전체 보기` : "",
   }) : "";
 
-  const hotPanels = [applyHot, leadHot, signHot].filter(Boolean).join("");
+  // 상인회 홈페이지가 아직 안 채워졌으면 그것도 '처리할 것' 이다. 가게 123곳을 넣어 놓고
+  // 지도에 45곳만 보이면, 손님이 지도를 열었을 때 골목의 절반이 없다. 화면 넷을 따로 열어야
+  // 알던 것을 첫 화면에 세운다 — 다 채워지면 이 블록은 사라진다.
+  const gaps = !isEsign && !isFranchise && setup.total > 0 ? [
+    setup.pinned < setup.total && { title: "지도에 안 보이는 가게", n: setup.total - setup.pinned,
+      sub: "손님 지도에 핀이 없습니다 — 상호로 찾아 한꺼번에 붙입니다", href: `${base}/admin/members/map`, label: "지도에 한꺼번에 연결" },
+    setup.photo < setup.total && { title: "사진 없는 가게", n: setup.total - setup.photo,
+      sub: "목록에서 회색 상자로 보입니다 — 지도 사진을 담거나 사장님께 부탁합니다", href: `${base}/admin/members/photos`, label: "지도 사진 한꺼번에",
+      href2: `${base}/admin/members/links`, label2: "사장님께 부탁" },
+    setup.hours < setup.total && { title: "영업시간 없는 가게", n: setup.total - setup.hours,
+      sub: "홈의 '지금 문 연 곳' 에 안 뜹니다 — 아시는 곳은 한꺼번에 적으세요", href: `${base}/admin/members/hours`, label: "한꺼번에 적기" },
+  ].filter(Boolean) : [];
+  const setupHot = gaps.length ? hotBlock({
+    n: gaps.length, title: "홈페이지 채우기", note: `가게 ${setup.total}곳 중 아직 비어 있는 것`,
+    href: `${base}/admin#s-people`, hrefLabel: "회원·점포",
+    rows: gaps.map((g) => hotRow(`${g.title} · ${g.n}곳`, g.sub,
+      `<a class="btn btn-sm" href="${g.href}">${esc(g.label)}</a>${g.href2 ? `<a class="btn btn-sm is-ghost" href="${g.href2}">${esc(g.label2)}</a>` : ""}`)),
+  }) : "";
+  const hotPanels = [applyHot, leadHot, signHot, setupHot].filter(Boolean).join("");
   const queuePanel = hotPanels || `<p class="all-clear">지금 처리할 일이 없습니다</p>`;
 
   // 바로 가기 — 매일 하는 일 네댓 개. 탭을 뒤지지 않고 첫 화면에서 바로 간다.
@@ -3165,8 +3241,12 @@ export async function admin(ctx) {
         <a href="${base}/admin/members/import">등록 <em>${setup.total}</em></a>
         <a href="${base}/admin/members/map">지도 <em>${setup.pinned}</em></a>
         <a href="${base}/admin/members/photos">사진 <em>${setup.photo}</em></a>
-        <a href="${base}/admin/members/links">영업시간 <em>${setup.hours}</em></a>
-        <small>— 숫자를 누르면 그 일을 하는 화면으로 갑니다. 왼쪽부터 차례로 채우면 됩니다.</small></p>`}
+        <a href="${base}/admin/members/hours">영업시간 <em>${setup.hours}</em></a>
+        <small>— 숫자를 누르면 그 일을 하는 화면으로 갑니다. 왼쪽부터 차례로 채우면 됩니다.</small></p>
+      ${setup.guessable ? `<form method="post" action="${base}/admin/members/guess-categories" class="setup-guess" data-once>
+        <input type="hidden" name="_csrf" value="${esc(csrf)}" />
+        <span>업종이 '기타' 인 가게 ${setup.other}곳 중 <b>${setup.guessable}곳</b>은 상호로 업종을 짐작할 수 있습니다 — '기타' 는 손님 화면의 분류 단추에서 빠집니다.</span>
+        <button class="btn btn-xs btn-outline">상호로 짐작해 채우기</button></form>` : ""}`}
       <span class="pill-row">${isEsign ? "" : `<a class="btn btn-xs btn-primary" href="${base}/admin/members/import">명부로 한 번에 등록</a><a class="btn btn-xs btn-outline" href="${base}/admin/members/map">지도에 한꺼번에 연결</a><a class="btn btn-xs btn-outline" href="${base}/admin/members/photos">지도 사진 한꺼번에</a><a class="btn btn-xs btn-outline" href="${base}/admin/members/links">사진·영업시간 요청 링크</a>`}${members.length && !isEsign ? `<a class="btn btn-xs btn-ghost" href="${base}/admin/members.csv">명단 CSV</a>` : ""}<a class="btn btn-xs btn-ghost" href="${base}/admin/export.json">전체 백업(JSON)</a></span></div>
       ${isEsign ? `<p class="panel-hint">계약서를 만들고 보내는 사람들입니다. <b>담당자</b>는 계약 업무만 하고 설정·API 키·과금은 볼 수 없습니다.
         권한을 회수해도 계정과 서명 이력은 남습니다 — 지우면 증거가 사라지기 때문입니다.</p>

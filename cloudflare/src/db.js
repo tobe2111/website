@@ -504,6 +504,14 @@ export const setBusinessNaverLink = (db, id, url) =>
   run(db, "UPDATE businesses SET sns_naver=?, updated_at=datetime('now') WHERE id=?", String(url || "").trim(), id);
 export const countBusinessesWithHours = async (db, aid) =>
   (await first(db, "SELECT COUNT(*) AS n FROM businesses WHERE association_id=? AND COALESCE(hours,'')<>''", aid)).n;
+// 영업시간이 빈 가게 — 회장님이 한꺼번에 적는 화면이 쓴다. 업종·이름 순이면 비슷한 가게가 붙어 서서
+// "위와 같게" 로 넘어가기 쉽다.
+export const listBusinessesNoHours = (db, aid, limit = 300) =>
+  all(db, "SELECT id, name, category, hours FROM businesses WHERE association_id=? AND COALESCE(hours,'')='' ORDER BY category, name LIMIT ?", aid, limit);
+export const listBusinessesOther = (db, aid) =>
+  all(db, "SELECT id, name FROM businesses WHERE association_id=? AND category='기타' ORDER BY id", aid);
+export const setBusinessCategory = (db, id, cat) =>
+  run(db, "UPDATE businesses SET category=?, updated_at=datetime('now') WHERE id=?", cat, id);
 export const listBusinessesToAsk = (db, aid, limit, offset) =>
   all(db, `SELECT b.id, b.name, b.hours, u.name AS owner_name, u.phone AS owner_phone,
              (SELECT COUNT(*) FROM media m WHERE m.business_id=b.id AND m.kind='image') AS photos

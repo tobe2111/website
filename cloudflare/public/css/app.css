@@ -4389,3 +4389,17 @@ body.is-console[data-console="super"] .console-strip{border-bottom:1px solid #2b
 .setup-strip a em{font-style:normal;font-weight:800;color:var(--brand-700,var(--ink))}
 .setup-strip a:hover em{text-decoration:underline}
 .setup-strip small{flex-basis:100%;color:var(--muted);font-weight:400}
+
+/* 영업시간 한꺼번에 적기 — 표 안의 입력칸. 손가락 기준(44px)을 지킨다. */
+.hours-fill{display:flex;flex-wrap:wrap;gap:10px;align-items:end}
+.hours-fill label{flex:1 1 260px;display:grid;gap:7px;font-weight:600;font-size:.92rem}
+.hours-fill input{width:100%;font:inherit;min-height:46px;padding:11px 14px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--bg);color:var(--ink)}
+.hours-table td:nth-child(2){min-width:220px}
+.hours-table input{width:100%;font:inherit;min-height:44px;padding:8px 12px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--bg);color:var(--ink)}
+.hours-table input:focus,.hours-fill input:focus{outline:none;border-color:var(--brand-600);box-shadow:0 0 0 3px var(--brand-ring)}
+/* 회원·점포 진행 한 줄 아래 — '기타' 업종 짐작 */
+.setup-guess{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;margin:-6px 0 14px;font-size:.9rem;color:var(--muted)}
+/* 요청 링크 표 — 문자·복사 두 단추가 한 칸에 */
+.roster-table .act-two{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.hours-table .hours-cell{display:grid;gap:6px;justify-items:start}
+.hours-table .hours-cell input{justify-self:stretch}

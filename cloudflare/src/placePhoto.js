@@ -59,6 +59,24 @@ const allowedPhoto = (u) => {
   catch { return false; }
 };
 
+// 응답의 앞 max 글자만 받고 연결을 끊는다. 스트림을 못 주는 응답(시험용 stub)은 통째로 받아 자른다.
+async function readHead(r, max) {
+  if (!r.body || typeof r.body.getReader !== "function") return String(await r.text()).slice(0, max);
+  const reader = r.body.getReader();
+  const dec = new TextDecoder();
+  let out = "";
+  try {
+    while (out.length < max) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      out += dec.decode(value, { stream: true });
+    }
+  } finally {
+    try { await reader.cancel(); } catch { /* 이미 끝난 스트림 */ }
+  }
+  return out.slice(0, max);
+}
+
 // 그 장소 페이지가 스스로 밝힌 대표 사진.
 // 못 가져오면 빈 값을 준다 — 지도가 느리다고 우리 화면이 같이 죽으면 안 된다.
 export async function placePhoto(mapUrl) {
@@ -72,9 +90,10 @@ export async function placePhoto(mapUrl) {
       headers: { accept: "text/html", "user-agent": "Mozilla/5.0 (compatible; MerchantSite/1.0)" },
     });
     if (!r.ok) return null;
-    const len = Number(r.headers.get("content-length") || 0);
-    if (len && len > MAX_HTML) return null;
-    const html = (await r.text()).slice(0, MAX_HTML);
+    // 앞부분만 읽는다. og 태그는 <head> 에 있어 첫 몇 KB 안에 다 있다. 예전에는 content-length 가
+    // 한도를 넘으면 통째로 거절했는데, 네이버 플레이스 페이지는 카카오와 달리 수백 KB 짜리라
+    // 그 규칙이 네이버 길을 통째로 막을 수 있었다. 한도는 그대로 두되 '거절' 이 아니라 '끊기' 로.
+    const html = await readHead(r, MAX_HTML);
     const img = absolutize(attr(html, "og:image"));
     if (!img || !allowedPhoto(img)) return null;
     return {
