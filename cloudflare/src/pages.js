@@ -1,7 +1,7 @@
 // 공개/인증 페이지 핸들러 (async). ctx = { env, db, assoc, base, user, url, query, csrf, params }
 import * as D from "./db.js";
 import { esc, cap, clip, openBadge, openNow, hoursLine, dongOf, fmtBytes, kstStamp, kstDate, prettyPath, safeNext, parseCookies, decomposeHours } from "./util.js";
-import { parseMemberRoster, markExisting, guessPrefix, IMPORT_MAX } from "./roster.js";
+import { parseMemberRoster, markExisting, guessPrefix, describeColumns, IMPORT_MAX } from "./roster.js";
 import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG, ORIGIN, assetUrl, brandLogo } from "./render.js";
 import { verifyInviteToken, verifyPhotoToken, SALES_STAGES, otpRequired, selfSignupOn, MAX_SLOTS, BULK_MAX, BULK_CHUNK, docOf, isPlaceholderEmail, importMemberRows, autoLinkChunk, MAP_CHUNK } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
 import { html, notFoundResponse, back, redirect } from "./http.js";
@@ -1434,12 +1434,14 @@ export async function adminMembersImport(ctx) {
   const prefix = posted ? cap(String(form.get("prefix") || "").trim(), 40) : guessPrefix(assoc.address);
   const confirm = posted && form.get("confirm") === "1";
 
-  let err = "", rows = null, done = null;
+  let err = "", rows = null, done = null, guessed = null;
   if (posted && !text.trim()) err = "명부를 붙여넣어 주세요.";
   else if (posted) {
     const parsed = parseMemberRoster(text, { prefix });
     if (parsed.error) err = parsed.error;
     else {
+      // 머리글 없이 붙여넣어 칸을 내용으로 알아낸 경우 — 표 위에 적어 줍니다.
+      guessed = parsed.inferred ? describeColumns(parsed.inferred) : null;
       rows = markExisting(parsed.rows, (await D.listAllBusinesses(db, assoc.id)).map((b) => b.name));
       // 미리보기에서 본 것과 넣는 것이 같은 줄이어야 합니다. 그래서 넣을 때도 같은 글자를
       // 다시 읽습니다 — 화면이 보낸 '이미 해석된 값' 을 믿지 않습니다.
@@ -1474,9 +1476,11 @@ export async function adminMembersImport(ctx) {
 
     <section class="panel">
       <h2 class="panel-title">엑셀 명부를 그대로 붙여넣기</h2>
-      <p class="panel-hint">엑셀에서 <b>머리글 줄을 포함해</b> 칸을 통째로 복사(Ctrl+C)한 뒤 아래에 붙여넣으세요(Ctrl+V).
-        머리글은 <b>상호 · 대표자 · 전화번호 · 주소 · 업종</b> 순서가 아니어도 되고, 없는 칸이 있어도 됩니다 —
-        <b>상호</b> 한 칸만 있으면 넣을 수 있습니다. 한 번에 ${IMPORT_MAX}줄까지.</p>
+      <p class="panel-hint">엑셀에서 칸을 통째로 복사(Ctrl+C)한 뒤 아래에 붙여넣으세요(Ctrl+V).
+        <b>머리글 줄은 없어도 됩니다</b> — 없으면 칸의 내용을 보고 무슨 칸인지 알아내고, 어떻게 읽었는지
+        미리보기 위에 적어 드립니다. 머리글을 넣으면 <b>상호 · 대표자 · 전화번호 · 주소 · 업종</b> 순서가
+        아니어도 되고, 없는 칸이 있어도 됩니다 — <b>상호</b> 한 칸만 있으면 넣을 수 있습니다.
+        한 번에 ${IMPORT_MAX}줄까지.</p>
       ${err ? `<div class="flash flash-err">${esc(err)}</div>` : ""}
       <form method="post" action="${base}/admin/members/import" class="stack-form">
         <input type="hidden" name="_csrf" value="${esc(csrf)}" />
@@ -1497,6 +1501,9 @@ export async function adminMembersImport(ctx) {
         ${dupN ? `<span class="badge badge-muted">${dupN}곳 이미 있음</span>` : ""}
         ${badN ? `<span class="badge badge-wait">${badN}곳 확인 필요</span>` : ""}</h2>
       <ul class="roster-notes">
+        ${guessed ? `<li><b>머리글이 없어서 칸의 내용을 보고 읽었습니다 — ${esc(guessed.join(" · "))}.</b>
+          맞는지 아래 표를 한 번만 훑어 주세요. 틀렸으면 명부 맨 위에
+          <code>상호&#9;대표자&#9;전화번호&#9;주소&#9;업종</code> 한 줄을 넣고 다시 붙여넣으면 그대로 읽습니다.</li>` : ""}
         ${fixedN ? `<li><b>전화번호 ${fixedN}개의 맨 앞 0 을 되살렸습니다.</b>
           엑셀은 <code>01012345678</code> 을 숫자로 보고 <code>1012345678</code> 로 저장합니다.
           그대로 두면 저장은 되는데 <b>손님이 걸었을 때만 안 걸립니다</b>.</li>` : ""}
