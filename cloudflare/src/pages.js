@@ -381,6 +381,8 @@ export async function home(ctx, opts = {}) {
   const body = renderHome(lay, {
     assoc, base, stats, businessesHtml, businessRowsHtml, openCount, catTiles, eventsHtml, loggedIn: !!user,
     deals: dealCards,
+    // 홈의 '이용권 만들러 가기' 는 유어딜 판매자 가입으로 곧장 간다 — 목표는 유어딜 유입이다.
+    urdealSignup: urdealSignupUrl(ctx.env, assoc.slug),
     heroImage: assoc.hero_image ? mediaUrl(assoc.hero_image) : "",
     heroVideo: assoc.hero_video ? mediaUrl(assoc.hero_video) : "",
     photosHtml,

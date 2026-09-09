@@ -3336,6 +3336,8 @@ a.deal-card:hover{border-color:var(--deal);transition:border-color .18s}
 .deal-band .mb-map{width:56px;height:56px;background:var(--surface)}
 .deal-band .deal-card.is-join{max-width:none;margin:0;height:100%;background:var(--surface);border:1px solid var(--line-soft)}
 .deal-band .deal-join{padding:26px;text-align:left;align-items:flex-start;height:100%;justify-content:center}
+.deal-how{font-size:.88rem;color:var(--muted);text-decoration:underline;text-underline-offset:3px;min-height:44px;display:inline-flex;align-items:center}
+.deal-how:hover{color:var(--ink)}
 .deal-join{padding:22px;display:flex;flex-direction:column;gap:8px;align-items:flex-start;
   height:100%;justify-content:center}
 .deal-join b{font-size:17px;font-weight:800;color:var(--ink);letter-spacing:-.02em}
