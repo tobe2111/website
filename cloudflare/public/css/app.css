@@ -1495,6 +1495,22 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
    대신 표제를 키우고 검색창을 넓혀 왼쪽 덩어리가 제 몫의 폭을 차지하게 하고,
    위아래 여백을 조여 빈 회색 띠가 아니라 짧고 단단한 대문이 되게 했습니다. */
 .hp-inner{position:relative;z-index:2;display:block;text-align:left;padding-block:clamp(40px,4.6vw,60px) clamp(32px,3.6vw,46px)}
+/* 사진이 있는 대문은 글·검색·숫자를 가운데로 모은다 — 왼쪽에 몰아 두면 넓은 화면에서 오른쪽 절반이
+   사진만 남아 산만했다(회장님이 고른 시안). 사진이 없는 대문은 예전처럼 왼쪽 정렬이다. */
+.hero-pro.has-photo{min-height:440px;display:flex;align-items:center}
+.hero-pro.has-photo .hp-inner{text-align:center;width:100%;padding-block:clamp(56px,6vw,72px) clamp(44px,5vw,60px)}
+.hero-pro.has-photo .hp-lead{max-width:760px;margin:0 auto}
+.hero-pro.has-photo .hp-title,.hero-pro.has-photo .hp-sub{margin-inline:auto}
+.hero-pro.has-photo .hp-title{font-size:clamp(2.1rem,5vw,3.5rem)}
+.hero-pro.has-photo .hp-sub{max-width:44ch;color:rgba(255,255,255,.8)}
+.hero-pro.has-photo .hp-search{margin:28px auto 0;max-width:620px}
+.hero-pro.has-photo .hp-search input{background:#fff;color:#1c2320;border:0}
+.hero-pro.has-photo .hp-search input::placeholder{color:#7a827d}
+.hero-pro.has-photo .hp-search input:focus{background:#fff;box-shadow:0 0 0 4px rgba(255,255,255,.35)}
+.hero-pro.has-photo .hp-actions{justify-content:center;margin-top:24px}
+.hero-pro.has-photo .hp-facts-line a,.hero-pro.has-photo .hp-facts-line span{color:rgba(255,255,255,.82)}
+.hero-pro.has-photo .hp-join{background:#fff;color:#1c2320;border:0;font-weight:700;padding-inline:22px}
+.hero-pro.has-photo .hp-join:hover{background:#f1f1f1;border:0}
 .hp-lead{min-width:0;max-width:none}
 .hp-title,.hp-sub{max-width:720px}
 .hp-actions{display:flex;flex-wrap:wrap;align-items:center;gap:14px 22px;margin-top:24px}
@@ -1549,7 +1565,7 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 /* 히어로 배경 사진 모드 — 사진 위 어두운 베일로 흰 타이포 가독성 확보 */
 .hero-pro.has-photo{background:var(--brand-900)}
 .hp-photo{position:absolute;inset:0;background-size:cover;background-position:center;z-index:0}
-.hp-photo-veil{position:absolute;inset:0;z-index:1;background:linear-gradient(180deg,rgba(6,26,17,.5) 0%,rgba(5,20,13,.6) 55%,rgba(4,16,10,.78) 100%)}
+.hp-photo-veil{position:absolute;inset:0;z-index:1;background:linear-gradient(180deg,rgba(0,0,0,.38) 0%,rgba(0,0,0,.5) 55%,rgba(0,0,0,.74) 100%)}
 /* 관리자: 현재 히어로 배경 미리보기 */
 .hero-img-cur img{width:100%;max-width:360px;aspect-ratio:16 / 6;object-fit:cover;border-radius:var(--r-md);border:1px solid var(--line-soft);display:block;margin:2px 0 8px}
 /* ===================== 관리자 프리미엄 정돈 (v6) ===================== */
@@ -3310,6 +3326,14 @@ a.deal-card:hover{border-color:var(--deal);transition:border-color .18s}
 
 /* 사장님을 부르는 칸 — 점선 테두리로 '아직 빈 자리' 임을 말합니다 */
 .deal-card.is-join{border:1.5px dashed var(--deal);background:var(--deal-tint)}
+/* 이용권이 아직 없을 때 — 지도 배너와 '사장님께' 카드를 나란히 한 띠로 (빈 상자 둘이 세로로 서지 않게) */
+.deal-band{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:18px;align-items:stretch}
+.section-deals .deal-band .map-banner{margin:0;height:100%;padding:28px;background:var(--brand-tint);border-color:transparent;box-shadow:none}
+.deal-band .mb-text strong{font-size:clamp(1.1rem,2vw,1.3rem)}
+.deal-band .mb-text em{font-size:.95rem;color:var(--ink-soft)}
+.deal-band .mb-map{width:56px;height:56px;background:var(--surface)}
+.deal-band .deal-card.is-join{max-width:none;margin:0;height:100%;background:var(--surface);border:1px solid var(--line-soft)}
+.deal-band .deal-join{padding:26px;text-align:left;align-items:flex-start;height:100%;justify-content:center}
 .deal-join{padding:22px;display:flex;flex-direction:column;gap:8px;align-items:flex-start;
   height:100%;justify-content:center}
 .deal-join b{font-size:17px;font-weight:800;color:var(--ink);letter-spacing:-.02em}
@@ -3521,6 +3545,7 @@ a.deal-card:hover{border-color:var(--deal);transition:border-color .18s}
 .dash .officer-row{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;border-top:1px solid var(--line-soft);padding-top:14px;margin-top:6px}
 .dash .officer-row small{display:block;color:var(--muted);font-size:13px;margin-top:4px}
 @media (max-width:900px){
+  .deal-band{grid-template-columns:minmax(0,1fr)}
   .dash .split-even{grid-template-columns:minmax(0,1fr);gap:22px}
   .dash .finish-bar{grid-template-columns:minmax(0,1fr)}
   .dash .btn-cta{min-height:56px}
