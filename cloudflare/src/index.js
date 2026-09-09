@@ -207,6 +207,8 @@ export const TENANT = [
   ["GET", "/admin/members/map", pages.adminMembersMap, "ADMIN"],
   ["GET", "/admin/members/photos", pages.adminMembersPhotos, "ADMIN"],
   ["GET", "/admin/members/links", pages.adminMembersLinks, "ADMIN"],
+  ["POST", "/admin/members/links/alimtalk", api.adminAskPhotosAlimtalk, "ADMIN"],
+  ["POST", "/admin/members/map/naver", api.adminLinkNaverBulk, "ADMIN"],
   ["POST", "/admin/members/photos", pages.adminMembersPhotos, "ADMIN"],
   ["POST", "/admin/members/map", pages.adminMembersMap, "ADMIN"],
   ["POST", "/admin/members/import", pages.adminMembersImport, "ADMIN"],

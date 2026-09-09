@@ -4238,6 +4238,7 @@ body.is-console[data-console="super"] .console-strip{border-bottom:1px solid #2b
 .roster-table .muted{color:var(--muted)}
 .roster-table small{color:var(--muted)}
 /* 건너뛰는 줄은 뒤로 물리고, 손봐야 하는 줄만 앞으로 나옵니다 */
+.roster-table .badge{white-space:normal;line-height:1.25;text-align:left}
 .roster-table tr.rs-dup{opacity:.55}
 .roster-table tr.rs-bad{background:var(--wait-bg)}
 .dash .stack-form textarea[name="roster"]{font-family:var(--font-mono,ui-monospace,SFMono-Regular,Menlo,monospace);
@@ -4379,3 +4380,12 @@ body.is-console[data-console="super"] .console-strip{border-bottom:1px solid #2b
 @media (max-width:860px){
   .form-two.form-two-tight{grid-template-columns:1fr 1fr;gap:10px}
 }
+
+/* 회원·점포 머리의 "지금 어디까지 왔나" — 등록·지도·사진·영업시간 숫자 넷.
+   화면 넷을 따로 열어야 알던 것을 한 줄로. 좁은 화면에서는 줄바꿈으로 버틴다(추가 @media 없음). */
+.setup-strip{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;margin:0 0 14px;padding:10px 14px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--bg-soft,var(--bg));font-size:.92rem}
+.setup-strip b{color:var(--ink)}
+.setup-strip a{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 6px;color:var(--ink);text-decoration:none;font-weight:600}
+.setup-strip a em{font-style:normal;font-weight:800;color:var(--brand-700,var(--ink))}
+.setup-strip a:hover em{text-decoration:underline}
+.setup-strip small{flex-basis:100%;color:var(--muted);font-weight:400}

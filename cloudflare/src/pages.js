@@ -11,7 +11,7 @@ import * as storage from "./storage.js";
 import { NEAR_KM } from "./placeMatch.js";
 import { countable, countHomeGoal, homeVariantCookie } from "./traffic.js";
 import { galleryItem } from "./media-render.js";
-import { priceOf, costOf, jeonToWon, notifyEnabled, autoNotifyOn, canAutoSend, ALIGO_VARS, hasCfg, TEMPLATE_KEYS, TEMPLATES, billingMode, BILLING_MODES } from "./notify.js";
+import { priceOf, costOf, jeonToWon, notifyEnabled, autoNotifyOn, canAutoSend, templateCodeFor, ALIGO_VARS, hasCfg, TEMPLATE_KEYS, TEMPLATES, billingMode, BILLING_MODES } from "./notify.js";
 import { providerLabel } from "./embed.js";
 import { verifySignature, publicKeyJwk, publicKeyFingerprint, keyStorage, algorithm, verifyChain, verifyAnchor } from "./esign.js";
 import { renderPaper, fieldBox, FIELD_KINDS, paginate, pageCount } from "./paper.js";
@@ -1495,7 +1495,7 @@ export async function adminMembersImport(ctx) {
       <td>${esc(r.owner) || '<span class="muted">모름</span>'}</td>
       <td>${r.phone ? `${esc(D.formatPhone(r.phone))}${r.phoneFixed ? ' <span class="badge badge-info">0 붙임</span>' : ""}` : '<span class="muted">없음</span>'}</td>
       <td class="rs-addr">${esc(r.address) || '<span class="muted">없음</span>'}</td>
-      <td>${r.rawCat ? `${esc(r.rawCat)} → ` : ""}<b>${esc(r.category)}</b></td>
+      <td>${r.rawCat ? `${esc(r.rawCat)} → ` : ""}<b>${esc(r.category)}</b>${r.catGuessed ? ' <span class="badge badge-info">상호로 짐작</span>' : ""}</td>
       <td><span class="badge ${mark[r.status][0]}">${mark[r.status][1]}</span>${
         r.note ? `<br /><small>${esc(r.note)}</small>` : ""}</td></tr>`).join("")}</tbody></table></div>` : "";
 
@@ -1582,6 +1582,14 @@ export async function adminMembersLinks(ctx) {
     D.listBusinessesToAsk(db, assoc.id, ASK_PER, (page - 1) * ASK_PER).catch(() => []),
   ]);
   const pages = Math.max(1, Math.ceil(total / ASK_PER));
+  // 알림톡 단추는 세 가지가 다 있어야 열린다: 발송 열쇠 · 조직 스위치 · 심사 통과한 문구.
+  // 하나라도 없으면 단추 대신 **왜 안 되는지** 를 적는다 — 없는 단추는 고장으로 보인다.
+  const talkTpl = await templateCodeFor(db, "photo_ask").catch(() => "");
+  const talkReady = canAutoSend(env, assoc) && !!talkTpl;
+  const talkWhy = !notifyEnabled(env) ? "발송 열쇠가 없어 아직 안 됩니다 (운영사 설정)"
+    : !autoNotifyOn(assoc) ? "설정에서 알림톡 발송을 켜면 열립니다"
+    : "'가게 사진·영업시간 요청' 문구가 카카오 심사를 통과하면 열립니다 (아래 '나에게 할 일' 참고)";
+  const withPhone = (await D.listBusinessesToAsk(db, assoc.id, 500, 0).catch(() => [])).filter((b) => b.owner_phone).length;
 
   // 링크는 서명이 붙은 값이라 한 곳당 한 번 만들어야 합니다. 한 쪽에 40곳까지만 만드는 이유입니다.
   const made = await Promise.all(rows.map(async (b) => ({
@@ -1615,6 +1623,13 @@ export async function adminMembersLinks(ctx) {
         <li><b>이미 다 갖춘 가게는 여기 안 나옵니다.</b> 사진도 있고 영업시간도 있는 곳은 부탁드릴 것이 없습니다.</li>
       </ul>
       ${total === 0 ? `<p class="panel-hint"><b>부탁드릴 곳이 없습니다.</b> 모든 가게에 사진과 영업시간이 있습니다.</p>` : ""}
+      ${total > 0 ? (talkReady
+        ? `<form method="post" action="${base}/admin/members/links/alimtalk" class="inline-form" data-once>
+            <input type="hidden" name="_csrf" value="${esc(csrf)}" />
+            <button class="btn btn-cta">휴대폰 번호 있는 ${withPhone}곳에 알림톡으로 한 번에 부탁하기</button>
+            <span class="panel-hint">한 건씩 요금이 듭니다. 보내기 전에 아래 명단을 한 번 훑어 주세요.</span></form>`
+        : `<p class="panel-hint"><b>알림톡으로 한 번에 보내기</b>는 ${talkWhy}.
+            그때까지는 아래 글을 복사해 카톡으로 보내 주세요.</p>`) : ""}
     </section>
 
     ${made.length ? `<section class="panel">
@@ -1862,6 +1877,20 @@ export async function adminMembersMap(ctx) {
         <input type="hidden" name="_csrf" value="${esc(csrf)}" />
         <input type="hidden" name="unlink" value="1" />
         <button class="btn btn-cta">${far.rows.length}곳 연결 풀고 다시 찾기</button></form></section>` : ""}
+
+    <section class="panel">
+      <h2 class="panel-title">네이버 플레이스 주소 여러 개 한 번에 붙이기</h2>
+      <p class="panel-hint">카카오 열쇠 없이 <b>지도 사진을 받는 유일한 길</b>입니다. 네이버지도에서 그 가게를 열고
+        <b>공유 → 링크 복사</b>한 주소를, 한 줄에 <code>상호 [탭] 주소</code> 로 붙여넣으세요.
+        상호로 맞춰 붙이고, 지도 페이지가 아닌 주소는 받지 않습니다. 붙이고 나면
+        <a href="${base}/admin/members/photos">지도 사진 한꺼번에</a>가 그 가게들을 가져옵니다.</p>
+      <form method="post" action="${base}/admin/members/map/naver" class="stack-form" data-once>
+        <input type="hidden" name="_csrf" value="${esc(csrf)}" />
+        <label>상호와 네이버 플레이스 주소
+          <textarea name="naver_links" rows="5" placeholder="버들카페&#9;https://naver.me/xxxx&#10;옹심이감자탕&#9;https://m.place.naver.com/restaurant/123456"></textarea></label>
+        <div class="finish-acts"><button class="btn btn-outline">붙이기</button></div>
+      </form>
+    </section>
 
     ${run ? `<section class="panel"><h2 class="panel-title">이번에 돌린 ${run.rows.length}곳
       ${run.linked ? `<span class="badge badge-ok">${run.linked}곳 연결</span>` : ""}
@@ -2433,6 +2462,13 @@ export async function admin(ctx) {
     <div class="tbar-chips">${bizChips}</div>
     <span class="tbar-count">${bizQ || bizStatus ? `${bizCounts.all}곳 중 <b>${bizPageData.total}</b>곳` : `모두 <b>${bizPageData.total}</b>곳`}</span>
   </div>`;
+  // "지금 어디까지 왔나" 한 줄. 화면 넷을 따로 열어야 알 수 있던 것을 숫자 넷으로 모은다.
+  const setup = {
+    total: all.length,
+    pinned: await D.countBusinessMarkers(db, assoc.id).catch(() => 0),
+    photo: await D.countBusinessesWithImage(db, assoc.id).catch(() => 0),
+    hours: await D.countBusinessesWithHours(db, assoc.id).catch(() => 0),
+  };
   const loginCell = (b) => !isPlaceholderEmail(b.owner_email) ? esc(b.owner_email)
     : b.owner_phone ? `<span class="badge badge-ok">휴대폰</span> ${esc(D.maskPhone(b.owner_phone))}`
     : '<span class="badge badge-wait">로그인 수단 없음</span>';
@@ -3125,6 +3161,12 @@ export async function admin(ctx) {
 
     <div class="sgroup" id="s-people" data-tab="people">
     <section class="panel" id="p-members"><div class="panel-head"><h2 class="panel-title">${isEsign ? "담당자 관리" : `${isFranchise ? "가맹점" : "회원·점포"}`} <span class="badge badge-muted">${isEsign ? staffList.length + "명" : bizCounts.all + "곳"}</span></h2>
+      ${isEsign ? "" : `<p class="setup-strip"><b>지금 어디까지 왔나</b>
+        <a href="${base}/admin/members/import">등록 <em>${setup.total}</em></a>
+        <a href="${base}/admin/members/map">지도 <em>${setup.pinned}</em></a>
+        <a href="${base}/admin/members/photos">사진 <em>${setup.photo}</em></a>
+        <a href="${base}/admin/members/links">영업시간 <em>${setup.hours}</em></a>
+        <small>— 숫자를 누르면 그 일을 하는 화면으로 갑니다. 왼쪽부터 차례로 채우면 됩니다.</small></p>`}
       <span class="pill-row">${isEsign ? "" : `<a class="btn btn-xs btn-primary" href="${base}/admin/members/import">명부로 한 번에 등록</a><a class="btn btn-xs btn-outline" href="${base}/admin/members/map">지도에 한꺼번에 연결</a><a class="btn btn-xs btn-outline" href="${base}/admin/members/photos">지도 사진 한꺼번에</a><a class="btn btn-xs btn-outline" href="${base}/admin/members/links">사진·영업시간 요청 링크</a>`}${members.length && !isEsign ? `<a class="btn btn-xs btn-ghost" href="${base}/admin/members.csv">명단 CSV</a>` : ""}<a class="btn btn-xs btn-ghost" href="${base}/admin/export.json">전체 백업(JSON)</a></span></div>
       ${isEsign ? `<p class="panel-hint">계약서를 만들고 보내는 사람들입니다. <b>담당자</b>는 계약 업무만 하고 설정·API 키·과금은 볼 수 없습니다.
         권한을 회수해도 계정과 서명 이력은 남습니다 — 지우면 증거가 사라지기 때문입니다.</p>
