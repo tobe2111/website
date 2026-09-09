@@ -498,6 +498,12 @@ export const countBusinessesForPlacePhoto = async (db, aid) =>
 // 영업시간은 안 오고, 사진도 없는 가게가 많습니다. 결국 사장님께 여쭙는 수밖에 없습니다.
 const NEEDS_ASK = `((SELECT COUNT(*) FROM media m WHERE m.business_id=b.id AND m.kind='image')=0
   OR COALESCE(b.hours,'')='')`;
+// 네이버 플레이스 주소만 붙인다 — updateBusiness 는 열네 칸을 한꺼번에 받아, 여기서 쓰면
+// 빈 칸이 기존 값을 지운다. 한 칸만 바꾸는 일은 한 칸만 바꾸는 문장으로.
+export const setBusinessNaverLink = (db, id, url) =>
+  run(db, "UPDATE businesses SET sns_naver=?, updated_at=datetime('now') WHERE id=?", String(url || "").trim(), id);
+export const countBusinessesWithHours = async (db, aid) =>
+  (await first(db, "SELECT COUNT(*) AS n FROM businesses WHERE association_id=? AND COALESCE(hours,'')<>''", aid)).n;
 export const listBusinessesToAsk = (db, aid, limit, offset) =>
   all(db, `SELECT b.id, b.name, b.hours, u.name AS owner_name, u.phone AS owner_phone,
              (SELECT COUNT(*) FROM media m WHERE m.business_id=b.id AND m.kind='image') AS photos

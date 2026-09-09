@@ -160,7 +160,21 @@ test("상호 한 칸짜리 명부도 받는다", () => {
   assert.ok(!r.error, r.error);
   assert.equal(r.rows.length, 2);
   assert.equal(r.rows[0].name, "버들카페");
-  assert.equal(r.rows[0].category, "기타", "업종을 모르면 지어내지 않는다");
+  // 업종 칸이 없어도 상호에 '카페' 가 있으면 카페로 **짐작**하되, 짐작이라고 표에 남긴다.
+  assert.equal(r.rows[0].category, "카페·디저트");
+  assert.equal(r.rows[0].catGuessed, true, "짐작한 업종은 그렇다고 적는다 — 조용히 넘겨짚지 않는다");
+  // 상호가 아무 힌트도 안 주면 지어내지 않는다.
+  assert.equal(r.rows[1].category, "기타", "업종을 모르면 지어내지 않는다");
+  assert.equal(r.rows[1].catGuessed, false);
+});
+
+test("업종 칸에 값이 있으면 상호로 짐작하지 않는다", () => {
+  // '카페' 라는 상호를 단 술집이 실제로 있다. 명부가 말한 업종이 상호보다 우선이다.
+  const r = parseMemberRoster("상호\t업종\n달빛카페\t주점\n그린식탁\t");
+  assert.equal(r.rows[0].category, "음식점");
+  assert.equal(r.rows[0].catGuessed, false, "명부가 준 업종은 짐작이 아니다");
+  assert.equal(r.rows[1].category, "음식점", "'식탁' 은 음식점으로 짐작한다");
+  assert.equal(r.rows[1].catGuessed, true);
 });
 
 test("명부의 '?' 를 그대로 넣지 않는다", () => {

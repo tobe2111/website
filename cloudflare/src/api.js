@@ -22,7 +22,7 @@ import { KINDS, kindById, PRESETS, assocTerms } from "./kinds.js";
 import { sellerPhotos, urdealProductUrl } from "./urdeal.js";
 import { placePhoto, isPlaceUrl, placeSourceOf } from "./placePhoto.js";
 import { pickPlace, placeQuery, kmApart, NEAR_KM } from "./placeMatch.js";
-import { TEMPLATE_KEYS, TEMPLATES, sendTest, listProviderTemplates, matchTemplates, sendMany, sendOne, notifyEnabled, autoNotifyOn, canAutoSend, wonToJeon, renderTemplate, templateButton, billingMode, chargeContract, BILLING_MODES, priceOf } from "./notify.js";
+import { TEMPLATE_KEYS, TEMPLATES, sendTest, listProviderTemplates, matchTemplates, sendMany, sendOne, notifyEnabled, autoNotifyOn, canAutoSend, wonToJeon, renderTemplate, templateCodeFor, templateButton, billingMode, chargeContract, BILLING_MODES, priceOf } from "./notify.js";
 
 // 계약 한 건을 연다 — 조직 경계와 **부서 경계**를 함께 본다.
 //
@@ -976,6 +976,70 @@ export async function adminImportPlacePhoto(ctx) {
   const r = await importPlacePhotoFor(env, db, assoc, b);
   if (!r.ok) return at(`${r.why}.`, true);
   return at(`${r.source}의 대표 사진을 담았습니다. 사장님 사진이 들어오면 바꿔 주세요.`);
+}
+
+// ---------- 사장님께 사진·영업시간을 알림톡으로 한 번에 부탁 ----------
+//
+// 요청 링크 화면은 보낼 글까지 만들어 주지만, 붙여 보내는 건 여전히 회장님 손이다. 123명이면
+// 123번이다. 알림톡 발송 장치가 이미 있으니 단추 하나로 끝낼 수 있다 — 다만 문구가 카카오
+// 심사를 통과해야 나간다. 그전에는 단추가 눌리지 않고 왜인지를 화면이 말한다.
+//
+// 자동 발송이 아니라 **회장님이 누른** 발송이다. 그래도 조직 스위치(notify_auto)는 따른다 —
+// 모르는 새 크레딧이 빠져나가는 쪽이 더 나쁘다.
+export async function adminAskPhotosAlimtalk(ctx) {
+  const { db, env, base, assoc } = ctx;
+  const to = `${base}/admin/members/links`;
+  if (!canAutoSend(env, assoc)) return back(to, "알림톡 발송이 꺼져 있거나 열쇠가 없습니다. 설정에서 알림톡을 켜 주세요.", true);
+  if (!(await templateCodeFor(db, "photo_ask")))
+    return back(to, "'가게 사진·영업시간 요청' 문구가 아직 카카오 심사를 받지 않았습니다. 승인되면 이 단추가 열립니다.", true);
+  const rows = (await D.listBusinessesToAsk(db, assoc.id, 500, 0)).filter((b) => b.owner_phone);
+  if (!rows.length) return back(to, "보낼 곳이 없습니다 — 사진·영업시간이 없는 가게 중 휴대폰 번호가 있는 곳이 없습니다.");
+  const origin = new URL(ctx.request.url).origin;
+  const links = new Map();
+  for (const b of rows) links.set(b.id, `${origin}${base}/photos/${encodeURIComponent(await makePhotoToken(env.SESSION_SECRET, assoc.id, b.id))}`);
+  const r = await sendMany(env, db, {
+    assoc, kind: "photo_ask",
+    recipients: rows.map((b) => ({ ...b, phone: b.owner_phone })),
+    textFor: (b) => renderTemplate("photo_ask", { 상호: assoc.name, 이름: b.owner_name || "사장", 가게: b.name, 링크: links.get(b.id) }),
+    buttonName: "", buttonUrl: "",
+  });
+  await audit(ctx, "사진요청알림톡", `${r.sent}건 발송 · 실패 ${r.failed}`);
+  const parts = [`알림톡 ${r.sent}건을 보냈습니다`];
+  if (r.cost) parts.push(`(${r.cost.toLocaleString("ko-KR")}원 차감)`);
+  if (r.failed) parts.push(`· 실패 ${r.failed}건`);
+  if (r.stopped) parts.push("· 잔액이 부족해 중간에 멈췄습니다");
+  return back(to, parts.join(" "), !!r.failed && !r.sent);
+}
+
+// ---------- 네이버 플레이스 주소를 여러 개 한 번에 붙이기 ----------
+//
+// 카카오 열쇠 없이 사진을 받는 유일한 길이다. 네이버 지역검색은 가게의 지도 페이지 주소를
+// 안 주지만, **사람은 네이버지도에서 그 가게를 열고 '공유' 로 주소를 복사할 수 있다.**
+// 그걸 한 곳씩 가게 화면에 붙이라고 하면 123번이다. 여기서는 "상호 [탭] 주소" 를 줄줄이
+// 붙여넣으면 상호로 맞춰 한 번에 붙인다. 화면이 보낸 주소는 지도 페이지일 때만 받는다.
+export async function adminLinkNaverBulk(ctx) {
+  const { db, form, base, assoc } = ctx;
+  const to = `${base}/admin/members/map`;
+  const text = String(form.get("naver_links") || "");
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(0, 300);
+  if (!lines.length) return back(to, "붙여넣은 줄이 없습니다.", true);
+  let done = 0, noShop = [], badUrl = [];
+  for (const l of lines) {
+    // "상호<탭>주소" 또는 "상호 주소" — 주소는 https:// 로 시작하므로 거기서 가른다
+    const m = /^(.*?)\s+(https?:\/\/\S+)\s*$/.exec(l);
+    if (!m) { badUrl.push(l.slice(0, 30)); continue; }
+    const name = m[1].replace(/\t/g, " ").trim(), url = m[2];
+    if (!isPlaceUrl(url)) { badUrl.push(name || url.slice(0, 30)); continue; }
+    const b = await D.getBusinessByName(db, assoc.id, name);
+    if (!b) { noShop.push(name); continue; }
+    await D.setBusinessNaverLink(db, b.id, url);
+    done++;
+  }
+  if (done) await audit(ctx, "네이버주소일괄", `${done}곳`);
+  const parts = [`${done}곳에 네이버 플레이스 주소를 붙였습니다.`];
+  if (noShop.length) parts.push(`명부에 없는 상호 ${noShop.length}곳: ${noShop.slice(0, 5).join(", ")}${noShop.length > 5 ? " 외" : ""}.`);
+  if (badUrl.length) parts.push(`지도 주소가 아닌 줄 ${badUrl.length}: ${badUrl.slice(0, 3).join(", ")}${badUrl.length > 3 ? " 외" : ""}.`);
+  return back(to, parts.join(" "), !done);
 }
 
 // ---------- 지도 사진을 한꺼번에 가져오기 ----------
