@@ -998,7 +998,7 @@ export function loginForm(ctx) {
       <button class="btn btn-primary btn-block">로그인</button>
     </form>
     <p class="auth-note"><a href="${base}/forgot">비밀번호를 잊으셨나요?</a></p>
-    ${assoc && assoc.kind === "merchant" ? `<p class="auth-note">아직 회원이 아니신가요? <a href="${base}/register">우리 가게 등록하기</a></p>`
+    ${assoc && assoc.kind === "merchant" ? `<p class="auth-note">아직 회원이 아니신가요? <a href="${base}/register">회원 신청하기</a></p>`
       : assoc ? "" : `<p class="auth-note">계정이 없으신가요? <a href="/esign/signup">전자계약 시작하기</a></p>`}
     </div></div></section>`;
   return html(layout({ title: "로그인", assoc: ctx.assoc, base: ctx.base, body, csrf, scripts: turnstileScript(env) }));
