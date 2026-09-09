@@ -499,8 +499,8 @@ export const countBusinessesForPlacePhoto = async (db, aid) =>
 //
 // 이 둘은 **지도가 못 주는 것**입니다. 지도에서 상호·주소·전화·좌표·대표사진까지는 따라오는데
 // 영업시간은 안 오고, 사진도 없는 가게가 많습니다. 결국 사장님께 여쭙는 수밖에 없습니다.
-const NEEDS_ASK = `((SELECT COUNT(*) FROM media m WHERE m.business_id=b.id AND m.kind='image')=0
-  OR COALESCE(b.hours,'')='')`;
+// 영업시간은 이 제품 화면에서 뺐다(회장님 결정). 부탁할 곳은 '사진이 없는 가게' 뿐이다.
+const NEEDS_ASK = `((SELECT COUNT(*) FROM media m WHERE m.business_id=b.id AND m.kind='image')=0)`;
 // 네이버 플레이스 주소만 붙인다 — updateBusiness 는 열네 칸을 한꺼번에 받아, 여기서 쓰면
 // 빈 칸이 기존 값을 지운다. 한 칸만 바꾸는 일은 한 칸만 바꾸는 문장으로.
 export const setBusinessNaverLink = (db, id, url) =>
@@ -515,6 +515,11 @@ export const listBusinessesOther = (db, aid) =>
   all(db, "SELECT id, name FROM businesses WHERE association_id=? AND category='기타' ORDER BY id", aid);
 export const setBusinessCategory = (db, id, cat) =>
   run(db, "UPDATE businesses SET category=?, updated_at=datetime('now') WHERE id=?", cat, id);
+// 현황 첫 화면의 '홈페이지 채우기' 가 이름을 들어 말하기 위한 목록 둘.
+export const listBusinessesNoPin = (db, aid, limit = 8) =>
+  all(db, "SELECT id, name FROM businesses WHERE association_id=? AND (lat IS NULL OR lng IS NULL) ORDER BY name LIMIT ?", aid, limit);
+export const listBusinessesNoImage = (db, aid, limit = 8) =>
+  all(db, `SELECT b.id, b.name FROM businesses b WHERE b.association_id=? AND ${NO_IMAGE_SQL} ORDER BY b.name LIMIT ?`, aid, limit);
 export const listBusinessesToAsk = (db, aid, limit, offset) =>
   all(db, `SELECT b.id, b.name, b.hours, u.name AS owner_name, u.phone AS owner_phone,
              (SELECT COUNT(*) FROM media m WHERE m.business_id=b.id AND m.kind='image') AS photos

@@ -172,7 +172,7 @@ test("빈 칸으로 누르면 아무것도 바꾸지 않고 알린다", async ()
 });
 
 // ── 3) 지금 어디까지 왔나 ───────────────────────────────────────────────
-test("회원·점포 머리에 등록·지도·사진·영업시간 숫자 넷이 뜬다", async () => {
+test("회원·점포 머리에 등록·지도·사진 숫자 셋이 뜬다 — 영업시간은 뺐다", async () => {
   const env = makeEnv(); const a = await seed(env);
   await biz(env, a, { name: "버들카페", lat: 37.48, lng: 126.99, hours: "10-22" });
   await biz(env, a, { name: "너나들이", lat: 37.48, lng: 126.99 });
@@ -186,7 +186,7 @@ test("회원·점포 머리에 등록·지도·사진·영업시간 숫자 넷�
   assert.match(s, /등록 <em>3<\/em>/);
   assert.match(s, /지도 <em>2<\/em>/);
   assert.match(s, /사진 <em>0<\/em>/);
-  assert.match(s, /영업시간 <em>1<\/em>/);
+  assert.doesNotMatch(s, /영업시간/, "영업시간은 회장님 화면에서 뺐다");
   assert.ok(s.includes('/admin/members/map"'), "숫자를 누르면 그 일을 하는 화면으로 간다");
 });
 

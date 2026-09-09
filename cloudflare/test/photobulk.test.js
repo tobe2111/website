@@ -185,7 +185,7 @@ test("로그인하지 않으면 이 화면을 열 수 없다", async () => {
 // 그런데 링크는 가게 화면에 들어가야 하나씩 만들어졌다 — 114곳이면 화면을 114번 연다.
 const LINKS = "/t/bb/admin/members/links";
 
-test("사진이나 영업시간이 없는 가게만 나온다", async () => {
+test("사진이 없는 가게만 나온다 — 영업시간은 이 화면의 일이 아니다", async () => {
   const env = makeEnv(); const a = await seed(env);
   const bare = await shop(env, a, "따올라이");                       // 둘 다 없음
   const noHours = await shop(env, a, "버들카페");                    // 사진만 있음
@@ -194,11 +194,11 @@ test("사진이나 영업시간이 없는 가게만 나온다", async () => {
   await D.addMedia(env.DB, { businessId: done, kind: "image", filename: "y.jpg", size: 10, caption: "" });
   await D.setBusinessHours(env.DB, done, "10:00-22:00");
 
-  assert.equal(await D.countBusinessesToAsk(env.DB, a.id), 2, "다 갖춘 가게까지 부르면 사장님이 두 번 귀찮다");
+  assert.equal(await D.countBusinessesToAsk(env.DB, a.id), 1, "사진이 있는 가게까지 부르면 사장님이 두 번 귀찮다");
   const j = await login(env);
   const html = await (await get(env, j, LINKS)).text();
-  assert.ok(html.includes("따올라이") && html.includes("버들카페"));
-  assert.ok(!html.includes(">서광안경<"), "이미 다 갖춘 가게가 목록에 있으면 회장님이 헛수고한다");
+  assert.ok(html.includes("따올라이"));
+  assert.ok(!html.includes(">버들카페<") && !html.includes(">서광안경<"), "사진이 있는 가게가 목록에 있으면 회장님이 헛수고한다");
   assert.ok(bare && noHours);
 });
 
@@ -208,7 +208,7 @@ test("보낼 글까지 만들어 준다 — 링크만 주면 '뭐라고 쓰지' 
   const j = await login(env);
   const html = await (await get(env, j, LINKS)).text();
   assert.ok(html.includes("방배카페골목 상인회"), "어느 상인회에서 온 것인지 없으면 사장님이 스팸으로 본다");
-  assert.ok(html.includes("영업시간을 부탁드립니다"));
+  assert.ok(html.includes("가게 사진을 부탁드립니다"));
   assert.ok(/\/photos\/[A-Za-z0-9_.-]+/.test(html), "링크가 안 만들어졌다");
   assert.ok(html.includes("data-copy="), "한 곳씩 복사할 길이 없다");
 });
@@ -239,7 +239,7 @@ test("회원·점포 화면에서 요청 링크로 가는 길이 있다", async 
   const env = makeEnv(); await seed(env);
   const j = await login(env);
   const html = await (await get(env, j, "/t/bb/admin")).text();
-  assert.ok(html.includes(">사진·영업시간 요청 링크</a>"));
+  assert.ok(html.includes(">사진 요청 링크</a>"));
 });
 
 test("로그인하지 않으면 링크 화면을 열 수 없다", async () => {
