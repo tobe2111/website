@@ -1583,7 +1583,7 @@ export async function adminMembersMap(ctx) {
 
   // 골목에서 멀리 찍힌 가게. 잘못 붙은 것을 화면이 먼저 말해 줘야 회장님이 알 수 있습니다 —
   // 지도를 열어 핀이 흩어진 것을 눈으로 보고서야 아는 것은 너무 늦습니다.
-  const far = kakaoOn ? await farFromStreet(ctx).catch(() => ({ rows: [] })) : { rows: [] };
+  const far = kakaoOn ? await farFromStreet(ctx).catch(() => ({ rows: [], center: null })) : { rows: [], center: null };
 
   const [total, left] = await Promise.all([
     D.listAllBusinesses(db, assoc.id).then((l) => l.length).catch(() => 0),
@@ -1624,6 +1624,18 @@ export async function adminMembersMap(ctx) {
         한 번 붙으면 <b>지도 위 핀 · 가게 대표번호 · 도로명주소 · 대표사진 가져오기 · 검색 노출</b>이 함께 열립니다.</p>
       ${kakaoOn ? "" : `<div class="flash flash-warn">지도 검색 열쇠가 아직 등록되지 않았습니다. 운영사에 문의해 주세요.</div>`}
       ${run && run.error ? `<div class="flash flash-err">${esc(run.error)}</div>` : ""}
+      <!-- 기준점이 틀리면 멀쩡한 우리 가게가 전부 거부된다(실제로 45곳에서 멈췄다).
+           그런데 그건 화면에 오류로 안 뜬다 — "그냥 더 안 늘어나네" 로만 보인다.
+           그래서 무엇을 기준으로 삼았는지를 반드시 적어 보여 준다. -->
+      ${kakaoOn ? (far.center
+        ? `<p class="panel-hint"><b>우리 골목 기준점:</b> ${esc(far.center.how)}
+            <small>(${far.center.lat.toFixed(4)}, ${far.center.lng.toFixed(4)})</small>
+            — 여기서 ${NEAR_KM}km 안에 있는 곳만 자동으로 붙입니다.
+            엉뚱한 자리면 <a href="${base}/admin#s-settings">설정</a>에서 상인회 주소를 고쳐 주세요.</p>`
+        : `<div class="flash flash-warn"><b>우리 골목이 어디인지 몰라 상당수가 안 붙습니다.</b>
+            상호가 같기만 한 곳은 다른 동네 지점일 수 있어 자동으로 붙이지 않는데, 기준점이 없으면
+            그 판단을 할 수가 없습니다. <a href="${base}/admin#s-settings">설정</a>에서
+            <b>상인회 주소</b>를 넣어 주시면 그때부터 훨씬 많이 붙습니다.</div>`) : ""}
       <ul class="roster-notes">
         <li><b>우리 골목 안에서만 찾습니다.</b> 상가연합회는 한 골목이라, 상호가 똑같아도
           골목에서 ${NEAR_KM}km 넘게 떨어진 곳은 자동으로 붙이지 않습니다. 우리 골목이 어디인지는

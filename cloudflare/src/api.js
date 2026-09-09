@@ -1684,33 +1684,92 @@ export const MAP_CHUNK = 8;
 //
 // 그래서 회장님이 적어 둔 **상인회 주소**를 지도에 물어 그 좌표를 씁니다. 이건 가게가
 // 한 곳도 없어도 알 수 있고, 잘못 붙은 가게가 늘어도 흔들리지 않습니다.
-export async function streetCenter(env, db, assoc) {
+// schema.sql 이 새 상인회에 넣어 주는 지도 중심. **손대지 않으면 이 값 그대로**입니다.
+// 서울 어딘가(양재 근처)를 가리키는 자리표시라, 이걸 '우리 골목' 으로 믿으면 안 됩니다.
+// 실제로 방배동 카페골목에서 3.39km 떨어져 있어서, 3km 판정에 딱 걸려 **이름이 같은 가게가
+// 전부 거부됐습니다.** 45곳쯤에서 더 늘지 않던 원인이 이것이었습니다.
+const DEFAULT_MAP_LAT = 37.4837, DEFAULT_MAP_LNG = 127.0324;
+const isDefaultCenter = (lat, lng) =>
+  Math.abs(Number(lat) - DEFAULT_MAP_LAT) < 1e-6 && Math.abs(Number(lng) - DEFAULT_MAP_LNG) < 1e-6;
+
+// 주소 하나를 좌표로. 카카오 주소 검색은 지번·도로명 둘 다 받습니다.
+async function geocode(env, q) {
   const key = String(env.KAKAO_REST_KEY || "").trim();
-  const addr = String(assoc && assoc.address || "").trim();
-  if (key && addr) {
-    try {
-      const url = new URL("https://dapi.kakao.com/v2/local/search/address.json");
-      url.searchParams.set("query", addr);
-      url.searchParams.set("size", "1");
-      const r = await fetch(url, { headers: { Authorization: `KakaoAK ${key}` } });
-      if (r.ok) {
-        const d = await r.json().catch(() => null);
-        const hit = d && Array.isArray(d.documents) ? d.documents[0] : null;
-        const lat = Number(hit && hit.y), lng = Number(hit && hit.x);
-        if (Number.isFinite(lat) && Number.isFinite(lng) && lat && lng) return { lat, lng };
-      }
-    } catch { /* 주소를 못 찾으면 아래로 */ }
+  const query = String(q || "").trim();
+  if (!key || query.length < 4) return null;
+  try {
+    const url = new URL("https://dapi.kakao.com/v2/local/search/address.json");
+    url.searchParams.set("query", query);
+    url.searchParams.set("size", "1");
+    const r = await fetch(url, { headers: { Authorization: `KakaoAK ${key}` } });
+    if (!r.ok) return null;
+    const d = await r.json().catch(() => null);
+    const hit = d && Array.isArray(d.documents) ? d.documents[0] : null;
+    const lat = Number(hit && hit.y), lng = Number(hit && hit.x);
+    return (Number.isFinite(lat) && Number.isFinite(lng) && lat && lng) ? { lat, lng } : null;
+  } catch { return null; }
+}
+
+// 회원 가게 주소에서 가장 많이 나오는 동네. "서울 서초구 방배동 769-10" → "서울 서초구 방배동".
+// 명부로 넣은 상인회는 114줄이 전부 같은 동네라, 이게 상인회 주소보다 오히려 정확합니다.
+export function commonArea(addresses) {
+  const tally = new Map();
+  for (const a of addresses || []) {
+    const t = String(a || "").trim().split(/\s+/).filter(Boolean);
+    // 뒤에서부터 번지(숫자로 시작하는 조각)를 떼어 낸다
+    while (t.length && /^\d/.test(t[t.length - 1])) t.pop();
+    if (t.length < 2) continue;
+    const k = t.slice(0, 3).join(" ");
+    tally.set(k, (tally.get(k) || 0) + 1);
   }
-  // 이미 붙어 있는 가게들의 한가운데. 잘못 붙은 것이 섞여 있을 수 있어 주소 다음입니다.
+  let best = "", n = 0;
+  for (const [k, v] of tally) if (v > n) { best = k; n = v; }
+  return n >= 3 ? best : "";
+}
+
+// 가운데값(중앙값). 평균을 쓰면 엉뚱하게 찍힌 핀 몇 개가 중심을 통째로 끌고 갑니다 —
+// 지금 고치려는 것이 바로 그 엉뚱한 핀들이라, 여기서 평균을 쓰면 고장난 값으로 고장을 잽니다.
+const median = (xs) => {
+  const a = xs.slice().sort((p, q) => p - q);
+  const m = a.length >> 1;
+  return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
+};
+
+// 우리 골목이 어디인가 — 일괄 연결 한 번에 **딱 한 번** 정합니다.
+//
+// 이게 없거나 틀리면: "노브랜드버거" 같은 상호가 부천 지점에 붙거나(중심을 모를 때),
+// 반대로 멀쩡한 우리 가게가 전부 거부됩니다(중심이 엉뚱한 곳일 때).
+// 그래서 **어디를 기준으로 삼았는지를 화면에 적어 보여 줍니다.** 조용히 넘겨짚지 않습니다.
+export async function streetCenter(env, db, assoc) {
+  // ① 상인회가 적어 둔 우리 주소
+  const byAssoc = await geocode(env, assoc && assoc.address);
+  if (byAssoc) return { ...byAssoc, how: "상인회 주소" };
+
+  // ② 회원 가게 주소에서 가장 많이 나오는 동네
+  let rows = [];
+  try { rows = await D.listAllBusinesses(db, assoc.id); } catch { rows = []; }
+  const area = commonArea(rows.map((b) => b.address));
+  if (area) {
+    const byArea = await geocode(env, area);
+    if (byArea) return { ...byArea, how: `회원 가게 주소 (${area})` };
+  }
+
+  // ③ 이미 찍혀 있는 위치의 가운데값
   try {
     const pts = await D.listBusinessMarkers(db, assoc.id);
-    if (pts.length) return {
-      lat: pts.reduce((a, p) => a + Number(p.lat), 0) / pts.length,
-      lng: pts.reduce((a, p) => a + Number(p.lng), 0) / pts.length,
+    if (pts.length >= 3) return {
+      lat: median(pts.map((p) => Number(p.lat))),
+      lng: median(pts.map((p) => Number(p.lng))),
+      how: "이미 찍혀 있는 가게 위치",
     };
   } catch { /* 없으면 아래로 */ }
+
+  // ④ 관리자가 지도에서 직접 옮겨 둔 중심. **손대지 않은 기본값은 쓰지 않습니다.**
   const lat = Number(assoc && assoc.map_lat), lng = Number(assoc && assoc.map_lng);
-  return (Number.isFinite(lat) && Number.isFinite(lng) && lat && lng) ? { lat, lng } : null;
+  if (Number.isFinite(lat) && Number.isFinite(lng) && lat && lng && !isDefaultCenter(lat, lng))
+    return { lat, lng, how: "관리자가 정해 둔 지도 중심" };
+
+  return null;   // 모릅니다 — 이름만 같은 곳은 붙이지 않습니다
 }
 
 // 골목에서 멀리 떨어져 찍힌 가게들.
@@ -1745,7 +1804,7 @@ export async function autoLinkChunk(ctx, { after = 0, limit = MAP_CHUNK } = {}) 
   const rows = await D.listUnlinkedBusinesses(db, assoc.id, Number(after) || 0, limit);
   const center = await streetCenter(env, db, assoc);
   const out = { rows: [], linked: 0, cursor: Number(after) || 0, done: rows.length < limit, error: "",
-    center: !!center };
+    center: !!center, centerHow: center ? center.how : "" };
   for (const b of rows) {
     out.cursor = b.id;
     // 중심을 **줄마다 다시 세지 않습니다.** 그러면 방금 잘못 붙은 가게가 다음 줄의 중심을

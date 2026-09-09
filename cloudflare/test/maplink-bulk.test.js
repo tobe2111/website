@@ -401,3 +401,72 @@ test("업체 홈페이지가 지도 주소 칸에 들어 있으면 연결 안 �
   assert.equal(await D.countUnlinkedBusinesses(env.DB, a.id), 1,
     "지도 페이지가 아닌 주소를 '연결됨' 으로 세면 그 가게는 영영 다시 안 찾아진다");
 });
+
+// ── 우리 골목 기준점을 어디서 얻는가 ────────────────────────────────────
+//
+// 실제로 난 사고: 상인회가 주소를 안 넣어 두면 schema 의 기본 지도중심(서울 어딘가)이
+// 기준점이 됐는데, 그게 방배동에서 3.39km 였다. 자동 연결 한계가 3km 이라 **멀쩡한 우리
+// 가게가 전부 거부**됐고, 화면에는 오류 하나 없이 "45곳에서 더 안 늘어난다" 로만 보였다.
+import { commonArea, streetCenter } from "../src/api.js";
+
+test("회원 가게 주소에서 우리 동네를 뽑아낸다", () => {
+  assert.equal(commonArea([
+    "서울 서초구 방배동 769-10", "서울 서초구 방배동 2233", "서울 서초구 방배동 3282",
+    "서울 강남구 역삼동 1",
+  ]), "서울 서초구 방배동");
+});
+
+test("몇 줄 안 되면 동네를 짐작하지 않는다", () => {
+  assert.equal(commonArea(["서울 서초구 방배동 1", "서울 서초구 방배동 2"]), "",
+    "두 줄로 골목을 정하면 그 두 줄이 틀렸을 때 전부 틀린다");
+});
+
+test("손대지 않은 기본 지도중심은 우리 골목으로 쓰지 않는다", async () => {
+  // 이게 이 파일에서 가장 비싼 시험이다 — 이 한 줄 때문에 69곳이 안 붙었다.
+  const env = makeEnv();                       // 지도 열쇠 없음 → 주소로 좌표를 못 구한다
+  const a = await D.createAssociation(env.DB, { slug: "zz", name: "주소없는상인회", kind: "merchant" });
+  const c = await streetCenter(env, env.DB, a);
+  assert.equal(c, null, "기본값(서울 어딘가)을 골목으로 믿으면 우리 가게가 전부 거부된다");
+});
+
+test("관리자가 지도를 직접 옮겨 뒀으면 그건 쓴다", async () => {
+  const env = makeEnv();
+  const a = await D.createAssociation(env.DB, { slug: "yy", name: "옮긴상인회", kind: "merchant" });
+  a.map_lat = 37.4816; a.map_lng = 126.9938;
+  const c = await streetCenter(env, env.DB, a);
+  assert.ok(c, "직접 옮긴 값은 자리표시가 아니라 뜻이 있는 값이다");
+  assert.equal(c.how, "관리자가 정해 둔 지도 중심");
+});
+
+test("기준점을 모르면 화면이 그렇게 말하고 무엇을 하라고 알려 준다", async () => {
+  const env = makeEnv({ KAKAO_REST_KEY: "k" });
+  const a = await D.createAssociation(env.DB, { slug: "bb", name: "방배카페골목 상인회", kind: "merchant" });
+  const p = await hashPassword("admin1234");
+  await D.createUser(env.DB, { email: "a@bb.kr", passwordHash: p.hash, salt: p.salt, name: "회장", role: "ADMIN", associationId: a.id });
+  const j = await login(env);
+  const stop = stubKakao(() => []);
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (req, init) => {   // 주소 검색도 못 찾는 상황
+    const u = String(req && req.url ? req.url : req);
+    if (u.includes("dapi.kakao.com")) return new Response(JSON.stringify({ documents: [] }), { headers: { "content-type": "application/json" } });
+    if (u.includes("openapi.naver.com")) return new Response(JSON.stringify({ items: [] }), { headers: { "content-type": "application/json" } });
+    return realFetch(req, init);
+  };
+  try {
+    const html = await (await get(env, j, MAP)).text();
+    assert.ok(html.includes("우리 골목이 어디인지 몰라"), "조용히 다 거부하면 '왜 안 늘지' 로만 보인다");
+    assert.ok(html.includes("상인회 주소"), "무엇을 하면 되는지를 말해 줘야 한다");
+  } finally { globalThis.fetch = realFetch; stop(); }
+});
+
+test("기준점을 찾았으면 어디를 기준으로 삼았는지 적어 준다", async () => {
+  const env = makeEnv({ KAKAO_REST_KEY: "k" });
+  const a = await seed(env);
+  const j = await login(env);
+  const stop = stubKakao(() => []);
+  try {
+    const html = await (await get(env, j, MAP)).text();
+    assert.ok(html.includes("우리 골목 기준점"));
+    assert.ok(html.includes("상인회 주소"));
+  } finally { stop(); }
+});
