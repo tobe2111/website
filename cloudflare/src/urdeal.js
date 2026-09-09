@@ -28,7 +28,9 @@
 // 나중에 유어딜에 여러 가게를 한 번에 부르는 칸이 생기면 이 파일만 고치면 된다.
 // 무엇이 필요한지는 docs/urdeal-api-request.md 에 적어 두었다.
 
-const DEFAULT_BASE = "https://live.ur-team.com";
+// 2026-09 부터 유어딜의 주소는 urdeal.kr 이다. 옛 live.ur-team.com 은 그리로 넘겨준다(301) —
+// 넘김 한 번을 아끼려고 새 주소를 기본으로 둔다. 상품 API 는 두 주소 모두 같은 답을 준다(확인함).
+const DEFAULT_BASE = "https://urdeal.kr";
 const CACHE_TTL = 600;        // 우리 쪽 10분. 이용권 값은 분 단위로 바뀌지 않는다.
 const PER_SELLER = 3;         // 한 가게에서 몇 개까지 가져올지
 const TIMEOUT_MS = 2500;      // 유어딜이 느리면 홈이 같이 느려진다 — 여기서 끊는다
@@ -38,6 +40,10 @@ export const urdealBase = (env) => String((env && env.URDEAL_BASE) || DEFAULT_BA
 // 손님이 이용권을 사러 가는 자리. 상품 상세가 우리가 아는 유일한 공개 주소다.
 export const urdealProductUrl = (env, id) => `${urdealBase(env)}/products/${Number(id) || 0}`;
 export const urdealSellerUrl = (env, id) => `${urdealBase(env)}/seller/${Number(id) || 0}`;
+// 사장님이 유어딜 판매자가 되는 문. 어느 상인회에서 왔는지 꼬리표를 붙인다 — 유어딜이 무시해도 해는 없다.
+export const urdealSignupUrl = (env, slug = "") =>
+  `${urdealBase(env)}/seller/signup${slug ? `?from=merchant&assoc=${encodeURIComponent(slug)}` : ""}`;
+export const urdealSellerLoginUrl = (env) => `${urdealBase(env)}/seller/login`;
 
 // 남의 서비스가 준 값이므로 우리가 쓰는 모양만 남기고 전부 다시 만든다.
 // (그대로 화면에 흘리면 유어딜이 필드를 하나 늘릴 때 우리 화면이 같이 흔들린다.)

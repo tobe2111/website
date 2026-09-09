@@ -148,7 +148,7 @@ test("유어딜 연동 페이지: /urdeal 렌더 + 대시보드에서 연결", a
   assert.equal(r.status, 200);
   const h = await r.text();
   assert.match(h, /유어딜로 매출 만들기/);
-  assert.match(h, /live\.ur-team\.com/);
+  assert.match(h, /urdeal\.kr\/seller\/signup/, "첫 단추가 유어딜 판매자 가입이어야 한다");
   const j = jar(); await post(env, j, "/login", { email: "m@x.kr", password: "merchant1234" });
   assert.match(await (await get(env, j, "/t/seocho/dashboard")).text(), /\/urdeal">연동 방법 보기/);
 });

@@ -94,7 +94,7 @@ test("가게 상세: 미니 지도(키 있을 때) + 유어딜 연계(대시보�
   assert.match(pub, /오시는 길/);
   assert.match(pub, /maps\.js\?ncpKeyId=testkey/);
   const j = jar(); await post(env, j, "/login", { email: "m@x.kr", password: "merchant1234" });
-  assert.match(await (await get(env, j, "/t/seocho/dashboard")).text(), /live\.ur-team\.com/);
+  assert.match(await (await get(env, j, "/t/seocho/dashboard")).text(), /urdeal\.kr\/seller\/signup/);
   await D.setSetting(env.DB, "platform_mode", "1");
   assert.match(await (await get(env, jar(), "/")).text(), /유어딜/);
 });

@@ -145,6 +145,7 @@ export const TENANT = [
   ["POST", "/board/:id/pin", api.pinPost, "MEMBER"],
   ["GET", "/dashboard", pages.dashboard, "MERCHANT"],
   ["POST", "/dashboard/business", api.updateBusiness, "MERCHANT"],
+  ["POST", "/dashboard/urdeal", api.setMyUrdealSeller, "MERCHANT"],
   ["POST", "/dashboard/media", api.uploadMedia, "MERCHANT"],
   ["POST", "/dashboard/media/embed", api.addVideoEmbed, "MERCHANT"],
   ["POST", "/dashboard/media/:id/delete", api.deleteMedia, "MERCHANT"],

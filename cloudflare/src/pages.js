@@ -6,7 +6,7 @@ import { STORED_KEYS, storedKeyHint } from "./keys.js";
 import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG, ORIGIN, assetUrl, brandLogo } from "./render.js";
 import { verifyInviteToken, verifyPhotoToken, SALES_STAGES, otpRequired, selfSignupOn, MAX_SLOTS, BULK_MAX, BULK_CHUNK, docOf, isPlaceholderEmail, importMemberRows, autoLinkChunk, farFromStreet, unlinkFar, photoChunk, makePhotoToken, mapKeys, MAP_CHUNK, PHOTO_CHUNK } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
 import { html, notFoundResponse, back, redirect } from "./http.js";
-import { deals as urdealDeals, urdealProductUrl, urdealSellerUrl, sellerPhotos } from "./urdeal.js";
+import { deals as urdealDeals, urdealProductUrl, urdealSellerUrl, sellerPhotos, urdealBase, urdealSignupUrl, urdealSellerLoginUrl } from "./urdeal.js";
 import { placeSourceOf } from "./placePhoto.js";
 import * as storage from "./storage.js";
 import { NEAR_KM } from "./placeMatch.js";
@@ -2094,27 +2094,39 @@ export async function invitePage(ctx) {
 
 // ================= 유어딜 연동 안내 =================
 export function urdealPage(ctx) {
-  const { assoc, base, user, csrf } = ctx;
+  const { assoc, base, user, csrf, env } = ctx;
+  // 사장님이 여기 오는 이유는 하나 — '이용권 만들러 가기' 를 눌렀다. 그러면 첫 단추가 **판매자 가입**이어야
+  // 한다. 예전에는 "운영사에 문의하세요" 였는데, 그러면 아무도 안 한다. 유어딜은 판매자 가입을 스스로
+  // 받으므로(urdeal.kr/seller/signup) 그리로 보내고, 가입 뒤에 우리 홈과 잇는 데 필요한 것(가게 번호
+  // 하나)을 여기서 설명한다.
+  const signup = urdealSignupUrl(env, assoc && assoc.slug);
+  const login = urdealSellerLoginUrl(env);
+  const isOwner = user && user.role === "MERCHANT";
   const steps = [
-    ["1", "유어딜에 가게 등록", "운영사(리스터코퍼레이션)가 등록을 도와드립니다. 아래 문의로 연락주세요."],
-    ["2", "이용권·동네딜 만들기", "예: '2만원 식사권을 1만 8천원에' — 손님은 할인가로 사고, 가게는 선결제 매출이 생깁니다."],
-    ["3", "손님이 매장에서 사용", "손님이 폰으로 이용권을 보여주면 확인 후 사용 처리 — 끝."],
+    ["1", "유어딜 판매자 가입 (5분)", `사업자등록증과 정산 계좌만 있으면 됩니다. <a href="${signup}" target="_blank" rel="noopener">유어딜 판매자 가입하기 ↗</a>`],
+    ["2", "가게 번호를 여기 알려주기", `가입하면 유어딜의 내 가게 화면 주소가 <code>urdeal.kr/seller/<b>번호</b></code> 모양입니다. 그 번호를
+      ${isOwner ? `<a href="${base}/dashboard#d-urdeal">내 가게 관리 → 유어딜 가게 번호</a>` : "<b>내 가게 관리 → 유어딜 가게 번호</b>"} 칸에 넣으세요.
+      회장님께 번호를 알려 주셔도 됩니다.`],
+    ["3", "유어딜에서 이용권 만들기", "예: '2만원 식사권을 1만 8천원에' — 손님은 할인가로 사고, 가게는 선결제 매출이 생깁니다. 결제·정산은 유어딜이 합니다."],
+    ["4", "상인회 홈에 자동으로 걸림", "번호가 연결된 가게의 이용권은 상인회 홈 '우리 골목 이용권' 자리에 자동으로 올라옵니다. 손님이 폰으로 이용권을 보여주면 확인 후 사용 처리 — 끝."],
   ];
   const body = `<section class="section page-top"><div class="container narrow">
     <div class="section-head"><h1 class="section-title">유어딜로 매출 만들기</h1>
-      <p class="section-lead">이 홈페이지는 우리 가게를 <b>알리는 곳</b>, 유어딜은 <b>파는 곳</b>입니다. 운영사의 커머스 서비스라 상인회 회원은 등록을 도와드립니다.</p></div>
+      <p class="section-lead">이 홈페이지는 우리 가게를 <b>알리는 곳</b>, 유어딜은 <b>파는 곳</b>입니다. 판매자 가입은 유어딜에서 직접 하고, 가게 번호 하나만 여기 적으면 이어집니다.</p></div>
     <div class="urdeal-hero">
       <span class="fb-badge">FAMILY SERVICE</span>
       <h3>유어딜 — 돈버는 쇼핑</h3>
       <p>할인가로 사서 매장에서 바로 쓰는 <b>이용권</b>, 기프티콘 <b>교환권</b>, 내 주변 <b>동네딜</b>. 결제·정산은 유어딜이 처리하니 가게는 쿠폰 확인만 하면 됩니다.</p>
-      <a class="btn btn-primary" href="https://live.ur-team.com/" target="_blank" rel="noopener">유어딜 구경하기 →</a>
+      <p class="pill-row" style="justify-content:center">
+        <a class="btn btn-primary" href="${signup}" target="_blank" rel="noopener">유어딜 판매자 가입하기 ↗</a>
+        <a class="btn btn-ghost" href="${login}" target="_blank" rel="noopener">이미 판매자예요 — 로그인 ↗</a></p>
     </div>
     <div class="urdeal-steps">${steps.map(([n, t, d]) => `<div class="us-step"><span class="us-num">${n}</span><div><strong>${t}</strong><p>${d}</p></div></div>`).join("")}</div>
     <div class="urdeal-vs">
       <div class="uv-col"><h4>이 홈페이지 (무료)</h4><ul><li>가게 소개·사진·소식</li><li>보여주기 쿠폰 (결제 없음)</li><li>지도·검색 노출</li></ul></div>
       <div class="uv-col is-urdeal"><h4>유어딜 (판매 채널)</h4><ul><li>이용권·교환권 실제 판매</li><li>동네딜로 신규 손님 유입</li><li>결제·정산 대행</li></ul></div>
     </div>
-    <p class="panel-hint">등록 문의: <a href="${base}/contact">상인회 문의하기</a> 또는 유어딜에서 직접 신청</p>
+    <p class="panel-hint">가입이 막히거나 번호를 모르겠으면 <a href="${base}/contact">상인회에 문의</a>하세요. <a href="${urdealBase(env)}/" target="_blank" rel="noopener">유어딜 구경하기 ↗</a></p>
   </div></section>`;
   return html(layout({ title: "유어딜 연동", assoc, base, user, body, csrf, description: "이용권·교환권·동네딜 — 유어딜로 우리 가게 매출 만들기" }));
 }
@@ -2209,7 +2221,12 @@ export async function dashboard(ctx) {
       <h2 class="panel-title">이용권·동네딜을 온라인으로 팔고 싶다면</h2>
       <p class="panel-hint">이곳의 쿠폰은 보여주기 혜택(결제 없음)입니다. 할인 이용권·기프티콘 교환권을 <strong>실제로 판매</strong>하려면 운영사의 커머스 <strong>유어딜</strong>과 함께하세요.</p>
       <span class="pill-row"><a class="btn btn-primary btn-sm" href="${base}/urdeal">연동 방법 보기</a>
-      <a class="btn btn-ghost btn-sm" href="https://live.ur-team.com/" target="_blank" rel="noopener">유어딜 바로가기 →</a></span></section>`;
+      <a class="btn btn-ghost btn-sm" href="${urdealSignupUrl(env, assoc.slug)}" target="_blank" rel="noopener">유어딜 판매자 가입 ↗</a></span>
+      <form method="post" action="${base}/dashboard/urdeal" class="stack-form compact" id="d-urdeal" style="margin-top:14px">
+        <label>유어딜 가게 번호 <small>(가입 뒤 내 가게 화면 주소 끝의 숫자 · 예: urdeal.kr/seller/<b>128</b> → 128)</small>
+          <input type="text" name="urdeal_seller_id" inputmode="numeric" maxlength="120" value="${b.urdeal_seller_id ? esc(String(b.urdeal_seller_id)) : ""}" placeholder="예: 128 (주소를 통째로 붙여도 됩니다)" /></label>
+        <button class="btn btn-primary btn-sm">${b.urdeal_seller_id ? "번호 바꾸기" : "연결하기"}</button>
+        ${b.urdeal_seller_id ? `<span class="panel-hint">연결됨 — 유어딜에 올린 이용권이 상인회 홈에 걸립니다. 비우고 누르면 풉니다.</span>` : ""}</form></section>`;
   const qrPanel = `<section class="panel"><h2 class="panel-title">가게 QR 코드</h2>
       <p class="panel-hint">인쇄해서 계산대·출입문에 붙여보세요. 손님이 스캔하면 우리 가게 페이지가 열립니다.</p>
       <div id="qrWidget" class="qr-widget" data-url="${base}/business/${esc(b.slug)}" data-name="${esc(b.name)}">
@@ -3031,7 +3048,7 @@ export async function admin(ctx) {
     const thin = outcomes.views < 30;
 
     const topRows = topBiz.map((b, i) => `<tr>
-      <td data-th="순위" class="num"><b>${i + 1}</b></td>
+      <td data-th="순위" class="num rank"><b>${i + 1}</b></td>
       <td data-th="가게"><a class="dt-main" href="${base}/business/${esc(b.slug)}" target="_blank" rel="noopener">${esc(b.name)}</a>
         <span class="dt-sub">${esc(b.category || "업종 미지정")}</span></td>
       <td data-th="열람" class="num"><b>${n(b.views)}</b>회</td>
@@ -3062,7 +3079,7 @@ export async function admin(ctx) {
 
       <div class="form-divider">많이 본 가게</div>
       ${topBiz.length ? `<div class="dtable-wrap"><table class="dtable">
-          <thead><tr><th class="num">순위</th><th>가게</th><th class="num">열람</th></tr></thead>
+          <thead><tr><th class="num rank">순위</th><th>가게</th><th class="num">열람</th></tr></thead>
           <tbody>${topRows}</tbody></table></div>
         <p class="panel-hint">사장님께 그대로 보여 드릴 수 있는 줄입니다. 열람이 0인 가게는 넣지 않습니다.</p>`
         : `<div class="dt-empty"><b>아직 열람 기록이 없습니다</b>
@@ -4280,7 +4297,7 @@ export async function adminBusinessEdit(ctx) {
           <span class="fold-cue"><span class="fold-open">펼치기</span><span class="fold-close">접기</span></span></summary>
           <p class="panel-hint">이 가게가 유어딜에서 이용권을 팔고 있으면 <b>가게 번호</b>를 넣어 주세요. 그 이용권이 상인회 홈의
             <b>우리 골목 이용권</b> 자리에 자동으로 걸립니다. 번호는 유어딜 가게 화면 주소 끝의 숫자입니다
-            (예: live.ur-team.com/seller/<b>128</b> → 128). 안 팔면 비워 두세요.</p>
+            (예: urdeal.kr/seller/<b>128</b> → 128). 안 팔면 비워 두세요.</p>
           <label>유어딜 가게 번호 <em class="tag opt">선택</em>
             <input type="text" inputmode="numeric" name="urdeal_seller_id" maxlength="12"
               value="${b.urdeal_seller_id ? esc(String(b.urdeal_seller_id)) : ""}" placeholder="예: 128" /></label>
@@ -6087,7 +6104,7 @@ export async function platformLanding(ctx) {
     <div class="section-head"><h2 class="section-title">함께하는 상인회</h2></div>
     <div class="landing-assoc-grid">${cards}</div></div></section>
   <section class="section"><div class="container">
-    <a class="family-banner" href="https://live.ur-team.com/" target="_blank" rel="noopener">
+    <a class="family-banner" href="https://urdeal.kr/" target="_blank" rel="noopener">
       <span class="fb-badge">FAMILY SERVICE</span>
       <span class="fb-text"><strong>유어딜 — 돈버는 쇼핑</strong><em>할인 이용권·기프티콘 교환권·동네딜. 우리 상권 가게의 매출 채널이 되어드립니다.</em></span>
       <span class="fb-chev" aria-hidden="true">→</span></a></div></section>
