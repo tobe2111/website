@@ -638,15 +638,34 @@ export async function searchPlaces(env, { q: rawQ, cx, cy, db, assocId, assoc } 
   // ── 네이버 지역 검색 ──
   // 소상공인은 네이버 스마트플레이스에만 등록한 경우가 많아, 카카오에는 없는 가게가 흔하다.
   // 두 곳을 함께 물어야 "우리 가게가 안 나와요" 가 줄어든다.
+  // 네이버는 한 번에 5건까지만 주고, 말을 어떻게 거느냐에 민감하다. "버들카페 서초구 방배동" 은
+  // 빈손인데 "방배동 버들카페" 는 나오는 식이다. 그래서 **말을 바꿔 가며 세 번까지** 묻는다.
+  // 상호만 던지는 마지막 시도는 전국에서 같은 이름이 쏟아지지만, 고르는 쪽(pickPlace)이
+  // 골목 3km 밖은 버리므로 안전하다.
+  function naverQueries(orig) {
+    const words = String(orig).split(/\s+/).filter(Boolean);
+    const name = words[0] || "";
+    const area = words.slice(1);                  // "서초구 방배동" 같은 동네 힌트
+    const dong = area.find((t) => /동$/.test(t)) || "";
+    const out = [orig];
+    if (dong) out.push(`${dong} ${name}`);        // 동네를 앞에
+    if (name.length >= 2) out.push(name);         // 상호만
+    return [...new Set(out.filter((t) => t.trim().length >= 2))];
+  }
   async function fromNaver() {
     if (!(nId && nSecret)) return [];
-    const url = new URL("https://openapi.naver.com/v1/search/local.json");
-    url.searchParams.set("query", q);
-    url.searchParams.set("display", "5");     // 지역 검색은 최대 5건까지만 준다
-    const r = await fetch(url, { headers: { "X-Naver-Client-Id": nId, "X-Naver-Client-Secret": nSecret } });
-    if (!r.ok) throw new Error(`naver ${r.status}`);
-    const data = await r.json().catch(() => null);
-    return (data && Array.isArray(data.items) ? data.items : []).map((d) => {
+    let items = [];
+    for (const t of naverQueries(q)) {
+      const url = new URL("https://openapi.naver.com/v1/search/local.json");
+      url.searchParams.set("query", t);
+      url.searchParams.set("display", "5");     // 지역 검색은 최대 5건까지만 준다
+      const r = await fetch(url, { headers: { "X-Naver-Client-Id": nId, "X-Naver-Client-Secret": nSecret } });
+      if (!r.ok) throw new Error(`naver ${r.status}`);
+      const data = await r.json().catch(() => null);
+      items = data && Array.isArray(data.items) ? data.items : [];
+      if (items.length) break;
+    }
+    return items.map((d) => {
       // 검색어에 <b> 태그가 씌워져 온다 — 태그를 벗기고 실체를 남긴다
       const name = String(d.title || "").replace(/<[^>]*>/g, "").trim();
       // mapx·mapy 는 두 가지 체계가 섞여 온다: 옛 KATECH(6자리대)와 WGS84×10^7(10자리대).
@@ -1723,11 +1742,13 @@ export const MAP_CHUNK = 8;
 export function mapKeys(env) {
   const kakao = !!String(env.KAKAO_REST_KEY || "").trim();
   const naver = !!(String(env.NAVER_SEARCH_ID || "").trim() && String(env.NAVER_SEARCH_SECRET || "").trim());
+  // 네이버 클라우드 지도 비밀키 — 지도 화면 키(NAVER_MAP_CLIENT_ID)와 짝. 있으면 주소→좌표가 네이버로도 된다.
+  const ncp = !!(String(env.NAVER_MAP_CLIENT_ID || "").trim() && String(env.NAVER_MAP_CLIENT_SECRET || "").trim());
   return {
-    kakao, naver,
+    kakao, naver, ncp,
     any: kakao || naver,
-    canLink: kakao,      // 지도 주소(장소 페이지) — 사진 가져오기가 여기에 걸려 있다
-    canGeocode: kakao,   // 주소 → 좌표 — 지도 핀을 찍는 데 쓴다
+    canLink: kakao,             // 지도 주소(장소 페이지) — 사진 가져오기가 여기에 걸려 있다
+    canGeocode: kakao || ncp,   // 주소 → 좌표 — 지도 핀을 찍는 데 쓴다
   };
 }
 
@@ -1749,21 +1770,44 @@ const isDefaultCenter = (lat, lng) =>
   Math.abs(Number(lat) - DEFAULT_MAP_LAT) < 1e-6 && Math.abs(Number(lng) - DEFAULT_MAP_LNG) < 1e-6;
 
 // 주소 하나를 좌표로. 카카오 주소 검색은 지번·도로명 둘 다 받습니다.
+// 네이버 쪽 '주소 → 좌표' 는 검색 API 가 아니라 **네이버 클라우드(NCP) 지도** 창구다.
+// 지도 화면에 쓰는 NAVER_MAP_CLIENT_ID 와 짝인 비밀키(NAVER_MAP_CLIENT_SECRET)가 있으면 열린다.
+// 검색 열쇠(NAVER_SEARCH_*)와는 다른 열쇠라, 있으면 쓰고 없으면 조용히 카카오로 간다.
+async function geocodeNaver(env, query) {
+  const id = String(env.NAVER_MAP_CLIENT_ID || "").trim();
+  const secret = String(env.NAVER_MAP_CLIENT_SECRET || "").trim();
+  if (!id || !secret) return null;
+  try {
+    const url = new URL("https://naveropenapi.apigw.ntruss.com/map-geocode/v2/geocode");
+    url.searchParams.set("query", query);
+    const r = await fetch(url, { headers: { "X-NCP-APIGW-API-KEY-ID": id, "X-NCP-APIGW-API-KEY": secret } });
+    if (!r.ok) return null;
+    const d = await r.json().catch(() => null);
+    const hit = d && Array.isArray(d.addresses) ? d.addresses[0] : null;
+    const lat = Number(hit && hit.y), lng = Number(hit && hit.x);
+    return (Number.isFinite(lat) && Number.isFinite(lng) && lat && lng) ? { lat, lng } : null;
+  } catch { return null; }
+}
+
+export { geocodeNaver };
 export async function geocode(env, q) {
-  const key = String(env.KAKAO_REST_KEY || "").trim();
   const query = String(q || "").trim();
-  if (!key || query.length < 4) return null;
+  if (query.length < 4) return null;
+  const key = String(env.KAKAO_REST_KEY || "").trim();
+  if (!key) return geocodeNaver(env, query);   // 카카오가 없으면 네이버 클라우드로
   try {
     const url = new URL("https://dapi.kakao.com/v2/local/search/address.json");
     url.searchParams.set("query", query);
     url.searchParams.set("size", "1");
     const r = await fetch(url, { headers: { Authorization: `KakaoAK ${key}` } });
-    if (!r.ok) return null;
-    const d = await r.json().catch(() => null);
-    const hit = d && Array.isArray(d.documents) ? d.documents[0] : null;
-    const lat = Number(hit && hit.y), lng = Number(hit && hit.x);
-    return (Number.isFinite(lat) && Number.isFinite(lng) && lat && lng) ? { lat, lng } : null;
-  } catch { return null; }
+    if (r.ok) {
+      const d = await r.json().catch(() => null);
+      const hit = d && Array.isArray(d.documents) ? d.documents[0] : null;
+      const lat = Number(hit && hit.y), lng = Number(hit && hit.x);
+      if (Number.isFinite(lat) && Number.isFinite(lng) && lat && lng) return { lat, lng };
+    }
+  } catch { /* 카카오가 못 찾으면 네이버 클라우드로 */ }
+  return geocodeNaver(env, query);
 }
 
 // 회원 가게 주소에서 가장 많이 나오는 동네. "서울 서초구 방배동 769-10" → "서울 서초구 방배동".

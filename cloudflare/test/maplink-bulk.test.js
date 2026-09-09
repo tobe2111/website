@@ -485,7 +485,7 @@ import { mapKeys } from "../src/api.js";
 
 test("어떤 열쇠가 무엇을 여는지 가른다", () => {
   assert.deepEqual(mapKeys({ KAKAO_REST_KEY: "k" }),
-    { kakao: true, naver: false, any: true, canLink: true, canGeocode: true });
+    { kakao: true, naver: false, ncp: false, any: true, canLink: true, canGeocode: true });
   const naverOnly = mapKeys({ NAVER_SEARCH_ID: "i", NAVER_SEARCH_SECRET: "s" });
   assert.equal(naverOnly.any, true, "검색은 된다");
   assert.equal(naverOnly.canLink, false, "그런데 지도 주소는 못 얻는다 — 사진이 여기 걸려 있다");
@@ -585,4 +585,75 @@ test("이미 좌표가 있는 가게는 주소로 다시 찍지 않는다", asyn
     const after = await D.getBusinessById(env.DB, b.id);
     assert.equal(Number(after.lat), 37.9, "회장님이 지도에서 직접 찍어 둔 자리를 덮어썼다");
   } finally { globalThis.fetch = real; }
+});
+
+// ── 네이버를 더 여러 갈래로 ──────────────────────────────────────────────
+//
+// 네이버 지역검색은 한 번에 5건뿐이고 말투에 민감하다. 한 번 묻고 빈손이면 그 가게는
+// 네이버에 있어도 못 찾는다. 그리고 주소→좌표 창구는 검색 API 가 아니라 네이버 클라우드
+// 지도 쪽에 따로 있다 — 지도 화면 키와 짝인 비밀키가 있으면 카카오 없이도 핀이 찍힌다.
+import { geocode, geocodeNaver, searchPlaces } from "../src/api.js";
+
+test("네이버는 첫 말이 빈손이면 말을 바꿔 다시 묻는다", async () => {
+  const env = makeEnv({ NAVER_SEARCH_ID: "i", NAVER_SEARCH_SECRET: "s" });
+  const asked = [];
+  const real = globalThis.fetch;
+  globalThis.fetch = async (req, init) => {
+    const u = String(req && req.url ? req.url : req);
+    if (u.includes("openapi.naver.com")) {
+      const q = decodeURIComponent(new URL(u).searchParams.get("query") || "");
+      asked.push(q);
+      // "방배동 버들카페" 로 물었을 때만 나온다 — 실제 네이버가 이런 식이다
+      const items = q === "방배동 버들카페"
+        ? [{ title: "<b>버들카페</b>", address: "서울 서초구 방배동 2233", roadAddress: "", telephone: "",
+             category: "카페", mapx: "1269938000", mapy: "374816000", link: "" }] : [];
+      return new Response(JSON.stringify({ items }), { headers: { "content-type": "application/json" } });
+    }
+    return real(req, init);
+  };
+  try {
+    const r = await searchPlaces(env, { q: "버들카페 서초구 방배동" });
+    assert.equal(r.places.length, 1, "한 번 묻고 빈손이라고 끝내면 네이버에 있는 가게도 못 찾는다");
+    assert.deepEqual(asked, ["버들카페 서초구 방배동", "방배동 버들카페"], "빈손일 때만 다음 말로 넘어가야 한다");
+  } finally { globalThis.fetch = real; }
+});
+
+test("네이버 클라우드 비밀키가 있으면 카카오 없이도 주소가 좌표가 된다", async () => {
+  const env = makeEnv({ NAVER_MAP_CLIENT_ID: "cid", NAVER_MAP_CLIENT_SECRET: "sec" });
+  const real = globalThis.fetch;
+  let hdr = null;
+  globalThis.fetch = async (req, init) => {
+    const u = String(req && req.url ? req.url : req);
+    if (u.includes("naveropenapi.apigw.ntruss.com/map-geocode")) {
+      hdr = (init && init.headers) || {};
+      return new Response(JSON.stringify({ addresses: [{ x: "126.9938", y: "37.4816" }] }),
+        { headers: { "content-type": "application/json" } });
+    }
+    return real(req, init);
+  };
+  try {
+    const at = await geocode(env, "서울 서초구 방배동 2233");
+    assert.ok(at && Math.abs(at.lat - 37.4816) < 1e-6, "네이버 클라우드로 좌표를 못 얻었다");
+    assert.equal(hdr["X-NCP-APIGW-API-KEY-ID"], "cid", "열쇠를 엉뚱한 머리글에 실었다");
+    assert.equal(mapKeys(env).canGeocode, true, "비밀키가 있는데도 '좌표 변환 안 됨' 으로 치면 화면이 거짓말한다");
+  } finally { globalThis.fetch = real; }
+});
+
+test("카카오가 못 찾은 주소는 네이버 클라우드로 한 번 더 찾는다", async () => {
+  const env = makeEnv({ KAKAO_REST_KEY: "k", NAVER_MAP_CLIENT_ID: "cid", NAVER_MAP_CLIENT_SECRET: "sec" });
+  const real = globalThis.fetch;
+  globalThis.fetch = async (req, init) => {
+    const u = String(req && req.url ? req.url : req);
+    if (u.includes("dapi.kakao.com")) return new Response(JSON.stringify({ documents: [] }), { headers: { "content-type": "application/json" } });
+    if (u.includes("map-geocode")) return new Response(JSON.stringify({ addresses: [{ x: "126.9938", y: "37.4816" }] }), { headers: { "content-type": "application/json" } });
+    return real(req, init);
+  };
+  try {
+    const at = await geocode(env, "서울 서초구 방배동 2233");
+    assert.ok(at, "한쪽이 빈손이면 다른 쪽에도 물어야 한다");
+  } finally { globalThis.fetch = real; }
+});
+
+test("비밀키가 없으면 네이버 클라우드는 조용히 건너뛴다", async () => {
+  assert.equal(await geocodeNaver(makeEnv({ NAVER_MAP_CLIENT_ID: "cid" }), "서울 서초구 방배동 1"), null);
 });

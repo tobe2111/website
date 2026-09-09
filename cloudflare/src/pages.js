@@ -1797,8 +1797,11 @@ export async function adminMembersMap(ctx) {
         <b>지도 사진은 카카오 열쇠가 있어야 됩니다</b> — 운영사에 카카오 REST 열쇠를 요청해 주세요.
         그때까지 사진은 <a href="${base}/admin/members/links">사장님께 요청 링크</a>로 받는 쪽이 빠릅니다.</div>` : ""}
       <p class="panel-hint">지도 열쇠: 카카오 <b>${keys.kakao ? "있음" : "없음"}</b> ·
-        네이버 <b>${keys.naver ? "있음" : "없음"}</b>
-        <small>(카카오 = 지도 주소·사진·좌표 / 네이버 = 검색 보완)</small></p>
+        네이버 검색 <b>${keys.naver ? "있음" : "없음"}</b> ·
+        네이버 클라우드 좌표 <b>${keys.ncp ? "있음" : "없음"}</b>
+        <small>(카카오 = 지도 주소·사진·좌표 / 네이버 검색 = 가게 찾기·좌표 / 네이버 클라우드 = 주소→좌표)</small>
+        ${!keys.kakao && !keys.ncp ? `<br /><small>네이버만으로 주소→좌표까지 하려면 지도 키(NAVER_MAP_CLIENT_ID)와
+          짝인 비밀키 <code>NAVER_MAP_CLIENT_SECRET</code> 을 운영사에 넣어 달라고 하세요.</small>` : ""}</p>
       ${run && run.error ? `<div class="flash flash-err">${esc(run.error)}</div>` : ""}
       <!-- 기준점이 틀리면 멀쩡한 우리 가게가 전부 거부된다(실제로 45곳에서 멈췄다).
            그런데 그건 화면에 오류로 안 뜬다 — "그냥 더 안 늘어나네" 로만 보인다.
