@@ -12,7 +12,7 @@ import worker from "../src/index.js";
 import { makeEnv } from "./shim.js";
 import * as D from "../src/db.js";
 import { hashPassword } from "../src/crypto.js";
-import { parseMemberRoster, restorePhone, mapCategory, withPrefix, guessPrefix, IMPORT_MAX } from "../src/roster.js";
+import { parseMemberRoster, restorePhone, mapCategory, withPrefix, guessPrefix, describeColumns, inferRosterColumns, IMPORT_MAX } from "../src/roster.js";
 
 const B = "http://localhost";
 const jar = () => ({ c: {} });
@@ -271,4 +271,90 @@ test("회원·점포 목록에서 이 화면으로 가는 길이 있다", async 
   const html = await (await get(env, j, "/t/bb/admin")).text();
   assert.ok(html.includes(">명부로 한 번에 등록</a>"), "기능이 있어도 못 찾으면 없는 것과 같다");
   assert.ok(html.includes("/admin/members/import"));
+});
+
+// ── 머리글 없이 몸통만 붙여넣었을 때 ────────────────────────────────────
+//
+// 실제로 회장님이 이렇게 보내 왔습니다 — 엑셀 머리글은 병합돼 있어서 첫 가게 줄부터
+// 드래그하게 됩니다. 예전에는 여기서 "머리글에 '상호' 칸이 없습니다" 로 되돌아갔습니다.
+const BODY_ONLY = [
+  "2001호텔\t송우진\t010-9911-7118\t769-10\t숙박업",
+  "박사부동산\t권경숙\t010-5048-2547\t2233\t부동산",
+  "서광안경\t김세웅\t010-9015-1001\t3282\t안경점",
+  "컴포즈커피\t이원정\t010-3516-6216\t3282\t카페",
+  "새롬상사\t백화실\t010-4701-1945\t?\t?",
+  "형제네축산\t\t010-2222-3333\t791-3\t정육점",
+].join("\n");
+
+test("머리글 없이 몸통만 붙여넣어도 칸을 알아본다", () => {
+  const r = parseMemberRoster(BODY_ONLY);
+  assert.equal(r.error, undefined);
+  assert.equal(r.rows.length, 6, "첫 줄을 머리글로 잡아먹으면 안 된다");
+  assert.deepEqual(describeColumns(r.inferred), [
+    "1번째 칸 = 상호", "2번째 칸 = 대표자", "3번째 칸 = 전화번호",
+    "4번째 칸 = 주소", "5번째 칸 = 업종",
+  ]);
+  assert.equal(r.rows[0].name, "2001호텔");
+  assert.equal(r.rows[0].owner, "송우진");
+  assert.equal(r.rows[0].phone, "01099117118");
+  assert.equal(r.rows[0].category, "생활·서비스");
+});
+
+test("머리글이 있으면 알아맞히지 않고 머리글을 따른다", () => {
+  const r = parseMemberRoster(REAL);
+  assert.equal(r.inferred, null, "머리글이 있는데도 넘겨짚으면 순서가 다른 명부가 망가진다");
+  assert.equal(r.rows.length, 5);
+});
+
+test("우리가 모르는 머리글 낱말이 붙어 와도 그 줄을 가게로 넣지 않는다", () => {
+  const r = parseMemberRoster(["점포이름\t사장이름\t연락처번호\t번지\t취급품목", ...BODY_ONLY.split("\n")].join("\n"));
+  assert.equal(r.error, undefined);
+  assert.equal(r.rows.length, 6, "머리글 줄이 '점포이름' 이라는 가게로 등록되면 안 된다");
+  assert.equal(r.rows[0].name, "2001호텔");
+});
+
+test("지번만 적힌 주소에도 앞말이 붙는다", () => {
+  const r = parseMemberRoster(BODY_ONLY, { prefix: "서울 서초구 방배동" });
+  assert.equal(r.rows[0].address, "서울 서초구 방배동 769-10");
+  assert.equal(r.rows[4].address, "", "'?' 를 주소로 넣으면 지도가 엉뚱한 곳을 찍는다");
+});
+
+test("상호 한 칸짜리 명부를 머리글 없이 넣어도 살아남는다", () => {
+  const r = parseMemberRoster("본죽\n쭈꾸미\n곱창집");
+  assert.equal(r.error, undefined);
+  assert.equal(r.rows.length, 3, "짧은 한글 상호가 대표자 칸으로 끌려가면 상호가 빈다");
+  assert.deepEqual(r.rows.map((x) => x.name), ["본죽", "쭈꾸미", "곱창집"]);
+});
+
+test("업종 칸은 되풀이로 알아본다 — 상호 칸을 업종으로 읽지 않는다", () => {
+  const r = parseMemberRoster(BODY_ONLY);
+  assert.equal(r.rows[3].name, "컴포즈커피");
+  assert.equal(r.rows[3].rawCat, "카페");
+  assert.equal(r.rows[3].category, "카페·디저트");
+});
+
+test("빈 글을 넣으면 알아맞히려 들지 않고 안내한다", () => {
+  assert.ok(parseMemberRoster("").error);
+  assert.ok(parseMemberRoster("상호\t대표자\t전화번호").error, "머리글만 있고 가게가 없다");
+});
+
+test("머리글 없이 넣으면 화면이 어떻게 읽었는지 적어 준다", async () => {
+  const env = makeEnv(); const a = await seed(env);
+  const j = await login(env);
+  const html = await (await post(env, j, IMPORT, { roster: BODY_ONLY }, null)).text();
+  assert.ok(html.includes("머리글이 없어서 칸의 내용을 보고 읽었습니다"), "조용히 넘겨짚으면 안 된다");
+  assert.ok(html.includes("3번째 칸 = 전화번호"));
+  assert.ok(!(await D.listAllBusinesses(env.DB, a.id)).length, "미리보기는 아무것도 넣지 않는다");
+});
+
+test("머리글 없는 명부도 그대로 등록된다", async () => {
+  const env = makeEnv(); const a = await seed(env);
+  const j = await login(env);
+  await post(env, j, IMPORT, { roster: BODY_ONLY, prefix: "서울 서초구 방배동", confirm: "1" }, IMPORT);
+  const list = await D.listAllBusinesses(env.DB, a.id);
+  assert.equal(list.length, 6);
+  const one = list.find((b) => b.name === "2001호텔");
+  assert.ok(one, "첫 줄이 머리글로 오해받아 사라졌다");
+  assert.equal(one.address, "서울 서초구 방배동 769-10");
+  assert.ok(!one.phone, "대표자 개인 번호가 가게 공개 번호로 새면 안 된다");
 });

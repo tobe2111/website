@@ -101,28 +101,132 @@ export function guessPrefix(address) {
   return /(시|도)$/.test(t[0]) && /(구|군|시)$/.test(t[1]) ? `${t[0]} ${t[1]}` : "";
 }
 
+// ---------- 머리글이 아예 없을 때 ----------
+//
+// 엑셀에서 **몸통만** 긁어 붙이는 일이 훨씬 흔합니다. 명부의 머리글은 병합된 칸이거나
+// 위에 제목 줄이 얹혀 있어서, 그냥 첫 가게 줄부터 드래그하게 됩니다.
+// 그때 "머리글이 없습니다" 로 돌려보내면 회장님은 엑셀로 돌아가 머리글을 만들어 다시
+// 복사해야 합니다. 거기서 대부분 그만둡니다 — 그러라고 만든 화면이 아닙니다.
+//
+// 그래서 **칸의 내용을 보고** 무슨 칸인지 알아냅니다. 확실한 것부터 집습니다.
+//   ① 연번     — "1 2 3 …" 이 올라가기만 하는 칸은 자료가 아닙니다. 먼저 빼 둡니다.
+//   ② 상호     — 남은 것 중 가장 왼쪽. 명부에서 상호는 연번 다음 첫 칸입니다.
+//   ③ 전화번호 — 숫자 9~11자리가 줄줄이 있는 칸은 그것 말고 없습니다.
+//   ④ 주소     — "769-10" 같은 지번이나 "…로 174" 가 늘어선 칸.
+//   ⑤ 업종     — 남은 칸 중 우리 분류에 걸리는 말이 대부분인 칸.
+//   ⑥ 대표자   — 그러고도 남은 칸 중 두세 글자 한글 이름만 있는 칸.
+//
+// 상호를 **가장 먼저** 자리에 앉히는 것이 중요합니다. 내용으로 겨루게 두면 상호가
+// 업종에 집니다 — "박사부동산" "컴포즈커피" 같은 상호는 업종 낱말을 품고 있어서
+// 업종 칸과 점수가 같아집니다. 그러면 상호가 비어 아무것도 못 넣습니다.
+//
+// 알아낸 결과는 **미리보기 표 위에 적어 보여 줍니다.** 조용히 넘겨짚지 않습니다.
+const cellsOf = (rows, i) => rows.map((r) => String(r[i] ?? "").trim()).filter(Boolean);
+const frac = (arr, f) => (arr.length ? arr.filter(f).length / arr.length : 0);
+
+const isPhoneCell = (s) => /^[\d\s().+-]+$/.test(s) && s.replace(/\D/g, "").length >= 9
+  && s.replace(/\D/g, "").length <= 11;
+// 지번("769-10") · 도로명("방배중앙로 174") · 아직 안 알아본 칸("?")
+const isAddrCell = (s) => s === "?" || /^\d{1,5}(-\d{1,4})?$/.test(s)
+  || /(대?로|길|동|가|읍|면|리)\s*\d/.test(s);
+const isPersonCell = (s) => s === "?" || /^[가-힣]{2,4}$/.test(s);
+
+// 연번 칸 — "1 2 3 …" 처럼 1(이나 2)부터 하나씩 올라가기만 하는 정수 칸.
+// 지번 주소("2233" "3282")를 여기에 걸리게 하면 안 되므로 **올라가기만 할 것**과
+// **1~2 에서 시작할 것**을 함께 봅니다. 지번은 그 두 가지를 함께 만족하지 않습니다.
+function isSeqColumn(c) {
+  if (c.length < 3 || !c.every((v) => /^\d{1,4}$/.test(v))) return false;
+  const n = c.map(Number);
+  if (n[0] > 2) return false;
+  for (let i = 1; i < n.length; i++) if (n[i] <= n[i - 1]) return false;
+  return true;
+}
+
+export function inferRosterColumns(body) {
+  const sample = body.slice(0, 40);
+  const width = sample.reduce((n, r) => Math.max(n, r.length), 0);
+  const idx = { name: -1, owner: -1, phone: -1, address: -1, cat: -1 };
+  if (!width) return idx;
+
+  const cols = [];
+  for (let i = 0; i < width; i++) cols.push(cellsOf(sample, i));
+  const taken = new Set();
+  for (let i = 0; i < width; i++) if (!cols[i].length || isSeqColumn(cols[i])) taken.add(i);
+
+  const pick = (role, score, min) => {
+    let best = -1, bestScore = 0;
+    for (let i = 0; i < width; i++) {
+      if (taken.has(i)) continue;
+      const s = score(cols[i]);
+      if (s > bestScore) { bestScore = s; best = i; }
+    }
+    if (best >= 0 && bestScore >= min) { idx[role] = best; taken.add(best); }
+  };
+
+  for (let i = 0; i < width; i++) if (!taken.has(i)) { idx.name = i; taken.add(i); break; }
+  pick("phone", (c) => frac(c, isPhoneCell), 0.6);
+  pick("address", (c) => frac(c, isAddrCell), 0.6);
+  pick("cat", (c) => frac(c, (v) => mapCategory(v) !== "기타"), 0.5);
+  pick("owner", (c) => frac(c, isPersonCell), 0.7);
+  return idx;
+}
+
+// 머리글을 **못 알아봤을 뿐** 머리글이 있을 수 있습니다("연락처번호" 처럼 우리가 모르는 말).
+// 전화번호 칸의 첫 줄에 숫자가 하나도 없으면 그 줄은 사람이 아니라 머리글입니다.
+// 판정을 이 한 가지로만 좁힌 이유: 멀쩡한 첫 가게를 말없이 버리는 쪽이 훨씬 나쁩니다.
+function looksLikeHeaderRow(row, idx) {
+  if (idx.phone < 0) return false;
+  const v = String(row[idx.phone] ?? "").trim();
+  return !!v && !/\d/.test(v);
+}
+
+// 알아낸 칸을 사람 말로 — 미리보기 위에 적어 줍니다.
+const ROLE_LABEL = { name: "상호", owner: "대표자", phone: "전화번호", address: "주소", cat: "업종" };
+export function describeColumns(idx) {
+  return Object.keys(ROLE_LABEL)
+    .filter((r) => idx[r] >= 0)
+    .sort((a, b) => idx[a] - idx[b])
+    .map((r) => `${idx[r] + 1}번째 칸 = ${ROLE_LABEL[r]}`);
+}
+
 // ---------- 명부 한 장 → 줄들 ----------
 export function parseMemberRoster(text, { prefix = "" } = {}) {
   const table = parseTable(text);
-  if (table.length < 2)
+  if (!table.length)
     return { error: "첫 줄에 머리글(상호·대표자·전화번호·주소·업종), 그 아래로 가게를 한 줄씩 붙여 주세요." };
 
   // 명부 맨 위에 "○○상가번영회 회원명부" 같은 제목 줄이 붙어 옵니다. 그 줄을 머리글로
   // 읽으면 전부 실패합니다. 그렇다고 "채워진 칸이 둘 미만이면 건너뛴다" 로 풀면
   // **상호 한 칸짜리 명부**가 통째로 사라집니다. 그래서 세는 대신 **알아보는** 쪽으로 합니다:
   // 앞쪽 다섯 줄 중 우리가 아는 머리글 낱말이 하나라도 있는 첫 줄이 머리글입니다.
-  let h = 0;
+  let h = -1;
   for (let i = 0; i < Math.min(table.length, 5); i++) {
     if (table[i].some((c) => rosterHeaderRole(c))) { h = i; break; }
   }
-  const head = table[h] || [];
-  const roles = head.map(rosterHeaderRole);
-  const idx = { name: -1, owner: -1, phone: -1, address: -1, cat: -1 };
-  for (let i = 0; i < roles.length; i++) if (roles[i] && idx[roles[i]] < 0) idx[roles[i]] = i;
-  if (idx.name < 0)
-    return { error: "머리글에 '상호' 칸이 없습니다. 첫 줄을 상호 · 대표자 · 전화번호 · 주소 · 업종 으로 적어 주세요." };
 
-  const body = table.slice(h + 1);
+  let idx, body, inferred = null;
+  if (h >= 0) {
+    const roles = (table[h] || []).map(rosterHeaderRole);
+    idx = { name: -1, owner: -1, phone: -1, address: -1, cat: -1 };
+    for (let i = 0; i < roles.length; i++) if (roles[i] && idx[roles[i]] < 0) idx[roles[i]] = i;
+    // 머리글을 알아봤는데 그 안에 '상호' 가 없으면 넘겨짚지 않고 멈춥니다.
+    // 머리글이 있다는 건 회장님이 칸 이름을 적었다는 뜻이고, 그러면 무엇을 고쳐야
+    // 하는지 말해 주는 쪽이 낫습니다. 아래 '알아맞히기' 는 머리글이 아예 없을 때만 씁니다.
+    if (idx.name < 0)
+      return { error: "머리글에 '상호' 칸이 없습니다. 첫 줄을 상호 · 대표자 · 전화번호 · 주소 · 업종 으로 적어 주세요." };
+    body = table.slice(h + 1);
+  } else {
+    // 머리글 없이 몸통만 붙여넣었습니다 — 칸의 내용을 보고 알아냅니다.
+    body = table;
+    idx = inferRosterColumns(body);
+    if (idx.name < 0)
+      return { error: "첫 줄에 머리글(상호·대표자·전화번호·주소·업종), 그 아래로 가게를 한 줄씩 붙여 주세요." };
+    if (body.length > 1 && looksLikeHeaderRow(body[0], idx)) body = body.slice(1);
+    inferred = idx;
+  }
+  if (!body.length)
+    return { error: "머리글 아래에 가게가 한 줄도 없습니다. 가게를 한 줄씩 붙여 주세요." };
+
   if (body.length > IMPORT_MAX)
     return { error: `한 번에 ${IMPORT_MAX}줄까지 넣을 수 있습니다. (붙여넣은 명부 ${body.length}줄) 나눠서 넣어 주세요.` };
 
@@ -149,7 +253,11 @@ export function parseMemberRoster(text, { prefix = "" } = {}) {
     if (row.status === "ok") seen.add(norm(name));
     rows.push(row);
   }
-  return { rows, has: { owner: idx.owner >= 0, phone: idx.phone >= 0, address: idx.address >= 0, cat: idx.cat >= 0 } };
+  return {
+    rows,
+    has: { owner: idx.owner >= 0, phone: idx.phone >= 0, address: idx.address >= 0, cat: idx.cat >= 0 },
+    inferred,   // 머리글 없이 알아낸 경우에만 채워집니다 — 화면이 "이렇게 읽었다" 고 적습니다
+  };
 }
 
 // 이미 등록된 상호는 건너뜁니다.
