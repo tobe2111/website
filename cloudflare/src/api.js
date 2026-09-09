@@ -1711,6 +1711,26 @@ export async function adminAddMember(ctx) {
 // 것이 걸립니다. 그런데 화면에는 멀쩡한 가게 하나가 보여서 아무도 눈치채지 못합니다.
 // 애매한 것은 그대로 두고 목록에 남겨, 회장님이 그 가게 화면에서 눈으로 고릅니다.
 export const MAP_CHUNK = 8;
+// 어떤 열쇠가 있고, 그 열쇠로 무엇까지 되는가.
+//
+// 예전에는 "카카오든 네이버든 하나만 있으면 열쇠가 있다" 로 쳤습니다. 그런데 그 둘이
+// 여는 문이 다릅니다. **지도 주소(장소 페이지)를 주는 곳은 카카오뿐**입니다 —
+// 네이버 지역검색이 주는 link 는 그 가게 홈페이지지 지도 페이지가 아닙니다.
+// 주소를 좌표로 바꾸는 창구도 카카오에만 있습니다.
+//
+// 그래서 카카오 없이 네이버만 있으면: 검색은 되는데 **지도 연결도 사진도 거의 안 됩니다.**
+// 그런데 화면은 "열쇠 있음" 으로만 보여서, 회장님 눈에는 그냥 "안 늘어나네" 로 보입니다.
+export function mapKeys(env) {
+  const kakao = !!String(env.KAKAO_REST_KEY || "").trim();
+  const naver = !!(String(env.NAVER_SEARCH_ID || "").trim() && String(env.NAVER_SEARCH_SECRET || "").trim());
+  return {
+    kakao, naver,
+    any: kakao || naver,
+    canLink: kakao,      // 지도 주소(장소 페이지) — 사진 가져오기가 여기에 걸려 있다
+    canGeocode: kakao,   // 주소 → 좌표 — 지도 핀을 찍는 데 쓴다
+  };
+}
+
 // 우리 골목이 어디인가 — 일괄 연결 한 번에 **딱 한 번** 정합니다.
 //
 // 이게 없으면 무슨 일이 났는가: 명부를 막 넣은 상인회에는 좌표가 하나도 없습니다.
@@ -1729,7 +1749,7 @@ const isDefaultCenter = (lat, lng) =>
   Math.abs(Number(lat) - DEFAULT_MAP_LAT) < 1e-6 && Math.abs(Number(lng) - DEFAULT_MAP_LNG) < 1e-6;
 
 // 주소 하나를 좌표로. 카카오 주소 검색은 지번·도로명 둘 다 받습니다.
-async function geocode(env, q) {
+export async function geocode(env, q) {
   const key = String(env.KAKAO_REST_KEY || "").trim();
   const query = String(q || "").trim();
   if (!key || query.length < 4) return null;
@@ -1777,9 +1797,21 @@ const median = (xs) => {
 // 반대로 멀쩡한 우리 가게가 전부 거부됩니다(중심이 엉뚱한 곳일 때).
 // 그래서 **어디를 기준으로 삼았는지를 화면에 적어 보여 줍니다.** 조용히 넘겨짚지 않습니다.
 export async function streetCenter(env, db, assoc) {
-  // ① 상인회가 적어 둔 우리 주소
+  // ① 상인회가 적어 둔 우리 주소 — 카카오 주소 창구로
   const byAssoc = await geocode(env, assoc && assoc.address);
   if (byAssoc) return { ...byAssoc, how: "상인회 주소" };
+
+  // ①-b 카카오 열쇠가 없으면 **네이버 검색으로도** 우리 주소 근처를 잡을 수 있습니다.
+  //     주소를 그대로 검색하면 그 자리 근처 가게가 나오고, 그 좌표면 골목을 가리키기에 충분합니다.
+  //     (네이버에는 '주소 → 좌표' 창구가 따로 있지만 열쇠 체계가 달라, 지금 가진 것으로 합니다.)
+  const addr = String(assoc && assoc.address || "").trim();
+  if (addr && !mapKeys(env).canGeocode) {
+    try {
+      const r = await searchPlaces(env, { q: addr.split(/\s+/).slice(0, 4).join(" ") });
+      const hit = (r.places || []).find((x) => Number.isFinite(x.lat) && Number.isFinite(x.lng) && x.lat && x.lng);
+      if (hit) return { lat: hit.lat, lng: hit.lng, how: "상인회 주소 (네이버 검색)" };
+    } catch { /* 아래로 */ }
+  }
 
   // ② 회원 가게 주소에서 가장 많이 나오는 동네
   let rows = [];
@@ -1839,7 +1871,7 @@ export async function autoLinkChunk(ctx, { after = 0, limit = MAP_CHUNK } = {}) 
   const { db, env, assoc } = ctx;
   const rows = await D.listUnlinkedBusinesses(db, assoc.id, Number(after) || 0, limit);
   const center = await streetCenter(env, db, assoc);
-  const out = { rows: [], linked: 0, cursor: Number(after) || 0, done: rows.length < limit, error: "",
+  const out = { rows: [], linked: 0, pinned: 0, cursor: Number(after) || 0, done: rows.length < limit, error: "",
     center: !!center, centerHow: center ? center.how : "" };
   for (const b of rows) {
     out.cursor = b.id;
@@ -1871,12 +1903,45 @@ export async function autoLinkChunk(ctx, { after = 0, limit = MAP_CHUNK } = {}) 
       out.linked++;
       out.rows.push({ id: b.id, name: b.name, status: place.url ? "linked" : "filled",
         found: place.name, address: place.address, phone: place.phone, why });
+    } else if (b.lat == null && b.address) {
+      // 확실한 가게를 못 골랐어도 **주소는 있습니다.** 지도 핀은 주소만으로 찍힙니다 —
+      // 가게를 특정하지 못한 것과 지도에 안 보이는 것은 다른 일입니다.
+      // (사진 가져오기는 여전히 안 됩니다. 그건 장소 페이지가 있어야 합니다.)
+      // 카카오가 있으면 주소 창구로. 없으면 네이버 검색에서 **주소를 그대로** 찾아
+      // 그 자리 근처 좌표를 씁니다 — 골목 안이면 핀으로 쓸 만합니다.
+      // 골목 밖으로 나온 좌표는 안 씁니다. 엉뚱한 핀은 없느니만 못합니다.
+      let at = await geocode(env, b.address);
+      if (!at) {
+        try {
+          const r2 = await searchPlaces(env, { q: b.address, cx: center ? center.lng : undefined, cy: center ? center.lat : undefined });
+          const hit = (r2.places || []).find((x) => Number.isFinite(x.lat) && Number.isFinite(x.lng) && x.lat && x.lng);
+          const km = hit && center ? kmApart(center, hit) : null;
+          if (hit && (km == null || km <= NEAR_KM)) at = { lat: hit.lat, lng: hit.lng };
+        } catch { /* 못 찾으면 아래에서 사람에게 넘긴다 */ }
+      }
+      if (at) {
+        await D.updateBusiness(db, b.id, {
+          name: b.name, category: b.category, description: b.description || "",
+          phone: b.phone || "", address: b.address, hours: b.hours || "",
+          lat: at.lat, lng: at.lng,
+          snsInstagram: b.sns_instagram || "", snsYoutube: b.sns_youtube || "",
+          snsBlog: b.sns_blog || "", snsKakao: b.sns_kakao || "", snsNaver: b.sns_naver || "",
+          mapUrl: isPlaceUrl(b.map_url) ? b.map_url : "",
+        });
+        out.pinned++;
+        out.rows.push({ id: b.id, name: b.name, status: "coord", found: "", address: b.address, phone: "",
+          why: "가게는 못 특정했지만 주소로 지도 핀은 찍었습니다" });
+        continue;
+      }
+      out.rows.push({ id: b.id, name: b.name, status: place ? "choose" : "none",
+        found: place ? place.name : "", address: place ? place.address : "", phone: "", why });
     } else {
       out.rows.push({ id: b.id, name: b.name, status: place ? "choose" : "none",
         found: place ? place.name : "", address: place ? place.address : "", phone: "", why });
     }
   }
-  if (out.linked) await audit(ctx, "지도일괄연결", `${out.linked}곳 연결`);
+  if (out.linked || out.pinned)
+    await audit(ctx, "지도일괄연결", `${out.linked}곳 연결 · ${out.pinned}곳 좌표만`);
   return out;
 }
 
