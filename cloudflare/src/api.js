@@ -21,7 +21,7 @@ import { seedStarter } from "./starterContent.js";
 import { KINDS, kindById, PRESETS, assocTerms } from "./kinds.js";
 import { sellerPhotos, urdealProductUrl } from "./urdeal.js";
 import { placePhoto, isPlaceUrl, placeSourceOf } from "./placePhoto.js";
-import { pickPlace, placeQuery, kmApart, NEAR_KM } from "./placeMatch.js";
+import { pickPlace, placeQuery, kmApart, NEAR_KM, repairAddress } from "./placeMatch.js";
 import { mapCategory } from "./roster.js";
 import { STORED_KEYS, storeKey, clearKey, forgetStoredKeys, checkKakaoKey } from "./keys.js";
 import { TEMPLATE_KEYS, TEMPLATES, sendTest, listProviderTemplates, matchTemplates, sendMany, sendOne, notifyEnabled, autoNotifyOn, canAutoSend, wonToJeon, renderTemplate, templateCodeFor, templateButton, billingMode, chargeContract, BILLING_MODES, priceOf } from "./notify.js";
@@ -2024,13 +2024,36 @@ export async function unlinkFar(ctx) {
   return rows.length;
 }
 
+// 골목 한가운데 좌표가 어느 동(洞)인가 — 카카오 좌표→행정구역. 열쇠가 없거나 못 물으면 "".
+// 동이 빠진 주소("서울 서초구 2233")를 고치는 데 쓴다. 한 번 물어 청크 안에서 다시 쓴다.
+export async function dongOfCenter(env, center) {
+  const key = String(env.KAKAO_REST_KEY || "").trim();
+  if (!key || !center) return "";
+  try {
+    const u = new URL("https://dapi.kakao.com/v2/local/geo/coord2regioncode.json");
+    u.searchParams.set("x", String(center.lng)); u.searchParams.set("y", String(center.lat));
+    const r = await fetch(u, { headers: { Authorization: `KakaoAK ${key}` } });
+    if (!r.ok) return "";
+    const d = await r.json().catch(() => null);
+    const docs = (d && Array.isArray(d.documents)) ? d.documents : [];
+    const b = docs.find((x) => x.region_type === "B") || docs[0];   // B = 법정동(주소에 쓰는 동)
+    const name = b && String(b.region_3depth_name || "").trim();
+    return name && /동$|가$|읍$|면$|리$/.test(name) ? name : "";
+  } catch { return ""; }
+}
+
 export async function autoLinkChunk(ctx, { after = 0, limit = MAP_CHUNK } = {}) {
   const { db, env, assoc } = ctx;
   const rows = await D.listUnlinkedBusinesses(db, assoc.id, Number(after) || 0, limit);
   const center = await streetCenter(env, db, assoc);
+  // 동은 처리할 가게가 있을 때 한 번만 묻는다 — 다 붙은 뒤에 도는 빈 청크가 지도를 또 부르지 않게.
+  const dong = rows.length && center ? await dongOfCenter(env, center) : "";
   const out = { rows: [], linked: 0, pinned: 0, cursor: Number(after) || 0, done: rows.length < limit, error: "",
-    center: !!center, centerHow: center ? center.how : "" };
-  for (const b of rows) {
+    center: !!center, centerHow: center ? center.how : "", dong };
+  for (const raw of rows) {
+    // 동이 빠진 주소는 고쳐서 찾고, 찾았든 핀만 찍었든 고친 주소를 저장한다 — 원래 모양은 지도가 못 읽는다.
+    const fixed = repairAddress(raw.address, dong);
+    const b = fixed !== String(raw.address || "") ? { ...raw, address: fixed, addressRepaired: true } : raw;
     out.cursor = b.id;
     // 중심을 **줄마다 다시 세지 않습니다.** 그러면 방금 잘못 붙은 가게가 다음 줄의 중심을
     // 옮겨 놓아, 한 번 어긋나면 뒤로 갈수록 더 멀리 갑니다.
@@ -2059,7 +2082,7 @@ export async function autoLinkChunk(ctx, { after = 0, limit = MAP_CHUNK } = {}) 
       });
       out.linked++;
       out.rows.push({ id: b.id, name: b.name, status: place.url ? "linked" : "filled",
-        found: place.name, address: place.address, phone: place.phone, why });
+        found: place.name, address: place.address, phone: place.phone, why: b.addressRepaired ? `${why} (주소에 ${dong} 을 넣어 찾았습니다)` : why });
     } else if (b.lat == null && b.address) {
       // 확실한 가게를 못 골랐어도 **주소는 있습니다.** 지도 핀은 주소만으로 찍힙니다 —
       // 가게를 특정하지 못한 것과 지도에 안 보이는 것은 다른 일입니다.
@@ -2087,7 +2110,7 @@ export async function autoLinkChunk(ctx, { after = 0, limit = MAP_CHUNK } = {}) 
         });
         out.pinned++;
         out.rows.push({ id: b.id, name: b.name, status: "coord", found: "", address: b.address, phone: "",
-          why: "가게는 못 특정했지만 주소로 지도 핀은 찍었습니다" });
+          why: `가게는 못 특정했지만 주소로 지도 핀은 찍었습니다${b.addressRepaired ? ` (주소에 ${dong} 을 넣었습니다)` : ""}` });
         continue;
       }
       out.rows.push({ id: b.id, name: b.name, status: place ? "choose" : "none",
