@@ -82,7 +82,7 @@ test("기본 홈: 히어로 안내표와 검은 인용 띠가 사라지고, 가�
   assert.ok(!html.includes("hp-panel"), "주소·전화·오늘신청을 한 표에 담던 안내 카드는 없앴다");
   assert.ok(!html.includes('class="showcase"'), "새 정보를 주지 않으면서 화면을 끊던 검은 띠는 기본에서 끈다");
   assert.ok(!html.includes("feat-band"), "가입점포·지도·공지 바로가기 카드는 머리말 메뉴와 겹쳐 끈다");
-  assert.match(html, /우리 가게 등록하기/, "가입 버튼은 첫 화면에 그대로 둔다");
+  assert.match(html, /회원 신청하기/, "가입(회원 신청) 버튼은 첫 화면에 그대로 둔다");
   assert.match(html, /hp-facts-line/);
   assert.match(html, /가입 점포 <b>2곳<\/b>/, "손님에게 쓸모 있는 숫자만 한 줄로");
 });

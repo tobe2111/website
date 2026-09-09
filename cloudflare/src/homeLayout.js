@@ -207,7 +207,7 @@ export function defaultLayout(assocName = "우리 상인회") {
     { type: "benefits", enabled: false, title: "입점하면 생기는 것", lead: "" },
     { type: "faq", enabled: false, title: "자주 묻는 질문" },
     { type: "contact", enabled: true, title: "연락처·오시는 길", hours: "" },
-    { type: "cta", enabled: true, title: "아직 회원이 아니신가요?", body: "지금 업체를 등록하면 나만의 업체 페이지에 사진·영상을 올리고 상권 홍보에 함께할 수 있습니다.", buttonLabel: "무료로 업체 등록하기" },
+    { type: "cta", enabled: true, title: "아직 회원이 아니신가요?", body: "회원이 되시면 우리 가게 페이지에 사진·소식을 올리고, 골목 홍보와 상인회 소식을 함께합니다.", buttonLabel: "회원 신청하기" },
   ];
 }
 
@@ -467,10 +467,10 @@ function renderSection(s, deps) {
         <div class="join-cta">
           <div class="jc-text">
             <h2>${esc(s.title || "")}</h2>
-            <p>${esc(s.body || "")}</p>
+            <p>${esc(ctaBody(s.body))}</p>
           </div>
           <a href="${deps.base}/register" class="jc-go">
-            <span>${esc(s.buttonLabel || "업체 등록하기")}</span>
+            <span>${esc(ctaLabel(s.buttonLabel))}</span>
             <span class="jc-arrow" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg></span>
           </a>
         </div></div></section>`;
@@ -478,6 +478,14 @@ function renderSection(s, deps) {
       return "";
   }
 }
+
+// 가입은 '업체 등록' 이 아니라 **상인회 회원 신청** 이다 — 회장님 말대로 사장님은 가게를 파는 게 아니라
+// 상인회에 드는 것이다. 예전 기본 문구("무료로 업체 등록하기")가 저장돼 있는 상인회도 새 말로 보이게,
+// 옛 기본값은 비어 있는 것으로 친다. 회장님이 직접 적은 다른 문구는 그대로 둔다.
+const OLD_CTA_LABEL = "무료로 업체 등록하기";
+const OLD_CTA_BODY = "지금 업체를 등록하면 나만의 업체 페이지에 사진·영상을 올리고 상권 홍보에 함께할 수 있습니다.";
+const ctaLabel = (v) => (v && v !== OLD_CTA_LABEL ? v : "회원 신청하기");
+const ctaBody = (v) => (v && v !== OLD_CTA_BODY ? v : "회원이 되시면 우리 가게 페이지에 사진·소식을 올리고, 골목 홍보와 상인회 소식을 함께합니다.");
 
 function heroSection(s, deps) {
   // 에디토리얼 히어로: 잉크 톤 배경 + 은은한 브랜드 광원 + 중앙 검색.
@@ -516,7 +524,7 @@ function heroSection(s, deps) {
   const factLine = `<p class="hp-facts-line">${facts}</p>`;
   // 가입하기 버튼은 첫 화면에 그대로 둔다 — 상인회가 이 홈으로 이루려는 첫째 목표이고,
   // 예전처럼 5,800px 아래에만 있으면 아무도 누르지 않는다.
-  const joinBtn = `<a class="btn btn-ghost hp-join" href="${base}/register">우리 가게 등록하기</a>`;
+  const joinBtn = `<a class="btn btn-ghost hp-join" href="${base}/register">회원 신청하기</a>`;
   const searchForm = `<form class="feat-search hp-search" method="get" action="${base}/businesses" role="search">
       <input type="search" name="q" placeholder="가게 이름·업종 검색" aria-label="점포 검색"${sug ? ' list="storeSuggest"' : ""} />
       <button class="btn btn-primary" type="submit" aria-label="검색"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg></button>
