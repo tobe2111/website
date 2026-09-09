@@ -2252,7 +2252,7 @@ export async function admin(ctx) {
     <td data-th="가게"><a class="dt-main" href="${base}/admin/business/${b.id}">${esc(b.name)}</a>
       <span class="dt-sub">${esc(b.category || "업종 미지정")}${b.address ? " · " + esc(String(b.address).split(" ").slice(0, 3).join(" ")) : ' · <span class="txt-muted">주소 없음</span>'}</span></td>
     <td data-th="사장님">${esc(b.owner_name)}<span class="dt-sub">${loginCell(b)}</span></td>
-    <td data-th="상태">${statusBadge(b.status)}</td>
+    <td data-th="상태" class="st">${statusBadge(b.status)}</td>
     <td data-th="등록" class="num"><span class="dt-sub">${esc(kstDate(b.created_at))}</span></td>
     <td class="act">
       ${b.status === "pending" ? `<form method="post" action="${base}/admin/business/${b.id}/status"><input type="hidden" name="status" value="approved"><button class="btn btn-xs btn-primary">승인</button></form>
@@ -2481,7 +2481,7 @@ export async function admin(ctx) {
     const amt = paidAmt.get(m.id) || 0;
     return `<tr>
       <td data-th="회원"><span class="dt-main">${esc(m.name)}</span><span class="dt-sub">${esc(m.business_name || "-")}</span></td>
-      <td data-th="상태">${on ? '<span class="badge badge-ok">납부</span>' : '<span class="badge badge-wait">미납</span>'}</td>
+      <td data-th="상태" class="st">${on ? '<span class="badge badge-ok">납부</span>' : '<span class="badge badge-wait">미납</span>'}</td>
       <td data-th="금액" class="num">${on ? (amt ? `<b>${won(amt)}원</b>` : '<span class="txt-muted">금액 없음</span>') : ""}</td>
       <td class="act"><form method="post" action="${base}/admin/dues" class="inline-form due-form">
         <input type="hidden" name="period" value="${esc(duePeriod)}" /><input type="hidden" name="user_id" value="${m.id}" />
