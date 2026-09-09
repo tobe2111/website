@@ -205,6 +205,9 @@ export const TENANT = [
   // POST 의 결과도 표로 그려야 하기 때문이다. 실제로 쓰는 일은 api.importMemberRows 가 한다.
   ["GET", "/admin/members/import", pages.adminMembersImport, "ADMIN"],
   ["GET", "/admin/members/map", pages.adminMembersMap, "ADMIN"],
+  ["GET", "/admin/members/photos", pages.adminMembersPhotos, "ADMIN"],
+  ["GET", "/admin/members/links", pages.adminMembersLinks, "ADMIN"],
+  ["POST", "/admin/members/photos", pages.adminMembersPhotos, "ADMIN"],
   ["POST", "/admin/members/map", pages.adminMembersMap, "ADMIN"],
   ["POST", "/admin/members/import", pages.adminMembersImport, "ADMIN"],
   ["POST", "/admin/invite", api.adminCreateInvite, "ADMIN"],

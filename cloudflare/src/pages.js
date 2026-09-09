@@ -3,10 +3,11 @@ import * as D from "./db.js";
 import { esc, cap, clip, openBadge, openNow, hoursLine, dongOf, fmtBytes, kstStamp, kstDate, prettyPath, safeNext, parseCookies, decomposeHours } from "./util.js";
 import { parseMemberRoster, markExisting, guessPrefix, describeColumns, IMPORT_MAX } from "./roster.js";
 import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG, ORIGIN, assetUrl, brandLogo } from "./render.js";
-import { verifyInviteToken, verifyPhotoToken, SALES_STAGES, otpRequired, selfSignupOn, MAX_SLOTS, BULK_MAX, BULK_CHUNK, docOf, isPlaceholderEmail, importMemberRows, autoLinkChunk, farFromStreet, unlinkFar, MAP_CHUNK } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
+import { verifyInviteToken, verifyPhotoToken, SALES_STAGES, otpRequired, selfSignupOn, MAX_SLOTS, BULK_MAX, BULK_CHUNK, docOf, isPlaceholderEmail, importMemberRows, autoLinkChunk, farFromStreet, unlinkFar, photoChunk, makePhotoToken, MAP_CHUNK, PHOTO_CHUNK } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
 import { html, notFoundResponse, back, redirect } from "./http.js";
 import { deals as urdealDeals, urdealProductUrl, urdealSellerUrl, sellerPhotos } from "./urdeal.js";
 import { placeSourceOf } from "./placePhoto.js";
+import * as storage from "./storage.js";
 import { NEAR_KM } from "./placeMatch.js";
 import { countable, countHomeGoal, homeVariantCookie } from "./traffic.js";
 import { galleryItem } from "./media-render.js";
@@ -1562,6 +1563,157 @@ export async function adminMembersImport(ctx) {
     scripts: `<script src="${assetUrl("/js/submit-once.js")}" defer></script>` }));
 }
 
+// ================= 사진·영업시간 요청 링크를 한 번에 뽑기 =================
+//
+// 지도가 못 주는 것이 둘 있습니다: **영업시간**과 **사장님이 직접 찍은 사진**.
+// 결국 사장님께 여쭤야 하는데, 링크는 가게 화면에 들어가야 하나씩 만들어졌습니다.
+// 114곳이면 화면을 114번 열어야 하고, 그러면 아무도 안 합니다.
+//
+// 그래서 여기서 **보낼 글까지 통째로** 만들어 줍니다. 회장님은 복사해서 카톡에 붙이기만
+// 하면 됩니다. 링크만 주면 "뭐라고 써서 보내지" 에서 또 한 번 멈춥니다.
+const ASK_PER = 40;
+export async function adminMembersLinks(ctx) {
+  const { db, env, assoc, base, user, csrf, query } = ctx;
+  if (assoc.kind === "esign") return notFoundResponse(ctx);
+
+  const page = Math.max(1, parseInt(query.get("p") || "1", 10) || 1);
+  const [total, rows] = await Promise.all([
+    D.countBusinessesToAsk(db, assoc.id).catch(() => 0),
+    D.listBusinessesToAsk(db, assoc.id, ASK_PER, (page - 1) * ASK_PER).catch(() => []),
+  ]);
+  const pages = Math.max(1, Math.ceil(total / ASK_PER));
+
+  // 링크는 서명이 붙은 값이라 한 곳당 한 번 만들어야 합니다. 한 쪽에 40곳까지만 만드는 이유입니다.
+  const made = await Promise.all(rows.map(async (b) => ({
+    ...b,
+    url: `${ORIGIN}${base}/photos/${encodeURIComponent(await makePhotoToken(env.SESSION_SECRET, assoc.id, b.id))}`,
+  })));
+  const msgOf = (b) => `[${assoc.name}] ${b.owner_name ? b.owner_name + " 사장님, " : ""}안녕하세요. `
+    + `홈페이지에 올릴 ${b.photos ? "" : "가게 사진과 "}영업시간을 부탁드립니다.\n`
+    + `아래 링크를 누르시면 로그인 없이 휴대폰에서 바로 올리실 수 있습니다. (2주 안에 열어 주세요)\n${b.url}`;
+
+  const needWhat = (b) => [!b.photos && "사진", !String(b.hours || "").trim() && "영업시간"].filter(Boolean).join("·");
+  const table = made.length ? `<div class="table-scroll"><table class="admin-table roster-table">
+    <thead><tr><th>가게</th><th>사장님</th><th>없는 것</th><th>보낼 글</th></tr></thead>
+    <tbody>${made.map((b) => `<tr>
+      <td><a href="${base}/admin/business/${b.id}"><b>${esc(b.name)}</b></a></td>
+      <td>${esc(b.owner_name || "")}${b.owner_phone ? `<br /><small><a href="tel:${esc(b.owner_phone)}">${esc(D.formatPhone(b.owner_phone))}</a></small>` : '<br /><small class="muted">번호 없음</small>'}</td>
+      <td><span class="badge badge-wait">${esc(needWhat(b))}</span></td>
+      <td><button type="button" class="btn btn-xs btn-outline" data-copy="${esc(msgOf(b))}">이 글 복사</button></td>
+    </tr>`).join("")}</tbody></table></div>` : "";
+
+  const allText = made.map(msgOf).join("\n\n");
+  const inner = `
+    <section class="panel">
+      <h2 class="panel-title">사진·영업시간 요청 링크
+        <span class="badge ${total ? "badge-wait" : "badge-ok"}">${total}곳에 부탁드릴 것이 있습니다</span></h2>
+      <p class="panel-hint">지도가 못 주는 것이 둘 있습니다 — <b>영업시간</b>과 <b>사장님이 직접 찍은 사진</b>.
+        아래 글을 복사해 카톡으로 보내시면, 사장님은 <b>로그인 없이</b> 휴대폰에서 바로 올리십니다.</p>
+      <ul class="roster-notes">
+        <li><b>링크는 2주 동안만 열립니다.</b> 지나면 이 화면에서 다시 뽑으시면 됩니다.</li>
+        <li><b>사장님이 올리면 회장님께 알림이 남습니다.</b> 안 들어온 곳만 챙기시면 됩니다.</li>
+        <li><b>이미 다 갖춘 가게는 여기 안 나옵니다.</b> 사진도 있고 영업시간도 있는 곳은 부탁드릴 것이 없습니다.</li>
+      </ul>
+      ${total === 0 ? `<p class="panel-hint"><b>부탁드릴 곳이 없습니다.</b> 모든 가게에 사진과 영업시간이 있습니다.</p>` : ""}
+    </section>
+
+    ${made.length ? `<section class="panel">
+      <h2 class="panel-title">이 쪽 ${made.length}곳 <span class="badge badge-muted">${page} / ${pages}쪽</span></h2>
+      <p class="panel-hint">한 곳씩 복사하거나, 아래 칸을 통째로 복사해 나눠 보내셔도 됩니다.</p>
+      <div class="stack-form"><label>이 쪽 ${made.length}곳 보낼 글 모두
+        <textarea rows="8" readonly data-select-all>${esc(allText)}</textarea></label></div>
+      ${table}
+      ${pages > 1 ? `<nav class="pager" aria-label="쪽 이동">${
+        Array.from({ length: pages }, (_, i) => i + 1).map((n) => n === page
+          ? `<span class="on" aria-current="page">${n}</span>`
+          : `<a href="${base}/admin/members/links?p=${n}">${n}</a>`).join("")}</nav>` : ""}
+    </section>` : ""}`;
+
+  const body = await consoleShell(ctx, {
+    title: "사진·영업시간 요청 링크", active: "people",
+    eyebrow: `<a href="${base}/admin#s-people">← 회원·점포</a>`,
+    sub: "사장님께 보낼 글과 링크를 한 번에 만듭니다. 복사해서 카톡에 붙이시면 됩니다.",
+    body: inner,
+  });
+  return html(layout({ title: "사진·영업시간 요청 링크", assoc, base, user, body, csrf,
+    scripts: `<script src="${assetUrl("/js/super-tabs.js")}" defer></script>` }));
+}
+
+// ================= 지도 사진을 한꺼번에 가져오기 =================
+//
+// 한 곳씩 누르는 단추는 원래 있었다. 그런데 가게가 114곳이면 114번 눌러야 하고,
+// 그 화면을 114번 열고 닫는 사람은 없다. 기능이 있는데도 사진이 한 장도 안 들어온
+// 이유가 그것이다. 여기서는 여섯 곳씩 끊어 스스로 돌린다.
+export async function adminMembersPhotos(ctx) {
+  const { db, env, assoc, base, user, csrf, form } = ctx;
+  if (assoc.kind === "esign") return notFoundResponse(ctx);
+
+  const storeOn = storage.enabled(env);
+  let run = null;
+  if (form && storeOn) run = await photoChunk(ctx, { after: Number(form.get("after")) || 0 });
+
+  const [total, left, withPhoto] = await Promise.all([
+    D.listAllBusinesses(db, assoc.id).then((l) => l.length).catch(() => 0),
+    D.countBusinessesForPlacePhoto(db, assoc.id).catch(() => 0),
+    D.countBusinessesWithImage(db, assoc.id).catch(() => 0),
+  ]);
+  const pct = total ? Math.round((withPhoto / total) * 100) : 0;
+
+  const runTable = run && run.rows.length ? `<div class="table-scroll"><table class="admin-table roster-table">
+    <thead><tr><th>가게</th><th>결과</th></tr></thead>
+    <tbody>${run.rows.map((r) => `<tr class="rs-${r.ok ? "ok" : "dup"}">
+      <td><a href="${base}/admin/business/${r.id}"><b>${esc(r.name)}</b></a></td>
+      <td><span class="badge ${r.ok ? "badge-ok" : "badge-muted"}">${r.ok ? "담았습니다" : "없습니다"}</span>
+        <br /><small>${esc(r.why)}</small></td></tr>`).join("")}</tbody></table></div>` : "";
+
+  const goForm = (label, after, auto) => `<form method="post" action="${base}/admin/members/photos" class="inline-form"${
+    auto ? " data-auto-next" : ""} data-once>
+    <input type="hidden" name="_csrf" value="${esc(csrf)}" />
+    <input type="hidden" name="after" value="${after}" />
+    <button class="btn btn-${auto ? "outline" : "cta"}">${label}</button></form>`;
+
+  const inner = `
+    <section class="panel">
+      <h2 class="panel-title">지도 사진 한꺼번에 가져오기
+        <span class="badge ${withPhoto === total && total ? "badge-ok" : "badge-wait"}">사진 있는 곳 ${withPhoto} / ${total}곳</span></h2>
+      <div class="done-bar${pct < 60 ? " is-low" : ""}"><i style="width:${pct}%"></i></div>
+      <p class="panel-hint">지도에 연결된 가게의 <b>대표 사진 한 장</b>을 담습니다.
+        사진이 없으면 목록에서 회색 상자로 보이고, 그러면 손님이 누를 이유가 없습니다.</p>
+      ${storeOn ? "" : `<div class="flash flash-warn">사진 저장소(R2)가 아직 연결되지 않았습니다. 운영사에 문의해 주세요.</div>`}
+      ${run && run.error ? `<div class="flash flash-err">${esc(run.error)}</div>` : ""}
+      <ul class="roster-notes">
+        <li><b>이 사진은 남이 찍은 것입니다.</b> 지도의 대표 사진은 대개 손님이 올린 후기 사진이라,
+          담을 때 <b>어디서 왔는지를 함께 저장</b>합니다. 내려 달라는 요청이 오면 어느 사진인지 찾을 수 있어야 하기 때문입니다.
+          <b>사장님이 보내 주신 사진이 들어오면 그걸로 바꾸는 것이 가장 좋습니다.</b></li>
+        <li><b>이미 사진이 있는 가게는 건너뜁니다.</b> 남의 후기 사진이 사장님 사진 옆에 쌓이지 않게 합니다.</li>
+        <li><b>지도에 사진이 없는 가게도 많습니다.</b> 그건 실패가 아니라 그 가게 지도에 아직 사진이 없는 것입니다 —
+          그런 곳은 사장님께 요청 링크를 보내는 쪽이 빠릅니다.</li>
+        <li><b>${PHOTO_CHUNK}곳씩 끊어 돌립니다.</b> 중간에 멈춰도 눌렀던 자리부터 이어지고, 담은 곳은 다시 묻지 않습니다.</li>
+      </ul>
+      ${total === 0
+        ? `<p class="panel-hint">아직 등록된 가게가 없습니다. 먼저 <a href="${base}/admin/members/import">명부로 한 번에 등록</a>해 주세요.</p>`
+        : left === 0
+          ? `<p class="panel-hint"><b>더 가져올 곳이 없습니다.</b> 지도에 연결됐고 사진이 없는 가게가 없습니다.
+              ${withPhoto < total ? `사진이 없는 나머지는 <a href="${base}/admin/members/map">지도에 먼저 연결</a>하거나,
+              <a href="${base}/admin/members/links">사장님께 요청 링크 보내기</a>로 부탁드리세요.` : ""}</p>`
+          : storeOn ? goForm(run ? `다음 ${PHOTO_CHUNK}곳 가져오기` : `자동으로 가져오기 시작 (남은 ${left}곳)`,
+              run && !run.error ? run.cursor : 0, !!(run && !run.error && !run.done)) : ""}
+    </section>
+
+    ${run ? `<section class="panel"><h2 class="panel-title">이번에 돌린 ${run.rows.length}곳
+      ${run.got ? `<span class="badge badge-ok">${run.got}장 담음</span>` : ""}</h2>
+      ${runTable || `<p class="panel-hint">더 돌릴 가게가 없습니다.</p>`}</section>` : ""}`;
+
+  const body = await consoleShell(ctx, {
+    title: "지도 사진 한꺼번에 가져오기", active: "people",
+    eyebrow: `<a href="${base}/admin#s-people">← 회원·점포</a>`,
+    sub: "지도에 연결된 가게의 대표 사진을 한 장씩 담아 옵니다.",
+    body: inner,
+  });
+  return html(layout({ title: "지도 사진 한꺼번에 가져오기", assoc, base, user, body, csrf,
+    scripts: `<script src="${assetUrl("/js/auto-next.js")}" defer></script><script src="${assetUrl("/js/submit-once.js")}" defer></script>` }));
+}
+
 // ================= 명부의 가게들을 지도에 한꺼번에 연결 =================
 //
 // 상호만 있어도 지도에는 그 가게가 거의 다 있습니다. 한 번 연결해 두면 그 하나에
@@ -1648,7 +1800,9 @@ export async function adminMembersMap(ctx) {
         <li><b>${MAP_CHUNK}곳씩 끊어 돌립니다.</b> 중간에 멈춰도 눌렀던 자리부터 이어지고, 이미 붙은 곳은 건너뜁니다.</li>
       </ul>
       ${left === 0 && total > 0
-        ? `<p class="panel-hint"><b>${total}곳이 모두 지도에 연결됐습니다.</b> 이제 각 가게 화면에서 <b>지도의 대표 사진</b>을 바로 가져올 수 있습니다.</p>`
+        ? `<p class="panel-hint"><b>${total}곳이 모두 지도에 연결됐습니다.</b> 다음은 사진입니다 —
+              한 곳씩 누르지 마시고 한 번에 가져오세요.
+              <a class="btn btn-sm btn-cta" href="${base}/admin/members/photos">지도 사진 한꺼번에 가져오기 →</a></p>`
         : total === 0
           ? `<p class="panel-hint">아직 등록된 가게가 없습니다. 먼저 <a href="${base}/admin/members/import">명부로 한 번에 등록</a>해 주세요.</p>`
           : kakaoOn ? goForm(run ? `다음 ${MAP_CHUNK}곳 찾기` : `자동으로 찾기 시작 (남은 ${left}곳)`,
@@ -1996,7 +2150,7 @@ export async function dashboard(ctx) {
       ${naver ? `<div class="geo-search"><input type="text" id="geoQuery" value="${esc(b.address)}" placeholder="도로명 주소 (예: 서초대로 123)" aria-label="주소로 좌표 찾기" /><button type="button" class="btn btn-ghost btn-sm" id="geoBtn">주소로 찾기</button></div>
       <p class="geo-msg panel-hint" id="geoMsg" hidden></p>
       <div id="pickMap" class="pick-map" data-center-lat="${b.lat ?? assoc.map_lat}" data-center-lng="${b.lng ?? assoc.map_lng}" data-zoom="16"></div><p class="panel-hint">주소로 찾거나, 지도를 직접 클릭하면 좌표가 입력됩니다.</p>` : `<p class="panel-hint">위도·경도를 입력하면 지도에 표시됩니다.</p>`}
-      <div class="form-two"><label>위도<input type="text" inputmode="decimal" name="lat" id="latInput" value="${b.lat != null ? esc(String(b.lat)) : ""}" /></label><label>경도<input type="text" inputmode="decimal" name="lng" id="lngInput" value="${b.lng != null ? esc(String(b.lng)) : ""}" /></label></div>
+      <div class="form-two form-two-tight"><label>위도<input type="text" inputmode="decimal" name="lat" id="latInput" value="${b.lat != null ? esc(String(b.lat)) : ""}" /></label><label>경도<input type="text" inputmode="decimal" name="lng" id="lngInput" value="${b.lng != null ? esc(String(b.lng)) : ""}" /></label></div>
       <button class="btn btn-primary">정보 저장</button></form></section>`;
   const mediaPanel = `  <section class="panel" id="d-media"><h2 class="panel-title">사진 업로드</h2>
     <form method="post" action="${base}/dashboard/media" enctype="multipart/form-data" class="upload-form">
@@ -2937,7 +3091,7 @@ export async function admin(ctx) {
 
     <div class="sgroup" id="s-people" data-tab="people">
     <section class="panel" id="p-members"><div class="panel-head"><h2 class="panel-title">${isEsign ? "담당자 관리" : `${isFranchise ? "가맹점" : "회원·점포"}`} <span class="badge badge-muted">${isEsign ? staffList.length + "명" : bizCounts.all + "곳"}</span></h2>
-      <span class="pill-row">${isEsign ? "" : `<a class="btn btn-xs btn-primary" href="${base}/admin/members/import">명부로 한 번에 등록</a><a class="btn btn-xs btn-outline" href="${base}/admin/members/map">지도에 한꺼번에 연결</a>`}${members.length && !isEsign ? `<a class="btn btn-xs btn-ghost" href="${base}/admin/members.csv">명단 CSV</a>` : ""}<a class="btn btn-xs btn-ghost" href="${base}/admin/export.json">전체 백업(JSON)</a></span></div>
+      <span class="pill-row">${isEsign ? "" : `<a class="btn btn-xs btn-primary" href="${base}/admin/members/import">명부로 한 번에 등록</a><a class="btn btn-xs btn-outline" href="${base}/admin/members/map">지도에 한꺼번에 연결</a><a class="btn btn-xs btn-outline" href="${base}/admin/members/photos">지도 사진 한꺼번에</a><a class="btn btn-xs btn-outline" href="${base}/admin/members/links">사진·영업시간 요청 링크</a>`}${members.length && !isEsign ? `<a class="btn btn-xs btn-ghost" href="${base}/admin/members.csv">명단 CSV</a>` : ""}<a class="btn btn-xs btn-ghost" href="${base}/admin/export.json">전체 백업(JSON)</a></span></div>
       ${isEsign ? `<p class="panel-hint">계약서를 만들고 보내는 사람들입니다. <b>담당자</b>는 계약 업무만 하고 설정·API 키·과금은 볼 수 없습니다.
         권한을 회수해도 계정과 서명 이력은 남습니다 — 지우면 증거가 사라지기 때문입니다.</p>
       <div class="table-scroll"><table class="admin-table"><thead><tr><th>이름</th><th>권한</th>${teams.length ? "<th>부서</th>" : ""}<th>관리</th></tr></thead><tbody>${staffRows}</tbody></table></div>
@@ -3972,7 +4126,7 @@ export async function adminBusinessEdit(ctx) {
             <input type="text" inputmode="numeric" name="urdeal_seller_id" maxlength="12"
               value="${b.urdeal_seller_id ? esc(String(b.urdeal_seller_id)) : ""}" placeholder="예: 128" /></label>
           <div class="form-divider">지도 위치</div>
-          <div class="form-two">
+          <div class="form-two form-two-tight">
             <label>위도 <em class="tag opt">선택</em><input type="text" inputmode="decimal" name="lat" data-place="lat" value="${b.lat != null ? esc(String(b.lat)) : ""}" /></label>
             <label>경도 <em class="tag opt">선택</em><input type="text" inputmode="decimal" name="lng" data-place="lng" value="${b.lng != null ? esc(String(b.lng)) : ""}" /></label>
           </div>
