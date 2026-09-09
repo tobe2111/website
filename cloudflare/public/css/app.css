@@ -1014,6 +1014,12 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .map-iw-name{font-weight:700;font-size:15px;color:#1c2320;margin-bottom:4px}
 .map-iw-cat{display:inline-block;font-size:12px;font-weight:700;color:var(--brand,#0b6e4f);margin-bottom:6px}
 .map-iw-addr{font-size:12px;color:#5c6660;margin-bottom:8px}
+/* 같은 자리 가게 묶음 — 핀 대신 목록으로 연다 */
+.map-iw-list{max-height:240px;overflow-y:auto}
+.map-iw-row{display:flex;justify-content:space-between;align-items:center;gap:10px;min-height:44px;padding:4px 0;border-top:1px solid #eef0ee;color:#1c2320;text-decoration:none}
+.map-iw-row:first-of-type{border-top:0}
+.map-iw-row b{font-size:14px}
+.map-iw-row small{font-size:12px;color:#5c6660;white-space:nowrap}
 .map-iw-tel{display:block;font-size:12px;font-weight:600;color:#3c4540;text-decoration:none;margin-bottom:8px}
 .map-iw-link{font-size:13px;font-weight:700;color:var(--brand,#0b6e4f);text-decoration:none}
 .totp-key{font-size:1.05rem;letter-spacing:.05em;background:var(--bg-alt);padding:4px 10px;border-radius:6px;user-select:all}

@@ -179,6 +179,20 @@ export function pickPlace(shop, places, { center = null } = {}) {
   return { place: list[0], confidence: "low", why: "확실한 것이 없습니다" };
 }
 
+// 동(洞)이 빠진 주소를 고친다 — "서울 서초구 2233" → "서울 서초구 방배동 2233".
+//
+// 명부를 넣을 때 주소 앞말을 "서울 서초구" 까지만 적으면 번지만 남은 주소가 이렇게 된다.
+// 이 모양은 지도가 못 읽는다: 좌표도 안 나오고(핀이 안 찍힌다) 번지 비교도 안 된다(가게를
+// 못 특정한다). 실제 운영 화면이 그래서 125곳 중 85곳에서 멈춰 있었다. 우리 골목의 동은
+// 골목 한가운데 좌표로 지도에 물어 안다(api.js dongOfCenter). 이미 동·로·길이 있으면 그대로.
+export function repairAddress(address, dong) {
+  const s = String(address || "").trim();
+  if (!s || !dong) return s;
+  const m = /^((?:\S+\s+)*?\S+(?:구|군|시))\s+(\d+(?:-\d+)?)(\s.*)?$/.exec(s);
+  if (!m) return s;
+  return `${m[1]} ${dong} ${m[2]}${m[3] || ""}`;
+}
+
 // 지도에 물어볼 말. 상호만 던지면 전국에서 같은 이름이 쏟아지므로 동네를 함께 붙입니다.
 // 번지까지 붙이면 오히려 못 찾습니다 — 지도는 '이름 + 지역' 으로 찾는 창구입니다.
 export function placeQuery(shop) {

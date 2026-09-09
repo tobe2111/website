@@ -92,7 +92,20 @@
         var la = 0, ln = 0; g.forEach(function (s) { la += s.lat; ln += s.lng; });
         var pos = new naver.maps.LatLng(la / g.length, ln / g.length);
         var cm = new naver.maps.Marker({ position: pos, map: map, icon: { content: '<div class="map-cluster">' + g.length + "</div>", anchor: new naver.maps.Point(22, 22) } });
-        naver.maps.Event.addListener(cm, "click", function () { map.morph(pos, Math.min((map.getZoom() || 14) + 2, 19)); });
+        // 주소만으로 핀을 찍은 가게들은 같은 번지(한 건물)에 여럿이 겹친다. 그런 묶음은 아무리
+        // 확대해도 안 풀리므로 — 끝까지 확대했거나 좌표가 다 같으면 — 그 자리에서 가게 목록을 연다.
+        // 예전에는 최대 줌에서 묶음을 눌러도 아무 일도 안 일어났다("핀을 눌러도 반응이 없다").
+        var sameSpot = g.every(function (s) { return Math.abs(s.lat - g[0].lat) < 1e-5 && Math.abs(s.lng - g[0].lng) < 1e-5; });
+        naver.maps.Event.addListener(cm, "click", function () {
+          var z = map.getZoom() || 14;
+          if (!sameSpot && z < 19) { map.morph(pos, Math.min(z + 2, 19)); return; }
+          deactivate();
+          info.setContent('<div class="map-iw map-iw-list"><div class="map-iw-cat">이 자리의 가게 ' + g.length + '곳</div>' +
+            g.map(function (s) {
+              return '<a class="map-iw-row" href="' + base + "/business/" + encodeURIComponent(s.slug) + '"><b>' + esc(s.name) + "</b><small>" + esc(s.category || "") + "</small></a>";
+            }).join("") + "</div>");
+          info.open(map, cm);
+        });
         cur.push(cm);
       });
     }

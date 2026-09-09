@@ -709,3 +709,40 @@ test("골목 안이라도 구가 다르면 비슷한 이름에 붙이지 않는�
      { name: "우리집한우정육식당", address: "서울 동작구 동작대로29가길 9", phone: "", url: "v", lat: 37.494, lng: 126.982 }], { center });
   assert.notEqual(r.confidence, "high");
 });
+
+
+// ── 동이 빠진 주소 ("서울 서초구 2233") — 명부 앞말을 짧게 적으면 이렇게 들어온다
+import { repairAddress } from "../src/placeMatch.js";
+test("동이 빠진 주소에 골목의 동을 넣어 준다", () => {
+  assert.equal(repairAddress("서울 서초구 2233", "방배동"), "서울 서초구 방배동 2233");
+  assert.equal(repairAddress("서울 서초구 760-2 3층", "방배동"), "서울 서초구 방배동 760-2 3층");
+  assert.equal(repairAddress("서울 서초구 방배동 2233", "방배동"), "서울 서초구 방배동 2233", "이미 동이 있으면 그대로");
+  assert.equal(repairAddress("서울 서초구 방배중앙로 174", "방배동"), "서울 서초구 방배중앙로 174", "도로명은 그대로");
+  assert.equal(repairAddress("서울 서초구 2233", ""), "서울 서초구 2233", "동을 모르면 손대지 않는다");
+  assert.equal(repairAddress("", "방배동"), "");
+});
+
+test("동이 빠진 주소로 넣은 가게도 골목의 동을 알아내 지도에 붙이고, 고친 주소를 저장한다", async () => {
+  const env = makeEnv({ KAKAO_REST_KEY: "k" }); const a = await seed(env);
+  const b = await biz(env, a, { name: "박사부동산", address: "서울 서초구 2233" });
+  const real = globalThis.fetch;
+  globalThis.fetch = async (req, init) => {
+    const u = String(req && req.url ? req.url : req);
+    if (u.includes("coord2regioncode")) return new Response(JSON.stringify({ documents: [
+      { region_type: "H", region_3depth_name: "방배4동" }, { region_type: "B", region_3depth_name: "방배동" }] }), { headers: { "content-type": "application/json" } });
+    if (u.includes("search/address")) return new Response(JSON.stringify({ documents: [{ x: "126.9878", y: "37.4893" }] }), { headers: { "content-type": "application/json" } });
+    if (u.includes("dapi.kakao.com")) return new Response(JSON.stringify({ documents: [
+      { place_name: "박사공인중개사사무소", road_address_name: "서울 서초구 방배중앙로21길 55", address_name: "서울 서초구 방배동 2233", phone: "", category_name: "부동산", x: "126.99", y: "37.492", place_url: "http://place.map.kakao.com/777" }] }), { headers: { "content-type": "application/json" } });
+    if (u.includes("openapi.naver.com")) return new Response(JSON.stringify({ items: [] }), { headers: { "content-type": "application/json" } });
+    return real(req, init);
+  };
+  try {
+    const j = await login(env);
+    const html = await (await post(env, j, MAP, { after: "0" }, MAP)).text();
+    assert.ok(html.includes("박사공인중개사사무소"), "동을 넣어 찾은 가게가 붙어야 한다");
+    assert.match(html, /주소에 방배동 을 넣어 찾았습니다/);
+    const after = await D.getBusinessById(env.DB, b.id);
+    assert.equal(after.map_url, "http://place.map.kakao.com/777");
+    assert.equal(after.address, "서울 서초구 방배동 2233", "고친 주소가 저장된다");
+  } finally { globalThis.fetch = real; }
+});
