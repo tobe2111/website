@@ -3105,7 +3105,9 @@ table.dtable tbody tr:last-child td:last-child{border-bottom-right-radius:11px}
 table.dtable tbody td{padding:11px 14px;border-bottom:1px solid var(--line-soft);vertical-align:middle}
 table.dtable tbody tr:last-child td{border-bottom:0}
 table.dtable tbody tr:hover td{background:var(--bg)}
-table.dtable .num{text-align:right;font-variant-numeric:tabular-nums}
+table.dtable .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;width:1%}
+/* 순위·열람처럼 짧은 숫자 칸이 폭을 나눠 갖지 않게 — 순위 칸이 300px 로 늘어나 가게 이름이 가운데로 밀렸다 */
+table.dtable .rank{width:56px;text-align:center;padding-inline:8px}
 table.dtable .act{text-align:right;white-space:nowrap;width:1%}
 table.dtable .act form{display:inline-flex}
 table.dtable .act > * + *{margin-left:6px}

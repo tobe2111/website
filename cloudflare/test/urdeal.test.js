@@ -42,7 +42,7 @@ function stubUrdeal(bySeller) {
   const calls = [];
   globalThis.fetch = async (url, init) => {
     const u = String(url);
-    if (!u.includes("ur-team.com")) return real(url, init);
+    if (!u.includes("ur-team.com") && !u.includes("urdeal.kr")) return real(url, init);
     calls.push(u);
     const id = Number(new URL(u).searchParams.get("seller_id"));
     const data = bySeller[id];
@@ -178,9 +178,9 @@ test("점주 화면에서 저장해도 가게 번호가 지워지지 않는다",
 
 test("유어딜 주소는 한 곳에서만 정한다", () => {
   const env = makeEnv();
-  assert.equal(urdealBase(env), "https://live.ur-team.com");
+  assert.equal(urdealBase(env), "https://urdeal.kr");
   assert.equal(urdealBase({ URDEAL_BASE: "https://stage.ur-team.com/" }), "https://stage.ur-team.com");
-  assert.match(urdealProductUrl(env, 42), /^https:\/\/live\.ur-team\.com\/products\/42$/);
+  assert.match(urdealProductUrl(env, 42), /^https:\/\/urdeal\.kr\/products\/42$/);
 });
 
 // ── 거르개가 조용히 무시되는 문제 ────────────────────────────────────────────
@@ -240,4 +240,23 @@ test("상품에 적힌 가게 번호를 우리가 물어본 번호로 덮어쓰�
     const out = await fetchDeals(env, [128]);
     assert.equal(out[0].sellerId, 128);
   } finally { s.restore(); }
+});
+
+// ── 사장님이 자기 유어딜 가게 번호를 적는다 (예전에는 관리자만)
+test("사장님이 내 가게 관리에서 유어딜 가게 번호를 직접 넣고, 주소를 통째로 붙여도 숫자만 남는다", async () => {
+  const env = makeEnv();
+  const { b1 } = await seed(env);
+  const mj = jar(); await post(env, mj, "/login", { login: "m1@x.kr", password: "pass1234" });
+  const dash = await (await get(env, mj, "/t/seocho/dashboard")).text();
+  assert.match(dash, /name="urdeal_seller_id"/, "번호 칸이 대시보드에 있어야");
+  const r = await post(env, mj, "/t/seocho/dashboard/urdeal", { urdeal_seller_id: "https://urdeal.kr/seller/128" }, "/t/seocho/dashboard");
+  assert.equal(r.status, 303);
+  assert.match(decodeURIComponent(r.headers.get("location")), /128/);
+  assert.equal((await D.getBusinessById(env.DB, b1.id)).urdeal_seller_id, 128);
+  const r2 = await post(env, mj, "/t/seocho/dashboard/urdeal", { urdeal_seller_id: "abc" }, "/t/seocho/dashboard");
+  assert.match(decodeURIComponent(r2.headers.get("location")), /숫자입니다/);
+  assert.equal((await D.getBusinessById(env.DB, b1.id)).urdeal_seller_id, 128, "틀린 값은 있던 번호를 지우지 않는다");
+  const r3 = await post(env, mj, "/t/seocho/dashboard/urdeal", { urdeal_seller_id: "" }, "/t/seocho/dashboard");
+  assert.match(decodeURIComponent(r3.headers.get("location")), /풀었습니다/);
+  assert.equal((await D.getBusinessById(env.DB, b1.id)).urdeal_seller_id, 0);
 });

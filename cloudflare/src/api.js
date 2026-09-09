@@ -463,6 +463,22 @@ export async function updateBusiness(ctx) {
   return back(base + "/dashboard", "업체 정보가 저장되었습니다.");
 }
 
+// 사장님이 자기 유어딜 가게 번호를 적는다.
+//
+// 유어딜 판매자 가입은 유어딜에서 하고, 그 뒤 우리 홈에 이용권이 걸리려면 가게 번호 하나가
+// 여기 있어야 한다. 예전에는 관리자만 적을 수 있어 사장님이 회장님께 번호를 카톡으로 보내야 했다.
+// 번호는 유어딜 가게 화면 주소 끝의 숫자다(urdeal.kr/seller/128 → 128). 주소를 통째로 붙여도 받는다.
+export async function setMyUrdealSeller(ctx) {
+  const { db, form, user, base, assoc } = ctx;
+  const b = await D.getBusinessByOwner(db, user.id);
+  if (!b || b.association_id !== assoc.id) return back(base + "/dashboard", "업체를 찾을 수 없습니다.", true);
+  const raw = String(form.get("urdeal_seller_id") || "").trim();
+  const m = /(\d{1,12})\s*$/.exec(raw.replace(/[?#].*$/, ""));
+  if (raw && !m) return back(base + "/dashboard#d-urdeal", "유어딜 가게 번호는 숫자입니다. 유어딜 가게 화면 주소 끝의 숫자를 넣어 주세요. (예: 128)", true);
+  await D.setUrdealSeller(db, b.id, assoc.id, m ? Number(m[1]) : 0);
+  return back(base + "/dashboard#d-urdeal", m ? `유어딜 가게 번호 ${m[1]} 을 연결했습니다. 유어딜에 올린 이용권이 상인회 홈에 걸립니다.` : "유어딜 연결을 풀었습니다.");
+}
+
 // 관리자가 점포 정보를 대신 채운다.
 //
 // 예전에는 주소·전화·영업시간을 점주 본인만 고칠 수 있었다. 그런데 상인회장이 명단을
