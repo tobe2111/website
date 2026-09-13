@@ -56,3 +56,56 @@ test("기존 DB(구버전) → custom_domain 컬럼 자동 마이그레이션", 
   const cols = (await db.prepare("PRAGMA table_info(associations)").all()).results.map((c) => c.name);
   assert.ok(cols.includes("custom_domain"), "컬럼 자동 추가");
 });
+
+test("한글 도메인: 한글로 적어도 퓨니코드로 저장 → 브라우저가 보내는 호스트로 홈이 뜨고, www 는 알맹이로 301", async () => {
+  const env = makeEnv();
+  const a = await D.createAssociation(env.DB, { slug: "bangbae", name: "방배카페골목상인회", tagline: "방배" });
+  const su = await hashPassword("super1234");
+  await D.createUser(env.DB, { email: "super@p.kr", passwordHash: su.hash, salt: su.salt, name: "슈퍼", role: "SUPERADMIN", associationId: null });
+  const j = jar();
+  await post(env, j, "http://localhost/login", { email: "super@p.kr", password: "super1234" }, "http://localhost/login");
+
+  let r = await post(env, j, `http://localhost/super/association/${a.id}/domain`, { domain: " https://WWW.방배카페골목.KR/ " }, "http://localhost/super");
+  assert.equal(r.status, 303);
+  assert.doesNotMatch(r.headers.get("location"), /err=1/);
+  const saved = (await D.getAssociationById(env.DB, a.id)).custom_domain;
+  assert.equal(saved, "xn--bb0bw4x46a2a173sv7g.kr", "퓨니코드·소문자·www 제거로 저장");
+
+  // 브라우저는 한글 주소를 퓨니코드 호스트로 보낸다 → 상인회 홈
+  r = await worker.fetch(new Request("http://xn--bb0bw4x46a2a173sv7g.kr/"), env);
+  assert.equal(r.status, 200);
+  const body = await r.text();
+  assert.match(body, /방배카페골목상인회/);
+  assert.doesNotMatch(body, /xn--bb0bw4x46a2a173sv7g\.kr\/t\//, "개별 도메인에서는 /t/슬러그 경로가 아니라 루트로 링크");
+
+  // www.한글도메인 → 알맹이 도메인으로 영구 이동 (경로·쿼리 보존)
+  r = await worker.fetch(new Request("http://www.xn--bb0bw4x46a2a173sv7g.kr/notice?page=2"), env);
+  assert.equal(r.status, 301);
+  assert.equal(r.headers.get("location"), "https://xn--bb0bw4x46a2a173sv7g.kr/notice?page=2");
+
+  // 슈퍼 콘솔에는 한글로 보이고, 콘솔 등록용 영문 변환형도 함께 보인다
+  r = await get(env, j, `http://localhost/super/org/${a.id}`);
+  const page = await r.text();
+  assert.match(page, /value="방배카페골목\.kr"/);
+  assert.match(page, /xn--bb0bw4x46a2a173sv7g\.kr/);
+
+  // 엉터리 입력은 거절, 기존 값은 유지
+  r = await post(env, j, `http://localhost/super/association/${a.id}/domain`, { domain: "방배 카페골목" }, "http://localhost/super");
+  assert.match(r.headers.get("location"), /err=1/);
+  assert.equal((await D.getAssociationById(env.DB, a.id)).custom_domain, saved);
+
+  // 연결되지 않은 www 호스트는 그대로 플랫폼 처리(리다이렉트 아님)
+  r = await worker.fetch(new Request("http://www.nobody.kr/"), env);
+  assert.notEqual(r.status, 301);
+});
+
+test("normalizeDomain / prettyDomain — 퓨니코드 왕복", async () => {
+  const { normalizeDomain, prettyDomain } = await import("../src/util.js");
+  assert.equal(normalizeDomain("방배카페골목.kr"), "xn--bb0bw4x46a2a173sv7g.kr");
+  assert.equal(normalizeDomain("Seocho-Market.KR."), "seocho-market.kr");
+  assert.equal(normalizeDomain("서초.상인회.한국"), "xn--2i4b21t.xn--hg4bw6j45n.xn--3e0b707e");
+  assert.equal(prettyDomain("xn--2i4b21t.xn--hg4bw6j45n.xn--3e0b707e"), "서초.상인회.한국");
+  assert.equal(prettyDomain("xn--mnchen-3ya.de"), "münchen.de");
+  assert.equal(prettyDomain("seocho-market.kr"), "seocho-market.kr");
+  for (const bad of ["", "x", "-x.kr", "bad_domain", "a..kr", ";;"]) assert.equal(normalizeDomain(bad), "", bad);
+});

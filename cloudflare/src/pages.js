@@ -1,6 +1,6 @@
 // 공개/인증 페이지 핸들러 (async). ctx = { env, db, assoc, base, user, url, query, csrf, params }
 import * as D from "./db.js";
-import { esc, cap, clip, openBadge, openNow, hoursLine, dongOf, fmtBytes, kstStamp, kstDate, prettyPath, safeNext, parseCookies, decomposeHours } from "./util.js";
+import { esc, cap, clip, openBadge, openNow, hoursLine, dongOf, fmtBytes, kstStamp, kstDate, prettyPath, prettyDomain, safeNext, parseCookies, decomposeHours } from "./util.js";
 import { parseMemberRoster, markExisting, guessPrefix, describeColumns, IMPORT_MAX, mapCategory } from "./roster.js";
 import { STORED_KEYS, storedKeyHint } from "./keys.js";
 import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG, ORIGIN, assetUrl, brandLogo } from "./render.js";
@@ -5269,10 +5269,11 @@ export async function superOrg(ctx) {
         : `<p class="panel-hint">주소를 바꿔도 옛 주소로 들어온 사람은 새 주소로 자동 이동합니다 — 이미 나간 링크가 죽지 않습니다.</p>`}
       <div class="form-divider">개별 도메인</div>
       <form method="post" action="/super/association/${a.id}/domain" class="stack-form compact">${ret}
-        <label class="mini-label">이 조직만 쓰는 도메인 <small>(Cloudflare 에 Custom Domain 먼저 연결)</small>
-          <input type="text" name="domain" value="${esc(a.custom_domain || "")}" placeholder="예: seocho-market.kr" /></label>
+        <label class="mini-label">이 조직만 쓰는 도메인 <small>(Cloudflare 에 Custom Domain 먼저 연결 · 한글 도메인 가능)</small>
+          <input type="text" name="domain" value="${esc(prettyDomain(a.custom_domain || ""))}" placeholder="예: seocho-market.kr, 방배카페골목.kr" /></label>
         <button class="btn btn-ghost btn-sm">저장</button></form>
-      ${a.custom_domain ? `<p class="panel-hint">연결됨 · <a href="https://${esc(a.custom_domain)}" target="_blank">${esc(a.custom_domain)}</a></p>` : ""}
+      ${a.custom_domain ? `<p class="panel-hint">연결됨 · <a href="https://${esc(a.custom_domain)}" target="_blank">${esc(prettyDomain(a.custom_domain))}</a>${
+        prettyDomain(a.custom_domain) !== a.custom_domain ? ` · 영문 변환형 <code>${esc(a.custom_domain)}</code> (Cloudflare·네이버 콘솔에는 이걸로 등록)` : ""} · www 붙은 주소도 여기로 옵니다</p>` : ""}
     </section>
 
     <section class="panel"><h2 class="panel-title">유형·요금제</h2>
@@ -5953,10 +5954,11 @@ export async function superConsole(ctx) {
       </ol>
       <h3>개별 도메인 연결 (조직 1곳당)</h3>
       <ol>
-        <li>도메인을 이 Cloudflare 계정에 추가 (Domains → Add)</li>
-        <li>Workers &amp; Pages → 이 워커 → Settings → <b>Domains &amp; Routes → Add → Custom Domain</b></li>
-        <li>아래 조직 목록의 <b>개별 도메인</b> 칸에 같은 도메인 입력·저장</li>
+        <li>도메인을 이 Cloudflare 계정에 추가 (Domains → Add) → 산 곳(가비아 등)에서 네임서버를 Cloudflare 가 알려 주는 두 개로 바꿈</li>
+        <li>Workers &amp; Pages → 이 워커 → Settings → <b>Domains &amp; Routes → Add → Custom Domain</b> — 알맹이 도메인과 <code>www.</code> 붙은 것 둘 다</li>
+        <li>아래 조직 목록의 <b>개별 도메인</b> 칸에 같은 도메인 입력·저장 (www 없이)</li>
         <li>네이버 지도 사용 시 → 위의 Web 서비스 URL 에도 추가</li>
+        <li><b>한글 도메인</b>(예: 방배카페골목.kr)은 Cloudflare·네이버 콘솔에 <b>영문 변환형</b>(<code>xn--…</code>)으로 넣습니다 — 저장하면 아래 칸에 변환형이 함께 보입니다</li>
       </ol>
       <h3>사진 직접 서빙 (설정 완료)</h3>
       <p>R2 버킷 공개 도메인(r2.dev) → 워커 변수 <code>MEDIA_PUBLIC_BASE</code>. 트래픽 커지면 커스텀 도메인으로 값만 교체.</p>
