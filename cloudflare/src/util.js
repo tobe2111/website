@@ -75,6 +75,69 @@ export function prettyPath(p) {
   try { return decodeURIComponent(String(p ?? "")); } catch { return String(p ?? ""); }
 }
 
+// ---------- 도메인 (한글 도메인 포함) ----------
+// 브라우저는 '방배카페골목.kr' 을 서버에 'xn--bb0bw4x46a2a173sv7g.kr'(퓨니코드) 로 보낸다.
+// 그래서 DB 에는 퓨니코드(소문자 ASCII)를 저장하고, 화면에는 한글로 되돌려 보여 준다.
+// 저장 형태를 하나로 맞추지 않으면 슈퍼가 한글로 적은 도메인과 실제 요청 호스트가 영영 안 만난다.
+
+// 입력(한글·대문자·프로토콜·경로·www. 섞여 있어도) → 저장용 호스트. 형식이 아니면 "".
+export function normalizeDomain(input) {
+  let s = String(input ?? "").trim().toLowerCase().replace(/^https?:\/\//, "").replace(/[/?#].*$/, "").replace(/\.$/, "");
+  s = s.replace(/^www\./, "");   // www 는 알맹이 도메인으로 넘겨 준다(요청 쪽에서 301)
+  if (!s) return "";
+  let host;
+  try { host = new URL("https://" + s).hostname; } catch { return ""; }   // URL 이 IDNA 변환까지 해 준다
+  if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(host)) return "";
+  return host;
+}
+
+// 저장된 호스트(퓨니코드) → 사람이 읽는 도메인. 되돌리지 못하면 그대로.
+export function prettyDomain(host) {
+  return String(host ?? "").split(".").map((l) => {
+    if (!l.startsWith("xn--")) return l;
+    try { return punyDecode(l.slice(4)); } catch { return l; }
+  }).join(".");
+}
+
+// RFC 3492 퓨니코드 복호화 (라벨 하나). Workers 에는 url.domainToUnicode 가 없어 직접 둔다.
+function punyDecode(input) {
+  const base = 36, tMin = 1, tMax = 26, skew = 38, damp = 700;
+  const out = [];
+  let n = 128, i = 0, bias = 72;
+  const basic = Math.max(0, input.lastIndexOf("-"));
+  for (let j = 0; j < basic; j++) {
+    const c = input.charCodeAt(j);
+    if (c >= 0x80) throw new Error("bad");
+    out.push(c);
+  }
+  const adapt = (delta, num, first) => {
+    delta = first ? Math.floor(delta / damp) : delta >> 1;
+    delta += Math.floor(delta / num);
+    let k = 0;
+    while (delta > ((base - tMin) * tMax) >> 1) { delta = Math.floor(delta / (base - tMin)); k += base; }
+    return k + Math.floor(((base - tMin + 1) * delta) / (delta + skew));
+  };
+  for (let idx = basic > 0 ? basic + 1 : 0; idx < input.length;) {
+    const oldi = i;
+    let w = 1;
+    for (let k = base; ; k += base) {
+      if (idx >= input.length) throw new Error("bad");
+      const c = input.charCodeAt(idx++);
+      const d = c - 48 < 10 ? c - 22 : c - 65 < 26 ? c - 65 : c - 97 < 26 ? c - 97 : base;
+      if (d >= base) throw new Error("bad");
+      i += d * w;
+      const t = k <= bias ? tMin : k >= bias + tMax ? tMax : k - bias;
+      if (d < t) break;
+      w *= base - t;
+    }
+    bias = adapt(i - oldi, out.length + 1, oldi === 0);
+    n += Math.floor(i / (out.length + 1));
+    i %= out.length + 1;
+    out.splice(i++, 0, n);
+  }
+  return String.fromCodePoint(...out);
+}
+
 // 저장된 시각은 모두 UTC 입니다(D1 의 datetime('now') 도, 앱이 남기는 ISO 도).
 // 그대로 찍으면 한국 사용자에게 9시간 어긋난 시각이 보이므로 화면에는 KST 로 환산해 보여 줍니다.
 // month=true 면 "08-04 14:30", 아니면 "2026-08-04 14:30".

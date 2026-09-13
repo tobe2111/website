@@ -528,6 +528,13 @@ async function handle(request, env) {
   if (!t) {
     assocPre = await D.getAssociationByDomain(db, url.hostname);
     if (assocPre) t = { slug: assocPre.slug, subpath: pathname || "/", base: "" };
+    // www.도메인 으로 들어오면 알맹이 도메인으로 영구 이동 — 명함에 www 를 붙여 적어도 죽지 않는다.
+    // (개별 도메인은 조직당 하나만 저장하므로 www 를 따로 등록할 자리가 없다.)
+    if (!assocPre && url.hostname.startsWith("www.")) {
+      const bare = await D.getAssociationByDomain(db, url.hostname.slice(4));
+      if (bare && bare.active)
+        return finalize(redirect(`https://${bare.custom_domain}${pathname}${url.search}`, 301), setCookies, env, timing);
+    }
   }
   if (t) {
     const assoc = assocPre || (await D.getAssociationBySlug(db, t.slug));

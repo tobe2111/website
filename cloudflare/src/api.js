@@ -7,7 +7,7 @@ import { back, redirect } from "./http.js";
 import * as storage from "./storage.js";
 import { countable, countHomeGoal } from "./traffic.js";
 import { parseEmbed } from "./embed.js";
-import { cap, sniffImage, EMAIL_RE, MAX_IMAGE_BYTES, slugify, esc, safeNext, composeHours, normalizeHours } from "./util.js";
+import { cap, sniffImage, EMAIL_RE, MAX_IMAGE_BYTES, slugify, esc, safeNext, composeHours, normalizeHours, normalizeDomain, prettyDomain } from "./util.js";
 import { contentHash, sealRecord, newVerifyCode, SEAL_VER, fieldsHashOf, keyStorage, verifyChain } from "./esign.js";
 import { isFieldKind, round4, FIELD_KINDS, pageCount, remapFields } from "./paper.js";
 import { parseTable, toCsv, decodeUtf8, headerRole } from "./csv.js";
@@ -4346,19 +4346,22 @@ export async function superSetDomain(ctx) {
   const a = await D.getAssociationById(db, Number(params.id));
   if (!a) return back(superBackTo(ctx), "상인회를 찾을 수 없습니다.", true);
   if (!planOf(a).customDomain) return back(superBackTo(ctx), "이 상인회 플랜은 개별 도메인을 지원하지 않습니다.", true);
-  // 입력 정리: 프로토콜·경로 제거, 소문자화
-  let domain = (form.get("domain") || "").toLowerCase().trim()
-    .replace(/^https?:\/\//, "").replace(/\/.*$/, "").replace(/\.$/, "");
-  if (domain && !/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(domain))
-    return back(superBackTo(ctx), "도메인 형식을 확인해 주세요. (예: seocho-market.kr)", true);
+  // 입력 정리: 프로토콜·경로·www 제거, 한글 도메인은 퓨니코드(xn--)로 — 브라우저가 보내는 호스트와 같은 형태로 저장
+  const raw = (form.get("domain") || "").trim();
+  const domain = raw ? normalizeDomain(raw) : "";
+  if (raw && !domain)
+    return back(superBackTo(ctx), "도메인 형식을 확인해 주세요. (예: seocho-market.kr, 방배카페골목.kr)", true);
   if (domain) {
     const dup = await D.getAssociationByDomain(db, domain);
     if (dup && dup.id !== a.id) return back(superBackTo(ctx), "이미 다른 상인회에 연결된 도메인입니다.", true);
   }
   await D.setAssociationDomain(db, a.id, domain);
   await audit(ctx, "도메인연결", `${a.name} → ${domain || "(해제)"}`, null);
+  const shown = prettyDomain(domain);
   return back(superBackTo(ctx), domain
-    ? `'${a.name}' 에 ${domain} 을 연결했습니다. Cloudflare 워커의 Custom Domain 에도 같은 도메인을 추가하세요.`
+    ? `'${a.name}' 에 ${shown} 을 연결했습니다. Cloudflare 워커의 Custom Domain 에도 같은 도메인을 추가하세요.`
+      + (shown !== domain ? ` 한글 도메인은 Cloudflare·네이버 콘솔에 ${domain} (영문 변환형)으로 넣어야 합니다.` : "")
+      + " www. 을 붙여 들어와도 이 도메인으로 자동 이동합니다."
     : `'${a.name}' 도메인 연결을 해제했습니다.`);
 }
 
