@@ -337,8 +337,14 @@ function securityHeaders(env, opts = {}) {
   const naver = " https://oapi.map.naver.com https://*.pstatic.net";
   const naverImg = " https://*.pstatic.net https://*.map.naver.com";
   const ts = env.TURNSTILE_SITE_KEY ? " https://challenges.cloudflare.com" : "";
-  const cfa = env.CF_ANALYTICS_TOKEN ? " https://static.cloudflareinsights.com" : "";
-  const cfaConn = env.CF_ANALYTICS_TOKEN ? " https://cloudflareinsights.com" : "";
+  // Cloudflare 웹 분석 — 토큰을 우리가 넣지 않아도, 도메인을 Cloudflare 에 붙이면
+  // 엣지가 beacon.min.js 를 응답에 **자동으로 끼워 넣는다**(대시보드의 자동 설정).
+  // 그래서 토큰이 있을 때만 열어 두면, 개별 도메인을 연결한 그날부터 콘솔이
+  // "beacon.min.js 가 CSP 에 막혔다" 로 뒤덮인다. 우리가 넣지 않은 스크립트가
+  // 우리 CSP 위반으로 잡히는 셈이라, 진짜 오류가 그 사이에 묻힌다.
+  // Cloudflare 자체 도메인 하나만 여는 것이므로 열어 둔다.
+  const cfa = " https://static.cloudflareinsights.com";
+  const cfaConn = " https://cloudflareinsights.com";
   // 구글 애널리틱스 — 측정 ID 를 넣어 둔 조직의 화면에서만 문을 엽니다.
   // 정책을 전 조직에 한 번에 열어 두면, 애널리틱스를 안 쓰는 상인회까지 구글 도메인에서
   // 스크립트를 받을 수 있는 상태가 됩니다. 쓰는 곳에서만, 쓰는 만큼만 엽니다.

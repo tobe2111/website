@@ -218,7 +218,7 @@ test("파일 고르기 단추가 우리말이다", async () => {
     .map((m) => m[0]).filter((h) => !/class="fi-btn"/.test(h));
   assert.deepEqual(bare, [], "우리말 단추를 안 씌운 파일 칸이 남아 있습니다");
   const css = readFileSync(new URL("../public/css/app.css", import.meta.url), "utf8");
-  assert.match(css, /\.file-inline input\{position:absolute/, "기본 단추를 감춰야 우리말이 보인다");
+  assert.match(css, /\.file-inline input[^{]*\{[^}]*position:absolute/, "기본 단추를 감춰야 우리말이 보인다");
 });
 
 // 사장님이 가장 많이 쓰는 화면인데 4,648px 한 장이었다 — 관리 화면은 탭으로 고쳤으면서.
