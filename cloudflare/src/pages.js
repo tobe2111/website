@@ -1,6 +1,6 @@
 // 공개/인증 페이지 핸들러 (async). ctx = { env, db, assoc, base, user, url, query, csrf, params }
 import * as D from "./db.js";
-import { esc, cap, clip, openBadge, openNow, hoursLine, dongOf, fmtBytes, kstStamp, kstDate, prettyPath, prettyDomain, safeNext, parseCookies, decomposeHours } from "./util.js";
+import { esc, cap, clip, openBadge, openNow, hoursLine, shortAddr, fmtBytes, kstStamp, kstDate, prettyPath, prettyDomain, safeNext, parseCookies, decomposeHours } from "./util.js";
 import { parseMemberRoster, markExisting, guessPrefix, describeColumns, IMPORT_MAX, mapCategory } from "./roster.js";
 import { STORED_KEYS, storedKeyHint } from "./keys.js";
 import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG, ORIGIN, assetUrl, brandLogo } from "./render.js";
@@ -106,7 +106,7 @@ function bizLines(b) {
   // 오늘 임시휴무면 좌상단 배지가 이미 "오늘 휴무" 라고 말한다 — 바로 아래 같은 말을 또 쓰지 않는다.
   const dayOff = D.isDayOff(b);
   const h = dayOff ? { state: "", label: "" } : hoursLine(b.hours);
-  return { h, dong: dongOf(b.address), dayOff };
+  return { h, dong: shortAddr(b.address), dayOff };
 }
 // 업체 카드 (시안: 영업중 dot pill 좌상단 · 본문 = 카테고리 라벨/이름/두 줄 메타)
 function businessCard(base, b, cover) {

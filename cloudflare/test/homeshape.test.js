@@ -8,7 +8,7 @@ import worker from "../src/index.js";
 import { makeEnv } from "./shim.js";
 import * as D from "../src/db.js";
 import { hashPassword } from "../src/crypto.js";
-import { dongOf, hoursLine } from "../src/util.js";
+import { shortAddr, hoursLine } from "../src/util.js";
 import { defaultLayout, applyHomePreset, serializeLayout, parseLayout } from "../src/homeLayout.js";
 
 const B = "http://localhost";
@@ -52,11 +52,15 @@ async function seed({ layout = null } = {}) {
   return { env, a };
 }
 
-test("주소는 카드에서 잘리지 않는다 — 동네 이름만 남긴다", () => {
-  assert.equal(dongOf("서울 서초구 서초동 1305-7"), "서초동");
-  assert.equal(dongOf("서울 서초구 서초대로 78길 12"), "서초대로", "동이 없으면 길 이름 — 구 이름은 상권 안에서 모두 같아 아무것도 알려주지 않는다");
-  assert.equal(dongOf("경기 성남시 분당구"), "분당구", "시·군·구가 여럿이면 가장 좁은 쪽");
-  assert.equal(dongOf(""), "");
+test("주소는 카드에서 잘리지 않는다 — 시·구는 빼고 번지까지 남긴다", () => {
+  // 길 이름만 남기면 한 골목 상권에서는 스물몇 곳이 전부 같은 글자가 된다("방배중앙로").
+  // 번지가 있어야 어느 가게인지 알 수 있다.
+  assert.equal(shortAddr("서울 서초구 방배중앙로 174"), "방배중앙로 174");
+  assert.equal(shortAddr("서울 서초구 서초동 1305-7"), "서초동 1305-7");
+  assert.equal(shortAddr("서울 서초구 서초대로 78길 12"), "서초대로 78길 12");
+  assert.equal(shortAddr("서울특별시 서초구 방배로 42 2층"), "방배로 42", "층·호는 뺀다 — 카드 한 줄에 들어가야 한다");
+  assert.equal(shortAddr("경기 성남시 분당구"), "분당구", "시·군·구까지가 전부면 가장 좁은 쪽");
+  assert.equal(shortAddr(""), "");
 });
 
 test("카드 첫 줄은 '지금 갈 수 있나' 를 말한다", () => {
