@@ -46,6 +46,11 @@ export const GLOBAL = [
   ["GET", "/login", pages.loginForm],
   ["POST", "/login", api.login],
   ["POST", "/logout", api.logout, "USER"],
+  // 카카오 로그인 — 시작(GET)·되돌아오기(GET)·연결 해제(POST).
+  // 되돌아오는 주소는 카카오 콘솔에 도메인마다 한 줄씩 등록해 둔다: https://<도메인>/auth/kakao/callback
+  ["GET",  "/auth/kakao", api.kakaoStart],
+  ["GET",  "/auth/kakao/callback", api.kakaoCallback],
+  ["POST", "/account/kakao/unlink", api.kakaoUnlink, "USER"],
   ["GET", "/account", pages.account, "USER"],
   ["POST", "/account/password", api.changePassword, "USER"],
   ["POST", "/account/phone", api.changePhone, "USER"],

@@ -14,6 +14,9 @@ export const STORED_KEYS = [
   ["NAVER_SEARCH_ID", "네이버 검색 Client ID", /^[\w-]{4,128}$/, "developers.naver.com → 검색 API 애플리케이션"],
   ["NAVER_SEARCH_SECRET", "네이버 검색 Client Secret", /^[\w-]{4,128}$/, "위 애플리케이션의 Client Secret"],
   ["NAVER_MAP_CLIENT_SECRET", "네이버 클라우드 지도 비밀키", /^[\w-]{4,128}$/, "네이버 클라우드 Maps 의 Client Secret — 지도 화면 키(NAVER_MAP_CLIENT_ID)와 짝. 주소→좌표에 쓴다"],
+  // 카카오 로그인은 지도와 **같은 앱의 REST 키**를 쓴다(위 KAKAO_REST_KEY).
+  // 보안 강화를 켠 앱만 아래 시크릿이 필요하다 — 안 켰으면 비워 두면 된다.
+  ["KAKAO_CLIENT_SECRET", "카카오 로그인 Client Secret", /^[\w-]{4,128}$/, "developers.kakao.com → 카카오 로그인 → 보안 → Client Secret (코드를 발급하지 않았으면 비워 두세요)"],
 ];
 const settingKey = (name) => `key_${name}`;
 

@@ -95,8 +95,13 @@ CREATE TABLE IF NOT EXISTS users (
   -- 상인회 임원인가. 게시판의 '임원 전용' 글을 볼 수 있는지만 정한다 —
   -- 회원 승인·설정 변경 같은 관리 권한은 role 이 정하고 이 값과 무관하다.
   officer         INTEGER NOT NULL DEFAULT 0,
+  -- 카카오 로그인으로 이어 둔 계정 (카카오 회원번호 · 빈 값 = 연결 안 함).
+  -- 토큰은 담지 않는다 — 우리는 카카오로 무엇을 보내지 않으므로 들고 있을 이유가 없다.
+  kakao_id        TEXT NOT NULL DEFAULT '',
   created_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
+-- 한 카카오 계정이 두 사람에게 붙으면 누구로 로그인할지 정할 수 없다. 빈 값은 여럿이어도 된다.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_kakao ON users(kakao_id) WHERE kakao_id != '';
 
 -- 관리자 감사 로그
 CREATE TABLE IF NOT EXISTS audit_log (
@@ -876,6 +881,10 @@ async function migrateColumns(db) {
     const ucols = (await db.prepare("PRAGMA table_info(users)").all()).results || [];
     if (!ucols.some((c) => c.name === "officer")) {
       await db.prepare("ALTER TABLE users ADD COLUMN officer INTEGER NOT NULL DEFAULT 0").run();
+    }
+    if (!ucols.some((c) => c.name === "kakao_id")) {
+      await db.prepare("ALTER TABLE users ADD COLUMN kakao_id TEXT NOT NULL DEFAULT ''").run();
+      await db.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_kakao ON users(kakao_id) WHERE kakao_id != ''").run();
     }
   }
 

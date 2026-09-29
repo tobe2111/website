@@ -4,6 +4,9 @@ import { esc, cap, clip, openBadge, openNow, hoursLine, shortAddr, fmtBytes, kst
 import { parseMemberRoster, markExisting, guessPrefix, describeColumns, IMPORT_MAX, mapCategory } from "./roster.js";
 import { STORED_KEYS, storedKeyHint } from "./keys.js";
 import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG, ORIGIN, assetUrl, brandLogo } from "./render.js";
+import { kakaoReady } from "./kakao.js";
+// 카카오 말풍선 —— 공식 로고 파일을 재배포하지 않고 같은 모양의 도형만 그린다.
+const KAKAO_MARK = `<svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 3C6.9 3 2.8 6.2 2.8 10.2c0 2.6 1.7 4.8 4.3 6.1l-1 3.6c-.1.3.2.6.5.4l4.3-2.8c.4 0 .7.1 1.1.1 5.1 0 9.2-3.2 9.2-7.4S17.1 3 12 3z"/></svg>`;
 import { verifyInviteToken, verifyPhotoToken, SALES_STAGES, otpRequired, selfSignupOn, MAX_SLOTS, BULK_MAX, BULK_CHUNK, docOf, isPlaceholderEmail, importMemberRows, autoLinkChunk, farFromStreet, unlinkFar, photoChunk, makePhotoToken, mapKeys, MAP_CHUNK, PHOTO_CHUNK } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
 import { html, notFoundResponse, back, redirect } from "./http.js";
 import { deals as urdealDeals, urdealProductUrl, urdealSellerUrl, sellerPhotos, urdealBase, urdealSignupUrl, urdealSellerLoginUrl } from "./urdeal.js";
@@ -978,6 +981,9 @@ export async function businessDetail(ctx) {
 }
 
 export function loginForm(ctx) {
+  // 카카오 로그인은 열쇠가 등록된 때에만 보인다 — 없는데 단추만 있으면 눌러도 막다른 길이다.
+  const kakaoOn = kakaoReady(ctx.env);
+  const nextQ = safeNext(ctx.query && ctx.query.get ? ctx.query.get("next") : "") ? `?next=${encodeURIComponent(ctx.query.get("next"))}` : "";
   const { env, query, csrf, assoc, base = "" } = ctx;
   // 전자계약만 쓰는 조직·플랫폼 전역에서 "상인회 회원 로그인"은 남의 옷이다
   const esign = assoc && assoc.kind === "esign";
@@ -999,6 +1005,10 @@ export function loginForm(ctx) {
       ${turnstileWidget(env)}
       <button class="btn btn-primary btn-block">로그인</button>
     </form>
+    ${kakaoOn ? `<div class="kko-wrap">
+      <a class="btn-kakao" href="${base}/auth/kakao${nextQ}">${KAKAO_MARK}카카오로 로그인</a>
+      <p class="kko-note">비밀번호 없이 들어옵니다. 상인회에 등록된 번호와 카카오 번호가 같으면 바로 연결됩니다.</p>
+    </div>` : ""}
     <p class="auth-note"><a href="${base}/forgot">비밀번호를 잊으셨나요?</a></p>
     ${assoc && assoc.kind === "merchant" ? `<p class="auth-note">아직 회원이 아니신가요? <a href="${base}/register">회원 신청하기</a></p>`
       : assoc ? "" : `<p class="auth-note">계정이 없으신가요? <a href="/esign/signup">전자계약 시작하기</a></p>`}
@@ -5952,6 +5962,23 @@ export async function superConsole(ctx) {
         <li>URL 은 앱당 <b>최대 10개</b> — 초과 시 Maps 앱을 하나 더 만들고, 아래 조직 목록의 <b>지도 키</b> 칸에 새 앱의 Client ID 를 넣으면 그 조직만 새 앱을 사용합니다</li>
         <li>사장님 대시보드의 <b>"주소로 찾기"</b>(주소→좌표 자동 변환)를 쓰려면 같은 Maps 앱에서 <b>Geocoding</b> 서비스도 체크해 주세요 — 미활성이어도 지도 클릭 방식은 그대로 동작합니다</li>
       </ol>
+      <h3>카카오 로그인 ${kakaoReady(env) ? `<span class="badge badge-ok">열쇠 있음</span>` : `<span class="badge badge-muted">열쇠 없음</span>`}</h3>
+      <p>사장님이 비밀번호 없이 들어옵니다. 지도와 <b>같은 앱의 REST 키</b>를 그대로 씁니다.</p>
+      <ol>
+        <li><a href="https://developers.kakao.com" target="_blank" rel="noopener">developers.kakao.com</a> → 내 애플리케이션 → <b>카카오 로그인</b> → <b>활성화 ON</b></li>
+        <li><b>Redirect URI</b> 에 아래 주소를 그대로 등록 (도메인마다 한 줄씩 · 최대 10개)
+          <br /><code>${esc(ORIGIN || "https://우리도메인")}/auth/kakao/callback</code>
+          <br />개별 도메인을 붙인 상인회는 <code>https://그도메인/auth/kakao/callback</code> 도 함께 넣습니다 —
+          한글 도메인은 <b>영문 변환형</b>(xn--…)으로 적어야 합니다</li>
+        <li><b>동의항목</b> → <b>닉네임</b>을 필수로 켭니다. 여기까지만 해도 로그인은 됩니다 —
+          다만 회원이 <b>먼저 휴대폰 번호와 비밀번호로 들어온 뒤</b> 계정 설정에서 연결해야 합니다</li>
+        <li><b>비즈니스 앱 전환</b>(사업자등록증 제출 · 무료) 뒤 동의항목의 <b>카카오계정(전화번호)</b>을 켜면,
+          카카오 번호와 상인회 명부의 번호가 같은 회원은 <b>첫 로그인부터</b> 카카오로 바로 들어옵니다.
+          투표의 본인 확인도 이때부터 뜻이 생깁니다</li>
+        <li>보안 → Client Secret 을 발급했다면 위 <b>열쇠</b> 칸의 <b>카카오 로그인 Client Secret</b> 에 넣습니다 (안 만들었으면 비워 둡니다)</li>
+      </ol>
+      <p class="honest-line">카카오 로그인은 법이 정한 본인확인기관(PASS 등)의 인증이 아닙니다.
+        카카오 계정이 가입 때 거친 휴대폰 인증에 기대는 것이므로, 다툼이 예상되는 총회 의결에는 알림톡 인증번호를 함께 쓰십시오.</p>
       <h3>개별 도메인 연결 (조직 1곳당)</h3>
       <ol>
         <li>도메인을 이 Cloudflare 계정에 추가 (Domains → Add) → 산 곳(가비아 등)에서 네임서버를 Cloudflare 가 알려 주는 두 개로 바꿈</li>
@@ -6017,6 +6044,14 @@ export function account(ctx) {
         <label>새 비밀번호 확인<input type="password" name="confirm" required autocomplete="new-password" /></label>
         <button class="btn btn-primary btn-sm">변경</button></form></section>
     <section class="panel"><h2 class="panel-title">2단계 인증 (2FA)</h2>${twofa}</section>
+    ${kakaoReady(ctx.env) ? `<section class="panel"><h2 class="panel-title">카카오 로그인
+      <span class="badge ${user.kakao_id ? "badge-ok" : "badge-muted"}">${user.kakao_id ? "연결됨" : "연결 안 함"}</span></h2>
+      ${user.kakao_id
+        ? `<p class="panel-hint">카카오로 바로 들어오실 수 있습니다. 해제해도 휴대폰 번호와 비밀번호로는 그대로 들어옵니다.</p>
+           <form method="post" action="/account/kakao/unlink" data-confirm="카카오 연결을 해제할까요?"><button class="btn btn-ghost btn-sm">연결 해제</button></form>`
+        : `<p class="panel-hint">한 번 연결해 두면 다음부터 비밀번호 없이 들어옵니다. 카카오 계정은 만들 때 이미 휴대폰 인증을 거치므로, 총회 안건 투표에서 본인 확인에도 쓰입니다.</p>
+           <a class="btn-kakao btn-kakao-sm" href="/auth/kakao">${KAKAO_MARK}카카오 계정 연결하기</a>`}
+    </section>` : ""}
     <section class="panel"><h2 class="panel-title">보안</h2>
       <p class="panel-hint">다른 기기·브라우저의 로그인 세션을 모두 종료합니다.</p>
       <form method="post" action="/account/logout-all" data-confirm="모든 기기에서 로그아웃할까요?"><button class="btn btn-ghost btn-sm">전 기기 로그아웃</button></form></section>
