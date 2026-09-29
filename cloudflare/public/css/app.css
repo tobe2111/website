@@ -1013,6 +1013,23 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .pb-fill.is-no{background:#d65745}
 .pb-fill.is-abs{background:#b9c2bc}
 .pb-pct{font-size:.82rem;color:var(--muted);text-align:right}
+/* 투표 본인확인 —— 아직 못 하는 이유와, 무엇을 하면 열리는지를 그 자리에 둔다.
+   버튼만 감추면 사장님은 "고장났다" 고 읽는다. 한 문장이라도 옆에 있어야 다음 걸음을 뗀다. */
+.badge-lock{background:var(--wait-bg);color:var(--wait-fg)}
+.poll-ok{margin-bottom:12px;font-size:.88rem;font-weight:600;color:var(--ok-fg)}
+.poll-gate{margin-bottom:14px;padding:14px 16px;border:1px solid var(--line);border-left:3px solid var(--wait-fg);border-radius:4px;background:var(--bg-alt)}
+.poll-gate .panel-hint{margin:6px 0 10px}
+.pg-need{margin:0;font-size:.94rem}
+.poll-gate .inline-form{display:inline-block;margin-right:8px}
+.otp-form{display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap;margin-top:10px}
+.otp-label{display:grid;gap:4px;font-size:.82rem;font-weight:600;color:var(--ink-soft)}
+.otp-label input{width:9ch;padding:8px 10px;border:1px solid var(--line);border-radius:4px;font-size:1.05rem;letter-spacing:.24em;text-align:center;background:var(--surface);color:var(--ink)}
+/* 투표 자격 대장 */
+.vf-sum{display:flex;flex-wrap:wrap;gap:8px 20px;margin:10px 0 0;padding:0;list-style:none;font-size:.88rem;color:var(--ink-soft)}
+.vf-ways{margin:0;padding-left:20px;display:grid;gap:10px;font-size:.9rem;line-height:1.6}
+.vf-ways .muted{display:block;font-size:.86em}
+.vf-table .vf-none td{background:var(--wait-bg)}
+.vf-table small{color:var(--muted)}
 /* 행사 참가 신청 */
 .event-rsvp{display:flex;align-items:center;flex-wrap:wrap;gap:10px;padding:10px 16px;border-top:1px solid var(--line-soft);background:var(--bg-alt)}
 .event-photo-card .event-rsvp{background:var(--surface)}
@@ -4103,6 +4120,7 @@ a.deal-card:hover{border-color:var(--deal);transition:border-color .18s}
   .chip-filter,.cat-tab{min-height:44px;display:inline-flex;align-items:center}
   .nav-logout .btn,.header-inner .btn,.main-nav .btn{min-height:44px}
   .poll-actions .btn{min-height:44px}
+  .otp-label input{min-height:44px}
   .fold-write > summary{min-height:52px}
   .pg-tools .srch input,.pg-tools .srch .btn{min-height:48px}
   .pg-head .btn{min-height:44px}

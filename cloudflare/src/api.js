@@ -205,9 +205,17 @@ export async function kakaoCallback(ctx) {
   if (r.kind === "login") return land(r.user);
   if (r.kind === "link") {
     await D.setUserKakao(db, r.user.id, kk.id);
+    // 카카오가 준 번호가 **명부에 적힌 번호와 같을 때만** 본인확인으로 인정한다.
+    // 카카오 계정은 만들 때 통신사 휴대폰 인증을 거치므로, 두 번호가 같으면
+    // "그 번호를 실제로 가진 사람이 지금 들어왔다" 가 된다 — 총회 표결에서 이걸 쓴다.
+    // 로그인한 채로 '연결' 만 누른 경우는 비밀번호를 알았다는 뜻일 뿐이라 인정하지 않는다.
+    const matched = !!(kk.phone && D.normalizePhone(r.user.phone || "") === kk.phone);
     // 이름·번호가 비어 있던 계정이면 카카오가 알려 준 값으로 채운다(덮어쓰지는 않는다).
     if (!r.user.phone && kk.phone) await D.setUserPhone(db, r.user.id, kk.phone).catch(() => {});
-    return land(r.user, "카카오 계정을 연결했습니다. 다음부터는 카카오로 바로 들어오실 수 있습니다.");
+    if (matched) await D.setUserVerified(db, r.user.id, "kakao");
+    return land(r.user, matched
+      ? "카카오 계정을 연결했습니다. 본인확인도 함께 끝났습니다 — 다음부터는 카카오로 바로 들어오실 수 있습니다."
+      : "카카오 계정을 연결했습니다. 다음부터는 카카오로 바로 들어오실 수 있습니다.");
   }
   if (r.kind === "already")
     return back(st.uid ? at + "/account" : at + "/login", "이 계정에는 이미 다른 카카오가 연결돼 있습니다. 먼저 연결을 해제해 주세요.", true);
@@ -222,6 +230,9 @@ export async function kakaoCallback(ctx) {
 export async function kakaoUnlink(ctx) {
   const { db, user, base } = ctx;
   await D.clearUserKakao(db, user.id);
+  // 카카오로 받은 본인확인이었다면 그 근거가 사라졌으므로 확인도 함께 내린다.
+  // 근거 없는 확인 표시를 남겨 두면, 그 표시로 통과한 표가 무엇에 근거한 것인지 아무도 모른다.
+  if (user.verified_how === "kakao") await D.clearUserVerified(db, user.id);
   return back((base || "") + "/account", "카카오 연결을 해제했습니다. 휴대폰 번호와 비밀번호로 로그인하실 수 있습니다.");
 }
 
@@ -2364,7 +2375,8 @@ export async function adminCreatePoll(ctx) {
   if (!title) return back(base + "/admin", "안건 제목을 입력해 주세요.", true);
   const rawClose = (form.get("closes_at") || "").trim();
   const closesAt = /^\d{4}-\d{2}-\d{2}$/.test(rawClose) ? rawClose : "";
-  await D.createPoll(db, { associationId: assoc.id, title, body: cap((form.get("body") || "").trim(), 2000), closesAt, createdBy: user.id });
+  await D.createPoll(db, { associationId: assoc.id, title, body: cap((form.get("body") || "").trim(), 2000), closesAt,
+    verify: pollVerifyFrom(form), createdBy: user.id });
   await D.createNotification(db, { associationId: assoc.id, kind: "poll", message: `새 투표: ${title}`, link: base + "/polls" });
   await audit(ctx, "투표생성", title);
   return back(base + "/polls", "투표를 시작했습니다. 회원들이 투표할 수 있습니다.");
@@ -2389,6 +2401,7 @@ export async function adminUpdatePoll(ctx) {
   await D.updatePoll(db, p.id, assoc.id, {
     title, body: cap((form.get("body") || "").trim(), 2000),
     closesAt: /^\d{4}-\d{2}-\d{2}$/.test(rawClose) ? rawClose : "",
+    verify: pollVerifyFrom(form),
   });
   await audit(ctx, "투표수정", `#${p.id} ${title}`);
   return back(base + "/polls", "안건을 고쳤습니다. 이미 들어온 표는 그대로 남습니다.");
@@ -2410,6 +2423,13 @@ export async function adminDeletePoll(ctx) {
   await audit(ctx, "투표삭제", `#${p.id} ${p.title} (표 ${votes})`);
   return back(base + "/polls", `안건을 지웠습니다.${votes ? ` 들어와 있던 표 ${votes}개도 함께 사라졌습니다.` : ""}`);
 }
+// 폼에서 확인 등급 읽기 — 아는 값(0·1·2) 이 아니면 0 으로 떨군다.
+// 모르는 값을 그대로 넣으면 pollVerifyLevel 이 0 으로 보아 아무 확인 없이 투표가 열린다.
+const pollVerifyFrom = (form) => {
+  const n = parseInt(form.get("verify") || "0", 10);
+  return n === 1 || n === 2 ? n : 0;
+};
+
 export async function pollVote(ctx) {
   const { db, form, base, assoc, user, params } = ctx;
   const p = await D.getPoll(db, Number(params.id));
@@ -2417,8 +2437,98 @@ export async function pollVote(ctx) {
   if (!D.isPollOpen(p)) return back(base + "/polls", "마감된 투표입니다.", true);
   const choice = form.get("choice");
   if (!["yes", "no", "abstain"].includes(choice)) return back(base + "/polls", "선택을 확인해 주세요.", true);
-  await D.votePoll(db, p.id, user.id, choice);
+  // 확인 등급 — 화면에서 버튼을 감추는 것만으로는 막은 것이 아니다. 주소로 직접 보낸 요청도
+  // 여기서 걸린다. 표가 근거로 쓰이는 안건에서 이 한 줄이 실제로 막는 것이다.
+  const lv = D.pollVerifyLevel(p);
+  let how = "";
+  if (lv === 1) {
+    if (!D.isVerified(user))
+      return back(base + "/polls", "이 안건은 본인확인을 마친 분만 투표하실 수 있습니다. 카카오 계정을 연결하시거나, 상인회 관리자에게 본인확인을 요청해 주세요.", true);
+    how = user.verified_how || "";
+  } else if (lv === 2) {
+    if (!(await D.pollOtpVerified(db, p.id, user.id)))
+      return back(base + "/polls", "이 안건은 휴대폰 인증번호로 본인확인을 한 뒤에 투표하실 수 있습니다.", true);
+    how = "otp";
+  }
+  await D.votePoll(db, p.id, user.id, choice, how);
   return back(base + "/polls", "투표했습니다. 마감 전까지 다시 눌러 변경할 수 있습니다.");
+}
+
+// ---------- 안건 투표 본인확인 (등급 2) ----------
+// 서명용과 같은 규칙(6자리·5분·5회)이지만 표를 따로 둔다 — 계약서에 서명하려고 넣은 번호가
+// 총회 표결의 근거로 재활용되지 않게 하기 위해서다.
+export async function pollOtpSend(ctx) {
+  const { db, env, base, assoc, user, params } = ctx;
+  const p = await D.getPoll(db, Number(params.id));
+  if (!p || p.association_id !== assoc.id) return back(base + "/polls", "투표를 찾을 수 없습니다.", true);
+  if (!D.isPollOpen(p)) return back(base + "/polls", "마감된 투표입니다.", true);
+  if (D.pollVerifyLevel(p) !== 2) return back(base + "/polls", "이 안건은 인증번호가 필요하지 않습니다.", true);
+  if (!D.isValidPhone(user.phone || ""))
+    return back(base + "/polls", "본인확인에 쓸 휴대폰 번호가 계정에 없습니다. 상인회 관리자에게 번호 등록을 요청해 주세요.", true);
+  // 재발송 남용 방지 — 직전 발송 후 60초 이내면 거절. 건당 돈이 나가는 길이다.
+  const cur = await D.getPollOtp(db, p.id, user.id);
+  if (cur && Date.parse(cur.created_at.replace(" ", "T") + "Z") > Date.now() - 60 * 1000)
+    return back(base + "/polls", "인증번호를 방금 보냈습니다. 1분 뒤에 다시 요청해 주세요.", true);
+
+  const code = String(Math.floor(100000 + Math.random() * 900000));
+  await D.upsertPollOtp(db, { pollId: p.id, userId: user.id, codeHash: await sha256Hex(`pollotp|${p.id}|${user.id}|${code}`), phone: user.phone });
+  const msg = renderTemplate("poll_otp", { 상호: assoc.name, 안건: p.title, 인증번호: code, 유효시간: D.OTP_TTL_MIN });
+  let via = "";
+  if (notifyEnabled(env)) {
+    const r = await sendOne(env, db, { assoc, kind: "poll_otp", to: user.phone, text: msg });
+    if (r.ok) via = `${D.maskPhone(user.phone)} 으로 알림톡을`;
+    else if (r.insufficient) { await D.clearPollOtp(db, p.id, user.id); return back(base + "/polls", "알림 크레딧이 부족해 인증번호를 보내지 못했습니다. 상인회 관리자에게 문의해 주세요.", true); }
+  }
+  // 알림톡 심사가 끝나지 않았어도 이메일이 있으면 그 길로 보낸다 —
+  // 그래야 템플릿 등록 전에 이 등급을 골라 둔 안건에서 투표가 통째로 막히지 않는다.
+  if (!via && emailEnabled(env) && user.email) {
+    await sendEmailFor(env, db, assoc, { kind: "poll_otp", to: user.email, subject: `[${assoc.name}] 안건 투표 본인확인 번호`,
+      html: mailShell("본인확인 번호", `<p>'${esc(p.title)}' 안건 투표 화면에 아래 번호를 입력해 주세요.</p><p style="font-size:28px;font-weight:800;letter-spacing:.1em">${esc(code)}</p><p style="color:#888">${D.OTP_TTL_MIN}분 후 만료됩니다.</p>`) }).catch(() => {});
+    via = `${esc(user.email)} 로 이메일을`;
+  }
+  if (!via) {
+    await D.clearPollOtp(db, p.id, user.id);
+    return back(base + "/polls", "인증번호를 보낼 수단이 없습니다. 상인회 관리자에게 문의해 주세요. (알림톡·이메일 모두 미설정)", true);
+  }
+  return back(`${base}/polls?otp=${p.id}`, `${via} 보냈습니다. ${D.OTP_TTL_MIN}분 안에 입력해 주세요.`);
+}
+
+export async function pollOtpVerify(ctx) {
+  const { db, form, base, assoc, user, params } = ctx;
+  const p = await D.getPoll(db, Number(params.id));
+  if (!p || p.association_id !== assoc.id) return back(base + "/polls", "투표를 찾을 수 없습니다.", true);
+  const to = `${base}/polls?otp=${p.id}`;
+  const rec = await D.getPollOtp(db, p.id, user.id);
+  if (!rec) return back(to, "먼저 인증번호를 요청해 주세요.", true);
+  if (rec.verified_at) return back(base + "/polls", "이미 본인확인을 마쳤습니다. 아래에서 투표해 주세요.");
+  if (rec.attempts >= D.OTP_MAX_ATTEMPTS) return back(to, "시도 횟수를 초과했습니다. 인증번호를 다시 요청해 주세요.", true);
+  if (Date.parse(rec.expires_at.replace(" ", "T") + "Z") < Date.now())
+    return back(to, "인증번호가 만료되었습니다. 다시 요청해 주세요.", true);
+  const input = (form.get("code") || "").replace(/\D/g, "");
+  await D.bumpPollOtpAttempt(db, rec.id);
+  const ok = input.length === 6 && (await sha256Hex(`pollotp|${p.id}|${user.id}|${input}`)) === rec.code_hash;
+  if (!ok) return back(to, `인증번호가 올바르지 않습니다. (남은 시도 ${Math.max(0, D.OTP_MAX_ATTEMPTS - rec.attempts - 1)}회)`, true);
+  await D.markPollOtpVerified(db, rec.id);
+  // 이 번호로 실제 받았다는 것이 밝혀졌으므로 계정에도 확인 표시를 남긴다 —
+  // 다음 안건에서 같은 사람에게 또 돈을 써 가며 같은 것을 묻지 않는다.
+  await D.setUserVerified(db, user.id, "otp");
+  return back(base + "/polls", "본인확인이 완료되었습니다. 아래에서 투표해 주세요.");
+}
+
+// ---------- 투표 자격 대장 (관리자) ----------
+// 총회 접수대에서 얼굴을 보고 확인해 주는 길. 외부 연동도, 비용도 없다.
+export async function adminMemberVerify(ctx) {
+  const { db, form, base, assoc, user, params } = ctx;
+  const m = await D.getUserById(db, Number(params.id));
+  if (!m || m.association_id !== assoc.id) return back(base + "/admin/polls/verify", "회원을 찾을 수 없습니다.", true);
+  if (form.get("on") === "1") {
+    await D.setUserVerified(db, m.id, "admin", user.id);
+    await audit(ctx, "본인확인", `${m.name} — 관리자 확인`);
+    return back(base + "/admin/polls/verify", `${m.name}님을 본인확인 처리했습니다.`);
+  }
+  await D.clearUserVerified(db, m.id);
+  await audit(ctx, "본인확인해제", m.name);
+  return back(base + "/admin/polls/verify", `${m.name}님의 본인확인을 내렸습니다.`);
 }
 
 // ---------- 행사 참가 신청 ----------
@@ -3149,6 +3259,9 @@ export async function signOtpVerify(ctx) {
   const ok = input.length === 6 && (await sha256Hex(`otp|${d.id}|${user.id}|${input}`)) === rec.code_hash;
   if (!ok) return back(base + "/sign/" + d.id, `인증번호가 올바르지 않습니다. (남은 시도 ${Math.max(0, D.OTP_MAX_ATTEMPTS - rec.attempts - 1)}회)`, true);
   await D.markOtpVerified(db, rec.id);
+  // 이 번호로 실제로 받았다는 것이 밝혀졌다 — 계정에도 본인확인 표시를 남긴다.
+  // 같은 사람에게 총회 때 또 22원을 써 가며 같은 것을 묻지 않기 위해서다.
+  await D.setUserVerified(db, user.id, "otp");
   await D.logDocEvent(db, { documentId: d.id, userId: user.id, actorName: user.name, kind: "otp_ok",
     detail: D.maskPhone(rec.phone || ""), ip: ctx.ip || "", userAgent: uaOf(ctx) });
   return back(base + "/sign/" + d.id, "본인확인이 완료되었습니다. 아래에서 서명해 주세요.");

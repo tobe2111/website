@@ -98,6 +98,14 @@ CREATE TABLE IF NOT EXISTS users (
   -- 카카오 로그인으로 이어 둔 계정 (카카오 회원번호 · 빈 값 = 연결 안 함).
   -- 토큰은 담지 않는다 — 우리는 카카오로 무엇을 보내지 않으므로 들고 있을 이유가 없다.
   kakao_id        TEXT NOT NULL DEFAULT '',
+  -- 본인확인 표시. "이 계정 뒤에 있는 사람이 명부의 그 사람임을 한 번 확인했다"는 기록이다.
+  --   verified_how = kakao (카카오를 이어 붙였다 — 카카오 계정은 만들 때 통신사 인증을 거친다)
+  --                | otp   (전자서명 본인확인 인증번호를 통과한 적이 있다)
+  --                | admin (관리자가 얼굴을 보고 확인했다 — 총회 접수대에서)
+  -- 법이 정한 본인확인기관(PASS 등)의 인증이 아니다. 화면에도 그렇게 적는다.
+  verified_at     TEXT NOT NULL DEFAULT '',
+  verified_how    TEXT NOT NULL DEFAULT '',
+  verified_by     INTEGER NOT NULL DEFAULT 0,  -- admin 확인일 때 확인해 준 관리자
   created_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 -- 한 카카오 계정이 두 사람에게 붙으면 누구로 로그인할지 정할 수 없다. 빈 값은 여럿이어도 된다.
@@ -227,6 +235,11 @@ CREATE TABLE IF NOT EXISTS polls (
   body           TEXT NOT NULL DEFAULT '',
   closes_at      TEXT NOT NULL DEFAULT '',    -- YYYY-MM-DD, 비우면 수동 마감만
   closed         INTEGER NOT NULL DEFAULT 0,
+  -- 이 안건에 표를 넣으려면 어디까지 확인해야 하는가.
+  --   0 = 로그인만  ·  1 = 본인확인 표시가 붙은 계정만  ·  2 = 투표할 때마다 인증번호
+  -- 회식 날짜를 고르는 일에까지 인증번호를 보내면 돈만 나가고 아무도 투표하지 않는다.
+  -- 그래서 기본값은 0 이고, 총회 안건처럼 표가 근거로 남아야 하는 건만 관리자가 올린다.
+  verify         INTEGER NOT NULL DEFAULT 0,
   created_by     INTEGER,
   created_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -235,8 +248,25 @@ CREATE TABLE IF NOT EXISTS poll_votes (
   poll_id    INTEGER NOT NULL REFERENCES polls(id) ON DELETE CASCADE,
   user_id    INTEGER NOT NULL,
   choice     TEXT NOT NULL,                   -- yes | no | abstain
+  -- 이 표를 넣을 때 무엇으로 확인했는가 (kakao | otp | admin | 빈 값=확인 없음).
+  -- 계정의 확인 표시를 나중에 풀어도, 그때 무엇으로 확인했는지는 표에 남아 있어야 한다 —
+  -- 의사록에 "누가 어떻게 확인된 상태로 찬성했다"를 적으려면 표 쪽에 있어야 하기 때문이다.
+  verify     TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE(poll_id, user_id)                    -- 1인 1표 (재투표 시 변경)
+);
+-- 안건 투표 본인확인 코드 (서명용 sign_otp 와 같은 규칙, 대상만 다름)
+CREATE TABLE IF NOT EXISTS poll_otp (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  poll_id     INTEGER NOT NULL REFERENCES polls(id) ON DELETE CASCADE,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  code_hash   TEXT NOT NULL,
+  phone       TEXT NOT NULL DEFAULT '',
+  attempts    INTEGER NOT NULL DEFAULT 0,
+  verified_at TEXT NOT NULL DEFAULT '',
+  expires_at  TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (poll_id, user_id)
 );
 
 CREATE TABLE IF NOT EXISTS event_rsvps (
@@ -886,6 +916,13 @@ async function migrateColumns(db) {
       await db.prepare("ALTER TABLE users ADD COLUMN kakao_id TEXT NOT NULL DEFAULT ''").run();
       await db.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_kakao ON users(kakao_id) WHERE kakao_id != ''").run();
     }
+    // 본인확인 표시 (투표 자격). 기존 계정은 '확인 안 됨' 으로 시작한다 —
+    // 없는 확인을 있다고 적어 두면 그 표가 근거로 쓰일 때 거짓이 된다.
+    if (!ucols.some((c) => c.name === "verified_at")) {
+      await db.prepare("ALTER TABLE users ADD COLUMN verified_at TEXT NOT NULL DEFAULT ''").run();
+      await db.prepare("ALTER TABLE users ADD COLUMN verified_how TEXT NOT NULL DEFAULT ''").run();
+      await db.prepare("ALTER TABLE users ADD COLUMN verified_by INTEGER NOT NULL DEFAULT 0").run();
+    }
   }
 
   // businesses 계측 컬럼 (기존 배포 업그레이드): 등록 경로·갱신 시각
@@ -920,8 +957,8 @@ async function migrateColumns(db) {
   const v11 = [
     ["updates", `CREATE TABLE updates (id INTEGER PRIMARY KEY AUTOINCREMENT, business_id INTEGER NOT NULL REFERENCES businesses(id) ON DELETE CASCADE, association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE, body TEXT NOT NULL, image TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
       ["CREATE INDEX IF NOT EXISTS idx_updates_biz ON updates(business_id, created_at)", "CREATE INDEX IF NOT EXISTS idx_updates_assoc ON updates(association_id, created_at)"]],
-    ["polls", `CREATE TABLE polls (id INTEGER PRIMARY KEY AUTOINCREMENT, association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE, title TEXT NOT NULL, body TEXT NOT NULL DEFAULT '', closes_at TEXT NOT NULL DEFAULT '', closed INTEGER NOT NULL DEFAULT 0, created_by INTEGER, created_at TEXT NOT NULL DEFAULT (datetime('now')))`, []],
-    ["poll_votes", `CREATE TABLE poll_votes (id INTEGER PRIMARY KEY AUTOINCREMENT, poll_id INTEGER NOT NULL REFERENCES polls(id) ON DELETE CASCADE, user_id INTEGER NOT NULL, choice TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(poll_id, user_id))`, []],
+    ["polls", `CREATE TABLE polls (id INTEGER PRIMARY KEY AUTOINCREMENT, association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE, title TEXT NOT NULL, body TEXT NOT NULL DEFAULT '', closes_at TEXT NOT NULL DEFAULT '', closed INTEGER NOT NULL DEFAULT 0, verify INTEGER NOT NULL DEFAULT 0, created_by INTEGER, created_at TEXT NOT NULL DEFAULT (datetime('now')))`, []],
+    ["poll_votes", `CREATE TABLE poll_votes (id INTEGER PRIMARY KEY AUTOINCREMENT, poll_id INTEGER NOT NULL REFERENCES polls(id) ON DELETE CASCADE, user_id INTEGER NOT NULL, choice TEXT NOT NULL, verify TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(poll_id, user_id))`, []],
     ["event_rsvps", `CREATE TABLE event_rsvps (id INTEGER PRIMARY KEY AUTOINCREMENT, event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE, association_id INTEGER NOT NULL, user_id INTEGER NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(event_id, user_id))`, []],
     ["dues", `CREATE TABLE dues (id INTEGER PRIMARY KEY AUTOINCREMENT, association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE, user_id INTEGER NOT NULL, period TEXT NOT NULL, memo TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(association_id, user_id, period))`, []],
   ];
@@ -1065,6 +1102,23 @@ async function migrateColumns(db) {
     await db.prepare(`CREATE TABLE chain_anchor (id INTEGER PRIMARY KEY AUTOINCREMENT, head_hash TEXT NOT NULL, sig_count INTEGER NOT NULL DEFAULT 0, anchored_at TEXT NOT NULL, seal TEXT NOT NULL DEFAULT '', external TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT (datetime('now')))`).run();
   }
   // v21: 서명 본인확인 OTP
+  // 안건 투표 본인확인 (기존 배포 업그레이드)
+  const pollTbl = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='polls'").first();
+  if (pollTbl) {
+    const pcols = (await db.prepare("PRAGMA table_info(polls)").all()).results || [];
+    if (!pcols.some((c) => c.name === "verify")) {
+      await db.prepare("ALTER TABLE polls ADD COLUMN verify INTEGER NOT NULL DEFAULT 0").run();
+    }
+    const vcols = (await db.prepare("PRAGMA table_info(poll_votes)").all()).results || [];
+    if (vcols.length && !vcols.some((c) => c.name === "verify")) {
+      await db.prepare("ALTER TABLE poll_votes ADD COLUMN verify TEXT NOT NULL DEFAULT ''").run();
+    }
+  }
+  const pollOtpTbl = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='poll_otp'").first();
+  if (!pollOtpTbl) {
+    await db.prepare(`CREATE TABLE poll_otp (id INTEGER PRIMARY KEY AUTOINCREMENT, poll_id INTEGER NOT NULL REFERENCES polls(id) ON DELETE CASCADE, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, code_hash TEXT NOT NULL, phone TEXT NOT NULL DEFAULT '', attempts INTEGER NOT NULL DEFAULT 0, verified_at TEXT NOT NULL DEFAULT '', expires_at TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE (poll_id, user_id))`).run();
+  }
+
   const otpTbl = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='sign_otp'").first();
   if (!otpTbl) {
     await db.prepare(`CREATE TABLE sign_otp (id INTEGER PRIMARY KEY AUTOINCREMENT, document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, code_hash TEXT NOT NULL, phone TEXT NOT NULL DEFAULT '', attempts INTEGER NOT NULL DEFAULT 0, verified_at TEXT NOT NULL DEFAULT '', expires_at TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE (document_id, user_id))`).run();

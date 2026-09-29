@@ -28,6 +28,9 @@ const KEEP = 8; // 주 1회 × 8주 보존
 export const TABLES = [
   "associations", "users", "businesses", "media", "products", "coupons",
   "updates", "polls", "poll_votes", "event_rsvps", "dues",
+  // 안건 투표 본인확인. 인증번호 자체는 5분이면 죽지만 '통과했다' 는 기록은 남는 값이다 —
+  // 이걸 날리면 마감 전에 표를 바꾸려는 사람마다 22원을 다시 써야 한다. 그래서 백업한다.
+  "poll_otp",
   "notices", "events", "posts", "comments", "post_images",
   // popups: 홈 안내창. 노출 기간까지 함께 살아나야 복원 뒤에 지난 팝업이 다시 뜨지 않는다.
   "popups",

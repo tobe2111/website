@@ -55,6 +55,10 @@ for (const [n, ct, ms] of [
   ["최방문", "guest@example.com", "단체로 20명 예약이 되는 가게가 있을까요? 스무 명이 한 번에 앉을 자리가 필요합니다."],
 ]) await D.createLead(env.DB, { associationId: m.id, name: n, phone: /@/.test(ct) ? "" : ct, email: /@/.test(ct) ? ct : "", message: ms, source: "contact" });
 await D.setDuesAmount(env.DB, m.id, 30000);
+// 확인 등급이 걸린 안건을 하나씩 만들어 둔다 — 투표 화면의 '문이 닫힌 모습' 도 재어야 한다.
+// (등급 0 안건만 있으면 게이트·인증번호 칸이 화면에 아예 나오지 않아 전수조사에서 빠진다)
+await D.createPoll(env.DB, { associationId: m.id, title: "회비를 3만 원에서 3만 5천 원으로 올릴까요", verify: 1, createdBy: null });
+await D.createPoll(env.DB, { associationId: m.id, title: "정관 제12조 개정 (임원 임기 2년)", verify: 2, createdBy: null });
 
 const ad = await hashPassword("market1234");
 await D.createUser(env.DB, { email: "office@market.kr", passwordHash: ad.hash, salt: ad.salt, name: "총무", role: "ADMIN", associationId: m.id });
@@ -130,6 +134,7 @@ const PAGES = [
   ["admin-write", "계약서 쓰기", `${B}/admin/documents/write`, "admin"],
   ["admin-tpl", "서식", `${B}/admin/templates`, "admin"],
   ["admin-api", "API 연동", `${B}/admin/api`, "admin"],
+  ["admin-verify", "투표 자격 대장", `${B}/admin/polls/verify`, "admin"],
 ];
 if (docs[0]) {
   PAGES.push(["admin-doc", "계약 상세", `${B}/admin/documents/${docs[0].id}`, "admin"]);

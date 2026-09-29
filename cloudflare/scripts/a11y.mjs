@@ -108,8 +108,13 @@ for (const [n, ct, ms] of [
 ])
   await D.createLead(env.DB, { associationId: m.id, name: n, phone: /@/.test(ct) ? "" : ct, email: /@/.test(ct) ? ct : "", message: ms, source: "contact" });
 await D.setDuesAmount(env.DB, m.id, 30000);
+// 확인 등급이 걸린 안건 — 투표 화면에서 '문이 닫힌 모습'(안내·인증번호 칸)도 색·과녁을 재야 한다
+await D.createPoll(env.DB, { associationId: m.id, title: "회비를 3만 원에서 3만 5천 원으로 올릴까요", verify: 1, createdBy: null });
+await D.createPoll(env.DB, { associationId: m.id, title: "정관 제12조 개정 (임원 임기 2년)", verify: 2, createdBy: null });
 const marketCookie = await loginAs("office@market.kr", "market1234");
 await grab("/t/market/admin", "market-admin.html", marketCookie);
+await grab("/t/market/polls", "market-polls.html", marketCookie);
+await grab("/t/market/admin/polls/verify", "market-verify.html", marketCookie);
 
 const MIME = { ".html": "text/html; charset=utf-8", ".css": "text/css", ".js": "text/javascript", ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg" };
 const srv = http.createServer((req, res) => {
@@ -257,6 +262,9 @@ const PAGES = [
   // 임원이 총회장에서 휴대폰으로 여는 일이 실제로 있다.
   ["관리자 콘솔 · 현황 (모바일)", "market-admin.html", { width: 390, height: 844, isMobile: true }, "s-home"],
   ["관리자 콘솔 · 회원·점포 (모바일)", "market-admin.html", { width: 390, height: 844, isMobile: true }, "s-people"],
+  ["안건 투표 (모바일)", "market-polls.html", { width: 390, height: 844, isMobile: true }],
+  ["투표 자격 대장 (모바일)", "market-verify.html", { width: 390, height: 844, isMobile: true }],
+  ["투표 자격 대장", "market-verify.html", { width: 1280, height: 900 }],
 ];
 let problems = 0;
 for (const [label, file, vp, hash] of PAGES) {

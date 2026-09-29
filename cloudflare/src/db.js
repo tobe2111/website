@@ -393,6 +393,41 @@ export const bumpSessionVersion = (db, id) => run(db, "UPDATE users SET session_
 export const resetHomeLayout = (db, id) => run(db, "UPDATE associations SET home_layout=NULL WHERE id=?", id);
 export const setUserTotp = (db, id, secret, enabled) => run(db, "UPDATE users SET totp_secret=?, totp_enabled=? WHERE id=?", secret, enabled ? 1 : 0, id);
 
+// ----- 계정 본인확인 표시 -----
+// "이 계정 뒤에 있는 사람이 명부의 그 사람이다" 를 한 번 확인한 기록. 투표 자격에 쓴다.
+// 확인이 붙는 길은 셋뿐이고, 그중 둘(kakao·otp)은 사람 손이 전혀 필요하지 않다.
+export const VERIFY_HOW = {
+  kakao: "카카오 연결",
+  otp: "휴대폰 인증번호",
+  admin: "관리자 확인",
+};
+export const verifyHowLabel = (how) => VERIFY_HOW[how] || "";
+export const isVerified = (u) => !!(u && u.verified_at);
+// 이미 더 센 확인이 붙어 있으면 약한 것으로 덮어쓰지 않는다 — 순서: otp > kakao > admin.
+// 기준은 '나중에 따져볼 때 남는 것' 이다. 인증번호는 그 번호로 실제 받았다는 기록이 남고,
+// 카카오는 통신사 인증을 거친 계정이 남는다. 관리자 확인은 사람의 말이라 기록이 그 말뿐이다.
+const VERIFY_RANK = { otp: 3, kakao: 2, admin: 1 };
+export async function setUserVerified(db, id, how, byId = 0) {
+  if (!VERIFY_HOW[how]) return;
+  const cur = await first(db, "SELECT verified_at, verified_how FROM users WHERE id=?", id);
+  if (cur && cur.verified_at && (VERIFY_RANK[cur.verified_how] || 0) > (VERIFY_RANK[how] || 0)) return;
+  await run(db, "UPDATE users SET verified_at=datetime('now'), verified_how=?, verified_by=? WHERE id=?", how, byId | 0, id);
+}
+export const clearUserVerified = (db, id) =>
+  run(db, "UPDATE users SET verified_at='', verified_how='', verified_by=0 WHERE id=?", id);
+// 투표 자격 대장용 — 이 상인회 계정 전원과 각자의 확인 상태.
+// 점포주만 뽑지 않는 이유: 총무·회장도 표를 넣는 사람이라 대장에 없으면 자기 표가 막힌다.
+// 가게 이름을 붙여야 총무가 명부의 누구인지 안다.
+export const listMembersVerify = (db, aid) =>
+  all(db, `SELECT u.id, u.name, u.role, u.phone, u.email, u.kakao_id, u.verified_at, u.verified_how, u.verified_by,
+      b.name AS business_name
+    FROM users u LEFT JOIN businesses b ON b.owner_id = u.id
+    WHERE u.association_id=? AND u.role IN ('MERCHANT','ADMIN','STAFF')
+    ORDER BY u.verified_at = '' DESC, u.name`, aid);
+export const countVerified = async (db, aid) =>
+  Number((await first(db, `SELECT COUNT(*) AS n FROM users WHERE association_id=?
+    AND role IN ('MERCHANT','ADMIN','STAFF') AND verified_at != ''`, aid))?.n) || 0;
+
 // ----- 감사 로그 -----
 export function logAudit(db, { associationId = null, userId = null, actorName = "", action, detail = "" }) {
   return run(db, "INSERT INTO audit_log (association_id, user_id, actor_name, action, detail) VALUES (?,?,?,?,?)", associationId, userId, actorName, action, detail);
@@ -817,8 +852,18 @@ export const setDayOff = (db, businessId, date) => run(db, "UPDATE businesses SE
 export const isDayOff = (b) => !!b && b.day_off_date === kstToday();
 
 // ----- 총회 안건 투표 -----
-export const createPoll = (db, { associationId, title, body = "", closesAt = "", createdBy = null }) =>
-  run(db, "INSERT INTO polls (association_id, title, body, closes_at, created_by) VALUES (?,?,?,?,?)", associationId, title, body, closesAt, createdBy).then((r) => first(db, "SELECT * FROM polls WHERE id=?", r.meta.last_row_id));
+// 안건별 확인 등급. 숫자를 코드 곳곳에 흩어 두면 화면과 판정이 어긋나므로 여기 한 곳에 둔다.
+export const POLL_VERIFY = {
+  0: { key: "none", label: "확인 없음", short: "로그인만", cost: false },
+  1: { key: "account", label: "본인확인된 계정만", short: "계정 확인", cost: false },
+  2: { key: "otp", label: "투표할 때마다 인증번호", short: "인증번호", cost: true },
+};
+export const pollVerifyLevel = (p) => {
+  const n = Number(p && p.verify) || 0;
+  return n === 1 || n === 2 ? n : 0;
+};
+export const createPoll = (db, { associationId, title, body = "", closesAt = "", verify = 0, createdBy = null }) =>
+  run(db, "INSERT INTO polls (association_id, title, body, closes_at, verify, created_by) VALUES (?,?,?,?,?,?)", associationId, title, body, closesAt, Number(verify) || 0, createdBy).then((r) => first(db, "SELECT * FROM polls WHERE id=?", r.meta.last_row_id));
 export const listPolls = (db, aid) => all(db, "SELECT * FROM polls WHERE association_id=? ORDER BY closed, created_at DESC", aid);
 export const getPoll = (db, id) => first(db, "SELECT * FROM polls WHERE id=?", id);
 export const closePoll = (db, id) => run(db, "UPDATE polls SET closed=1 WHERE id=?", id);
@@ -829,20 +874,21 @@ export const reopenPoll = (db, id) =>
     WHERE id=?`, kstToday(), id);
 // 공지·행사는 그 자리에서 고칠 수 있는데 투표만 안 됐다. 오타 하나에 지우고 다시 만들면
 // 이미 넣은 표가 함께 사라진다 — 그건 고치는 게 아니라 무르는 것이다.
-export const updatePoll = (db, id, aid, { title, body = "", closesAt = "" }) =>
-  run(db, "UPDATE polls SET title=?, body=?, closes_at=? WHERE id=? AND association_id=?", title, body, closesAt, id, aid);
+export const updatePoll = (db, id, aid, { title, body = "", closesAt = "", verify = 0 }) =>
+  run(db, "UPDATE polls SET title=?, body=?, closes_at=?, verify=? WHERE id=? AND association_id=?", title, body, closesAt, Number(verify) || 0, id, aid);
 // 표를 먼저 지운다 — 외래키 cascade 가 켜져 있다는 보장이 없어, 안 지우면 주인 없는 표가 남는다.
 export async function deletePoll(db, id, aid) {
   const p = await first(db, "SELECT id FROM polls WHERE id=? AND association_id=?", id, aid);
   if (!p) return;
   await run(db, "DELETE FROM poll_votes WHERE poll_id=?", id);
+  await run(db, "DELETE FROM poll_otp WHERE poll_id=?", id);
   await run(db, "DELETE FROM polls WHERE id=? AND association_id=?", id, aid);
 }
 export const countPollVotes = async (db, pollId) =>
   Number((await first(db, "SELECT COUNT(*) AS n FROM poll_votes WHERE poll_id=?", pollId))?.n) || 0;
 export const isPollOpen = (p) => p && !p.closed && (!p.closes_at || p.closes_at >= kstToday());
-export const votePoll = (db, pollId, userId, choice) =>
-  run(db, "INSERT INTO poll_votes (poll_id, user_id, choice) VALUES (?,?,?) ON CONFLICT(poll_id, user_id) DO UPDATE SET choice=excluded.choice, created_at=datetime('now')", pollId, userId, choice);
+export const votePoll = (db, pollId, userId, choice, verify = "") =>
+  run(db, "INSERT INTO poll_votes (poll_id, user_id, choice, verify) VALUES (?,?,?,?) ON CONFLICT(poll_id, user_id) DO UPDATE SET choice=excluded.choice, verify=excluded.verify, created_at=datetime('now')", pollId, userId, choice, verify || "");
 export const pollResults = async (db, pollId) => {
   const rows = await all(db, "SELECT choice, COUNT(*) AS n FROM poll_votes WHERE poll_id=? GROUP BY choice", pollId);
   const r = { yes: 0, no: 0, abstain: 0, total: 0 };
@@ -850,6 +896,12 @@ export const pollResults = async (db, pollId) => {
   return r;
 };
 export const userVote = async (db, pollId, userId) => (await first(db, "SELECT choice FROM poll_votes WHERE poll_id=? AND user_id=?", pollId, userId))?.choice || null;
+// 한 표 한 표를 사람 이름과 함께 — 의사록에 붙이는 명세다. 무엇으로 확인된 표인지까지 적는다.
+export const listPollVotes = (db, pollId) =>
+  all(db, `SELECT v.user_id, v.choice, v.verify, v.created_at, u.name, b.name AS business_name
+    FROM poll_votes v LEFT JOIN users u ON u.id = v.user_id
+      LEFT JOIN businesses b ON b.owner_id = v.user_id
+    WHERE v.poll_id=? ORDER BY v.created_at, v.id`, pollId);
 // 투표 페이지용 일괄 조회 — 안건 수와 무관하게 2쿼리 (N+1 제거)
 // IN(?,?,...) 나열 대신 서브쿼리: D1 은 쿼리당 바인드 파라미터 100개 한도라 안건 100개부터 터진다
 export async function pollResultsBulk(db, aid) {
@@ -1681,6 +1733,7 @@ export async function deleteAssociationDeep(db, aid) {
   const viaPosts = ["comments", "post_images"];
   for (const t of viaPosts) await run(db, `DELETE FROM ${t} WHERE post_id IN (SELECT id FROM posts WHERE association_id=?)`, aid);
   await run(db, "DELETE FROM poll_votes WHERE poll_id IN (SELECT id FROM polls WHERE association_id=?)", aid);
+  await run(db, "DELETE FROM poll_otp WHERE poll_id IN (SELECT id FROM polls WHERE association_id=?)", aid);
   for (const t of ["signatures", "signature_requests"])
     await run(db, `DELETE FROM ${t} WHERE document_id IN (SELECT id FROM documents WHERE association_id=?)`, aid);
   await run(db, "DELETE FROM media WHERE business_id IN (SELECT id FROM businesses WHERE association_id=?)", aid);
@@ -1856,6 +1909,34 @@ export async function otpVerifiedRecently(db, documentId, userId) {
   const r = await first(db, `SELECT 1 AS ok FROM sign_otp WHERE document_id=? AND user_id=?
     AND verified_at != '' AND verified_at > datetime('now','-30 minutes')`, documentId, userId);
   return !!r;
+}
+
+// 안건 투표 본인확인 — 서명용과 같은 규칙(5분 만료·5회 시도)을 별도 표에 둔다.
+// 표를 따로 두는 이유: 서명 인증을 통과한 것으로 투표까지 통과시키면, 계약서에 서명하려고
+// 넣은 번호가 총회 표결의 근거가 된다. 두 행위는 다른 행위이므로 확인도 따로 받는다.
+export async function upsertPollOtp(db, { pollId, userId, codeHash, phone }) {
+  await run(db, `INSERT INTO poll_otp (poll_id, user_id, code_hash, phone, attempts, verified_at, expires_at)
+    VALUES (?,?,?,?,0,'', datetime('now', '+${OTP_TTL_MIN} minutes'))
+    ON CONFLICT(poll_id, user_id) DO UPDATE SET
+      code_hash=excluded.code_hash, phone=excluded.phone, attempts=0, verified_at='',
+      expires_at=excluded.expires_at, created_at=datetime('now')`, pollId, userId, codeHash, phone || "");
+}
+export const getPollOtp = (db, pollId, userId) =>
+  first(db, "SELECT * FROM poll_otp WHERE poll_id=? AND user_id=?", pollId, userId);
+export const bumpPollOtpAttempt = (db, id) => run(db, "UPDATE poll_otp SET attempts=attempts+1 WHERE id=?", id);
+export const markPollOtpVerified = (db, id) => run(db, "UPDATE poll_otp SET verified_at=datetime('now') WHERE id=?", id);
+export const clearPollOtp = (db, pollId, userId) => run(db, "DELETE FROM poll_otp WHERE poll_id=? AND user_id=?", pollId, userId);
+// 이 안건에서 이미 인증번호를 통과한 사람들 — 투표 화면이 한 번의 조회로 판정한다
+export const pollOtpVerifiedSet = async (db, aid, userId) => {
+  const out = new Set();
+  for (const r of await all(db, `SELECT poll_id FROM poll_otp WHERE user_id=? AND verified_at != ''
+      AND poll_id IN (SELECT id FROM polls WHERE association_id=?)`, userId, aid)) out.add(r.poll_id);
+  return out;
+};
+// 한 번 통과하면 그 안건에서는 계속 유효하다 — 마감 전 표를 바꿀 때마다 다시 22원을 쓰게 하면
+// 사람들은 마음이 바뀌어도 그냥 둔다. 확인의 목적은 '누가 넣었나' 이고 그건 이미 밝혀졌다.
+export async function pollOtpVerified(db, pollId, userId) {
+  return !!(await first(db, "SELECT 1 AS ok FROM poll_otp WHERE poll_id=? AND user_id=? AND verified_at != ''", pollId, userId));
 }
 
 // 외부 서명자 본인확인 — 회원용과 같은 규칙(5분 만료·5회 시도)을 별도 표에 둔다.
