@@ -6457,6 +6457,9 @@ export async function adminBulkView(ctx) {
   const done = c.sent + c.failed;
   const pct = c.total ? Math.round((done / c.total) * 100) : 0;
   const started = done > 0;
+  // 지급대장 양식으로 보낸 명단인가 —— 이 명단만 '대장으로 모아 찍기' 가 뜻이 있다.
+  // 서식 id 는 계약서에 남지 않으므로(서식은 본문을 복사해 갈 뿐이다) 본문의 표제로 알아본다.
+  const isPayout = !!src && /개인정보 수집·이용·제공동의서/.test(src.body || "");
 
   const rowHtml = rows.map((r) => {
     const vars = (() => { try { return JSON.parse(r.vars || "{}"); } catch { return {}; } })();
@@ -6495,10 +6498,129 @@ export async function adminBulkView(ctx) {
         <th>줄</th><th>이름</th><th>연락처</th><th>빈칸</th><th>상태</th><th>비고</th></tr></thead>
         <tbody id="bulkRows">${rowHtml}</tbody></table></div>
     </section>
-    <form method="post" action="${base}/admin/bulk/${b.id}/delete">
-      <button class="btn btn-ghost btn-sm" data-confirm="이 명단을 목록에서 지울까요? 이미 보낸 계약서는 그대로 남습니다.">명단 지우기</button>
-    </form>` });
+    <span class="pill-row">
+      ${isPayout ? `<a class="btn btn-primary btn-sm" href="${base}/admin/bulk/${b.id}/ledger">지급대장 인쇄</a>` : ""}
+      <form method="post" action="${base}/admin/bulk/${b.id}/delete">
+        <button class="btn btn-ghost btn-sm" data-confirm="이 명단을 목록에서 지울까요? 이미 보낸 계약서는 그대로 남습니다.">명단 지우기</button>
+      </form>
+    </span>` });
   // 브라우저 탭 제목에는 {{ }} 를 벗겨서 — 탭 이름에 괄호가 박히면 무엇인지 알 수 없다
   return html(layout({ title: b.title.replace(/\{\{([^}]+)\}\}/g, "$1"), assoc, base, user, body, csrf,
     scripts: `<script src="${assetUrl("/js/bulk.js")}" defer></script>` }));
+}
+
+// ---------- 지급대장 (제출본) ----------
+//
+// 왜 따로 찍는가 —— 받는 사람에게는 **한 사람에 한 장**을 보낸다. 그래야 옆 가게 사장님의
+// 성명·연락처·생년월일이 서로에게 보이지 않는다. 그런데 재단에 내는 것은 여러 사람이
+// 한 장에 들어간 **대장** 이고, 그 양식은 한 칸도 바뀌면 안 된다.
+// 그래서 서명이 모이면 여기서 원래 표 그대로 다시 짠다 — 받는 화면과 내는 종이가 다른 것이다.
+//
+// 인원은 유동적이다. 원본 대장이 한 장에 8줄이므로 8줄씩 끊어 장을 넘기고,
+// 장마다 머리(사업명·동의 안내·두 표)를 다시 얹는다 — 장이 흩어져도 각 장이 그대로 완결된다.
+const LEDGER_ROWS_PER_PAGE = 8;
+const ledgerHead = (v) => `
+  <h1 class="lg-title">물품(쿠폰, 경품, 기념품) 지급대장</h1>
+  <p class="lg-market">(상권명 : ${esc(v.상권명 || "")})</p>
+  <table class="lg-tbl lg-top"><tbody>
+    <tr><td class="lg-label">○ 사업명 : ${esc(v.사업명 || "")}</td></tr>
+    <tr><td class="lg-label">○ 품  목 : ${esc(v.품목 || "")}</td></tr>
+    <tr><th class="lg-center lg-blue">개인정보 수집·이용·제공동의서</th></tr>
+    <tr><td class="lg-intro">본 사업의 추진을 위하여 아래와 같이 개인정보를 수집·이용·제공하고자 합니다.<br />
+      아래의 내용을 확인하신 후 동의여부를 결정하여 주시기 바랍니다.<br />
+      ※수집된 정보는 수집 목적 외에 사용하지 않습니다.<br />
+      ※개인정보 수집·이용·제공에 대해 거부할 권리가 있습니다. 다만, 동의에 거부할 경우 물품(경품, 기념품, 쿠폰)을<br />
+      &nbsp;&nbsp;지급받으실 수 없습니다.</td></tr>
+  </tbody></table>
+  ${["◆개인정보의 수집·이용에 관한 사항", "◆개인정보의 제3자 제공에 관한 사항"].map((sec, i) => `
+  <table class="lg-tbl lg-info"><tbody>
+    <tr><td class="lg-sec" colspan="4">${esc(sec)}</td></tr>
+    <tr><th class="lg-blue">개인정보처리자</th><th class="lg-blue">수집항목</th><th class="lg-blue">수집목적</th><th class="lg-blue">보유기간</th></tr>
+    <tr><td class="lg-center">${i === 0 ? "서울신용보증재단(수탁자 ㈜0000)" : "서울시, 자치구"}</td>
+      <td class="lg-center">성명,휴대번호,생년월일</td>
+      <td class="lg-center">물품지급관리 및 사업 결과보고</td>
+      <td class="lg-center">사업지원종료 후 5년간</td></tr>
+  </tbody></table>`).join("")}`;
+const consentCell = (ok) => ok
+  ? `<span class="lg-ck">☑동  의</span><br /><span class="lg-ck">□미동의</span>`
+  : `<span class="lg-ck">□동  의</span><br /><span class="lg-ck">☑미동의</span>`;
+
+export async function adminBulkLedger(ctx) {
+  const { db, base, assoc, user, params, csrf } = ctx;
+  const b = await D.getBatch(db, Number(params.bid));
+  if (!b || b.association_id !== assoc.id) return notFoundResponse(ctx);
+  if (!D.canSeeBatch(assoc, user, b)) return notFoundResponse(ctx);
+  const rows = await D.listBatchRows(db, b.id);
+
+  // 서명을 마친 줄만 대장에 올린다 — 아직 안 한 사람을 빈칸으로 올리면 그 줄이 곧 거짓이 된다.
+  const done = [];
+  for (const r of rows) {
+    if (r.status !== "sent" || !r.document_id) continue;
+    const doc = await D.getDocument(db, r.document_id);
+    if (!doc) continue;                                   // 나중에 지워진 계약서
+    const fields = await D.listFieldsWithValues(db, r.document_id);
+    const sign = fields.find((f) => f.kind === "sign" && (f.image || f.value));
+    if (!sign) continue;
+    let vars = {};
+    try { vars = JSON.parse(r.vars || "{}"); } catch { vars = {}; }
+    const ck = (needle) => {
+      const f = fields.find((x) => x.kind === "check" && String(x.label || "").includes(needle));
+      return !!(f && (f.value || f.image));
+    };
+    done.push({
+      pay: vars["지급일"] || "", name: vars["성명"] || r.name || "",
+      phone: vars["연락처"] || (r.phone ? phoneText(r.phone) : ""),
+      birth: vars["생년월일"] || "", qty: vars["수량"] || "",
+      collect: ck("수집"), third: ck("제3자"),
+      signImg: sign.image ? mediaUrl(sign.image) : "", signText: sign.image ? "" : (sign.value || ""),
+    });
+  }
+
+  // 머리에 쓸 사업명·품목·상권명은 줄마다 같은 값이다 — 첫 줄에서 읽는다.
+  let head = {};
+  for (const r of rows) { try { head = JSON.parse(r.vars || "{}"); break; } catch { /* 다음 줄 */ } }
+
+  const sheets = [];
+  for (let i = 0; i < Math.max(1, Math.ceil(done.length / LEDGER_ROWS_PER_PAGE)); i++) {
+    const part = done.slice(i * LEDGER_ROWS_PER_PAGE, (i + 1) * LEDGER_ROWS_PER_PAGE);
+    const body = Array.from({ length: LEDGER_ROWS_PER_PAGE }, (_, k) => {
+      const d = part[k];
+      const seq = i * LEDGER_ROWS_PER_PAGE + k + 1;
+      if (!d) return `<tr class="lg-empty"><td></td><td></td><td></td><td></td><td></td>
+        <td>${consentCell(false).replace(/☑미동의/, "□미동의")}</td>
+        <td>${consentCell(false).replace(/☑미동의/, "□미동의")}</td><td></td><td></td></tr>`;
+      return `<tr><td>${seq}</td><td>${esc(d.pay)}</td><td>${esc(d.name)}</td><td>${esc(d.phone)}</td>
+        <td>${esc(d.birth)}</td><td>${consentCell(d.collect)}</td><td>${consentCell(d.third)}</td>
+        <td>${esc(d.qty)}</td>
+        <td class="lg-sign">${d.signImg ? `<img src="${esc(d.signImg)}" alt="서명" />` : esc(d.signText)}</td></tr>`;
+    }).join("");
+    sheets.push(`<div class="paper lg-paper" style="width:794px;height:1123px">
+      ${ledgerHead(head)}
+      <table class="lg-tbl lg-main"><thead><tr>
+        <th class="lg-blue">연번</th><th class="lg-blue">지급일</th><th class="lg-blue">성명<br />(지급처)</th>
+        <th class="lg-blue">연락처</th><th class="lg-blue">생년월일</th>
+        <th class="lg-blue">개인정보<br />수집․이용 동의여부</th><th class="lg-blue">개인정보<br />제3자 제공 동의여부</th>
+        <th class="lg-blue">수량</th><th class="lg-blue">서명</th></tr></thead>
+        <tbody>${body}</tbody></table>
+    </div>`);
+  }
+
+  const body = await consoleShell(ctx, {
+    title: "지급대장",
+    eyebrow: `<a href="${base}/admin/bulk/${b.id}">← 명단</a>`,
+    sub: `서명을 마친 ${done.length}곳 · ${sheets.length}장`,
+    active: "documents",
+    body: `
+    <div class="dash-head no-print">
+      <p class="panel-hint">받는 분께는 한 사람에 한 장씩 보내고, 여기서는 재단에 낼 <b>대장</b> 으로 모아 찍습니다.
+        양식은 받은 그대로이며, 서명을 마친 분만 연번 순으로 올라갑니다.</p>
+      <button type="button" class="btn btn-primary btn-sm" data-print>인쇄 · PDF로 저장</button>
+    </div>
+    ${done.length ? "" : `<p class="panel-hint">아직 서명을 마친 분이 없습니다. 한 분이라도 서명하면 이 자리에 대장이 만들어집니다.</p>`}
+    <div class="paper-wrap"><div class="paper-stack">${sheets.join("")}</div></div>` });
+  // paper.js 가 화면 폭에 맞춰 A4 를 축소한다 — 없으면 좁은 화면에서 오른쪽(수량·서명)이 잘려 보인다.
+  // 인쇄에는 영향이 없다(print 에서 transform 을 되돌린다).
+  return html(layout({ title: "지급대장", assoc, base, user, body, csrf,
+    scripts: `<script src="${assetUrl("/js/paper.js")}" defer></script>` })
+    + `<style>@media print{@page{size:A4;margin:0}body{background:#fff}}</style>`);
 }
