@@ -1258,12 +1258,31 @@ export async function events(ctx) {
 }
 
 // ================= 총회 안건 투표 =================
+// 안건마다 "표를 넣으려면 어디까지 확인해야 하나" 를 고르는 칸.
+// 회식 날짜를 묻는 일에까지 확인을 걸면 아무도 투표하지 않는다. 그래서 기본은 '확인 없음' 이고,
+// 총회 안건처럼 표가 근거로 남아야 하는 건만 관리자가 올려 둔다.
+const verifyPick = (cur) => `<label>투표 자격
+  <select name="verify">
+    ${[[0, "확인 없음 — 로그인한 회원 누구나"],
+       [1, "본인확인을 마친 분만 (추가 비용 없음)"],
+       [2, "투표할 때마다 휴대폰 인증번호 (건당 발송비)"]].map(([v, l]) =>
+      `<option value="${v}"${Number(cur) === v ? " selected" : ""}>${l}</option>`).join("")}
+  </select></label>`;
+
 export async function polls(ctx) {
   const { db, assoc, base, user, query, csrf } = ctx;
   const list = await D.listPolls(db, assoc.id);
   const isAdmin = user.role === "ADMIN" || user.role === "SUPERADMIN";
   // 안건 수와 무관하게 2쿼리 (건별 결과·내 표 조회의 N+1 제거)
-  const [resultsMap, votesMap] = await Promise.all([D.pollResultsBulk(db, assoc.id), D.userVotesBulk(db, assoc.id, user.id)]);
+  const [resultsMap, votesMap, otpDone] = await Promise.all([
+    D.pollResultsBulk(db, assoc.id), D.userVotesBulk(db, assoc.id, user.id), D.pollOtpVerifiedSet(db, assoc.id, user.id),
+  ]);
+  const meVerified = D.isVerified(user);
+  // 관리자 화면에 "지금 몇 명이 확인됐나" 를 붙이려면 두 숫자가 필요하다.
+  // 이 숫자가 없으면 관리자는 확인 등급을 올린 뒤에야 몇 명이 투표할 수 없는지 알게 된다.
+  const [vTotal, vDone] = isAdmin
+    ? [(await D.listMembersVerify(db, assoc.id)).length, await D.countVerified(db, assoc.id)]
+    : [0, 0];
   const cards = [];
   for (const p of list) {
     const open = D.isPollOpen(p);
@@ -1272,14 +1291,38 @@ export async function polls(ctx) {
     const pct = (n) => (r.total ? Math.round((n / r.total) * 100) : 0);
     const bar = (label, key, cls) => `<div class="poll-bar"><span class="pb-label">${label} <b>${r[key]}표</b></span>
       <span class="pb-track"><span class="pb-fill ${cls}" style="width:${pct(r[key])}%"></span></span><span class="pb-pct">${pct(r[key])}%</span></div>`;
-    const voteBtns = open ? `<form method="post" action="${base}/polls/${p.id}/vote" class="poll-actions">
+    // 이 안건이 요구하는 확인을 내가 통과했는가. 통과하지 못했으면 버튼을 아예 만들지 않는다 —
+    // 눌러 놓고 거절당하는 것보다, 무엇을 해야 열리는지를 그 자리에서 보여 주는 편이 낫다.
+    const lv = D.pollVerifyLevel(p);
+    const passed = lv === 0 || (lv === 1 ? meVerified : otpDone.has(p.id));
+    const gate = !open || passed ? "" : lv === 1
+      ? `<div class="poll-gate"><p class="pg-need"><b>본인확인을 마친 분만</b> 투표하실 수 있는 안건입니다.</p>
+          <p class="panel-hint">카카오 계정을 연결하시면 그 자리에서 끝납니다(무료). 카카오를 쓰지 않으시면
+            상인회 관리자에게 본인확인을 요청해 주세요.</p>
+          <a class="btn btn-outline btn-sm" href="${base}/account">카카오 연결하러 가기</a></div>`
+      : `<div class="poll-gate"><p class="pg-need"><b>휴대폰 인증번호</b>로 본인확인을 한 뒤에 투표하실 수 있는 안건입니다.</p>
+          ${D.isValidPhone(user.phone || "")
+            ? `<p class="panel-hint">계정에 등록된 ${esc(D.maskPhone(user.phone))} 으로 여섯 자리 번호를 보냅니다.</p>
+          <form method="post" action="${base}/polls/${p.id}/otp" class="inline-form">
+            <button class="btn btn-outline btn-sm">인증번호 받기</button></form>
+          <form method="post" action="${base}/polls/${p.id}/otp/verify" class="otp-form">
+            <label class="otp-label">받은 번호<input type="text" name="code" inputmode="numeric" autocomplete="one-time-code"
+              pattern="[0-9]*" maxlength="6" required placeholder="000000" /></label>
+            <button class="btn btn-primary btn-sm">확인</button></form>`
+            : `<p class="panel-hint">계정에 휴대폰 번호가 없어 인증번호를 보낼 수 없습니다. 상인회 관리자에게 번호 등록을 요청해 주세요.</p>`}
+        </div>`;
+    const voteBtns = open && passed ? `<form method="post" action="${base}/polls/${p.id}/vote" class="poll-actions">
         ${[["yes", "찬성"], ["no", "반대"], ["abstain", "기권"]].map(([v, l]) =>
           `<button name="choice" value="${v}" class="btn btn-sm ${mine === v ? "btn-primary" : "btn-ghost"}">${l}${mine === v ? " ✓" : ""}</button>`).join("")}
       </form>${mine ? `<p class="panel-hint">내 투표: <b>${{ yes: "찬성", no: "반대", abstain: "기권" }[mine]}</b> — 마감 전까지 변경할 수 있습니다.</p>` : ""}` : "";
     cards.push(`<section class="panel poll-card${open ? "" : " is-closed"}">
       <div class="panel-head"><h2 class="panel-title">${esc(p.title)}</h2>
+        ${lv ? `<span class="badge badge-lock">${lv === 1 ? "본인확인 필요" : "인증번호 필요"}</span>` : ""}
         <span class="badge ${open ? "badge-open" : "badge-muted"}">${open ? (p.closes_at ? `~${esc(p.closes_at)}` : "진행 중") : "마감"}</span></div>
       ${p.body ? `<p class="poll-body">${esc(p.body).replace(/\n/g, "<br />")}</p>` : ""}
+      ${lv && passed && open ? `<p class="poll-ok">본인확인을 마치셨습니다${
+        lv === 1 && user.verified_how ? ` (${esc(D.verifyHowLabel(user.verified_how))})` : ""} — 투표하실 수 있습니다.</p>` : ""}
+      ${gate}
       ${voteBtns}
       <div class="poll-results">${bar("찬성", "yes", "is-yes")}${bar("반대", "no", "is-no")}${bar("기권", "abstain", "is-abs")}
         <p class="panel-hint">총 ${r.total}명 참여</p></div>
@@ -1293,7 +1336,10 @@ export async function polls(ctx) {
           <label>안건 제목<input type="text" name="title" value="${esc(p.title)}" required maxlength="200" /></label>
           <label>설명 <small>(선택)</small><textarea name="body" rows="3" maxlength="2000">${esc(p.body || "")}</textarea></label>
           <label>마감일 <small>(선택·비우면 수동 마감)</small><input type="date" name="closes_at" value="${esc(String(p.closes_at || "").slice(0, 10))}" /></label>
+          ${verifyPick(lv)}
           <button class="btn btn-primary btn-sm">고친 내용 저장</button></form>
+          ${r.total && lv ? `<p class="panel-hint">확인 등급을 올리면 <b>이미 들어온 표는 그대로 남습니다.</b>
+            다만 그 표들은 새 등급을 통과하고 들어온 표가 아닙니다 — 등급은 안건을 올릴 때 정하는 편이 맞습니다.</p>` : ""}
         <span class="pill-row">
           ${open ? `<form method="post" action="${base}/admin/polls/${p.id}/close" data-confirm="이 투표를 마감할까요?&#10;마감해도 다시 열 수 있습니다."><input type="hidden" name="_csrf" value="${csrf}" /><button class="btn btn-ghost btn-sm">투표 마감</button></form>`
             : `<form method="post" action="${base}/admin/polls/${p.id}/reopen"><input type="hidden" name="_csrf" value="${csrf}" /><button class="btn btn-ghost btn-sm">다시 열기</button></form>`}
@@ -1308,7 +1354,10 @@ export async function polls(ctx) {
       <label>안건 제목<input name="title" required maxlength="200" placeholder="예: 가을 골목축제 공동 부스 운영 여부" /></label>
       <label>설명 (선택)<textarea name="body" rows="3" maxlength="2000"></textarea></label>
       <label>마감일 (선택·비우면 수동 마감)<input type="date" name="closes_at" /></label>
-      <button class="btn btn-primary btn-sm">투표 시작</button></form></div></details>` : "";
+      ${verifyPick(0)}
+      <button class="btn btn-primary btn-sm">투표 시작</button></form></div></details>
+    <p class="panel-hint"><a href="${base}/admin/polls/verify">투표 자격 대장 보기</a> —
+      지금 ${vTotal}명 중 <b>${vDone}명</b>이 본인확인을 마쳤습니다.</p>` : "";
   // 목록이 먼저, 글쓰기는 접어 둔다 — 예전에는 '새 안건 올리기' 폼이 화면을 다 먹고
   // 정작 안건 목록은 그 아래 회색 한 줄이었다.
   const pollList = cards.join("") || emptyCard("poll", "진행 중인 안건이 없습니다",
@@ -1325,6 +1374,79 @@ export async function polls(ctx) {
           <p class="pg-sub">총회에 못 오셔도 폰에서 의견을 남길 수 있습니다. 1인 1표, 마감 전 변경 가능.</p></div></div>
         ${inner}</div></section>`;
   return html(layout({ title: "안건 투표", assoc, base, user, body, activeNav: `${base}/polls`, csrf }));
+}
+
+// ================= 투표 자격 대장 =================
+//
+// 총회 안건을 표결에 올릴 때 가장 먼저 나오는 걱정은 하나다 — "그 표를 그 사람이 넣었나".
+// 본인확인기관(PASS 등)에 붙이면 건당 수십 원에 사업자 심사까지 필요하다. 그래서 여기서는
+// 돈과 심사가 들지 않는 길 셋을 두고, 어느 길로 확인됐는지를 이 대장에 그대로 적는다.
+//
+// ⚠️ 이것은 법이 정한 본인확인이 아니다. 화면에 그렇게 적는다 —
+//    관리자가 이걸 "법적 본인인증" 으로 알고 총회 결의의 근거로 삼으면 나중에 다투게 된다.
+export async function adminPollVerify(ctx) {
+  const { db, assoc, base, user, csrf, query } = ctx;
+  if (assoc.kind !== "merchant") return notFoundResponse(ctx);
+
+  const rows = await D.listMembersVerify(db, assoc.id);
+  const done = rows.filter((m) => m.verified_at);
+  const pct = rows.length ? Math.round((done.length / rows.length) * 100) : 0;
+  const byHow = { kakao: 0, otp: 0, admin: 0 };
+  for (const m of done) if (byHow[m.verified_how] !== undefined) byHow[m.verified_how]++;
+
+  const roleLabel = (r) => (r === "ADMIN" ? "관리자" : r === "STAFF" ? "담당자" : "");
+  const table = rows.length ? `<div class="table-scroll"><table class="admin-table vf-table">
+    <thead><tr><th>회원</th><th>가게</th><th>확인 상태</th><th>처리</th></tr></thead>
+    <tbody>${rows.map((m) => `<tr${m.verified_at ? "" : ' class="vf-none"'}>
+      <td><b>${esc(m.name)}</b>${roleLabel(m.role) ? ` <span class="badge badge-muted">${roleLabel(m.role)}</span>` : ""}
+        ${m.phone ? `<br /><small>${esc(D.formatPhone(m.phone))}</small>` : '<br /><small class="muted">번호 없음</small>'}</td>
+      <td>${esc(m.business_name || "")}</td>
+      <td>${m.verified_at
+        ? `<span class="badge badge-ok">확인됨</span> <small>${esc(D.verifyHowLabel(m.verified_how))} · ${esc(kstDate(m.verified_at, "."))}</small>`
+        : `<span class="badge badge-wait">확인 안 됨</span>${m.kakao_id ? ' <small class="muted">카카오는 연결됨 (번호가 명부와 달라 확인으로 인정되지 않음)</small>' : ""}`}</td>
+      <td><form method="post" action="${base}/admin/member/${m.id}/verify" class="inline-form"${m.verified_at
+        ? ` data-confirm="${esc(m.name)}님의 본인확인을 내릴까요?&#10;이미 넣은 표는 그대로 남습니다."` : ""}>
+        <input type="hidden" name="on" value="${m.verified_at ? "0" : "1"}" />
+        <button class="btn btn-xs ${m.verified_at ? "btn-ghost" : "btn-outline"}">${m.verified_at ? "확인 내리기" : "확인 처리"}</button></form></td>
+    </tr>`).join("")}</tbody></table></div>`
+    : `<p class="panel-hint">아직 회원이 없습니다.</p>`;
+
+  const inner = `${flashOf(query)}
+    <section class="panel">
+      <div class="panel-head"><h2 class="panel-title">${rows.length}명 중 ${done.length}명 확인됨</h2>
+        <span class="badge ${pct >= 100 ? "badge-ok" : "badge-muted"}">${pct}%</span></div>
+      <p class="panel-hint">확인을 마친 분만 투표할 수 있는 안건에서, 지금 <b>${rows.length - done.length}명</b>이
+        투표하실 수 없습니다. 아래에서 확인 처리하시거나, 그분들께 카카오 연결을 부탁하시면 됩니다.</p>
+      <ul class="vf-sum">
+        <li>카카오 연결로 확인 <b>${byHow.kakao}명</b></li>
+        <li>휴대폰 인증번호로 확인 <b>${byHow.otp}명</b></li>
+        <li>관리자가 확인 <b>${byHow.admin}명</b></li>
+      </ul>
+    </section>
+    <section class="panel">
+      <h2 class="panel-title">확인이 붙는 세 가지 길</h2>
+      <ol class="vf-ways">
+        <li><b>카카오 계정 연결</b> — 회원이 직접 연결합니다. 카카오 계정은 만들 때 통신사 휴대폰
+          인증을 거치므로, 그 번호가 명부의 번호와 같으면 확인으로 인정됩니다.
+          <span class="muted">돈이 들지 않고, 관리자가 할 일도 없습니다.</span></li>
+        <li><b>휴대폰 인증번호</b> — 전자계약 서명이나 인증번호 등급 안건에서 여섯 자리 번호를
+          입력해 통과한 분은 자동으로 확인됩니다. <span class="muted">보낼 때만 건당 발송비가 듭니다.</span></li>
+        <li><b>관리자 확인</b> — 총회 접수대에서 얼굴을 보고 확인하신 뒤 아래에서 눌러 주시면 됩니다.
+          <span class="muted">누가 언제 확인했는지 기록에 남습니다.</span></li>
+      </ol>
+      <p class="honest-line">이 확인은 법이 정한 본인확인기관(PASS·아이핀 등)의 인증이 아닙니다.
+        총회 결의의 근거로 쓰실 때는 서면 위임장·참석 명부를 함께 갖추시는 편이 안전합니다.</p>
+    </section>
+    ${table ? `<section class="panel"><h2 class="panel-title">회원 ${rows.length}명</h2>
+      <p class="panel-hint">확인 안 된 분이 위로 올라옵니다.</p>${table}</section>` : ""}`;
+
+  const body = await consoleShell(ctx, {
+    title: "투표 자격 대장", active: "polls",
+    eyebrow: `<a href="${base}/polls">← 안건 투표</a>`,
+    sub: "누구를 본인확인했는지 한 곳에서 봅니다. 확인된 분만 투표할 수 있는 안건에 쓰입니다.",
+    body: inner,
+  });
+  return html(layout({ title: "투표 자격 대장", assoc, base, user, body, csrf }));
 }
 
 // ================= 회원 게시판 =================
