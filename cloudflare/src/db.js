@@ -357,6 +357,22 @@ export const formatPhone = (p) => {
 };
 // 휴대폰 번호로 계정 찾기 — 번호는 유일하지 않다(부부가 가게 둘을 하는 경우가 실제로 있다).
 // 그래서 여럿을 돌려주고, 누구인지는 비밀번호가 가른다. 5개로 끊는 건 느려지지 않게 하려는 것.
+// ---------- 카카오 로그인 연결 ----------
+export const getUserByKakaoId = (db, kakaoId) =>
+  kakaoId ? first(db, "SELECT * FROM users WHERE kakao_id = ? AND kakao_id != ''", String(kakaoId)) : Promise.resolve(null);
+// 번호로 사람을 찾는다. **한 명일 때만** 돌려준다 —— 같은 번호를 두 계정이 쓰고 있으면
+// 누구로 들어와야 하는지 알 수 없고, 아무나 고르면 남의 계정을 여는 셈이 된다.
+export async function findUserByPhone(db, phone, assocId = null) {
+  const d = normalizePhone(phone);
+  if (!d) return null;
+  const rows = assocId
+    ? await all(db, "SELECT * FROM users WHERE phone = ? AND association_id = ? ORDER BY id LIMIT 3", d, assocId)
+    : await all(db, "SELECT * FROM users WHERE phone = ? ORDER BY id LIMIT 3", d);
+  return rows.length === 1 ? rows[0] : null;
+}
+export const setUserKakao = (db, uid, kakaoId) => run(db, "UPDATE users SET kakao_id=? WHERE id=?", String(kakaoId || ""), uid);
+export const clearUserKakao = (db, uid) => run(db, "UPDATE users SET kakao_id='' WHERE id=?", uid);
+
 export const listUsersByPhone = (db, phone) => {
   const d = normalizePhone(phone);
   return d ? all(db, "SELECT * FROM users WHERE phone = ? ORDER BY id LIMIT 5", d) : Promise.resolve([]);

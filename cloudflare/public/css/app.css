@@ -4531,3 +4531,23 @@ body.is-console[data-console="super"] .console-strip{border-bottom:1px solid #2b
 .lg-main th:nth-child(7),.lg-main td:nth-child(7){width:13%}
 .lg-main th:nth-child(8),.lg-main td:nth-child(8){width:7%}
 .lg-main th:nth-child(9),.lg-main td:nth-child(9){width:15%}
+
+/* ── 카카오 로그인 단추 ────────────────────────────────────────────────
+   색과 글자색은 카카오가 정해 둔 조합(노랑 #FEE500 · 먹 85%)을 그대로 쓴다.
+   우리 브랜드색으로 칠하면 "상인회가 만든 카카오" 처럼 보여 누구에게 로그인하는지 흐려진다. */
+.kko-wrap{margin:18px 0 6px;display:flex;flex-direction:column;gap:8px}
+.btn-kakao{display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;
+  min-height:52px;padding:0 18px;border-radius:var(--r-md);border:0;cursor:pointer;
+  background:#FEE500;color:rgba(0,0,0,.85);font-family:inherit;font-size:16px;font-weight:700;
+  letter-spacing:-.01em;text-decoration:none;transition:filter .2s}
+.btn-kakao:hover{filter:brightness(.96);text-decoration:none;color:rgba(0,0,0,.85)}
+.btn-kakao:active{filter:brightness(.92)}
+.btn-kakao svg{flex:none}
+.btn-kakao-sm{width:auto;min-height:44px;font-size:14.5px;padding:0 16px}
+.kko-note{font-size:.85rem;color:var(--muted);line-height:1.55;text-align:center}
+/* 로그인 화면에서 비밀번호 폼과 카카오 사이에 '또는' 선 */
+/* 배경을 칠하지 않는다 —— 로그인 화면은 상인회 색으로 물들어 있어, 흰 배경을 깔면 네모가 뜬다 */
+.kko-wrap::before{content:"또는";display:block;text-align:center;font-size:.8rem;color:var(--muted);margin:0 0 -2px}
+/* 운영 가이드의 '정직한 한 줄' — 할 수 있는 것 옆에 못 하는 것을 같은 크기로 적는다 */
+.honest-line{margin-top:8px;padding:8px 12px;border-left:3px solid var(--no);background:var(--bg-alt);
+  font-size:.88rem;line-height:1.6;color:var(--ink-soft)}

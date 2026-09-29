@@ -13,6 +13,7 @@ import { isFieldKind, round4, FIELD_KINDS, pageCount, remapFields } from "./pape
 import { parseTable, toCsv, decodeUtf8, headerRole } from "./csv.js";
 import { builtinById, isBuiltinId, normalizeTemplate, extractVars, applyVars, fillVars, resolveFieldPages } from "./templates.js";
 import { resolveExtToken, makeExtToken, extSignUrl, sendSignLink, remindExternals, originFor, rememberOrigin } from "./extsign.js";
+import { kakaoReady, kakaoRedirectUri, kakaoAuthUrl, kakaoExchange, kakaoMe, makeState, readState, resolveKakaoUser } from "./kakao.js";
 import { enqueueDocEvent, newApiKey, hashApiKey, KEY_PREFIX, checkWebhookUrl } from "./apiv1.js";
 import { turnstileVerify } from "./turnstile.js";
 import { planOf, PLANS, PLAN_KEYS, planPriceKey } from "./plans.js";
@@ -156,6 +157,72 @@ export async function login(ctx) {
   // 서명 링크를 눌렀다가 로그인하러 온 사람은 그 문서로 돌려보낸다.
   // (safeNext 가 같은 사이트 경로만 통과시킨다 — 열린 리다이렉트 차단)
   return redirect(safeNext(form.get("next")) || (await postLoginPath(db, user, assoc)));
+}
+
+// ---------- 카카오 로그인 ----------
+//
+// 두 갈래로 들어온다.
+//   · 로그인 화면의 '카카오로 로그인' —— 처음 오는 사람. 카카오가 알려 준 번호가 명부에 있으면 통과.
+//   · 계정 설정의 '카카오 연결' —— 이미 로그인한 사람. 지금 계정에 이어 붙인다.
+// 어느 쪽이든 되돌아올 자리를 state 에 서명해 담는다(쿠키를 하나 더 만들지 않기 위해서다).
+export async function kakaoStart(ctx) {
+  const { env, url, user, base, query } = ctx;
+  const at = base || "";
+  if (!kakaoReady(env)) return back(at + "/login", "카카오 로그인이 아직 준비되지 않았습니다. 운영사에 문의해 주세요.", true);
+  const state = await makeState(env.SESSION_SECRET, {
+    base: at, next: safeNext(query.get("next")) || "", uid: user ? user.id : 0,
+  });
+  return redirect(kakaoAuthUrl(env, { redirectUri: kakaoRedirectUri(url), state }), 302);
+}
+
+export async function kakaoCallback(ctx) {
+  const { db, env, url, query, addCookie, isProd, assoc } = ctx;
+  const st = await readState(env.SESSION_SECRET, query.get("state"));
+  // state 가 어긋나면 되돌아갈 자리조차 믿을 수 없다 — 공용 로그인으로 세운다.
+  if (!st) return redirect("/login?err=1&msg=" + encodeURIComponent("로그인 요청이 만료되었거나 올바르지 않습니다. 다시 시도해 주세요."));
+  const at = st.base || "";
+  if (query.get("error")) {
+    const msg = query.get("error_description") || "카카오 로그인을 취소했습니다.";
+    return back(at + "/login", msg, true);
+  }
+  const code = query.get("code");
+  if (!code) return back(at + "/login", "카카오에서 인증 코드를 받지 못했습니다.", true);
+  if (!kakaoReady(env)) return back(at + "/login", "카카오 로그인이 아직 준비되지 않았습니다.", true);
+
+  const tok = await kakaoExchange(env, { code, redirectUri: kakaoRedirectUri(url) });
+  if (!tok.ok) return back(at + "/login", `카카오 로그인에 실패했습니다. (${tok.error})`, true);
+  const kk = await kakaoMe(tok.token);
+  if (!kk.ok) return back(at + "/login", `카카오 정보를 읽지 못했습니다. (${kk.error})`, true);
+
+  const r = await resolveKakaoUser(db, kk, { uid: st.uid, assocId: assoc ? assoc.id : null });
+  const land = async (u, flash) => {
+    const token = await sessionTokenForUser(u, env.SESSION_SECRET);
+    addCookie(sessionCookie(token, isProd));
+    const to = st.next || (await postLoginPath(db, u, assoc));
+    return redirect(flash ? `${to}${to.includes("?") ? "&" : "?"}msg=${encodeURIComponent(flash)}` : to);
+  };
+
+  if (r.kind === "login") return land(r.user);
+  if (r.kind === "link") {
+    await D.setUserKakao(db, r.user.id, kk.id);
+    // 이름·번호가 비어 있던 계정이면 카카오가 알려 준 값으로 채운다(덮어쓰지는 않는다).
+    if (!r.user.phone && kk.phone) await D.setUserPhone(db, r.user.id, kk.phone).catch(() => {});
+    return land(r.user, "카카오 계정을 연결했습니다. 다음부터는 카카오로 바로 들어오실 수 있습니다.");
+  }
+  if (r.kind === "already")
+    return back(st.uid ? at + "/account" : at + "/login", "이 계정에는 이미 다른 카카오가 연결돼 있습니다. 먼저 연결을 해제해 주세요.", true);
+  if (r.kind === "taken")
+    return back(at + "/login", "그 번호의 계정에는 이미 다른 카카오가 연결돼 있습니다. 상인회 관리자에게 문의해 주세요.", true);
+  if (r.kind === "unknown")
+    return back(at + "/login", `${D.maskPhone(r.phone)} 번호로 등록된 회원이 없습니다. 회원 신청을 먼저 해 주시거나, 상인회 관리자에게 번호 등록을 요청해 주세요.`, true);
+  // nophone —— 카카오가 번호를 주지 않았다(비즈니스 앱 전환 전이거나 동의하지 않음).
+  return back(at + "/login", "카카오에서 휴대폰 번호를 받지 못해 회원을 찾을 수 없습니다. 먼저 휴대폰 번호와 비밀번호로 로그인하신 뒤, 계정 설정에서 카카오를 연결해 주세요.", true);
+}
+
+export async function kakaoUnlink(ctx) {
+  const { db, user, base } = ctx;
+  await D.clearUserKakao(db, user.id);
+  return back((base || "") + "/account", "카카오 연결을 해제했습니다. 휴대폰 번호와 비밀번호로 로그인하실 수 있습니다.");
 }
 
 export async function logout(ctx) {
