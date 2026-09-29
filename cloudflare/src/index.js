@@ -277,6 +277,7 @@ export const TENANT = [
   ["POST", "/admin/documents/:id/bulk", api.adminBulkPrepare, "STAFF"],
   ["GET",  "/admin/documents/:id/bulk/sample", api.adminBulkSample, "STAFF"],
   ["GET",  "/admin/bulk/:bid", pages.adminBulkView, "STAFF"],
+  ["GET",  "/admin/bulk/:bid/ledger", pages.adminBulkLedger, "STAFF"],
   ["POST", "/admin/bulk/:bid/run", api.adminBulkRun, "STAFF"],
   ["POST", "/admin/bulk/:bid/delete", api.adminBulkDelete, "STAFF"],
   ["GET", "/admin/documents/:id", pages.adminDocumentDetail, "STAFF"],
