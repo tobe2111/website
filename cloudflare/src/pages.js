@@ -7,7 +7,7 @@ import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG, ORIGIN, as
 import { kakaoReady } from "./kakao.js";
 // 카카오 말풍선 —— 공식 로고 파일을 재배포하지 않고 같은 모양의 도형만 그린다.
 const KAKAO_MARK = `<svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 3C6.9 3 2.8 6.2 2.8 10.2c0 2.6 1.7 4.8 4.3 6.1l-1 3.6c-.1.3.2.6.5.4l4.3-2.8c.4 0 .7.1 1.1.1 5.1 0 9.2-3.2 9.2-7.4S17.1 3 12 3z"/></svg>`;
-import { verifyInviteToken, verifyPhotoToken, SALES_STAGES, otpRequired, selfSignupOn, MAX_SLOTS, BULK_MAX, BULK_CHUNK, docOf, isPlaceholderEmail, importMemberRows, autoLinkChunk, farFromStreet, unlinkFar, photoChunk, makePhotoToken, mapKeys, MAP_CHUNK, PHOTO_CHUNK } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
+import { verifyInviteToken, verifyPhotoToken, verifyVoteToken, makeVoteToken, SALES_STAGES, otpRequired, selfSignupOn, MAX_SLOTS, BULK_MAX, BULK_CHUNK, docOf, isPlaceholderEmail, importMemberRows, autoLinkChunk, farFromStreet, unlinkFar, photoChunk, makePhotoToken, mapKeys, MAP_CHUNK, PHOTO_CHUNK } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
 import { html, notFoundResponse, back, redirect } from "./http.js";
 import { deals as urdealDeals, urdealProductUrl, urdealSellerUrl, sellerPhotos, urdealBase, urdealSignupUrl, urdealSellerLoginUrl } from "./urdeal.js";
 import { placeSourceOf } from "./placePhoto.js";
@@ -1335,12 +1335,14 @@ export async function polls(ctx) {
       <div class="poll-results">${bar("찬성", "yes", "is-yes")}${bar("반대", "no", "is-no")}${bar("기권", "abstain", "is-abs")}
         <p class="panel-hint">총 ${r.total}명 참여</p></div>
       ${isAdmin ? `<span class="pill-row poll-admin-row">
+        <a class="btn btn-primary btn-sm" href="${base}/admin/polls/${p.id}/links">투표 링크 보내기</a>
         <a class="btn btn-outline btn-sm" href="${base}/admin/polls/${p.id}/minutes">표결 결과 · 의사록</a>
       </span>
       <details class="mini-edit poll-tell"><summary>
         <span class="mini-edit-hint">회원에게 알리기 — 카톡·문자로 (0원)</span></summary>
-        <p class="panel-hint">알림톡은 아직 카카오 심사 전이라, 지금은 아래 글을 단톡방에 붙이시는 것이
-          가장 빠르고 <b>돈이 들지 않습니다.</b> 링크는 로그인 화면을 거쳐 이 안건으로 갑니다.</p>
+        <p class="panel-hint">아래 글은 <b>단톡방에 통째로</b> 붙이는 글입니다 — 받으신 분은 로그인을 거쳐
+          투표하십니다. 로그인이 어려우신 분들껜 <b>투표 링크 보내기</b>로 한 분씩 보내시면
+          비밀번호 없이 바로 투표하십니다. 둘 다 문자 요금 말고는 돈이 들지 않습니다.</p>
         <div class="stack-form"><label>보낼 글
           <textarea rows="7" readonly data-select-all>${esc(tellText(p))}</textarea></label></div>
         <span class="pill-row">
@@ -1473,6 +1475,123 @@ export async function adminPollVerify(ctx) {
   return html(layout({ title: "투표 자격 대장", assoc, base, user, body, csrf }));
 }
 
+const CHOICE_KO = { yes: "찬성", no: "반대", abstain: "기권" };
+
+// ================= 투표 링크 (로그인 없이 한 표) =================
+//
+// 총회 안건을 폰으로 받기로 해 놓고 정작 막히는 곳은 늘 로그인이다. 임시 비밀번호를 만들어
+// 카톡으로 보내고, 잃어버리셨다고 다시 요청이 오고, 그러는 사이 마감이 지난다.
+// 회원이 100곳이면 그 왕복이 100번이라 결국 아무도 투표하지 않는다.
+//
+// 그래서 사진 요청 링크와 같은 방식을 쓴다 — **그 사람의 그 안건 한 표만** 여는 서명된 링크.
+// 카카오 설정도, 알림톡 심사도, 비밀번호도 필요 없다. 문자 한 통이면 끝난다.
+export async function votePage(ctx) {
+  const { db, env, assoc, base, query, csrf } = ctx;
+  const token = String(ctx.params.token || "");
+  const shell = (inner, title) => html(layout({ title, assoc, base, csrf, body:
+    `<section class="section page-top"><div class="container auth-wrap"><div class="auth-card">${inner}</div></div></section>` }));
+
+  const t = await verifyVoteToken(env.SESSION_SECRET, token, assoc.id);
+  if (!t) return shell(`${authHead("링크가 만료되었습니다", "투표 링크는 30일 동안만 열려 있습니다.", assoc)}
+    <p class="auth-note">${esc(assoc.name)}에 연락해 새 링크를 요청해 주세요.</p>`, "안건 투표");
+
+  const [p, u] = await Promise.all([D.getPoll(db, t.p), D.getUserById(db, t.u)]);
+  if (!p || p.association_id !== assoc.id || !u || u.association_id !== assoc.id) return notFoundResponse(ctx);
+
+  const open = D.isPollOpen(p);
+  const mine = await D.userVote(db, p.id, u.id);
+  const here = `${base}/vote/${encodeURIComponent(token)}`;
+  const lv = D.pollVerifyLevel(p);
+
+  // 인증번호 등급은 이 길로 열지 않는다. 단추를 만들지 않고, 왜 안 되는지를 적는다 —
+  // 없는 단추는 고장으로 보이고, 고장으로 보이면 그분은 전화를 건다.
+  const body = lv === 2
+    ? `<p class="auth-note">이 안건은 <b>휴대폰 인증번호로 본인확인</b>을 하셔야 투표하실 수 있습니다.
+        아래에서 로그인하신 뒤 투표 화면에서 인증번호를 받아 주세요.</p>
+      <p class="pill-row"><a class="btn btn-primary" href="${base}/login?next=${encodeURIComponent(base + "/polls")}">로그인하고 투표하기</a></p>`
+    : !open
+      ? `<p class="auth-note">이 안건은 <b>마감되었습니다.</b>${mine ? ` 넣으셨던 표는 <b>${esc(CHOICE_KO[mine] || mine)}</b> 입니다.` : ""}</p>`
+      : `<form method="post" action="${here}" class="vl-pick">
+          ${[["yes", "찬성"], ["no", "반대"], ["abstain", "기권"]].map(([v, l]) =>
+            `<button name="choice" value="${v}" class="btn ${mine === v ? "btn-primary" : "btn-outline"}">${l}${mine === v ? " ✓" : ""}</button>`).join("")}
+        </form>
+        ${mine ? `<p class="auth-note">지금 <b>${esc(CHOICE_KO[mine] || mine)}</b> 로 되어 있습니다 — 마감 전까지 다시 눌러 바꾸실 수 있습니다.</p>`
+          : `<p class="auth-note">하나를 눌러 주시면 그 자리에서 기록됩니다. 마감 전까지 바꾸실 수 있습니다.</p>`}`;
+
+  return shell(`${authHead(esc(p.title), `${esc(assoc.name)} 안건 투표`, assoc)}
+    ${flashOf(query)}
+    <p class="vl-who"><b>${esc(u.name)}</b>님으로 투표하십니다${u.phone ? ` · ${esc(D.maskPhone(u.phone))}` : ""}</p>
+    ${p.body ? `<p class="vl-body">${esc(p.body).replace(/\n/g, "<br />")}</p>` : ""}
+    ${p.closes_at ? `<p class="auth-note">마감: <b>${esc(p.closes_at)}</b></p>` : ""}
+    ${body}
+    <p class="honest-line"><b>이 링크는 ${esc(u.name)}님 한 분의 표입니다.</b> 다른 분께 넘기시면
+      그분이 대신 누를 수 있으니, 단톡방에 올리지 말아 주세요. 이 링크로는 투표만 되고
+      게시판·계약서 같은 다른 화면은 열리지 않습니다.</p>`, `${p.title} · 안건 투표`);
+}
+
+// ── 관리자: 사람마다 링크를 만들어 문자로 보낸다 ──────────────────────────
+//
+// 한 곳당 한 줄. 휴대폰에서 열면 '문자로 보내기' 가 문자 앱을 글과 링크가 채워진 채로 연다 —
+// 복사도 심사도 필요 없고, 문자 요금만 회장님 휴대폰으로 나간다.
+// 여기에 '모두 복사' 를 두지 않는 이유가 있다: 링크는 사람마다 다르고, 한 덩어리로 복사하면
+// 단톡방에 통째로 붙이게 된다. 그러면 아무나 남의 표를 누를 수 있다.
+export async function adminPollLinks(ctx) {
+  const { db, env, assoc, base, user, csrf, query } = ctx;
+  const p = await D.getPoll(db, Number(ctx.params.id) || 0);
+  if (!p || p.association_id !== assoc.id) return notFoundResponse(ctx);
+  const lv = D.pollVerifyLevel(p);
+
+  const rows = await D.listPollRecipients(db, p.id, assoc.id);
+  const made = await Promise.all(rows.map(async (m) => ({
+    ...m,
+    url: `${ORIGIN}${base}/vote/${encodeURIComponent(await makeVoteToken(env.SESSION_SECRET, assoc.id, p.id, m.id))}`,
+  })));
+  const msgOf = (m) => `[${assoc.name}] ${m.name}님, 안건 투표를 부탁드립니다.\n\n`
+    + `▶ 안건: ${p.title}\n`
+    + `▶ 마감: ${p.closes_at || "마감 안내 시까지"}\n\n`
+    + `아래 링크를 누르시면 로그인 없이 바로 투표하실 수 있습니다.\n${m.url}\n\n`
+    + `이 링크는 ${m.name}님 한 분의 표이니 다른 분께 넘기지 말아 주세요.`;
+
+  const done = made.filter((m) => m.choice).length;
+  const table = made.length ? `<div class="table-scroll"><table class="admin-table vl-table">
+    <thead><tr><th>회원 · 보내기</th><th>연락처</th><th>표</th></tr></thead>
+    <tbody>${made.map((m) => `<tr${m.choice ? "" : ' class="vl-todo"'}>
+      <td><b>${esc(m.name)}</b>${m.business_name ? ` <small>${esc(m.business_name)}</small>` : ""}
+        <div class="act-two">${m.phone
+          ? `<a class="btn btn-xs btn-primary" href="sms:${esc(String(m.phone).replace(/\D/g, ""))}?&body=${encodeURIComponent(msgOf(m))}">문자로 보내기</a>`
+          : ""}<button type="button" class="btn btn-xs btn-outline" data-copy="${esc(msgOf(m))}">이 글 복사</button></div></td>
+      <td>${m.phone ? `<a href="tel:${esc(m.phone)}">${esc(D.formatPhone(m.phone))}</a>` : '<span class="muted">번호 없음</span>'}</td>
+      <td>${m.choice
+        ? `<span class="badge badge-ok">${esc(CHOICE_KO[m.choice] || m.choice)}</span>`
+        : '<span class="badge badge-wait">아직</span>'}</td>
+    </tr>`).join("")}</tbody></table></div>` : `<p class="panel-hint">아직 회원이 없습니다.</p>`;
+
+  const inner = `${flashOf(query)}
+    <section class="panel">
+      <div class="panel-head"><h2 class="panel-title">${made.length}명 중 ${done}명 투표함</h2>
+        <span class="badge ${done >= made.length ? "badge-ok" : "badge-muted"}">${made.length ? Math.round((done / made.length) * 100) : 0}%</span></div>
+      <p class="panel-hint">사람마다 <b>다른 링크</b>입니다. 그 링크를 누른 분은 로그인 없이 바로
+        투표하십니다 — 비밀번호를 만들어 드리거나 카카오를 설정할 필요가 없습니다.
+        <b>문자 요금 말고는 돈이 들지 않습니다.</b></p>
+      <p class="honest-line"><b>단톡방에 올리지 마세요.</b> 링크 하나가 한 사람의 표라서,
+        여럿이 보는 곳에 올리면 아무나 남의 표를 누를 수 있습니다. 1:1 카톡이나 문자로
+        한 분씩 보내 주세요. 링크는 30일 뒤에 스스로 닫힙니다.</p>
+      ${lv === 2 ? `<p class="honest-line">이 안건은 <b>인증번호 등급</b>이라 링크로는 투표되지 않습니다.
+        링크를 누르면 로그인하라는 안내가 뜹니다 — 등급을 내리시거나 이 화면을 쓰지 마세요.</p>` : ""}
+    </section>
+    <section class="panel"><h2 class="panel-title">회원 ${made.length}명</h2>
+      <p class="panel-hint">아직 안 넣으신 분이 위로 올라옵니다.</p>${table}</section>`;
+
+  const body = await consoleShell(ctx, {
+    title: "투표 링크 보내기", active: "polls",
+    eyebrow: `<a href="${base}/polls">← 안건 투표</a>`,
+    sub: `${esc(p.title)} · ${made.length}명 중 ${done}명 투표함`,
+    body: inner,
+  });
+  return html(layout({ title: "투표 링크 보내기", assoc, base, user, body, csrf,
+    scripts: `<script src="${assetUrl("/js/super-tabs.js")}" defer></script>` }));
+}
+
 // ================= 투표 결의서 · 명세 (의사록에 붙이는 종이) =================
 //
 // 왜 필요한가 —— 화면에는 합계만 있었다. "찬성 12표 · 반대 3표 · 총 15명".
@@ -1486,7 +1605,6 @@ export async function adminPollVerify(ctx) {
 //   ③ 미투표자 명단 — 총무가 전화를 돌릴 종이 (전화번호 포함)
 const MN_VOTE_ROWS = 18;      // 명세 한 장에 들어가는 줄
 const MN_LEFT_ROWS = 24;      // 미투표자 한 장에 들어가는 줄 (칸이 적어 더 들어간다)
-const CHOICE_KO = { yes: "찬성", no: "반대", abstain: "기권" };
 
 // 장마다 다시 얹는 머리. 장이 흩어져도 이 장이 무슨 안건의 몇째 장인지 알 수 있어야 한다.
 const mnHead = (assoc, p, label, n, of) => `<div class="mn-head">
@@ -1544,13 +1662,15 @@ export async function adminPollMinutes(ctx) {
         <tr><td>카카오 계정 연결로 확인</td><td class="mn-num">${breakdown.kakao}표</td></tr>
         <tr><td>휴대폰 인증번호로 확인</td><td class="mn-num">${breakdown.otp}표</td></tr>
         <tr><td>관리자가 확인</td><td class="mn-num">${breakdown.admin}표</td></tr>
+        <tr><td>문자로 보낸 링크로 투표</td><td class="mn-num">${breakdown.link}표</td></tr>
         <tr><td>확인 없음 (로그인만)</td><td class="mn-num">${breakdown.none}표</td></tr>
       </tbody>
     </table>
     <p class="mn-line mn-warn">이 확인은 <b>법이 정한 본인확인기관(PASS·아이핀 등)의 인증이 아닙니다.</b>
       카카오 계정의 번호가 명부와 맞는지, 휴대폰으로 보낸 번호를 실제로 받았는지, 관리자가
-      얼굴을 보고 확인했는지 — 셋뿐입니다. 결의의 근거로 쓰실 때는 서면 위임장·참석 명부를
-      함께 갖추시는 편이 안전합니다.</p>
+      얼굴을 보고 확인했는지 — 셋뿐입니다.${breakdown.link ? ` 그중 <b>문자 링크로 들어온 ${breakdown.link}표</b>는
+      가장 약합니다: 링크를 받은 번호는 그분의 번호이지만, 링크 자체는 남에게 넘길 수 있습니다.` : ""}
+      결의의 근거로 쓰실 때는 서면 위임장·참석 명부를 함께 갖추시는 편이 안전합니다.</p>
     <table class="mn-tbl mn-meta">
       <tr><th>투표 기간</th><td>${esc(kstDate(p.created_at, "."))} ~ ${p.closes_at ? esc(p.closes_at) : "마감일 없음"}${
         open ? " <b>(진행 중)</b>" : " (마감)"}</td></tr>

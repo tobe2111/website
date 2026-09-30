@@ -1030,6 +1030,13 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .vf-ways .muted{display:block;font-size:.86em}
 .vf-table .vf-none td{background:var(--wait-bg)}
 .vf-table small{color:var(--muted)}
+/* 투표 링크 — 로그인 없이 여는 한 표 */
+.vl-who{margin:0 0 10px;font-size:.94rem}
+.vl-body{margin:0 0 14px;color:var(--ink-soft);line-height:1.6}
+.vl-pick{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0 10px}
+.vl-pick .btn{flex:1 1 92px;justify-content:center;font-size:1.02rem;padding:14px 10px}
+.vl-table .vl-todo td{background:var(--wait-bg)}
+.vl-table small{color:var(--muted)}
 /* 회원에게 알리기 — 안건 카드 안의 두 단추 줄 */
 .poll-admin-row{margin-bottom:10px}
 .poll-tell textarea{font-size:.86rem;line-height:1.55}

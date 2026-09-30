@@ -3944,6 +3944,68 @@ export async function verifyPhotoToken(secret, token, assocId) {
   return data;
 }
 
+// ---------- 투표 링크 —— 비밀번호 없이 한 표 ----------
+//
+// 왜 필요한가 ——
+// 총회 안건을 폰으로 받기로 해 놓고 정작 막히는 곳은 늘 로그인이다. 사장님께 임시
+// 비밀번호를 만들어 카톡으로 보내고, 잃어버리셨다고 다시 요청이 오고, 그러는 사이
+// 마감이 지난다. 회원이 100곳이면 이 왕복이 100번이다 — 그래서 아무도 투표하지 않는다.
+//
+// 그래서 사진 요청 링크와 같은 방식을 쓴다: **그 사람의 그 안건 한 표만** 여는 서명된 링크.
+// 카카오 설정도, 알림톡 심사도, 비밀번호도 필요 없다. 문자 한 통이면 끝난다.
+//
+// ── 이 링크가 열지 않는 것 ──────────────────────────────────────────────
+// · 로그인이 아니다. 쿠키를 심지 않는다 — 게시판·계약서·계정 설정 어디에도 못 간다.
+// · 다른 안건에 못 쓴다. 다른 사람으로도 못 쓴다 — 둘 다 서명 안에 들어 있다.
+// · 인증번호 등급(2) 안건에는 통하지 않는다. 그 등급은 본인이 번호를 받아야 하는 것이고,
+//   문자로 받은 링크는 그 자리를 대신하지 못한다.
+// ──────────────────────────────────────────────────────────────────────
+//
+// 남는 위험은 하나 —— **링크를 남에게 넘기면 그 사람이 대신 누를 수 있다.** 그래서
+// 단톡방에 뿌리면 안 되고(화면이 그렇게 경고한다), 표에는 '문자 링크' 로 적혀 의사록에서
+// 카카오·인증번호로 들어온 표와 구별된다. 계정에 본인확인 표시를 붙이지도 않는다 —
+// 링크를 받았다는 것은 그 사람이라는 증명이 아니기 때문이다.
+const VOTE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+export async function makeVoteToken(secret, assocId, pollId, userId) {
+  const json = JSON.stringify({ a: assocId, p: pollId, u: userId, x: Date.now() + VOTE_TTL_MS });
+  const sig = await hmacSign(secret, "vote|" + json);
+  return `${b64uFromBytes(new TextEncoder().encode(json))}.${sig}`;
+}
+export async function verifyVoteToken(secret, token, assocId) {
+  const parts = String(token || "").split(".");
+  if (parts.length !== 2) return null;
+  let raw;
+  try { raw = new TextDecoder().decode(bytesFromB64u(parts[0])); } catch { return null; }
+  // 서명 문맥이 "vote|" 다 — 사진 링크·초대 링크를 투표 링크로 돌려 쓸 수 없다.
+  if (!(await hmacVerify(secret, "vote|" + raw, parts[1]))) return null;
+  let data;
+  try { data = JSON.parse(raw); } catch { return null; }
+  if (!data || data.a !== assocId || !data.p || !data.u || !data.x || Date.now() > data.x) return null;
+  return data;
+}
+
+// 링크로 들어온 한 표. 로그인 없음 — 토큰이 곧 권한이다.
+export async function voteByLink(ctx) {
+  const { db, env, form, assoc, base } = ctx;
+  const token = String(ctx.params.token || "");
+  const here = `${base}/vote/${encodeURIComponent(token)}`;
+  const t = await verifyVoteToken(env.SESSION_SECRET, token, assoc.id);
+  if (!t) return back(here, "링크가 만료되었거나 올바르지 않습니다.", true);
+  const p = await D.getPoll(db, t.p);
+  if (!p || p.association_id !== assoc.id) return back(here, "안건을 찾을 수 없습니다.", true);
+  if (!D.isPollOpen(p)) return back(here, "마감된 투표입니다.", true);
+  // 인증번호 등급은 링크로 통과시키지 않는다. 화면에도 단추를 만들지 않지만,
+  // 주소로 직접 보낸 요청이 여기서 걸려야 실제로 막은 것이다.
+  if (D.pollVerifyLevel(p) === 2)
+    return back(here, "이 안건은 휴대폰 인증번호로 본인확인을 하셔야 합니다. 로그인해 투표해 주세요.", true);
+  const u = await D.getUserById(db, t.u);
+  if (!u || u.association_id !== assoc.id) return back(here, "회원을 찾을 수 없습니다.", true);
+  const choice = form.get("choice");
+  if (!["yes", "no", "abstain"].includes(choice)) return back(here, "선택을 확인해 주세요.", true);
+  await D.votePoll(db, p.id, u.id, choice, "link");
+  return back(here, "투표했습니다. 마감 전까지 이 링크에서 다시 바꾸실 수 있습니다.");
+}
+
 export async function adminCreatePhotoLink(ctx) {
   const { db, env, base, assoc } = ctx;
   const b = await D.getBusinessById(db, Number(ctx.params.id) || 0);

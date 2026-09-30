@@ -62,6 +62,8 @@ const mnPoll = await D.createPoll(env.DB, { associationId: m.id, title: "정관 
 // 의사록 화면은 표가 몇 줄이라도 있어야 명세표가 그려진다 — 빈 표만 재면 뜻이 없다
 for (const row of (await env.DB.prepare("SELECT id FROM users WHERE association_id=? AND role='MERCHANT' ORDER BY id LIMIT 5").bind(m.id).all()).results || [])
   await D.votePoll(env.DB, mnPoll.id, row.id, "yes", "admin");
+// 링크 보내기 화면은 회원 한 줄마다 링크를 만든다 — 줄이 있어야 잴 것이 있다
+const linkPoll = await D.createPoll(env.DB, { associationId: m.id, title: "가을 골목축제 공동 부스 운영 여부", createdBy: null });
 
 const ad = await hashPassword("market1234");
 await D.createUser(env.DB, { email: "office@market.kr", passwordHash: ad.hash, salt: ad.salt, name: "총무", role: "ADMIN", associationId: m.id });
@@ -139,6 +141,7 @@ const PAGES = [
   ["admin-api", "API 연동", `${B}/admin/api`, "admin"],
   ["admin-verify", "투표 자격 대장", `${B}/admin/polls/verify`, "admin"],
   ["admin-minutes", "표결 결과 · 의사록", `${B}/admin/polls/${mnPoll.id}/minutes`, "admin"],
+  ["admin-vlinks", "투표 링크 보내기", `${B}/admin/polls/${linkPoll.id}/links`, "admin"],
 ];
 if (docs[0]) {
   PAGES.push(["admin-doc", "계약 상세", `${B}/admin/documents/${docs[0].id}`, "admin"]);

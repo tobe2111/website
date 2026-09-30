@@ -400,6 +400,10 @@ export const VERIFY_HOW = {
   kakao: "카카오 연결",
   otp: "휴대폰 인증번호",
   admin: "관리자 확인",
+  // 아래는 **표에만** 적히고 계정에는 붙지 않는다(setUserVerified 가 받지 않는다).
+  // 문자로 보낸 링크를 눌렀다는 것은 그 번호로 받았다는 뜻일 뿐, 그 사람이라는 증명이
+  // 아니다 — 링크는 남에게 넘길 수 있다. 의사록에서 구별되도록 이름만 준다.
+  link: "문자 링크",
 };
 export const verifyHowLabel = (how) => VERIFY_HOW[how] || "";
 export const isVerified = (u) => !!(u && u.verified_at);
@@ -408,7 +412,8 @@ export const isVerified = (u) => !!(u && u.verified_at);
 // 카카오는 통신사 인증을 거친 계정이 남는다. 관리자 확인은 사람의 말이라 기록이 그 말뿐이다.
 const VERIFY_RANK = { otp: 3, kakao: 2, admin: 1 };
 export async function setUserVerified(db, id, how, byId = 0) {
-  if (!VERIFY_HOW[how]) return;
+  // link 는 여기 없다 — 표에만 적히고 계정에는 붙지 않는다.
+  if (!VERIFY_RANK[how]) return;
   const cur = await first(db, "SELECT verified_at, verified_how FROM users WHERE id=?", id);
   if (cur && cur.verified_at && (VERIFY_RANK[cur.verified_how] || 0) > (VERIFY_RANK[how] || 0)) return;
   await run(db, "UPDATE users SET verified_at=datetime('now'), verified_how=?, verified_by=? WHERE id=?", how, byId | 0, id);
@@ -914,9 +919,18 @@ export const listPollNonVoters = (db, pollId, aid) =>
     WHERE u.association_id=? AND u.role IN ('MERCHANT','ADMIN','STAFF')
       AND u.id NOT IN (SELECT user_id FROM poll_votes WHERE poll_id=?)
     ORDER BY u.verified_at = '' DESC, u.name`, aid, pollId);
+// 링크를 보낼 사람들 — 회원 전원과 각자의 표(있으면). 대장 한 줄에 '보냄/안 보냄' 이
+// 아니라 '넣음/안 넣음' 이 보여야, 총무가 누구에게 다시 보낼지 그 자리에서 판단한다.
+export const listPollRecipients = (db, pollId, aid) =>
+  all(db, `SELECT u.id, u.name, u.phone, u.role, b.name AS business_name,
+      v.choice, v.verify
+    FROM users u LEFT JOIN businesses b ON b.owner_id = u.id
+      LEFT JOIN poll_votes v ON v.user_id = u.id AND v.poll_id = ?
+    WHERE u.association_id=? AND u.role IN ('MERCHANT','ADMIN','STAFF')
+    ORDER BY v.choice IS NULL DESC, u.name`, pollId, aid);
 // 표를 무엇으로 확인해 받았는지의 내역 — 결의서에 한 줄로 적는다
 export async function pollVerifyBreakdown(db, pollId) {
-  const out = { kakao: 0, otp: 0, admin: 0, none: 0 };
+  const out = { kakao: 0, otp: 0, admin: 0, link: 0, none: 0 };
   for (const r of await all(db, "SELECT verify, COUNT(*) AS n FROM poll_votes WHERE poll_id=? GROUP BY verify", pollId)) {
     const k = out[r.verify] === undefined ? "none" : r.verify;
     out[k] += Number(r.n) || 0;
