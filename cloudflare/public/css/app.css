@@ -1151,7 +1151,6 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .switch input:checked+.track::after{transform:translateX(18px)}
 /* 카드 그리드 유틸 */
 /* 강조 그라디언트 패널(슈퍼 콘솔·지도 배너) */
-.promo-inner{position:relative;display:flex;flex-wrap:wrap;align-items:center;gap:18px}
 :root[data-theme="light"]{color-scheme:light}
 
 /* ---------- 점포 제품 진열 (전시 전용) ---------- */
@@ -1410,12 +1409,6 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .sns-btn:hover{background:rgba(255,255,255,.3)}
 
 
-/* ===================== 파스텔·일러스트 개편 (v3) ===================== */
-.hi-scene{position:absolute;inset:0;line-height:0}
-.hi-svg{width:100%;height:100%;display:block}
-.hi-head{position:absolute;top:0;left:50%;transform:translateX(-50%);width:100%;text-align:center;padding-top:clamp(18px,3.6vw,42px);pointer-events:none}
-.hi-eyebrow{font-weight:700;font-size:clamp(12px,1.4vw,15px);letter-spacing:.06em;color:var(--brand-900)}
-.hi-title{font-weight:800;font-size:clamp(20px,4.2vw,42px);color:var(--brand-900);letter-spacing:-.02em;margin-top:6px;text-shadow:0 2px 12px rgba(255,255,255,.5)}
 /* 겹치는 카드 밴드 */
 /* 바로가기 카드를 켠 상인회에서는 히어로 아래 여백에 겹쳐 올라온다.
    히어로 아래 여백을 이 겹침 몫만큼 두던 시절이 있었는데, 카드를 끄면 그만큼이 빈 검정으로 남았다. */
@@ -1446,7 +1439,6 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
     /* .feat-band 의 좁은 화면 값은 .feat-band 정의 바로 뒤에서 정합니다 */
   .feat-inner{grid-template-columns:1fr;gap:22px;align-items:stretch}
   .feat-mint{grid-row:auto;min-height:120px}
-  .hi-title{text-shadow:0 2px 14px rgba(255,255,255,.8),0 1px 3px rgba(255,255,255,.9)}
 }
 @media (max-width:560px){.hero-illus{aspect-ratio:1/1}}
 @media (max-width:520px){.feat-cards{grid-template-columns:1fr}}
@@ -1473,39 +1465,16 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 }
 /* 스크롤 리빌 */
 /* 프리미엄 타이포 — Pretendard, 큰 디스플레이 + 조밀한 자간 */
-.hi-title{font-weight:800;letter-spacing:-.035em;line-height:1.12}
-.hi-eyebrow{letter-spacing:.18em;font-size:clamp(11px,1.2vw,13px);opacity:.82;font-weight:600}
 .sc-big{letter-spacing:-.03em;font-weight:800}
 .section-title{letter-spacing:-.03em}
 .feat-intro h2{letter-spacing:-.03em;font-weight:800}
 .feat-card .fc-txt strong{letter-spacing:-.02em}
-/* 일러스트 무광 톤 + 하단 소프트 페이드 (만화 톤 완화 → 고급) */
-.hi-svg{filter:saturate(.86) contrast(.98)}
 /* 헤더 글래스 (스크롤 시 반투명 블러) */
 .site-header.scrolled{background:rgba(252,251,249,.72);-webkit-backdrop-filter:saturate(180%) blur(16px);backdrop-filter:saturate(180%) blur(16px);border-bottom:1px solid var(--line-soft);box-shadow:var(--sh-1)}
 /* 카드 미세 상호작용 정돈 */
 .feat-card{will-change:transform}
 .market-card{transition:box-shadow .3s}
 .market-card:hover{border-color:var(--line)}
-/* 히어로 일러스트 앰비언트 모션 — 잔잔하지만 분명히 움직이는 생동감 (transform/opacity만, GPU 친화).
-   장식용 무한 루프라 모션 최소화 설정과 무관하게 항상 재생(운영자 요청).
-   ※ 스크롤 리빌·카드 호버 확대 등 '큰' 모션은 여전히 prefers-reduced-motion 을 존중. */
-.hi-cloud{will-change:transform}
-.hi-cloud-a{animation:hiDriftA 19s ease-in-out infinite}
-.hi-cloud-b{animation:hiDriftB 24s ease-in-out infinite}
-.hi-sun{animation:hiSun 8s ease-in-out infinite}
-.hi-tree{transform-box:fill-box;transform-origin:50% 100%;will-change:transform}
-.hi-tree-1{animation:hiSway 5s ease-in-out infinite}
-.hi-tree-2{animation:hiSway 5.8s ease-in-out -1.2s infinite}
-.hi-tree-3{animation:hiSway 6.4s ease-in-out -2.6s infinite}
-.hi-lamp{animation:hiGlow 4.5s ease-in-out infinite}
-.hi-fountain{animation:hiFountain 4s ease-in-out infinite}
-@keyframes hiFountain{0%,100%{opacity:.4}50%{opacity:.8}}
-@keyframes hiDriftA{0%,100%{transform:translateX(0)}50%{transform:translateX(48px)}}
-@keyframes hiDriftB{0%,100%{transform:translateX(0)}50%{transform:translateX(-40px)}}
-@keyframes hiSun{0%,100%{opacity:.48}50%{opacity:.7}}
-@keyframes hiSway{0%,100%{transform:rotate(-2deg)}50%{transform:rotate(2deg)}}
-@keyframes hiGlow{0%,100%{opacity:1}50%{opacity:.66}}
 /* ── UI 폴리시: D-day 뱃지 · 카드 포커스 링 · 사진 호버 줌 ── */
 .dday{display:inline-block;padding:2px 9px;border-radius:4px;background:var(--brand-50);color:var(--brand-text);font-size:.72rem;font-weight:800;letter-spacing:.02em;line-height:1.7;white-space:nowrap}
 .dday.is-today{background:var(--brand);color:#fff}
@@ -1696,12 +1665,12 @@ a.cc-val:hover{color:var(--brand-text)}
 .contact-hours{margin-top:12px;font-size:.87rem;color:var(--muted)}
 
 @media (max-width:900px){
-  .step-list,.benefit-grid,.contact-grid{grid-template-columns:1fr 1fr}
+  .step-list,.contact-grid{grid-template-columns:1fr 1fr}
   .faq-grid{grid-template-columns:1fr}
 }
 @media (max-width:600px){
-  .step-list,.benefit-grid,.contact-grid{grid-template-columns:1fr}
-  .step-item,.benefit-card,.contact-card{padding:16px}
+  .step-list,.contact-grid{grid-template-columns:1fr}
+  .step-item,.contact-card{padding:16px}
 }
 /* ===================== 전자계약: 거절·첨부·확인서 ===================== */
 .decline-box{margin-top:18px;border-top:1px solid var(--line-soft);padding-top:14px}
@@ -2896,9 +2865,6 @@ body.is-done .foot-copy,body.is-done .site-footer p{color:var(--dk-muted)}
 .place-pick:hover{border-color:var(--brand);background:var(--surface)}
 .place-pick b{display:block;font-size:14.5px;font-weight:700}
 .place-pick small{display:block;color:var(--muted);font-size:12.5px;margin-top:2px}
-/* 무엇이 비어서 손님에게 어떻게 보이는지 — 목록으로 적는다 */
-.gap-list{margin:8px 0 0;padding-left:18px;display:grid;gap:4px}
-.gap-list li{font-size:13.5px}
 @media (max-width:640px){
   .home-sheet{padding:16px 14px 18px;border-radius:var(--r-lg)}
   .hot{padding:16px 16px 6px}
@@ -3556,8 +3522,6 @@ a.deal-card:hover{border-color:var(--deal);transition:border-color .18s}
 .dash .panel-hint{font-size:13px;line-height:1.55;color:var(--muted);margin:0 0 18px}
 .dash .form-divider{font-size:14px;font-weight:700;color:var(--ink);border-top:1px solid var(--line-soft);padding-top:18px;margin:6px 0 4px}
 
-/* 두 칸: 왼쪽 자동 입력, 오른쪽 직접 입력. 레퍼런스 비율(48:52) */
-.dash .split-even{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.08fr);gap:28px;align-items:start}
 .dash .col-head{display:flex;align-items:center;gap:8px;font-size:16px;font-weight:700;margin-bottom:4px}
 .dash .col-head svg{width:20px;height:20px;color:var(--brand-text);flex:none}
 .dash .col-head .ai{font-size:11px;font-weight:700;color:var(--brand-text);background:var(--brand-tint);border-radius:6px;padding:2px 7px;margin-left:2px}
@@ -3633,7 +3597,6 @@ a.deal-card:hover{border-color:var(--deal);transition:border-color .18s}
 .dash .officer-row small{display:block;color:var(--muted);font-size:13px;margin-top:4px}
 @media (max-width:900px){
   .deal-band{grid-template-columns:minmax(0,1fr)}
-  .dash .split-even{grid-template-columns:minmax(0,1fr);gap:22px}
   .dash .finish-bar{grid-template-columns:minmax(0,1fr)}
   .dash .btn-cta{min-height:56px}
   .dash .biz-fields,.dash .owner-grid{grid-template-columns:minmax(0,1fr)}
@@ -3854,7 +3817,6 @@ a.deal-card:hover{border-color:var(--deal);transition:border-color .18s}
   .dash .stack-form textarea{min-height:96px;padding:8px 10px;font-size:13.5px;border-radius:6px}
   .dash .form-two{gap:12px 16px}
   .dash .tag{font-size:11px;padding:2px 6px;border-radius:4px;margin-left:5px}
-  .dash .split-even{gap:20px}
   .dash .col-head{font-size:14px;margin-bottom:3px}
   .dash .col-sub{font-size:12.5px;margin-bottom:10px}
   .dash .auto-box{padding:10px 12px}
@@ -4036,7 +3998,6 @@ a.deal-card:hover{border-color:var(--deal);transition:border-color .18s}
 .scard .s-cat{align-self:flex-start;font-size:11.5px;font-weight:700;padding:3px 8px;
   border-radius:5px;background:var(--brand-tint);color:var(--brand-text)}
 .scard .s-addr{font-size:13px;color:var(--muted)}
-.scard .s-go{font-size:13px;font-weight:600;color:var(--brand-text);margin-top:2px}
 @media (max-width:640px){
   .pubpage{padding-block:24px 40px}
   .pg-title{font-size:22px}

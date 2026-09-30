@@ -19,7 +19,8 @@
     "test:manual": "node --experimental-sqlite cloudflare/test-e2e/manual-link-drill.mjs",
     "check": "node --experimental-sqlite cloudflare/test-e2e/feature-check.mjs",
     "qa": "node --experimental-sqlite cloudflare/test-e2e/qa-drill.mjs",
-    "browsers": "node cloudflare/scripts/browser-support.mjs"
+    "browsers": "node cloudflare/scripts/browser-support.mjs",
+    "css:unused": "node cloudflare/scripts/css-unused.mjs"
   },
   "license": "MIT"
 }
