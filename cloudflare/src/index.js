@@ -127,6 +127,9 @@ export const TENANT = [
   ["POST", "/polls/:id/vote", api.pollVote, "MEMBER"],
   ["POST", "/polls/:id/otp", api.pollOtpSend, "MEMBER"],
   ["POST", "/polls/:id/otp/verify", api.pollOtpVerify, "MEMBER"],
+  // 로그인 없이 한 표 — 토큰이 곧 권한이다(사진 요청 링크와 같은 방식)
+  ["GET", "/vote/:token", pages.votePage],
+  ["POST", "/vote/:token", api.voteByLink],
   ["GET", "/register", pages.registerForm],
   ["POST", "/register", api.register],
   ["POST", "/photos/upload", api.ownerPhotoUpload],
@@ -236,6 +239,7 @@ export const TENANT = [
   ["POST", "/admin/user/:id/team", api.adminSetUserTeam, "ADMIN"],
   ["POST", "/admin/polls", api.adminCreatePoll, "ADMIN"],
   ["GET", "/admin/polls/verify", pages.adminPollVerify, "ADMIN"],
+  ["GET", "/admin/polls/:id/links", pages.adminPollLinks, "ADMIN"],
   ["GET", "/admin/polls/:id/minutes.csv", pages.adminPollMinutesCsv, "ADMIN"],
   ["GET", "/admin/polls/:id/minutes", pages.adminPollMinutes, "ADMIN"],
   ["POST", "/admin/member/:id/verify", api.adminMemberVerify, "ADMIN"],

@@ -348,3 +348,140 @@ test("투표 화면이 카톡에 붙일 안내문과 링크를 만들어 준다 
   assert.match(h, /href="sms:/, "문자로 보내기");
   assert.ok(h.includes(`/admin/polls/${p.id}/minutes`), "의사록으로 가는 길");
 });
+
+// ── 투표 링크 — 로그인 없이 한 표 ───────────────────────────────
+// 이 링크는 **가지고 있으면 쓸 수 있는 열쇠**다. 그래서 검사가 지켜야 할 것은
+// "된다" 가 아니라 **"딱 그것만 된다"** 이다. 다른 안건·다른 사람·다른 화면으로
+// 새어 나가면, 총회 표결이 링크 하나 유출로 무너진다.
+import { makeVoteToken, verifyVoteToken, makePhotoToken } from "../src/api.js";
+
+async function linkFor(env, a, pollId, userId) {
+  return `${B}/vote/${encodeURIComponent(await makeVoteToken(env.SESSION_SECRET, a.id, pollId, userId))}`;
+}
+// 로그인하지 않은 브라우저 — 링크만 들고 온 사람이다
+async function postNoLogin(env, url, fields) {
+  const j = jar();
+  const t = (/name="_csrf" value="([^"]+)"/.exec(await (await get(env, j, url)).text()) || [])[1];
+  return worker.fetch(new Request(url, { method: "POST",
+    headers: { cookie: ch(j), "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ _csrf: t, ...fields }).toString() }), env);
+}
+
+test("링크: 로그인 없이 들어와 한 표를 넣는다", async () => {
+  const { env, a, member } = await setup();
+  const p = await D.createPoll(env.DB, { associationId: a.id, title: "회비 인상", createdBy: null });
+  const url = await linkFor(env, a, p.id, member.id);
+
+  const h = await (await get(env, jar(), url)).text();
+  assert.match(h, /회비 인상/);
+  assert.match(h, /김사장/, "누구로 투표하는지 먼저 보여 준다");
+  assert.match(h, /단톡방에 올리지/, "넘기면 안 된다는 경고");
+
+  await postNoLogin(env, url, { choice: "yes" });
+  assert.equal(await D.userVote(env.DB, p.id, member.id), "yes");
+  // 표에는 '문자 링크' 로 적힌다 — 의사록에서 카카오·인증번호 표와 구별되어야 한다
+  assert.equal((await D.listPollVotes(env.DB, p.id))[0].verify, "link");
+
+  // 마감 전에는 바꿀 수 있다
+  await postNoLogin(env, url, { choice: "no" });
+  assert.equal(await D.userVote(env.DB, p.id, member.id), "no");
+});
+
+test("링크: 로그인이 되는 것이 아니다 — 다른 화면은 안 열린다", async () => {
+  const { env, a, member } = await setup();
+  const p = await D.createPoll(env.DB, { associationId: a.id, title: "안건", createdBy: null });
+  const url = await linkFor(env, a, p.id, member.id);
+  const j = jar();
+  await get(env, j, url);
+  await worker.fetch(new Request(url, { method: "POST", headers: { cookie: ch(j), "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ _csrf: (/name="_csrf" value="([^"]+)"/.exec(await (await get(env, j, url)).text()) || [])[1], choice: "yes" }).toString() }), env);
+  // 쿠키 병에 세션이 들어오지 않았어야 한다
+  assert.ok(!Object.keys(j.c).some((k) => /sess/i.test(k)), "세션 쿠키를 심지 않는다");
+  // 그리고 회원 화면은 로그인으로 튕긴다
+  const r = await get(env, j, `${B}/board`);
+  assert.ok(r.status === 302 || r.status === 303, "게시판은 안 열린다");
+  assert.match(r.headers.get("location") || "", /login/);
+});
+
+test("링크: 다른 안건·다른 사람으로 돌려 쓸 수 없다", async () => {
+  const { env, a, member } = await setup();
+  const p1 = await D.createPoll(env.DB, { associationId: a.id, title: "안건1", createdBy: null });
+  const p2 = await D.createPoll(env.DB, { associationId: a.id, title: "안건2", createdBy: null });
+  const url1 = await linkFor(env, a, p1.id, member.id);
+
+  // ① 서명 안의 안건 번호를 고쳐도 서명이 깨진다
+  const raw = decodeURIComponent(url1.split("/vote/")[1]);
+  const [data, sig] = raw.split(".");
+  const body = JSON.parse(Buffer.from(data.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString());
+  body.p = p2.id;
+  const forged = Buffer.from(JSON.stringify(body)).toString("base64url") + "." + sig;
+  assert.equal(await verifyVoteToken(env.SESSION_SECRET, forged, a.id), null, "고친 토큰은 받지 않는다");
+  await postNoLogin(env, `${B}/vote/${encodeURIComponent(forged)}`, { choice: "yes" });
+  assert.equal(await D.userVote(env.DB, p2.id, member.id), null, "다른 안건에 표가 들어가면 안 된다");
+
+  // ② 사진 요청 링크를 투표 링크로 쓸 수 없다 (서명 문맥이 다르다)
+  const photo = await makePhotoToken(env.SESSION_SECRET, a.id, 1);
+  assert.equal(await verifyVoteToken(env.SESSION_SECRET, photo, a.id), null);
+
+  // ③ 남의 상인회에서 만든 토큰은 통하지 않는다
+  const other = await D.createAssociation(env.DB, { slug: "other", name: "다른 상인회", kind: "merchant" });
+  const cross = await makeVoteToken(env.SESSION_SECRET, other.id, p1.id, member.id);
+  assert.equal(await verifyVoteToken(env.SESSION_SECRET, cross, a.id), null);
+});
+
+test("링크: 인증번호 등급 안건은 링크로 통과시키지 않는다", async () => {
+  const { env, a, member } = await setup();
+  const p = await D.createPoll(env.DB, { associationId: a.id, title: "정관 개정", verify: 2, createdBy: null });
+  const url = await linkFor(env, a, p.id, member.id);
+  const h = await (await get(env, jar(), url)).text();
+  assert.match(h, /휴대폰 인증번호/, "왜 안 되는지 적는다");
+  assert.ok(!/name="choice"/.test(h), "단추를 만들지 않는다");
+  // 주소로 직접 보내도 막힌다 — 이쪽이 진짜 막는 자리다
+  await postNoLogin(env, url, { choice: "yes" });
+  assert.equal(await D.userVote(env.DB, p.id, member.id), null);
+});
+
+test("링크: 계정에 본인확인 표시를 붙이지 않는다", async () => {
+  const { env, a, member } = await setup();
+  const p = await D.createPoll(env.DB, { associationId: a.id, title: "안건", createdBy: null });
+  await postNoLogin(env, await linkFor(env, a, p.id, member.id), { choice: "yes" });
+  // 링크를 받았다는 것은 그 사람이라는 증명이 아니다 — 넘길 수 있는 물건이다
+  assert.equal((await D.getUserById(env.DB, member.id)).verified_at, "",
+    "링크로 계정 확인이 붙으면 다음 안건에서 더 센 등급을 통과해 버린다");
+});
+
+test("링크: 확인된 계정만 투표하는 등급은 링크로 통과한다", async () => {
+  const { env, a, member } = await setup();
+  const p = await D.createPoll(env.DB, { associationId: a.id, title: "회비", verify: 1, createdBy: null });
+  // 관리자가 그 사람 번호로 링크를 보낸 것이므로 '관리자 확인' 과 같은 무게로 본다
+  await postNoLogin(env, await linkFor(env, a, p.id, member.id), { choice: "abstain" });
+  assert.equal(await D.userVote(env.DB, p.id, member.id), "abstain");
+});
+
+test("링크 보내기 화면: 사람마다 다른 링크와 문자 단추가 선다", async () => {
+  const { env, a, member } = await setup();
+  const p = await D.createPoll(env.DB, { associationId: a.id, title: "회비 인상", closesAt: "2026-10-15", createdBy: null });
+  const j = jar();
+  await login(env, j, "office@m.kr", "admin1234");
+  const h = await (await get(env, j, `${B}/admin/polls/${p.id}/links`)).text();
+  assert.match(h, /단톡방에 올리지 마세요/, "한 링크가 한 사람의 표라는 경고");
+  assert.match(h, /href="sms:01033334444/, "그분 번호로 문자 앱을 연다");
+  assert.ok(h.includes("/vote/"), "링크가 글에 들어 있다");
+  assert.match(h, /2명 중 0명 투표함/);
+  // 투표하면 그 줄이 바뀐다
+  await postNoLogin(env, await linkFor(env, a, p.id, member.id), { choice: "yes" });
+  const h2 = await (await get(env, j, `${B}/admin/polls/${p.id}/links`)).text();
+  assert.match(h2, /2명 중 1명 투표함/);
+});
+
+test("의사록: 문자 링크로 들어온 표는 그렇게 적히고, 약하다고 적는다", async () => {
+  const { env, a, member } = await setup();
+  const p = await D.createPoll(env.DB, { associationId: a.id, title: "회비", createdBy: null });
+  await postNoLogin(env, await linkFor(env, a, p.id, member.id), { choice: "yes" });
+  const j = jar();
+  await login(env, j, "office@m.kr", "admin1234");
+  const h = await (await get(env, j, `${B}/admin/polls/${p.id}/minutes`)).text();
+  assert.match(h, /문자로 보낸 링크로 투표/, "결의서 내역에 따로 센다");
+  assert.match(h, /문자 링크/, "명세의 본인확인 칸");
+  assert.match(h, /가장 약합니다/, "약한 근거라고 적어야 의사록을 읽는 사람이 판단한다");
+});
