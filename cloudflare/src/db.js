@@ -851,7 +851,11 @@ export const getUpdate = (db, id) => first(db, "SELECT * FROM updates WHERE id=?
 export const deleteUpdate = (db, id) => run(db, "DELETE FROM updates WHERE id=?", id);
 
 // ----- 오늘 임시휴무 (KST 날짜 저장 — 날짜가 지나면 자동 무효) -----
-export const kstToday = () => new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+export const kstToday = (now = Date.now()) => new Date(now + 9 * 3600 * 1000).toISOString().slice(0, 10);
+// SQL 안에서 쓰는 '한국 오늘'. SQLite 의 date('now') 는 UTC 라, 한국시간 0~9시에는
+// 어제를 오늘이라고 답한다 — 기한 판정에 그대로 쓰면 '어제까지' 인 계약이 아홉 시간 더
+// 열려 있고, 화면은 '1일 남음' 이라고 적는다. 날짜를 자르기 전에 +9시간 한다.
+const KST_DATE = "date('now','+9 hours')";
 export const kstDaysAgo = (days) => new Date(Date.now() + 9 * 3600 * 1000 - Math.max(0, days) * 86400000).toISOString().slice(0, 10);
 export const setDayOff = (db, businessId, date) => run(db, "UPDATE businesses SET day_off_date=? WHERE id=?", date || "", businessId);
 export const isDayOff = (b) => !!b && b.day_off_date === kstToday();
@@ -1304,7 +1308,7 @@ const DOC_STATUS = `CASE
    AND (SELECT COUNT(*) FROM signatures s WHERE s.document_id=d.id)
        >= ((SELECT COUNT(*) FROM signature_requests r WHERE r.document_id=d.id)
          + (SELECT COUNT(*) FROM external_signers e WHERE e.document_id=d.id)) THEN 'done'
-  WHEN d.due_date!='' AND d.due_date < date('now') THEN 'overdue'
+  WHEN d.due_date!='' AND d.due_date < ${KST_DATE} THEN 'overdue'
   ELSE 'open' END`;
 export const DOC_STATUSES = ["open", "overdue", "declined", "done", "closed"];
 export const DOC_STATUS_LABEL = {
@@ -1360,7 +1364,7 @@ export const closeDocument = (db, id) => run(db, "UPDATE documents SET closed=1 
 // 아무도 손대지 않는 계약이 목록 맨 위에 영원히 쌓인다. 그러면 목록을 아무도 안 본다.
 export const listExpiredOpen = (db) =>
   all(db, `SELECT d.*, a.slug AS assoc_slug FROM documents d JOIN associations a ON a.id=d.association_id
-    WHERE d.draft=0 AND d.closed=0 AND d.due_date!='' AND d.due_date < date('now')
+    WHERE d.draft=0 AND d.closed=0 AND d.due_date!='' AND d.due_date < ${KST_DATE}
       AND (SELECT COUNT(*) FROM signatures s WHERE s.document_id=d.id)
         < ((SELECT COUNT(*) FROM signature_requests r WHERE r.document_id=d.id)
          + (SELECT COUNT(*) FROM external_signers e WHERE e.document_id=d.id))
@@ -1385,7 +1389,7 @@ const TURN_OK = `(d.ordered = 0 OR (
 // ⚠️ d.draft=0 을 빼면 안 된다. 초안은 서명 대상이 하나도 지정돼 있지 않은데,
 // 아래 '대상이 없는 문서는 회원 전체 대상' 규칙에 걸려 **조직 회원 전원에게 열린다**.
 // 쓰다 만 계약서가 서명 가능해지는 셈이다.
-const toSignSql = (openToAll) => `d.association_id=? AND d.closed=0 AND d.draft=0 AND (d.due_date='' OR d.due_date >= date('now'))
+const toSignSql = (openToAll) => `d.association_id=? AND d.closed=0 AND d.draft=0 AND (d.due_date='' OR d.due_date >= ${KST_DATE})
   AND NOT EXISTS (SELECT 1 FROM signatures s WHERE s.document_id=d.id AND s.user_id=?)
   AND NOT EXISTS (SELECT 1 FROM signature_requests rd WHERE rd.document_id=d.id AND rd.user_id=? AND rd.declined_at != '')
   AND (EXISTS (SELECT 1 FROM signature_requests r WHERE r.document_id=d.id AND r.user_id=?)${openToAll ? `
@@ -1419,7 +1423,7 @@ export async function canReceiveSign(db, docId, uid, role) {
 export const canSignNow = (db, doc, uid) => canSignNowAny(db, doc, { userId: uid });
 export function isPastDue(doc) {
   if (!doc.due_date) return false;
-  return doc.due_date < new Date().toISOString().slice(0, 10);
+  return doc.due_date < kstToday();   // 한국 달력으로 — UTC 로 재면 아홉 시간 늦게 지난다
 }
 export async function createSignatureRequests(db, documentId, userIds) {
   let i = 0; for (const uid of userIds) { i++; await run(db, "INSERT OR IGNORE INTO signature_requests (document_id, user_id, sign_order) VALUES (?,?,?)", documentId, uid, i); }
@@ -1922,7 +1926,7 @@ export const setDocumentAttachment = (db, id, key, name, hash) =>
 // 기한이 임박(D-2 이내)했는데 아직 안 끝난 문서 — 자동 리마인더 대상
 export const listDocsNeedingRemind = (db) =>
   all(db, `SELECT d.*, a.name AS assoc_name, a.slug AS assoc_slug FROM documents d JOIN associations a ON a.id=d.association_id
-    WHERE d.closed=0 AND d.due_date != '' AND d.due_date >= date('now') AND d.due_date <= date('now','+2 day')
+    WHERE d.closed=0 AND d.due_date != '' AND d.due_date >= ${KST_DATE} AND d.due_date <= date('now','+9 hours','+2 day')
       AND (d.last_remind_at='' OR d.last_remind_at < datetime('now','-20 hour'))
       AND (EXISTS (SELECT 1 FROM signature_requests r WHERE r.document_id=d.id AND r.declined_at=''
              AND NOT EXISTS (SELECT 1 FROM signatures s WHERE s.document_id=r.document_id AND s.user_id=r.user_id))
