@@ -2849,7 +2849,7 @@ export async function adminCreateDocument(ctx) {
   const ordered = form.get("ordered") === "1" ? 1 : 0;
   let dueDate = ""; const rawDue = (form.get("due_date") || "").trim();
   if (rawDue) { if (!/^\d{4}-\d{2}-\d{2}$/.test(rawDue)) return back(base + "/admin/documents", "기한 형식(YYYY-MM-DD)을 확인하세요.", true);
-    if (rawDue < new Date().toISOString().slice(0, 10)) return back(base + "/admin/documents", "기한은 오늘 이후여야 합니다.", true); dueDate = rawDue; }
+    if (rawDue < D.kstToday()) return back(base + "/admin/documents", "기한은 오늘 이후여야 합니다.", true); dueDate = rawDue; }
   // 계약서 PDF 첨부(선택) — 파일 내용 해시를 본문 해시에 함께 묶어야 봉인이 첨부까지 보호한다
   let attKey = "", attName = "", attHash = "";
   const file = form.get("attachment");
@@ -4902,7 +4902,7 @@ export async function adminPublishDraft(ctx) {
   let dueDate = ""; const rawDue = (form.get("due_date") || "").trim();
   if (rawDue) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(rawDue)) return back(to, "기한 형식(YYYY-MM-DD)을 확인하세요.", true);
-    if (rawDue < new Date().toISOString().slice(0, 10)) return back(to, "기한은 오늘 이후여야 합니다.", true);
+    if (rawDue < D.kstToday()) return back(to, "기한은 오늘 이후여야 합니다.", true);
     dueDate = rawDue;
   }
   const ordered = form.get("ordered") === "1" ? 1 : 0;
@@ -5135,7 +5135,7 @@ export async function adminBulkPrepare(ctx) {
   const rawDue = (form.get("due_date") || "").trim();
   if (rawDue) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(rawDue)) return back(to, "기한 형식(YYYY-MM-DD)을 확인하세요.", true);
-    if (rawDue < new Date().toISOString().slice(0, 10)) return back(to, "기한은 오늘 이후여야 합니다.", true);
+    if (rawDue < D.kstToday()) return back(to, "기한은 오늘 이후여야 합니다.", true);
     dueDate = rawDue;
   }
   const ordered = form.get("ordered") === "1" ? 1 : 0;

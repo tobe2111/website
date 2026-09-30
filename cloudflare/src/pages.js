@@ -2946,7 +2946,6 @@ export async function admin(ctx) {
     D.couponUseCounts(db, assoc.id).catch(() => new Map()),
     D.couponUseTotal(db, assoc.id, 30).catch(() => 0),
   ]);
-  const today = new Date().toISOString().slice(0, 10);
   const visits = { cur: Number(visitsRaw && visitsRaw.cur) || 0, prev: Number(visitsRaw && visitsRaw.prev) || 0 };
   const lay = parseLayout(assoc.home_layout, assoc.name);
 
@@ -3904,8 +3903,7 @@ ${isFranchise ? `    <section class="panel panel-accent" id="p-home"><h2 class="
 // 기한이 지났는가 — due_date 는 'YYYY-MM-DD' 이고 그날 자정까지로 본다(KST 기준).
 export function isOverdue(d, now = Date.now()) {
   if (d.closed || !d.due_date) return false;
-  const today = new Date(now + 9 * 3600 * 1000).toISOString().slice(0, 10);
-  return d.due_date < today;
+  return d.due_date < D.kstToday(now);
 }
 
 // 진행 중인 계약 — 전자계약 조직 관리자가 매일 확인하는 유일한 것.
@@ -4110,7 +4108,7 @@ export async function adminDocuments(ctx) {
   const { db, assoc, base, user, query, csrf } = ctx;
   // 담당자(STAFF)는 /admin·/admin/api 가 403 이다 — 못 가는 곳으로 가는 링크를 그리면 안 된다
   const canAdmin = user.role === "ADMIN" || user.role === "SUPERADMIN";
-  const today = new Date().toISOString().slice(0, 10);
+  const today = D.kstToday();   // UTC 로 세면 한국 0~9시에 '오늘까지' 가 '1일 남음' 으로 보인다
 
   // ---- 목록: 찾을 수 있어야 목록이다 ----
   // 계약이 쌓이면 날짜순 한 덩어리로는 아무것도 못 한다. 상태 칩 · 검색 · 쪽 나눔.
