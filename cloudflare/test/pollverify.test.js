@@ -213,3 +213,138 @@ test("남의 상인회 회원을 확인 처리할 수 없다", async () => {
   await post(env, j, `${B}/admin/member/${stranger.id}/verify`, { on: "1" }, `${B}/admin/polls/verify`);
   assert.equal((await D.getUserById(env.DB, stranger.id)).verified_at, "", "경계를 넘지 못한다");
 });
+
+// ── 의사록에 붙이는 종이 ────────────────────────────────────────
+// 화면에 합계만 있으면 총무는 그걸 손으로 옮겨 적는다. 옮겨 적는 순간 그 숫자는
+// 근거가 아니라 주장이 된다. 그래서 사람별 명세가 종이에 그대로 나와야 한다.
+async function votedPoll(env, a, opts = {}) {
+  const { n = 3, verify = 0 } = opts;
+  const p = await D.createPoll(env.DB, { associationId: a.id, title: "정관 제12조 개정", body: "임원 임기를 2년으로", verify, createdBy: null });
+  const made = [];
+  for (let i = 1; i <= n; i++) {
+    const pw = await hashPassword("owner1234");
+    const u = await D.createUser(env.DB, { email: `m${i}@m.kr`, passwordHash: pw.hash, salt: pw.salt, name: `사장${i}`, role: "MERCHANT", associationId: a.id });
+    await D.setUserPhone(env.DB, u.id, `0102000${String(1000 + i)}`);
+    made.push(u);
+  }
+  return { p, made };
+}
+
+test("의사록: 사람마다 무엇에 투표했고 어떻게 확인됐는지가 줄로 나온다", async () => {
+  const { env, a } = await setup();
+  const { p, made } = await votedPoll(env, a, { n: 3 });
+  await D.setUserVerified(env.DB, made[0].id, "kakao");
+  await D.setUserVerified(env.DB, made[1].id, "otp");
+  await D.votePoll(env.DB, p.id, made[0].id, "yes", "kakao");
+  await D.votePoll(env.DB, p.id, made[1].id, "no", "otp");
+  // 셋째는 투표하지 않는다 — 미투표자 명단에 이름과 번호가 있어야 한다
+
+  const j = jar();
+  await login(env, j, "office@m.kr", "admin1234");
+  const h = await (await get(env, j, `${B}/admin/polls/${p.id}/minutes`)).text();
+
+  // ① 사람별 명세
+  assert.ok(h.includes("사장1") && h.includes("사장2"), "투표한 사람 이름");
+  assert.match(h, /카카오 연결/, "무엇으로 확인된 표인지");
+  assert.match(h, /휴대폰 인증번호/);
+  assert.ok(h.includes("찬성") && h.includes("반대"));
+
+  // ② 미투표자는 전화번호까지 — 총무가 전화를 돌릴 종이다
+  assert.ok(h.includes("사장3"), "미투표자 이름");
+  assert.match(h, /010-2000-1003/, "전화번호가 있어야 전화를 걸 수 있다");
+  assert.match(h, /아직 투표하지 않은 분/);
+
+  // ③ 과반 계산 — 반올림하지 않는다
+  assert.match(h, /투표권자/);
+  assert.match(h, /참여자 과반/);
+  assert.match(h, /투표권자 과반/);
+
+  // ④ 법정 본인확인이 아니라는 고지가 종이에도 있다
+  assert.match(h, /법이 정한 본인확인기관/);
+  // ⑤ 가결 여부를 우리가 정하지 않는다 — 정관이 정한다고 적는다
+  assert.match(h, /정관이 정한 기준/);
+});
+
+test("의사록: 과반은 '넘는 것' 이다 — 4명 중 2표는 과반이 아니다", async () => {
+  const { env, a } = await setup();
+  const { p, made } = await votedPoll(env, a, { n: 4 });
+  // 넷 다 투표하고 둘만 찬성 → 딱 절반. 반올림하면 과반이 되어 부결이 가결로 바뀐다.
+  await D.votePoll(env.DB, p.id, made[0].id, "yes", "admin");
+  await D.votePoll(env.DB, p.id, made[1].id, "yes", "admin");
+  await D.votePoll(env.DB, p.id, made[2].id, "no", "admin");
+  await D.votePoll(env.DB, p.id, made[3].id, "abstain", "admin");
+  const j = jar();
+  await login(env, j, "office@m.kr", "admin1234");
+  const h = await (await get(env, j, `${B}/admin/polls/${p.id}/minutes`)).text();
+  const line = /참여자 과반<\/th><td>[^<]*<b>([^<]+)<\/b>/.exec(h);
+  assert.ok(line, "참여자 과반 줄");
+  assert.equal(line[1], "넘지 못했습니다", "4명 중 2표는 과반이 아니다");
+});
+
+test("의사록: 장이 넘어가도 장마다 안건 이름이 다시 붙는다", async () => {
+  const { env, a } = await setup();
+  const { p, made } = await votedPoll(env, a, { n: 20 });
+  for (const u of made) await D.votePoll(env.DB, p.id, u.id, "yes", "admin");
+  const j = jar();
+  await login(env, j, "office@m.kr", "admin1234");
+  const h = await (await get(env, j, `${B}/admin/polls/${p.id}/minutes`)).text();
+  // 결의서 1장 + 명세 2장(18줄 + 2줄). 미투표자는 총무뿐이라 1장.
+  const sheets = (h.match(/class="paper mn-paper"/g) || []).length;
+  assert.equal(sheets, 4, `결의서1 + 명세2 + 미투표1 = 4장 (실제 ${sheets})`);
+  // 장마다 머리가 다시 얹힌다
+  assert.equal((h.match(/정관 제12조 개정/g) || []).length, 4);
+  assert.match(h, /2 \/ 2 장/, "명세 둘째 장");
+});
+
+test("의사록: 마감하지 않은 안건은 숫자가 바뀔 수 있다고 적는다", async () => {
+  const { env, a } = await setup();
+  const { p } = await votedPoll(env, a, { n: 1 });
+  const j = jar();
+  await login(env, j, "office@m.kr", "admin1234");
+  let h = await (await get(env, j, `${B}/admin/polls/${p.id}/minutes`)).text();
+  assert.match(h, /마감하지 않은/, "진행 중이면 경고");
+  await D.closePoll(env.DB, p.id);
+  h = await (await get(env, j, `${B}/admin/polls/${p.id}/minutes`)).text();
+  assert.doesNotMatch(h, /마감하지 않은/, "마감하면 경고가 사라진다");
+});
+
+test("의사록 파일: 투표와 미투표가 한 파일에 담긴다", async () => {
+  const { env, a } = await setup();
+  const { p, made } = await votedPoll(env, a, { n: 2 });
+  await D.votePoll(env.DB, p.id, made[0].id, "yes", "kakao");
+  const j = jar();
+  await login(env, j, "office@m.kr", "admin1234");
+  const r = await get(env, j, `${B}/admin/polls/${p.id}/minutes.csv`);
+  assert.equal(r.status, 200);
+  assert.match(r.headers.get("content-type") || "", /text\/csv/);
+  assert.match(r.headers.get("content-disposition") || "", /attachment/);
+  const csv = await r.text();
+  assert.match(csv, /구분,연번,성명/);
+  assert.match(csv, /투표,1,사장1,,찬성,카카오 연결/);
+  assert.match(csv, /미투표,.*사장2/, "안 넣은 사람도 같은 파일에");
+});
+
+test("남의 상인회 안건의 의사록은 열리지 않는다", async () => {
+  const { env } = await setup();
+  const other = await D.createAssociation(env.DB, { slug: "other", name: "다른 상인회", kind: "merchant" });
+  const op = await D.createPoll(env.DB, { associationId: other.id, title: "남의 안건", createdBy: null });
+  const j = jar();
+  await login(env, j, "office@m.kr", "admin1234");
+  assert.equal((await get(env, j, `${B}/admin/polls/${op.id}/minutes`)).status, 404);
+  assert.equal((await get(env, j, `${B}/admin/polls/${op.id}/minutes.csv`)).status, 404);
+});
+
+test("투표 화면이 카톡에 붙일 안내문과 링크를 만들어 준다 (0원)", async () => {
+  const { env, a } = await setup();
+  const p = await D.createPoll(env.DB, { associationId: a.id, title: "회비 인상", closesAt: "2026-10-15", createdBy: null });
+  const j = jar();
+  await login(env, j, "office@m.kr", "admin1234");
+  const h = await (await get(env, j, `${B}/polls`)).text();
+  assert.match(h, /회원에게 알리기/);
+  assert.match(h, /안건 투표 안내/, "보낼 글");
+  assert.match(h, /2026-10-15/, "마감일이 글에 들어간다");
+  assert.ok(h.includes("/t/market/polls"), "투표 링크가 글에 들어간다");
+  assert.match(h, /data-copy=/, "복사 단추");
+  assert.match(h, /href="sms:/, "문자로 보내기");
+  assert.ok(h.includes(`/admin/polls/${p.id}/minutes`), "의사록으로 가는 길");
+});

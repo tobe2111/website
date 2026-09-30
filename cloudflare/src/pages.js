@@ -1271,6 +1271,14 @@ const verifyPick = (cur) => `<label>투표 자격
 
 export async function polls(ctx) {
   const { db, assoc, base, user, query, csrf } = ctx;
+  // 회원에게 보낼 안내문. 화면이 만들어 주지 않으면 회장님이 매번 손으로 쓰는데,
+  // 그러면 링크를 빼먹거나 마감일을 잘못 적는다 — 둘 다 표가 안 들어오는 결과로 끝난다.
+  const tellText = (p) => `[${assoc.name}] 안건 투표 안내\n\n`
+    + `'${p.title}' 안건에 대한 의견을 받습니다.\n`
+    + `▶ 마감: ${p.closes_at || "마감일 없음 (마감 안내 시까지)"}\n`
+    + `▶ 투표: ${ORIGIN}${base}/polls\n\n`
+    + `위 링크를 누르고 로그인하신 뒤 찬성·반대·기권 중 하나를 눌러 주세요.\n`
+    + `마감 전까지는 다시 눌러 바꾸실 수 있습니다.`;
   const list = await D.listPolls(db, assoc.id);
   const isAdmin = user.role === "ADMIN" || user.role === "SUPERADMIN";
   // 안건 수와 무관하게 2쿼리 (건별 결과·내 표 조회의 N+1 제거)
@@ -1326,7 +1334,21 @@ export async function polls(ctx) {
       ${voteBtns}
       <div class="poll-results">${bar("찬성", "yes", "is-yes")}${bar("반대", "no", "is-no")}${bar("기권", "abstain", "is-abs")}
         <p class="panel-hint">총 ${r.total}명 참여</p></div>
-      ${isAdmin ? `<details class="mini-edit poll-edit"><summary>
+      ${isAdmin ? `<span class="pill-row poll-admin-row">
+        <a class="btn btn-outline btn-sm" href="${base}/admin/polls/${p.id}/minutes">표결 결과 · 의사록</a>
+      </span>
+      <details class="mini-edit poll-tell"><summary>
+        <span class="mini-edit-hint">회원에게 알리기 — 카톡·문자로 (0원)</span></summary>
+        <p class="panel-hint">알림톡은 아직 카카오 심사 전이라, 지금은 아래 글을 단톡방에 붙이시는 것이
+          가장 빠르고 <b>돈이 들지 않습니다.</b> 링크는 로그인 화면을 거쳐 이 안건으로 갑니다.</p>
+        <div class="stack-form"><label>보낼 글
+          <textarea rows="7" readonly data-select-all>${esc(tellText(p))}</textarea></label></div>
+        <span class="pill-row">
+          <button type="button" class="btn btn-primary btn-sm" data-copy="${esc(tellText(p))}">이 글 복사</button>
+          <a class="btn btn-outline btn-sm" href="sms:?&body=${encodeURIComponent(tellText(p))}">문자로 보내기</a>
+        </span>
+      </details>
+      <details class="mini-edit poll-edit"><summary>
         <span class="mini-edit-hint">안건 고치기${r.total ? ` · 이미 ${r.total}명 투표함` : ""}</span></summary>
         ${r.total ? `<p class="panel-hint">이미 <b>${r.total}명</b>이 투표했습니다.
           오타나 날짜를 고치는 것은 괜찮지만, <b>묻는 내용 자체를 바꾸면 그분들은 다른 질문에 답한 것이 됩니다.</b>
@@ -1373,7 +1395,9 @@ export async function polls(ctx) {
         <div class="pg-head"><div><h1 class="pg-title">안건 투표</h1>
           <p class="pg-sub">총회에 못 오셔도 폰에서 의견을 남길 수 있습니다. 1인 1표, 마감 전 변경 가능.</p></div></div>
         ${inner}</div></section>`;
-  return html(layout({ title: "안건 투표", assoc, base, user, body, activeNav: `${base}/polls`, csrf }));
+  return html(layout({ title: "안건 투표", assoc, base, user, body, activeNav: `${base}/polls`, csrf,
+    // '이 글 복사' 는 이 스크립트가 붙어야 동작한다 — 없으면 눌려도 아무 일이 없다.
+    scripts: isAdmin ? `<script src="${assetUrl("/js/super-tabs.js")}" defer></script>` : "" }));
 }
 
 // ================= 투표 자격 대장 =================
@@ -1447,6 +1471,181 @@ export async function adminPollVerify(ctx) {
     body: inner,
   });
   return html(layout({ title: "투표 자격 대장", assoc, base, user, body, csrf }));
+}
+
+// ================= 투표 결의서 · 명세 (의사록에 붙이는 종이) =================
+//
+// 왜 필요한가 —— 화면에는 합계만 있었다. "찬성 12표 · 반대 3표 · 총 15명".
+// 그런데 총회 의사록에 붙는 것은 합계가 아니라 **명세**다. 누가, 무엇에, 어떻게 확인된
+// 상태로 표를 넣었는지가 줄로 적혀 있어야 나중에 "그 표결은 유효했나" 에 답할 수 있다.
+// 데이터는 처음부터 갖고 있었는데 꺼내 놓지 않아서, 총무가 쓸 수 없는 상태였다.
+//
+// 장 구성 —— 세 덩어리를 각각 완결된 A4 로 찍는다. 흩어져도 장마다 안건 이름이 붙는다.
+//   ① 결의서 한 장 — 숫자와 과반 계산, 확인 내역, 고지, 서명란
+//   ② 투표 명세 — 사람마다 한 줄
+//   ③ 미투표자 명단 — 총무가 전화를 돌릴 종이 (전화번호 포함)
+const MN_VOTE_ROWS = 18;      // 명세 한 장에 들어가는 줄
+const MN_LEFT_ROWS = 24;      // 미투표자 한 장에 들어가는 줄 (칸이 적어 더 들어간다)
+const CHOICE_KO = { yes: "찬성", no: "반대", abstain: "기권" };
+
+// 장마다 다시 얹는 머리. 장이 흩어져도 이 장이 무슨 안건의 몇째 장인지 알 수 있어야 한다.
+const mnHead = (assoc, p, label, n, of) => `<div class="mn-head">
+  <div class="mn-org">${esc(assoc.name)}</div>
+  <h2 class="mn-title">${esc(p.title)}</h2>
+  <div class="mn-sub"><span>${esc(label)}</span><span>${n} / ${of} 장</span></div>
+</div>`;
+
+export async function adminPollMinutes(ctx) {
+  const { db, assoc, base, user, csrf } = ctx;
+  const p = await D.getPoll(db, Number(ctx.params.id) || 0);
+  if (!p || p.association_id !== assoc.id) return notFoundResponse(ctx);
+
+  const [votes, left, breakdown] = await Promise.all([
+    D.listPollVotes(db, p.id),
+    D.listPollNonVoters(db, p.id, assoc.id),
+    D.pollVerifyBreakdown(db, p.id),
+  ]);
+  const eligible = votes.length + left.length;          // 투표권자 = 넣은 사람 + 안 넣은 사람
+  const tally = { yes: 0, no: 0, abstain: 0 };
+  for (const v of votes) if (tally[v.choice] !== undefined) tally[v.choice]++;
+  const cast = votes.length;
+  const pctOf = (n, d) => (d ? Math.round((n / d) * 1000) / 10 : 0);
+  // 과반은 '넘는 것' 이다 — 10명 중 5표는 과반이 아니다. 여기서 반올림하면 부결이 가결이 된다.
+  const majorityOf = (n, d) => d > 0 && n * 2 > d;
+
+  const lv = D.pollVerifyLevel(p);
+  const open = D.isPollOpen(p);
+
+  // ── ① 결의서 ───────────────────────────────────────────────────────────
+  const numRow = (label, value, note = "") =>
+    `<tr><th>${label}</th><td class="mn-num">${value}</td><td class="mn-note">${note}</td></tr>`;
+  const resolution = `<div class="paper mn-paper" style="width:794px;height:1123px">
+    ${mnHead(assoc, p, "안건 표결 결과", 1, 1)}
+    ${p.body ? `<div class="mn-body">${esc(p.body).replace(/\n/g, "<br />")}</div>` : ""}
+    <table class="mn-tbl mn-sum">
+      ${numRow("투표권자", `${eligible}명`, "명부에 오른 계정 수. 정관상 재적 회원 수와 다를 수 있으니 확인해 주세요")}
+      ${numRow("투표 참여", `${cast}명`, `참여율 ${pctOf(cast, eligible)}%`)}
+      ${numRow("찬성", `${tally.yes}표`, `참여자의 ${pctOf(tally.yes, cast)}%`)}
+      ${numRow("반대", `${tally.no}표`, `참여자의 ${pctOf(tally.no, cast)}%`)}
+      ${numRow("기권", `${tally.abstain}표`, `참여자의 ${pctOf(tally.abstain, cast)}%`)}
+      ${numRow("미투표", `${left.length}명`, left.length ? "명단은 뒤 장에 있습니다" : "")}
+    </table>
+    <table class="mn-tbl mn-maj">
+      <tr><th>참여자 과반</th><td>찬성 ${tally.yes}표 / 참여 ${cast}명 —
+        <b>${majorityOf(tally.yes, cast) ? "넘었습니다" : "넘지 못했습니다"}</b></td></tr>
+      <tr><th>투표권자 과반</th><td>찬성 ${tally.yes}표 / 투표권자 ${eligible}명 —
+        <b>${majorityOf(tally.yes, eligible) ? "넘었습니다" : "넘지 못했습니다"}</b></td></tr>
+    </table>
+    <p class="mn-line">가결·부결은 <b>상인회 정관이 정한 기준</b>으로 판단해 주세요.
+      이 종이는 숫자와 과반 여부만 적습니다 — 어느 기준을 쓰는지는 정관에 있습니다.</p>
+    <table class="mn-tbl mn-vf">
+      <thead><tr><th>표를 받을 때의 본인확인</th><th>표 수</th></tr></thead>
+      <tbody>
+        <tr><td>카카오 계정 연결로 확인</td><td class="mn-num">${breakdown.kakao}표</td></tr>
+        <tr><td>휴대폰 인증번호로 확인</td><td class="mn-num">${breakdown.otp}표</td></tr>
+        <tr><td>관리자가 확인</td><td class="mn-num">${breakdown.admin}표</td></tr>
+        <tr><td>확인 없음 (로그인만)</td><td class="mn-num">${breakdown.none}표</td></tr>
+      </tbody>
+    </table>
+    <p class="mn-line mn-warn">이 확인은 <b>법이 정한 본인확인기관(PASS·아이핀 등)의 인증이 아닙니다.</b>
+      카카오 계정의 번호가 명부와 맞는지, 휴대폰으로 보낸 번호를 실제로 받았는지, 관리자가
+      얼굴을 보고 확인했는지 — 셋뿐입니다. 결의의 근거로 쓰실 때는 서면 위임장·참석 명부를
+      함께 갖추시는 편이 안전합니다.</p>
+    <table class="mn-tbl mn-meta">
+      <tr><th>투표 기간</th><td>${esc(kstDate(p.created_at, "."))} ~ ${p.closes_at ? esc(p.closes_at) : "마감일 없음"}${
+        open ? " <b>(진행 중)</b>" : " (마감)"}</td></tr>
+      <tr><th>투표 자격</th><td>${esc(D.POLL_VERIFY[lv].label)}</td></tr>
+      <tr><th>뽑은 시각</th><td>${esc(kstStamp(new Date().toISOString()))}</td></tr>
+    </table>
+    ${open ? `<p class="mn-line mn-warn">아직 <b>마감하지 않은</b> 안건입니다 — 지금 뽑은 숫자는 바뀔 수 있습니다.</p>` : ""}
+    <div class="mn-sign"><div><span>의　장</span><i>(서명)</i></div><div><span>간　사</span><i>(서명)</i></div></div>
+  </div>`;
+
+  // ── ② 투표 명세 ────────────────────────────────────────────────────────
+  const voteSheets = [];
+  const votePages = Math.max(1, Math.ceil(votes.length / MN_VOTE_ROWS));
+  for (let i = 0; i < votePages; i++) {
+    const part = votes.slice(i * MN_VOTE_ROWS, (i + 1) * MN_VOTE_ROWS);
+    const rows = part.map((v, k) => `<tr>
+      <td>${i * MN_VOTE_ROWS + k + 1}</td>
+      <td>${esc(v.name || "(탈퇴)")}</td>
+      <td>${esc(v.business_name || "")}</td>
+      <td class="mn-ch mn-ch-${esc(v.choice)}">${esc(CHOICE_KO[v.choice] || v.choice)}</td>
+      <td>${esc(D.verifyHowLabel(v.verify) || "확인 없음")}</td>
+      <td>${esc(kstStamp(v.created_at))}</td></tr>`).join("");
+    voteSheets.push(`<div class="paper mn-paper" style="width:794px;height:1123px">
+      ${mnHead(assoc, p, "투표 명세", i + 1, votePages)}
+      <table class="mn-tbl mn-list"><thead><tr>
+        <th>연번</th><th>성명</th><th>가게</th><th>선택</th><th>본인확인</th><th>투표 시각</th>
+      </tr></thead><tbody>${rows || `<tr><td colspan="6" class="mn-none">들어온 표가 없습니다.</td></tr>`}</tbody></table>
+    </div>`);
+  }
+
+  // ── ③ 미투표자 ─────────────────────────────────────────────────────────
+  const leftSheets = [];
+  const leftPages = Math.ceil(left.length / MN_LEFT_ROWS);
+  for (let i = 0; i < leftPages; i++) {
+    const part = left.slice(i * MN_LEFT_ROWS, (i + 1) * MN_LEFT_ROWS);
+    const rows = part.map((m, k) => `<tr>
+      <td>${i * MN_LEFT_ROWS + k + 1}</td>
+      <td>${esc(m.name || "")}</td>
+      <td>${esc(m.business_name || "")}</td>
+      <td>${m.phone ? esc(D.formatPhone(m.phone)) : "<span class=\"muted\">번호 없음</span>"}</td>
+      <td>${m.verified_at ? esc(D.verifyHowLabel(m.verified_how)) : "<b>확인 안 됨</b>"}</td></tr>`).join("");
+    leftSheets.push(`<div class="paper mn-paper" style="width:794px;height:1123px">
+      ${mnHead(assoc, p, "아직 투표하지 않은 분", i + 1, leftPages)}
+      <p class="mn-line">전화를 돌리실 명단입니다. <b>확인 안 됨</b>인 분은 재촉하기 전에
+        본인확인을 먼저 해 드려야 투표하실 수 있습니다.</p>
+      <table class="mn-tbl mn-list"><thead><tr>
+        <th>연번</th><th>성명</th><th>가게</th><th>연락처</th><th>본인확인</th>
+      </tr></thead><tbody>${rows}</tbody></table>
+    </div>`);
+  }
+
+  const sheets = [resolution, ...voteSheets, ...leftSheets];
+  const body = await consoleShell(ctx, {
+    title: "표결 결과 · 의사록",
+    eyebrow: `<a href="${base}/polls">← 안건 투표</a>`,
+    sub: `투표권자 ${eligible}명 중 ${cast}명 참여 · 종이 ${sheets.length}장`,
+    active: "polls",
+    body: `
+    <div class="dash-head no-print">
+      <p class="panel-hint">총회 의사록에 붙이는 종이입니다. <b>결의서 한 장 · 투표 명세 · 미투표자 명단</b>
+        순서로 찍히고, 장마다 안건 이름이 다시 붙어 흩어져도 무엇인지 알 수 있습니다.</p>
+      <span class="pill-row">
+        <button type="button" class="btn btn-primary btn-sm" data-print>인쇄 · PDF로 저장</button>
+        <a class="btn btn-outline btn-sm" href="${base}/admin/polls/${p.id}/minutes.csv">명세 파일로 내려받기</a>
+      </span>
+    </div>
+    <div class="paper-wrap"><div class="paper-stack">${sheets.join("")}</div></div>` });
+  return html(layout({ title: "표결 결과 · 의사록", assoc, base, user, body, csrf,
+    scripts: `<script src="${assetUrl("/js/paper.js")}" defer></script>` })
+    + `<style>@media print{@page{size:A4;margin:0}body{background:#fff}}</style>`);
+}
+
+// 엑셀에서 정리하실 분을 위해 — 명세와 미투표자를 한 파일에 담는다.
+// 두 파일로 나누면 둘 중 하나를 잃어버린 채로 정리하게 된다.
+export async function adminPollMinutesCsv(ctx) {
+  const { db, assoc } = ctx;
+  const p = await D.getPoll(db, Number(ctx.params.id) || 0);
+  if (!p || p.association_id !== assoc.id) return notFoundResponse(ctx);
+  const [votes, left] = await Promise.all([
+    D.listPollVotes(db, p.id), D.listPollNonVoters(db, p.id, assoc.id),
+  ]);
+  const lines = [
+    ["구분", "연번", "성명", "가게", "선택", "본인확인", "투표 시각", "연락처"],
+    ...votes.map((v, i) => ["투표", String(i + 1), v.name || "(탈퇴)", v.business_name || "",
+      CHOICE_KO[v.choice] || v.choice, D.verifyHowLabel(v.verify) || "확인 없음",
+      kstStamp(v.created_at), v.phone ? D.formatPhone(v.phone) : ""]),
+    ...left.map((m, i) => ["미투표", String(i + 1), m.name || "", m.business_name || "",
+      "", m.verified_at ? D.verifyHowLabel(m.verified_how) : "확인 안 됨", "",
+      m.phone ? D.formatPhone(m.phone) : ""]),
+  ];
+  const csv = "﻿" + lines.map((r) => r.map(csvCell).join(",")).join("\r\n");
+  // 파일 이름에 안건 제목을 넣지 않는다 — 한글 파일명은 브라우저마다 처리가 갈려 깨진다.
+  return text(csv, 200, { "content-type": "text/csv; charset=utf-8",
+    "content-disposition": `attachment; filename="poll_${assoc.slug}_${p.id}.csv"`,
+    "cache-control": "no-store" });
 }
 
 // ================= 회원 게시판 =================

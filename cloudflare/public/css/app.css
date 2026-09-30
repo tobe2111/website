@@ -1030,6 +1030,40 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .vf-ways .muted{display:block;font-size:.86em}
 .vf-table .vf-none td{background:var(--wait-bg)}
 .vf-table small{color:var(--muted)}
+/* 회원에게 알리기 — 안건 카드 안의 두 단추 줄 */
+.poll-admin-row{margin-bottom:10px}
+.poll-tell textarea{font-size:.86rem;line-height:1.55}
+
+/* ── 표결 결의서·명세 (의사록에 붙이는 A4) ──────────────────────────────
+   흑백 프린터로 찍어 총회 자리에 돌린다. 그래서 색으로만 구분하지 않고
+   테두리와 굵기로 읽히게 한다 — 복사기를 한 번 더 타면 연한 색은 사라진다. */
+/* 세로로 쌓고 서명란만 바닥으로 민다 — 서명은 종이 아래에 있어야 결재 서류로 읽힌다.
+   명세·미투표자 장에는 서명란이 없어 표가 그대로 위에 붙는다. */
+.mn-paper{padding:44px 46px;font-size:12px;line-height:1.5;color:#000;background:#fff;display:flex;flex-direction:column}
+.mn-head{border-bottom:2px solid #000;padding-bottom:10px;margin-bottom:16px}
+.mn-org{font-size:12px;font-weight:700}
+.mn-title{font-size:20px;font-weight:800;letter-spacing:-.02em;margin:6px 0 8px;line-height:1.3}
+.mn-sub{display:flex;justify-content:space-between;font-size:11px;font-weight:700}
+.mn-body{border-left:3px solid #000;padding:2px 0 2px 12px;margin-bottom:16px;font-size:11.5px;line-height:1.6}
+.mn-tbl{width:100%;border-collapse:collapse;table-layout:fixed;margin-bottom:14px}
+.mn-tbl th,.mn-tbl td{border:1px solid #000;padding:6px 8px;vertical-align:middle;word-break:keep-all}
+.mn-tbl thead th{background:#EDEDED;font-weight:700;text-align:center}
+.mn-sum th,.mn-maj th,.mn-meta th{width:120px;background:#EDEDED;font-weight:700;text-align:left}
+.mn-num{text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
+.mn-sum .mn-num{width:92px}
+.mn-note{font-size:10.5px;color:#333;word-break:keep-all}
+.mn-vf td:last-child{width:92px}
+.mn-line{font-size:10.5px;line-height:1.6;margin:0 0 14px}
+.mn-warn{border:1px solid #000;padding:8px 10px}
+.mn-list th,.mn-list td{padding:5px 6px;font-size:11px;text-align:center}
+.mn-list td:nth-child(2),.mn-list td:nth-child(3){text-align:left;word-break:break-all}
+.mn-list th:first-child,.mn-list td:first-child{width:42px}
+.mn-ch{font-weight:800}
+.mn-ch-abstain{color:#444}
+.mn-none{text-align:center;padding:18px 0}
+.mn-sign{display:flex;gap:40px;margin-top:auto;padding-top:22px;font-size:12px}
+.mn-sign > div{flex:1 1 0;border-top:1px solid #000;padding-top:8px;display:flex;justify-content:space-between}
+.mn-sign i{font-style:normal;color:#555}
 /* 행사 참가 신청 */
 .event-rsvp{display:flex;align-items:center;flex-wrap:wrap;gap:10px;padding:10px 16px;border-top:1px solid var(--line-soft);background:var(--bg-alt)}
 .event-photo-card .event-rsvp{background:var(--surface)}

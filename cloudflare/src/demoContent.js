@@ -579,10 +579,13 @@ export async function seedDemo(env, db, assoc, { emailDomain = "demo.kr" } = {})
   }
 
   // ---- 회비 장부 ----
-  const now = new Date();
+  // '이번 달' 을 **한국 달력으로** 센다. 워커는 UTC 로 돌기 때문에 한국시간 1일 0~9시에는
+  // UTC 가 아직 지난달이다 — 그때 UTC 기준으로 심으면 화면(한국 기준)이 이번 달을 빈 칸으로
+  // 보여 준다. 데모가 "회비가 하나도 안 걷힌 상인회" 로 보이는 사고가 실제로 났다.
+  const [ky, km] = D.kstToday().split("-").map(Number);
   for (const [back, paid] of DUES) {
-    const d = new Date(now.getFullYear(), now.getMonth() - back, 1);
-    const period = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const d = new Date(Date.UTC(ky, km - 1 - back, 1));
+    const period = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
     for (let i = 0; i < Math.min(paid, ownerIds.length); i++)
       await run(`INSERT INTO dues (association_id, user_id, period, memo, created_at) VALUES (?,?,?,?,?)`,
         aid, ownerIds[i], period, "", at(-back * 30 + 4));
