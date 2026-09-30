@@ -236,6 +236,8 @@ export const TENANT = [
   ["POST", "/admin/user/:id/team", api.adminSetUserTeam, "ADMIN"],
   ["POST", "/admin/polls", api.adminCreatePoll, "ADMIN"],
   ["GET", "/admin/polls/verify", pages.adminPollVerify, "ADMIN"],
+  ["GET", "/admin/polls/:id/minutes.csv", pages.adminPollMinutesCsv, "ADMIN"],
+  ["GET", "/admin/polls/:id/minutes", pages.adminPollMinutes, "ADMIN"],
   ["POST", "/admin/member/:id/verify", api.adminMemberVerify, "ADMIN"],
   ["POST", "/admin/polls/:id/close", api.adminClosePoll, "ADMIN"],
   ["POST", "/admin/polls/:id/reopen", api.adminReopenPoll, "ADMIN"],

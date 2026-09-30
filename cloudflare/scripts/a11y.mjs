@@ -110,11 +110,14 @@ for (const [n, ct, ms] of [
 await D.setDuesAmount(env.DB, m.id, 30000);
 // 확인 등급이 걸린 안건 — 투표 화면에서 '문이 닫힌 모습'(안내·인증번호 칸)도 색·과녁을 재야 한다
 await D.createPoll(env.DB, { associationId: m.id, title: "회비를 3만 원에서 3만 5천 원으로 올릴까요", verify: 1, createdBy: null });
-await D.createPoll(env.DB, { associationId: m.id, title: "정관 제12조 개정 (임원 임기 2년)", verify: 2, createdBy: null });
+const mnPoll = await D.createPoll(env.DB, { associationId: m.id, title: "정관 제12조 개정 (임원 임기 2년)", verify: 2, createdBy: null });
+for (const row of (await env.DB.prepare("SELECT id FROM users WHERE association_id=? AND role='MERCHANT' ORDER BY id LIMIT 5").bind(m.id).all()).results || [])
+  await D.votePoll(env.DB, mnPoll.id, row.id, "yes", "admin");
 const marketCookie = await loginAs("office@market.kr", "market1234");
 await grab("/t/market/admin", "market-admin.html", marketCookie);
 await grab("/t/market/polls", "market-polls.html", marketCookie);
 await grab("/t/market/admin/polls/verify", "market-verify.html", marketCookie);
+await grab(`/t/market/admin/polls/${mnPoll.id}/minutes`, "market-minutes.html", marketCookie);
 
 const MIME = { ".html": "text/html; charset=utf-8", ".css": "text/css", ".js": "text/javascript", ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg" };
 const srv = http.createServer((req, res) => {
@@ -265,6 +268,8 @@ const PAGES = [
   ["안건 투표 (모바일)", "market-polls.html", { width: 390, height: 844, isMobile: true }],
   ["투표 자격 대장 (모바일)", "market-verify.html", { width: 390, height: 844, isMobile: true }],
   ["투표 자격 대장", "market-verify.html", { width: 1280, height: 900 }],
+  ["표결 결과 · 의사록", "market-minutes.html", { width: 1280, height: 900 }],
+  ["표결 결과 · 의사록 (모바일)", "market-minutes.html", { width: 390, height: 844, isMobile: true }],
 ];
 let problems = 0;
 for (const [label, file, vp, hash] of PAGES) {

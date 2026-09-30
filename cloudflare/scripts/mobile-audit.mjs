@@ -58,7 +58,10 @@ await D.setDuesAmount(env.DB, m.id, 30000);
 // 확인 등급이 걸린 안건을 하나씩 만들어 둔다 — 투표 화면의 '문이 닫힌 모습' 도 재어야 한다.
 // (등급 0 안건만 있으면 게이트·인증번호 칸이 화면에 아예 나오지 않아 전수조사에서 빠진다)
 await D.createPoll(env.DB, { associationId: m.id, title: "회비를 3만 원에서 3만 5천 원으로 올릴까요", verify: 1, createdBy: null });
-await D.createPoll(env.DB, { associationId: m.id, title: "정관 제12조 개정 (임원 임기 2년)", verify: 2, createdBy: null });
+const mnPoll = await D.createPoll(env.DB, { associationId: m.id, title: "정관 제12조 개정 (임원 임기 2년)", verify: 2, createdBy: null });
+// 의사록 화면은 표가 몇 줄이라도 있어야 명세표가 그려진다 — 빈 표만 재면 뜻이 없다
+for (const row of (await env.DB.prepare("SELECT id FROM users WHERE association_id=? AND role='MERCHANT' ORDER BY id LIMIT 5").bind(m.id).all()).results || [])
+  await D.votePoll(env.DB, mnPoll.id, row.id, "yes", "admin");
 
 const ad = await hashPassword("market1234");
 await D.createUser(env.DB, { email: "office@market.kr", passwordHash: ad.hash, salt: ad.salt, name: "총무", role: "ADMIN", associationId: m.id });
@@ -135,6 +138,7 @@ const PAGES = [
   ["admin-tpl", "서식", `${B}/admin/templates`, "admin"],
   ["admin-api", "API 연동", `${B}/admin/api`, "admin"],
   ["admin-verify", "투표 자격 대장", `${B}/admin/polls/verify`, "admin"],
+  ["admin-minutes", "표결 결과 · 의사록", `${B}/admin/polls/${mnPoll.id}/minutes`, "admin"],
 ];
 if (docs[0]) {
   PAGES.push(["admin-doc", "계약 상세", `${B}/admin/documents/${docs[0].id}`, "admin"]);

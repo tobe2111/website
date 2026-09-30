@@ -897,11 +897,32 @@ export const pollResults = async (db, pollId) => {
 };
 export const userVote = async (db, pollId, userId) => (await first(db, "SELECT choice FROM poll_votes WHERE poll_id=? AND user_id=?", pollId, userId))?.choice || null;
 // 한 표 한 표를 사람 이름과 함께 — 의사록에 붙이는 명세다. 무엇으로 확인된 표인지까지 적는다.
+// 넣은 순서(created_at)로 준다: 의사록의 연번이 곧 표가 들어온 순서가 되어, 나중에
+// "몇 번째 표까지가 마감 전인가" 를 따질 때 줄을 다시 세지 않아도 된다.
 export const listPollVotes = (db, pollId) =>
-  all(db, `SELECT v.user_id, v.choice, v.verify, v.created_at, u.name, b.name AS business_name
+  all(db, `SELECT v.user_id, v.choice, v.verify, v.created_at, u.name, u.phone, u.role,
+      b.name AS business_name
     FROM poll_votes v LEFT JOIN users u ON u.id = v.user_id
       LEFT JOIN businesses b ON b.owner_id = v.user_id
     WHERE v.poll_id=? ORDER BY v.created_at, v.id`, pollId);
+// 아직 안 넣은 사람 — 총무가 전화를 돌릴 명단이다. 숫자만으로는 전화를 걸 수 없다.
+// 확인 여부를 함께 주는 이유: '확인이 안 돼서 못 한 사람' 과 '할 수 있는데 안 한 사람' 은
+// 전화로 할 말이 다르다(앞은 확인해 드려야 하고, 뒤는 재촉하면 된다).
+export const listPollNonVoters = (db, pollId, aid) =>
+  all(db, `SELECT u.id, u.name, u.phone, u.role, u.verified_at, u.verified_how, b.name AS business_name
+    FROM users u LEFT JOIN businesses b ON b.owner_id = u.id
+    WHERE u.association_id=? AND u.role IN ('MERCHANT','ADMIN','STAFF')
+      AND u.id NOT IN (SELECT user_id FROM poll_votes WHERE poll_id=?)
+    ORDER BY u.verified_at = '' DESC, u.name`, aid, pollId);
+// 표를 무엇으로 확인해 받았는지의 내역 — 결의서에 한 줄로 적는다
+export async function pollVerifyBreakdown(db, pollId) {
+  const out = { kakao: 0, otp: 0, admin: 0, none: 0 };
+  for (const r of await all(db, "SELECT verify, COUNT(*) AS n FROM poll_votes WHERE poll_id=? GROUP BY verify", pollId)) {
+    const k = out[r.verify] === undefined ? "none" : r.verify;
+    out[k] += Number(r.n) || 0;
+  }
+  return out;
+}
 // 투표 페이지용 일괄 조회 — 안건 수와 무관하게 2쿼리 (N+1 제거)
 // IN(?,?,...) 나열 대신 서브쿼리: D1 은 쿼리당 바인드 파라미터 100개 한도라 안건 100개부터 터진다
 export async function pollResultsBulk(db, aid) {
@@ -1837,20 +1858,26 @@ export const messageStats = (db, aid) =>
     COALESCE(SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END),0) AS failed
     FROM message_log WHERE association_id=?`, aid);
 // 월별 정산 — 건수·매출(판매가)·원가·마진. 성공 발송만 집계(실패는 환불되어 매출이 아님).
+// ⚠️ 발송 시각은 UTC 로 저장된다(datetime('now')). 그런데 정산은 **한국 달력**으로 끊는다 —
+// 9월 정산이라고 하면 한국에서 9월 1일 0시부터 9월 30일 24시까지다.
+// 그래서 월을 자르기 전에 +9시간 한다. 이 한 줄이 없으면 한국시간 매월 1일 0~9시에 보낸 건이
+// 지난달 정산에 들어가고, 새 달 정산은 그 아홉 시간 동안 빈 화면으로 보인다.
+// (돈이 걸린 집계라 '거의 맞는' 것으로는 부족하다.)
+const KST_MONTH = "strftime('%Y-%m', datetime(created_at, '+9 hours'))";
 export const monthlySettlement = (db, month) =>
   all(db, `SELECT a.id, a.name,
       COUNT(m.id) AS sent,
       COALESCE(SUM(m.cost),0) AS revenue,
       COALESCE(SUM(m.cost_base),0) AS cost_base
     FROM message_log m JOIN associations a ON a.id=m.association_id
-    WHERE m.status='sent' AND strftime('%Y-%m', m.created_at)=?
+    WHERE m.status='sent' AND strftime('%Y-%m', datetime(m.created_at, '+9 hours'))=?
     GROUP BY a.id, a.name ORDER BY revenue DESC`, month);
 // 대사용: 이 플랫폼이 해당 월에 보낸 총 건수 (CPaaS 대시보드 수치와 맞춰 보는 기준)
 export const monthlySendCount = (db, month) =>
   first(db, `SELECT COUNT(*) AS sent, COALESCE(SUM(cost),0) AS revenue, COALESCE(SUM(cost_base),0) AS cost_base
-    FROM message_log WHERE status='sent' AND strftime('%Y-%m', created_at)=?`, month);
+    FROM message_log WHERE status='sent' AND ${KST_MONTH}=?`, month);
 export const settlementMonths = (db) =>
-  all(db, `SELECT DISTINCT strftime('%Y-%m', created_at) AS m FROM message_log WHERE status='sent' ORDER BY m DESC LIMIT 12`);
+  all(db, `SELECT DISTINCT ${KST_MONTH} AS m FROM message_log WHERE status='sent' ORDER BY m DESC LIMIT 12`);
 
 // 플랫폼 전체 사용량·매출(슈퍼) — 판매액 기준
 export const platformMessageUsage = (db) =>
