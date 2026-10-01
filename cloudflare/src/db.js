@@ -112,6 +112,11 @@ export const setAssociationMapKey = (db, id, key) => run(db, "UPDATE association
 // 우리 직인(법인 인감). 계약서의 '우리 도장' 자리에 자동으로 찍힌다.
 export const setAssociationSeal = (db, id, key) => run(db, "UPDATE associations SET seal_media=? WHERE id=?", key || "", id);
 export const setAssociationPlan = (db, id, plan) => run(db, "UPDATE associations SET plan=? WHERE id=?", plan, id);
+// 개설 직후의 연락처. 시작 공지와 가입 동의서 문구가 이 번호를 그대로 인용하므로
+// **시작 세트를 넣기 전에** 채운다. 나중에 설정 화면에서 채우면 이미 게시된 공지에는
+// "상인회 사무실로 연락 주세요"만 남아, 손님이 전화할 번호가 없는 상태로 문을 열게 된다.
+export const setAssociationContact = (db, id, { phone = "", email = "", address = "" }) =>
+  run(db, "UPDATE associations SET phone=?, email=?, address=? WHERE id=?", phone, email, address, id);
 // 알림 자동화 스위치. 꺼져 있으면 이 조직 이름으로는 자동 발송이 한 통도 나가지 않는다.
 export const setNotifyAuto = (db, id, on) => run(db, "UPDATE associations SET notify_auto=? WHERE id=?", on ? 1 : 0, id);
 export const countMembers = async (db, aid) => (await first(db, "SELECT COUNT(*) AS n FROM users WHERE association_id=? AND role='MERCHANT'", aid)).n;

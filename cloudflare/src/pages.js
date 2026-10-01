@@ -5923,6 +5923,15 @@ function superSide(tabs, { linkBase = "" } = {}) {
     `<a href="${linkBase}#s-${id}"${linkBase ? "" : ` data-tab="${id}"`}>${esc(label)}${badge ? `<span class="side-badge">${badge}</span>` : ""}</a>`).join("")}</nav></aside>`;
 }
 
+// 개설·복제 양쪽에서 쓰는 연락처 칸. 셋 다 선택 입력이지만 **개설 화면에서 받아 두는 것**이 중요하다 —
+// 시작 공지의 "사무실(02-...)로 연락 주세요" 문장이 이 번호를 그대로 인용하고, 바닥글·지도·동의서
+// 안내문도 여기서 값을 가져간다. 나중에 설정 화면에서 채우면 이미 게시된 공지에는 번호가 없는 채로 남는다.
+const CONTACT_FIELDS = `<div class="form-divider">연락처 <small>(선택 — 지금 넣으면 시작 공지에 번호가 함께 박혀 나갑니다)</small></div>
+        <div class="form-two"><label>대표 전화<input type="text" name="phone" maxlength="40" placeholder="예: 02-586-1234" autocomplete="tel" /></label>
+          <label>대표 이메일<input type="email" name="org_email" maxlength="120" placeholder="예: office@example.com" /></label></div>
+        <label>주소 <small>(바닥글과 찾아오는 길에 나옵니다)</small>
+          <input type="text" name="address" maxlength="200" placeholder="예: 서울 서초구 방배로 00" autocomplete="street-address" /></label>`;
+
 export async function superOrg(ctx) {
   const { db, user, query, csrf, params, env } = ctx;
   const id = parseInt(params.id, 10);
@@ -6604,21 +6613,25 @@ export async function superConsole(ctx) {
           <select name="preset">${PRESET_KEYS.map((k) => `<option value="${k}">${esc(PRESETS[k].label)}</option>`).join("")}</select></label>
         <label>한 줄 소개 <small>(고객사 홈 첫 화면의 큰 문구 · 검색결과 설명 · 카톡 공유 미리보기에 나옵니다. 비우면 유형에 맞는 기본 문구가 들어갑니다)</small>
           <input type="text" name="tagline" maxlength="200" placeholder="예: 함께 성장하는 우리 동네 상권" /></label>
+        ${CONTACT_FIELDS}
         <div class="form-divider">관리자 계정</div>
         <div class="form-two"><label>관리자 이름<input type="text" name="admin_name" autocomplete="name" /></label><label>관리자 이메일<input type="email" name="admin_email" required autocomplete="email" /></label></div>
         <label>관리자 비밀번호 (8자 이상)<input type="password" name="admin_password" required minlength="8" autocomplete="new-password" /></label>
         <button class="btn btn-primary">조직 만들기</button></form></details>
     <details class="panel panel-fold" id="clone-assoc"><summary class="panel-title">기존 사이트 복제해서 만들기</summary>
       <p class="panel-hint">잘 만들어 둔 사이트를 본으로 새 고객사를 찍어 냅니다. 프랜차이즈든 상인회든 같습니다.
-        <b>복사되는 것</b>: 유형·업종 문구·대표색·홈/랜딩 화면 구성·캠페인 사본.
-        <b>복사되지 않는 것</b>: 회원·점포·상담 신청·계약 — 남의 실제 데이터는 절대 따라오지 않습니다.</p>
+        <b>복사되는 것</b>: 유형·업종 문구·대표색·홈/랜딩 화면 구성·캠페인 사본·계약 서식·간편동의서 양식(주소는 새로 뽑습니다).
+        <b>복사되지 않는 것</b>: 회원·점포·상담 신청·계약·받아 둔 동의 — 남의 실제 데이터는 절대 따라오지 않습니다.
+        지도 중심은 원본과 같은 자리로 복사되니, 다른 동네라면 개설 뒤 설정에서 옮겨 주세요.</p>
       <form method="post" action="/super/association/clone" class="stack-form">
         <label>본으로 삼을 사이트<select name="source_id" required><option value="">— 선택 —</option>
           ${list.map((a) => `<option value="${a.id}">${esc(a.name)} (${esc(kindById(a.kind).label)}${kindById(a.kind).usesLanding ? " · " + esc((PRESETS[a.preset] || {}).label || "") : ""})</option>`).join("")}
         </select></label>
         <div class="form-two"><label>새 조직 이름<input type="text" name="name" required maxlength="100" autocomplete="organization" /></label>
-          <label>대표 색상 <small>(비우면 원본과 동일)</small><input type="color" name="brand_color" value="#0b6e4f" /></label></div>
+          <label>대표 색상<input type="color" name="brand_color" value="#0b6e4f" />
+            <small><input type="checkbox" name="keep_color" value="1" checked /> 원본 색을 그대로 씁니다 (체크를 풀면 위에서 고른 색)</small></label></div>
         <label>한 줄 소개 <small>(비우면 원본과 동일)</small><input type="text" name="tagline" maxlength="200" /></label>
+        ${CONTACT_FIELDS}
         <div class="form-divider">관리자 계정</div>
         <div class="form-two"><label>관리자 이름<input type="text" name="admin_name" autocomplete="name" /></label><label>관리자 이메일<input type="email" name="admin_email" required autocomplete="email" /></label></div>
         <label>관리자 비밀번호 (8자 이상)<input type="password" name="admin_password" required minlength="8" autocomplete="new-password" /></label>

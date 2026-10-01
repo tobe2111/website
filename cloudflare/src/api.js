@@ -350,18 +350,31 @@ export async function superCloneAssociation(ctx) {
   if (await D.getUserByEmail(db, adminEmail)) return back("/super", "이미 사용 중인 관리자 이메일입니다.", true);
   let slug = slugify(name), n = 1;
   while (await D.getAssociationBySlug(db, slug)) slug = slugify(name) + "-" + (++n);
+  // 색상은 '원본과 동일'이 기본이다. <input type="color"> 는 비울 수가 없어서 체크를 풀지 않으면
+  // 무조건 기본값(#0b6e4f)이 올라오는데, 그대로 믿으면 "비우면 원본과 동일"이라고 적어 둔 안내와
+  // 반대로 모든 복제본이 초록색으로 나온다. 체크박스로 의사를 분명히 받는다.
+  const keepColor = form.get("keep_color") === "1";
+  const picked = form.get("brand_color") || "";
   const made = await D.cloneAssociation(db, src.id, {
     slug, name,
-    brandColor: /^#[0-9a-fA-F]{6}$/.test(form.get("brand_color") || "") ? form.get("brand_color") : "",
+    brandColor: !keepColor && /^#[0-9a-fA-F]{6}$/.test(picked) ? picked : "",
     tagline: cap(form.get("tagline"), 200),
   });
   if (!made) return back("/super", "복제에 실패했습니다.", true);
   const { hash, salt } = await hashPassword(adminPassword);
   await D.createUser(db, { email: adminEmail, passwordHash: hash, salt, name: cap(form.get("admin_name"), 60) || "관리자", role: "ADMIN", associationId: made.id });
-  const st = await seedStarter(ctx.env, db, made, { createdBy: null });
-  await audit(ctx, "사이트복제", `${src.name} → ${name} (/t/${made.slug})`, null);
-  return back("/super", `'${src.name}' 을(를) 본으로 '${name}' 을(를) 만들었습니다. (주소: /t/${made.slug}, 관리자: ${adminEmail}) `
-    + `화면 구성은 그대로 복사됐고, 회원·상담 신청 등 원본의 데이터는 따라오지 않았습니다. 시작 공지 ${st.notices}건을 넣었습니다.`);
+  // 연락처는 복제되지 않는다(원본의 번호다). 여기서 받은 값을 시작 세트 전에 넣어 둔다.
+  let fresh = made;
+  const contact = contactFrom(form);
+  if (contact.phone || contact.email || contact.address) {
+    await D.setAssociationContact(db, made.id, contact);
+    fresh = (await D.getAssociationById(db, made.id)) || made;
+  }
+  const st = await seedStarter(ctx.env, db, fresh, { createdBy: null });
+  await audit(ctx, "사이트복제", `${src.name} → ${name} (/t/${fresh.slug})`, null);
+  return back("/super", `'${src.name}' 을(를) 본으로 '${name}' 을(를) 만들었습니다. `
+    + `화면 구성은 그대로 복사됐고, 회원·상담 신청 등 원본의 데이터는 따라오지 않았습니다. `
+    + (await openedMsg(db, fresh, adminEmail, st)));
 }
 
 export async function superSetKind(ctx) {
@@ -3940,6 +3953,26 @@ export async function superSignupSettings(ctx) {
   return back("/super", "셀프 가입 설정을 저장했습니다.");
 }
 
+// 개설·복제 화면에서 함께 받는 연락처. 셋 다 선택 입력이지만, 받아 두면 시작 공지에
+// 실제 전화번호가 박혀 나가고 바닥글·지도에도 주소가 뜬다 — 개설 당일에 바로 쓸 수 있는 사이트와
+// "연락처를 채워 주세요"만 남은 사이트의 차이가 이 세 칸이다.
+const contactFrom = (form) => ({
+  phone: cap(form.get("phone"), 40).trim(),
+  email: cap((form.get("org_email") || "").toLowerCase().trim(), 120),
+  address: cap(form.get("address"), 200).trim(),
+});
+
+// 개설·복제 직후 운영자에게 돌려줄 안내. 간편동의서 **공개 주소를 여기서 알려 준다** —
+// 새 조직이 가장 먼저 해야 하는 일이 점포 명단 만들기이고, 그 링크를 찾으러 관리 화면을
+// 헤매게 하면 개설 당일에 아무 일도 일어나지 않는다.
+async function openedMsg(db, assoc, adminEmail, st) {
+  const forms = await D.listConsentForms(db, assoc.id).catch(() => []);
+  const link = forms[0]
+    ? ` 간편동의서 주소: /t/${assoc.slug}/consent/${forms[0].token} — 이 링크(또는 관리 화면의 QR)를 사장님들께 보내면 명단이 채워집니다.`
+    : "";
+  return `(주소: /t/${assoc.slug}, 관리자: ${adminEmail}) 시작 공지 ${st.notices}건을 넣었습니다.${link}`;
+}
+
 export async function superCreateAssociation(ctx) {
   const { db, form } = ctx;
   const name = cap((form.get("name") || "").trim(), 100);
@@ -3953,14 +3986,20 @@ export async function superCreateAssociation(ctx) {
   // 고유 slug
   let slug = slugify(name), n = 1;
   while (await D.getAssociationBySlug(db, slug)) slug = slugify(name) + "-" + (++n);
-  const assoc = await D.createAssociation(db, { slug, name, brandColor: color, kind,
+  let assoc = await D.createAssociation(db, { slug, name, brandColor: color, kind,
     preset, tagline: cap(form.get("tagline"), 200) || taglineFor(kind, preset) });
   const { hash, salt } = await hashPassword(adminPassword);
   await D.createUser(db, { email: adminEmail, passwordHash: hash, salt, name: cap(form.get("admin_name"), 60) || "관리자", role: "ADMIN", associationId: assoc.id });
-  // 빈 화면으로 넘기지 않도록 시작 세트를 함께 넣습니다(공지·가입 동의서).
+  // 연락처를 먼저 넣고 다시 읽는다 — 시작 공지가 이 번호를 인용한다.
+  const contact = contactFrom(form);
+  if (contact.phone || contact.email || contact.address) {
+    await D.setAssociationContact(db, assoc.id, contact);
+    assoc = (await D.getAssociationById(db, assoc.id)) || assoc;
+  }
+  // 빈 화면으로 넘기지 않도록 시작 세트를 함께 넣습니다(공지·가입 동의서·간편동의서).
   const st = await seedStarter(ctx.env, db, assoc, { createdBy: null });
   await audit(ctx, "상인회생성", `${name} (/t/${assoc.slug})`, null);
-  return back("/super", `'${name}' 상인회가 생성되었습니다. (주소: /t/${assoc.slug}, 관리자: ${adminEmail}) 시작 공지 ${st.notices}건과 가입 동의서를 함께 넣었습니다.`);
+  return back("/super", `'${name}' 상인회가 생성되었습니다. ${await openedMsg(db, assoc, adminEmail, st)}`);
 }
 // 데모 콘텐츠 채우기 — 영업 소개용 샘플 사이트를 버튼 하나로 만들기 위한 기능.
 // 대상 상인회의 기존 콘텐츠와 사장님 계정을 지우고 데모 세트를 넣습니다(다른 상인회는 무관).
