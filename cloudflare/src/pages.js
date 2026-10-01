@@ -3603,7 +3603,10 @@ export async function admin(ctx) {
     ...all.filter((b) => b.status === "approved").map((b) => ({ t: b.created_at, msg: `${b.name} 점포가 가입했습니다`, link: `${base}/admin/business/${b.id}` })),
     ...notices.map((n) => ({ t: n.created_at, msg: `공지 「${n.title}」 을 올렸습니다`, link: `${base}/notices/${n.id}` })),
     ...events.map((e) => ({ t: e.created_at, msg: `행사 「${e.title}」 을 열었습니다`, link: `${base}/events` })),
-    ...docs.map((d) => ({ t: d.created_at, msg: `계약서 「${d.title}」 ${d.closed ? "체결 완료" : "서명 요청"}`, link: `${base}/admin/documents` })),
+    // 받는 분을 아직 안 넣은 계약서를 '서명 요청' 이라고 적으면, 보낸 적 없는 것을 보냈다고 말하는 셈이다.
+    ...docs.map((d) => ({ t: d.created_at, link: `${base}/admin/documents`,
+      msg: `계약서 「${d.title}」 ${d.closed ? "체결 완료"
+        : (Number(d.signer_count) || 0) + (Number(d.ext_count) || 0) > 0 ? "서명 요청" : "만들어 둠"}` })),
   ].filter((x) => x.t && x.msg).sort((a, b) => String(b.t).localeCompare(String(a.t))).slice(0, 8);
   const notifRows = feed.length ? feed.map((n) => `<li class="${n.unread ? "unread" : ""}"><span class="notif-dot"></span><a href="${esc(n.link)}" class="notif-msg">${esc(n.msg)}</a><time>${esc(kstStamp(n.t, { year: false }))}</time></li>`).join("") : `<li class="empty">알림이 없습니다.</li>`;
   const docCount = docs.length;
@@ -3810,13 +3813,25 @@ export async function admin(ctx) {
     <div class="hot-m"><b>${esc(title)}</b><small>${esc(sub)}</small></div>
     <div class="hot-acts">${acts}</div></div>`;
 
+  // '서명을 기다리는 중' 은 **보낸 뒤에만** 참이다. 받는 분을 아직 아무도 넣지 않은 계약서는
+  // 기다리는 게 아니라 **안 보낸 것**이다. 개설 직후 화면에서 이 구분이 특히 중요하다 —
+  // 시작 세트가 넣어 주는 가입 동의서는 일부러 서명 요청을 걸지 않는데(누구에게 돌릴지는
+  // 상인회가 정할 일이라서), 그걸 "상대방이 아직 서명하지 않았습니다" 로 적으면
+  // 아무에게도 보낸 적 없는 문서를 두고 상대방을 탓하는 셈이 된다.
+  const sentOut = (d) => (Number(d.signer_count) || 0) + (Number(d.ext_count) || 0) > 0;
+  const waiting = openDocs.filter(sentOut);
   const signHot = openDocs.length ? hotBlock({
-    n: openDocs.length, title: "서명 대기",
-    note: lateDocs.length ? `${lateDocs.length}건은 기한이 지났습니다` : "상대방이 아직 서명하지 않았습니다",
+    n: openDocs.length, title: waiting.length ? "서명 대기" : "아직 안 보낸 계약서",
+    note: lateDocs.length ? `${lateDocs.length}건은 기한이 지났습니다`
+      : waiting.length ? "상대방이 아직 서명하지 않았습니다" : "받는 분을 넣어야 서명 요청이 나갑니다",
     href: `${base}/admin/documents`, hrefLabel: "계약서 전체",
     // 기한 지난 것이 위로 — 오늘 손이 갈 곳이 맨 앞에 있어야 한다
     rows: [...openDocs].sort((a, b) => (isOverdue(b) ? 1 : 0) - (isOverdue(a) ? 1 : 0)).slice(0, 5).map((d) => {
       const late = isOverdue(d);
+      if (!sentOut(d)) {
+        return hotRow(d.title, "받는 분을 아직 넣지 않았습니다 — 넣으면 서명 요청이 나갑니다",
+          `<a class="btn btn-sm" href="${base}/admin/documents/${d.id}">받는 분 넣기</a>`);
+      }
       return hotRow(d.title,
         `${late ? `기한 ${daysSince(d.due_date + " 00:00:00")}일 지남` : "서명을 기다리는 중"}${d.due_date && !late ? ` · 기한 ${d.due_date}` : ""}`,
         `<a class="btn btn-sm" href="${base}/admin/documents/${d.id}">${late ? "링크 다시 보내기" : "진행 보기"}</a>`);

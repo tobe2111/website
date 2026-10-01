@@ -1316,7 +1316,10 @@ export const listDocuments = (db, aid) =>
   // "0명 서명" 만으로는 다 된 건지 아무도 안 한 건지 알 수 없다 — 몇 명 중 몇 명인지가 필요하다.
   all(db, `SELECT d.*, u.name AS author_name,
       (SELECT COUNT(*) FROM signatures s WHERE s.document_id=d.id) AS sign_count,
-      (SELECT COUNT(*) FROM signature_requests r WHERE r.document_id=d.id) AS signer_count
+      (SELECT COUNT(*) FROM signature_requests r WHERE r.document_id=d.id) AS signer_count,
+      -- 바깥 서명자(계정 없는 상대방)도 '보낸 것' 이다. 이걸 빼고 세면, 외부로만 보낸 계약서가
+      -- 첫 화면에서 '아직 아무에게도 안 보냄' 으로 둔갑한다.
+      (SELECT COUNT(*) FROM external_signers e WHERE e.document_id=d.id) AS ext_count
     FROM documents d LEFT JOIN users u ON u.id = d.created_by
     WHERE d.association_id=? AND d.draft=0 ORDER BY d.created_at DESC`, aid);
 // ---- 부서 경계 ----

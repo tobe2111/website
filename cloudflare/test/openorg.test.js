@@ -207,3 +207,36 @@ test("첫 화면: 전자계약 조직에는 동의서 이야기가 나오지 않
   const html = await (await get(env, j, `/t/${a.slug}/admin`)).text();
   assert.doesNotMatch(html, /첫 단추|들어온 간편동의서/, "점포가 없는 제품에 점포 명단 이야기는 소음이다");
 });
+
+// ---- '서명 대기' 는 보낸 뒤에만 참이다 ----
+// 시작 세트가 넣어 주는 가입 동의서는 일부러 서명 요청을 걸지 않는다(누구에게 돌릴지는
+// 상인회가 정할 일이라서). 그걸 "상대방이 아직 서명하지 않았습니다" 로 적으면,
+// 아무에게도 보낸 적 없는 문서를 두고 상대방을 탓하는 셈이 된다.
+test("첫 화면: 받는 분을 안 넣은 계약서는 '서명 대기'가 아니다", async () => {
+  const env = makeEnv();
+  const su = await superLogin(env);
+  await post(env, su, "/super/association", { name: "서식만있는상인회", admin_email: "x@d.kr", admin_password: "admin1234" }, "/super");
+  const a = await found(env, "서식만있는상인회");
+  const j = await adminOf(env, a.id, "chief@d.kr");
+  const html = await (await get(env, j, `/t/${a.slug}/admin`)).text();
+  assert.doesNotMatch(html, /상대방이 아직 서명하지 않았습니다/,
+    "아무에게도 안 보낸 문서를 두고 상대방을 탓하면 안 된다");
+  assert.match(html, /아직 안 보낸 계약서/);
+  assert.match(html, /받는 분을 아직 넣지 않았습니다/);
+});
+
+test("첫 화면: 받는 분을 넣으면 그때부터 '서명 대기'다", async () => {
+  const env = makeEnv();
+  const su = await superLogin(env);
+  await post(env, su, "/super/association", { name: "보낸상인회", admin_email: "x@e.kr", admin_password: "admin1234" }, "/super");
+  const a = await found(env, "보낸상인회");
+  const doc = (await D.listDocuments(env.DB, a.id))[0];
+  assert.ok(doc, "시작 세트가 가입 동의서를 넣어 둔다");
+  const pw = await hashPassword("owner1234");
+  const owner = await D.createUser(env.DB, { email: "o@e.kr", passwordHash: pw.hash, salt: pw.salt, name: "사장님", role: "MERCHANT", associationId: a.id });
+  await D.createSignatureRequests(env.DB, doc.id, [owner.id]);
+  const j = await adminOf(env, a.id, "chief@e.kr");
+  const html = await (await get(env, j, `/t/${a.slug}/admin`)).text();
+  assert.match(html, /상대방이 아직 서명하지 않았습니다/);
+  assert.doesNotMatch(html, /아직 안 보낸 계약서/);
+});
