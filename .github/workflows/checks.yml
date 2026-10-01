@@ -1,0 +1,60 @@
+# 브라우저가 있어야만 되는 검사 — 실제 크로미움을 띄워 화면을 본다.
+#
+# 왜 따로 두는가 — 이걸 배포 워크플로에 같이 넣으면 크로미움을 받는 1분 가까이가
+# 매 배포에 그대로 붙는다. 그래서 배포는 브라우저 없이 되는 검사만으로 막고(4초),
+# 화면 검사는 여기서 병렬로 돌려 Actions 탭에 빨갛게 남긴다.
+#
+# 이 파일이 생긴 이유는 더 구체적이다. 스모크 테스트(smoke.mjs)의 선택자가
+# 화면 구조가 바뀐 뒤에도 옛 이름을 가리키고 있던 것을 **두 번** 뒤늦게 발견했다
+# (input[name=email] → login, .map-fallback → .mapbox). 둘 다 사람이 손으로 돌려야
+# 나오는 검사여서, 아무도 안 돌리는 동안 조용히 거짓 통과하고 있었다.
+# 검사 자체가 낡은 것을 잡아 주는 장치가 없으면 검사는 장식이 된다.
+#
+# 배포를 막지는 않는다 — 브라우저 검사는 환경 탓으로 흔들릴 수 있고,
+# 그 때문에 핫픽스가 못 나가는 쪽이 더 위험하다. 대신 빨간 표시는 남는다.
+
+name: 화면 검사
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22      # 검사에 --experimental-sqlite 가 필요하다 (22+)
+
+      # 저장소에는 의존성이 하나도 없다(외부 의존성 0개가 이 제품의 설계다).
+      # playwright 는 검사 도구일 뿐이므로 package.json 에 넣지 않고 여기서만 전역 설치한다.
+      # 검사 스크립트들이 `npm root -g` 로 찾으므로 전역이어야 한다.
+      - name: 크로미움 준비
+        run: |
+          npm i -g playwright
+          npx playwright install --with-deps chromium
+
+      # e2e 스모크(43) · 접근성 20화면(WCAG AA) · 업로드 한계 · 모바일 서명 · 인쇄
+      - name: 화면 검사
+        run: npm run test:browser
+
+      # 스타일시트 위생 — 참고용이라 실패로 치지 않되, 로그에는 남겨 둔다.
+      # CSS 는 깨져도 에러가 안 나는 유일한 곳이라 눈으로 볼 자리가 필요하다.
+      - name: 스타일시트 점검 (참고)
+        if: always()
+        continue-on-error: true
+        run: |
+          npm run css:unused
+          npm run css:dead

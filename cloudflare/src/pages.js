@@ -3870,7 +3870,43 @@ export async function admin(ctx) {
     rows: gaps.map((g) => hotRow(`${g.title} · ${g.n}곳`, g.sub,
       `<a class="btn btn-sm" href="${g.href}">${esc(g.label)}</a>${g.href2 ? `<a class="btn btn-sm is-ghost" href="${g.href2}">${esc(g.label2)}</a>` : ""}`) + (g.names || "")),
   }) : "";
-  const hotPanels = [applyHot, leadHot, signHot, setupHot].filter(Boolean).join("");
+  // 들어온 간편동의서 — 사장님이 적어 보낸 것이 쌓여 있는데 첫 화면이 조용하면,
+  // 총무는 그게 와 있는 줄도 모른다. [점포로 등록] 한 번이면 가게가 열리는 일이므로
+  // 오늘 손이 갈 곳 중 가장 값이 싸고 효과가 크다.
+  // 승인 버튼은 여기 두지 않는다 — 서명 그림과 적어 보낸 내용을 보고 눌러야 하는 일이라,
+  // 첫 화면에서 눈 감고 누르게 만들면 안 된다. 그 화면으로 보내 준다.
+  const freshConsents = (consents || []).filter((c) => c.status === "new");
+  const consentHot = !isEsign && !isFranchise && freshConsents.length ? hotBlock({
+    n: freshConsents.length, title: "들어온 간편동의서", note: "사장님이 직접 적어 보낸 것입니다 — 확인하고 점포로 등록하면 됩니다",
+    href: `${base}/admin#p-consent`, hrefLabel: "간편동의서",
+    rows: freshConsents.slice(0, 5).map((c) => hotRow(c.biz_name,
+      `${c.name}${c.phone ? ` · ${D.formatPhone(c.phone)}` : ""} · ${daysSince(c.created_at) === 0 ? "오늘 접수" : `${daysSince(c.created_at)}일 전 접수`}`,
+      `<a class="btn btn-sm" href="${base}/admin#p-consent">확인하고 등록</a>`)),
+    more: freshConsents.length > 5 ? `들어온 동의 ${freshConsents.length}건 전체 보기` : "",
+  }) : "";
+
+  // 문을 막 연 상인회 — 점포가 한 곳도 없다.
+  // 이때 "지금 처리할 일이 없습니다" 가 뜨는 것이 이 화면의 가장 큰 거짓말이었다.
+  // 할 일이 없는 게 아니라 **가장 중요한 일이 아직 시작도 안 된** 상태다.
+  // 첫 단추는 점포 명단이고, 그 명단을 만드는 가장 빠른 길이 간편동의서 링크다.
+  const openForm = (consentForms || []).find((f) => f.enabled);
+  const firstStepHot = !isEsign && !isFranchise && setup.total === 0 && !freshConsents.length
+    ? hotBlock({
+      n: 1, title: "첫 단추 — 점포 명단 만들기", note: "아직 등록된 가게가 없습니다",
+      href: `${base}/admin#p-consent`, hrefLabel: "간편동의서",
+      rows: [openForm
+        ? hotRow("링크 하나를 단톡방에 올리세요",
+          "사장님이 열어서 상호·성함·연락처를 직접 적고 서명합니다. 가입도 비밀번호도 필요 없습니다.",
+          `<a class="btn btn-sm" href="${base}/admin#p-consent">링크·QR 보기</a>`)
+          + `<span class="hot-names hot-link"><a href="${consentOrigin(ctx)}${base}/consent/${esc(openForm.token)}" target="_blank" rel="noopener">${esc(consentOrigin(ctx) + base + "/consent/" + openForm.token)}</a></span>`
+        : hotRow("간편동의서를 먼저 만드세요",
+          "링크를 하나 만들어 두면 사장님들이 직접 적어 보냅니다 — 명단을 손으로 칠 일이 없습니다.",
+          `<a class="btn btn-sm" href="${base}/admin#p-consent">간편동의서 만들기</a>`),
+        hotRow("아는 가게는 직접 넣어도 됩니다", "지도에서 상호로 찾아 바로 등록합니다 — 사장님 연락 없이도 됩니다",
+          `<a class="btn btn-sm is-ghost" href="${base}/admin#p-addmember">점포 직접 추가</a>`)],
+    }) : "";
+
+  const hotPanels = [applyHot, leadHot, signHot, consentHot, firstStepHot, setupHot].filter(Boolean).join("");
   const queuePanel = hotPanels || `<p class="all-clear">지금 처리할 일이 없습니다</p>`;
 
   // 바로 가기 — 매일 하는 일 네댓 개. 탭을 뒤지지 않고 첫 화면에서 바로 간다.

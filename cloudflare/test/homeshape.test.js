@@ -163,11 +163,21 @@ test("첫 화면은 손이 필요한 것을 색으로 가르고, 승인을 그 �
 });
 
 // 파란 덩어리가 '보이는 것' 자체가 신호다 — 0 이라는 숫자를 읽게 하지 않는다.
+//
+// '처리할 것이 없다' 는 **돌아가고 있는 상인회가 밀린 일을 다 쳐낸 상태**를 말한다.
+// 점포가 한 곳도 없는 상인회는 그 상태가 아니다 — 거기서 '할 일 없음'은 거짓이고,
+// 그 경우 첫 화면은 '첫 단추'(점포 명단 만들기)를 띄운다(openorg.test.js 가 지킨다).
+// 그래서 이 검사는 가게가 하나 있고 지도·사진까지 채워진, 정말 밀린 게 없는 상인회를 본다.
 test("처리할 것이 없으면 파란 블록이 통째로 사라진다", async () => {
   const env = makeEnv();
   const pw = await hashPassword("pass1234");
   const a = await D.createAssociation(env.DB, { slug: "s", name: "서초구 상인회", kind: "merchant" });
   await D.createUser(env.DB, { email: "ad@s.kr", passwordHash: pw.hash, salt: pw.salt, name: "회장", role: "ADMIN", associationId: a.id });
+  const ow = await D.createUser(env.DB, { email: "own@s.kr", passwordHash: pw.hash, salt: pw.salt, name: "사장님", role: "MERCHANT", associationId: a.id });
+  const biz = await D.createBusiness(env.DB, { associationId: a.id, ownerId: ow.id, name: "김밥천국", category: "음식점" });
+  // 지도 핀까지 꽂혀 있고 사진도 올라간, 정말 손볼 데가 없는 상태로 만든다
+  await env.DB.prepare("UPDATE businesses SET lat=?, lng=?, status='approved' WHERE id=?").bind(37.48, 127.01, biz.id).run();
+  await D.addMedia(env.DB, { businessId: biz.id, filename: "a.jpg", kind: "image" });
   const j = await login(env, "ad@s.kr");
   const html = await (await jget(env, j, "/t/s/admin")).text();
 

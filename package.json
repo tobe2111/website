@@ -20,7 +20,11 @@
     "check": "node --experimental-sqlite cloudflare/test-e2e/feature-check.mjs",
     "qa": "node --experimental-sqlite cloudflare/test-e2e/qa-drill.mjs",
     "browsers": "node cloudflare/scripts/browser-support.mjs",
-    "css:unused": "node cloudflare/scripts/css-unused.mjs"
+    "css:unused": "node cloudflare/scripts/css-unused.mjs",
+    "css:dead": "node cloudflare/scripts/css-dead-media.mjs",
+    "test:a11y-screens": "node --experimental-sqlite cloudflare/scripts/a11y.mjs",
+    "test:fast": "npm run check && npm test && npm run qa && npm run test:send && npm run test:manual && npm run test:restore && npm run test:perf && npm run browsers",
+    "test:browser": "npm run test:e2e && npm run test:a11y-screens && npm run test:limits && npm run test:mobile && npm run test:a11y"
   },
   "license": "MIT"
 }

@@ -2783,6 +2783,9 @@ body.is-done .foot-copy,body.is-done .site-footer p{color:var(--dk-muted)}
 .hot-names a{display:inline-flex;align-items:center;min-height:32px;padding:0 10px;border-radius:8px;background:rgba(255,255,255,.14);color:#fff;font-size:12.5px;text-decoration:none}
 .hot-names a:hover{background:rgba(255,255,255,.26)}
 .hot-names .hot-names-more{background:transparent;border:1px solid rgba(255,255,255,.4);font-weight:700}
+/* 주소 한 줄을 칩으로 띄울 때 — 상호 칩과 달리 길이가 55자를 넘는다. 칩은 내용보다
+   좁아지지 않으므로 그냥 두면 360px 화면에서 가로로 삐져나간다. 이 칩만 끊어 준다. */
+.hot-names.hot-link a{max-width:100%;word-break:break-all;font-family:var(--mono);font-size:12px}
 .hot-row{flex-wrap:wrap}
 .hot-acts .btn{background:#fff;color:var(--brand-text);font-weight:700;border:0}
 .hot-acts .btn:hover{background:rgba(255,255,255,.88)}

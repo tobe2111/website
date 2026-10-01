@@ -46,11 +46,13 @@ jobs:
           node-version: 22      # 검사에 --experimental-sqlite 가 필요하다 (22+)
 
       # 깨진 코드를 라이브에 올리지 않는다. 여기서 막히면 배포가 안 되는 게 맞다.
-      # 브라우저가 필요한 검사(e2e·접근성)는 빼고, 로직 검사만 돌린다 — 1분 안에 끝난다.
-      - name: 검사 (기능 목록 + 단위 테스트)
-        run: |
-          npm run check
-          npm test
+      # 브라우저가 필요한 검사(e2e·접근성·인쇄)는 '화면 검사' 워크플로가 따로 맡는다 —
+      # 크로미움을 받는 데만 1분 가까이 걸려 배포를 그만큼 늦추기 때문이다.
+      # 브라우저 없이 되는 것은 전부 여기 둔다. 아래 다섯 줄을 더해도 4초면 끝나는데,
+      # 그 안에 계약 봉인·증적 패키지(qa)·알림톡 발송 리허설(test:send)·
+      # **백업 복구 리허설(test:restore)** 이 들어 있다. 복구가 깨진 걸 사고 난 날 알면 늦다.
+      - name: 검사 (브라우저 없이 되는 전부)
+        run: npm run test:fast
 
       - name: Cloudflare 배포
         uses: cloudflare/wrangler-action@v3
