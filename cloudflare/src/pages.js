@@ -169,17 +169,25 @@ function eventCard(base, e) {
   // 링크가 아니라 **표시**다. 카드를 누르면 상세로 가고, 거기서 어느 캘린더에 넣을지 고른다.
   // (링크 안에 링크를 넣을 수 없기도 하지만, 그보다 여기서 바로 파일이 떨어지면 안 된다.)
   const calHint = `<span class="event-cal">${CAL_SVG} 캘린더에 넣기</span>`;
+  // 제목은 **사진 아래**에 둔다. 예전에는 사진 위에 얹었는데, 올라오는 사진이
+  // 풍경이 아니라 **포스터**인 경우가 많다 — 포스터는 그 자체가 글자와 네온으로 가득 차
+  // 있어서, 그 위에 흰 글자를 얹으면 어느 쪽도 안 읽힌다. 검은 막을 덧씌워 글자를 살리면
+  // 이번엔 포스터가 안 보인다. 포스터를 보여주려고 올린 것인데 말이다.
+  // 날짜 칩만 사진 위에 남긴다(자기 배경이 있어 어떤 사진에서도 읽힌다).
   if (e.image) return `<article class="event-photo-card">
     <a class="epc-link" href="${href}">
-      <img src="${esc(mediaUrl(e.image))}" alt="" loading="lazy" />
-      <span class="epc-overlay" aria-hidden="true"></span>
-      <span class="epc-body"><span class="epc-date">${Number(e.event_date.slice(5, 7))}.${Number(d)}</span><strong>${esc(e.title)}</strong>${e.place ? `<span class="epc-place">${PIN_SVG}${esc(e.place)}</span>` : ""}${calHint}</span>
+      <span class="epc-photo">
+        <img src="${esc(mediaUrl(e.image))}" alt="" loading="lazy" />
+        <span class="epc-overlay" aria-hidden="true"></span>
+        <span class="epc-date">${Number(e.event_date.slice(5, 7))}.${Number(d)}</span>
+      </span>
+      <span class="epc-body"><strong>${esc(e.title)}</strong>${e.time_text ? `<span class="epc-place">${CAL_SVG}${esc(e.time_text)}</span>` : ""}${e.place ? `<span class="epc-place">${PIN_SVG}${esc(e.place)}</span>` : ""}${calHint}</span>
     </a>
     ${ddBadge ? `<span class="dday dday-corner${dd === "D-DAY" ? " is-today" : ""}">${dd}</span>` : ""}
   </article>`;
   return `<article class="event-card"><a class="event-link" href="${href}">
       <div class="event-date"><span class="d">${d}</span><span class="m">${mo}</span></div>
-      <div class="event-info">${ddBadge ? `<div class="ev-head"><h3>${esc(e.title)}</h3>${ddBadge}</div>` : `<h3>${esc(e.title)}</h3>`}<p>${esc(e.description)}</p>${e.place ? `<span class="event-place">${PIN_SVG}${esc(e.place)}</span>` : ""}${calHint}</div>
+      <div class="event-info">${ddBadge ? `<div class="ev-head"><h3>${esc(e.title)}</h3>${ddBadge}</div>` : `<h3>${esc(e.title)}</h3>`}<p>${esc(e.description)}</p>${e.time_text ? `<span class="event-place">${CAL_SVG}${esc(e.time_text)}</span>` : ""}${e.place ? `<span class="event-place">${PIN_SVG}${esc(e.place)}</span>` : ""}${calHint}</div>
     </a></article>`;
 }
 
@@ -203,10 +211,24 @@ function googleCalUrl(assoc, e) {
     dates: `${day}/${next.toISOString().slice(0, 10).replace(/-/g, "")}`,
   });
   if (e.place) p.set("location", e.place);
-  if (e.description) p.set("details", String(e.description).slice(0, 800));
+  const det = calDetails(e);
+  if (det) p.set("details", det.slice(0, 1000));
   return `https://calendar.google.com/calendar/render?${p.toString()}`;
 }
 const CAL_SVG = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 9h18M12 13v5M9.5 15.5h5"/></svg>';
+
+// 캘린더에 들어갈 설명문. 시간·접수·주최를 설명 맨 앞에 붙인다.
+//
+// 일정 자체는 **종일**로 넣는다. time_text 는 '15:00 ~ 20:00 (개회식 18:00)' 처럼
+// 사람이 읽는 문장이라 시각으로 바꾸려면 추측이 들어간다 — 포스터에 없는 시각을
+// 캘린더에 적어 놓으면 그 시각에 맞춰 온 분이 헛걸음한다. 그래서 글자 그대로 옮긴다.
+const calDetails = (e) => [
+  e.time_text ? `시간: ${e.time_text}` : "",
+  e.signup ? `접수: ${e.signup}` : "",
+  e.host ? `주최: ${e.host}` : "",
+  e.contact ? `문의: ${e.contact}` : "",
+  e.description || "",
+].filter(Boolean).join("\n");
 
 // 행사 → iCalendar 파일 (아이폰·구글·네이버 캘린더 공통 규격)
 export async function eventIcs(ctx) {
@@ -223,7 +245,7 @@ export async function eventIcs(ctx) {
     `DTEND;VALUE=DATE:${next.toISOString().slice(0, 10).replace(/-/g, "")}`,
     `SUMMARY:${icsEsc(e.title)} — ${icsEsc(assoc.name)}`,
     e.place ? `LOCATION:${icsEsc(e.place)}` : "",
-    e.description ? `DESCRIPTION:${icsEsc(e.description)}` : "",
+    (() => { const d = calDetails(e); return d ? `DESCRIPTION:${icsEsc(d)}` : ""; })(),
     "END:VEVENT", "END:VCALENDAR"].filter(Boolean).join("\r\n");
   // inline 으로 준다. attachment 를 붙이면 아이폰 사파리도 '파일'로 받아 버려
   // 캘린더 앱이 안 열린다 — 정체 모를 파일 하나가 생기고 행사는 캘린더에 안 들어간다.
@@ -248,7 +270,9 @@ export async function eventDetail(ctx) {
   const past = !dd;                         // 지난 행사는 숨기지 않고 '끝났습니다' 로 적는다
   const day = String(e.event_date || "").slice(0, 10);
 
-  const rsvpBlock = past
+  const rsvpBlock = !D.eventTakesRsvp(e)
+    ? (past ? `<p class="panel-hint">이미 지난 행사입니다.</p>` : "")   // 그냥 와서 즐기는 행사 — 신청 자리를 두지 않는다
+    : past
     ? `<p class="panel-hint">이미 지난 행사입니다.</p>`
     : `<div class="ed-rsvp">
         ${count ? `<span class="rsvp-count">참가 신청 ${count}곳</span>` : ""}
@@ -268,10 +292,12 @@ export async function eventDetail(ctx) {
     ${e.image ? `<img class="article-image" src="${esc(mediaUrl(e.image))}" alt="${esc(e.title)}" />` : ""}
 
     <dl class="ed-facts">
-      <div><dt>언제</dt><dd>${esc(ymdDow(day))}</dd></div>
+      <div><dt>언제</dt><dd>${esc(ymdDow(day))}${e.time_text ? `<span class="ed-time">${esc(e.time_text)}</span>` : ""}</dd></div>
       ${e.place ? `<div><dt>어디서</dt><dd>${esc(e.place)}
         <a class="ed-map" href="https://map.naver.com/p/search/${encodeURIComponent(e.place)}" target="_blank" rel="noopener">지도에서 보기 ↗</a></dd></div>` : ""}
-      ${assoc.phone ? `<div><dt>문의</dt><dd><a href="tel:${esc(assoc.phone)}">${esc(assoc.phone)}</a></dd></div>` : ""}
+      ${e.signup ? `<div><dt>접수</dt><dd>${esc(e.signup)}</dd></div>` : ""}
+      ${(() => { const tel = e.contact || assoc.phone; return tel ? `<div><dt>문의</dt><dd><a href="tel:${esc(tel)}">${esc(tel)}</a></dd></div>` : ""; })()}
+      ${e.host ? `<div class="ed-host"><dt>주최</dt><dd>${esc(e.host)}</dd></div>` : ""}
     </dl>
 
     ${e.description ? `<div class="article-body">${esc(e.description).replace(/\n/g, "<br />")}</div>` : ""}
@@ -280,7 +306,7 @@ export async function eventDetail(ctx) {
 
     ${past ? "" : `<section class="ed-cal" id="cal">
       <h2 class="ed-cal-h">${CAL_SVG} 캘린더에 넣기</h2>
-      <p class="ed-cal-date"><b>${esc(ymdDow(day))}</b>${e.place ? ` · ${esc(e.place)}` : ""}</p>
+      <p class="ed-cal-date"><b>${esc(ymdDow(day))}</b>${e.time_text ? ` ${esc(e.time_text)}` : ""}${e.place ? ` · ${esc(e.place)}` : ""}</p>
       <p class="panel-hint">쓰시는 캘린더를 골라 주세요. 종이 달력에 적으실 거면 위 날짜만 보시면 됩니다.</p>
       <div class="ed-cal-row">
         <a class="btn btn-ghost" href="${esc(googleCalUrl(assoc, e))}" target="_blank" rel="noopener">구글 캘린더에 넣기</a>
@@ -1227,13 +1253,14 @@ export async function events(ctx) {
   for (const e of list) {
     const count = rsvpMap.get(e.id)?.n || 0;
     const mine = isMember ? !!rsvpMap.get(e.id)?.mine : false;
-    const rsvp = `<div class="event-rsvp">
+    // 신청을 안 받는 행사는 숫자도 단추도 두지 않는다
+    const rsvp = !D.eventTakesRsvp(e) ? "" : `<div class="event-rsvp">
       ${count ? `<span class="rsvp-count">참가 신청 ${count}곳</span>` : ""}
       ${isMember ? (mine
         ? `<form method="post" action="${base}/events/${e.id}/rsvp/cancel" class="inline-form"><button class="btn btn-xs btn-ghost">✓ 신청됨 (취소)</button></form>`
         : `<form method="post" action="${base}/events/${e.id}/rsvp" class="inline-form"><button class="btn btn-xs btn-primary">참가 신청</button></form>`) : ""}
     </div>`;
-    cards.push(eventCard(base, e).replace("</article>", rsvp + "</article>"));
+    cards.push(rsvp ? eventCard(base, e).replace("</article>", rsvp + "</article>") : eventCard(base, e));
   }
   const body = `<section class="section page-top"><div class="container">
     <div class="section-head"><h1 class="section-title">행사·소식</h1>
@@ -3181,8 +3208,13 @@ export async function admin(ctx) {
           <form method="post" action="${base}/admin/event/${e.id}" enctype="multipart/form-data" class="stack-form compact">
             <input type="text" name="title" value="${esc(e.title)}" required maxlength="200" aria-label="행사명" />
             <div class="form-two"><label class="mini-label">날짜<input type="date" name="event_date" value="${esc(String(e.event_date || "").slice(0, 10))}" required /></label>
-              <label class="mini-label">장소<input type="text" name="place" value="${esc(e.place || "")}" maxlength="120" /></label></div>
+              <label class="mini-label">시간<input type="text" name="time_text" value="${esc(e.time_text || "")}" maxlength="80" placeholder="예: 15:00 ~ 20:00" /></label></div>
+            <label class="mini-label">장소<input type="text" name="place" value="${esc(e.place || "")}" maxlength="120" /></label>
             <textarea name="description" rows="3" aria-label="행사 설명">${esc(e.description || "")}</textarea>
+            <label class="mini-label">접수 안내 <small>(신청을 받는 행사일 때)</small><input type="text" name="signup" value="${esc(e.signup || "")}" maxlength="300" /></label>
+            <div class="form-two"><label class="mini-label">주최·주관<input type="text" name="host" value="${esc(e.host || "")}" maxlength="200" /></label>
+              <label class="mini-label">문의 <small>(비우면 대표번호)</small><input type="text" name="contact" value="${esc(e.contact || "")}" maxlength="60" /></label></div>
+            <label class="check"><input type="checkbox" name="rsvp" value="1"${D.eventTakesRsvp(e) ? " checked" : ""} /> 회원 참가 신청을 받습니다</label>
             ${imgSwap(e.image, "대표 이미지 바꾸기 <small>(선택 · 홈에 포스터형 카드로 표시)</small>")}
             <span class="pill-row"><button class="btn btn-primary btn-sm">고친 내용 저장</button>
               <a class="btn btn-ghost btn-sm" href="${base}/events" target="_blank" rel="noopener">행사 보기 ↗</a></span>
@@ -3826,8 +3858,17 @@ ${isFranchise ? `    <section class="panel panel-accent" id="p-home"><h2 class="
       <section class="panel"><div class="panel-head"><h2 class="panel-title">행사 <span class="badge badge-muted">${eventCount}건</span></h2></div>
         <details class="fold-write"><summary>새 행사 열기</summary><div class="fold-body">
           <form method="post" action="${base}/admin/event" enctype="multipart/form-data" class="stack-form compact">
-            <input type="text" name="title" placeholder="행사명" aria-label="새 행사명" required /><input type="date" name="event_date" aria-label="행사 날짜" required />
+            <input type="text" name="title" placeholder="행사명" aria-label="새 행사명" required />
+            <div class="form-two"><input type="date" name="event_date" aria-label="행사 날짜" required />
+              <input type="text" name="time_text" placeholder="시간 (예: 15:00 ~ 20:00)" aria-label="행사 시간" maxlength="80" /></div>
             <input type="text" name="place" placeholder="장소" aria-label="행사 장소" /><textarea name="description" rows="2" placeholder="설명" aria-label="행사 설명"></textarea>
+            <details class="fold-write"><summary>접수·주최·문의 <small>(선택)</small></summary><div class="fold-body">
+              <input type="text" name="signup" placeholder="접수 안내 (예: 9월 23일까지 · 방배본동 주민센터 1층)" aria-label="접수 안내" maxlength="300" />
+              <input type="text" name="host" placeholder="주최·주관 (예: 주최 ○○ · 주관 △△)" aria-label="주최·주관" maxlength="200" />
+              <input type="text" name="contact" placeholder="문의 전화 (비우면 상인회 대표번호)" aria-label="문의 전화" maxlength="60" />
+            </div></details>
+            <label class="check"><input type="checkbox" name="rsvp" value="1" checked /> 회원 참가 신청을 받습니다
+              <small>(끄면 신청 단추가 사라집니다 — 그냥 오시면 되는 동네 축제라면 꺼 두세요)</small></label>
             <label class="mini-label">대표 이미지 <small>(선택 · 홈에 포스터형 카드로 표시)</small><input type="file" name="image" accept="image/*" /></label>
             <button class="btn btn-primary btn-sm">등록</button></form></div></details>
         ${eventCount ? `<form method="post" action="${base}/admin/events/bulk" id="eventBulk" class="pick-bar" data-bulk>
@@ -3869,6 +3910,14 @@ ${isFranchise ? `    <section class="panel panel-accent" id="p-home"><h2 class="
         <label>한 줄 소개<input type="text" name="tagline" value="${esc(assoc.tagline)}" /></label>
         <div class="form-two"><label>대표 전화<input type="text" name="phone" value="${esc(assoc.phone)}" autocomplete="tel" /></label><label>이메일<input type="email" name="email" value="${esc(assoc.email)}" autocomplete="email" /></label></div>
         <label>주소<input type="text" name="address" value="${esc(assoc.address)}" autocomplete="street-address" /></label>
+        <fieldset class="sns-set"><legend>상인회 SNS <small>(적은 것만 모든 화면 맨 아래에 아이콘으로 붙습니다)</small></legend>
+          <div class="form-two"><label>인스타그램<input type="url" name="sns_instagram" value="${esc(assoc.sns_instagram || "")}" placeholder="instagram.com/계정" /></label>
+            <label>유튜브<input type="url" name="sns_youtube" value="${esc(assoc.sns_youtube || "")}" placeholder="youtube.com/@채널" /></label></div>
+          <div class="form-two"><label>블로그<input type="url" name="sns_blog" value="${esc(assoc.sns_blog || "")}" placeholder="blog.naver.com/계정" /></label>
+            <label>네이버 플레이스<input type="url" name="sns_naver" value="${esc(assoc.sns_naver || "")}" placeholder="naver.me/… 또는 map.naver.com/…" /></label></div>
+          <p class="panel-hint">가게마다 따로 적는 SNS 와는 다릅니다 — 여기는 <b>골목 전체의 계정</b>입니다.
+            비워 두면 그 아이콘은 나오지 않습니다.</p>
+        </fieldset>
         <label class="mini-label">로고 <small>(선택·이미지)</small><input type="file" name="logo" accept="image/*" /></label>
         <label class="mini-label">홈 첫 화면 배경 사진 <small>(가로 사진 권장 · 비우면 먹빛 바탕만 남습니다)</small><input type="file" name="hero_image" accept="image/*" /></label>
         <label class="mini-label">홈 히어로 배경 영상 <small>(선택·MP4 또는 WebM·8MB 이하)</small><input type="file" name="hero_video" accept="video/mp4,video/webm" /></label>

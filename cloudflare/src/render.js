@@ -184,6 +184,7 @@ ${bnav}
 ${workScreen ? "" : `<footer class="site-footer"><div class="container">
   <div class="foot-top">
     <nav class="foot-policy"><a href="/privacy" class="strong">개인정보처리방침</a><span class="sep"></span><a href="/terms">이용약관</a>${assoc ? `<span class="sep"></span><a href="${base}/contact">문의하기</a>` : ""}</nav>
+    ${footSns(assoc)}
   </div>
   <div class="foot-bottom">
     ${(() => { const g = brandLogo(assoc, { wide: true, w: 123, h: 50, lazy: true });
@@ -380,6 +381,25 @@ export function setOrigin(o) { ORIGIN = o || ""; }
 export let ASSET_VER = "dev";
 export function setAssetVer(v) { if (v) ASSET_VER = String(v).slice(0, 12); }
 export const assetUrl = (path) => `${path}?v=${ASSET_VER}`;
+// 상인회 자체의 SNS — 바닥글에 뜬다. 가게별 계정(businesses.sns_*)과 다른,
+// 골목 전체의 계정이다. 적어 둔 것만 나온다 — 눌러도 아무 데도 안 가는 아이콘을
+// 손님에게 보이지 않기 위해서다. 하나도 없으면 줄 자체가 사라진다.
+const FOOT_SNS = [
+  ["sns_instagram", "인스타그램", '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1.2" fill="currentColor" stroke="none"/></svg>'],
+  ["sns_youtube", "유튜브", '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M23 12s0-3.8-.5-5.6a2.9 2.9 0 0 0-2-2C18.7 4 12 4 12 4s-6.7 0-8.5.4a2.9 2.9 0 0 0-2 2C1 8.2 1 12 1 12s0 3.8.5 5.6a2.9 2.9 0 0 0 2 2C5.3 20 12 20 12 20s6.7 0 8.5-.4a2.9 2.9 0 0 0 2-2C23 15.8 23 12 23 12z"/><path d="M10 15.5l6-3.5-6-3.5z" fill="#fff"/></svg>'],
+  ["sns_blog", "블로그", '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><text x="12" y="17.5" text-anchor="middle" font-size="15" font-weight="800" font-family="sans-serif">b</text></svg>'],
+  ["sns_naver", "네이버", '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><text x="12" y="17.5" text-anchor="middle" font-size="15" font-weight="800" font-family="sans-serif">N</text></svg>'],
+];
+function footSns(assoc) {
+  if (!assoc) return "";
+  const links = FOOT_SNS
+    .map(([key, label, svg]) => [String(assoc[key] || "").trim(), label, svg])
+    .filter(([url]) => /^https?:\/\//i.test(url));
+  if (!links.length) return "";
+  return `<nav class="foot-sns" aria-label="상인회 SNS">${links.map(([url, label, svg]) =>
+    `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer" aria-label="${esc(label)}" title="${esc(label)}">${svg}</a>`).join("")}</nav>`;
+}
+
 export function mediaUrl(key) {
   if (!key) return "";
   if (/^https?:\/\//.test(key)) return key;

@@ -75,9 +75,21 @@ export async function cloneAssociation(db, sourceId, { slug, name, brandColor, t
   return getAssociationById(db, made.id);
 }
 export function updateAssociation(db, id, f) {
-  return run(db, `UPDATE associations SET name=?, tagline=?, brand_color=?, phone=?, email=?, address=?, logo=?, hero_image=?, hero_video=?, naver_verification=?, google_verification=?, ga_measurement_id=? WHERE id=?`,
-    f.name, f.tagline, f.brand_color, f.phone, f.email, f.address, f.logo, f.hero_image || "", f.hero_video || "", f.naver_verification || "", f.google_verification || "", f.ga_measurement_id || "", id);
+  return run(db, `UPDATE associations SET name=?, tagline=?, brand_color=?, phone=?, email=?, address=?, logo=?, hero_image=?, hero_video=?, naver_verification=?, google_verification=?, ga_measurement_id=?, sns_instagram=?, sns_youtube=?, sns_blog=?, sns_naver=? WHERE id=?`,
+    f.name, f.tagline, f.brand_color, f.phone, f.email, f.address, f.logo, f.hero_image || "", f.hero_video || "", f.naver_verification || "", f.google_verification || "", f.ga_measurement_id || "",
+    f.sns_instagram || "", f.sns_youtube || "", f.sns_blog || "", f.sns_naver || "", id);
 }
+
+// 상인회 SNS — 바닥글에 뜨는 것만 고른다. 비어 있는 칸은 아예 내보내지 않는다
+// (아이콘만 있고 눌러도 아무 데도 안 가는 링크를 손님에게 보이지 않기 위해서).
+export const ASSOC_SNS = [
+  ["sns_instagram", "인스타그램"],
+  ["sns_youtube", "유튜브"],
+  ["sns_blog", "블로그"],
+  ["sns_naver", "네이버"],
+];
+export const assocSnsLinks = (a) =>
+  ASSOC_SNS.map(([key, label]) => ({ key, label, url: String((a && a[key]) || "").trim() })).filter((s) => s.url);
 export const setAssociationActive = (db, id, a) => run(db, "UPDATE associations SET active=? WHERE id=?", a ? 1 : 0, id);
 export const getAssociationByDomain = (db, host) => first(db, "SELECT * FROM associations WHERE custom_domain = ? AND custom_domain != ''", String(host || "").toLowerCase());
 export const setAssociationDomain = (db, id, domain) => run(db, "UPDATE associations SET custom_domain=? WHERE id=?", domain || "", id);
@@ -1072,17 +1084,20 @@ export const listEvents = (db, aid, upcomingOnly = false) => upcomingOnly
   ? all(db, "SELECT * FROM events WHERE association_id=? AND event_date >= ? ORDER BY event_date ASC", aid, kstToday()) // date('now')=UTC — 새벽 0~9시에 어제 행사가 남던 버그
   : all(db, "SELECT * FROM events WHERE association_id=? ORDER BY event_date DESC", aid);
 export const getEvent = (db, id) => first(db, "SELECT * FROM events WHERE id=?", id);
-export async function createEvent(db, { associationId, title, event_date, place, description, image }) {
-  await run(db, "INSERT INTO events (association_id, title, event_date, place, description, image) VALUES (?,?,?,?,?,?)",
-    associationId, title, event_date, place || "", description || "", image || "");
+export async function createEvent(db, { associationId, title, event_date, time_text, place, description, signup, host, contact, image, rsvp = 1 }) {
+  await run(db, "INSERT INTO events (association_id, title, event_date, time_text, place, description, signup, host, contact, image, rsvp) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+    associationId, title, event_date, time_text || "", place || "", description || "", signup || "", host || "", contact || "", image || "", rsvp ? 1 : 0);
   return getEvent(db, await lastId(db));
 }
-export async function updateEvent(db, id, aid, { title, event_date, place, description, image = null }) {
-  await run(db, `UPDATE events SET title=?, event_date=?, place=?, description=?${image === null ? "" : ", image=?"}
+export async function updateEvent(db, id, aid, { title, event_date, time_text, place, description, signup, host, contact, image = null, rsvp = 1 }) {
+  await run(db, `UPDATE events SET title=?, event_date=?, time_text=?, place=?, description=?, signup=?, host=?, contact=?, rsvp=?${image === null ? "" : ", image=?"}
     WHERE id=? AND association_id=?`,
-    ...[title, event_date, place || "", description || "", ...(image === null ? [] : [image]), id, aid]);
+    ...[title, event_date, time_text || "", place || "", description || "", signup || "", host || "", contact || "", rsvp ? 1 : 0,
+        ...(image === null ? [] : [image]), id, aid]);
   return getEvent(db, id);
 }
+// 참가 신청을 받는 행사인가. 옛 줄(칸이 생기기 전에 열린 행사)은 값이 없을 수 있어 '받는다'로 본다.
+export const eventTakesRsvp = (e) => !e || e.rsvp === undefined || e.rsvp === null || Number(e.rsvp) === 1;
 export const deleteEvent = (db, id) => run(db, "DELETE FROM events WHERE id=?", id);
 
 // ----- 홈 팝업 -----

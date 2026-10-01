@@ -122,7 +122,8 @@ test("배지·태그가 알약 모양이 아니다", async () => {
   //   .doc-chip — 계약 목록의 필터 칩('전체 1' · '승차권 1' 처럼 레퍼런스 자체가 알약이다)
   //   .done-next .btn-outline — 완료 화면의 다음 행동 단추('오는 열차 찾아보기')
   // 그 밖의 배지·태그는 여전히 알약이 아니어야 한다.
-  const pillOk = /^(\.progress|\.req-order|\.switch|\.ob-check|\.share-toast|\.sns-btn|\.gallery-item|\.market-open|\.doc-chip|\.done-next)/;
+  // (.foot-sns 도 같은 성격이다 — 바닥글의 상인회 SNS 아이콘 버튼. 배지가 아니라 누르는 원이다.)
+  const pillOk = /^(\.progress|\.req-order|\.switch|\.ob-check|\.share-toast|\.sns-btn|\.foot-sns|\.gallery-item|\.market-open|\.doc-chip|\.done-next)/;
   const pills = [...css.matchAll(/(^|\n)([.\w][^{\n]*)\{[^}]*border-radius:999px/g)]
     .map((m) => m[2].trim()).filter((sel) => !pillOk.test(sel));
   assert.deepEqual(pills, [], "알약 모양이 남아 있습니다: " + pills.join(", "));
