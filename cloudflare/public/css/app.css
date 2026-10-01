@@ -260,7 +260,7 @@ img,video{max-width:100%;display:block}
 /* 카드 전체가 상세로 가는 링크다 — 손님은 사진과 제목을 보고 당연히 카드를 누른다.
    격자를 링크 쪽으로 물려 준다(카드 자체의 두 칸 구성을 그대로 쓴다). */
 .event-card .event-link{grid-column:1/-1;display:grid;grid-template-columns:auto minmax(0,1fr);gap:0 16px;align-items:start;color:inherit;text-decoration:none}
-.event-photo-card .epc-link{position:absolute;inset:0;display:block;color:inherit;text-decoration:none}
+.event-photo-card .epc-link{display:flex;flex-direction:column;color:inherit;text-decoration:none}
 .event-date{flex:none;width:56px;height:56px;border-radius:var(--r-md);background:var(--brand-tint);color:var(--brand-text);display:grid;place-items:center;align-content:center;line-height:1}
 .event-date .d{font-size:1.35rem;font-weight:700;letter-spacing:-.03em}
 .event-date .m{font-size:.7rem;margin-top:3px;opacity:.8}
@@ -355,6 +355,12 @@ a.bc-val:hover{text-decoration:underline}
 .ed-facts>div{display:grid;grid-template-columns:66px minmax(0,1fr);gap:12px;align-items:baseline}
 .ed-facts dt{font-size:.86rem;font-weight:700;color:var(--muted)}
 .ed-facts dd{font-size:1rem;font-weight:600;color:var(--ink);margin:0}
+/* 시간은 날짜 바로 아래 한 단 작게. 같은 줄에 붙이면 '10월 17일 15:00~20:00 (개회식 18:00)'
+   처럼 길어져 폰에서 두 줄로 접히고, 어디까지가 날짜인지 읽히지 않는다. */
+.ed-facts .ed-time{display:block;margin-top:2px;font-size:.92rem;font-weight:600;color:var(--muted)}
+/* 주최·주관·후원은 길고, 손님이 행동할 거리가 없다. 맨 아래에 한 단 작고 옅게 둔다 —
+   언제·어디서와 같은 굵기로 적으면 그 줄들을 밀어내고 먼저 읽힌다. */
+.ed-facts .ed-host dd{font-size:.88rem;font-weight:500;color:var(--muted);line-height:1.5}
 .ed-map{display:inline-flex;align-items:center;min-height:24px;margin-left:8px;font-size:.86rem;font-weight:700;color:var(--brand-text)}
 /* 손가락으로 누르는 화면에서는 '지도에서 보기'·'← 목록' 도 44px 을 지킨다 */
 @media (hover:none),(pointer:coarse){
@@ -934,7 +940,7 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .event-cal{display:inline-flex;align-items:center;gap:5px;font-size:.8rem;font-weight:600;margin-top:6px;color:var(--brand-text)}
 /* .event-info 는 블록이라 장소와 이 표시가 한 줄에 달라붙어 있었습니다 */
 .event-info .event-cal{display:flex;width:max-content;margin-top:8px}
-.epc-body .event-cal{color:rgba(255,255,255,.92)}
+.epc-body .event-cal{color:var(--brand-text)}
 .event-link:hover .event-cal,.epc-link:hover .event-cal{text-decoration:underline}
 /* 검색 자동완성 드롭다운 (초성 검색) */
 .hero-search,.feat-search{position:relative}
@@ -1337,16 +1343,21 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .join-cta p{position:relative;max-width:56ch;margin:0;color:var(--muted);line-height:1.75;font-size:.95rem}
 
 /* 행사 이미지 카드 (시안: 16:10 사진 + 오버레이 + 날짜 칩) */
-.event-photo-card{position:relative;aspect-ratio:16/10;border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--sh-1);transition:box-shadow .25s}
+.event-photo-card{position:relative;display:flex;flex-direction:column;border:1px solid var(--line-soft);border-radius:var(--r-lg);overflow:hidden;background:var(--surface);box-shadow:var(--sh-1);transition:box-shadow .25s}
 .event-photo-card:hover{box-shadow:var(--sh-2);border-color:var(--line)}
+/* 사진 칸. 포스터는 세로로 길어 16:10 으로 자르면 가운데만 남는다 — 그래도 자른다.
+   목록은 카드 높이가 같아야 읽히고, 포스터 전체는 카드를 눌러 들어간 상세에서 보여 준다. */
+.epc-photo{position:relative;display:block;aspect-ratio:16/10;background:var(--bg-alt);overflow:hidden}
 .event-photo-card img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-.epc-overlay{position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.72),transparent 58%)}
+/* 사진 위에 남는 것은 날짜 칩과 D-day 뿐이다. 둘 다 위쪽에 있어 위에서만 살짝 어둡게 한다. */
+.epc-overlay{position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,.34) 0%,rgba(0,0,0,.12) 26%,transparent 52%)}
 /* 날짜 칩은 글자만큼만 넓어야 한다. .epc-body 가 grid 라 align-self(세로축)로는
    가로 폭이 안 줄어, '9.29' 하나가 카드를 가로지르는 띠가 돼 있었다 — justify-self 가 맞다. */
-.epc-date{justify-self:start;align-self:start;padding:5px 11px;border-radius:8px;background:rgba(0,0,0,.55);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);font-size:.8rem;font-weight:700;letter-spacing:.02em}
-.epc-body{position:absolute;left:16px;right:16px;bottom:14px;color:#fff;display:grid;gap:5px}
-.epc-body>strong{font-size:1.15rem;font-weight:800;letter-spacing:-.01em;text-shadow:0 1px 8px rgba(0,0,0,.35)}
-.epc-place{display:inline-flex;align-items:center;gap:5px;font-size:.82rem;opacity:.92;justify-self:start}
+.epc-date{position:absolute;top:12px;left:12px;padding:5px 11px;border-radius:8px;background:rgba(0,0,0,.62);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);color:#fff;font-size:.8rem;font-weight:700;letter-spacing:.02em}
+/* 제목 칸은 사진 **아래**, 흰 바탕 위다. 어떤 포스터가 올라와도 제목이 읽힌다. */
+.epc-body{display:grid;gap:5px;padding:14px 16px 16px;color:var(--ink)}
+.epc-body>strong{font-size:1.1rem;font-weight:800;letter-spacing:-.01em;line-height:1.35}
+.epc-place{display:inline-flex;align-items:center;gap:5px;font-size:.84rem;color:var(--muted);justify-self:start}
 .epc-body .event-cal{justify-self:start;margin-top:2px}
 
 /* 플랫폼 인덱스 테넌트 카드 (시안: 그라디언트 밴드 96px + 겹치는 아바타) */
@@ -1391,7 +1402,12 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .notice-ico.is-recruit{background:#fdf0e3;color:#c2680f}
 /* 멀티행 푸터 (시안) */
 .site-footer{padding:0}
-.foot-top{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:18px 0;border-bottom:1px solid rgba(255,255,255,.14)}
+.foot-top{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;padding:18px 0;border-bottom:1px solid rgba(255,255,255,.14)}
+/* 상인회 SNS — 바닥글 오른쪽. 글자 없이 아이콘만이라 누르는 자리를 44px 로 잡는다
+   (아이콘은 18px 이지만, 손가락이 닿는 넓이는 그것과 따로다). */
+.foot-sns{display:flex;align-items:center;gap:4px}
+.foot-sns a{display:grid;place-items:center;width:44px;height:44px;border-radius:999px;color:rgba(255,255,255,.82)}
+.foot-sns a:hover,.foot-sns a:focus-visible{color:#fff;background:rgba(255,255,255,.14)}
 .foot-policy{display:flex;align-items:center;gap:14px;font-size:.88rem}
 .foot-policy a{color:rgba(255,255,255,.8)}
 .foot-policy a.strong{color:#fff;font-weight:700}
@@ -2469,6 +2485,8 @@ input:not([type]),input[type="text"],input[type="email"],input[type="tel"],input
 .foot-policy a.strong{color:var(--ink);font-weight:500}
 .foot-policy a:hover{text-decoration:underline}
 .foot-policy .sep{background:var(--line)}
+.foot-sns a{color:var(--muted)}
+.foot-sns a:hover,.foot-sns a:focus-visible{color:var(--ink);background:var(--bg-alt)}
 .foot-bottom{padding:14px 0 0;border-top:1px solid var(--line-soft)}
 .foot-mark{display:none}      /* 상호 옆에 마크를 또 붙일 이유가 없습니다 — 머리말에 이미 있습니다 */
 .foot-info strong{color:var(--ink);font-family:var(--font-display);font-weight:700;font-size:1rem}
@@ -2922,9 +2940,9 @@ body.popup-open{overflow:hidden}
 @media (max-width:900px){.popup-card~.popup-card{display:none}}
 
 /* ---------- 상권 색 견본 (관리자 브랜딩) ---------- */
-.theme-pick{border:1px solid var(--line-soft);border-radius:var(--r-lg);padding:14px 16px 12px;margin:4px 0 2px}
-.theme-pick>legend{font-size:.86rem;font-weight:600;color:var(--ink-soft);padding:0 6px}
-.theme-pick>legend small{font-weight:400;color:var(--muted)}
+.theme-pick,.sns-set{border:1px solid var(--line-soft);border-radius:var(--r-lg);padding:14px 16px 12px;margin:4px 0 2px}
+.theme-pick>legend,.sns-set>legend{font-size:.86rem;font-weight:600;color:var(--ink-soft);padding:0 6px}
+.theme-pick>legend small,.sns-set>legend small{font-weight:400;color:var(--muted)}
 .theme-swatches{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
 .theme-sw{display:inline-flex;align-items:center;gap:8px;min-height:40px;padding:0 13px 0 10px;border:1.5px solid var(--line);border-radius:var(--r-pill);background:var(--surface);cursor:pointer;font-family:inherit;font-size:.86rem;font-weight:600;color:var(--ink-soft)}
 .theme-sw:hover{border-color:var(--ink-soft);color:var(--ink)}
@@ -3825,7 +3843,7 @@ a.deal-card:hover{border-color:var(--deal);transition:border-color .18s}
   .dash .done-label{font-size:13px}
   .dash .done-pct{font-size:15px}
   .dash .btn-cta{min-height:56px;font-size:15px;border-radius:8px}
-  .dash .theme-pick{padding:10px 12px}
+  .dash .theme-pick,.dash .sns-set{padding:10px 12px}
   .dash .theme-sw{min-height:32px;font-size:12.5px}
   .dash .hint-ok{padding:9px 12px;font-size:12.5px;margin-top:8px}
 }

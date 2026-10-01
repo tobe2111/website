@@ -140,11 +140,14 @@ test("없는 행사는 404", async () => {
 test("사진 카드도 상세로 가고, 날짜 칩이 띠가 되지 않는다", async () => {
   const { readFileSync } = await import("node:fs");
   const css = readFileSync(new URL("../public/css/app.css", import.meta.url), "utf8");
-  // .epc-body 가 grid 라 align-self(세로축)로는 가로 폭이 안 줄어든다.
-  // 그래서 '9.29' 하나가 카드를 가로지르는 검은 띠가 돼 있었다.
+  // '9.29' 하나가 카드를 가로지르는 검은 띠가 돼 있었다.
+  // (지금은 칩이 사진 위에 절대 배치돼 있다 — 한쪽 모서리에만 붙으면 글자만큼만 넓어진다.
+  //  left 와 right 를 **둘 다** 주거나 width 를 100% 로 주면 그때 다시 띠가 된다.)
   const chip = /\.epc-date\{([^}]*)\}/.exec(css);
   assert.ok(chip, ".epc-date 규칙을 못 찾았다");
-  assert.match(chip[1], /justify-self:start/, "글자만큼만 넓어야 한다");
+  const spans = /justify-self:start/.test(chip[1])
+    || (/position:absolute/.test(chip[1]) && /left:/.test(chip[1]) && !/right:/.test(chip[1]) && !/width:/.test(chip[1]));
+  assert.ok(spans, "날짜 칩이 글자만큼만 넓어야 한다: " + chip[1]);
 
   const env = makeEnv(); const { a } = await seed(env);
   const ev = await D.createEvent(env.DB, { associationId: a.id, title: "여름 골목 야시장",

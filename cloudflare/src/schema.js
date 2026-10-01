@@ -35,6 +35,12 @@ CREATE TABLE IF NOT EXISTS associations (
   naver_verification TEXT NOT NULL DEFAULT '',  -- 네이버 서치어드바이저 소유 확인 코드
   google_verification TEXT NOT NULL DEFAULT '', -- 구글 서치콘솔 소유 확인 코드
   ga_measurement_id TEXT NOT NULL DEFAULT '',  -- 구글 애널리틱스(GA4) 측정 ID 'G-XXXXXXX'
+  -- 상인회 자체의 SNS. 가게별 계정(businesses.sns_*)과 다릅니다 — 이건 골목 전체의 계정이라
+  -- 바닥글에 붙어 모든 화면에서 보입니다. 비우면 그 아이콘이 나오지 않습니다.
+  sns_instagram TEXT NOT NULL DEFAULT '',
+  sns_youtube   TEXT NOT NULL DEFAULT '',
+  sns_blog      TEXT NOT NULL DEFAULT '',
+  sns_naver     TEXT NOT NULL DEFAULT '',
   dues_amount INTEGER NOT NULL DEFAULT 0,      -- 기본 월 회비(원). 0 = 안 정함(금액 없이 체크만)
   dues_account TEXT NOT NULL DEFAULT '',       -- 회비 입금 계좌 (독촉 문구에 그대로 들어간다)
   -- 회비를 아예 안 걷는 상인회가 있다. 그런 곳에 빈 장부를 띄워 두면
@@ -302,14 +308,29 @@ CREATE TABLE IF NOT EXISTS notices (
   created_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- 행사. 날짜만으로는 안내가 안 되는 것들이 있어 선택 칸을 넷 둡니다 —
+-- 포스터에 반드시 적히는데 event_date 에는 담기지 않는 것들입니다:
+--   time_text  '15:00 ~ 20:00 (개회식 18:00)'  — 몇 시에 가면 되나
+--   signup     '9월 23일(수)까지 · 방배본동 주민센터 1층' — 신청을 받는 행사인가
+--   host       '주최 ○○ · 주관 △△ · 후원 □□'  — 누가 여는가
+--   contact    '010-0000-0000'                  — 상인회 대표번호와 다른 전화
+-- 넷 다 비워 두면 화면에 그 줄이 아예 나오지 않습니다(예전과 똑같이 보입니다).
 CREATE TABLE IF NOT EXISTS events (
   id             INTEGER PRIMARY KEY AUTOINCREMENT,
   association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
   title          TEXT NOT NULL,
   event_date     TEXT NOT NULL,
+  time_text      TEXT NOT NULL DEFAULT '',
   place          TEXT NOT NULL DEFAULT '',
   description    TEXT NOT NULL DEFAULT '',
+  signup         TEXT NOT NULL DEFAULT '',
+  host           TEXT NOT NULL DEFAULT '',
+  contact        TEXT NOT NULL DEFAULT '',
   image          TEXT NOT NULL DEFAULT '',
+  -- 참가 신청을 받는 행사인가. 1 = 회원이 신청 단추를 누를 수 있다(지금까지의 동작).
+  -- 0 = 그냥 와서 즐기는 행사. 동네 축제에 '참가 신청은 회원만 할 수 있습니다' 가 뜨면
+  --     손님은 "회원이라야 갈 수 있나 보다" 로 읽는다 — 안내가 아니라 문을 닫는 말이 된다.
+  rsvp           INTEGER NOT NULL DEFAULT 1,
   created_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -1360,6 +1381,26 @@ async function migrateColumns(db) {
   // v35: 랜딩형 제품의 업종 프리셋 (프랜차이즈·학원·헬스장·병원·분양…)
   if (acol.length && !acol.some((c) => c.name === "preset")) {
     await db.prepare("ALTER TABLE associations ADD COLUMN preset TEXT NOT NULL DEFAULT 'franchise'").run();
+  }
+
+  // v38: 행사의 시간·접수·주최·문의 (포스터에는 적히는데 날짜 칸에는 안 담기던 것들)
+  if (evTbl) {
+    const ec = (await db.prepare("PRAGMA table_info(events)").all()).results || [];
+    for (const col of ["time_text", "signup", "host", "contact"]) {
+      if (!ec.some((c) => c.name === col)) {
+        await db.prepare(`ALTER TABLE events ADD COLUMN ${col} TEXT NOT NULL DEFAULT ''`).run();
+      }
+    }
+    // 이미 열린 행사는 지금까지처럼 참가 신청을 받는다(1). 끄는 것은 관리자가 고른다.
+    if (!ec.some((c) => c.name === "rsvp")) {
+      await db.prepare("ALTER TABLE events ADD COLUMN rsvp INTEGER NOT NULL DEFAULT 1").run();
+    }
+  }
+  // v38: 상인회 자체의 SNS 계정 (바닥글 링크)
+  for (const col of ["sns_instagram", "sns_youtube", "sns_blog", "sns_naver"]) {
+    if (acol.length && !acol.some((c) => c.name === col)) {
+      await db.prepare(`ALTER TABLE associations ADD COLUMN ${col} TEXT NOT NULL DEFAULT ''`).run();
+    }
   }
 
   await romanizeSlugs(db);

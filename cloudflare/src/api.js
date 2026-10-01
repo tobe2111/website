@@ -1593,12 +1593,26 @@ export async function adminNoticesBulk(ctx) {
   return back(to, "알 수 없는 작업입니다.", true);
 }
 
+// 행사의 선택 칸 — 등록·수정이 같은 값을 읽는다. 한쪽에만 칸을 더해
+// "등록할 땐 적혔는데 고치면 지워지는" 사고가 나지 않도록 한 곳에 둔다.
+const eventExtras = (form) => ({
+  time_text: cap(form.get("time_text"), 80),
+  place: cap(form.get("place"), 120),
+  description: cap(form.get("description"), 2000),
+  signup: cap(form.get("signup"), 300),
+  host: cap(form.get("host"), 200),
+  contact: cap(form.get("contact"), 60),
+  // 체크를 끄면 참가 신청 자리가 통째로 사라진다 (동네 축제엔 신청이 없다)
+  rsvp: form.get("rsvp") === "1" ? 1 : 0,
+});
+
 export async function adminCreateEvent(ctx) {
   const { db, env, form, base, assoc } = ctx;
   if (!(form.get("title") || "").trim() || !(form.get("event_date") || "").trim()) return back(base + "/admin", "행사명과 날짜를 입력하세요.", true);
   const up = await saveImages(env, form.getAll("image"), 1); // 폼의 대표 이미지 — 누락돼 조용히 버려지던 버그 수정
   if (up.error) return back(base + "/admin", up.error, true);
-  await D.createEvent(db, { associationId: assoc.id, title: cap(form.get("title").trim(), 200), event_date: cap(form.get("event_date"), 10), place: cap(form.get("place"), 120), description: cap(form.get("description"), 2000), image: up.images[0]?.filename || "" });
+  await D.createEvent(db, { associationId: assoc.id, title: cap(form.get("title").trim(), 200), event_date: cap(form.get("event_date"), 10),
+    ...eventExtras(form), image: up.images[0]?.filename || "" });
   return back(base + "/admin", "행사를 등록했습니다.");
 }
 // 행사도 여러 건을 한 번에 지운다 — 공지와 같은 방식.
@@ -1633,10 +1647,7 @@ export async function adminUpdateEvent(ctx) {
   const drop = form.get("drop_image") === "1";
   const nextImage = up.images[0] ? up.images[0].filename : drop ? "" : null;
   if (nextImage !== null && e.image && e.image !== nextImage) await storage.remove(env, e.image).catch(() => {});
-  await D.updateEvent(db, e.id, assoc.id, {
-    title, event_date: date, place: cap(form.get("place"), 120),
-    description: cap(form.get("description"), 2000), image: nextImage,
-  });
+  await D.updateEvent(db, e.id, assoc.id, { title, event_date: date, ...eventExtras(form), image: nextImage });
   await audit(ctx, "행사수정", title);
   return back(base + "/admin#s-content", "행사를 고쳤습니다.");
 }
@@ -1741,10 +1752,24 @@ export async function adminSettings(ctx) {
     naver_verification: verCode(form.get("naver_verification")), google_verification: verCode(form.get("google_verification")),
     // GA4 측정 ID — 'G-' + 영숫자. 이 값은 구글로 나가는 <script src> 의 쿼리에 그대로 붙으므로
     // 규격에 맞지 않으면 아예 저장하지 않습니다(빈 값 = 애널리틱스 끔).
-    ga_measurement_id: (() => { const v = cap((form.get("ga_measurement_id") || "").trim(), 30).toUpperCase(); return /^G-[A-Z0-9]{4,20}$/.test(v) ? v : ""; })() });
+    ga_measurement_id: (() => { const v = cap((form.get("ga_measurement_id") || "").trim(), 30).toUpperCase(); return /^G-[A-Z0-9]{4,20}$/.test(v) ? v : ""; })(),
+    // 상인회 SNS — 바닥글에 링크로 나가므로 http(s) 가 아닌 주소는 저장하지 않는다.
+    // ('instagram.com/…' 처럼 앞을 빼고 적는 분이 많아 https:// 는 붙여 준다.)
+    sns_instagram: assocSnsUrl(form.get("sns_instagram")), sns_youtube: assocSnsUrl(form.get("sns_youtube")),
+    sns_blog: assocSnsUrl(form.get("sns_blog")), sns_naver: assocSnsUrl(form.get("sns_naver")) });
   await audit(ctx, "브랜딩수정", "");
   return back(base + "/admin", "상인회 정보가 저장되었습니다.");
 }
+// 상인회 SNS 주소 다듬기. 손님 화면의 링크가 되는 값이라 http(s) 만 통과시킨다 —
+// 'javascript:' 같은 다른 스킴이 적히면 통째로 버린다(앞에 https:// 를 붙여 무해하게
+// 만드는 대신 아예 저장하지 않는다. 눌러도 안 열리는 링크를 남기지 않기 위해서).
+const assocSnsUrl = (v) => {
+  const t = cap((v || "").trim(), 200);
+  if (!t) return "";
+  const full = /^[a-z][a-z0-9+.-]*:/i.test(t) ? t : "https://" + t;
+  return /^https?:\/\//i.test(full) ? full : "";
+};
+
 // ---------- 우리 직인(법인 인감) ----------
 //
 // 회사는 계약마다 서명하지 않는다. 직인이 이미 찍힌 계약서를 보내고, 상대방만 서명한다.
@@ -2536,6 +2561,8 @@ export async function eventRsvp(ctx) {
   const { db, base, assoc, user, params } = ctx;
   const e = await D.getEvent(db, Number(params.id));
   if (!e || e.association_id !== assoc.id) return back(base + "/events", "행사를 찾을 수 없습니다.", true);
+  // 화면에서 단추를 뺐어도 폼은 손으로 만들 수 있다 — 받지 않기로 한 행사는 서버에서 막는다
+  if (!D.eventTakesRsvp(e)) return back(base + "/events", "이 행사는 참가 신청을 받지 않습니다. 그냥 오시면 됩니다.", true);
   await D.rsvpEvent(db, e.id, assoc.id, user.id);
   return back(base + "/events", `'${e.title}' 참가 신청 완료! 관리자가 명단을 확인합니다.`);
 }
