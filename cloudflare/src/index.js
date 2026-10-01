@@ -138,6 +138,9 @@ export const TENANT = [
   ["GET", "/invite", pages.invitePage],
   ["POST", "/invite", api.acceptInvite],
   ["GET", "/contact", pages.contactForm],
+  // 간편동의서 — 로그인 없이 링크만으로 연다. 토큰이 곧 주소다.
+  ["GET", "/consent/:token", pages.consentForm],
+  ["POST", "/consent/:token", api.consentSubmit],
   // 가맹 상담 신청 — 프랜차이즈 랜딩의 목적. 로그인 없이 누구나 보내는 공개 경로다.
   ["POST", "/lead", api.leadSubmit],
   // 사본 주소 — 모집 랜딩은 광고 소재별 문구, 상인회는 홈 구성 A/B (성과를 나란히 비교한다)
@@ -252,6 +255,14 @@ export const TENANT = [
   ["POST", "/admin/dues/account", api.adminDuesAccount, "ADMIN"],
   ["POST", "/admin/dues/enabled", api.adminDuesEnabled, "ADMIN"],
   ["POST", "/admin/dues/remind", api.adminDuesRemind, "ADMIN"],
+  ["POST", "/admin/consent-form", api.adminConsentFormSave, "ADMIN"],
+  ["POST", "/admin/consent-form/:id/toggle", api.adminConsentFormToggle, "ADMIN"],
+  ["POST", "/admin/consent-form/:id/delete", api.adminConsentFormDelete, "ADMIN"],
+  ["GET", "/admin/consent-form/:id/qr", pages.adminConsentQr, "ADMIN"],
+  ["POST", "/admin/consent-form/:id", api.adminConsentFormSave, "ADMIN"],
+  ["POST", "/admin/consent/:id/approve", api.adminConsentApprove, "ADMIN"],
+  ["POST", "/admin/consent/:id/reject", api.adminConsentReject, "ADMIN"],
+  ["GET", "/admin/consents.csv", pages.adminExportConsents, "ADMIN"],
   ["GET", "/admin/dues/unpaid.csv", pages.adminExportUnpaid, "ADMIN"],
   ["POST", "/admin/product/:id/hide", api.adminProductHide, "ADMIN"],
   ["GET", "/admin/members.csv", pages.adminExportMembers, "ADMIN"],

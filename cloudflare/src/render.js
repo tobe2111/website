@@ -77,7 +77,7 @@ export function brandLogo(assoc, { wide = false, cls = "", w = 0, h = 0, lazy = 
   return "";
 }
 
-export function layout({ title, assoc, base = "", user = null, body, activeNav = "", description = "", scripts = "", csrf = "", ogImage = "", preloadImage = "", jsonLd = null, product = null, console: consoleKind = "" }) {
+export function layout({ title, assoc, base = "", user = null, body, activeNav = "", description = "", scripts = "", csrf = "", ogImage = "", preloadImage = "", jsonLd = null, product = null, console: consoleKind = "", noIndex = false }) {
   // 업무 화면(콘솔)에는 손님용 메뉴를 걸지 않는다.
   //
   // 예전에는 관리자 화면 맨 위에 공개 홈 메뉴(소개·가입 점포·점포 지도·게시판·투표)가,
@@ -146,6 +146,7 @@ ${ogImgAbs ? `<meta property="og:image" content="${esc(ogImgAbs)}" />` : ""}
   const page = `<!doctype html><html lang="ko" data-theme="light"><head>
 <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>${esc(title ? title + " · " : "")}${brand}</title>${meta}${og}${ldScript}
+${noIndex ? '<meta name="robots" content="noindex, nofollow" />' : ""}
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
 <link rel="stylesheet" id="fontCss" media="print" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css" />
 <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css" /></noscript>

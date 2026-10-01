@@ -96,6 +96,14 @@ await grab("/t/market/events", "market-events.html");
   if (ev) await grab(`/t/market/events/${ev.id}`, "market-event.html");
 }
 await grab("/t/market/business/goeul-gukbap", "market-biz.html");
+// 간편동의서 — 사장님이 단톡방 링크를 눌러 닿는 화면이다. 여기서 막히면 명단이 안 만들어진다.
+{
+  const cf = await D.createConsentForm(env.DB, { associationId: m.id, token: "a11ytoken123",
+    title: "상인회 가입 신청 및 개인정보 수집·이용 동의서",
+    body: "본인은 방배 카페골목 상인회에 가입을 신청하며, 개인정보 수집·이용에 동의합니다.\n\n1. 수집 항목: 성명, 연락처, 점포명, 점포 주소\n2. 이용 목적: 회원 관리, 공지·행사 안내\n3. 보유 기간: 회원 자격이 유지되는 동안",
+    askAddress: 1 });
+  if (cf) await grab("/t/market/consent/a11ytoken123", "market-consent.html");
+}
 
 // ── 상인회 관리자 콘솔 —— 상인회 임원이 하루 종일 켜 두고 일하는 화면이다.
 // 손님 화면만 재고 있으면, 정작 매일 쓰는 사람이 측정 밖에 남는다.
@@ -263,6 +271,7 @@ const PAGES = [
   ["점포 지도 (모바일)", "market-map.html", { width: 390, height: 844, isMobile: true }],
   ["행사 (모바일)", "market-events.html", { width: 390, height: 844, isMobile: true }],
   ["행사 상세 (모바일)", "market-event.html", { width: 390, height: 844, isMobile: true }],
+  ["간편동의서 (모바일)", "market-consent.html", { width: 390, height: 844, isMobile: true }],
   ["상담 DB 콘솔", "leads.html", { width: 1280, height: 900 }],
   ["랜딩 편집기", "editor.html", { width: 1280, height: 900 }],
   // 관리자 콘솔 — 탭마다 다른 표와 폼이 들어 있어 묶음별로 연다(#s-…).

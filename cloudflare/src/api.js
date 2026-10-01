@@ -1,6 +1,6 @@
 // 폼 처리 핸들러 (POST). ctx.form 은 파싱된 FormData.
 import * as D from "./db.js";
-import { verifyPassword, hashPassword, hmacSign, hmacVerify, b64uFromBytes, bytesFromB64u, sha256HexBytes, sha256Hex } from "./crypto.js";
+import { verifyPassword, hashPassword, hmacSign, hmacVerify, b64uFromBytes, bytesFromB64u, sha256HexBytes, sha256Hex, randomHex } from "./crypto.js";
 import { sendEmail, sendEmailFor, emailEnabled, mailShell, mailButton } from "./email.js";
 import { sessionTokenForUser, sessionCookie, clearSessionCookie } from "./auth.js";
 import { back, redirect } from "./http.js";
@@ -2677,6 +2677,143 @@ export async function adminDuesRemind(ctx) {
       `한 건도 보내지 못했습니다 — ${why}, 이메일 주소가 있는 분도 없습니다. 명단 CSV로 받아 직접 연락해 주세요.`, true);
   }
   return back(base + "/admin#p-dues", `${period} 미납 ${targets.length}명에게 보냈습니다 — ${parts.join(" · ")}.`);
+}
+
+// ---------- 간편동의서 ----------
+//
+// 링크(또는 QR) 하나를 단톡방에 뿌리면 사장님이 열어서 자기 손으로 적고 동의한다.
+// 사전 등록도 비밀번호도 없다 — 그래서 새 상인회가 명단 없이 명단을 만들 수 있다.
+//
+// 공개 주소라 아무나 넣을 수 있다. 그래서 막는 것:
+//   · 봇 방지(Turnstile) + 허니팟 + 같은 주소에서 몰아넣기 제한
+//   · 양식을 끄면 그 자리에서 닫힌다
+//   · 하루 안에 같은 번호·상호가 또 오면 '이미 보내셨습니다' 로 돌려보낸다
+//     (사장님들은 눌렸나 싶으면 한 번 더 누른다. 그걸 두 줄로 쌓으면 명단이 못 쓰게 된다)
+export async function consentSubmit(ctx) {
+  const { db, env, form, base, assoc, ip, request, params } = ctx;
+  const to = `${base}/consent/${encodeURIComponent(params.token || "")}`;
+  const f = await D.getConsentFormByToken(db, params.token, assoc.id);
+  if (!f) return back(base + "/", "동의서 링크가 올바르지 않습니다.", true);
+  if (!f.enabled) return back(to, "지금은 동의서를 받지 않습니다. 상인회 사무실로 문의해 주세요.", true);
+  if (rateLimited(ip)) return back(to, "시도가 너무 많습니다. 잠시 후 다시 시도해 주세요.", true);
+  if (!(await turnstileVerify(env, form.get("cf-turnstile-response"), ip)))
+    return back(to, "봇 방지 확인에 실패했습니다. 다시 시도해 주세요.", true);
+  if (form.get("website")) return back(to, "동의서가 제출되었습니다.");   // 허니팟 — 봇에겐 성공처럼
+
+  const bizName = cap((form.get("biz_name") || "").trim(), 100);
+  const name = cap((form.get("name") || "").trim(), 60);
+  const phone = D.normalizePhone(form.get("phone") || "");
+  const email = cap((form.get("email") || "").toLowerCase().trim(), 120);
+  if (!bizName || !name) return back(to, "상호와 성함을 입력해 주세요.", true);
+  if (!D.isValidPhone(phone)) return back(to, "휴대폰 번호를 확인해 주세요. (010-1234-5678)", true);
+  if (email && !EMAIL_RE.test(email)) return back(to, "이메일 형식을 확인해 주세요.", true);
+  if (form.get("agree") !== "1") return back(to, "동의 확인란에 체크해 주세요.", true);
+
+  const sig = pngFromDataUrl(form.get("signature"));
+  if (!sig) return back(to, "서명을 입력해 주세요. 네모 칸 안에 손가락으로 쓰시면 됩니다.", true);
+
+  if (await D.consentDuplicate(db, f.id, phone, bizName))
+    return back(to, "이미 제출하셨습니다. 한 번만 보내시면 됩니다 — 상인회에서 확인 후 연락드립니다.");
+
+  const sigKey = storage.enabled(env) ? await storage.save(env, sig, "image/png") : "";
+  await D.createConsent(db, {
+    formId: f.id, associationId: assoc.id, bizName, name, phone, email,
+    address: cap((form.get("address") || "").trim(), 200),
+    category: cap((form.get("category") || "").trim(), 40),
+    signature: sigKey,
+    // 지금 이 사람이 읽은 문구의 지문. 상인회가 나중에 문구를 고쳐도 이 동의는 흔들리지 않는다.
+    bodyHash: await sha256Hex(f.body),
+    ip, userAgent: cap(request.headers.get("user-agent") || "", 200),
+  });
+  await D.createNotification(db, { associationId: assoc.id, kind: "consent",
+    message: `[동의서] ${bizName} · ${name}님이 '${f.title}' 에 동의했습니다.`, link: base + "/admin#s-people" });
+  return back(to, "동의해 주셔서 감사합니다. 상인회에서 확인한 뒤 가게 페이지를 열어 드립니다.");
+}
+
+// ── 관리자: 양식 만들기·고치기·켜고 끄기 ──────────────────────────────────
+export async function adminConsentFormSave(ctx) {
+  const { db, form, base, assoc, params } = ctx;
+  const to = base + "/admin#p-consent";
+  const title = cap((form.get("title") || "").trim(), 120);
+  const body = cap((form.get("body") || "").trim(), 8000);
+  const askAddress = form.get("ask_address") === "1";
+  if (!title || !body) return back(to, "제목과 동의 문구를 모두 입력해 주세요.", true);
+  if (params.id) {
+    const f = await D.getConsentForm(db, Number(params.id), assoc.id);
+    if (!f) return back(to, "동의서를 찾을 수 없습니다.", true);
+    await D.updateConsentForm(db, f.id, assoc.id, { title, body, askAddress });
+    await audit(ctx, "동의서수정", `#${f.id} ${title}`);
+    return back(to, "동의서를 고쳤습니다. 이미 받아 둔 동의는 그때 문구 그대로 남습니다.");
+  }
+  const made = await D.createConsentForm(db, {
+    associationId: assoc.id, token: randomHex(11), title, body, askAddress,
+  });
+  await audit(ctx, "동의서생성", `#${made.id} ${title}`);
+  return back(to, "동의서를 만들었습니다. 아래 링크를 단톡방에 올리시거나 QR을 인쇄해 붙이세요.");
+}
+export async function adminConsentFormToggle(ctx) {
+  const { db, base, assoc, params, form } = ctx;
+  const f = await D.getConsentForm(db, Number(params.id), assoc.id);
+  if (!f) return back(base + "/admin#p-consent", "동의서를 찾을 수 없습니다.", true);
+  const on = form.get("on") === "1";
+  await D.setConsentFormEnabled(db, f.id, assoc.id, on);
+  await audit(ctx, on ? "동의서열기" : "동의서닫기", `#${f.id} ${f.title}`);
+  return back(base + "/admin#p-consent", on
+    ? "링크를 다시 열었습니다. 이제 받을 수 있습니다."
+    : "링크를 닫았습니다. 이미 뿌린 링크를 눌러도 더는 제출되지 않습니다.");
+}
+export async function adminConsentFormDelete(ctx) {
+  const { db, base, assoc, params } = ctx;
+  const f = await D.getConsentForm(db, Number(params.id), assoc.id);
+  if (!f) return back(base + "/admin#p-consent", "동의서를 찾을 수 없습니다.", true);
+  const r = await D.deleteConsentForm(db, f.id, assoc.id);
+  if (!r.ok) return back(base + "/admin#p-consent",
+    `받아 둔 동의가 ${r.count}건 있어 지울 수 없습니다. 더 받지 않으시려면 [링크 닫기] 를 쓰세요 — 지우면 그 동의 기록이 함께 사라집니다.`, true);
+  await audit(ctx, "동의서삭제", `#${f.id} ${f.title}`);
+  return back(base + "/admin#p-consent", "동의서를 지웠습니다.");
+}
+
+// ── 관리자: 들어온 동의를 점포로 승인 ────────────────────────────────────
+//
+// 승인은 '회원 대행 등록'(adminAddMember)과 같은 일을 한다. 다만 값을 사장님이 직접 적어
+// 보냈으므로 회장님이 다시 칠 것이 없다 — 그게 이 기능의 전부다.
+export async function adminConsentApprove(ctx) {
+  const { db, base, assoc, params } = ctx;
+  const to = base + "/admin#p-consent";
+  const c = await D.getConsent(db, Number(params.id), assoc.id);
+  if (!c) return back(to, "동의 기록을 찾을 수 없습니다.", true);
+  if (c.status === "approved") return back(to, "이미 승인한 동의입니다.", true);
+  if ((await D.countMembers(db, assoc.id)) >= planOf(assoc).maxMembers)
+    return back(to, "회원 정원이 가득 찼습니다.", true);
+  // 이메일을 적어 주셨고 아직 안 쓰인 주소면 그대로 아이디가 된다.
+  // 없거나 겹치면 로그인 못 하는 자리지기 계정을 만든다 — 나중에 번호로 로그인을 열어 준다.
+  const taken = c.email ? await D.getUserByEmail(db, c.email) : null;
+  const loginEmail = (c.email && !taken) ? c.email : `p${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}@${NO_LOGIN_DOMAIN}`;
+  const temp = tempPassword();
+  const { hash, salt } = await hashPassword(temp);
+  const user = await D.createUser(db, { email: loginEmail, passwordHash: hash, salt,
+    name: c.name, role: "MERCHANT", associationId: assoc.id, phone: c.phone });
+  const biz = await D.createBusiness(db, { associationId: assoc.id, ownerId: user.id,
+    name: c.biz_name, category: c.category || "기타", source: "proxy" });
+  await D.setBusinessStatus(db, biz.id, "approved");
+  if (c.address) {
+    await D.updateBusiness(db, biz.id, { name: biz.name, category: biz.category, description: "",
+      phone: "", address: c.address, hours: "", lat: null, lng: null,
+      snsInstagram: "", snsYoutube: "", snsBlog: "", snsKakao: "", snsNaver: "", mapUrl: "" });
+  }
+  await D.setConsentStatus(db, c.id, assoc.id, "approved", biz.id);
+  await audit(ctx, "동의서승인", `${c.biz_name} / ${c.name}`);
+  return back(to, `${c.biz_name} 를 점포로 등록했습니다 — ${c.name}님 로그인: ${
+    taken || !c.email ? D.maskPhone(c.phone) + " (휴대폰 번호로)" : c.email} / 임시비번 ${temp} (본인에게 전달하세요)`);
+}
+export async function adminConsentReject(ctx) {
+  const { db, base, assoc, params } = ctx;
+  const c = await D.getConsent(db, Number(params.id), assoc.id);
+  if (!c) return back(base + "/admin#p-consent", "동의 기록을 찾을 수 없습니다.", true);
+  await D.setConsentStatus(db, c.id, assoc.id, "rejected", 0);
+  await audit(ctx, "동의서반려", `${c.biz_name} / ${c.name}`);
+  // 기록 자체는 지우지 않는다. 동의를 받은 사실은 남아야 하고, 반려는 '점포로 안 만든다' 일 뿐이다.
+  return back(base + "/admin#p-consent", "반려 처리했습니다. 동의 기록 자체는 증거로 남습니다.");
 }
 
 // 권한 회수 — 계정을 지우지 않고 역할만 내린다.

@@ -1,5 +1,6 @@
 // D1(비동기) 데이터 접근 계층. 모든 함수는 D1 바인딩(db)을 첫 인자로 받습니다.
 import { slugify, likeParam } from "./util.js";
+import { randomHex } from "./crypto.js";
 import { KIND_KEYS, DEFAULT_KIND, PRESET_KEYS, DEFAULT_PRESET } from "./kinds.js";
 
 // ----- D1 헬퍼 -----
@@ -71,6 +72,20 @@ export async function cloneAssociation(db, sourceId, { slug, name, brandColor, t
   for (const v of await listLandingVariants(db, sourceId)) {
     await run(db, "INSERT INTO landing_variants (association_id, slug, name, layout) VALUES (?,?,?,?)",
       made.id, v.slug, v.name, v.layout);
+  }
+  // 서식(계약서 틀)도 가져온다. 잘 다듬어 둔 임대차·동의서 서식이 복제본에 안 따라오면
+  // 새 상인회는 빈 화면에서 다시 쓰기 시작해야 한다 — 그러면 아무도 안 쓴다.
+  // 공용 서식(association_id=0)은 어차피 모두가 함께 보므로 복사하지 않는다.
+  for (const t of await all(db, "SELECT * FROM doc_templates WHERE association_id=?", sourceId)) {
+    await run(db, `INSERT INTO doc_templates (association_id, title, summary, body, fields, parties, ordered, created_by)
+      VALUES (?,?,?,?,?,?,?,NULL)`, made.id, t.title, t.summary, t.body, t.fields, t.parties, t.ordered);
+  }
+  // 간편동의서 양식도 가져온다 — 다만 **주소(token)는 새로 뽑는다.**
+  // 같은 토큰을 물려주면 원본 상인회에 뿌려 둔 링크가 복제본으로도 열린다.
+  // 받아 둔 동의(consents)는 따라오지 않는다. 남의 상인회 사장님들 개인정보다.
+  for (const f of await all(db, "SELECT * FROM consent_forms WHERE association_id=?", sourceId)) {
+    await run(db, "INSERT INTO consent_forms (association_id, token, title, body, ask_address, enabled) VALUES (?,?,?,?,?,?)",
+      made.id, randomHex(11), f.title, f.body, f.ask_address, f.enabled);
   }
   return getAssociationById(db, made.id);
 }
@@ -848,6 +863,73 @@ export const listAssocCoupons = (db, aid) =>
     ORDER BY b.name, c.created_at DESC`, aid);
 export const countAssocCoupons = async (db, aid) =>
   Number((await first(db, "SELECT COUNT(*) AS n FROM coupons WHERE association_id=?", aid))?.n) || 0;
+
+// ----- 간편동의서 -----
+//
+// 전자계약과 다른 점 하나가 전부다: **받는 사람을 미리 등록하지 않는다.**
+// 링크 하나를 뿌리면 사장님이 자기 손으로 상호·이름·연락처를 적고 동의한다.
+// 그래서 새 상인회가 명단 없이도 명단을 만들 수 있다.
+export const CONSENT_STATUSES = ["new", "approved", "rejected"];
+
+export const listConsentForms = (db, aid) =>
+  all(db, "SELECT * FROM consent_forms WHERE association_id=? ORDER BY enabled DESC, id DESC", aid);
+export const getConsentForm = (db, id, aid) =>
+  first(db, "SELECT * FROM consent_forms WHERE id=? AND association_id=?", id, aid);
+// 공개 링크로 들어올 때 쓴다. 토큰이 곧 주소라 상인회까지 함께 확인한다 —
+// 남의 상인회 주소에 우리 토큰을 붙여 여는 일이 없게.
+export const getConsentFormByToken = (db, token, aid) =>
+  first(db, "SELECT * FROM consent_forms WHERE token=? AND association_id=?", String(token || ""), aid);
+export async function createConsentForm(db, { associationId, token, title, body, askAddress = 1 }) {
+  await run(db, "INSERT INTO consent_forms (association_id, token, title, body, ask_address) VALUES (?,?,?,?,?)",
+    associationId, token, title, body, askAddress ? 1 : 0);
+  return first(db, "SELECT * FROM consent_forms WHERE id=?", await lastId(db));
+}
+export const updateConsentForm = (db, id, aid, { title, body, askAddress }) =>
+  run(db, "UPDATE consent_forms SET title=?, body=?, ask_address=? WHERE id=? AND association_id=?",
+    title, body, askAddress ? 1 : 0, id, aid);
+export const setConsentFormEnabled = (db, id, aid, on) =>
+  run(db, "UPDATE consent_forms SET enabled=? WHERE id=? AND association_id=?", on ? 1 : 0, id, aid);
+export async function deleteConsentForm(db, id, aid) {
+  // 받아 둔 동의가 한 건이라도 있으면 양식을 지우지 않는다 — 동의 기록이 함께 날아간다.
+  const n = Number((await first(db, "SELECT COUNT(*) AS n FROM consents WHERE form_id=? AND association_id=?", id, aid))?.n) || 0;
+  if (n > 0) return { ok: false, count: n };
+  await run(db, "DELETE FROM consent_forms WHERE id=? AND association_id=?", id, aid);
+  return { ok: true, count: 0 };
+}
+
+export async function createConsent(db, c) {
+  await run(db, `INSERT INTO consents (form_id, association_id, biz_name, name, phone, email, address, category,
+      signature, body_hash, ip, user_agent) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+    c.formId, c.associationId, c.bizName, c.name, c.phone, c.email || "", c.address || "", c.category || "",
+    c.signature || "", c.bodyHash, c.ip || "", c.userAgent || "");
+  return first(db, "SELECT * FROM consents WHERE id=?", await lastId(db));
+}
+export const getConsent = (db, id, aid) =>
+  first(db, "SELECT * FROM consents WHERE id=? AND association_id=?", id, aid);
+export const listConsents = (db, aid, { status = "", formId = 0, limit = 200, offset = 0 } = {}) => {
+  const w = ["c.association_id=?"]; const a = [aid];
+  if (status) { w.push("c.status=?"); a.push(status); }
+  if (formId) { w.push("c.form_id=?"); a.push(formId); }
+  return all(db, `SELECT c.*, f.title AS form_title FROM consents c
+    LEFT JOIN consent_forms f ON f.id = c.form_id
+    WHERE ${w.join(" AND ")} ORDER BY c.created_at DESC, c.id DESC LIMIT ? OFFSET ?`, ...a, limit, offset);
+};
+export async function consentStatusCounts(db, aid) {
+  const out = { all: 0, new: 0, approved: 0, rejected: 0 };
+  for (const r of await all(db, "SELECT status, COUNT(*) AS n FROM consents WHERE association_id=? GROUP BY status", aid)) {
+    const n = Number(r.n) || 0;
+    out.all += n;
+    if (out[r.status] !== undefined) out[r.status] = n;
+  }
+  return out;
+}
+export const setConsentStatus = (db, id, aid, status, businessId = 0) =>
+  run(db, "UPDATE consents SET status=?, business_id=? WHERE id=? AND association_id=?",
+    CONSENT_STATUSES.includes(status) ? status : "new", businessId || 0, id, aid);
+// 같은 사람이 두 번 눌러 두 줄이 생기는 것을 막는다. 사장님들은 "눌렸나?" 싶으면 다시 누른다.
+export const consentDuplicate = (db, formId, phone, bizName) =>
+  first(db, `SELECT * FROM consents WHERE form_id=? AND (phone=? OR biz_name=?)
+    AND created_at > datetime('now','-1 day') LIMIT 1`, formId, phone, bizName);
 
 // ----- 가게 소식 (한 줄 피드) -----
 export const listUpdates = (db, businessId, limit = 20) =>

@@ -8,6 +8,7 @@
 // 문구는 어느 상인회에서나 그대로 게시할 수 있게 쓰되, 상인회 이름·연락처는 실제 값을 넣습니다.
 import * as D from "./db.js";
 import { contentHash } from "./esign.js";
+import { randomHex } from "./crypto.js";
 import { kindOf, assocTerms } from "./kinds.js";
 import { defaultLandingLayout, serializeLandingLayout } from "./franchise.js";
 
@@ -95,7 +96,7 @@ const CONSENT_DOC = (assoc) => ({
  */
 export async function seedStarter(env, db, assoc, { createdBy = null } = {}) {
   const aid = assoc.id;
-  const added = { notices: 0, documents: 0, landing: 0 };
+  const added = { notices: 0, documents: 0, landing: 0, consentForms: 0 };
   const skipped = [];
 
   // 랜딩형 제품은 '발행된 한 장'이 있어야 문을 연 것이다.
@@ -127,6 +128,21 @@ export async function seedStarter(env, db, assoc, { createdBy = null } = {}) {
       contentHash: await contentHash(doc.body), createdBy, ordered: 0, dueDate: "",
     });
     added.documents++;
+  }
+
+  // 간편동의서 — 새 상인회가 가장 먼저 해야 하는 일이 점포 명단 만들기이고,
+  // 그 명단을 만들려면 개인정보 동의가 먼저다. 링크를 열어 둔 채로 넘겨 준다.
+  // (전자계약 조직에는 점포가 없으므로 만들지 않는다.)
+  if (!kindOf(assoc).usesLanding && assoc.kind !== "esign") {
+    const n = (await db.prepare("SELECT COUNT(*) AS n FROM consent_forms WHERE association_id=?").bind(aid).first()).n;
+    if (n > 0) skipped.push("간편동의서");
+    else {
+      const doc = CONSENT_DOC(assoc);
+      await D.createConsentForm(db, {
+        associationId: aid, token: randomHex(11), title: doc.title, body: doc.body, askAddress: 1,
+      });
+      added.consentForms = 1;
+    }
   }
 
   return { ...added, skipped };

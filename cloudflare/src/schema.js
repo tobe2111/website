@@ -223,6 +223,53 @@ CREATE TABLE IF NOT EXISTS coupon_uses (
 );
 CREATE INDEX IF NOT EXISTS idx_couponuse_assoc ON coupon_uses(association_id, day);
 
+-- ── 간편동의서 ──────────────────────────────────────────────────────────────
+--
+-- 새 상인회를 열면 닭과 달걀이 생긴다. 점포 명단을 만들려면 개인정보 동의를 받아야 하는데,
+-- 동의를 받으려면 누구에게 보낼지 명단이 먼저 있어야 한다.
+--
+-- 전자계약(documents)은 이 일을 못 한다. 받는 사람을 **한 명씩 미리 등록**해야 링크가 나오기
+-- 때문이다. 그래서 반대로 만든다 — 링크(또는 QR) 하나를 단톡방에 뿌리면, 사장님이 열어서
+-- 자기 상호·이름·연락처를 적고 동의·서명한다. 사전 등록도 비밀번호도 없다.
+CREATE TABLE IF NOT EXISTS consent_forms (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
+  -- 공개 주소에 그대로 실린다. 번호(1,2,3…)로 두면 남의 상인회 양식을 훑을 수 있어 난수로 만든다.
+  token          TEXT NOT NULL UNIQUE,
+  title          TEXT NOT NULL,
+  body           TEXT NOT NULL,               -- 동의 문구 전문. 화면에 그대로 보여 준다
+  ask_address    INTEGER NOT NULL DEFAULT 1,  -- 점포 주소도 받을지 (행사 참가 동의 등에는 필요 없다)
+  enabled        INTEGER NOT NULL DEFAULT 1,  -- 끄면 링크가 "지금은 받지 않습니다" 로 바뀐다
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_consentform_assoc ON consent_forms(association_id, enabled);
+
+-- 들어온 동의 한 건.
+--
+-- body_hash 를 함께 남기는 이유: 상인회가 나중에 동의 문구를 고쳐도, 이 사람이 **그때 무엇에**
+-- 동의했는지가 흔들리면 안 된다. 분쟁에서 필요한 것은 "동의를 받았다" 가 아니라
+-- "이 문구에 이 시각에 동의했다" 이다.
+CREATE TABLE IF NOT EXISTS consents (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  form_id        INTEGER NOT NULL REFERENCES consent_forms(id) ON DELETE CASCADE,
+  association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
+  biz_name       TEXT NOT NULL,               -- 상호
+  name           TEXT NOT NULL,               -- 사장님 성함
+  phone          TEXT NOT NULL,
+  email          TEXT NOT NULL DEFAULT '',    -- 선택 — 이메일 없는 사장님이 많다
+  address        TEXT NOT NULL DEFAULT '',
+  category       TEXT NOT NULL DEFAULT '',
+  signature      TEXT NOT NULL DEFAULT '',    -- 손가락 서명 그림 (R2 키)
+  body_hash      TEXT NOT NULL,               -- 동의한 그 순간의 문구 지문
+  ip             TEXT NOT NULL DEFAULT '',
+  user_agent     TEXT NOT NULL DEFAULT '',
+  status         TEXT NOT NULL DEFAULT 'new', -- new=확인 전 · approved=점포로 등록함 · rejected=반려
+  business_id    INTEGER NOT NULL DEFAULT 0,  -- 승인해서 만들어진 점포
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_consent_assoc ON consents(association_id, status, created_at);
+CREATE INDEX IF NOT EXISTS idx_consent_form ON consents(form_id);
+
 CREATE TABLE IF NOT EXISTS updates (
   id             INTEGER PRIMARY KEY AUTOINCREMENT,
   business_id    INTEGER NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
@@ -840,7 +887,7 @@ CREATE INDEX IF NOT EXISTS idx_landing_asset_assoc ON landing_assets(association
 // 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
 // 마이그레이션 세대 — migrateColumns 에 단계를 추가할 때마다 +1
 // 36 = 두 갈래(트렁크 33 · 모집형 35)를 합친 세대. 양쪽 DB 모두 다시 한 번 마이그레이션을 타게 한다.
-export const SCHEMA_VERSION = "53";
+export const SCHEMA_VERSION = "54";
 
 // ⚠️ 이 숫자를 올리는 걸 잊으면 **마이그레이션이 통째로 안 돈다.**
 //
@@ -1261,6 +1308,39 @@ async function migrateColumns(db) {
   // 총무에게 전화해서 물어야 하고, 그러면 독촉을 보낸 의미가 없다.
   if (cols.length && !cols.some((c) => c.name === "dues_account"))
     await db.prepare("ALTER TABLE associations ADD COLUMN dues_account TEXT NOT NULL DEFAULT ''").run();
+
+  // v54: 간편동의서. 새 상인회를 열 때 점포 명단을 만들려면 개인정보 동의가 필요한데,
+  // 동의를 받으려면 보낼 명단이 먼저 있어야 한다 — 그 고리를 끊는다.
+  // 링크 하나를 뿌리면 사장님이 직접 열고 적고 서명한다.
+  await db.prepare(`CREATE TABLE IF NOT EXISTS consent_forms (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
+    token          TEXT NOT NULL UNIQUE,
+    title          TEXT NOT NULL,
+    body           TEXT NOT NULL,
+    ask_address    INTEGER NOT NULL DEFAULT 1,
+    enabled        INTEGER NOT NULL DEFAULT 1,
+    created_at     TEXT NOT NULL DEFAULT (datetime('now')))`).run();
+  await db.prepare("CREATE INDEX IF NOT EXISTS idx_consentform_assoc ON consent_forms(association_id, enabled)").run();
+  await db.prepare(`CREATE TABLE IF NOT EXISTS consents (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    form_id        INTEGER NOT NULL REFERENCES consent_forms(id) ON DELETE CASCADE,
+    association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
+    biz_name       TEXT NOT NULL,
+    name           TEXT NOT NULL,
+    phone          TEXT NOT NULL,
+    email          TEXT NOT NULL DEFAULT '',
+    address        TEXT NOT NULL DEFAULT '',
+    category       TEXT NOT NULL DEFAULT '',
+    signature      TEXT NOT NULL DEFAULT '',
+    body_hash      TEXT NOT NULL,
+    ip             TEXT NOT NULL DEFAULT '',
+    user_agent     TEXT NOT NULL DEFAULT '',
+    status         TEXT NOT NULL DEFAULT 'new',
+    business_id    INTEGER NOT NULL DEFAULT 0,
+    created_at     TEXT NOT NULL DEFAULT (datetime('now')))`).run();
+  await db.prepare("CREATE INDEX IF NOT EXISTS idx_consent_assoc ON consents(association_id, status, created_at)").run();
+  await db.prepare("CREATE INDEX IF NOT EXISTS idx_consent_form ON consents(form_id)").run();
 
   // v48: 유어딜 가게 번호. 이 번호가 있는 점포의 이용권을 홈 '우리 골목 이용권' 에 건다.
   // 0 = 유어딜을 안 쓰는 가게 (대부분). 번호는 유어딜이 발급한 셀러 번호를 그대로 적는다.

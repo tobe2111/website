@@ -4589,3 +4589,35 @@ body.is-console[data-console="super"] .console-strip{border-bottom:1px solid #2b
 /* 운영 가이드의 '정직한 한 줄' — 할 수 있는 것 옆에 못 하는 것을 같은 크기로 적는다 */
 .honest-line{margin-top:8px;padding:8px 12px;border-left:3px solid var(--no);background:var(--bg-alt);
   font-size:.88rem;line-height:1.6;color:var(--ink-soft)}
+
+/* ==========================================================================
+   간편동의서
+
+   이 화면을 여는 사람은 가게에서 일하다 단톡방 링크를 누른 40~60대 사장님입니다.
+   그래서 글을 먼저 크게 보여 주고, 적을 칸은 그 아래에 한 줄씩 둡니다.
+   계약서처럼 보이면 그 자리에서 닫습니다 — 무겁지 않게, 다만 읽히게.
+   ========================================================================== */
+.consent-doc{background:var(--bg-alt);border:1px solid var(--line-soft);border-radius:var(--r-lg);
+  padding:20px 22px;margin-bottom:24px;max-height:46vh;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.consent-body{font-size:.97rem;line-height:1.85;color:var(--ink-soft);white-space:normal}
+.consent-step{font-size:.95rem;font-weight:700;color:var(--ink);margin:0 0 4px}
+.consent-form .sign-pad-wrap{margin-top:10px}
+
+/* 관리 화면: 링크 한 줄 — 총무가 실제로 하는 일은 이 주소를 복사해 단톡방에 붙이는 것입니다 */
+.consent-link{margin:14px;padding:14px 16px;background:var(--brand-050);border:1px solid var(--brand-200);
+  border-radius:10px;display:grid;gap:8px}
+.consent-link b{font-size:.92rem;color:var(--brand-text)}
+.consent-link .pill-row{margin:0}
+.notice-tag.tag-off{background:var(--bg-alt);color:var(--muted)}
+.consent-new > summary .notice-title{color:var(--brand-text);font-weight:700}
+
+/* QR 한 장 — 가게 문에 붙이거나 총회 자료에 넣는 종이입니다.
+   단톡방에 안 들어오신 사장님께 닿는 길은 종이뿐입니다. */
+.qr-sheet{text-align:center;padding:30px 24px;border:1px solid var(--line);border-radius:var(--r-lg);
+  background:var(--surface)}
+.qr-sheet-title{font-size:1.5rem;font-weight:800;letter-spacing:-.02em;margin:0 0 4px}
+.qr-sheet-sub{font-size:1.05rem;color:var(--ink-soft);margin:0 0 20px}
+.qr-sheet .qr-widget{justify-content:center}
+.qr-sheet-note{margin-top:20px;font-size:.95rem;line-height:1.7;color:var(--ink-soft)}
+.qr-sheet-call{margin-top:10px;font-weight:700;color:var(--brand-text)}
+@media print{ .qr-sheet{border:0} }

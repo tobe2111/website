@@ -1906,6 +1906,85 @@ export async function editPost(ctx) {
   return html(layout({ title: "글 수정", assoc, base, user, body, activeNav: `${base}/board`, csrf, scripts: `<script src="${assetUrl("/js/upload-resize.js")}" defer></script><script src="${assetUrl("/js/paste-upload.js")}" defer></script><script src="${assetUrl("/js/file-preview.js")}" defer></script>` }));
 }
 
+// 뿌릴 링크·QR 에 쓸 **절대** 주소.
+//
+// 상대 주소("/t/…")를 QR 에 넣으면 카메라로 비춰도 아무 데도 가지 않는다. 그런데 화면에는
+// 멀쩡한 QR 이 그려지므로 아무도 눈치채지 못한다 — 종이를 다 인쇄해 붙인 뒤에야 안다.
+// 그래서 모르면 비워 두지 않고, 지금 들어온 요청의 주소를 쓴다. 그건 언제나 맞는 값이다.
+//   ① 상인회 개별 도메인 → ② 운영사가 정해 둔 PUBLIC_ORIGIN → ③ 지금 이 요청의 주소
+function consentOrigin(ctx) {
+  const { assoc, env, request, url } = ctx;
+  if (assoc && assoc.custom_domain) return `https://${assoc.custom_domain}`;
+  if (env && env.PUBLIC_ORIGIN) return String(env.PUBLIC_ORIGIN).replace(/\/+$/, "");
+  try { return new URL(request ? request.url : url).origin; } catch { return ""; }
+}
+
+// ================= 간편동의서 (공개) =================
+//
+// 로그인도 사전 등록도 없다. 링크(또는 QR)를 받은 사장님이 그 자리에서 적고 서명한다.
+//
+// 이 화면을 여는 사람은 가게에서 일하다 단톡방 링크를 누른 40~60대 사장님이다.
+// 그래서 한 화면에 한 가지만 묻고, 설명을 길게 쓰지 않는다 — 길면 그 자리에서 닫는다.
+export async function consentForm(ctx) {
+  const { db, env, assoc, base, params, query, csrf } = ctx;
+  const f = await D.getConsentFormByToken(db, params.token, assoc.id);
+  if (!f) return notFoundResponse(ctx);
+  const opts = CATEGORIES.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
+
+  // 닫아 둔 링크. 404 로 보내지 않는다 — 사장님은 자기가 잘못 눌렀다고 생각하게 된다.
+  if (!f.enabled) {
+    const shut = `<section class="section page-top"><div class="container narrow">
+      <div class="empty-card"><b>지금은 동의서를 받지 않습니다</b>
+        <p>접수가 끝났거나 잠시 닫아 둔 상태입니다. ${assoc.phone
+          ? `상인회 사무실(<a href="tel:${esc(assoc.phone)}">${esc(assoc.phone)}</a>)로 문의해 주세요.`
+          : "상인회 사무실로 문의해 주세요."}</p></div></div></section>`;
+    return html(layout({ title: f.title, assoc, base, body: shut, csrf, noIndex: true }));
+  }
+
+  const body = `<section class="section page-top"><div class="container narrow">
+    <div class="section-head"><h1 class="section-title">${esc(f.title)}</h1>
+      <p class="section-lead">${esc(assoc.name)}</p></div>
+    ${flashOf(query)}
+
+    <section class="consent-doc" aria-label="동의 내용">
+      <div class="consent-body">${esc(f.body).replace(/\n/g, "<br />")}</div>
+    </section>
+
+    <form method="post" action="${base}/consent/${esc(f.token)}" class="stack-form consent-form" id="signForm">
+      <input type="hidden" name="_csrf" value="${csrf}" />
+      <p class="consent-step">아래 칸을 채우고 맨 아래에 서명해 주세요.</p>
+      <label>상호 <small>(가게 이름)</small><input type="text" name="biz_name" required maxlength="100"
+        autocomplete="organization" placeholder="예: 방배 커피" /></label>
+      <label>사장님 성함<input type="text" name="name" required maxlength="60" autocomplete="name" /></label>
+      <label>휴대폰 번호<input type="tel" name="phone" required maxlength="13" inputmode="numeric"
+        placeholder="010-1234-5678" autocomplete="tel" /></label>
+      <label>업종<select name="category">${opts}</select></label>
+      ${f.ask_address ? `<label>가게 주소<input type="text" name="address" maxlength="200"
+        autocomplete="street-address" placeholder="예: 서울 서초구 방배로 42" /></label>` : ""}
+      <label>이메일 <small>(선택 · 없으셔도 됩니다)</small><input type="email" name="email" maxlength="120"
+        autocomplete="email" /></label>
+
+      <label class="check check-tap"><input type="checkbox" name="agree" value="1" required />
+        위 내용을 모두 읽었으며, 개인정보 수집·이용에 동의합니다.</label>
+
+      <label>서명 <small>(네모 칸 안에 손가락으로 쓰세요)</small>
+        <div class="sign-pad-wrap"><canvas id="signPad" class="sign-pad" width="600" height="200"></canvas>
+          <button type="button" class="btn btn-ghost btn-xs sign-clear" id="signClear">지우기</button></div></label>
+      <input type="hidden" name="signature" id="signatureData" />
+
+      <div class="hp-field" aria-hidden="true"><label>이 칸은 비워 두세요<input type="text" name="website" tabindex="-1" autocomplete="off" /></label></div>
+      ${turnstileWidget(env)}
+      <button class="btn btn-primary btn-block">동의하고 보내기</button>
+    </form>
+    <p class="auth-note">보내 주신 내용은 ${esc(assoc.name)}의 회원 관리에만 쓰입니다.
+      상인회에서 확인한 뒤 가게 페이지를 열어 드립니다.</p>
+  </div></section>`;
+
+  // noIndex: 검색엔진에 올릴 화면이 아니다. 링크를 받은 분만 쓰는 자리다.
+  return html(layout({ title: f.title, assoc, base, body, csrf, noIndex: true,
+    scripts: `${turnstileScript(env)}<script src="${assetUrl("/js/sign.js")}" defer></script>` }));
+}
+
 // ================= 회원가입 =================
 export function registerForm(ctx) {
   // 셀프 가입을 받지 않는 제품에서는 URL 도 닫는다. 메뉴에서만 감추면 업체 레코드가 생겨
@@ -2946,7 +3025,7 @@ export async function admin(ctx) {
   const BIZ_PER = 50;
   const bizPage = Math.max(1, parseInt(query.get("bp") || "1", 10) || 1);
   const inboxStatus = D.LEAD_STATUSES.includes(query.get("is")) ? query.get("is") : "";
-  const [s, all, notices, events, members, admins, notifs, unread, auditLog, met, assocProducts, allRsvps, dueRowsRaw, visitsRaw, popupList, bizPageData, bizCounts, inbox, inboxCounts, topBiz, outcomes, byDay, assocCoupons, couponUses, couponUsed30] = await Promise.all([
+  const [s, all, notices, events, members, admins, notifs, unread, auditLog, met, assocProducts, allRsvps, dueRowsRaw, visitsRaw, popupList, bizPageData, bizCounts, inbox, inboxCounts, topBiz, outcomes, byDay, assocCoupons, couponUses, couponUsed30, consentForms, consents, consentCounts] = await Promise.all([
     D.stats(db, assoc.id),
     D.listAllBusinesses(db, assoc.id),
     D.listNotices(db, assoc.id),
@@ -2972,6 +3051,9 @@ export async function admin(ctx) {
     D.listAssocCoupons(db, assoc.id).catch(() => []),
     D.couponUseCounts(db, assoc.id).catch(() => new Map()),
     D.couponUseTotal(db, assoc.id, 30).catch(() => 0),
+    D.listConsentForms(db, assoc.id).catch(() => []),
+    D.listConsents(db, assoc.id, { limit: 200 }).catch(() => []),
+    D.consentStatusCounts(db, assoc.id).catch(() => ({ all: 0, new: 0, approved: 0, rejected: 0 })),
   ]);
   const visits = { cur: Number(visitsRaw && visitsRaw.cur) || 0, prev: Number(visitsRaw && visitsRaw.prev) || 0 };
   const lay = parseLayout(assoc.home_layout, assoc.name);
@@ -3321,6 +3403,96 @@ export async function admin(ctx) {
            <br /><span class="txt-muted">막고 있는 것: ${blockers.map(esc).join(" · ")}</span>`}</p>
     </div>`;
   })();
+  // ── 간편동의서 ────────────────────────────────────────────────────────
+  //
+  // 새 상인회를 열면 점포 명단을 만들어야 하는데, 명단을 만들려면 개인정보 동의가 필요하고,
+  // 동의를 받으려면 누구에게 보낼지 명단이 먼저 있어야 한다 — 닭과 달걀이다.
+  //
+  // 전자계약으로는 이 고리를 못 끊는다. 받는 사람을 한 명씩 등록해야 링크가 나오기 때문이다.
+  // 그래서 반대로 간다: 링크 하나를 단톡방에 뿌리면 사장님이 자기 손으로 적는다.
+  // 들어온 것은 여기 명단으로 쌓이고, [점포로 등록] 한 번이면 끝난다.
+  const consentPanel = (() => {
+    const siteOrigin = consentOrigin(ctx);
+    const linkFor = (f) => `${siteOrigin}${base}/consent/${f.token}`;
+    const n = (v) => (Number(v) || 0).toLocaleString("ko-KR");
+
+    const formRows = consentForms.map((f) => {
+      const url = linkFor(f);
+      return `<li class="mini-item"><details class="mini-edit">
+        <summary><span class="notice-tag${f.enabled ? "" : " tag-off"}">${f.enabled ? "받는 중" : "닫힘"}</span>
+          <span class="notice-title">${esc(f.title)}</span>
+          <span class="mini-edit-hint">링크·문구 보기</span></summary>
+
+        <div class="consent-link">
+          <b>이 주소를 단톡방에 올리시면 됩니다</b>
+          <code class="id-cell">${esc(url)}</code>
+          <span class="pill-row">
+            <button type="button" class="btn btn-ghost btn-xs" data-copy="${esc(url)}">주소 복사</button>
+            <a class="btn btn-ghost btn-xs" href="${base}/consent/${esc(f.token)}" target="_blank" rel="noopener">열어 보기 ↗</a>
+            <a class="btn btn-ghost btn-xs" href="${base}/admin/consent-form/${f.id}/qr" target="_blank" rel="noopener">QR 인쇄</a>
+          </span>
+        </div>
+
+        <form method="post" action="${base}/admin/consent-form/${f.id}" class="stack-form compact">
+          <input type="hidden" name="_csrf" value="${csrf}" />
+          <label>제목<input type="text" name="title" value="${esc(f.title)}" required maxlength="120" /></label>
+          <label>동의 문구 <small>(사장님 화면에 이 글이 그대로 보입니다)</small>
+            <textarea name="body" rows="10" required maxlength="8000">${esc(f.body)}</textarea></label>
+          <label class="check"><input type="checkbox" name="ask_address" value="1"${f.ask_address ? " checked" : ""} /> 가게 주소도 받기</label>
+          <button class="btn btn-primary btn-sm">고친 내용 저장</button>
+        </form>
+        <span class="pill-row">
+          <form method="post" action="${base}/admin/consent-form/${f.id}/toggle"><input type="hidden" name="_csrf" value="${csrf}" />
+            <input type="hidden" name="on" value="${f.enabled ? "0" : "1"}" />
+            <button class="btn btn-ghost btn-sm">${f.enabled ? "링크 닫기" : "링크 다시 열기"}</button></form>
+        </span>
+        <form method="post" action="${base}/admin/consent-form/${f.id}/delete" class="mini-del"
+          data-confirm="'${esc(f.title)}' 동의서를 지울까요?&#10;받아 둔 동의가 있으면 지워지지 않습니다 — 그때는 [링크 닫기] 를 쓰세요."><input type="hidden" name="_csrf" value="${csrf}" />
+          <button class="link-danger">이 동의서 지우기</button></form>
+      </details></li>`;
+    }).join("");
+
+    const rows = consents.map((c) => `<tr>
+      <td data-th="가게"><b>${esc(c.biz_name)}</b><span class="dt-sub">${esc(c.name)}${c.category ? ` · ${esc(c.category)}` : ""}</span></td>
+      <td data-th="연락처">${esc(D.formatPhone(c.phone))}${c.email ? `<span class="dt-sub">${esc(c.email)}</span>` : ""}</td>
+      <td data-th="받은 때">${esc(kstStamp(c.created_at, { year: false }))}</td>
+      <td data-th="상태">${c.status === "approved" ? '<span class="badge badge-ok">점포 등록됨</span>'
+        : c.status === "rejected" ? '<span class="badge badge-no">반려</span>'
+        : '<span class="badge badge-wait">확인 전</span>'}</td>
+      <td class="act">${c.status === "new" ? `
+        <form method="post" action="${base}/admin/consent/${c.id}/approve"><input type="hidden" name="_csrf" value="${csrf}" />
+          <button class="btn btn-primary btn-xs">점포로 등록</button></form>
+        <form method="post" action="${base}/admin/consent/${c.id}/reject"
+          data-confirm="'${esc(c.biz_name)}' 을 반려할까요?&#10;동의 기록 자체는 증거로 남습니다."><input type="hidden" name="_csrf" value="${csrf}" />
+          <button class="btn btn-ghost btn-xs">반려</button></form>` : ""}</td></tr>`).join("");
+
+    return `<section class="panel" id="p-consent"><div class="panel-head">
+        <h2 class="panel-title">간편동의서 ${consentCounts.new ? `<span class="badge badge-wait">확인 전 ${consentCounts.new}</span>` : ""}</h2>
+        ${consentCounts.all ? `<a class="btn btn-xs btn-ghost" href="${base}/admin/consents.csv">명단 CSV</a>` : ""}</div>
+      <p class="panel-hint">링크 하나를 단톡방에 올리거나 QR을 인쇄해 붙이면, 사장님이 열어서
+        <b>상호·성함·연락처를 직접 적고 동의·서명</b>합니다. 사장님은 가입도 비밀번호도 필요 없습니다.
+        들어온 것을 [점포로 등록] 하면 가게가 그 자리에서 열립니다.</p>
+
+      <ul class="admin-mini-list">${formRows || `<li class="empty">아직 동의서가 없습니다. 아래에서 하나 만드세요.</li>`}</ul>
+
+      <details class="mini-edit consent-new"${consentForms.length ? "" : " open"}><summary>
+        <span class="notice-title">＋ 동의서 새로 만들기</span><span class="mini-edit-hint">펼치기</span></summary>
+        <form method="post" action="${base}/admin/consent-form" class="stack-form compact">
+          <input type="hidden" name="_csrf" value="${csrf}" />
+          <label>제목<input type="text" name="title" required maxlength="120" placeholder="예: 상인회 가입 신청 및 개인정보 수집·이용 동의서" /></label>
+          <label>동의 문구<textarea name="body" rows="8" required maxlength="8000" placeholder="사장님 화면에 그대로 보일 글입니다."></textarea></label>
+          <label class="check"><input type="checkbox" name="ask_address" value="1" checked /> 가게 주소도 받기</label>
+          <button class="btn btn-primary btn-sm">동의서 만들기</button></form></details>
+
+      <div class="form-divider">들어온 동의 ${consentCounts.all ? `<span class="badge badge-muted">${n(consentCounts.all)}건</span>` : ""}</div>
+      ${consents.length ? `<div class="dtable-wrap"><table class="dtable">
+          <thead><tr><th>가게 · 사장님</th><th>연락처</th><th>받은 때</th><th>상태</th><th class="act"></th></tr></thead>
+          <tbody>${rows}</tbody></table></div>`
+        : `<div class="dt-empty"><b>아직 들어온 동의가 없습니다</b>
+           위 링크를 단톡방에 올리시거나 QR을 인쇄해 가게에 붙여 보세요.</div>`}
+    </section>`;
+  })();
+
   const duesPanel = `<section class="panel" id="p-dues"><div class="panel-head">
       <h2 class="panel-title">회비 장부 <span class="badge badge-muted">${paidSet.size}/${members.length} 납부</span></h2>
       <form method="get" action="${base}/admin" class="inline-form"><input type="month" name="due_period" value="${esc(duePeriod)}" aria-label="회비를 볼 월" data-autosubmit /><button class="btn btn-xs btn-ghost">이동</button></form></div>
@@ -3819,6 +3991,7 @@ export async function admin(ctx) {
           <button class="btn btn-primary btn-sm">관리자 계정 만들기</button></form></div></details>`}
       </section>
     ${isEsign ? "" : addMemberPanel}
+    ${isEsign || isFranchise ? "" : consentPanel}
     ${isEsign ? teamsPanel : ""}
     ${isEsign || isFranchise || !D.usesDues(assoc) ? "" : duesPanel}
     </div>
@@ -4034,6 +4207,52 @@ export async function adminExportUnpaid(ctx) {
   const csv = "\ufeff" + lines.map((r) => r.map(csvCell).join(",")).join("\r\n");
   return text(csv, 200, { "content-type": "text/csv; charset=utf-8",
     "content-disposition": `attachment; filename="unpaid_${assoc.slug}_${period}.csv"`, "cache-control": "no-store" });
+}
+
+// 들어온 간편동의 명단. 화면에도 표로 보이지만, 총무가 실제로 하는 일은 이걸 엑셀로 열어
+// 전화를 돌리며 표시하는 것이다. 동의 시각과 문구 지문을 함께 내보낸다 — 나중에
+// "언제 무엇에 동의했나" 를 묻는 사람에게 이 파일 하나로 답할 수 있어야 한다.
+export async function adminExportConsents(ctx) {
+  const { db, assoc } = ctx;
+  const rows = await D.listConsents(db, assoc.id, { limit: 5000 });
+  const label = { new: "확인 전", approved: "점포 등록됨", rejected: "반려" };
+  const lines = [["동의서", "가게", "사장님", "연락처", "이메일", "주소", "업종", "동의 시각", "상태", "문구 지문"],
+    ...rows.map((r) => [r.form_title || "", r.biz_name, r.name, D.formatPhone(r.phone), r.email || "",
+      r.address || "", r.category || "", kstStamp(r.created_at), label[r.status] || r.status,
+      String(r.body_hash || "").slice(0, 16)])];
+  const csv = "﻿" + lines.map((r) => r.map(csvCell).join(",")).join("\r\n");
+  return text(csv, 200, { "content-type": "text/csv; charset=utf-8",
+    "content-disposition": `attachment; filename="consents_${assoc.slug}.csv"`, "cache-control": "no-store" });
+}
+
+// 동의서 QR — 가게 문에 붙이거나 총회 자료에 넣는 종이 한 장.
+// 단톡방에 안 들어오신 사장님이 실제로 있고, 그분들께 닿는 길은 종이뿐이다.
+export async function adminConsentQr(ctx) {
+  const { db, assoc, base, params, csrf, user } = ctx;
+  const f = await D.getConsentForm(db, Number(params.id), assoc.id);
+  if (!f) return notFoundResponse(ctx);
+  const url = `${consentOrigin(ctx)}${base}/consent/${f.token}`;
+  const body = `<section class="section page-top"><div class="container narrow">
+    <a href="${base}/admin#p-consent" class="back-link">← 관리 화면</a>
+    <div class="qr-sheet">
+      <h1 class="qr-sheet-title">${esc(assoc.name)}</h1>
+      <p class="qr-sheet-sub">${esc(f.title)}</p>
+      <div id="qrWidget" class="qr-widget" data-url="${esc(url)}" data-name="${esc(f.title)}">
+        <div class="qr-img" aria-label="동의서 QR 코드"></div>
+        <div class="qr-actions no-print">
+          <button type="button" class="btn btn-primary btn-sm" data-qr-png>PNG 저장 (인쇄용)</button>
+          <button type="button" class="btn btn-ghost btn-sm" data-qr-copy>링크 복사</button>
+        </div>
+      </div>
+      <p class="qr-sheet-note">휴대폰 카메라로 비추시면 동의서가 열립니다.<br />
+        상호·성함·연락처를 적고 서명하시면 끝납니다 — 가입이나 비밀번호는 필요 없습니다.</p>
+      ${assoc.phone ? `<p class="qr-sheet-call">문의 ${esc(assoc.phone)}</p>` : ""}
+    </div>
+    <p class="panel-hint no-print">이 화면을 그대로 인쇄하시거나, [PNG 저장] 으로 그림만 받아
+      안내문에 붙이셔도 됩니다.</p>
+  </div></section>`;
+  return html(layout({ title: `${f.title} QR`, assoc, base, user, body, csrf, noIndex: true,
+    scripts: `<script src="${assetUrl("/js/qr.js")}" defer></script><script src="${assetUrl("/js/qr-widget.js")}" defer></script>` }));
 }
 
 // 행사 참가자 명단 — 자리·다과·상품권을 이 명단으로 준비한다.
