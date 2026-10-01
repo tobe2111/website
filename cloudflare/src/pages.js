@@ -508,7 +508,8 @@ function layoutEditor(base, layoutArr, opts = {}) {
     // 화면이 8,000px 이 넘었고, 무엇을 고치는 중인지 알 수 없었다.
     // 켜고 끄기와 순서는 줄에서 바로, 문구는 그 줄을 열어야 나온다.
     const cur = String(sec.title || sec.eyebrow || "").trim();
-    return `<details class="layout-row" data-index="${i}"><summary class="layout-row-head">
+    // 꺼 둔 구역은 처음부터 흐리게 찍는다 — 스위치를 누르면 layout-editor.js 가 바꾼다
+    return `<details class="layout-row${sec.enabled ? "" : " is-off"}" data-index="${i}"><summary class="layout-row-head">
       <label class="switch" title="${sec.enabled ? "지금 켜져 있습니다" : "지금 꺼져 있습니다"}"><input type="checkbox" name="en_${i}" value="1"${sec.enabled ? " checked" : ""} aria-label="${esc(cat.label)} 켜고 끄기" /><span class="track"></span></label>
       <span class="lname"><strong>${esc(cat.label)}</strong>${cur ? `<small>${esc(cur)}</small>` : ""}</span>
       <span class="lstate">${sec.enabled ? "켜짐" : "꺼짐"}</span>
@@ -4859,6 +4860,7 @@ export async function adminBusinessEdit(ctx) {
           <p class="panel-hint">담을 사진을 고르세요 (최대 5장). 상품 이름이 설명으로 함께 저장됩니다.</p>
           <ul class="pick-grid">${urdealPics.map((im, i) => `<li><label class="pick-item">
             <input type="checkbox" name="url" value="${esc(im.url)}" />
+            <span class="pick-ring" aria-hidden="true"></span>
             <img src="${esc(im.url)}" alt="${esc(im.name || `유어딜에 올린 사진 ${i + 1}`)}" loading="lazy" />
             <small>${esc(im.name || "유어딜")}</small></label></li>`).join("")}</ul>
           <button class="btn btn-primary btn-block">고른 사진 담기</button></form>`

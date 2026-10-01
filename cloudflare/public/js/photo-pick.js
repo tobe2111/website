@@ -44,13 +44,17 @@
         var cb = document.createElement("input");
         cb.type = "checkbox"; cb.name = "url"; cb.value = im.url;
         cb.addEventListener("change", sync);
+        // 고른 테 — CSS 가 체크박스 바로 뒤 형제로 찾는다(`:has()` 없이)
+        var ring = document.createElement("span");
+        ring.className = "pick-ring";
+        ring.setAttribute("aria-hidden", "true");
         var img = document.createElement("img");
         img.src = im.thumb; img.loading = "lazy";
         // 무엇이 찍힌 사진인지 우리는 모른다. 읽어 주는 프로그램에는 출처만 정직하게 말한다.
         img.alt = (im.site ? im.site + " 에 실린 사진" : "검색된 사진") + " " + (i + 1);
         var cap = document.createElement("small");
         cap.textContent = im.site || "출처 미상";
-        lab.appendChild(cb); lab.appendChild(img); lab.appendChild(cap);
+        lab.appendChild(cb); lab.appendChild(ring); lab.appendChild(img); lab.appendChild(cap);
         li.appendChild(lab);
         list.appendChild(li);
       });

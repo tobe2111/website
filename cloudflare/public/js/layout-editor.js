@@ -49,6 +49,8 @@
         var row = sw.closest(".layout-row");
         var state = row && row.querySelector(".lstate");
         if (state) state.textContent = box.checked ? "켜짐" : "꺼짐";
+        // 꺼 둔 줄을 흐리게 — CSS 가 `:has()` 로 읽던 것을 여기서 붙여 준다
+        if (row) row.classList.toggle("is-off", !box.checked);
         sw.title = box.checked ? "지금 켜져 있습니다" : "지금 꺼져 있습니다";
       }
       return;
