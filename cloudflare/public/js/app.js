@@ -312,3 +312,17 @@ document.addEventListener("click", (e) => {
     [].forEach.call(wrap.querySelectorAll(".theme-sw"), function (b) { b.classList.toggle("is-on", b === btn); });
   });
 })();
+
+// 서식 '본문 고치기' 를 펼치면 왼쪽 칸을 넓힌다.
+// CSS 가 `.tpl-layout:has(.tpl-edit[open])` 로 하던 일인데, 파이어폭스 ESR
+// (관공서·학교 PC 에 남아 있다)에는 `:has()` 가 없어 420px 칸에서 계약서를
+// 가로로 밀며 써야 했다. 펼침 상태를 여기서 클래스로 옮겨 준다.
+(function () {
+  "use strict";
+  var edit = document.querySelector(".tpl-edit");
+  var layout = document.querySelector(".tpl-layout");
+  if (!edit || !layout) return;
+  var sync = function () { layout.classList.toggle("is-wide", edit.open); };
+  edit.addEventListener("toggle", sync);
+  sync();   // 뒤로가기로 돌아와 이미 펼쳐져 있을 때
+})();
