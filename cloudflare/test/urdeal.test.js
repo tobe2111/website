@@ -64,9 +64,12 @@ test("이용권이 없어도 섹션이 비지 않는다 — 사장님을 부르�
   const html = await (await get(env, jar(), "/t/seocho/")).text();
   assert.match(html, /우리 골목 이용권/, "섹션이 있어야");
   assert.match(html, /우리 가게 이용권 만들어서 홍보하기/, "사장님을 부르는 칸이 있어야");
-  // 이용권이 0개면 '사장님께' 칸이 지도 배너와 나란히 한 띠가 된다(지도 배너가 뒤에 있을 때). 아니면 그 칸 하나가 섹션 전체.
-  assert.ok(/deal-band/.test(html) || /deal-row is-empty/.test(html), "이용권이 0개면 사장님 칸이 지도와 한 띠이거나 섹션 전체");
-  assert.ok(!/<section class="section" style="padding-top:0"><div class="container"><a href="[^"]*\/map" class="map-banner">/.test(html), "띠로 합쳐졌으면 지도 배너가 따로 또 서지 않는다");
+  // 이용권이 0개면 제목·설명을 벌리지 않고 **한 줄 띠**로 줄인다.
+  // 아직 아무도 안 만든 것을 큰 구역으로 벌려 두면 '텅 빈 매대' 로 보인다.
+  assert.match(html, /class="deal-slim"/, "이용권이 0개면 한 줄 띠");
+  assert.ok(!/deal-band/.test(html), "지도를 이용권 자리로 끌어오지 않는다");
+  // 그리고 점포 지도는 **제 폭으로 혼자 선다** — 손님이 가장 많이 쓰는 칸이 반 폭이 되면 안 된다.
+  assert.match(html, /class="map-banner"/, "지도 배너가 제 자리에 그대로 선다");
   // 홈의 단추는 유어딜 판매자 가입으로 곧장 간다(목표는 유어딜 유입). 안내 화면은 작은 링크로.
   assert.match(html, /urdeal\.kr\/seller\/signup\?from=merchant&amp;assoc=seocho/, "판매자 가입 주소에 상인회 꼬리표");
   assert.match(html, /유어딜 판매자 가입하기/);

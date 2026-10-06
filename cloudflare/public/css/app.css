@@ -4727,3 +4727,44 @@ body.is-console[data-console="super"] .console-strip{border-bottom:1px solid #2b
   .fest-cover .fc-in{flex-direction:column;align-items:stretch;gap:22px}
   .fc-poster{width:200px;align-self:center}
 }
+
+/* ==========================================================================
+   홈 아래쪽 두 구역 — 비어 보이던 자리
+
+   ① 이용권이 하나도 없을 때: 큰 카드 둘 대신 한 줄 띠.
+      아직 아무도 안 만든 것을 큰 구역으로 벌려 두면 '텅 빈 매대' 로 보입니다.
+   ② 연락처: 왼쪽 연락처, 오른쪽 '여기가 누구인가'(간판·이름·한 줄 소개·SNS).
+      페이지 끝은 "여기가 어디였지" 에 답하는 자리입니다.
+   ========================================================================== */
+.deal-slim{display:flex;align-items:center;flex-wrap:wrap;gap:10px 16px;
+  padding:16px 20px;border:1px solid var(--line-soft);border-radius:var(--r-lg);background:var(--surface)}
+.ds-tag{flex:none;font-size:12px;font-weight:800;letter-spacing:.02em;padding:5px 11px;
+  border-radius:var(--r-pill);background:var(--brand-tint);color:var(--brand-text)}
+.ds-text{font-size:15px;font-weight:700;letter-spacing:-.01em}
+.ds-sub{flex:1;min-width:200px;font-size:13px;color:var(--muted)}
+.ds-go{flex:none;min-height:44px;display:inline-flex;align-items:center}
+
+.contact-two{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:18px;align-items:stretch}
+/* 왼쪽 칸 안에서는 연락처를 세로로 쌓습니다. 가로로 벌리면 두 칸이 짧게 서고
+   그 아래가 통째로 비어, 오른쪽 기둥과 키가 안 맞습니다. */
+.contact-left{min-width:0;display:flex;flex-direction:column;gap:12px}
+.contact-two .contact-grid{grid-template-columns:1fr;gap:12px;flex:1}
+.contact-two .contact-card{align-content:center}
+.contact-org{min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:9px;
+  padding:22px 24px;background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--r-lg)}
+.org-logo{max-width:160px;max-height:52px;object-fit:contain;display:block;margin-bottom:2px}
+.org-name{font-size:1.05rem;font-weight:800;letter-spacing:-.015em}
+.org-tag{margin:0;font-size:.93rem;line-height:1.6;color:var(--ink-soft)}
+.org-sns-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:2px}
+.org-sns{display:inline-flex;align-items:center;gap:5px;min-height:44px;padding:10px 14px;
+  border-radius:var(--r-pill);border:1px solid var(--line);font-size:13px;font-weight:700;
+  color:var(--ink-soft);text-decoration:none}
+.org-sns:hover{border-color:var(--brand);color:var(--brand-text)}
+.org-join{margin-top:4px;min-height:44px;display:inline-flex;align-items:center;gap:6px;
+  font-size:14px;font-weight:700;color:var(--brand-text);text-decoration:none}
+.org-join:hover{text-decoration:underline}
+@media (max-width:860px){
+  .contact-two{grid-template-columns:1fr}
+  .deal-slim{padding:14px 16px}
+  .ds-sub{min-width:0;flex-basis:100%}
+}

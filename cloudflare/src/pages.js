@@ -410,7 +410,14 @@ export async function home(ctx, opts = {}) {
   // 다만 같은 공지를 사진판과 공지 목록에 두 번 늘어놓지는 않는다 — 사진판이 켜져 있으면
   // 그 공지는 사진판 몫이고, 아래 공지 목록에는 사진 없는 것만 남는다.
   const photoOn = lay.some((s) => s.type === "photos" && s.enabled !== false);
-  const withPhoto = photoOn ? notices.filter((n) => n.image) : [];
+  // 같은 사진을 한 페이지에 두 번 깔지 않는다.
+  //
+  // 축제 포스터를 행사에도 올리고 공지에도 붙이면(그게 맞는 운영이다) 바로 위 '다가오는 행사'
+  // 카드와 활동사진이 **똑같은 그림 세 장**이 된다. 길이만 늘고 알려 주는 것은 하나도 안 는다.
+  // 행사 카드가 이미 보여 준 사진은 사진판에서 뺀다 — 그래서 남는 게 없으면 구역이 통째로
+  // 사라지고, 다른 활동 사진을 올리는 순간 다시 켜진다.
+  const shownImages = new Set(events.filter((e) => e.image).map((e) => e.image));
+  const withPhoto = photoOn ? notices.filter((n) => n.image && !shownImages.has(n.image)) : [];
   const textNotices = photoOn ? notices.filter((n) => !n.image) : notices;
   const photosHtml = withPhoto.slice(0, 6).map((n) => `<a class="pb-card" href="${base}/notices/${n.id}">
     <span class="pb-shot"><img src="${esc(mediaUrl(n.image))}" alt="" loading="lazy" />
@@ -433,6 +440,9 @@ export async function home(ctx, opts = {}) {
     // 홈의 '이용권 만들러 가기' 는 유어딜 판매자 가입으로 곧장 간다 — 목표는 유어딜 유입이다.
     urdealSignup: urdealSignupUrl(ctx.env, assoc.slug),
     heroImage: assoc.hero_image ? mediaUrl(assoc.hero_image) : "",
+    // 맨 아래 '연락처·오시는 길' 의 오른쪽 기둥 — 간판·SNS 는 이미 가진 값이다
+    logoUrl: assoc.logo ? mediaUrl(assoc.logo) : "",
+    assocSns: D.assocSnsLinks(assoc),
     heroVideo: assoc.hero_video ? mediaUrl(assoc.hero_video) : "",
     photosHtml,
     coverEvent: coverEv,
