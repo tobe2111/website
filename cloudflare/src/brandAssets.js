@@ -26,6 +26,11 @@ export const BUNDLED_BRANDS = [
     wide: "/img/brand/bangbae-cafe.svg",        // 가로형 「방배카페골목 BANGBAE CAFE STREET」 — 머리말·바닥글
     tall: "/img/brand/bangbae-cafe-tall.svg",   // 세로형 (좁은 자리·인쇄물)
     og: "/img/brand/bangbae-cafe-og.png",       // 카카오톡·SNS 공유 미리보기 (1200×630)
+    // 상인회(조직)의 공식 로고. 위의 주황 글자마크와 **다른 것**이다 —
+    // 주황은 골목(거리)의 간판이라 머리말에 걸리고, 이것은 '방배동카페골목상가연합회'
+    // 라는 **조직**의 표장이라 "여기가 어디였지" 에 답하는 자리(연락처 구역)에 선다.
+    // 둘을 한 자리에 같이 걸면 손님은 상인회가 둘인 줄 안다.
+    union: "/img/brand/bangbae-union.png",
   },
 ];
 

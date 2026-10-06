@@ -4808,7 +4808,10 @@ body.is-console[data-console="super"] .console-strip{border-bottom:1px solid #2b
 .contact-two .contact-card{align-content:center}
 .contact-org{min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:9px;
   padding:22px 24px;background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--r-lg)}
-.org-logo{max-width:160px;max-height:52px;object-fit:contain;display:block;margin-bottom:2px}
+/* 조직 표장은 가로로 긴 것이 많습니다(글자가 로고 안에 들어 있는 형태).
+   160px 로 묶으면 5:1 짜리 로고는 높이가 29px 이 되어 **그 안의 한글이 안 읽힙니다.**
+   가로를 260px 까지 열어 두고 높이로 묶습니다 — 정사각 로고는 여전히 높이에서 걸립니다. */
+.org-logo{max-width:260px;max-height:52px;object-fit:contain;display:block;margin-bottom:2px}
 .org-name{font-size:1.05rem;font-weight:800;letter-spacing:-.015em}
 .org-tag{margin:0;font-size:.93rem;line-height:1.6;color:var(--ink-soft)}
 .org-sns-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:2px}
