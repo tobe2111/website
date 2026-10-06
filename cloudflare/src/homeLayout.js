@@ -1,6 +1,6 @@
 // 홈페이지 구성(레이아웃) 시스템
 // 각 상인회는 섹션의 표시 여부·순서·문구를 독립적으로 바꿀 수 있습니다.
-import { esc, orgShortName } from "./util.js";
+import { esc, orgShortName, outletTone } from "./util.js";
 import { parseEmbed, embedSrc } from "./embed.js";
 
 const ico = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
@@ -485,14 +485,15 @@ function renderSection(s, deps) {
     case "press": {
       const list = deps.press || [];
       if (!list.length) return ""; // 고른 기사가 없으면 섹션 자체가 없다 — 빈 상자를 남기지 않는다
-      const cards = list.slice(0, 6).map((p) => `<a class="press-card" href="${esc(p.url)}" target="_blank" rel="noopener nofollow ugc">
-        <span class="pc-top"><b class="pc-src">${esc(p.source || "")}</b>${p.published_at ? `<time>${esc(p.published_at)}</time>` : ""}</span>
-        <strong class="pc-title">${esc(p.title)}</strong>
-        <span class="pc-go">원문 보기 <span aria-hidden="true">↗</span></span></a>`).join("");
       const who = orgShortName(deps.assoc && deps.assoc.name);
+      const [lead, ...rest] = list.slice(0, 6);
       return sectionWrap("section-sub section-press", s.title || `언론 속의 ${who}`,
         s.lead || `${who}이 기사에 실렸습니다. 제목을 누르면 원문으로 갑니다.`,
-        `<div class="press-wall">${cards}</div>`);
+        `<div class="press-stand">
+          ${pressLead(lead)}
+          ${rest.length ? `<ul class="press-rest">${rest.map(pressRow).join("")}</ul>` : ""}
+        </div>`,
+        list.length > 6 ? { href: `${deps.base}/press`, label: "전체보기" } : null);
     }
     case "photos":
       // 사진 붙은 공지가 없으면 섹션 자체가 없다 — 빈 사진판은 '아직 아무것도 안 한 상인회'로 읽힌다
@@ -715,6 +716,27 @@ function featureCardsSection(s, deps) {
 // "골목마다 이야기가 있는 / 우리 동네 가게" 처럼 앞줄이 꾸미고 뒷줄이 이름을 말하는 형태가
 // 한 줄짜리 라벨보다 사람 말에 가깝고, 화면에 리듬이 생깁니다.
 // 관리자가 한 줄로만 적으면 한 줄로 나옵니다(예전과 같음).
+// 기사 카드 두 벌 — 홈 구역과 '전체보기' 화면이 **같은 것**을 쓴다.
+//
+// 사진은 쓰지 않는다(남의 사진이다). 그래서 이 카드에 색을 주는 것은 매체 이름뿐이고,
+// 매체마다 늘 같은 색이 붙어 신문 가판대처럼 읽힌다(outletTone).
+// 맨 위 한 건만 크게 세우고 나머지는 줄로 받친다 — 여섯 장이 같은 크기로 서면
+// 눈이 쉴 데가 없어서, 글자만 있는 구역은 더 허전해 보인다.
+export function pressLead(p) {
+  if (!p) return "";
+  return `<a class="press-lead src-${outletTone(p.source)}" href="${esc(p.url)}" target="_blank" rel="noopener nofollow ugc">
+    <span class="pl-top"><b class="press-src">${esc(p.source || "출처 미확인")}</b>
+      ${p.published_at ? `<time>${esc(p.published_at)}</time>` : ""}</span>
+    <strong class="pl-title">${esc(p.title)}</strong>
+    <span class="pl-go">원문 보기 <span aria-hidden="true">↗</span></span></a>`;
+}
+export function pressRow(p) {
+  return `<li><a class="pr-row src-${outletTone(p.source)}" href="${esc(p.url)}" target="_blank" rel="noopener nofollow ugc">
+    <span class="pr-top"><b class="press-src">${esc(p.source || "출처 미확인")}</b>
+      ${p.published_at ? `<time>${esc(p.published_at)}</time>` : ""}</span>
+    <span class="pr-title">${esc(p.title)}</span></a></li>`;
+}
+
 function sectionWrap(extraClass, title, lead, inner, more) {
   const heading = esc(title || "").replace(/\n/g, "<br />");
   return `<section class="section sec-v5 ${extraClass}"><div class="container">

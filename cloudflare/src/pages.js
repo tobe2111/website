@@ -24,7 +24,7 @@ import { buildEvidence } from "./evidence.js";
 import { resolveExtToken, makeExtToken, extSignUrl } from "./extsign.js";
 import { KEY_PREFIX } from "./apiv1.js";
 import { text } from "./http.js";
-import { parseLayout, renderHome, SECTION_CATALOG, HOME_PRESETS } from "./homeLayout.js";
+import { parseLayout, renderHome, SECTION_CATALOG, HOME_PRESETS, pressLead, pressRow } from "./homeLayout.js";
 import { parseLandingLayout, renderLanding, LANDING_CATALOG, safeSrc } from "./franchise.js";
 import { KINDS, KIND_KEYS, PRESETS, PRESET_KEYS, kindOf, kindById, assocTerms, AREA_THEMES } from "./kinds.js";
 import { bundledBrand } from "./brandAssets.js";
@@ -390,7 +390,8 @@ export async function home(ctx, opts = {}) {
   const coverAlso = coverEv ? await D.sameDayEvents(db, assoc.id, coverEv.event_date, coverEv.id).catch(() => []) : [];
   // 언론 속 우리 골목 — **관리자가 고른 것(live)만** 가져온다. 구역을 껐으면 묻지도 않는다.
   const pressOn = lay.some((x) => x.type === "press" && x.enabled !== false);
-  const pressRows = pressOn ? await D.listPressLive(db, assoc.id, 6).catch(() => []) : [];
+  // 7건을 가져온다 — 6건을 보여주고, 일곱 번째가 있으면 '전체보기' 를 띄운다.
+  const pressRows = pressOn ? await D.listPressLive(db, assoc.id, 7).catch(() => []) : [];
   const cardItems = items.slice(0, 8);
   const covers = await D.coverImagesFor(db, cardItems.map((b) => b.id));
   const businessesHtml = cardItems.map((b) => businessCard(base, b, covers.get(b.id))).join("");
@@ -7597,4 +7598,29 @@ export async function adminPress(ctx) {
   });
   return html(layout({ title: `언론 속의 ${orgShortName(assoc.name)}`, assoc, base, user, body, csrf,
     scripts: `<script src="${assetUrl("/js/bulk-select.js")}" defer></script>` }));
+}
+
+// ================= 언론 속의 우리 골목 — 전체 목록 (손님 화면) =================
+//
+// 홈 구역은 여섯 건까지다. 그런데 올린 기사가 열다섯 건이면 아홉 건은 **아무도 못 본다** —
+// 올려 둔 것이 보이지 않는 자리는 올린 사람에게도 거짓말이 된다. 전체를 보는 화면을 둔다.
+//
+// 여기서도 사진은 없고 본문도 없다. 제목·매체·날짜·원문 링크 넷뿐이다.
+export async function pressList(ctx) {
+  const { db, assoc, base, user, csrf } = ctx;
+  if (assoc.kind === "esign" || assoc.kind === "franchise") return notFoundResponse(ctx);
+  const items = await D.listPressLive(db, assoc.id, 100).catch(() => []);
+  const who = orgShortName(assoc.name);
+  const [lead, ...rest] = items;
+  const body = `<section class="section sec-v5"><div class="container">
+    <div class="pg-head"><div><h1 class="pg-title">언론 속의 ${esc(who)}</h1>
+      <p class="pg-sub">${esc(who)}이 실린 기사 ${items.length}건입니다. 제목을 누르면 원문으로 갑니다.</p></div></div>
+    ${items.length ? `<div class="press-stand">${pressLead(lead)}
+        ${rest.length ? `<ul class="press-rest">${rest.map(pressRow).join("")}</ul>` : ""}</div>`
+      : `<p class="dt-empty"><b>아직 올린 기사가 없습니다</b>상인회가 고른 기사만 여기에 실립니다.</p>`}
+    <p class="press-note">기사 본문은 가져오지 않습니다. 각 기사의 저작권은 해당 언론사에 있습니다.</p>
+  </div></section>`;
+  return html(layout({ title: `언론 속의 ${who}`, assoc, base, user, body, csrf,
+    activeNav: `${base}/press`,
+    description: `${assoc.name} — 언론에 실린 ${who} 기사 ${items.length}건.` }));
 }

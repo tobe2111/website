@@ -340,3 +340,19 @@ export function orgShortName(name) {
   const base = String(name || "").trim().replace(ORG_TAIL, "").trim();
   return base.length >= 2 ? base : String(name || "").trim();
 }
+
+// 매체마다 제 색 — 신문 가판대처럼 보이게 하는 유일한 장치입니다.
+//
+// 사진을 안 쓰기로 했으므로(남의 사진입니다) 기사 카드에 색을 주는 것은 매체 이름뿐입니다.
+// 이름을 숫자로 접어 여덟 색 중 하나를 고릅니다 — **같은 매체는 늘 같은 색**이라
+// 연합뉴스가 어제도 오늘도 같은 색이고, 그래서 색이 장식이 아니라 표시가 됩니다.
+// 색 값은 CSS 에 둡니다(.src-0 ~ .src-7). 여덟 색 모두 흰 글자로 6.7:1 이상입니다.
+// 한글 이름은 코드값이 한 덩어리에 몰려 있어, 흔한 `h*31 + 글자` 를 8 로 나누면
+// 아홉 매체 중 다섯이 같은 색으로 떨어졌다. 섞은 값의 **윗자리**를 쓴다(FNV-1a).
+export function outletTone(name) {
+  const t = String(name || "");
+  let h = 2166136261;
+  for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 16777619); }
+  h >>>= 0;
+  return ((h >>> 28) ^ (h >>> 20) ^ (h >>> 12)) & 7;
+}
