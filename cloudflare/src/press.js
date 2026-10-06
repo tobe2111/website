@@ -112,7 +112,20 @@ const OUTLET = {
   "sisajournal.com": "시사저널", "weekly.chosun.com": "주간조선",
   "naver.com": "네이버", "blog.naver.com": "네이버 블로그", "tistory.com": "티스토리",
   "seocho.go.kr": "서초구청", "sisa-news.kr": "시사뉴스",
+  "heraldcorp.com": "헤럴드경제", "etoday.co.kr": "이투데이", "gukjenews.com": "국제뉴스",
+  "industrynews.co.kr": "인더스트리뉴스", "seoulilbo.com": "서울일보",
+  // 다음·네이버 뉴스는 **매체가 아니라 가판대**다. 어느 신문 기사인지 알 수 없으므로
+  // 그렇게 적는다 — 모르는 것을 아는 척하지 않는다.
+  "v.daum.net": "다음뉴스", "daum.net": "다음뉴스", "n.news.naver.com": "네이버뉴스",
 };
+// 구글 뉴스가 매체 이름 대신 **주소를 적어 보낼 때**가 있다(go.seoul.co.kr 처럼).
+// 그대로 두면 화면에 주소가 뜬다 — 아는 매체면 이름으로 바꿔 준다.
+export function prettyOutlet(s) {
+  const t = String(s || "").trim();
+  if (!t || t.includes(" ") || !t.includes(".")) return t;   // 이미 사람 이름이면 그대로
+  if (!/^[a-z0-9.-]+$/i.test(t)) return t;
+  return outletOf("https://" + t);
+}
 export function outletOf(url) {
   try {
     const h = new URL(url).hostname.toLowerCase().replace(/^www\./, "");
@@ -175,7 +188,7 @@ export function parseGoogleRss(xml) {
     if (source && title.endsWith(" - " + source)) title = title.slice(0, -(source.length + 3)).trim();
     const url = httpOnly(tagOf(b, "link"));
     if (!title || !url) continue;
-    out.push({ kind: "news", title, url, source: source || outletOf(url), date: kstDay(tagOf(b, "pubDate")), snippet: "" });
+    out.push({ kind: "news", title, url, source: prettyOutlet(source) || outletOf(url), date: kstDay(tagOf(b, "pubDate")), snippet: "" });
   }
   return out;
 }
