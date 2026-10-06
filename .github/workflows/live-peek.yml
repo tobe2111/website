@@ -35,7 +35,8 @@ jobs:
           q() {
             echo "### $1" >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
-            npx --yes wrangler@4 d1 execute seocho-db --remote --yes --command "$2" >> $GITHUB_STEP_SUMMARY
+            # 로그와 요약 양쪽에 찍는다 — 요약은 사람이 보기 좋고, 로그는 API 로 읽힌다
+            npx --yes wrangler@4 d1 execute seocho-db --remote --yes --command "$2" | tee -a $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
           }
           q "조직" "SELECT id, slug, name, brand_color, CASE WHEN hero_image='' THEN '없음' ELSE '있음' END AS 대문사진, CASE WHEN logo='' THEN '없음' ELSE '있음' END AS 로고, CASE WHEN tagline='' THEN '없음' ELSE tagline END AS 한줄소개, sns_instagram FROM associations"
