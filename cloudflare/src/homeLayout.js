@@ -1,6 +1,6 @@
 // 홈페이지 구성(레이아웃) 시스템
 // 각 상인회는 섹션의 표시 여부·순서·문구를 독립적으로 바꿀 수 있습니다.
-import { esc } from "./util.js";
+import { esc, orgShortName } from "./util.js";
 import { parseEmbed, embedSrc } from "./embed.js";
 
 const ico = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
@@ -119,7 +119,7 @@ export const SECTION_CATALOG = {
     fields: [{ key: "title", label: "제목", type: "text" }],
   },
   press: {
-    label: "언론 속 우리 골목 (포털 기사 모음)",
+    label: "언론 속의 우리 골목 (포털 기사 모음)",
     fields: [
       { key: "title", label: "제목", type: "text" },
       { key: "lead", label: "설명", type: "textarea" },
@@ -217,7 +217,7 @@ export function defaultLayout(assocName = "우리 상인회") {
     { type: "photos", enabled: true, title: "활동사진", lead: "" },
     // 언론 속 우리 골목 — 관리자가 고른 기사만 들어온다. 고른 것이 없으면 섹션 자체가 없다
     // (수집을 켜지 않은 상인회의 홈은 예전과 똑같이 보인다).
-    { type: "press", enabled: true, title: "언론 속 우리 골목", lead: "" },
+    { type: "press", enabled: true, title: `언론 속의 ${orgShortName(assocName)}`, lead: "" },
     // 영상 — 주소를 넣지 않으면 아예 없는 섹션이다.
     { type: "video", enabled: true, title: "영상으로 보기", url: "", lead: "" },
     // 입점 안내 세 덩어리는 기본에서 끕니다.
@@ -270,7 +270,7 @@ export function parseLayout(json, assocName) {
     const guides = [
       ["deals", { type: "deals", enabled: true, title: "우리 골목 이용권", lead: "" }],
       ["photos", { type: "photos", enabled: true, title: "활동사진", lead: "" }],
-      ["press", { type: "press", enabled: true, title: "언론 속 우리 골목", lead: "" }],
+      ["press", { type: "press", enabled: true, title: `언론 속의 ${orgShortName(assocName)}`, lead: "" }],
       ["video", { type: "video", enabled: true, title: "영상으로 보기", url: "", lead: "" }],
       ["steps", { type: "steps", enabled: false, title: "입점은 이렇게 진행됩니다", lead: "" }],
       ["benefits", { type: "benefits", enabled: false, title: "입점하면 생기는 것", lead: "" }],
@@ -482,8 +482,9 @@ function renderSection(s, deps) {
         <span class="pc-top"><b class="pc-src">${esc(p.source || "")}</b>${p.published_at ? `<time>${esc(p.published_at)}</time>` : ""}</span>
         <strong class="pc-title">${esc(p.title)}</strong>
         <span class="pc-go">원문 보기 <span aria-hidden="true">↗</span></span></a>`).join("");
-      return sectionWrap("section-sub section-press", s.title || "언론 속 우리 골목",
-        s.lead || "우리 골목이 기사에 실렸습니다. 제목을 누르면 원문으로 갑니다.",
+      const who = orgShortName(deps.assoc && deps.assoc.name);
+      return sectionWrap("section-sub section-press", s.title || `언론 속의 ${who}`,
+        s.lead || `${who}이 기사에 실렸습니다. 제목을 누르면 원문으로 갑니다.`,
         `<div class="press-wall">${cards}</div>`);
     }
     case "photos":

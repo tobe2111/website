@@ -21,6 +21,7 @@
 import * as D from "./db.js";
 import { kindOf } from "./kinds.js";
 import { withStoredKeys } from "./keys.js";
+import { orgShortName } from "./util.js";
 
 // 찌를 수 있는 호스트 — 이 둘 말고는 없다.
 export const PRESS_HOSTS = ["openapi.naver.com", "news.google.com"];
@@ -49,11 +50,9 @@ export const stripTags = (s) =>
 //
 // 상인회 이름 그대로 검색하면 거의 안 걸린다 — 기사는 "방배카페골목" 이라고 쓰고
 // "방배카페골목상인회" 라고는 안 쓴다. 그래서 꼬리말을 떼고 골목 이름만 남긴다.
-const TAIL = /(상인회|상가연합회|상인연합회|상가번영회|번영회|상가회|상점가|협동조합|조합|연합회)\s*$/;
-export function defaultTerms(name) {
-  const base = String(name || "").trim().replace(TAIL, "").trim();
-  return base.length >= 2 ? base : String(name || "").trim();
-}
+// 꼬리말을 떼는 규칙은 화면 제목('언론 속의 방배카페골목')과 **같은 것**을 쓴다.
+// 두 벌로 두면 어느 날 한쪽만 고쳐져, 찾는 말과 적힌 말이 달라진다.
+export const defaultTerms = orgShortName;
 // 관리자가 적는 형식: 한 줄에 하나(쉼표도 됨). 앞에 '-' 를 붙이면 제외 낱말.
 //   방배카페골목
 //   방배 카페거리

@@ -355,7 +355,7 @@ const M = "상인회";
   // **"모은 기사가 멋대로 홈에 올라가지 않나"** 다. 올라가면 되돌리는 값이 더 크다.
   {
     const pr = await (await f("/t/seocho/admin/press", { headers: { cookie: martJar } })).text();
-    chk(M, "포털 기사를 모아 두는 화면이 열린다", /언론 속 우리 골목/.test(pr));
+    chk(M, "포털 기사를 모아 두는 화면이 열린다", /언론 속의 .{2,20}</.test(pr));
     const item = await D.addPressItem(env.DB, { associationId: mart.id,
       title: "서초 골목상권에 손님이 돌아왔다", url: "https://example.com/n/1",
       source: "연합뉴스", publishedAt: "2026-10-06", snippet: "기사 본문 첫 문장", kind: "news" });
