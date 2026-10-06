@@ -315,19 +315,16 @@ export function applyHomePreset(arr, preset) {
 // deps: { assoc, base, stats, businessesHtml, noticesHtml, eventsHtml, loggedIn }
 export function renderHome(layout, deps) {
   const on = layout.filter((s) => s.enabled);
-  // 이용권이 아직 하나도 없으면 '사장님께' 카드 하나가 섹션 전체였고, 지도 배너가 따로 한 줄 더
-  // 있었다 — 빈 상자 둘이 세로로 서 있는 모양이다. 둘을 한 띠로 나란히 놓는다(회장님이 고른 시안).
-  // 사이에 사진판·영상처럼 비어서 안 그려지는 섹션이 끼어 있어도 같다. 이용권이 생기면 다시 갈라진다.
-  const dealsAt = on.findIndex((s) => s.type === "deals");
-  const mapAt = on.findIndex((s) => s.type === "mapbanner");
-  const band = dealsAt >= 0 && mapAt > dealsAt && !(deps.deals || []).length;
+  // 이용권이 아직 하나도 없을 때.
+  //
+  // 예전에는 지도 배너를 이용권 자리로 끌어와 둘을 한 띠로 붙였다. 그런데 그러면
+  //   · 큰 카드 둘이 나란히 서서 **둘 다 반만 찬** 모양이 되고,
+  //   · 손님이 가장 많이 쓰는 '점포 지도' 가 제 폭을 잃는다.
+  // 이제는 갈라 놓는다. 이용권 구역은 제목도 설명도 없는 **한 줄 띠**(사장님을 부르는 말)로
+  // 줄이고, 지도 배너는 제 폭으로 혼자 선다. 이용권이 하나라도 생기면 예전처럼 카드 줄이 된다.
+  const slimDeals = !(deps.deals || []).length;
   const out = [];
-  for (let i = 0; i < on.length; i++) {
-    const s = on[i];
-    if (band && i === mapAt) continue;
-    if (band && i === dealsAt) { out.push(renderSection(s, { ...deps, bandMap: mapBannerLink(on[mapAt], deps) })); continue; }
-    out.push(renderSection(s, deps));
-  }
+  for (const s of on) out.push(renderSection(s, { ...deps, slimDeals }));
   return out.join("\n");
 }
 
@@ -461,14 +458,24 @@ function renderSection(s, deps) {
              <a class="deal-how" href="${deps.base}/urdeal">어떻게 이어지나요?</a>`
           : `<a class="btn btn-deal" href="${deps.base}/urdeal">이용권 만들러 가기</a>`}
       </div></article>`;
-      // 이용권 0개 + 지도 배너가 바로 뒤 → 지도와 '사장님께' 카드를 나란히 한 띠로
-      const body = !list.length && deps.bandMap
-        ? `<div class="deal-band">${deps.bandMap}${join}</div>`
-        : `<div class="deal-row${list.length ? "" : " is-empty"}">${list.slice(0, 5).map(card).join("")}${join}</div>`;
+      // 이용권이 0개면 제목·설명 없이 **한 줄 띠**로 줄인다. 아직 아무도 안 만든 것을
+      // 큰 구역으로 벌려 두면 '텅 빈 매대' 로 보인다 — 부르는 말은 한 줄이면 닿는다.
+      if (!list.length && deps.slimDeals) {
+        return `<section class="section sec-v5" style="padding-top:0"><div class="container">
+          <div class="deal-slim">
+            <span class="ds-tag">사장님께</span>
+            <b class="ds-text">${esc(s.title || "우리 골목 이용권")} — 우리 가게 이용권 만들어서 홍보하기</b>
+            <span class="ds-sub">손님이 미리 사고 매장에서 그대로 씁니다. 결제와 정산은 유어딜이 대신합니다.</span>
+            ${deps.urdealSignup
+              ? `<a class="btn btn-deal ds-go" href="${esc(deps.urdealSignup)}" target="_blank" rel="noopener">유어딜 판매자 가입하기 ↗</a>
+                 <a class="deal-how" href="${deps.base}/urdeal">어떻게 이어지나요?</a>`
+              : `<a class="btn btn-deal ds-go" href="${deps.base}/urdeal">이용권 만들러 가기</a>`}
+          </div></div></section>`;
+      }
+      const body = `<div class="deal-row">${list.slice(0, 5).map(card).join("")}${join}</div>`;
       return sectionWrap("section-deals", s.title || "우리 골목 이용권",
-        s.lead || (list.length ? "미리 사 두고 매장에서 그대로 쓰세요." : "우리 골목 가게의 이용권을 미리 사고 매장에서 그대로 씁니다."),
-        body,
-        list.length ? { href: `${deps.base}/urdeal`, label: "유어딜에서 더 보기" } : null);
+        s.lead || "미리 사 두고 매장에서 그대로 쓰세요.",
+        body, { href: `${deps.base}/urdeal`, label: "유어딜에서 더 보기" });
     }
     // 언론 속 우리 골목 —— 관리자가 승인한 기사만 온다(deps.press).
     //
@@ -559,8 +566,27 @@ function renderSection(s, deps) {
         <a class="cc-val" href="${href}">${val}</a>
       </li>`).join("");
       const hours = esc(s.hours || "");
+      // 두 기둥으로 연다. 왼쪽은 연락처, 오른쪽은 **이 상인회가 누구인가**.
+      //
+      // 예전에는 전화·주소 두 칸이 가로로 길게 늘어나 페이지 끝이 허전했다. 마지막 구역은
+      // "여기가 어디였지" 에 답하는 자리다 — 간판·이름·한 줄 소개·SNS 가 거기 있어야 한다.
+      // 전부 이미 가진 값이라 새로 적을 것이 없고, 없는 값은 그 줄이 안 나온다.
+      const sns = (deps.assocSns || []).map((x) =>
+        `<a class="org-sns" href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.label)} <span aria-hidden="true">↗</span></a>`).join("");
+      const org = `<aside class="contact-org">
+        ${deps.logoUrl ? `<img class="org-logo" src="${esc(deps.logoUrl)}" alt="" />` : ""}
+        <b class="org-name">${esc(a.name || "")}</b>
+        ${a.tagline ? `<p class="org-tag">${esc(a.tagline)}</p>` : ""}
+        ${sns ? `<div class="org-sns-row">${sns}</div>` : ""}
+        <a class="org-join" href="${deps.base}/register">우리 가게도 등록하기 <span aria-hidden="true">→</span></a>
+      </aside>`;
       return sectionWrap("section-note", s.title || "연락처·오시는 길", "",
-        `<ul class="contact-grid">${cards}</ul>${hours ? `<p class="contact-hours">${hours}</p>` : ""}`);
+        `<div class="contact-two">
+          <div class="contact-left">
+            <ul class="contact-grid">${cards}</ul>
+            ${hours ? `<p class="contact-hours">${hours}</p>` : ""}
+          </div>${org}
+        </div>`);
     }
     case "cta":
       // 페이지를 맺는 한 장. 위쪽이 전부 흰 바탕 위 납작한 면이라, 마지막만 브랜드색으로
