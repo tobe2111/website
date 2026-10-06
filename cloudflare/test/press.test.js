@@ -315,3 +315,21 @@ test("켜고 끄기와 검색어가 저장된다 — 끄면 다음 아침부터 
   await post(env, j, "/t/bangbae/admin/press/settings", { press_terms: "방배카페골목" }, "/t/bangbae/admin/press");
   assert.equal(await D.pressEnabled(env.DB, a.id), false, "체크를 빼면 꺼진다");
 });
+
+test("구역 제목이 '언론 속의 방배카페골목' — 아무도 '우리 골목'을 검색하지 않는다", async () => {
+  const env = makeEnv();
+  const a = await seed(env);
+  await D.addPressItem(env.DB, { associationId: a.id, title: "방배카페골목 미식로드", url: "https://yna.co.kr/9", source: "연합뉴스" });
+  await D.setPressStatus(env.DB, (await D.listPress(env.DB, a.id, "new", 1))[0].id, a.id, "live");
+
+  const home = await (await get(env, jar(), "/t/bangbae/")).text();
+  assert.match(home, /언론 속의 방배카페골목/, "상인회 이름에서 꼬리말을 뗀 골목 이름을 쓴다");
+  assert.ok(!home.includes("언론 속 우리 골목"), "'우리 골목' 은 어느 상인회나 똑같은 말이다");
+
+  // 상인회마다 제 이름이 들어간다
+  const b = await seed(env, { slug: "seorae", name: "서래마을 상가번영회" });
+  await D.addPressItem(env.DB, { associationId: b.id, title: "서래마을 축제", url: "https://yna.co.kr/8", source: "연합뉴스" });
+  await D.setPressStatus(env.DB, (await D.listPress(env.DB, b.id, "new", 1))[0].id, b.id, "live");
+  const home2 = await (await get(env, jar(), "/t/seorae/")).text();
+  assert.match(home2, /언론 속의 서래마을/, "'상가번영회' 꼬리말도 뗀다");
+});

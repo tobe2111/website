@@ -1,6 +1,6 @@
 // 공개/인증 페이지 핸들러 (async). ctx = { env, db, assoc, base, user, url, query, csrf, params }
 import * as D from "./db.js";
-import { esc, cap, clip, openBadge, openNow, hoursLine, shortAddr, fmtBytes, kstStamp, kstDate, prettyPath, prettyDomain, safeNext, parseCookies, decomposeHours } from "./util.js";
+import { esc, cap, clip, openBadge, openNow, hoursLine, shortAddr, fmtBytes, kstStamp, kstDate, prettyPath, prettyDomain, safeNext, parseCookies, decomposeHours, orgShortName } from "./util.js";
 import { parseMemberRoster, markExisting, guessPrefix, describeColumns, IMPORT_MAX, mapCategory } from "./roster.js";
 import { STORED_KEYS, storedKeyHint } from "./keys.js";
 import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG, ORIGIN, assetUrl, brandLogo } from "./render.js";
@@ -7564,7 +7564,7 @@ export async function adminPress(ctx) {
 
     <section class="panel">
       <h2 class="panel-title">홈에 올라가 있는 기사 <span class="badge ${live.length ? "badge-ok" : "badge-muted"}">${live.length}건</span></h2>
-      ${live.length ? `<p class="panel-hint">홈 '언론 속 우리 골목' 구역에 최신 6건까지 보입니다.</p>
+      ${live.length ? `<p class="panel-hint">홈의 '언론 속의 ${esc(orgShortName(assoc.name))}' 구역에 최신 6건까지 보입니다.</p>
         ${bar("pressLive", `<button name="act" value="hidden" class="btn btn-xs btn-ghost">홈에서 내리기</button>`)}
         <ul class="press-list">${live.map((p) => row(p, "pressLive")).join("")}</ul>`
         : `<p class="dt-empty"><b>아직 홈에 올린 기사가 없습니다</b>올린 기사가 하나도 없으면 홈에 그 구역 자체가 안 나옵니다 — 빈 칸은 안 생깁니다.</p>`}
@@ -7580,11 +7580,11 @@ export async function adminPress(ctx) {
       </div></details>` : ""}`;
 
   const body = await consoleShell(ctx, {
-    title: "언론 속 우리 골목", active: "press",
+    title: `언론 속의 ${orgShortName(assoc.name)}`, active: "press",
     eyebrow: `<a href="${base}/admin#s-content">← 공지·행사</a>`,
     sub: "포털에 올라온 우리 골목 기사를 모아 둡니다. 고른 것만 홈에 올라갑니다.",
     body: inner,
   });
-  return html(layout({ title: "언론 속 우리 골목", assoc, base, user, body, csrf,
+  return html(layout({ title: `언론 속의 ${orgShortName(assoc.name)}`, assoc, base, user, body, csrf,
     scripts: `<script src="${assetUrl("/js/bulk-select.js")}" defer></script>` }));
 }

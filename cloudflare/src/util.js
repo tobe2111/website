@@ -329,3 +329,14 @@ export const safeNext = (p) => {
   const s = String(p || "");
   return /^\/[\w\-./%가-힣]*$/.test(s) && !s.startsWith("//") && s.length <= 300 ? s : "";
 };
+
+// 조직 이름에서 꼬리말을 뗀 '골목 이름'.
+//
+// 화면에 "언론 속의 방배카페골목상인회" 라고 쓰면 아무도 그렇게 부르지 않는 이름이 된다.
+// 기사도 "방배카페골목" 이라고 쓰지 "방배카페골목상인회" 라고는 안 쓴다.
+// 뗐을 때 너무 짧아지면(한 글자) 원래 이름을 그대로 쓴다.
+const ORG_TAIL = /(상인회|상가연합회|상인연합회|상가번영회|번영회|상가회|상점가|협동조합|조합|연합회)\s*$/;
+export function orgShortName(name) {
+  const base = String(name || "").trim().replace(ORG_TAIL, "").trim();
+  return base.length >= 2 ? base : String(name || "").trim();
+}
