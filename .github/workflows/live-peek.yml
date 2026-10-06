@@ -9,8 +9,13 @@
 
 name: 라이브 현황 보기
 
+# 이 세션의 깃허브 자격으로는 '손으로 돌리기'(workflow_dispatch)가 403 이라,
+# 이 파일이 바뀐 푸시에도 한 번 돌게 둔다. 읽기 전용이라 여러 번 돌아도 무해하다.
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/live-peek.yml'
 
 permissions:
   contents: read
