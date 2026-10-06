@@ -61,16 +61,24 @@ if (!orgs.length) {
   process.exit(0);
 }
 
+// 이미 들고 있는 주소. 이게 없으면 로그가 "찾은 글 40건" 이라고만 말하는데,
+// 그중 몇이 **처음 보는 글**인지가 빠져 있어 "오늘 새로 들어온 게 있나" 에 답하지 못한다.
+// (UNIQUE 가 알아서 걸러 주므로 넣는 결과는 같다 — 달라지는 것은 사람이 읽는 줄이다.)
+const knownUrls = new Set(query("SELECT url FROM press").map((r) => String(r.url)));
+
 const lines = [];
-let found = 0;
+let found = 0, fresh = 0;
 for (const o of orgs) {
   const terms = parseTerms(o.terms, o.name);
   // 여기서는 사람이 기다리고 있다. 평소(24건)보다 넉넉히 가져온다.
   const items = await collect(env, { terms, max: 60 });
   found += items.length;
-  console.log(`\n■ ${o.name} — 찾은 글 ${items.length}건 (검색어: ${terms.include.join(" · ")})`);
+  const isNew = (u) => !knownUrls.has(String(u));
+  const n = items.filter((it) => isNew(it.url)).length;
+  fresh += n;
+  console.log(`\n■ ${o.name} — 찾은 글 ${items.length}건 (그중 처음 보는 글 ${n}건 · 검색어: ${terms.include.join(" · ")})`);
   for (const it of items) {
-    console.log(`   · [${it.source}] ${it.date || "날짜없음"} ${it.title}`);
+    console.log(`   ${isNew(it.url) ? "✚" : "·"} [${it.source}] ${it.date || "날짜없음"} ${it.title}`);
     lines.push(`INSERT INTO press (association_id, title, url, source, published_at, snippet, kind, term) VALUES (`
       + `${Number(o.id)}, ${q(it.title)}, ${q(it.url)}, ${q(it.source)}, ${q(it.date)}, ${q(it.snippet)}, `
       + `${q(it.kind === "blog" ? "blog" : "news")}, ${q(terms.include[0] || "")})`
@@ -89,4 +97,4 @@ console.log(wrangler(["--file", file]));
 
 const after = query("SELECT status, COUNT(*) AS n FROM press GROUP BY status");
 console.log("\n지금 대기 줄:", after.map((r) => `${r.status} ${r.n}건`).join(" · ") || "비어 있음");
-console.log("찾은 글 " + found + "건 · 홈에는 아직 아무것도 안 뜹니다 — 고른 것만 올라갑니다.");
+console.log(`찾은 글 ${found}건 · 그중 처음 보는 글 ${fresh}건(✚ 표시) · 홈에는 아직 아무것도 안 뜹니다 — 고른 것만 올라갑니다.`);

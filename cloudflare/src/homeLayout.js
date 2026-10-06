@@ -352,9 +352,10 @@ function renderSection(s, deps) {
     //   ① **날짜가 지나면 이 구역이 통째로 사라진다.** coverEvent 가 지난 행사를 안 준다.
     //      끝난 축제가 대문에 남아 있는 것은 "관리 안 하는 상인회" 로 읽히는데, 그걸 막는
     //      확실한 방법은 사람이 내리는 걸 기억하게 하는 게 아니라 아예 안 남게 하는 것이다.
-    //   ② 제목은 h2 다. 커 보이지만 이 페이지의 h1 은 아래 대문에 있는 **상인회 이름**이고,
-    //      한 쪽에 h1 이 둘이면 화면을 읽어 주는 프로그램이 "이 페이지는 무엇인가" 에
-    //      두 가지로 답한다. 이 축제의 h1 은 행사 상세 쪽에 있다.
+    //   ② 제목은 h1 이다. 예전에는 h2 였다 — 이 화면의 h1 이 아래 사진 대문의 **상인회 이름**
+    //      이었기 때문이다. 지금은 축제가 서면 그 사진 대문이 찾기 띠로 눕고 큰 제목이 없어지므로,
+    //      h1 을 그대로 h2 로 두면 **이 쪽에 h1 이 하나도 없게 된다**(화면을 읽어 주는 프로그램이
+    //      "이 페이지는 무엇인가" 에 답하지 못한다). 축제가 서 있는 동안 이 쪽은 축제 쪽이 맞다.
     //   ③ 글자색은 --on-brand 다. 브랜드색이 밝으면(민트·노랑) 흰 글자가 1.5:1 까지
     //      떨어져 안 읽힌다 — render.js 가 흰색과 먹색 중 읽히는 쪽을 골라 준다.
     case "festcover": {
@@ -366,7 +367,7 @@ function renderSection(s, deps) {
       return `<section class="fest-cover"><div class="container fc-in">
         <div class="fc-copy">
           ${dd ? `<span class="fc-dday">${esc(dd)}</span>` : ""}
-          <h2 class="fc-title">${esc(e.title)}</h2>
+          <h1 class="fc-title">${esc(e.title)}</h1>
           <p class="fc-when">${esc(deps.coverWhen || "")}${e.time_text ? `<br />${esc(e.time_text)}` : ""}</p>
           ${sub ? `<p class="fc-where">${esc(sub)}</p>` : ""}
           ${also.length ? `<ul class="fc-prog"><li class="fc-prog-h">같은 날 함께</li>${
@@ -486,14 +487,18 @@ function renderSection(s, deps) {
       const list = deps.press || [];
       if (!list.length) return ""; // 고른 기사가 없으면 섹션 자체가 없다 — 빈 상자를 남기지 않는다
       const who = orgShortName(deps.assoc && deps.assoc.name);
-      const [lead, ...rest] = list.slice(0, 6);
+      // 홈에 거는 건수. 머리기사 하나 + 두 단 목록 아홉.
+      // 올려 둔 것이 보이지 않는 자리는 올린 사람에게도 거짓말이라, 목록이 감당하는 만큼은 건다
+      // (두 단이라 아홉이면 한 단에 다섯 줄 — 더 늘리면 아래 구역이 화면 밖으로 밀린다).
+      const HOME_PRESS = 10;
+      const [lead, ...rest] = list.slice(0, HOME_PRESS);
       return sectionWrap("section-sub section-press", s.title || `언론 속의 ${who}`,
         s.lead || `${who}이 기사에 실렸습니다. 제목을 누르면 원문으로 갑니다.`,
         `<div class="press-stand">
           ${pressLead(lead)}
           ${rest.length ? `<ul class="press-rest">${rest.map(pressRow).join("")}</ul>` : ""}
         </div>`,
-        list.length > 6 ? { href: `${deps.base}/press`, label: "전체보기" } : null);
+        list.length > HOME_PRESS ? { href: `${deps.base}/press`, label: "전체보기" } : null);
     }
     case "photos":
       // 사진 붙은 공지가 없으면 섹션 자체가 없다 — 빈 사진판은 '아직 아무것도 안 한 상인회'로 읽힌다
@@ -659,6 +664,29 @@ function heroSection(s, deps) {
       <button class="btn btn-primary" type="submit" aria-label="검색"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg></button>
       ${sug ? `<datalist id="storeSuggest">${deps.suggestNames.map((n) => `<option value="${esc(n)}"></option>`).join("")}</datalist>` : ""}
     </form>`;
+
+  // ── 축제가 대문에 서 있으면 이 구역은 '찾기 띠' 가 된다 ──────────────────
+  //
+  // 대문이 둘이면 둘 다 안 읽힌다. 민트색 축제 대문이 한 화면을 다 쓰고 바로 밑에서
+  // 사진 대문이 또 한 화면을 다 쓰면, 손님은 두 번을 쓸어내려야 가게 목록에 닿는다.
+  // 게다가 둘은 같은 말을 한다 — 머리줄 로고가 이미 상인회 이름을 말하고 있는데
+  // 사진 대문이 그 이름을 한 번 더 외친다.
+  //
+  // 그래서 **축제가 서 있는 동안만** 이 구역을 한 줄로 눕힌다. 지우지는 않는다 —
+  // 검색은 손님이 이 홈에서 가장 많이 쓰는 것이고, '회원 신청하기' 는 상인회가 이
+  // 홈으로 이루려는 첫째 목표다. 큰 제목·배경 사진·부제만 걷는다.
+  //
+  // 축제가 끝나면 coverEvent 가 비고, 이 가지는 저절로 꺼져 예전 사진 대문이 돌아온다.
+  // 되돌리는 것을 사람이 기억하게 하지 않는다.
+  if (deps.coverEvent) {
+    return `<section class="hero-bar">
+      <div class="container hb-in">
+        ${searchForm}
+        <p class="hb-facts">${facts}</p>
+        <a class="btn btn-ghost hb-join" href="${base}/register">회원 신청하기</a>
+      </div>
+    </section>`;
+  }
 
   // 'search' 구성은 사진을 아예 쓰지 않고 검색창을 첫 화면의 주인공으로 둔다.
   // 사진이 없거나 품질이 들쭉날쭉한 상권에서 오히려 화면이 단정해진다.
