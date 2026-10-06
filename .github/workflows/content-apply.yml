@@ -35,7 +35,7 @@ jobs:
   apply:
     if: github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -51,6 +51,8 @@ jobs:
 
       # 새 칸(ALTER TABLE)은 배포 뒤 **첫 요청**에 붙는다. 아직 아무도 사이트를 안 열었으면
       # 칸이 없는 상태라 아래 INSERT 가 통째로 실패한다. 그래서 먼저 한 번 깨운다.
+      #
+      # 다만 이것만으로는 모자랐다 — 아래 '반영' 의 긴 주석을 보라.
       - name: 사이트를 한 번 깨운다 (새 칸 적용)
         run: curl -fsS -o /dev/null --retry 3 --max-time 30 https://website.tobe211167.workers.dev/ || true
 
@@ -64,14 +66,44 @@ jobs:
           done
 
       # 파일 하나씩 돈다. 파일이 늘어도 이 워크플로를 고칠 일이 없다.
-      - name: 라이브 DB 에 반영
+      #
+      # ⚠️ 왜 다시 시도하나 — 실제로 한 번 터진 자리다.
+      #
+      # 새 칸을 쓰는 내용 파일(events.cover)을 그 칸을 만드는 코드와 **같은 푸시**에 넣었더니
+      # 여기서 `no such column: cover` 로 멈췄다. 이 워크플로와 '배포' 가 같은 푸시에 나란히
+      # 출발하는데, 위에서 사이트를 깨울 때는 아직 **옛 워커**가 서비스 중이라 마이그레이션이
+      # 안 돌기 때문이다. 깨우기 한 번으로는 못 막는다 — 경주의 결과가 그때그때 다르다.
+      #
+      # 순서를 강제하는 길(workflow_run 으로 배포 뒤에 돌리기)도 있지만, 그러면 이 파일이
+      # 기본 브랜치에 있어야만 도는 등 규칙이 하나 더 는다. 내용 파일은 어차피 '두 번 돌아도
+      # 같아야 한다' 는 계약을 이미 지키므로(맨 위 주석), **될 때까지 다시 돌리는** 쪽이
+      # 규칙을 안 늘리면서 이 경주를 통째로 없앤다. 성공한 파일을 다시 돌려도 아무 일이 없다.
+      - name: 라이브 DB 에 반영 (배포가 늦으면 될 때까지 다시)
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          for f in cloudflare/content/*.sql; do
-            echo "── $f"
-            npx --yes wrangler@4 d1 execute seocho-db --remote --yes --file="$f"
+          attempt=1
+          max=6
+          while :; do
+            failed=""
+            for f in cloudflare/content/*.sql; do
+              echo "── $f (${attempt}번째)"
+              npx --yes wrangler@4 d1 execute seocho-db --remote --yes --file="$f" || failed="$failed $f"
+            done
+            if [ -z "$failed" ]; then
+              echo "✓ 내용 파일 전부 반영 (${attempt}번째에 성공)"
+              break
+            fi
+            if [ "$attempt" -ge "$max" ]; then
+              echo "::error::내용 반영이 ${max}번 모두 실패했습니다 —${failed}. 배포 로그를 함께 보세요(새 칸이 안 붙었을 수 있습니다)."
+              exit 1
+            fi
+            echo "아직 안 되는 파일:${failed}"
+            echo "배포가 아직 안 끝났을 수 있습니다. 사이트를 다시 깨우고 45초 뒤 다시 시도합니다."
+            curl -fsS -o /dev/null --max-time 30 https://website.tobe211167.workers.dev/ || true
+            sleep 45
+            attempt=$((attempt + 1))
           done
 
       # 넣었다는 말만으로는 들어간 줄 모른다.
