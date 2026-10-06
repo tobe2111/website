@@ -39,6 +39,29 @@ jobs:
           echo "깨우기 → HTTP $code" | tee -a $GITHUB_STEP_SUMMARY
           sleep 3
 
+      # 숫자 말고 **화면**도 한 번 읽는다.
+      #
+      # D1 에 기사가 열다섯 건 있다는 것과, 손님이 그 기사를 본다는 것은 다른 말이다.
+      # 배포가 올라갔는데 홈이 예전 모양으로 뜨는 사고를 숫자로는 못 잡는다.
+      # 그래서 홈과 기사 목록을 받아 와 **표시가 몇 개 보이는지**만 센다. 본문은 안 남긴다.
+      - name: 화면이 그 모양으로 뜨는가
+        run: |
+          site=https://xn--bb0bw4x46a2a173sv7g.kr
+          peek() {
+            f=$(mktemp)
+            code=$(curl -s -o "$f" -w '%{http_code}' --max-time 30 "$site$1" || echo 000)
+            echo "- \`$1\` → HTTP $code · $(wc -c <"$f") 바이트" | tee -a $GITHUB_STEP_SUMMARY
+            shift
+            for pat in "$@"; do
+              n=$(grep -o "$pat" "$f" | wc -l)
+              echo "    - \`$pat\` ×$n" | tee -a $GITHUB_STEP_SUMMARY
+            done
+            rm -f "$f"
+          }
+          echo "### 화면" | tee -a $GITHUB_STEP_SUMMARY
+          peek "/" 'press-stand' 'press-lead' 'pr-row' 'fest-cover' '전체보기'
+          peek "/press" 'pr-row' '언론 속의'
+
       - name: 숫자만 읽어 온다
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
