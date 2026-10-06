@@ -436,6 +436,10 @@ export const VERIFY_HOW = {
   // 문자로 보낸 링크를 눌렀다는 것은 그 번호로 받았다는 뜻일 뿐, 그 사람이라는 증명이
   // 아니다 — 링크는 남에게 넘길 수 있다. 의사록에서 구별되도록 이름만 준다.
   link: "문자 링크",
+  // 단톡방 링크로 들어와 명부(상호·대표자 성함·번호 뒷 네 자리)와 맞은 표. 문자 링크보다
+  // 조금 낫다 — 번호 뒷자리를 알아야 통과한다. 그래도 간판을 보고 상호와 성함을 아는
+  // 사람이 뒷자리를 맞히면 들어올 수 있으니, 계정에는 붙이지 않는다.
+  roster: "명부 대조",
 };
 export const verifyHowLabel = (how) => VERIFY_HOW[how] || "";
 export const isVerified = (u) => !!(u && u.verified_at);
@@ -970,8 +974,8 @@ export const pollVerifyLevel = (p) => {
   const n = Number(p && p.verify) || 0;
   return n === 1 || n === 2 ? n : 0;
 };
-export const createPoll = (db, { associationId, title, body = "", closesAt = "", verify = 0, createdBy = null }) =>
-  run(db, "INSERT INTO polls (association_id, title, body, closes_at, verify, created_by) VALUES (?,?,?,?,?,?)", associationId, title, body, closesAt, Number(verify) || 0, createdBy).then((r) => first(db, "SELECT * FROM polls WHERE id=?", r.meta.last_row_id));
+export const createPoll = (db, { associationId, title, body = "", closesAt = "", verify = 0, rosterLink = 0, secret = 0, createdBy = null }) =>
+  run(db, "INSERT INTO polls (association_id, title, body, closes_at, verify, roster_link, secret, created_by) VALUES (?,?,?,?,?,?,?,?)", associationId, title, body, closesAt, Number(verify) || 0, rosterLink ? 1 : 0, secret ? 1 : 0, createdBy).then((r) => first(db, "SELECT * FROM polls WHERE id=?", r.meta.last_row_id));
 export const listPolls = (db, aid) => all(db, "SELECT * FROM polls WHERE association_id=? ORDER BY closed, created_at DESC", aid);
 export const getPoll = (db, id) => first(db, "SELECT * FROM polls WHERE id=?", id);
 export const closePoll = (db, id) => run(db, "UPDATE polls SET closed=1 WHERE id=?", id);
@@ -982,28 +986,71 @@ export const reopenPoll = (db, id) =>
     WHERE id=?`, kstToday(), id);
 // 공지·행사는 그 자리에서 고칠 수 있는데 투표만 안 됐다. 오타 하나에 지우고 다시 만들면
 // 이미 넣은 표가 함께 사라진다 — 그건 고치는 게 아니라 무르는 것이다.
-export const updatePoll = (db, id, aid, { title, body = "", closesAt = "", verify = 0 }) =>
-  run(db, "UPDATE polls SET title=?, body=?, closes_at=?, verify=? WHERE id=? AND association_id=?", title, body, closesAt, Number(verify) || 0, id, aid);
+// 비밀 여부(secret)는 **표가 하나라도 들어온 뒤에는 바꾸지 않는다.** 공개→비밀로 바꾸면
+// 이미 이름과 함께 적힌 표가 그대로 남아 비밀이 아니고, 비밀→공개로 바꾸면 이름 없는 표에
+// 이름을 붙일 길이 없어 명세가 반쪽이 된다. 어느 쪽이든 '바꿨다' 고 말하면 거짓이 된다.
+export const updatePoll = (db, id, aid, { title, body = "", closesAt = "", verify = 0, rosterLink = 0, secret = null }) =>
+  secret === null
+    ? run(db, "UPDATE polls SET title=?, body=?, closes_at=?, verify=?, roster_link=? WHERE id=? AND association_id=?", title, body, closesAt, Number(verify) || 0, rosterLink ? 1 : 0, id, aid)
+    : run(db, "UPDATE polls SET title=?, body=?, closes_at=?, verify=?, roster_link=?, secret=? WHERE id=? AND association_id=?", title, body, closesAt, Number(verify) || 0, rosterLink ? 1 : 0, secret ? 1 : 0, id, aid);
 // 표를 먼저 지운다 — 외래키 cascade 가 켜져 있다는 보장이 없어, 안 지우면 주인 없는 표가 남는다.
 export async function deletePoll(db, id, aid) {
   const p = await first(db, "SELECT id FROM polls WHERE id=? AND association_id=?", id, aid);
   if (!p) return;
   await run(db, "DELETE FROM poll_votes WHERE poll_id=?", id);
   await run(db, "DELETE FROM poll_otp WHERE poll_id=?", id);
+  await run(db, "DELETE FROM poll_ballots WHERE poll_id=?", id);
+  await run(db, "DELETE FROM poll_tries WHERE poll_id=?", id);
   await run(db, "DELETE FROM polls WHERE id=? AND association_id=?", id, aid);
 }
 export const countPollVotes = async (db, pollId) =>
   Number((await first(db, "SELECT COUNT(*) AS n FROM poll_votes WHERE poll_id=?", pollId))?.n) || 0;
 export const isPollOpen = (p) => p && !p.closed && (!p.closes_at || p.closes_at >= kstToday());
+export const pollIsSecret = (p) => !!(p && Number(p.secret));
+export const pollRosterLink = (p) => !!(p && Number(p.roster_link));
+
 export const votePoll = (db, pollId, userId, choice, verify = "") =>
   run(db, "INSERT INTO poll_votes (poll_id, user_id, choice, verify) VALUES (?,?,?,?) ON CONFLICT(poll_id, user_id) DO UPDATE SET choice=excluded.choice, verify=excluded.verify, created_at=datetime('now')", pollId, userId, choice, verify || "");
-export const pollResults = async (db, pollId) => {
-  const rows = await all(db, "SELECT choice, COUNT(*) AS n FROM poll_votes WHERE poll_id=? GROUP BY choice", pollId);
+
+// 비밀투표 한 표. 두 군데에 따로 적는다 —
+//   poll_votes   : 이분이 넣으셨다 (choice 는 빈 칸으로 남긴다)
+//   poll_ballots : 무엇이 한 표 들어왔다 (누구인지 없다)
+//
+// 이미 넣으신 분이면 **아무것도 하지 않고 false 를 돌려준다.** 비밀투표는 바꿀 수 없다 —
+// 바꾸려면 "이분의 지난 표" 를 찾아 지워야 하는데, 그걸 찾을 수 있다면 애초에 비밀이 아니다.
+// 화면에서도 누르기 전에 그렇게 적는다(누른 뒤에 알면 속은 것이 된다).
+export async function castSecretVote(db, pollId, userId, choice, verify = "") {
+  const had = await first(db, "SELECT id FROM poll_votes WHERE poll_id=? AND user_id=?", pollId, userId);
+  if (had) return false;
+  // 두 번 눌리는 사이에 들어오면 위 검사를 둘 다 통과한다. 마지막으로 막는 것은
+  // poll_votes 의 UNIQUE(poll_id, user_id) 다 — 거기서 걸리면 표는 넣지 않고 조용히 물러난다.
+  // (사람 줄이 먼저다. 표를 먼저 넣으면 경합에서 주인 없는 표가 하나 더 생긴다)
+  try {
+    await run(db, "INSERT INTO poll_votes (poll_id, user_id, choice, verify) VALUES (?,?,'',?)", pollId, userId, verify || "");
+  } catch { return false; }
+  // seq 는 무작위다. 자동 번호를 그대로 두면 들어온 차례가 남고, 차례가 남으면
+  // poll_votes 의 차례와 나란히 놓는 것만으로 누가 무엇을 골랐는지가 드러난다.
+  const seq = Math.floor(Math.random() * 1e9);
+  await run(db, "INSERT INTO poll_ballots (poll_id, choice, seq) VALUES (?,?,?)", pollId, choice, seq);
+  return true;
+}
+
+// 집계. 비밀 안건은 표(poll_ballots)에서, 공개 안건은 사람 표(poll_votes)에서 센다.
+// total 은 **언제나 사람 수**다 — 비밀 안건에서도 "몇 분이 참여하셨나" 는 떳떳하게 셀 수 있고,
+// 미투표자 명단도 그 수에서 나온다.
+export const pollResults = async (db, pollId, poll = null) => {
+  const p = poll || await first(db, "SELECT secret FROM polls WHERE id=?", pollId);
   const r = { yes: 0, no: 0, abstain: 0, total: 0 };
-  for (const row of rows) { if (row.choice in r) r[row.choice] = row.n; r.total += row.n; }
+  r.total = Number((await first(db, "SELECT COUNT(*) AS n FROM poll_votes WHERE poll_id=?", pollId))?.n) || 0;
+  const src = pollIsSecret(p)
+    ? await all(db, "SELECT choice, COUNT(*) AS n FROM poll_ballots WHERE poll_id=? GROUP BY choice", pollId)
+    : await all(db, "SELECT choice, COUNT(*) AS n FROM poll_votes WHERE poll_id=? GROUP BY choice", pollId);
+  for (const row of src) if (row.choice in r) r[row.choice] = Number(row.n) || 0;
   return r;
 };
 export const userVote = async (db, pollId, userId) => (await first(db, "SELECT choice FROM poll_votes WHERE poll_id=? AND user_id=?", pollId, userId))?.choice || null;
+// 비밀 안건에서는 choice 가 빈 칸이라 userVote 로는 '넣었는지' 를 알 수 없다. 줄이 있는지만 본다.
+export const userHasVoted = async (db, pollId, userId) => !!(await first(db, "SELECT 1 AS x FROM poll_votes WHERE poll_id=? AND user_id=?", pollId, userId));
 // 한 표 한 표를 사람 이름과 함께 — 의사록에 붙이는 명세다. 무엇으로 확인된 표인지까지 적는다.
 // 넣은 순서(created_at)로 준다: 의사록의 연번이 곧 표가 들어온 순서가 되어, 나중에
 // "몇 번째 표까지가 마감 전인가" 를 따질 때 줄을 다시 세지 않아도 된다.
@@ -1024,16 +1071,18 @@ export const listPollNonVoters = (db, pollId, aid) =>
     ORDER BY u.verified_at = '' DESC, u.name`, aid, pollId);
 // 링크를 보낼 사람들 — 회원 전원과 각자의 표(있으면). 대장 한 줄에 '보냄/안 보냄' 이
 // 아니라 '넣음/안 넣음' 이 보여야, 총무가 누구에게 다시 보낼지 그 자리에서 판단한다.
+// voted 를 따로 주는 이유: 비밀 안건에서는 choice 가 빈 칸이라, 그걸로 '넣었나' 를 세면
+// 다 넣으셨는데도 화면이 "0명 투표함" 으로 뜬다. 그러면 총무가 전체에게 다시 전화를 돌린다.
 export const listPollRecipients = (db, pollId, aid) =>
   all(db, `SELECT u.id, u.name, u.phone, u.role, b.name AS business_name,
-      v.choice, v.verify
+      v.choice, v.verify, (v.id IS NOT NULL) AS voted
     FROM users u LEFT JOIN businesses b ON b.owner_id = u.id
       LEFT JOIN poll_votes v ON v.user_id = u.id AND v.poll_id = ?
     WHERE u.association_id=? AND u.role IN ('MERCHANT','ADMIN','STAFF')
-    ORDER BY v.choice IS NULL DESC, u.name`, pollId, aid);
+    ORDER BY v.id IS NULL DESC, u.name`, pollId, aid);
 // 표를 무엇으로 확인해 받았는지의 내역 — 결의서에 한 줄로 적는다
 export async function pollVerifyBreakdown(db, pollId) {
-  const out = { kakao: 0, otp: 0, admin: 0, link: 0, none: 0 };
+  const out = { kakao: 0, otp: 0, admin: 0, link: 0, roster: 0, none: 0 };
   for (const r of await all(db, "SELECT verify, COUNT(*) AS n FROM poll_votes WHERE poll_id=? GROUP BY verify", pollId)) {
     const k = out[r.verify] === undefined ? "none" : r.verify;
     out[k] += Number(r.n) || 0;
@@ -1044,14 +1093,76 @@ export async function pollVerifyBreakdown(db, pollId) {
 // IN(?,?,...) 나열 대신 서브쿼리: D1 은 쿼리당 바인드 파라미터 100개 한도라 안건 100개부터 터진다
 export async function pollResultsBulk(db, aid) {
   const out = new Map();
-  for (const row of await all(db, `SELECT poll_id, choice, COUNT(*) AS n FROM poll_votes
-      WHERE poll_id IN (SELECT id FROM polls WHERE association_id=?) GROUP BY poll_id, choice`, aid)) {
-    if (!out.has(row.poll_id)) out.set(row.poll_id, { yes: 0, no: 0, abstain: 0, total: 0 });
-    const r = out.get(row.poll_id);
-    if (row.choice in r) { r[row.choice] = row.n; r.total += row.n; }
+  const of = (id) => { if (!out.has(id)) out.set(id, { yes: 0, no: 0, abstain: 0, total: 0 }); return out.get(id); };
+  // 참여 인원은 언제나 사람 표에서 — 비밀 안건이든 공개 안건이든 "몇 분이 넣으셨나" 는 같다.
+  for (const row of await all(db, `SELECT poll_id, COUNT(*) AS n FROM poll_votes
+      WHERE poll_id IN (SELECT id FROM polls WHERE association_id=?) GROUP BY poll_id`, aid))
+    of(row.poll_id).total = Number(row.n) || 0;
+  // 공개 안건의 찬반은 사람 표에, 비밀 안건의 찬반은 이름 없는 표에 있다.
+  for (const row of await all(db, `SELECT v.poll_id, v.choice, COUNT(*) AS n FROM poll_votes v
+      JOIN polls p ON p.id = v.poll_id
+      WHERE p.association_id=? AND p.secret=0 GROUP BY v.poll_id, v.choice`, aid)) {
+    const r = of(row.poll_id); if (row.choice in r) r[row.choice] = Number(row.n) || 0;
+  }
+  for (const row of await all(db, `SELECT b.poll_id, b.choice, COUNT(*) AS n FROM poll_ballots b
+      WHERE b.poll_id IN (SELECT id FROM polls WHERE association_id=?) GROUP BY b.poll_id, b.choice`, aid)) {
+    const r = of(row.poll_id); if (row.choice in r) r[row.choice] = Number(row.n) || 0;
   }
   return out;
 }
+
+// ----- 명부 대조 (단톡방에 링크 하나) -----
+//
+// 단톡방 링크는 "누구든 열 수 있는 문" 이다. 그 문 안쪽에서 **이 골목 사장님인지**를
+// 명부로 가린다 — 상호 · 대표자 성함 · 전화번호 뒷 네 자리 셋이 모두 맞아야 한다.
+//
+// 왜 이 셋인가. 상호와 성함은 골목을 아는 사람이면 알 수 있다(간판에 적혀 있다).
+// 번호 뒷 네 자리가 실제로 가르는 몫이고, 상호·성함은 "어느 줄을 보느냐" 를 정한다.
+// 번호 전체를 받지 않는 이유는 50대 이상 사장님이 폰에서 열한 자리를 치다 틀리기 때문이고,
+// 받아 두면 그 자리에서 번호를 모으는 꼴이 되기 때문이다.
+//
+// 비교하기 전에 띄어쓰기를 지운다. '버들 카페' 와 '버들카페' 는 같은 가게인데
+// 띄어쓰기 하나로 "명부에 없습니다" 가 뜨면 그분은 다시 안 들어온다.
+export const rosterKey = (s) => String(s || "").replace(/\s+/g, "").toLowerCase();
+export async function matchRosterMember(db, aid, { shop, name, last4 }) {
+  const wantShop = rosterKey(shop), wantName = rosterKey(name);
+  const want4 = String(last4 || "").replace(/\D/g, "").slice(-4);
+  if (!wantShop || !wantName || want4.length !== 4) return null;
+  const rows = await all(db, `SELECT u.id, u.name, u.phone, b.name AS business_name, b.phone AS business_phone
+    FROM users u LEFT JOIN businesses b ON b.owner_id = u.id
+    WHERE u.association_id=? AND u.role IN ('MERCHANT','ADMIN','STAFF')`, aid);
+  const hits = rows.filter((r) => rosterKey(r.business_name) === wantShop
+    && rosterKey(r.name) === wantName
+    // 가게 번호로 적어 두신 분도 있다 — 둘 중 하나만 맞으면 통과시킨다.
+    && [r.phone, r.business_phone].some((ph) => normalizePhone(ph).slice(-4) === want4));
+  // 두 줄이 똑같이 맞으면 누구인지 정할 수 없다. 아무나 들여보내느니 못 들어가는 편이 낫다
+  // (로그인에서도 같은 규칙을 쓴다). 이때는 관리자가 명부를 고쳐야 한다.
+  return hits.length === 1 ? hits[0] : null;
+}
+
+// 몇 번 틀렸는가. 뒷 네 자리는 만 가지뿐이라, 세어 두지 않으면 끝까지 찍어 볼 수 있다.
+// 한 시간에 여덟 번. 사람이 기억을 더듬기엔 넉넉하고, 만 가지를 찍기엔 턱없이 적다.
+// 숫자를 로그인 쪽 셈(주소당 15분에 8회)과 맞춰 둔다 — 둘이 다르면 둘 중 느슨한 쪽은
+// 영영 걸리지 않아, 코드에만 있고 실제로는 없는 안전장치가 된다.
+const ROSTER_MAX_TRIES = 8;
+const ROSTER_WINDOW_H = 1;
+export async function pollTriesLeft(db, pollId, who) {
+  const r = await first(db, "SELECT tries, first_at FROM poll_tries WHERE poll_id=? AND who=?", pollId, who);
+  if (!r) return ROSTER_MAX_TRIES;
+  const old = (Date.now() - Date.parse(String(r.first_at).replace(" ", "T") + "Z")) > ROSTER_WINDOW_H * 3600 * 1000;
+  return old ? ROSTER_MAX_TRIES : Math.max(0, ROSTER_MAX_TRIES - (Number(r.tries) || 0));
+}
+export async function bumpPollTry(db, pollId, who) {
+  const r = await first(db, "SELECT id, first_at FROM poll_tries WHERE poll_id=? AND who=?", pollId, who);
+  if (r && (Date.now() - Date.parse(String(r.first_at).replace(" ", "T") + "Z")) > ROSTER_WINDOW_H * 3600 * 1000) {
+    await run(db, "UPDATE poll_tries SET tries=1, first_at=datetime('now') WHERE id=?", r.id);
+    return;
+  }
+  await run(db, `INSERT INTO poll_tries (poll_id, who, tries) VALUES (?,?,1)
+    ON CONFLICT(poll_id, who) DO UPDATE SET tries = tries + 1`, pollId, who);
+}
+// 대조에 성공하면 그 사람의 시도 기록은 지운다 — 다음에 또 들어오셔야 하기 때문이다.
+export const clearPollTries = (db, pollId, who) => run(db, "DELETE FROM poll_tries WHERE poll_id=? AND who=?", pollId, who);
 export async function userVotesBulk(db, aid, userId) {
   const out = new Map();
   for (const row of await all(db, `SELECT poll_id, choice FROM poll_votes

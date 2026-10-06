@@ -451,7 +451,12 @@ const Bk = "백업";
     .filter((n) => !n.startsWith("sqlite_") && n !== "_cf_KV");
   const missing = names.filter((n) => !TABLES.includes(n) && !BACKUP_SKIP.includes(n));
   chk(Bk, "새로 생긴 표가 백업에서 빠지지 않았다", missing.length === 0, missing.join(", "));
-  chk(Bk, "되살리면 안 되는 값은 일부러 뺀다 (인증번호·웹훅 대기열)", BACKUP_SKIP.length === 3);
+  // 개수가 아니라 **이름**으로 본다. 숫자로 재면 표를 하나 더 빼먹었을 때도 숫자만 맞추면
+  // 통과해 버린다 — 정작 "무엇이 빠져 있나" 는 아무도 안 본다.
+  const mustSkip = ["sign_otp", "ext_otp", "webhook_queue"];
+  chk(Bk, "되살리면 안 되는 값은 일부러 뺀다 (인증번호·웹훅 대기열)",
+    mustSkip.every((t) => BACKUP_SKIP.includes(t)),
+    mustSkip.filter((t) => !BACKUP_SKIP.includes(t)).join(", "));
 }
 
 // ── 출력

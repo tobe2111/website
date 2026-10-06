@@ -293,6 +293,11 @@ CREATE TABLE IF NOT EXISTS polls (
   -- 회식 날짜를 고르는 일에까지 인증번호를 보내면 돈만 나가고 아무도 투표하지 않는다.
   -- 그래서 기본값은 0 이고, 총회 안건처럼 표가 근거로 남아야 하는 건만 관리자가 올린다.
   verify         INTEGER NOT NULL DEFAULT 0,
+  -- 단톡방에 **링크 하나만** 뿌리고, 들어온 분이 명부와 맞는지로 자격을 가린다.
+  -- 0 = 끔(지금까지와 같다) · 1 = 켬
+  roster_link    INTEGER NOT NULL DEFAULT 0,
+  -- 비밀투표인가. 1 이면 누가 무엇을 골랐는지를 어디에도 적지 않는다(아래 poll_ballots).
+  secret         INTEGER NOT NULL DEFAULT 0,
   created_by     INTEGER,
   created_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -320,6 +325,36 @@ CREATE TABLE IF NOT EXISTS poll_otp (
   expires_at  TEXT NOT NULL,
   created_at  TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE (poll_id, user_id)
+);
+-- 비밀투표의 표 — 사람도, 시각도, 들어온 차례도 없다.
+--
+-- 왜 표를 따로 두는가. 같은 줄에 '누구' 와 '무엇' 이 함께 적혀 있으면, 화면에서 가려도
+-- 가린 것일 뿐이다. 총무가 콘솔을 열면 보이고, 보이면 비밀투표가 아니다.
+-- 그래서 비밀 안건은 **두 군데에 따로** 적는다 —
+--   poll_votes  : "이분은 표를 넣으셨다" (choice 는 빈 칸)  ← 1인 1표와 미투표자 명단용
+--   poll_ballots: "찬성 한 표가 들어왔다" (누구인지 없음)    ← 집계용
+-- seq 는 무작위 수다. 자동 번호나 시각을 두면 넣은 차례가 남아, poll_votes 의 차례와
+-- 나란히 놓는 것만으로 누가 무엇을 골랐는지가 드러난다.
+--
+-- 정직한 한계: 데이터베이스를 직접 열 수 있는 사람(운영사)까지 막는 암호 투표는 아니다.
+-- 법으로 다툴 안건이라면 종이 투표와 참관인을 함께 두셔야 한다. 화면에도 그렇게 적는다.
+CREATE TABLE IF NOT EXISTS poll_ballots (
+  id      INTEGER PRIMARY KEY AUTOINCREMENT,
+  poll_id INTEGER NOT NULL REFERENCES polls(id) ON DELETE CASCADE,
+  choice  TEXT NOT NULL,                      -- yes | no | abstain
+  seq     INTEGER NOT NULL DEFAULT 0          -- 무작위. 차례를 지우려고 둔다.
+);
+CREATE INDEX IF NOT EXISTS idx_ballots_poll ON poll_ballots(poll_id);
+-- 명부 대조를 몇 번 틀렸는가. 전화번호 뒷 네 자리는 만 가지뿐이라, 세어 두지 않으면
+-- 상호와 성함을 아는 사람이 번호를 끝까지 찍어 볼 수 있다. 워커가 내려갔다 떠도
+-- 횟수가 남아야 실제로 막은 것이므로 메모리가 아니라 표에 적는다.
+CREATE TABLE IF NOT EXISTS poll_tries (
+  id       INTEGER PRIMARY KEY AUTOINCREMENT,
+  poll_id  INTEGER NOT NULL REFERENCES polls(id) ON DELETE CASCADE,
+  who      TEXT NOT NULL,                     -- 접속 주소를 해시한 값 (주소 자체는 안 적는다)
+  tries    INTEGER NOT NULL DEFAULT 0,
+  first_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (poll_id, who)
 );
 
 CREATE TABLE IF NOT EXISTS event_rsvps (
@@ -916,7 +951,7 @@ CREATE INDEX IF NOT EXISTS idx_landing_asset_assoc ON landing_assets(association
 // 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
 // 마이그레이션 세대 — migrateColumns 에 단계를 추가할 때마다 +1
 // 36 = 두 갈래(트렁크 33 · 모집형 35)를 합친 세대. 양쪽 DB 모두 다시 한 번 마이그레이션을 타게 한다.
-export const SCHEMA_VERSION = "54";
+export const SCHEMA_VERSION = "55";
 
 // ⚠️ 이 숫자를 올리는 걸 잊으면 **마이그레이션이 통째로 안 돈다.**
 //
@@ -1218,6 +1253,31 @@ async function migrateColumns(db) {
       await db.prepare("ALTER TABLE poll_votes ADD COLUMN verify TEXT NOT NULL DEFAULT ''").run();
     }
   }
+  // v55: 단톡방에 링크 하나 — 명부 대조로 자격을 가리고, 비밀/공개를 안건마다 고른다.
+  //
+  // 지금까지는 사람마다 다른 링크를 1:1 로 보내야 했다(화면이 "단톡방에 올리지 마세요" 라고
+  // 경고한다). 회원이 125곳이면 회장님이 문자를 125번 보내야 하고, 실제로는 그래서
+  // 안 보냈다. 단톡방에 하나 뿌리고, 들어온 분이 **상호·대표자 성함·전화번호 뒷 네 자리**로
+  // 명부와 맞는지를 보는 쪽이 실제로 돌아간다.
+  if (pollTbl) {
+    const pc2 = (await db.prepare("PRAGMA table_info(polls)").all()).results || [];
+    if (!pc2.some((c) => c.name === "roster_link")) {
+      await db.prepare("ALTER TABLE polls ADD COLUMN roster_link INTEGER NOT NULL DEFAULT 0").run();
+    }
+    if (!pc2.some((c) => c.name === "secret")) {
+      await db.prepare("ALTER TABLE polls ADD COLUMN secret INTEGER NOT NULL DEFAULT 0").run();
+    }
+  }
+  const ballotTbl = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='poll_ballots'").first();
+  if (!ballotTbl) {
+    await db.prepare("CREATE TABLE poll_ballots (id INTEGER PRIMARY KEY AUTOINCREMENT, poll_id INTEGER NOT NULL REFERENCES polls(id) ON DELETE CASCADE, choice TEXT NOT NULL, seq INTEGER NOT NULL DEFAULT 0)").run();
+    await db.prepare("CREATE INDEX IF NOT EXISTS idx_ballots_poll ON poll_ballots(poll_id)").run();
+  }
+  const triesTbl = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='poll_tries'").first();
+  if (!triesTbl) {
+    await db.prepare("CREATE TABLE poll_tries (id INTEGER PRIMARY KEY AUTOINCREMENT, poll_id INTEGER NOT NULL REFERENCES polls(id) ON DELETE CASCADE, who TEXT NOT NULL, tries INTEGER NOT NULL DEFAULT 0, first_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE (poll_id, who))").run();
+  }
+
   const pollOtpTbl = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='poll_otp'").first();
   if (!pollOtpTbl) {
     await db.prepare(`CREATE TABLE poll_otp (id INTEGER PRIMARY KEY AUTOINCREMENT, poll_id INTEGER NOT NULL REFERENCES polls(id) ON DELETE CASCADE, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, code_hash TEXT NOT NULL, phone TEXT NOT NULL DEFAULT '', attempts INTEGER NOT NULL DEFAULT 0, verified_at TEXT NOT NULL DEFAULT '', expires_at TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE (poll_id, user_id))`).run();

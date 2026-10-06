@@ -128,6 +128,10 @@ export const TENANT = [
   ["POST", "/polls/:id/otp", api.pollOtpSend, "MEMBER"],
   ["POST", "/polls/:id/otp/verify", api.pollOtpVerify, "MEMBER"],
   // 로그인 없이 한 표 — 토큰이 곧 권한이다(사진 요청 링크와 같은 방식)
+  // 단톡방에 뿌리는 링크 하나 — 사람이 아니라 안건만 든 토큰이라, 누르면 투표가 아니라
+  // 명부 대조가 먼저 뜬다. (토막 수가 달라 /vote/:token 과 섞이지 않는다)
+  ["GET", "/vote/g/:token", pages.rosterVotePage],
+  ["POST", "/vote/g/:token", api.rosterVoteMatch],
   ["GET", "/vote/:token", pages.votePage],
   ["POST", "/vote/:token", api.voteByLink],
   ["GET", "/register", pages.registerForm],

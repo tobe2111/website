@@ -62,8 +62,12 @@ const mnPoll = await D.createPoll(env.DB, { associationId: m.id, title: "정관 
 // 의사록 화면은 표가 몇 줄이라도 있어야 명세표가 그려진다 — 빈 표만 재면 뜻이 없다
 for (const row of (await env.DB.prepare("SELECT id FROM users WHERE association_id=? AND role='MERCHANT' ORDER BY id LIMIT 5").bind(m.id).all()).results || [])
   await D.votePoll(env.DB, mnPoll.id, row.id, "yes", "admin");
-// 링크 보내기 화면은 회원 한 줄마다 링크를 만든다 — 줄이 있어야 잴 것이 있다
-const linkPoll = await D.createPoll(env.DB, { associationId: m.id, title: "가을 골목축제 공동 부스 운영 여부", createdBy: null });
+// 링크 보내기 화면은 회원 한 줄마다 링크를 만든다 — 줄이 있어야 잴 것이 있다.
+// 단톡방 링크도 켜 둔다 — 안 켜면 '단톡방에 올릴 링크 하나' 구역이 안 그려져 측정 밖에 남는다.
+const linkPoll = await D.createPoll(env.DB, { associationId: m.id, title: "가을 골목축제 공동 부스 운영 여부", rosterLink: 1, createdBy: null });
+// 비밀투표 + 명부 대조 안건 — 손님이 단톡방 링크를 눌렀을 때 뜨는 그 화면을 잰다.
+// 로그인 없이 세 칸을 채우는 화면이고, 50대 이상 사장님이 폰에서 보는 자리라 더 중요하다.
+const groupPoll = await D.createPoll(env.DB, { associationId: m.id, title: "임원 신임 투표 (비밀)", rosterLink: 1, secret: 1, createdBy: null });
 
 const ad = await hashPassword("market1234");
 await D.createUser(env.DB, { email: "office@market.kr", passwordHash: ad.hash, salt: ad.salt, name: "총무", role: "ADMIN", associationId: m.id });
@@ -151,6 +155,11 @@ const PAGES = [
   ["admin-minutes", "표결 결과 · 의사록", `${B}/admin/polls/${mnPoll.id}/minutes`, "admin"],
   ["admin-vlinks", "투표 링크 보내기", `${B}/admin/polls/${linkPoll.id}/links`, "admin"],
 ];
+{
+  const { makeRosterVoteToken } = await import("../src/api.js");
+  const tk = await makeRosterVoteToken(env.SESSION_SECRET, m.id, groupPoll.id);
+  PAGES.push(["vote-roster", "단톡방 링크 — 명부 대조", `${B}/vote/g/${encodeURIComponent(tk)}`, null]);
+}
 if (docs[0]) {
   PAGES.push(["admin-doc", "계약 상세", `${B}/admin/documents/${docs[0].id}`, "admin"]);
   PAGES.push(["admin-fields", "서명 자리 놓기", `${B}/admin/documents/${docs[0].id}/fields`, "admin"]);

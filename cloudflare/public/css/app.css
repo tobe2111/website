@@ -405,6 +405,15 @@ a.bc-val:hover{text-decoration:underline}
 .check,.stack-form label.check{display:flex;align-items:center;gap:8px;font-weight:500;font-size:.92rem}
 .check input,.stack-form label.check input{width:auto;min-height:0;height:auto;flex:none;margin:0;accent-color:var(--brand-700)}
 .check a{text-decoration:underline;text-underline-offset:2px}
+/* 설명이 두세 줄 붙는 체크상자 — `.check` 는 한 줄짜리라 align-items:center 다.
+   여기에 그대로 쓰면 상자가 글 덩어리 한가운데에 떠서 어느 줄에 붙은 것인지 안 보인다.
+   손가락으로 누를 자리는 상자가 아니라 **줄 전체**다(라벨이 상자를 품고 있다). */
+.check-line,.stack-form label.check-line{display:flex;align-items:flex-start;gap:10px;
+  font-weight:500;font-size:.92rem;line-height:1.65;min-height:44px;padding:8px 0;color:var(--ink-soft)}
+.check-line input,.stack-form label.check-line input{width:20px;height:20px;min-height:0;flex:none;
+  margin:3px 0 0;accent-color:var(--brand-700)}
+.check-line b{color:var(--ink)}
+.check-line input:disabled+span{color:var(--muted)}
 
 /* ---------- Flash ---------- */
 .flash{padding:14px 18px;border-radius:12px;font-weight:600;margin-bottom:22px;font-size:.95rem}
