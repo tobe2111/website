@@ -50,15 +50,15 @@ jobs:
           peek() {
             f=$(mktemp)
             code=$(curl -s -o "$f" -w '%{http_code}' --max-time 30 "$site$1" || echo 000)
-            echo "- \`$1\` → HTTP $code · $(wc -c <"$f") 바이트" >> $GITHUB_STEP_SUMMARY
+            echo "- \`$1\` → HTTP $code · $(wc -c <"$f") 바이트" | tee -a $GITHUB_STEP_SUMMARY
             shift
             for pat in "$@"; do
               n=$(grep -o "$pat" "$f" | wc -l)
-              echo "    - \`$pat\` ×$n" >> $GITHUB_STEP_SUMMARY
+              echo "    - \`$pat\` ×$n" | tee -a $GITHUB_STEP_SUMMARY
             done
             rm -f "$f"
           }
-          echo "### 화면" >> $GITHUB_STEP_SUMMARY
+          echo "### 화면" | tee -a $GITHUB_STEP_SUMMARY
           peek "/" 'press-stand' 'press-lead' 'pr-row' 'fest-cover' '전체보기'
           peek "/press" 'pr-row' '언론 속의'
 
