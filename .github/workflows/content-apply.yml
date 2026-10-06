@@ -86,19 +86,23 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          echo '### 지금 들어 있는 행사 (최근 10건)' >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          npx --yes wrangler@4 d1 execute seocho-db --remote --yes \
-            --command "SELECT id, event_date, title FROM events ORDER BY id DESC LIMIT 10" \
-            >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
+          # 로그와 요약 양쪽에 찍는다 — 요약은 사람이 보기 좋고, 로그는 API 로 읽힌다.
+          # 행사만 세고 공지를 안 세던 구멍을 메운다: 내용 파일은 공지도 넣는다.
+          show() {
+            echo "### $1" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            npx --yes wrangler@4 d1 execute seocho-db --remote --yes --command "$2" | tee -a $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          }
+          show "지금 들어 있는 행사 (최근 10건)" "SELECT id, event_date, title FROM events ORDER BY id DESC LIMIT 10"
+          show "지금 들어 있는 공지 (최근 10건)" "SELECT id, pinned, tag, title, CASE WHEN image='' THEN '' ELSE '사진' END AS 사진 FROM notices ORDER BY id DESC LIMIT 10"
 
           # 이름이 같은 행사가 둘 이상이면 두 번 들어간 것이다 — 여기서 멈춘다.
           npx --yes wrangler@4 d1 execute seocho-db --remote --yes --json \
-            --command "SELECT title FROM events GROUP BY association_id, title HAVING COUNT(*) > 1" > /tmp/dup.json
+            --command "SELECT title FROM events GROUP BY association_id, title HAVING COUNT(*) > 1 UNION ALL SELECT title FROM notices GROUP BY association_id, title HAVING COUNT(*) > 1" > /tmp/dup.json
           if grep -q '"title"' /tmp/dup.json; then
             cat /tmp/dup.json
-            echo "::error::같은 이름의 행사가 두 벌 들어갔습니다. 내용 파일의 건너뛰기 조건을 보세요."
+            echo "::error::같은 이름의 행사나 공지가 두 벌 들어갔습니다. 내용 파일의 건너뛰기 조건을 보세요."
             exit 1
           fi
-          echo "✓ 겹쳐 들어간 행사 없음"
+          echo "✓ 겹쳐 들어간 행사·공지 없음"
