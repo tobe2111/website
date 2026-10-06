@@ -110,6 +110,13 @@ export const SECTION_CATALOG = {
     label: "동네 새소식 (가게 소식 피드)",
     fields: [{ key: "title", label: "제목", type: "text" }],
   },
+  press: {
+    label: "언론 속 우리 골목 (포털 기사 모음)",
+    fields: [
+      { key: "title", label: "제목", type: "text" },
+      { key: "lead", label: "설명", type: "textarea" },
+    ],
+  },
   photos: {
     label: "활동사진 (사진 붙은 공지를 사진판으로)",
     fields: [
@@ -197,6 +204,9 @@ export function defaultLayout(assocName = "우리 상인회") {
     // 활동사진 — 사진이 붙은 공지를 사진판으로 보여준다. 상인회가 실제로 무엇을 하는 곳인지는
     // 문장보다 사진이 빨리 말한다. 사진 붙은 공지가 하나도 없으면 섹션 자체가 안 나온다.
     { type: "photos", enabled: true, title: "활동사진", lead: "" },
+    // 언론 속 우리 골목 — 관리자가 고른 기사만 들어온다. 고른 것이 없으면 섹션 자체가 없다
+    // (수집을 켜지 않은 상인회의 홈은 예전과 똑같이 보인다).
+    { type: "press", enabled: true, title: "언론 속 우리 골목", lead: "" },
     // 영상 — 주소를 넣지 않으면 아예 없는 섹션이다.
     { type: "video", enabled: true, title: "영상으로 보기", url: "", lead: "" },
     // 입점 안내 세 덩어리는 기본에서 끕니다.
@@ -244,6 +254,7 @@ export function parseLayout(json, assocName) {
     const guides = [
       ["deals", { type: "deals", enabled: true, title: "우리 골목 이용권", lead: "" }],
       ["photos", { type: "photos", enabled: true, title: "활동사진", lead: "" }],
+      ["press", { type: "press", enabled: true, title: "언론 속 우리 골목", lead: "" }],
       ["video", { type: "video", enabled: true, title: "영상으로 보기", url: "", lead: "" }],
       ["steps", { type: "steps", enabled: false, title: "입점은 이렇게 진행됩니다", lead: "" }],
       ["benefits", { type: "benefits", enabled: false, title: "입점하면 생기는 것", lead: "" }],
@@ -407,6 +418,22 @@ function renderSection(s, deps) {
         s.lead || (list.length ? "미리 사 두고 매장에서 그대로 쓰세요." : "우리 골목 가게의 이용권을 미리 사고 매장에서 그대로 씁니다."),
         body,
         list.length ? { href: `${deps.base}/urdeal`, label: "유어딜에서 더 보기" } : null);
+    }
+    // 언론 속 우리 골목 —— 관리자가 승인한 기사만 온다(deps.press).
+    //
+    // 내보내는 것은 넷뿐이다: 제목 · 매체 · 날짜 · 원문 링크. 기사 본문도, 검색 API 가 준
+    // 한 줄 요약도 여기 싣지 않는다 — 남의 글이고, 요약은 관리자 화면에서만 쓴다.
+    // 링크는 새 창으로, rel 에 nofollow 를 붙인다(우리 홈이 남의 기사에 순위를 넘기지 않는다).
+    case "press": {
+      const list = deps.press || [];
+      if (!list.length) return ""; // 고른 기사가 없으면 섹션 자체가 없다 — 빈 상자를 남기지 않는다
+      const cards = list.slice(0, 6).map((p) => `<a class="press-card" href="${esc(p.url)}" target="_blank" rel="noopener nofollow ugc">
+        <span class="pc-top"><b class="pc-src">${esc(p.source || "")}</b>${p.published_at ? `<time>${esc(p.published_at)}</time>` : ""}</span>
+        <strong class="pc-title">${esc(p.title)}</strong>
+        <span class="pc-go">원문 보기 <span aria-hidden="true">↗</span></span></a>`).join("");
+      return sectionWrap("section-sub section-press", s.title || "언론 속 우리 골목",
+        s.lead || "우리 골목이 기사에 실렸습니다. 제목을 누르면 원문으로 갑니다.",
+        `<div class="press-wall">${cards}</div>`);
     }
     case "photos":
       // 사진 붙은 공지가 없으면 섹션 자체가 없다 — 빈 사진판은 '아직 아무것도 안 한 상인회'로 읽힌다

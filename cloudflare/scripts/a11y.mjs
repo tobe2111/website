@@ -85,6 +85,17 @@ await D.updateAssociation(env.DB, m.id, {
 await D.createPopup(env.DB, { associationId: m.id, title: "여름 골목 야시장이 열립니다",
   body: "8월 15일(금) 저녁 6시부터 10시까지 골목길을 차 없는 거리로 운영합니다.",
   linkUrl: "/t/market/events", linkLabel: "행사 자세히 보기" });
+// 언론 속 우리 골목 — 올린 기사가 하나도 없으면 홈에 그 구역이 안 나오므로,
+// 재려면 한 건은 올라가 있어야 한다. 대기 줄도 같이 둬야 관리 화면에 잴 것이 생긴다.
+await D.setPressEnabled(env.DB, m.id, true);
+await D.setPressTerms(env.DB, m.id, "방배카페골목");
+await D.addPressItem(env.DB, { associationId: m.id, title: "방배카페골목 미식로드, 맛집 22곳이 문을 열었다",
+  url: "https://example.com/news/1", source: "연합뉴스", publishedAt: "2026-10-06",
+  snippet: "서초구 방배카페골목 상인회가 주최한 미식로드가 열렸다.", kind: "news", term: "방배카페골목" });
+await D.setPressStatus(env.DB, (await D.listPress(env.DB, m.id, "new", 1))[0].id, m.id, "live");
+await D.addPressItem(env.DB, { associationId: m.id, title: "방배카페골목 인근 아파트 시세 동향",
+  url: "https://example.com/news/2", source: "example.com", publishedAt: "2026-10-05",
+  snippet: "방배동 일대 아파트 거래가 늘었다.", kind: "news", term: "방배카페골목" });
 await grab("/t/market", "market-home.html");
 await grab("/t/market/businesses", "market-list.html");
 await grab("/t/market/notices", "market-notices.html");
@@ -126,6 +137,7 @@ const linkPoll = await D.createPoll(env.DB, { associationId: m.id, title: "가�
 const marketCookie = await loginAs("office@market.kr", "market1234");
 await grab("/t/market/admin", "market-admin.html", marketCookie);
 await grab("/t/market/polls", "market-polls.html", marketCookie);
+await grab("/t/market/admin/press", "market-press.html", marketCookie);
 await grab("/t/market/admin/polls/verify", "market-verify.html", marketCookie);
 await grab(`/t/market/admin/polls/${mnPoll.id}/minutes`, "market-minutes.html", marketCookie);
 await grab(`/t/market/admin/polls/${linkPoll.id}/links`, "market-vlinks.html", marketCookie);
@@ -275,6 +287,8 @@ const PAGES = [
   ["상담 DB 콘솔", "leads.html", { width: 1280, height: 900 }],
   ["랜딩 편집기", "editor.html", { width: 1280, height: 900 }],
   // 관리자 콘솔 — 탭마다 다른 표와 폼이 들어 있어 묶음별로 연다(#s-…).
+  ["언론 보도 고르기", "market-press.html", { width: 1280, height: 900 }],
+  ["언론 보도 고르기 (모바일)", "market-press.html", { width: 390, height: 844, isMobile: true }],
   ["관리자 콘솔 · 현황", "market-admin.html", { width: 1280, height: 900 }, "s-home"],
   ["관리자 콘솔 · 회원·점포", "market-admin.html", { width: 1280, height: 900 }, "s-people"],
   ["관리자 콘솔 · 콘텐츠", "market-admin.html", { width: 1280, height: 900 }, "s-content"],
