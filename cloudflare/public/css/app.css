@@ -684,7 +684,17 @@ body[data-console="super"] .site-header .nav-logout .btn:hover{color:#fff;backgr
 .free-text{font-size:1.05rem;color:var(--ink-soft);line-height:1.9}
 
 /* ---------- Notice image (news) ---------- */
-.article-image{width:100%;aspect-ratio:16/9;max-height:440px;object-fit:cover;background:var(--bg-alt);border-radius:var(--radius);margin:6px 0 22px;box-shadow:var(--shadow)}
+/* 상세 화면에서는 사진을 자르지 않습니다.
+   포스터·증서·세로 사진은 글자가 위아래에 들어 있어, 16:9 로 잘라 맞추면 제목이나
+   날짜가 그대로 날아갑니다(세로 포스터의 위가 잘려 나간 사고가 실제로 났습니다).
+   목록의 카드(.market-thumb 등)는 높이를 맞춰야 하니 자르는 게 맞지만, 상세에는
+   맞출 높이가 없습니다 — 사진 자체가 그 화면의 내용입니다.
+   그래서 `aspect-ratio: auto 16/9` 를 씁니다. 두 값을 같이 쓰면 **사진이 오기 전에는**
+   16:9 만큼 자리를 미리 잡아 두고(본문이 아래로 밀려 읽던 줄을 놓치지 않게),
+   **사진이 오면** 그 사진의 실제 비율을 씁니다. 그래서 잘리지도, 튀지도 않습니다.
+   아주 긴 세로 사진만 화면 높이(88vh)에서 멈추고, contain 이라 잘리는 대신
+   좌우에 바탕색 띠가 생깁니다. */
+.article-image{display:block;width:100%;height:auto;aspect-ratio:auto 16/9;max-height:88vh;object-fit:contain;background:var(--bg-alt);border-radius:var(--radius);margin:6px 0 22px;box-shadow:var(--shadow)}
 
 /* ---------- Board ---------- */
 .board-list{background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--r-lg);overflow:hidden;box-shadow:none;margin-top:8px}
