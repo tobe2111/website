@@ -1,0 +1,40 @@
+# 라이브에 지금 무엇이 들어 있나 — 숫자만 읽어 온다 (읽기 전용).
+#
+# 왜 필요한가. 화면이 "밋밋하다" 는 말은 디자인 탓일 수도, 채울 것이 안 채워진 탓일
+# 수도 있다. 사진 없는 가게가 백 곳이면 어떤 디자인을 얹어도 회색 상자 백 개다.
+# 둘을 가르려면 라이브의 숫자를 봐야 하는데, 작업 환경에서는 사이트에 닿지 않는다.
+#
+# 손으로 눌러야만 돌고, SELECT 만 한다. 쓰는 문장이 섞이면 아래에서 멈춘다.
+# 개인정보는 읽지 않는다 — 이름·전화번호·주소는 한 줄도 꺼내지 않고 **갯수만** 센다.
+
+name: 라이브 현황 보기
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  peek:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 숫자만 읽어 온다
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          q() {
+            echo "### $1" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            npx --yes wrangler@4 d1 execute seocho-db --remote --yes --command "$2" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          }
+          q "조직" "SELECT id, slug, name, brand_color, CASE WHEN hero_image='' THEN '없음' ELSE '있음' END AS 대문사진, CASE WHEN logo='' THEN '없음' ELSE '있음' END AS 로고, CASE WHEN tagline='' THEN '없음' ELSE tagline END AS 한줄소개, sns_instagram FROM associations"
+          q "가게 — 얼마나 채워졌나" "SELECT association_id AS 조직, COUNT(*) AS 전체, SUM(status='approved') AS 공개, SUM(lat IS NOT NULL AND lat<>0) AS 지도, SUM(description<>'') AS 소개글, SUM(hours<>'') AS 영업시간, SUM(phone<>'') AS 전화 FROM businesses GROUP BY association_id"
+          q "가게 사진·영상" "SELECT b.association_id AS 조직, m.kind AS 종류, COUNT(DISTINCT b.id) AS 가게수, COUNT(m.id) AS 장수 FROM businesses b JOIN media m ON m.business_id=b.id GROUP BY b.association_id, m.kind"
+          q "홈에 올라간 것" "SELECT a.id AS 조직, a.name, (SELECT COUNT(*) FROM notices n WHERE n.association_id=a.id) AS 공지, (SELECT COUNT(*) FROM events e WHERE e.association_id=a.id) AS 행사, (SELECT COUNT(*) FROM popups p WHERE p.association_id=a.id AND p.enabled=1) AS 팝업 FROM associations a"
+          q "홈 구성" "SELECT id, name, CASE WHEN home_layout IS NULL THEN '기본값 그대로' ELSE '직접 고침' END AS 구성 FROM associations"
