@@ -378,6 +378,11 @@ CREATE TABLE IF NOT EXISTS events (
   -- 0 = 그냥 와서 즐기는 행사. 동네 축제에 '참가 신청은 회원만 할 수 있습니다' 가 뜨면
   --     손님은 "회원이라야 갈 수 있나 보다" 로 읽는다 — 안내가 아니라 문을 닫는 말이 된다.
   rsvp           INTEGER NOT NULL DEFAULT 1,
+  -- 홈 대문에 이 행사를 세우는가. 한 조직에 하나만 1 이 된다(켜면 나머지가 꺼진다).
+  -- 날짜가 지나면 대문이 **스스로 사라진다** — 사람이 내리는 일을 아예 두지 않았다.
+  -- 끝난 축제가 첫 화면에 남아 있는 것은 "관리 안 하는 상인회" 로 읽히는데,
+  -- 그걸 막는 유일한 확실한 방법은 '내려야 한다는 것을 기억할 필요가 없게' 만드는 것이다.
+  cover          INTEGER NOT NULL DEFAULT 0,
   created_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -1503,6 +1508,10 @@ async function migrateColumns(db) {
     // 이미 열린 행사는 지금까지처럼 참가 신청을 받는다(1). 끄는 것은 관리자가 고른다.
     if (!ec.some((c) => c.name === "rsvp")) {
       await db.prepare("ALTER TABLE events ADD COLUMN rsvp INTEGER NOT NULL DEFAULT 1").run();
+    }
+    // v42: 홈 대문에 세울 행사. 기본 0 이라 켜기 전까지 홈은 예전과 똑같이 보인다.
+    if (!ec.some((c) => c.name === "cover")) {
+      await db.prepare("ALTER TABLE events ADD COLUMN cover INTEGER NOT NULL DEFAULT 0").run();
     }
   }
   // v38: 상인회 자체의 SNS 계정 (바닥글 링크)

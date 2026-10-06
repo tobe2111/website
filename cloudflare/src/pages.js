@@ -153,6 +153,18 @@ function dDayLabel(dateStr) {
   if (isNaN(diff) || diff < 0) return "";
   return diff === 0 ? "D-DAY" : "D-" + diff;
 }
+// '10월 17일 토요일' — 대문에 적는 날짜.
+//
+// 숫자만("2026-10-17") 적으면 손님이 그게 무슨 요일인지 세어 봐야 한다. 동네 축제에서
+// 사람이 실제로 묻는 것은 "그게 토요일이야?" 다. 날짜 문자열은 이미 KST 달력 날짜라
+// UTC 로 읽어도 요일이 어긋나지 않는다.
+const WEEK = ["일", "월", "화", "수", "목", "금", "토"];
+function festWhen(dateStr) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr || "")) return "";
+  const t = Date.parse(dateStr + "T00:00:00Z");
+  if (isNaN(t)) return "";
+  return `${Number(dateStr.slice(5, 7))}월 ${Number(dateStr.slice(8, 10))}일 ${WEEK[new Date(t).getUTCDay()]}요일`;
+}
 // 행사 카드 (시안: 이미지 16:10 + 오버레이 + 날짜 칩 / 이미지 없으면 날짜 사각형형)
 //
 // 카드 전체가 행사 상세로 가는 링크다. 예전에는 카드를 눌러도 아무 데도 안 갔다 —
@@ -371,6 +383,11 @@ export async function home(ctx, opts = {}) {
   ]);
   // 홈 팝업 — 관리자가 띄운 안내창. 기간이 지난 것은 질의에서 이미 빠집니다.
   const popups = await D.listActivePopups(db, assoc.id, 3).catch(() => []);
+  // 대문 행사 — 관리자가 체크한 한 건. **날짜가 지난 것은 질의가 주지 않아** 구역이 스스로 사라진다.
+  // 구역을 껐으면 묻지도 않는다(질의 한 번을 아낀다).
+  const coverOn = lay.some((x) => x.type === "festcover" && x.enabled !== false);
+  const coverEv = coverOn ? await D.coverEvent(db, assoc.id).catch(() => null) : null;
+  const coverAlso = coverEv ? await D.sameDayEvents(db, assoc.id, coverEv.event_date, coverEv.id).catch(() => []) : [];
   // 언론 속 우리 골목 — **관리자가 고른 것(live)만** 가져온다. 구역을 껐으면 묻지도 않는다.
   const pressOn = lay.some((x) => x.type === "press" && x.enabled !== false);
   const pressRows = pressOn ? await D.listPressLive(db, assoc.id, 6).catch(() => []) : [];
@@ -418,6 +435,12 @@ export async function home(ctx, opts = {}) {
     heroImage: assoc.hero_image ? mediaUrl(assoc.hero_image) : "",
     heroVideo: assoc.hero_video ? mediaUrl(assoc.hero_video) : "",
     photosHtml,
+    coverEvent: coverEv,
+    coverAlso,
+    coverImage: coverEv && coverEv.image ? mediaUrl(coverEv.image) : "",
+    // 'D-11' · '오늘' — 숫자를 화면에서 다시 세지 않게 여기서 한 번 만든다
+    coverDday: coverEv ? dDayLabel(coverEv.event_date) : "",
+    coverWhen: coverEv ? festWhen(coverEv.event_date) : "",
     press: pressRows,
     noticesHtml: textNotices.length ? noticeRows(base, textNotices) : "",
     counts: { businesses: items.length, notices: notices.length, events: events.length },
@@ -3307,6 +3330,8 @@ export async function admin(ctx) {
             <div class="form-two"><label class="mini-label">주최·주관<input type="text" name="host" value="${esc(e.host || "")}" maxlength="200" /></label>
               <label class="mini-label">문의 <small>(비우면 대표번호)</small><input type="text" name="contact" value="${esc(e.contact || "")}" maxlength="60" /></label></div>
             <label class="check"><input type="checkbox" name="rsvp" value="1"${D.eventTakesRsvp(e) ? " checked" : ""} /> 회원 참가 신청을 받습니다</label>
+            <label class="check"><input type="checkbox" name="cover" value="1"${e.cover ? " checked" : ""} /> 홈 첫 화면을 이 행사로
+              <small>(포스터와 함께 대문이 됩니다 · 한 번에 한 행사만 · <b>날짜가 지나면 스스로 내려갑니다</b>)</small></label>
             ${imgSwap(e.image, "대표 이미지 바꾸기 <small>(선택 · 홈에 포스터형 카드로 표시)</small>")}
             <span class="pill-row"><button class="btn btn-primary btn-sm">고친 내용 저장</button>
               <a class="btn btn-ghost btn-sm" href="${base}/events" target="_blank" rel="noopener">행사 보기 ↗</a></span>
@@ -4104,6 +4129,8 @@ ${isFranchise ? `    <section class="panel panel-accent" id="p-home"><h2 class="
             </div></details>
             <label class="check"><input type="checkbox" name="rsvp" value="1" checked /> 회원 참가 신청을 받습니다
               <small>(끄면 신청 단추가 사라집니다 — 그냥 오시면 되는 동네 축제라면 꺼 두세요)</small></label>
+            <label class="check"><input type="checkbox" name="cover" value="1" /> 홈 첫 화면을 이 행사로
+              <small>(포스터와 함께 대문이 됩니다 · 한 번에 한 행사만 · <b>날짜가 지나면 스스로 내려갑니다</b>)</small></label>
             <label class="mini-label">대표 이미지 <small>(선택 · 홈에 포스터형 카드로 표시)</small><input type="file" name="image" accept="image/*" /></label>
             <button class="btn btn-primary btn-sm">등록</button></form></div></details>
         ${eventCount ? `<form method="post" action="${base}/admin/events/bulk" id="eventBulk" class="pick-bar" data-bulk>
@@ -7508,6 +7535,11 @@ export async function adminPress(ctx) {
           <b>이 화면에서만</b> 보이며, 회장님이 "우리 얘긴가"를 가리는 데만 씁니다.</li>
         <li><b>찾는 곳</b>: ${naver ? "네이버 뉴스·블로그 + 구글 뉴스" : "구글 뉴스만 (네이버 검색 열쇠가 없어 지금은 구글만 봅니다 — 운영사 설정)"}.
           돈은 들지 않습니다.</li>
+        <li><b>공지로도 올릴 수 있습니다.</b> 홈 구역은 손님이 지나며 보는 자리이고,
+          <b>공지 목록은 회원이 찾아보는 자리</b>입니다. 단톡방에 "공지 보세요" 로 돌리는 쪽이 공지 목록이라,
+          회원에게 알리실 기사는 [공지로도 올리기]를 누르시면 됩니다 — 홈에도 함께 걸립니다.
+          공지에 담기는 것도 제목·매체·날짜·원문 링크뿐입니다(본문은 안 퍼옵니다).
+          같은 기사를 두 번 눌러도 공지가 두 건이 되지는 않습니다.</li>
         <li><b>엉뚱한 기사가 섞입니다.</b> "방배"만 걸려도 들어오기 때문입니다. 그래서 자동으로 올리지 않습니다 —
           버리는 낱말(<b>-부동산</b> 처럼)을 적어 두시면 다음부터 덜 들어옵니다.</li>
         ${ran ? `<li>마지막으로 찾아본 때: <b>${esc(ran)}</b></li>` : ""}
@@ -7522,6 +7554,7 @@ export async function adminPress(ctx) {
       <h2 class="panel-title">고를 기사 <span class="badge ${pending.length ? "badge-wait" : "badge-muted"}">${pending.length}건 대기</span></h2>
       ${pending.length ? `<p class="panel-hint">제목을 누르면 원문이 열립니다. <b>읽어 보고</b> 고르세요.</p>
         ${bar("pressNew", `<button name="act" value="live" class="btn btn-xs btn-primary">홈에 올리기</button>
+          <button name="act" value="notice" class="btn btn-xs btn-outline">공지로도 올리기</button>
           <button name="act" value="hidden" class="btn btn-xs btn-ghost">치우기</button>`)}
         <ul class="press-list">${pending.map((p) => row(p, "pressNew")).join("")}</ul>`
         : `<p class="dt-empty"><b>대기 중인 기사가 없습니다</b>${on

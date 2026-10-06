@@ -85,6 +85,13 @@ await D.updateAssociation(env.DB, m.id, {
 await D.createPopup(env.DB, { associationId: m.id, title: "여름 골목 야시장이 열립니다",
   body: "8월 15일(금) 저녁 6시부터 10시까지 골목길을 차 없는 거리로 운영합니다.",
   linkUrl: "/t/market/events", linkLabel: "행사 자세히 보기" });
+// 대문 행사 — 브랜드색 면 위에 글자를 얹는 유일한 큰 구역이다. 여기가 안 읽히면
+// 홈 첫 화면이 안 읽힌다. 이 상인회의 색은 로고에서 뽑은 주황(#C24310)이라
+// 흰 글자가 3.6:1 로 미달이고, 화면이 먹 글자로 바꿔 얹는다 — 그게 정말 되는지는 여기서만 확인된다.
+{
+  const ev = (await D.listEvents(env.DB, m.id, true))[0] || (await D.listEvents(env.DB, m.id))[0];
+  if (ev) await D.setEventCover(env.DB, ev.id, m.id);
+}
 // 언론 속 우리 골목 — 올린 기사가 하나도 없으면 홈에 그 구역이 안 나오므로,
 // 재려면 한 건은 올라가 있어야 한다. 대기 줄도 같이 둬야 관리 화면에 잴 것이 생긴다.
 await D.setPressEnabled(env.DB, m.id, true);

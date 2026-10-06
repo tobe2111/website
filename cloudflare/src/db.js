@@ -1171,6 +1171,23 @@ export const listEvents = (db, aid, upcomingOnly = false) => upcomingOnly
   ? all(db, "SELECT * FROM events WHERE association_id=? AND event_date >= ? ORDER BY event_date ASC", aid, kstToday()) // date('now')=UTC — 새벽 0~9시에 어제 행사가 남던 버그
   : all(db, "SELECT * FROM events WHERE association_id=? ORDER BY event_date DESC", aid);
 export const getEvent = (db, id) => first(db, "SELECT * FROM events WHERE id=?", id);
+// ----- 홈 대문에 세운 행사 -----
+//
+// 한 조직에 하나만. 켜면 나머지가 꺼진다 — 대문이 둘이면 둘 다 안 읽힌다.
+export async function setEventCover(db, id, aid) {
+  await run(db, "UPDATE events SET cover=0 WHERE association_id=? AND id<>?", aid, id);
+  await run(db, "UPDATE events SET cover=1 WHERE id=? AND association_id=?", id, aid);
+}
+export const clearEventCover = (db, id, aid) => run(db, "UPDATE events SET cover=0 WHERE id=? AND association_id=?", id, aid);
+// 대문에 세운 행사 중 **아직 안 지난 것**. 날짜가 지나면 null 이 되어 대문이 스스로 사라진다.
+// (kstToday 를 쓰는 이유: date('now') 는 UTC 라 새벽 0~9시에 오늘 행사가 '지난 것' 이 된다)
+export const coverEvent = (db, aid) =>
+  first(db, "SELECT * FROM events WHERE association_id=? AND cover=1 AND event_date >= ? ORDER BY event_date ASC LIMIT 1", aid, kstToday());
+// 같은 날 함께 열리는 다른 행사 — 대문에 '그날 뭐가 있나' 를 적는 데 쓴다.
+// 손으로 또 적게 하지 않는다: 이미 등록한 행사에서 끌어온다(없으면 그 줄이 아예 안 나온다).
+export const sameDayEvents = (db, aid, date, exceptId) =>
+  all(db, "SELECT * FROM events WHERE association_id=? AND event_date=? AND id<>? ORDER BY id ASC LIMIT 5", aid, date, exceptId || 0);
+
 export async function createEvent(db, { associationId, title, event_date, time_text, place, description, signup, host, contact, image, rsvp = 1 }) {
   await run(db, "INSERT INTO events (association_id, title, event_date, time_text, place, description, signup, host, contact, image, rsvp) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
     associationId, title, event_date, time_text || "", place || "", description || "", signup || "", host || "", contact || "", image || "", rsvp ? 1 : 0);

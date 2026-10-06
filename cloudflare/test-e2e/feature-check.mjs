@@ -334,6 +334,23 @@ const M = "상인회";
   await post("/t/seocho/admin/event", martJar, { _csrf: csrfIn(a2), title: "봄 골목축제", event_date: "2099-04-01" });
   chk(M, "행사를 올리고 손님이 본다", /봄 골목축제/.test(await (await f("/t/seocho/events")).text()));
   chk(M, "공지 RSS 가 나간다", (await f("/t/seocho/feed.xml")).status === 200);
+  // 대문 행사 — 여기서 답해야 하는 질문은 "축제가 대문에 뜨나" 가 아니라
+  // **"끝났는데도 뜨나"** 다. 끝난 축제가 첫 화면에 남는 것이 이 기능의 유일한 큰 사고다.
+  {
+    const ev = await D.createEvent(env.DB, { associationId: mart.id, title: "골목 축제 (대문 시험)",
+      event_date: "2099-10-17", time_text: "오후 3시 ~ 저녁 8시", place: "골목 일대",
+      description: "", signup: "", host: "", contact: "", image: "", rsvp: 0 });
+    await D.setEventCover(env.DB, ev.id, mart.id);
+    const h = await (await f("/t/seocho/")).text();
+    chk(M, "고른 행사가 홈 대문이 된다 (축제를 첫 화면으로)", /class="fest-cover"/.test(h) && /골목 축제 \(대문 시험\)/.test(h));
+    chk(M, "원래 대문(가게 찾기)이 없어지지 않고 아래로 밀린다", /class="fest-cover"/.test(h) && /name="q"/.test(h));
+    // 날짜를 지난 날로 바꾸면, 체크를 그대로 둬도 홈에서 사라져야 한다
+    await env.DB.prepare("UPDATE events SET event_date='2020-01-01' WHERE id=?").bind(ev.id).run();
+    const h2 = await (await f("/t/seocho/")).text();
+    chk(M, "축제가 끝나면 대문이 스스로 내려간다 (사람이 기억하지 않아도 된다)",
+      !/class="fest-cover"/.test(h2) && (await D.getEvent(env.DB, ev.id)).cover === 1);
+    await env.DB.prepare("UPDATE events SET cover=0 WHERE id=?").bind(ev.id).run();
+  }
   // 언론 속 우리 골목 — 여기서 답해야 하는 질문은 "기사가 모이나" 가 아니라
   // **"모은 기사가 멋대로 홈에 올라가지 않나"** 다. 올라가면 되돌리는 값이 더 크다.
   {
@@ -349,6 +366,15 @@ const M = "상인회";
     chk(M, "고른 기사는 홈에 뜬다", /손님이 돌아왔다/.test(ph));
     chk(M, "홈에 나가는 것은 제목·매체·날짜·링크뿐이다 (기사 본문은 안 퍼온다)",
       !/기사 본문 첫 문장/.test(ph) && /연합뉴스/.test(ph));
+    // 공지로도 올리기 — 회원이 찾아보는 자리는 홈 구역이 아니라 공지 목록이다
+    const pr2 = await (await f("/t/seocho/admin/press", { headers: { cookie: martJar } })).text();
+    const item2 = await D.addPressItem(env.DB, { associationId: mart.id,
+      title: "골목 상인회가 상을 받았다", url: "https://example.com/n/2", source: "뉴시스",
+      publishedAt: "2026-10-06", snippet: "본문은 안 퍼온다", kind: "news" });
+    await post("/t/seocho/admin/press/bulk", martJar, { _csrf: csrfIn(pr2), act: "notice", ids: String(item2.id) });
+    const nl = await (await f("/t/seocho/notices")).text();
+    chk(M, "고른 기사를 상인회 공지로도 올린다 (회원이 공지 목록에서 찾는다)", /골목 상인회가 상을 받았다/.test(nl));
+    chk(M, "공지에도 기사 본문은 안 들어간다", !/본문은 안 퍼온다/.test(nl));
   }
   // A/B
   await D.createLandingVariant(env.DB, { associationId: mart.id, slug: "b", name: "사본", layout: null });
