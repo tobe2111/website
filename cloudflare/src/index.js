@@ -207,6 +207,11 @@ export const TENANT = [
   ["GET", "/admin/event/:id/rsvps.csv", pages.adminExportRsvps, "ADMIN"],
   ["POST", "/admin/event/:id/delete", api.adminDeleteEvent, "ADMIN"],
   ["POST", "/admin/events/bulk", api.adminEventsBulk, "ADMIN"],
+  // 언론 속 우리 골목 — 수집은 크론이, 게시 판단은 이 화면이 한다
+  ["GET", "/admin/press", pages.adminPress, "ADMIN"],
+  ["POST", "/admin/press/settings", api.adminPressSettings, "ADMIN"],
+  ["POST", "/admin/press/bulk", api.adminPressBulk, "ADMIN"],
+  ["POST", "/admin/press/collect", api.adminPressCollect, "ADMIN"],
   ["POST", "/admin/popup", api.adminCreatePopup, "ADMIN"],
   ["POST", "/admin/popup/:id/delete", api.adminDeletePopup, "ADMIN"],
   ["POST", "/admin/popup/:id/toggle", api.adminTogglePopup, "ADMIN"],

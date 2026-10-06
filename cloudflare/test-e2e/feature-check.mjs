@@ -334,6 +334,22 @@ const M = "상인회";
   await post("/t/seocho/admin/event", martJar, { _csrf: csrfIn(a2), title: "봄 골목축제", event_date: "2099-04-01" });
   chk(M, "행사를 올리고 손님이 본다", /봄 골목축제/.test(await (await f("/t/seocho/events")).text()));
   chk(M, "공지 RSS 가 나간다", (await f("/t/seocho/feed.xml")).status === 200);
+  // 언론 속 우리 골목 — 여기서 답해야 하는 질문은 "기사가 모이나" 가 아니라
+  // **"모은 기사가 멋대로 홈에 올라가지 않나"** 다. 올라가면 되돌리는 값이 더 크다.
+  {
+    const pr = await (await f("/t/seocho/admin/press", { headers: { cookie: martJar } })).text();
+    chk(M, "포털 기사를 모아 두는 화면이 열린다", /언론 속 우리 골목/.test(pr));
+    const item = await D.addPressItem(env.DB, { associationId: mart.id,
+      title: "서초 골목상권에 손님이 돌아왔다", url: "https://example.com/n/1",
+      source: "연합뉴스", publishedAt: "2026-10-06", snippet: "기사 본문 첫 문장", kind: "news" });
+    chk(M, "모아 둔 기사는 홈에 안 뜬다 (회장님이 고른 것만 나간다)",
+      !/손님이 돌아왔다/.test(await (await f("/t/seocho/")).text()));
+    await post("/t/seocho/admin/press/bulk", martJar, { _csrf: csrfIn(pr), act: "live", ids: String(item.id) });
+    const ph = await (await f("/t/seocho/")).text();
+    chk(M, "고른 기사는 홈에 뜬다", /손님이 돌아왔다/.test(ph));
+    chk(M, "홈에 나가는 것은 제목·매체·날짜·링크뿐이다 (기사 본문은 안 퍼온다)",
+      !/기사 본문 첫 문장/.test(ph) && /연합뉴스/.test(ph));
+  }
   // A/B
   await D.createLandingVariant(env.DB, { associationId: mart.id, slug: "b", name: "사본", layout: null });
   const vr = await f("/t/seocho/l/b");

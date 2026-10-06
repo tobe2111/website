@@ -371,6 +371,9 @@ export async function home(ctx, opts = {}) {
   ]);
   // 홈 팝업 — 관리자가 띄운 안내창. 기간이 지난 것은 질의에서 이미 빠집니다.
   const popups = await D.listActivePopups(db, assoc.id, 3).catch(() => []);
+  // 언론 속 우리 골목 — **관리자가 고른 것(live)만** 가져온다. 구역을 껐으면 묻지도 않는다.
+  const pressOn = lay.some((x) => x.type === "press" && x.enabled !== false);
+  const pressRows = pressOn ? await D.listPressLive(db, assoc.id, 6).catch(() => []) : [];
   const cardItems = items.slice(0, 8);
   const covers = await D.coverImagesFor(db, cardItems.map((b) => b.id));
   const businessesHtml = cardItems.map((b) => businessCard(base, b, covers.get(b.id))).join("");
@@ -415,6 +418,7 @@ export async function home(ctx, opts = {}) {
     heroImage: assoc.hero_image ? mediaUrl(assoc.hero_image) : "",
     heroVideo: assoc.hero_video ? mediaUrl(assoc.hero_video) : "",
     photosHtml,
+    press: pressRows,
     noticesHtml: textNotices.length ? noticeRows(base, textNotices) : "",
     counts: { businesses: items.length, notices: notices.length, events: events.length },
     // 사진 카드 구성은 8곳, 한 줄 목록 구성은 12곳을 보여준다
@@ -2980,6 +2984,7 @@ function consoleSide({ base, kind, counts = {}, active = "", inPage = false }) {
     <span class="side-sep"></span>
     ${isFranchise ? ext(`${base}/admin/leads`, "상담 DB", "leads", counts.leads || 0) + ext(`${base}/admin/landing`, "랜딩페이지", "landing") : ""}
     ${isEsign || isFranchise ? "" : ext(`${base}/polls`, "안건 투표", "polls")}
+    ${isEsign || isFranchise ? "" : ext(`${base}/admin/press`, "언론 보도", "press", counts.press || 0)}
     ${ext(`${base}/admin/documents`, "계약서", "documents")}
     ${ext(`${base}/admin/templates`, "서식", "templates")}
     ${ext(`${base}/admin/api`, "API 연동", "api")}
@@ -3001,11 +3006,13 @@ async function consoleShell(ctx, { title, titleHtml = "", eyebrow = "", sub = ""
   const { db, assoc, base, query } = ctx;
   const kind = assoc.kind;
   // 배지는 두 번의 조회로 끝난다 — 없으면 다른 탭으로 옮길 때 숫자가 사라져 보인다
-  const [s, unread] = await Promise.all([
+  const [s, unread, press] = await Promise.all([
     D.stats(db, assoc.id).catch(() => ({})),
     D.unreadCount(db, assoc.id).catch(() => 0),
+    // 언론 보도 대기 건수. 표가 없는 옛 DB 에서도 화면이 죽지 않게 0 으로 받는다.
+    kind !== "esign" && kind !== "franchise" ? D.countPressPending(db, assoc.id).catch(() => 0) : 0,
   ]);
-  const counts = { pending: s.pending || 0, unread: unread || 0 };
+  const counts = { pending: s.pending || 0, unread: unread || 0, press: press || 0 };
   return `<section class="dash dash-shell"><div class="container">
     <div class="dash-head"><div>${eyebrow ? `<p class="section-eyebrow">${eyebrow}</p>` : ""}<h1 class="dash-title">${titleHtml || esc(title)}</h1>${sub ? `<p class="dash-sub">${sub}</p>` : ""}</div>
       ${actions ? `<div class="dash-head-actions">${actions}</div>` : ""}</div>
@@ -3058,6 +3065,8 @@ export async function admin(ctx) {
   ]);
   const visits = { cur: Number(visitsRaw && visitsRaw.cur) || 0, prev: Number(visitsRaw && visitsRaw.prev) || 0 };
   const lay = parseLayout(assoc.home_layout, assoc.name);
+  // 언론 보도 — 고를 기사가 쌓여 있는지. 배지가 없으면 회장님이 그 화면을 다시 안 여신다.
+  const pressPending = kindOf(assoc).id === "merchant" ? await D.countPressPending(db, assoc.id).catch(() => 0) : 0;
 
   // ── 홈 A/B — 같은 상인회의 다른 홈 구성을 나란히 놓고 무엇이 실제로 통했는지 본다.
   // 성공을 하나로 합치지 않는다. 상인회에는 목적이 둘이다 —
@@ -3939,6 +3948,7 @@ export async function admin(ctx) {
       : [quick("#p-content", "공지 올리기", "회원 모두에게 알립니다"),
          quick("#p-addmember", "회원·점포 추가", "지도에서 찾아 바로 등록"),
          quick("#p-popup-wrap", "홈 팝업", "기간을 정해 첫 화면에 띄웁니다"),
+         quick(`${base}/admin/press`, "언론 보도", pressPending ? `고를 기사 ${pressPending}건` : "포털에 올라온 우리 골목 기사"),
          ...(D.usesDues(assoc) ? [quick("#p-dues", "회비 장부", "이번 달 납부 체크")] : []),
          quick("#p-brand", "상인회 정보", "이름·로고·색·검색 등록")]).join("");
 
@@ -3949,7 +3959,7 @@ export async function admin(ctx) {
         : `<a href="${base}/admin/documents" class="btn btn-primary btn-sm">계약서 만들기</a>`}</div></div>
     ${flashOf(query)}
     <div class="console-grid">
-    ${consoleSide({ base, kind: assoc.kind, counts: { unread: unread || 0, pending: s.pending || 0, inbox: inboxCounts.new || 0 }, inPage: true })}
+    ${consoleSide({ base, kind: assoc.kind, counts: { unread: unread || 0, pending: s.pending || 0, inbox: inboxCounts.new || 0, press: pressPending }, inPage: true })}
     <div class="console-main">
     <div class="sgroup" id="s-home" data-tab="home">
     <div class="home-sheet">
@@ -7431,4 +7441,117 @@ export async function adminBulkLedger(ctx) {
   return html(layout({ title: "지급대장", assoc, base, user, body, csrf,
     scripts: `<script src="${assetUrl("/js/paper.js")}" defer></script>` })
     + `<style>@media print{@page{size:A4;margin:0}body{background:#fff}}</style>`);
+}
+
+// ================= 언론 속 우리 골목 =================
+//
+// 포털에 올라온 우리 동네 기사를 하루 한 번 모아 두고, **회장님이 고른 것만** 홈에 올린다.
+// 이 화면이 그 '고르는 자리' 다. 자동 게시를 두지 않은 이유는 press.js 머리말에 적어 두었다.
+//
+// 화면에서 지키는 것 둘
+//   ① 홈에 나가는 것은 제목·매체·날짜·원문 링크 넷뿐이라고 **화면에 적어 둔다.**
+//      안 적어 두면 "요약도 같이 나가나" 를 물어볼 사람이 없어, 어느 날 저작권 문제로 돌아온다.
+//   ② 치운 기사는 지우지 않고 'hidden' 으로 남긴다 — 지우면 내일 또 올라와 또 치워야 한다.
+export async function adminPress(ctx) {
+  const { db, env, assoc, base, user, csrf } = ctx;
+  if (assoc.kind === "esign" || assoc.kind === "franchise") return notFoundResponse(ctx);
+  const { parseTerms, defaultTerms } = await import("./press.js");
+
+  const [on, termsRaw, pending, live, hidden, lastRun] = await Promise.all([
+    D.pressEnabled(db, assoc.id).catch(() => false),
+    D.getPressTerms(db, assoc.id).catch(() => ""),
+    D.listPress(db, assoc.id, "new", 60).catch(() => []),
+    D.listPress(db, assoc.id, "live", 30).catch(() => []),
+    D.listPress(db, assoc.id, "hidden", 30).catch(() => []),
+    D.getSetting(db, "press_run").catch(() => null),
+  ]);
+  const terms = parseTerms(termsRaw, assoc.name);
+  const naver = !!(String(env.NAVER_SEARCH_ID || "").trim() && String(env.NAVER_SEARCH_SECRET || "").trim());
+  let ran = "";
+  try { const j = JSON.parse(lastRun || "null"); if (j && j.at) ran = kstDate(j.at) + " 아침"; } catch { /* 없으면 안 적는다 */ }
+
+  // 한 줄. 제목은 원문으로 가는 링크다 — 회장님이 올리기 전에 **읽어 보고** 고르셔야 한다.
+  const row = (p, formId) => `<li class="press-pick">
+    <label class="press-chk"><input type="checkbox" name="ids" value="${p.id}" form="${formId}"
+      aria-label="${esc(p.title)} 고르기" /></label>
+    <div class="press-b">
+      <a class="press-t" href="${esc(p.url)}" target="_blank" rel="noopener nofollow ugc">${esc(p.title)} <span aria-hidden="true">↗</span></a>
+      <p class="press-m"><b>${esc(p.source || "출처 미확인")}</b>${p.published_at ? ` · ${esc(p.published_at)}` : ""}
+        · <span class="badge badge-muted">${p.kind === "blog" ? "블로그" : "기사"}</span></p>
+      ${p.snippet ? `<p class="press-s">${esc(p.snippet)}</p>` : ""}
+    </div></li>`;
+
+  const bar = (id, buttons) => `<form method="post" action="${base}/admin/press/bulk" id="${id}" class="pick-bar" data-bulk>
+    <input type="hidden" name="_csrf" value="${esc(csrf)}" />
+    <label class="pick-all"><input type="checkbox" data-bulk-all aria-label="전체 고르기" /><span>전체</span></label>
+    <span class="pick-count" data-bulk-count>고른 것 없음</span>${buttons}</form>`;
+
+  const inner = `
+    <section class="panel">
+      <h2 class="panel-title">검색어
+        <span class="badge ${on ? "badge-ok" : "badge-muted"}">${on ? "매일 아침 모읍니다" : "꺼져 있습니다"}</span></h2>
+      <p class="panel-hint">네이버와 구글에서 <b>이 낱말이 들어간 기사·블로그 글</b>을 하루 한 번 찾아 아래에 쌓아 둡니다.
+        <b>쌓이기만 하고 홈에는 아무것도 안 뜹니다</b> — 회장님이 고른 것만 올라갑니다.</p>
+      <form method="post" action="${base}/admin/press/settings" class="stack-form compact">
+        <input type="hidden" name="_csrf" value="${esc(csrf)}" />
+        <label class="check"><input type="checkbox" name="press_on" value="1"${on ? " checked" : ""} /> 매일 아침 찾아보기</label>
+        <label class="mini-label">찾을 낱말 <small>(한 줄에 하나 · 앞에 <b>-</b> 를 붙이면 그 낱말이 든 글은 버립니다)</small>
+          <textarea name="press_terms" rows="4" placeholder="${esc(defaultTerms(assoc.name))}&#10;-부동산&#10;-분양">${esc(termsRaw)}</textarea></label>
+        <p class="panel-hint">지금 쓰는 낱말: <b>${terms.include.map((t) => esc(t)).join("</b> · <b>")}</b>${
+          terms.exclude.length ? ` / 버리는 낱말: ${terms.exclude.map((t) => esc(t)).join(" · ")}` : ""}
+          ${termsRaw ? "" : " <small>(비워 두면 상인회 이름에서 꼬리말을 뗀 것으로 찾습니다)</small>"}</p>
+        <button class="btn btn-primary btn-sm">저장</button>
+      </form>
+      <ul class="roster-notes">
+        <li><b>홈에 나가는 것은 넷뿐입니다</b> — 제목 · 매체 이름 · 날짜 · 원문 링크.
+          기사 본문은 가져오지 않습니다(남의 글입니다). 아래 회색 글의 한 줄 요약은
+          <b>이 화면에서만</b> 보이며, 회장님이 "우리 얘긴가"를 가리는 데만 씁니다.</li>
+        <li><b>찾는 곳</b>: ${naver ? "네이버 뉴스·블로그 + 구글 뉴스" : "구글 뉴스만 (네이버 검색 열쇠가 없어 지금은 구글만 봅니다 — 운영사 설정)"}.
+          돈은 들지 않습니다.</li>
+        <li><b>엉뚱한 기사가 섞입니다.</b> "방배"만 걸려도 들어오기 때문입니다. 그래서 자동으로 올리지 않습니다 —
+          버리는 낱말(<b>-부동산</b> 처럼)을 적어 두시면 다음부터 덜 들어옵니다.</li>
+        ${ran ? `<li>마지막으로 찾아본 때: <b>${esc(ran)}</b></li>` : ""}
+      </ul>
+      <form method="post" action="${base}/admin/press/collect" class="inline-form" data-once>
+        <input type="hidden" name="_csrf" value="${esc(csrf)}" />
+        <button class="btn btn-outline btn-sm">지금 한 번 찾아보기</button>
+        <span class="panel-hint">아침을 기다리지 않고 바로 확인하실 때.</span></form>
+    </section>
+
+    <section class="panel">
+      <h2 class="panel-title">고를 기사 <span class="badge ${pending.length ? "badge-wait" : "badge-muted"}">${pending.length}건 대기</span></h2>
+      ${pending.length ? `<p class="panel-hint">제목을 누르면 원문이 열립니다. <b>읽어 보고</b> 고르세요.</p>
+        ${bar("pressNew", `<button name="act" value="live" class="btn btn-xs btn-primary">홈에 올리기</button>
+          <button name="act" value="hidden" class="btn btn-xs btn-ghost">치우기</button>`)}
+        <ul class="press-list">${pending.map((p) => row(p, "pressNew")).join("")}</ul>`
+        : `<p class="dt-empty"><b>대기 중인 기사가 없습니다</b>${on
+            ? "매일 아침 찾아봅니다. 위 [지금 한 번 찾아보기] 로 바로 확인하실 수도 있습니다."
+            : "위에서 [매일 아침 찾아보기] 를 켜 주세요."}</p>`}
+    </section>
+
+    <section class="panel">
+      <h2 class="panel-title">홈에 올라가 있는 기사 <span class="badge ${live.length ? "badge-ok" : "badge-muted"}">${live.length}건</span></h2>
+      ${live.length ? `<p class="panel-hint">홈 '언론 속 우리 골목' 구역에 최신 6건까지 보입니다.</p>
+        ${bar("pressLive", `<button name="act" value="hidden" class="btn btn-xs btn-ghost">홈에서 내리기</button>`)}
+        <ul class="press-list">${live.map((p) => row(p, "pressLive")).join("")}</ul>`
+        : `<p class="dt-empty"><b>아직 홈에 올린 기사가 없습니다</b>올린 기사가 하나도 없으면 홈에 그 구역 자체가 안 나옵니다 — 빈 칸은 안 생깁니다.</p>`}
+    </section>
+
+    ${hidden.length ? `<details class="panel panel-fold"><summary class="panel-title">치운 기사 ${hidden.length}건</summary>
+      <div class="fold-body">
+        <p class="panel-hint">지우지 않고 남겨 둡니다 — 지우면 다음에 또 올라와 또 치우셔야 합니다.</p>
+        ${bar("pressHidden", `<button name="act" value="live" class="btn btn-xs btn-primary">홈에 올리기</button>
+          <button name="act" value="new" class="btn btn-xs btn-ghost">다시 대기로</button>
+          <button name="act" value="delete" class="btn btn-xs btn-danger" data-confirm="고른 기사를 지울까요?&#10;다음 수집에서 다시 올라올 수 있습니다.">지우기</button>`)}
+        <ul class="press-list">${hidden.map((p) => row(p, "pressHidden")).join("")}</ul>
+      </div></details>` : ""}`;
+
+  const body = await consoleShell(ctx, {
+    title: "언론 속 우리 골목", active: "press",
+    eyebrow: `<a href="${base}/admin#s-content">← 공지·행사</a>`,
+    sub: "포털에 올라온 우리 골목 기사를 모아 둡니다. 고른 것만 홈에 올라갑니다.",
+    body: inner,
+  });
+  return html(layout({ title: "언론 속 우리 골목", assoc, base, user, body, csrf,
+    scripts: `<script src="${assetUrl("/js/bulk-select.js")}" defer></script>` }));
 }

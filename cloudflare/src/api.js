@@ -5455,3 +5455,53 @@ export async function adminBulkDelete(ctx) {
   await D.deleteBatch(db, b.id, assoc.id);
   return back(base + "/admin/documents", `명단 '${b.title}' 을 목록에서 지웠습니다.${c.sent ? ` 이미 보낸 계약 ${c.sent}건은 그대로 남아 있습니다.` : ""}`);
 }
+
+// ---------- 언론 속 우리 골목 ----------
+//
+// 수집은 기계가, 게시는 사람이. 그래서 여기에는 '올리기' 가 없고 '고른 것만 올리기' 가 있다.
+// 자동 게시를 넣지 않는 이유: "방배" 만 걸려도 엉뚱한 기사가 들어오는데, 그게 상인회 이름으로
+// 첫 화면에 뜨면 되돌리는 비용이 수집으로 얻는 것보다 크다.
+export async function adminPressSettings(ctx) {
+  const { db, form, base, assoc } = ctx;
+  const on = form.get("press_on") === "1";
+  const terms = cap((form.get("press_terms") || "").trim(), 500);
+  await D.setPressEnabled(db, assoc.id, on);
+  await D.setPressTerms(db, assoc.id, terms);
+  await audit(ctx, on ? "기사수집켜기" : "기사수집끄기", terms.replace(/\n/g, " · ").slice(0, 80));
+  return back(base + "/admin/press", on ? "검색어를 저장했습니다. 매일 아침 한 번 모읍니다." : "기사 수집을 껐습니다.");
+}
+export async function adminPressBulk(ctx) {
+  const { db, form, base, assoc } = ctx;
+  const act = String(form.get("act") || "");
+  const ids = form.getAll("ids").map((v) => Number(v)).filter((n) => Number.isInteger(n) && n > 0).slice(0, 200);
+  if (!ids.length) return back(base + "/admin/press", "고른 기사가 없습니다.", true);
+  // 번호가 이 상인회 것인지 한 줄씩 다시 본다 — 폼을 고쳐 남의 상인회 번호를 보낼 수 있다.
+  const mine = [];
+  for (const id of ids) {
+    const p = await D.getPressItem(db, id);
+    if (p && p.association_id === assoc.id) mine.push(p);
+  }
+  if (!mine.length) return back(base + "/admin/press", "고른 기사를 찾지 못했습니다.", true);
+  if (act === "delete") {
+    for (const p of mine) await D.deletePress(db, p.id, assoc.id);
+    await audit(ctx, "기사삭제", `${mine.length}건`);
+    return back(base + "/admin/press", `${mine.length}건을 지웠습니다. 다음 수집에 다시 올라올 수 있습니다.`);
+  }
+  const map = { live: "홈에 올렸습니다", hidden: "치웠습니다", new: "대기로 돌렸습니다" };
+  if (!map[act]) return back(base + "/admin/press", "알 수 없는 작업입니다.", true);
+  for (const p of mine) await D.setPressStatus(db, p.id, assoc.id, act);
+  await audit(ctx, act === "live" ? "기사게시" : act === "hidden" ? "기사치움" : "기사대기", `${mine.length}건`);
+  return back(base + "/admin/press", `${mine.length}건을 ${map[act]}.`);
+}
+// 손으로 한 번 더 모으기 — 크론을 기다리지 않고 지금 확인하고 싶을 때.
+export async function adminPressCollect(ctx) {
+  const { db, env, base, assoc } = ctx;
+  const { collectForAssoc } = await import("./press.js");
+  const r = await collectForAssoc(env, db, assoc).catch((e) => ({ added: 0, error: String((e && e.message) || e) }));
+  if (r.error) return back(base + "/admin/press", "수집 중 문제가 있었습니다. 잠시 뒤 다시 눌러 보세요.", true);
+  if (r.skipped) return back(base + "/admin/press", "대기 중인 기사가 많습니다. 먼저 정리해 주세요.", true);
+  await audit(ctx, "기사수집", `${r.added}건 새로 들어옴`);
+  return back(base + "/admin/press", r.added
+    ? `${r.added}건을 새로 찾았습니다. 아래에서 고르면 홈에 올라갑니다.`
+    : "새로 찾은 기사가 없습니다. 검색어를 넓혀 보세요.");
+}

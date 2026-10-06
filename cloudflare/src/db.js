@@ -2115,3 +2115,46 @@ export async function addChainAnchor(db, { headHash, sigCount, anchoredAt, seal,
 }
 export const listAnchors = (db, limit = 30) => all(db, "SELECT * FROM chain_anchor ORDER BY id DESC LIMIT ?", limit);
 export const lastAnchor = (db) => first(db, "SELECT * FROM chain_anchor ORDER BY id DESC LIMIT 1");
+
+// ----- 언론 속 우리 골목 (press) -----
+//
+// 수집은 기계가, 게시는 사람이. 그래서 이 표의 기본 status 는 'new'(대기)고,
+// 홈을 그리는 질의는 'live' 만 본다 — 수집이 폭주해도 손님 화면은 조용하다.
+export const PRESS_ON_KEY = (aid) => `press_on:${aid}`;
+export const PRESS_TERMS_KEY = (aid) => `press_terms:${aid}`;
+export const pressEnabled = async (db, aid) => (await getSetting(db, PRESS_ON_KEY(aid))) === "1";
+export const setPressEnabled = (db, aid, on) => setSetting(db, PRESS_ON_KEY(aid), on ? "1" : "0");
+export const getPressTerms = async (db, aid) => (await getSetting(db, PRESS_TERMS_KEY(aid))) || "";
+export const setPressTerms = (db, aid, raw) => setSetting(db, PRESS_TERMS_KEY(aid), String(raw || "").slice(0, 500));
+
+// 겹치면 조용히 버린다(두 출처에서 같은 기사가 온다). 새로 들어온 줄만 돌려준다 —
+// 부르는 쪽이 '몇 건 새로 들어왔나' 를 셀 수 있어야 한다.
+export async function addPressItem(db, { associationId, title, url, source, publishedAt, snippet, kind, term }) {
+  const r = await run(db, `INSERT INTO press (association_id, title, url, source, published_at, snippet, kind, term)
+    VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(association_id, url) DO NOTHING`,
+    associationId, String(title).slice(0, 200), String(url).slice(0, 500), source || "",
+    publishedAt || "", snippet || "", kind || "news", term || "");
+  if (!(r && r.meta && r.meta.changes)) return null;
+  return first(db, "SELECT * FROM press WHERE id=?", await lastId(db));
+}
+// 날짜가 빈 줄(못 읽은 것)은 뒤로 — 들어온 순서로 받친다.
+const PRESS_ORDER = "ORDER BY (published_at = '') ASC, published_at DESC, id DESC";
+export const listPress = (db, aid, status, limit = 50) =>
+  all(db, `SELECT * FROM press WHERE association_id=? AND status=? ${PRESS_ORDER} LIMIT ?`, aid, status, limit);
+export const listPressLive = (db, aid, limit = 6) => listPress(db, aid, "live", limit);
+export const getPressItem = (db, id) => first(db, "SELECT * FROM press WHERE id=?", id);
+export const countPressPending = async (db, aid) =>
+  (await first(db, "SELECT COUNT(*) AS n FROM press WHERE association_id=? AND status='new'", aid)).n;
+export const countPressLive = async (db, aid) =>
+  (await first(db, "SELECT COUNT(*) AS n FROM press WHERE association_id=? AND status='live'", aid)).n;
+export const PRESS_STATUS = ["new", "live", "hidden"];
+export async function setPressStatus(db, id, aid, status) {
+  if (!PRESS_STATUS.includes(status)) return null;
+  await run(db, "UPDATE press SET status=? WHERE id=? AND association_id=?", status, id, aid);
+  return getPressItem(db, id);
+}
+// 치운 것은 지우지 않고 'hidden' 으로 남긴다 — 지우면 다음 수집에서 같은 기사가 다시 올라와
+// 회장님이 같은 것을 또 치워야 한다. 다만 오래 묵은 것은 비운다(대기 줄이 느려진다).
+export const deletePress = (db, id, aid) => run(db, "DELETE FROM press WHERE id=? AND association_id=?", id, aid);
+export const purgeOldHiddenPress = (db, aid, days = 180) =>
+  run(db, `DELETE FROM press WHERE association_id=? AND status='hidden' AND created_at < datetime('now', '-${Number(days) | 0} days')`, aid);

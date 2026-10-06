@@ -34,6 +34,9 @@ export const TABLES = [
   "notices", "events", "posts", "comments", "post_images",
   // popups: 홈 안내창. 노출 기간까지 함께 살아나야 복원 뒤에 지난 팝업이 다시 뜨지 않는다.
   "popups",
+  // press: 언론 보도. 회장님이 '홈에 올린다/치운다' 를 하나씩 눌러 둔 판단이 여기 있다 —
+  // 날리면 치운 기사가 다음 수집에 전부 다시 올라와, 그 판단을 처음부터 다시 해야 한다.
+  "press",
   "documents", "signatures", "signature_requests",
   // 전자계약 — 필드 배치·채운 값·서식·감사 추적·외부 서명자까지 있어야 계약이 복원된다.
   // (서명 봉인만 남고 '무엇을 어디에 채웠는지'가 없으면 계약서를 다시 그릴 수 없다)
@@ -329,13 +332,19 @@ export async function runExpireOverdue(env) {
 }
 
 export async function runDaily(env) {
+  // 언론 보도 수집 — 켜 둔 상인회만. 새 크론을 더하지 않고 일일 작업에 얹는다
+  // (크론 등록은 한 글자만 어긋나도 셋 다 조용히 멈춘다 — 위 CRON 주석 참고).
+  const press = await (async () => {
+    const { runPressCollect } = await import("./press.js");
+    return runPressCollect(env);
+  })().catch((e) => ({ error: String(e) }));
   const expired = await runExpireOverdue(env).catch((e) => ({ error: String(e) }));
   const reminders = await runSignReminders(env).catch((e) => ({ error: String(e) }));
   const anchor = await runChainAnchor(env).catch((e) => ({ error: String(e) }));
   const hooks = await runWebhooks(env).catch((e) => ({ error: String(e) }));
   const leads = await runLeadPurge(env).catch((e) => ({ error: String(e) }));
-  console.log("daily job", JSON.stringify({ expired, reminders, anchor, hooks, leads }));
-  return { expired, reminders, anchor, hooks, leads };
+  console.log("daily job", JSON.stringify({ expired, reminders, anchor, hooks, leads, press }));
+  return { expired, reminders, anchor, hooks, leads, press };
 }
 
 // 보관 기간이 지난 상담 신청 파기.

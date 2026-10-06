@@ -381,6 +381,28 @@ CREATE TABLE IF NOT EXISTS events (
   created_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- 언론 속 우리 골목 —— 포털에서 긁어 온 기사·글의 '대기 줄'.
+-- 여기 들어왔다는 것만으로는 홈에 아무것도 안 뜬다. status 를 관리자가 'live' 로 바꾼 것만 나간다.
+--   status  'new' 대기 · 'live' 홈에 게시 · 'hidden' 치움(다시 안 걸리게 남겨 둔다)
+--   snippet 검색 API 가 준 한 줄 요약. **관리자 화면에서만** 쓴다 —
+--           손님 화면에 내보내는 것은 제목·매체·날짜·원문 링크 넷뿐이다(전문 전재 금지).
+-- UNIQUE(association_id, url): 같은 기사가 네이버·구글 양쪽에서 들어와도 한 줄이다.
+CREATE TABLE IF NOT EXISTS press (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
+  title          TEXT NOT NULL,
+  url            TEXT NOT NULL,
+  source         TEXT NOT NULL DEFAULT '',   -- 매체명. 모르는 곳은 주소를 그대로 둔다
+  published_at   TEXT NOT NULL DEFAULT '',   -- 'YYYY-MM-DD' (KST) · 못 읽으면 빈 칸
+  snippet        TEXT NOT NULL DEFAULT '',
+  kind           TEXT NOT NULL DEFAULT 'news',  -- 'news' | 'blog'
+  term           TEXT NOT NULL DEFAULT '',   -- 어느 검색어에 걸렸나 (소음을 추적하려고)
+  status         TEXT NOT NULL DEFAULT 'new',
+  created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(association_id, url)
+);
+CREATE INDEX IF NOT EXISTS idx_press_assoc ON press(association_id, status, published_at);
+
 -- 홈 팝업 —— 관리자가 홈 첫 화면에 띄우는 안내창.
 -- 손님 화면을 가로막는 유일한 것이라 반드시 스스로 사라질 수 있어야 합니다:
 -- 노출 기간(start_date~end_date)이 지나면 자동으로 내려가고, 방문자는 '오늘 하루 보지 않기'로 닫습니다.
@@ -1039,6 +1061,13 @@ async function migrateColumns(db) {
   if (!popTbl) {
     await db.prepare(`CREATE TABLE popups (id INTEGER PRIMARY KEY AUTOINCREMENT, association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE, title TEXT NOT NULL, body TEXT NOT NULL DEFAULT '', image TEXT NOT NULL DEFAULT '', link_url TEXT NOT NULL DEFAULT '', link_label TEXT NOT NULL DEFAULT '', start_date TEXT NOT NULL DEFAULT '', end_date TEXT NOT NULL DEFAULT '', enabled INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL DEFAULT (datetime('now')))`).run();
     await db.prepare("CREATE INDEX IF NOT EXISTS idx_popups_assoc ON popups(association_id, enabled)").run();
+  }
+  // v41: 언론 속 우리 골목 — 수집 대기 줄. 표가 없으면 화면이 "열쇠가 없다" 가 아니라
+  // 통째로 500 이 된다. 옛 배포에도 만들어 준다.
+  const prTbl = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='press'").first();
+  if (!prTbl) {
+    await db.prepare(`CREATE TABLE press (id INTEGER PRIMARY KEY AUTOINCREMENT, association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE, title TEXT NOT NULL, url TEXT NOT NULL, source TEXT NOT NULL DEFAULT '', published_at TEXT NOT NULL DEFAULT '', snippet TEXT NOT NULL DEFAULT '', kind TEXT NOT NULL DEFAULT 'news', term TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'new', created_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(association_id, url))`).run();
+    await db.prepare("CREATE INDEX IF NOT EXISTS idx_press_assoc ON press(association_id, status, published_at)").run();
   }
   // v13 인덱스 (기존 배포 업그레이드): 행사 신청 상인회 집계·회비 월 조회
   await db.prepare("CREATE INDEX IF NOT EXISTS idx_rsvp_assoc ON event_rsvps(association_id)").run();

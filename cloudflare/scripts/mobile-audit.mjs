@@ -135,6 +135,7 @@ const PAGES = [
   ["admin-map", "지도에 한꺼번에 연결", `${B}/admin/members/map`, "admin"],
   ["admin-photos", "지도 사진 한꺼번에", `${B}/admin/members/photos`, "admin"],
   ["admin-links", "사진 요청 링크", `${B}/admin/members/links`, "admin"],
+  ["admin-press", "언론 보도 고르기", `${B}/admin/press`, "admin"],
   ["admin-docs", "계약서 목록", `${B}/admin/documents`, "admin"],
   ["admin-write", "계약서 쓰기", `${B}/admin/documents/write`, "admin"],
   ["admin-tpl", "서식", `${B}/admin/templates`, "admin"],
