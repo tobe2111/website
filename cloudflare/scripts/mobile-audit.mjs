@@ -73,6 +73,12 @@ const bizList = (await D.listBusinessesPaged(env.DB, m.id, { perPage: 5 })).rows
 const biz = bizList[0];
 const notices = await D.listNotices(env.DB, m.id);
 const events = await D.listEvents(env.DB, m.id);
+// 대문 행사 — 폰에서 글과 포스터가 위아래로 갈리는 구역이다. 안 세우면 홈에서 안 그려져
+// 측정 밖에 남는다. 아직 안 지난 행사를 하나 골라 세운다.
+{
+  const up = await D.listEvents(env.DB, m.id, true);
+  if (up[0]) await D.setEventCover(env.DB, up[0].id, m.id);
+}
 const posts = (await D.listPostsPaged(env.DB, m.id, { perPage: 5 }).catch(() => ({}))).rows || [];
 const docs = (await D.listDocuments(env.DB, m.id).catch(() => [])) || [];
 

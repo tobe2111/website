@@ -1618,15 +1618,25 @@ const eventExtras = (form) => ({
   // 체크를 끄면 참가 신청 자리가 통째로 사라진다 (동네 축제엔 신청이 없다)
   rsvp: form.get("rsvp") === "1" ? 1 : 0,
 });
+// 홈 대문 체크. createEvent/updateEvent 와 따로 두는 이유는 **한 조직에 하나만** 이라
+// 다른 줄도 함께 건드려야 하기 때문이다(한 벌로 묶으면 그 사실이 안 보인다).
+async function applyEventCover(ctx, ev, form) {
+  if (!ev) return;
+  if (form.get("cover") === "1") await D.setEventCover(ctx.db, ev.id, ctx.assoc.id);
+  else await D.clearEventCover(ctx.db, ev.id, ctx.assoc.id);
+}
 
 export async function adminCreateEvent(ctx) {
   const { db, env, form, base, assoc } = ctx;
   if (!(form.get("title") || "").trim() || !(form.get("event_date") || "").trim()) return back(base + "/admin", "행사명과 날짜를 입력하세요.", true);
   const up = await saveImages(env, form.getAll("image"), 1); // 폼의 대표 이미지 — 누락돼 조용히 버려지던 버그 수정
   if (up.error) return back(base + "/admin", up.error, true);
-  await D.createEvent(db, { associationId: assoc.id, title: cap(form.get("title").trim(), 200), event_date: cap(form.get("event_date"), 10),
+  const made = await D.createEvent(db, { associationId: assoc.id, title: cap(form.get("title").trim(), 200), event_date: cap(form.get("event_date"), 10),
     ...eventExtras(form), image: up.images[0]?.filename || "" });
-  return back(base + "/admin", "행사를 등록했습니다.");
+  await applyEventCover(ctx, made, form);
+  return back(base + "/admin", made && made.cover
+    ? "행사를 등록하고 홈 대문에 세웠습니다. 날짜가 지나면 스스로 내려갑니다."
+    : "행사를 등록했습니다.");
 }
 // 행사도 여러 건을 한 번에 지운다 — 공지와 같은 방식.
 // 지난 행사는 계속 쌓이는데 한 건씩 펼쳐 지워야 하면 아무도 안 치운다.
@@ -1661,8 +1671,12 @@ export async function adminUpdateEvent(ctx) {
   const nextImage = up.images[0] ? up.images[0].filename : drop ? "" : null;
   if (nextImage !== null && e.image && e.image !== nextImage) await storage.remove(env, e.image).catch(() => {});
   await D.updateEvent(db, e.id, assoc.id, { title, event_date: date, ...eventExtras(form), image: nextImage });
+  await applyEventCover(ctx, e, form);
   await audit(ctx, "행사수정", title);
-  return back(base + "/admin#s-content", "행사를 고쳤습니다.");
+  const on = form.get("cover") === "1";
+  return back(base + "/admin#s-content", on
+    ? "행사를 고치고 홈 대문에 세웠습니다. 날짜가 지나면 스스로 내려갑니다."
+    : "행사를 고쳤습니다.");
 }
 export async function adminDeleteEvent(ctx) {
   const { db, env, base, assoc, params } = ctx;
@@ -5486,6 +5500,28 @@ export async function adminPressBulk(ctx) {
     for (const p of mine) await D.deletePress(db, p.id, assoc.id);
     await audit(ctx, "기사삭제", `${mine.length}건`);
     return back(base + "/admin/press", `${mine.length}건을 지웠습니다. 다음 수집에 다시 올라올 수 있습니다.`);
+  }
+  // 공지로도 올리기 — 홈 구역은 손님이 보는 자리이고, 공지 목록은 **회원이 찾아보는 자리**다.
+  // 단톡방에 "공지 보세요" 라고 돌리는 쪽이 공지 목록이라, 거기 없으면 회원은 기사를 못 본다.
+  //
+  // 여기서도 본문을 퍼오지 않는다. 공지에 담는 것은 매체·날짜·원문 링크뿐이다 —
+  // 한 줄 요약조차 넣지 않는다(관리 화면에서만 쓰는 값이다).
+  if (act === "notice") {
+    const have = new Set((await D.listNotices(db, assoc.id)).map((n) => n.title));
+    let made = 0, skipped = 0;
+    for (const p of mine) {
+      if (have.has(p.title)) { skipped++; continue; } // 두 번 눌러도 공지가 두 건이 되지 않는다
+      const when = p.published_at ? `${p.published_at} · ` : "";
+      await D.createNotice(db, { associationId: assoc.id, title: p.title, tag: "소식", pinned: 0,
+        body: `${when}${p.source || "출처 미확인"}\n\n원문 보기: ${p.url}\n\n(언론에 실린 기사입니다. 본문은 원문에서 읽어 주세요.)` });
+      have.add(p.title);
+      await D.setPressStatus(db, p.id, assoc.id, "live");
+      made++;
+    }
+    await audit(ctx, "기사공지", `${made}건`);
+    return back(base + "/admin/press", made
+      ? `공지 ${made}건을 올렸습니다${skipped ? ` (이미 올린 ${skipped}건은 건너뜀)` : ""}. 홈에도 함께 걸립니다.`
+      : "이미 공지로 올린 기사입니다.");
   }
   const map = { live: "홈에 올렸습니다", hidden: "치웠습니다", new: "대기로 돌렸습니다" };
   if (!map[act]) return back(base + "/admin/press", "알 수 없는 작업입니다.", true);

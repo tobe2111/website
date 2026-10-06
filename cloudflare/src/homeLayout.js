@@ -50,6 +50,14 @@ const DEFAULT_FAQ = [
 
 // 섹션 카탈로그: 편집 가능한 필드 정의 (관리자 UI 자동 생성용)
 export const SECTION_CATALOG = {
+  // 대문 행사 — '어느 행사를 세울지' 는 여기서 고르지 않는다. 행사 쪽에서 체크한 한 건이 온다.
+  // 그래서 편집할 것이 '쓸지 말지' 와 문구 하나뿐이다.
+  festcover: {
+    label: "대문 행사 (축제를 첫 화면으로)",
+    fields: [
+      { key: "lead", label: "날짜 아래 한 줄 (비우면 장소가 들어갑니다)", type: "text" },
+    ],
+  },
   hero: {
     label: "히어로 (상단 대문)",
     fields: [
@@ -184,6 +192,9 @@ export const SECTION_CATALOG = {
 // 기본 홈 구성
 export function defaultLayout(assocName = "우리 상인회") {
   return [
+    // 대문 행사 — 켜 둬도 **체크한 행사가 없으면 아무것도 안 그린다.** 그래서 기본으로 켠다.
+    // 행사 쪽에서 체크하는 순간 켜지고, 그 날짜가 지나면 스스로 사라진다.
+    { type: "festcover", enabled: true, lead: "" },
     { type: "hero", enabled: true, layout: "photo", eyebrow: "함께 만드는 우리 동네", title: "", highlight: "", subtitle: "", findTitle: "", primaryLabel: "", showStats: false },
     // 바로가기 카드(가입 점포·점포 지도·공지·소식)는 기본에서 끕니다 — 셋 다 이미 머리말 메뉴에 있고,
     // 히어로 숫자 줄과도 겹칩니다. 같은 말을 세 번 하면 화면이 아무것도 강조하지 못합니다.
@@ -232,6 +243,11 @@ export function parseLayout(json, assocName) {
     if (!out.some((s) => s.type === "mapbanner")) {
       const i = out.findIndex((s) => s.type === "businesses");
       out.splice(i >= 0 ? i + 1 : out.length, 0, { type: "mapbanner", enabled: true, title: "우리 동네 점포 지도", subtitle: "" });
+    }
+    // 새 섹션: 대문 행사가 없으면 **히어로 앞**에 주입. 대문은 맨 위라야 뜻이 있다.
+    if (!out.some((s) => s.type === "festcover")) {
+      const h = out.findIndex((s) => s.type === "hero");
+      out.splice(h >= 0 ? h : 0, 0, { type: "festcover", enabled: true, lead: "" });
     }
     // 개편 업그레이드: 바로가기 카드가 없으면 히어로 뒤에 주입
     if (!out.some((s) => s.type === "featurecards")) {
@@ -330,6 +346,41 @@ function mapBannerLink(s, deps) {
 
 function renderSection(s, deps) {
   switch (s.type) {
+    // 대문 행사 —— 축제가 첫 화면이 된다 (회장님이 고른 C안).
+    //
+    // 왼쪽에 행사 글, 오른쪽에 포스터. 원래 대문(사진·검색)은 이 아래로 밀려난다 —
+    // 없어지는 게 아니라 한 번 스크롤 아래다.
+    //
+    // 두 가지를 설계로 못질했다.
+    //   ① **날짜가 지나면 이 구역이 통째로 사라진다.** coverEvent 가 지난 행사를 안 준다.
+    //      끝난 축제가 대문에 남아 있는 것은 "관리 안 하는 상인회" 로 읽히는데, 그걸 막는
+    //      확실한 방법은 사람이 내리는 걸 기억하게 하는 게 아니라 아예 안 남게 하는 것이다.
+    //   ② 제목은 h2 다. 커 보이지만 이 페이지의 h1 은 아래 대문에 있는 **상인회 이름**이고,
+    //      한 쪽에 h1 이 둘이면 화면을 읽어 주는 프로그램이 "이 페이지는 무엇인가" 에
+    //      두 가지로 답한다. 이 축제의 h1 은 행사 상세 쪽에 있다.
+    //   ③ 글자색은 --on-brand 다. 브랜드색이 밝으면(민트·노랑) 흰 글자가 1.5:1 까지
+    //      떨어져 안 읽힌다 — render.js 가 흰색과 먹색 중 읽히는 쪽을 골라 준다.
+    case "festcover": {
+      const e = deps.coverEvent;
+      if (!e) return ""; // 체크한 행사가 없거나 날짜가 지났다 → 구역 자체가 없다
+      const also = deps.coverAlso || [];
+      const dd = deps.coverDday;
+      const sub = s.lead || e.place || "";
+      return `<section class="fest-cover"><div class="container fc-in">
+        <div class="fc-copy">
+          ${dd ? `<span class="fc-dday">${esc(dd)}</span>` : ""}
+          <h2 class="fc-title">${esc(e.title)}</h2>
+          <p class="fc-when">${esc(deps.coverWhen || "")}${e.time_text ? `<br />${esc(e.time_text)}` : ""}</p>
+          ${sub ? `<p class="fc-where">${esc(sub)}</p>` : ""}
+          ${also.length ? `<ul class="fc-prog"><li class="fc-prog-h">같은 날 함께</li>${
+            also.map((o) => `<li>${esc(o.title)}</li>`).join("")}</ul>` : ""}
+          <a class="fc-go" href="${deps.base}/events/${e.id}">행사 자세히 보기 <span aria-hidden="true">→</span></a>
+        </div>
+        ${e.image ? `<a class="fc-poster" href="${deps.base}/events/${e.id}">
+          <img src="${esc(deps.coverImage || "")}" alt="${esc(e.title)} 포스터" />
+        </a>` : ""}
+      </div></section>`;
+    }
     case "hero":
       return heroSection(s, deps);
     case "businesses":

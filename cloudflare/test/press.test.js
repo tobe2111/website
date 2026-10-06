@@ -256,6 +256,54 @@ test("크론이 돌면 켜 둔 상인회만 모으고, 그래도 홈은 조용�
   assert.ok(!home.includes("press-wall"), "크론이 모아도 손님 화면은 그대로다");
 });
 
+test("고른 기사를 공지로도 올린다 — 회원이 찾아보는 자리는 공지 목록이다", async () => {
+  const env = makeEnv();
+  const a = await seed(env);
+  const j = jar();
+  await login(env, j, "a@bangbae.kr");
+  const row = await D.addPressItem(env.DB, {
+    associationId: a.id, title: "방배카페골목 미식로드 개막", url: "https://yna.co.kr/view/AKR9",
+    source: "연합뉴스", publishedAt: "2026-10-06", snippet: "기사 본문 첫 문장이 여기 들어온다", kind: "news",
+  });
+  await post(env, j, "/t/bangbae/admin/press/bulk", { act: "notice", ids: [String(row.id)] }, "/t/bangbae/admin/press");
+
+  const notices = await D.listNotices(env.DB, a.id);
+  assert.equal(notices.length, 1, "공지가 한 건 생긴다");
+  assert.equal(notices[0].title, "방배카페골목 미식로드 개막");
+  assert.match(notices[0].body, /연합뉴스/);
+  assert.match(notices[0].body, /2026-10-06/);
+  assert.match(notices[0].body, /https:\/\/yna\.co\.kr\/view\/AKR9/, "원문으로 가는 주소가 들어간다");
+  assert.ok(!notices[0].body.includes("기사 본문 첫 문장"), "한 줄 요약조차 공지에 안 넣는다 — 남의 글이다");
+  assert.equal((await D.getPressItem(env.DB, row.id)).status, "live", "공지로 올리면 홈에도 함께 걸린다");
+
+  // 공지 목록·검색에서 찾힌다 (홈 구역만으로는 회원이 못 찾는다)
+  const list = await (await get(env, jar(), "/t/bangbae/notices")).text();
+  assert.match(list, /방배카페골목 미식로드 개막/);
+});
+
+test("같은 기사를 두 번 눌러도 공지가 두 건이 되지 않는다", async () => {
+  const env = makeEnv();
+  const a = await seed(env);
+  const j = jar();
+  await login(env, j, "a@bangbae.kr");
+  const row = await D.addPressItem(env.DB, { associationId: a.id, title: "같은 기사", url: "https://yna.co.kr/1", source: "연합뉴스" });
+  await post(env, j, "/t/bangbae/admin/press/bulk", { act: "notice", ids: [String(row.id)] }, "/t/bangbae/admin/press");
+  await post(env, j, "/t/bangbae/admin/press/bulk", { act: "notice", ids: [String(row.id)] }, "/t/bangbae/admin/press");
+  assert.equal((await D.listNotices(env.DB, a.id)).length, 1, "두 번 눌러도 한 건이다");
+});
+
+test("남의 상인회 기사를 내 공지로 올리지 못한다", async () => {
+  const env = makeEnv();
+  const a = await seed(env);
+  const b = await seed(env, { slug: "seorae", name: "서래마을상인회" });
+  const row = await D.addPressItem(env.DB, { associationId: a.id, title: "방배 기사", url: "https://yna.co.kr/1", source: "연합뉴스" });
+  const j = jar();
+  await login(env, j, "a@seorae.kr");
+  await post(env, j, "/t/seorae/admin/press/bulk", { act: "notice", ids: [String(row.id)] }, "/t/seorae/admin/press");
+  assert.equal((await D.listNotices(env.DB, b.id)).length, 0, "남의 기사가 내 공지가 되지 않는다");
+  assert.equal((await D.getPressItem(env.DB, row.id)).status, "new");
+});
+
 test("켜고 끄기와 검색어가 저장된다 — 끄면 다음 아침부터 안 돈다", async () => {
   const env = makeEnv();
   const a = await seed(env);
