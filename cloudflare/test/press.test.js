@@ -333,3 +333,18 @@ test("구역 제목이 '언론 속의 방배카페골목' — 아무도 '우리 
   const home2 = await (await get(env, jar(), "/t/seorae/")).text();
   assert.match(home2, /언론 속의 서래마을/, "'상가번영회' 꼬리말도 뗀다");
 });
+
+test("구글이 매체 이름 대신 주소를 보내면 사람이 읽는 이름으로 바꾼다", () => {
+  const rows = parseGoogleRss(RSS([
+    { t: "방배카페골목 방문 - go.seoul.co.kr", u: "https://go.seoul.co.kr/news/1", s: "go.seoul.co.kr" },
+  ]));
+  assert.equal(rows[0].source, "서울신문", "주소가 그대로 화면에 뜨면 어느 신문인지 알 수 없다");
+  assert.equal(rows[0].title, "방배카페골목 방문", "꼬리로 붙은 주소도 제목에서 뗀다");
+});
+
+test("모르는 매체는 여전히 주소 그대로 — 없는 이름을 지어내지 않는다", () => {
+  const rows = parseGoogleRss(RSS([
+    { t: "방배카페골목 소식", u: "https://some-local.example/1", s: "some-local.example" },
+  ]));
+  assert.equal(rows[0].source, "some-local.example");
+});
