@@ -108,6 +108,8 @@ await grab("/t/market/businesses", "market-list.html");
 await grab("/t/market/notices", "market-notices.html");
 await grab("/t/market/map", "market-map.html");
 await grab("/t/market/events", "market-events.html");
+// 언론 보도 전체 목록 — 손님이 보는 새 화면. 매체 색 타일에 흰 글자를 얹는 유일한 자리다.
+await grab("/t/market/press", "market-press-list.html");
 // 행사 상세 — 손님이 홈에서 카드를 눌러 닿는 화면이다. '언제 어디로 가면 되나' 가 여기 있다.
 {
   const ev = (await D.listEvents(env.DB, m.id))[0];
@@ -289,6 +291,8 @@ const PAGES = [
   ["공지·소식 (모바일)", "market-notices.html", { width: 390, height: 844, isMobile: true }],
   ["점포 지도 (모바일)", "market-map.html", { width: 390, height: 844, isMobile: true }],
   ["행사 (모바일)", "market-events.html", { width: 390, height: 844, isMobile: true }],
+  ["언론 보도 전체 (모바일)", "market-press-list.html", { width: 390, height: 844, isMobile: true }],
+  ["언론 보도 전체", "market-press-list.html", { width: 1280, height: 900 }],
   ["행사 상세 (모바일)", "market-event.html", { width: 390, height: 844, isMobile: true }],
   ["간편동의서 (모바일)", "market-consent.html", { width: 390, height: 844, isMobile: true }],
   ["상담 DB 콘솔", "leads.html", { width: 1280, height: 900 }],

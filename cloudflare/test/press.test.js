@@ -172,7 +172,7 @@ test("수집해도 홈에는 아무것도 안 뜬다 — 회장님이 고른 것
   assert.equal(await D.countPressPending(env.DB, a.id), 1, "대기 줄에는 들어왔다");
   const home = await (await get(env, jar(), "/t/bangbae/")).text();
   assert.ok(!home.includes("미식로드 개막"), "고르기 전에는 홈에 안 뜬다");
-  assert.ok(!home.includes("press-wall"), "구역 자체가 없다 — 빈 상자를 남기지 않는다");
+  assert.ok(!home.includes("press-stand"), "구역 자체가 없다 — 빈 상자를 남기지 않는다");
 
   const admin = await (await get(env, j, "/t/bangbae/admin/press")).text();
   assert.match(admin, /미식로드 개막/, "관리 화면 대기 줄에는 보인다");
@@ -192,7 +192,8 @@ test("고른 기사는 홈에 뜨고, 나가는 것은 제목·매체·날짜·�
   await post(env, j, "/t/bangbae/admin/press/bulk", { act: "live", ids: [String(row.id)] }, "/t/bangbae/admin/press");
 
   const home = await (await get(env, jar(), "/t/bangbae/")).text();
-  assert.match(home, /press-wall/, "구역이 켜진다");
+  assert.match(home, /press-stand/, "구역이 켜진다");
+  assert.match(home, /class="press-lead src-\d"/, "맨 위 한 건은 크게 — 매체마다 제 색이 붙는다");
   assert.match(home, /방배카페골목 미식로드 개막/);
   assert.match(home, /연합뉴스/);
   assert.match(home, /2026-10-06/);
@@ -253,7 +254,7 @@ test("크론이 돌면 켜 둔 상인회만 모으고, 그래도 홈은 조용�
       "찌르는 곳은 두 곳으로 고정돼 있다 (주소를 받아 가져오는 길이 없다)");
   } finally { f.restore(); }
   const home = await (await get(env, jar(), "/t/bangbae/")).text();
-  assert.ok(!home.includes("press-wall"), "크론이 모아도 손님 화면은 그대로다");
+  assert.ok(!home.includes("press-stand"), "크론이 모아도 손님 화면은 그대로다");
 });
 
 test("고른 기사를 공지로도 올린다 — 회원이 찾아보는 자리는 공지 목록이다", async () => {
@@ -347,4 +348,47 @@ test("모르는 매체는 여전히 주소 그대로 — 없는 이름을 지어
     { t: "방배카페골목 소식", u: "https://some-local.example/1", s: "some-local.example" },
   ]));
   assert.equal(rows[0].source, "some-local.example");
+});
+
+test("홈은 여섯 건까지 — 더 있으면 '전체보기' 로 나머지를 본다", async () => {
+  const env = makeEnv();
+  const a = await seed(env);
+  for (let i = 1; i <= 9; i++) {
+    const row = await D.addPressItem(env.DB, { associationId: a.id, title: `방배카페골목 기사 ${i}`,
+      url: `https://yna.co.kr/view/${i}`, source: "연합뉴스", publishedAt: `2026-0${(i % 9) + 1}-01` });
+    await D.setPressStatus(env.DB, row.id, a.id, "live");
+  }
+  const home = await (await get(env, jar(), "/t/bangbae/")).text();
+  // 제목이 실제로 **카드에** 적힌 횟수만 센다 — 쪽 설명(meta)에도 같은 말이 들어간다
+  const onHome = (home.match(/-title">방배카페골목 기사 \d/g) || []).length;
+  assert.equal(onHome, 6, "홈에는 여섯 건까지");
+  assert.match(home, /href="\/t\/bangbae\/press"/, "더 있으면 전체보기 링크가 뜬다");
+
+  const all = await (await get(env, jar(), "/t/bangbae/press")).text();
+  assert.equal((all.match(/-title">방배카페골목 기사 \d/g) || []).length, 9, "전체 목록에는 아홉 건 다");
+  assert.match(all, /각 기사의 저작권은 해당 언론사에 있습니다/, "어디까지가 우리 것인지 적어 둔다");
+  // 머리말·바닥글의 간판 그림은 우리 것이다. 재는 것은 **기사 목록 안**이다.
+  const stand = all.slice(all.indexOf("press-stand"), all.indexOf("press-note"));
+  assert.ok(!stand.includes("<img"), "기사 사진은 가져오지 않는다 — 남의 사진이다");
+});
+
+test("여섯 건 이하면 '전체보기' 를 띄우지 않는다 — 눌러도 더 없는 링크는 거짓말이다", async () => {
+  const env = makeEnv();
+  const a = await seed(env);
+  for (let i = 1; i <= 3; i++) {
+    const row = await D.addPressItem(env.DB, { associationId: a.id, title: `기사 ${i}`,
+      url: `https://yna.co.kr/x/${i}`, source: "연합뉴스", publishedAt: "2026-05-01" });
+    await D.setPressStatus(env.DB, row.id, a.id, "live");
+  }
+  const home = await (await get(env, jar(), "/t/bangbae/")).text();
+  assert.ok(!/href="\/t\/bangbae\/press"/.test(home), "여섯 건 이하면 링크가 없다");
+});
+
+test("매체마다 늘 같은 색 — 색이 장식이 아니라 표시가 된다", async () => {
+  const { outletTone } = await import("../src/util.js");
+  assert.equal(outletTone("연합뉴스"), outletTone("연합뉴스"), "같은 매체는 늘 같은 색");
+  const tones = new Set(["연합뉴스", "문화일보", "헤럴드경제", "뉴뉴스", "서울신문", "국제뉴스",
+    "이투데이", "서울일보", "뉴시스", "조선일보", "한겨레", "경향신문"].map(outletTone));
+  assert.ok(tones.size >= 5, `열두 매체가 최소 다섯 색으로 갈려야 (지금 ${tones.size}색)`);
+  for (const t of tones) assert.ok(t >= 0 && t <= 7, "여덟 색 안에 든다");
 });

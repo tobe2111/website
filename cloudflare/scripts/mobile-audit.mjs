@@ -122,6 +122,7 @@ const PAGES = [
   ["notices", "공지 목록", `${B}/notices`, null],
   ["notice", "공지 상세", `${B}/notices/${notices[0]?.id || 1}`, null],
   ["events", "행사 목록", `${B}/events`, null],
+  ["press", "언론 보도 전체", `${B}/press`, null],
   ["event", "행사 상세", `${B}/events/${events[0]?.id || 1}`, null],
   ["register", "회원 신청", `${B}/register`, null],
   ["contact", "문의하기", `${B}/contact`, null],

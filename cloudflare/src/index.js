@@ -207,6 +207,9 @@ export const TENANT = [
   ["GET", "/admin/event/:id/rsvps.csv", pages.adminExportRsvps, "ADMIN"],
   ["POST", "/admin/event/:id/delete", api.adminDeleteEvent, "ADMIN"],
   ["POST", "/admin/events/bulk", api.adminEventsBulk, "ADMIN"],
+  // 손님이 보는 '언론 속의 우리 골목' 전체 목록. 홈 구역은 여섯 건까지라
+  // 올린 기사가 더 많으면 나머지를 볼 자리가 없었다.
+  ["GET", "/press", pages.pressList],
   // 언론 속 우리 골목 — 수집은 크론이, 게시 판단은 이 화면이 한다
   ["GET", "/admin/press", pages.adminPress, "ADMIN"],
   ["POST", "/admin/press/settings", api.adminPressSettings, "ADMIN"],
