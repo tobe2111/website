@@ -420,10 +420,14 @@ export async function home(ctx, opts = {}) {
   // 행사 카드가 이미 보여 준 사진은 사진판에서 뺀다 — 그래서 남는 게 없으면 구역이 통째로
   // 사라지고, 다른 활동 사진을 올리는 순간 다시 켜진다.
   const shownImages = new Set(events.filter((e) => e.image).map((e) => e.image));
-  const withPhoto = photoOn ? notices.filter((n) => n.image && !shownImages.has(n.image)) : [];
-  const textNotices = photoOn ? notices.filter((n) => !n.image) : notices;
-  const photosHtml = withPhoto.slice(0, 6).map((n) => `<a class="pb-card" href="${base}/notices/${n.id}">
-    <span class="pb-shot"><img src="${esc(mediaUrl(n.image))}" alt="" loading="lazy" />
+  // 공지 한 건에 사진이 여러 장이면 그 장들도 사진판에 선다. 다만 **한 건이 판을 독차지하지
+  // 않게** 건당 셋까지만 올린다 — 지정식 다섯 장으로 여섯 칸이 다 차면 다른 활동이 안 보인다.
+  const withPhoto = photoOn
+    ? notices.flatMap((n) => D.noticeImages(n).filter((k) => !shownImages.has(k)).slice(0, 3).map((k) => ({ n, k })))
+    : [];
+  const textNotices = photoOn ? notices.filter((n) => !D.noticeImages(n).length) : notices;
+  const photosHtml = withPhoto.slice(0, 6).map(({ n, k }) => `<a class="pb-card" href="${base}/notices/${n.id}">
+    <span class="pb-shot"><img src="${esc(mediaUrl(k))}" alt="" loading="lazy" />
       <span class="pb-view" aria-hidden="true">view <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></span></span>
     <time>${esc(kstDate(n.created_at))}</time>
     <strong>${esc(n.title)}</strong></a>`).join("");
@@ -1270,7 +1274,15 @@ export async function noticeDetail(ctx) {
     <a href="${base}/notices" class="back-link">← 공지 목록</a>
     <div class="article-head"><span class="notice-tag${n.pinned ? " tag-important" : ""}">${esc(n.tag)}</span><time>${esc(kstDate(n.created_at, "."))}</time></div>
     <h1 class="article-title">${esc(n.title)}</h1>
-    ${n.image ? `<img class="article-image" src="${esc(mediaUrl(n.image))}" alt="${esc(n.title)}" />` : ""}
+    ${(() => {
+      // 사진이 한 장이면 예전 그대로 한 장. 여러 장이면 아래로 이어 붙인다 —
+      // 격자로 쪼개면 단체사진 속 얼굴이 작아져 누가 누군지 안 보인다.
+      const imgs = D.noticeImages(n);
+      if (!imgs.length) return "";
+      if (imgs.length === 1) return `<img class="article-image" src="${esc(mediaUrl(imgs[0]))}" alt="${esc(n.title)}" />`;
+      return `<div class="article-shots">${imgs.map((k, i) =>
+        `<img class="article-image" src="${esc(mediaUrl(k))}" alt="${esc(n.title)} 사진 ${i + 1}"${i ? ' loading="lazy"' : ""} />`).join("")}</div>`;
+    })()}
     <div class="article-body">${esc(n.body).replace(/\n/g, "<br />")}</div>
     <div class="article-actions"><button type="button" class="btn btn-share" data-share data-share-title="${esc(n.title)} — ${esc(assoc.name)}">${SHARE_SVG} 공지 공유하기</button></div></div></section>`;
   // 구조화 데이터: Article — 공지/소식 리치 결과(제목·발행일·발행처)
@@ -3293,10 +3305,12 @@ export async function admin(ctx) {
   // 예전에는 만들기와 지우기만 있었다. 오타 하나를 고치려면 지우고 다시 써야 했는데,
   // 그러면 글 주소가 바뀌어 이미 카톡으로 돌린 링크가 죽는다. 매주 쓰는 기능에서
   // 그건 그냥 못 쓰는 것이다.
-  const imgSwap = (cur, label) => `<label class="mini-label">${label}
-      <input type="file" name="image" accept="image/*" /></label>
+  const imgSwap = (cur, label, multi = false) => `<label class="mini-label">${label}
+      <input type="file" name="image" accept="image/*"${multi ? " multiple" : ""} /></label>
     ${cur ? `<label class="check"><input type="checkbox" name="drop_image" value="1" /> 지금 사진 지우기</label>` : ""}
-    <p class="panel-hint">사진을 새로 고르지 않으면 지금 사진이 그대로 남습니다.</p>`;
+    <p class="panel-hint">${multi
+      ? "새로 고른 사진은 <b>뒤에 더해집니다</b> — 이미 올린 사진은 그대로 남습니다. 전부 지우려면 위를 체크하세요."
+      : "사진을 새로 고르지 않으면 지금 사진이 그대로 남습니다."}</p>`;
   // 표 한 장으로 — 체크해서 여러 건을 한 번에 지우거나 상단에 고정한다.
   // 예전에는 한 건씩 펼쳐 삭제를 눌러야 해서, 지난 안내가 계속 쌓이기만 했다.
   const noticeRows2 = notices.map((n) => `<tr>
@@ -3309,7 +3323,7 @@ export async function admin(ctx) {
           <div class="form-two"><label class="mini-label">카테고리<select name="tag">${
             NOTICE_CATEGORIES.map((c) => `<option value="${esc(c)}"${c === n.tag ? " selected" : ""}>${esc(c)}</option>`).join("")}</select></label>
             <label class="check"><input type="checkbox" name="pinned" value="1"${n.pinned ? " checked" : ""} /> 상단 고정</label></div>
-          ${imgSwap(n.image, "대표 이미지 바꾸기 <small>(선택)</small>")}
+          ${imgSwap(D.noticeImages(n).length, `사진 더 붙이기 <small>(여러 장 · 지금 ${D.noticeImages(n).length}장)</small>`, true)}
           <span class="pill-row"><button class="btn btn-primary btn-sm">고친 내용 저장</button>
             <a class="btn btn-ghost btn-sm" href="${base}/notices/${n.id}" target="_blank" rel="noopener">공지 보기 ↗</a></span>
         </form>
@@ -4115,7 +4129,8 @@ ${isFranchise ? `    <section class="panel panel-accent" id="p-home"><h2 class="
           <form method="post" action="${base}/admin/notice" enctype="multipart/form-data" class="stack-form compact">
             <input type="text" name="title" placeholder="제목" aria-label="새 공지 제목" required /><textarea name="body" rows="3" placeholder="내용" aria-label="새 공지 내용"></textarea>
             <div class="form-two"><label class="mini-label">카테고리<select name="tag">${noticeCats}</select></label><label class="check"><input type="checkbox" name="pinned" value="1" /> 상단 고정</label></div>
-            <label class="mini-label">대표 이미지 <small>(선택)</small><input type="file" name="image" accept="image/*" /></label>
+            <label class="mini-label">사진 <small>(선택 · 여러 장 고를 수 있습니다 · 첫 장이 목록에 나옵니다)</small>
+              <input type="file" name="image" accept="image/*" multiple /></label>
             <button class="btn btn-primary btn-sm">등록</button></form></div></details>
         ${notices.length ? `<form method="post" action="${base}/admin/notices/bulk" id="noticeBulk" class="pick-bar" data-bulk>
             <input type="hidden" name="_csrf" value="${csrf}" />

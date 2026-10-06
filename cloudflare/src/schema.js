@@ -351,6 +351,8 @@ CREATE TABLE IF NOT EXISTS notices (
   body           TEXT NOT NULL DEFAULT '',
   tag            TEXT NOT NULL DEFAULT '안내',
   image          TEXT NOT NULL DEFAULT '',
+  -- 사진 여러 장. 줄바꿈으로 이어 붙이고 **첫 줄이 대표 사진**이다(목록·사진판에 나가는 그 한 장).
+  images         TEXT NOT NULL DEFAULT '',
   pinned         INTEGER NOT NULL DEFAULT 0,
   created_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -1512,6 +1514,23 @@ async function migrateColumns(db) {
     // v42: 홈 대문에 세울 행사. 기본 0 이라 켜기 전까지 홈은 예전과 똑같이 보인다.
     if (!ec.some((c) => c.name === "cover")) {
       await db.prepare("ALTER TABLE events ADD COLUMN cover INTEGER NOT NULL DEFAULT 0").run();
+    }
+  }
+  // v43: 공지에 사진 여러 장.
+  //
+  // 지금까지 공지는 대표 이미지 한 장이었다. 그런데 상인회가 올리고 싶은 것은 '한 장' 이 아니라
+  // **그날 하루**다 — 수여식 한 장, 간담회 두 장, 단체사진 한 장. 한 장만 되니 회장님은
+  // 같은 일을 공지 넷으로 쪼개 올리게 되고, 그러면 공지 목록이 사진첩이 되어 정작 읽을
+  // 공지가 밀려난다. 실제로 제7호 지정식 사진 다섯 장을 올릴 자리가 없었다.
+  //
+  // 줄바꿈으로 이어 붙인다. 표를 하나 더 만들지 않는 이유는 **순서가 곧 뜻**이기 때문이다 —
+  // 첫 줄이 대표 사진이고, 목록·사진판에 나가는 것도 그 한 장이다. 표로 떼면 순서를 지키려고
+  // 정렬 칸을 또 두어야 하고, 그 칸이 비는 순간 사진 차례가 뒤섞인다.
+  // 기존 image 칸은 그대로 둔다 — 이미 올라간 공지가 한 글자도 안 바뀐다.
+  {
+    const nc = (await db.prepare("PRAGMA table_info(notices)").all()).results || [];
+    if (nc.length && !nc.some((c) => c.name === "images")) {
+      await db.prepare("ALTER TABLE notices ADD COLUMN images TEXT NOT NULL DEFAULT ''").run();
     }
   }
   // v38: 상인회 자체의 SNS 계정 (바닥글 링크)

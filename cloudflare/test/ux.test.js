@@ -76,3 +76,14 @@ test("사진 자리를 미리 잡아 화면이 튀지 않는다", async () => {
   assert.match(css, /\.article-image\{[^}]*aspect-ratio/);
   assert.match(css, /\.market-thumb\{[^}]*aspect-ratio/);
 });
+
+// 자리를 잡는 것과 '잘라서 맞추는' 것은 다르다. 상세 화면의 사진은 그 화면의 내용이라
+// 한 변도 잘려선 안 된다 — 세로 포스터의 제목이 잘려 나간 일이 있었다.
+test("상세 화면의 사진은 잘리지 않는다", async () => {
+  const rule = css.match(/\.article-image\{([^}]*)\}/);
+  assert.ok(rule, ".article-image 규칙이 있어야");
+  assert.doesNotMatch(rule[1], /object-fit\s*:\s*cover/,
+    "상세 사진을 cover 로 자르면 포스터의 글자가 날아간다");
+  assert.match(rule[1], /aspect-ratio\s*:\s*auto\s/,
+    "사진이 오면 실제 비율을 쓰도록 aspect-ratio 에 auto 를 함께 적어야");
+});

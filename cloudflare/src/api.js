@@ -43,6 +43,9 @@ const BOARD_MAX_IMAGES = 6;
 const MAX_EMBEDS = 30;
 
 // FormData 파일들을 R2 에 저장(썸네일은 Workers 에선 원본 사용) → { images } 또는 { error }
+// 공지 한 건에 붙일 수 있는 사진 수. 열 장이면 행사 하루가 다 들어가고,
+// 그 이상은 공지가 아니라 사진첩이라 활동사진 구역에서 한 행사가 화면을 독차지한다.
+const NOTICE_MAX_IMAGES = 10;
 async function saveImages(env, files, max) {
   const hasFiles = files.some((f) => f && typeof f.arrayBuffer === "function" && f.size);
   if (hasFiles && !storage.enabled(env))
@@ -1533,9 +1536,13 @@ export async function adminCreateNotice(ctx) {
   const { db, env, form, base, assoc } = ctx;
   const title = cap((form.get("title") || "").trim(), 200);
   if (!title) return back(base + "/admin", "공지 제목을 입력하세요.", true);
-  const up = await saveImages(env, form.getAll("image"), 1);
+  // 사진은 최대 열 장. 상인회가 올리고 싶은 것은 '한 장' 이 아니라 그날 하루다 —
+  // 한 장만 받으면 같은 일을 공지 넷으로 쪼개 올리게 되고 공지 목록이 사진첩이 된다.
+  const up = await saveImages(env, form.getAll("image"), NOTICE_MAX_IMAGES);
   if (up.error) return back(base + "/admin", up.error, true);
-  await D.createNotice(db, { associationId: assoc.id, title, body: cap(form.get("body"), 10000), tag: cap(form.get("tag") || "안내", 20), image: up.images[0] ? up.images[0].filename : "", pinned: form.get("pinned") === "1" });
+  await D.createNotice(db, { associationId: assoc.id, title, body: cap(form.get("body"), 10000),
+    tag: cap(form.get("tag") || "안내", 20), images: up.images.map((i) => i.filename).join("\n"),
+    pinned: form.get("pinned") === "1" });
   await audit(ctx, "공지등록", title);
   return back(base + "/admin", "공지를 등록했습니다.");
 }
@@ -1547,15 +1554,18 @@ export async function adminUpdateNotice(ctx) {
   if (!n || n.association_id !== assoc.id) return back(base + "/admin", "공지를 찾을 수 없습니다.", true);
   const title = cap((form.get("title") || "").trim(), 200);
   if (!title) return back(base + "/admin#s-content", "공지 제목을 입력하세요.", true);
-  const up = await saveImages(env, form.getAll("image"), 1);
+  const up = await saveImages(env, form.getAll("image"), NOTICE_MAX_IMAGES);
   if (up.error) return back(base + "/admin#s-content", up.error, true);
   const drop = form.get("drop_image") === "1";
-  const nextImage = up.images[0] ? up.images[0].filename : drop ? "" : null;
-  // 바꿔치웠거나 지운 사진은 저장소에서도 치운다 — 안 그러면 아무도 안 보는 파일이 쌓인다
-  if (nextImage !== null && n.image && n.image !== nextImage) await storage.remove(env, n.image).catch(() => {});
+  const had = D.noticeImages(n);
+  // 새로 고른 사진은 **덧붙인다**. 바꿔치우면 지난주에 올린 넉 장이 한 장을 더하다가 사라진다.
+  // 다 지우려면 [사진 지우기] 를 체크한다 — 지우는 것은 언제나 눌러서 하는 일이어야 한다.
+  const nextList = drop ? [] : up.images.length ? had.concat(up.images.map((i) => i.filename)).slice(0, NOTICE_MAX_IMAGES) : null;
+  // 지운 사진은 저장소에서도 치운다 — 안 그러면 아무도 안 보는 파일이 쌓인다
+  if (drop) for (const k of had) await storage.remove(env, k).catch(() => {});
   await D.updateNotice(db, n.id, assoc.id, {
     title, body: cap(form.get("body"), 10000), tag: cap(form.get("tag") || "안내", 20),
-    pinned: form.get("pinned") === "1", image: nextImage,
+    pinned: form.get("pinned") === "1", images: nextList === null ? null : nextList.join("\n"),
   });
   await audit(ctx, "공지수정", title);
   return back(base + "/admin#s-content", "공지를 고쳤습니다.");
@@ -1563,7 +1573,10 @@ export async function adminUpdateNotice(ctx) {
 export async function adminDeleteNotice(ctx) {
   const { db, env, base, assoc, params } = ctx;
   const n = await D.getNotice(db, Number(params.id));
-  if (n && n.association_id === assoc.id) { if (n.image) await storage.remove(env, n.image); await D.deleteNotice(db, n.id); await audit(ctx, "공지삭제", n.title); }
+  if (n && n.association_id === assoc.id) {
+    for (const k of D.noticeImages(n)) await storage.remove(env, k).catch(() => {});
+    await D.deleteNotice(db, n.id); await audit(ctx, "공지삭제", n.title);
+  }
   return back(base + "/admin", "공지를 삭제했습니다.");
 }
 // 여러 건을 한 번에 — 지우기·상단 고정·고정 해제.
@@ -1593,7 +1606,10 @@ export async function adminNoticesBulk(ctx) {
   }
   if (!mine.length) return back(to, "고른 공지를 찾지 못했습니다.", true);
   if (act === "delete") {
-    for (const n of mine) { if (n.image) await storage.remove(env, n.image); await D.deleteNotice(db, n.id); }
+    for (const n of mine) {
+      for (const k of D.noticeImages(n)) await storage.remove(env, k).catch(() => {});
+      await D.deleteNotice(db, n.id);
+    }
     await audit(ctx, "공지 여러 건 삭제", `${mine.length}건`);
     return back(to, `공지 ${mine.length}건을 삭제했습니다.`);
   }

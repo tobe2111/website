@@ -750,14 +750,22 @@ function featureCardsSection(s, deps) {
 // 매체마다 늘 같은 색이 붙어 신문 가판대처럼 읽힌다(outletTone).
 // 맨 위 한 건만 크게 세우고 나머지는 줄로 받친다 — 여섯 장이 같은 크기로 서면
 // 눈이 쉴 데가 없어서, 글자만 있는 구역은 더 허전해 보인다.
+// 신문처럼 **제목이 먼저**다.
+//
+// 처음에는 매체 이름을 색 알약으로 제목 위에 올렸다. 그랬더니 짙은 색 여덟 개가 제목보다
+// 먼저 눈에 들어와, 읽어야 할 것이 두 번째가 됐다 — 회장님 말로 "촌스럽다" 였다.
+// 신문 지면은 반대다. 제목을 읽고, 누가 썼는지는 그다음에 본다.
+// 매체 색은 버리지 않는다. 알약을 점 하나로 줄이면 "연합뉴스는 늘 같은 색" 이라는
+// 표시 구실은 그대로 남고 무게만 빠진다.
 export function pressLead(p) {
   if (!p) return "";
   return `<a class="press-lead src-${outletTone(p.source)}" href="${esc(p.url)}" target="_blank" rel="noopener nofollow ugc">
-    <span class="pl-top"><b class="press-src">${esc(p.source || "출처 미확인")}</b>
-      ${p.published_at ? `<time>${esc(p.published_at)}</time>` : ""}</span>
     <strong class="pl-title">${esc(p.title)}</strong>
-    <span class="pl-go">원문 보기 <span aria-hidden="true">↗</span></span></a>`;
+    <span class="pl-top"><b class="press-src">${esc(p.source || "출처 미확인")}</b>
+      ${p.published_at ? `<time>${esc(p.published_at)}</time>` : ""}</span></a>`;
 }
+// 나머지는 한 단 색인. 왼쪽에 매체·날짜, 오른쪽에 제목 — 신문 뒷면의 기사 색인 모양이다.
+// 두 단으로 쪼개면 제목이 두 줄로 접히고, 접힌 제목은 훑어지지 않는다.
 export function pressRow(p) {
   return `<li><a class="pr-row src-${outletTone(p.source)}" href="${esc(p.url)}" target="_blank" rel="noopener nofollow ugc">
     <span class="pr-top"><b class="press-src">${esc(p.source || "출처 미확인")}</b>
