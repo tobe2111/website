@@ -4686,40 +4686,53 @@ body.is-console[data-console="super"] .console-strip{border-bottom:1px solid #2b
    목록보다 키가 한참 모자라 왼쪽이 통째로 비고, 휑한 것을 고치려다 더 휑해집니다.
    가로로 펴면 키를 맞출 일이 없고, 1면 머리기사처럼 읽힙니다. */
 .press-stand{display:grid;gap:16px}
-.press-src{display:inline-block;padding:4px 10px;border-radius:var(--r-pill);
-  background:var(--src,var(--neutral));color:#fff;font-size:12px;font-weight:800;letter-spacing:-.01em}
+/* 매체 이름은 색 알약이었습니다. 짙은 색 여덟 개가 제목보다 먼저 눈에 들어와 읽어야 할 것이
+   두 번째가 됐습니다. 점 하나로 줄이면 "연합뉴스는 늘 같은 색" 이라는 표시 구실은 남고
+   무게만 빠집니다. 점은 장식이라 화면 읽어 주는 프로그램에는 안 읽힙니다(::before). */
+.press-src{position:relative;display:inline-block;padding-left:14px;color:var(--ink-soft);
+  font-size:12.5px;font-weight:700;letter-spacing:0}
+.press-src::before{content:"";position:absolute;left:0;top:50%;width:8px;height:8px;border-radius:50%;
+  background:var(--src,var(--brand));transform:translateY(-50%)}
 
-.press-lead{display:flex;align-items:center;justify-content:flex-start;flex-wrap:wrap;gap:8px 22px;min-width:0;
-  padding:20px 24px;background:var(--surface);border:1px solid var(--line-soft);
-  border-left:5px solid var(--src,var(--brand));border-radius:var(--r-lg);
-  color:inherit;text-decoration:none;box-shadow:var(--sh-1);transition:box-shadow .2s}
-.press-lead:hover{box-shadow:var(--sh-2)}
-.pl-top{flex:none;display:flex;align-items:center;gap:10px}
+/* 머리기사 — 제목을 먼저, 매체·날짜를 아래로. 상자도 그림자도 없이 굵은 밑줄 하나로 받칩니다. */
+.press-lead{display:flex;flex-direction:column;align-items:flex-start;gap:10px;min-width:0;
+  padding:0 0 18px;border-bottom:2px solid var(--ink);
+  color:inherit;text-decoration:none;transition:color .2s}
+.pl-top{display:flex;align-items:center;gap:10px}
 .pl-top time{font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums}
-.pl-title{flex:1;min-width:260px;text-align:left;font-size:clamp(1.1rem,1.7vw,1.35rem);
-  font-weight:800;line-height:1.45;letter-spacing:-.02em}
+.pl-title{min-width:0;text-align:left;font-size:clamp(1.25rem,2vw,1.6rem);
+  font-weight:800;line-height:1.3;letter-spacing:-.025em}
 .press-lead:hover .pl-title{color:var(--brand-text)}
-.pl-go{flex:none;font-size:13px;font-weight:700;color:var(--muted);white-space:nowrap}
-.press-lead:hover .pl-go{color:var(--brand-text)}
 
-/* 나머지는 두 칸짜리 색인. 칸마다 첫 줄에도 윗선을 둬서 두 칸의 시작이 나란히 보입니다. */
-.press-rest{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:0 30px}
+/* 나머지는 한 단 색인 — 왼쪽에 매체·날짜, 오른쪽에 제목. 신문 뒷면의 기사 색인 모양입니다.
+   두 단으로 쪼개면 제목이 두 줄로 접히고, 접힌 제목은 훑어지지 않습니다. */
+.press-rest{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:1fr;gap:0}
 .press-rest li{border-top:1px solid var(--line-soft)}
-.pr-row{display:block;min-width:0;padding:13px 2px;color:inherit;text-decoration:none}
-.pr-top{display:flex;align-items:center;gap:9px;margin-bottom:5px}
+.press-rest li:first-child{border-top:0}
+.pr-row{display:flex;align-items:baseline;gap:20px;min-width:0;padding:14px 2px;color:inherit;text-decoration:none}
+/* 매체 이름이 긴 곳(서울복지신문)이 있어 날짜가 줄바꿈되지 않게 칸을 넉넉히 잡습니다. */
+.pr-top{flex:0 0 190px;display:flex;align-items:baseline;gap:9px}
 .pr-top time{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
-.pr-title{display:-webkit-box;font-size:15px;font-weight:700;line-height:1.5;letter-spacing:-.015em;
-  -webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.pr-title{flex:1;min-width:0;display:-webkit-box;font-size:16px;font-weight:600;line-height:1.45;
+  letter-spacing:-.015em;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
 .pr-row:hover .pr-title{color:var(--brand-text)}
 
 /* 전체 목록 화면 맨 아래 한 줄 — 어디까지가 우리 것인지를 적어 둡니다 */
 .press-note{margin:22px 0 0;font-size:13px;color:var(--muted)}
 @media (max-width:860px){
-  .press-rest{grid-template-columns:1fr;gap:0}
-  .press-lead{padding:16px 18px;gap:6px 14px}
-  .pl-title{min-width:0;flex-basis:100%}
-  .pl-go{flex-basis:100%}
+  /* 좁은 화면에서는 색인도 두 줄로 — 190px 짜리 매체 칸을 두면 제목에 남는 폭이 없습니다. */
+  .pr-row{flex-direction:column;gap:6px;padding:13px 2px}
+  .pr-top{flex:none}
+  .pr-title{-webkit-line-clamp:2}
+  .press-lead{padding:0 0 15px;gap:8px}
+  .pl-title{min-width:0}
 }
+/* 공지에 붙은 사진 여러 장 — 아래로 이어 붙입니다.
+   격자로 쪼개면 단체사진 속 얼굴이 작아져 누가 누군지 안 보입니다. 행사 사진의 쓸모는
+   "그날 누가 거기 있었나" 이므로, 폭을 다 쓰는 쪽이 맞습니다. */
+.article-shots{display:grid;gap:14px;margin:0 0 22px}
+.article-shots .article-image{margin:0}
+
 /* 관리 화면: 고를 목록. 제목이 원문으로 가는 링크입니다 — 올리기 전에 읽어 보셔야 합니다. */
 .press-list{list-style:none;margin:0;padding:0;display:grid;gap:2px}
 .press-pick{display:flex;align-items:flex-start;gap:10px;padding:2px 4px;

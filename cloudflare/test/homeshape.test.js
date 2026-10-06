@@ -426,3 +426,39 @@ test("영상은 주소를 넣었을 때만 뜬다 (없거나 이상하면 자리
   assert.match(ok, /youtube-nocookie\.com\/embed\/dQw4w9WgXcQ/);
   assert.ok(!/youtube\.com\/watch/.test(ok), "원본 주소를 그대로 iframe 에 넣지 않는다");
 });
+
+// ── 공지 한 건에 사진 여러 장 ────────────────────────────────────────
+//
+// 상인회가 올리고 싶은 것은 '한 장' 이 아니라 **그날 하루**다. 한 장만 되면 회장님은
+// 같은 일을 공지 넷으로 쪼개 올리게 되고, 공지 목록이 사진첩이 되어 읽을 공지가 밀려난다.
+// 반대로 한 건이 사진판을 독차지해도 안 된다 — 다섯 장이 여섯 칸을 다 먹으면 다른 활동이 안 보인다.
+test("공지 한 건에 사진 여러 장이 붙고, 상세에서 다 보인다", async () => {
+  const { env, a } = await seedPhotos([]);
+  const n = await D.createNotice(env.DB, { associationId: a.id, title: "지정식",
+    body: "본문", tag: "소식", images: "a.jpg\nb.jpg\nc.jpg" });
+  assert.equal(D.noticeImages(n).length, 3);
+  assert.equal(n.image, "a.jpg", "첫 줄이 대표 사진 — 목록 썸네일과 상세 첫 장이 같아야 한다");
+
+  const detail = await (await get(env, `/t/s/notices/${n.id}`)).text();
+  assert.equal((detail.match(/class="article-image"/g) || []).length, 3, "상세에는 석 장 다");
+});
+
+test("옛 공지(사진 한 칸짜리)도 그대로 읽힌다", async () => {
+  const { env, a } = await seedPhotos([]);
+  // images 칸이 생기기 전에 올라간 줄을 흉내 낸다
+  await env.DB.prepare("INSERT INTO notices (association_id, title, body, tag, image) VALUES (?,?,?,?,?)")
+    .bind(a.id, "옛 공지", "본문", "소식", "old.jpg").run();
+  const n = await D.first(env.DB, "SELECT * FROM notices WHERE title='옛 공지'");
+  assert.deepEqual(D.noticeImages(n), ["old.jpg"], "image 한 칸만 있어도 한 장으로 읽는다");
+});
+
+test("한 공지가 활동사진 판을 독차지하지 않는다 — 건당 석 장까지", async () => {
+  const { env, a } = await seedPhotos([]);
+  await D.createNotice(env.DB, { associationId: a.id, title: "지정식", body: "본문", tag: "소식",
+    images: "p1.jpg\np2.jpg\np3.jpg\np4.jpg\np5.jpg" });
+  await D.createNotice(env.DB, { associationId: a.id, title: "대청소", body: "본문", tag: "소식", images: "q1.jpg" });
+  const html = await (await get(env, "/t/s/")).text();
+  const board = html.slice(html.indexOf("photo-board"), html.indexOf("photo-board") + 4000);
+  assert.equal((board.match(/p\d\.jpg/g) || []).length, 3, "다섯 장을 올려도 판에는 석 장까지");
+  assert.match(board, /q1\.jpg/, "다른 활동도 자리를 얻는다");
+});

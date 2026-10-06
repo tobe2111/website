@@ -1140,18 +1140,34 @@ export const listNotices = (db, aid, limit = null) =>
 export const getNotice = (db, id) => first(db, "SELECT * FROM notices WHERE id=?", id);
 export const distinctNoticeTags = (db, aid) =>
   all(db, "SELECT tag, COUNT(*) AS n FROM notices WHERE association_id=? GROUP BY tag ORDER BY n DESC, tag", aid);
-export async function createNotice(db, { associationId, title, body, tag, image = "", pinned }) {
-  await run(db, "INSERT INTO notices (association_id, title, body, tag, image, pinned) VALUES (?,?,?,?,?,?)",
-    associationId, title, body || "", tag || "안내", image || "", pinned ? 1 : 0);
+// 공지에 붙은 사진들. 첫 줄이 대표 사진이고, 목록·사진판에 나가는 것도 그 한 장이다.
+// 옛 공지는 images 가 비어 있고 image 한 칸만 있다 — 그래서 둘을 합쳐 읽는다.
+export function noticeImages(n) {
+  if (!n) return [];
+  const many = String(n.images || "").split("\n").map((x) => x.trim()).filter(Boolean);
+  if (many.length) return many;
+  return n.image ? [String(n.image)] : [];
+}
+export async function createNotice(db, { associationId, title, body, tag, image = "", images = "", pinned }) {
+  // 대표 사진은 늘 첫 줄이다. 둘을 따로 받으면 언젠가 어긋나고, 어긋나면 목록 썸네일과
+  // 상세 첫 사진이 다른 그림이 된다 — 보는 사람은 고장으로 읽는다.
+  const list = String(images || "").split("\n").map((x) => x.trim()).filter(Boolean);
+  const cover = list[0] || image || "";
+  await run(db, "INSERT INTO notices (association_id, title, body, tag, image, images, pinned) VALUES (?,?,?,?,?,?,?)",
+    associationId, title, body || "", tag || "안내", cover, list.join("\n"), pinned ? 1 : 0);
   return getNotice(db, await lastId(db));
 }
 // 고치기 — 예전에는 만들기와 지우기만 있었다. 오타 하나에 공지를 지웠다 다시 쓰면
 // 카톡으로 돌린 링크가 죽는다(주소가 글 번호이기 때문). 같은 글을 그대로 고친다.
 // image 를 넘기지 않으면 원래 사진을 그대로 둔다 — 사진을 안 다시 올렸다고 지워 버리면 안 된다.
-export async function updateNotice(db, id, aid, { title, body, tag, pinned, image = null }) {
-  await run(db, `UPDATE notices SET title=?, body=?, tag=?, pinned=?${image === null ? "" : ", image=?"}
+export async function updateNotice(db, id, aid, { title, body, tag, pinned, images = null }) {
+  // images 가 null 이면 사진은 손대지 않는다(제목만 고치는 경우). 빈 문자열이면 다 지운다.
+  const set = images === null ? "" : ", image=?, images=?";
+  const list = images === null ? [] : String(images).split("\n").map((x) => x.trim()).filter(Boolean);
+  await run(db, `UPDATE notices SET title=?, body=?, tag=?, pinned=?${set}
     WHERE id=? AND association_id=?`,
-    ...[title, body || "", tag || "안내", pinned ? 1 : 0, ...(image === null ? [] : [image]), id, aid]);
+    ...[title, body || "", tag || "안내", pinned ? 1 : 0,
+        ...(images === null ? [] : [list[0] || "", list.join("\n")]), id, aid]);
   return getNotice(db, id);
 }
 export const deleteNotice = (db, id) => run(db, "DELETE FROM notices WHERE id=?", id);

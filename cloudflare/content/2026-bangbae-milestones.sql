@@ -87,3 +87,21 @@ FROM associations a
 WHERE a.name LIKE '%방배카페골목%' AND a.kind = 'merchant'
   AND NOT EXISTS (SELECT 1 FROM notices n WHERE n.association_id = a.id
                   AND n.title = '지난 교육 — 골목형상점가 상인 역량강화 교육 (서울신용보증재단)');
+
+-- ④ 제7호 지정 공지에 그날 사진 다섯 장을 붙입니다 (서초구청 · 전성수 서초구청장).
+--
+-- 사진은 공개 자산으로 함께 배포되는 파일이고, 줄바꿈으로 이어 붙입니다.
+-- 첫 줄이 대표 사진이라 공지 목록과 홈 '활동사진' 에 나가는 것도 그 한 장입니다.
+--
+-- 이미 사진이 붙어 있으면 건드리지 않습니다 — 회장님이 관리 화면에서 바꾸셨을 수 있고,
+-- 배포 한 번에 그걸 조용히 되돌리면 되돌린 줄도 모릅니다.
+UPDATE notices
+SET images = '/img/notice/2026-golmok7-01-수여.webp
+/img/notice/2026-golmok7-02-환담.webp
+/img/notice/2026-golmok7-03-간담회.webp
+/img/notice/2026-golmok7-04-간담회2.webp
+/img/notice/2026-golmok7-05-간담회3.webp',
+    image = '/img/notice/2026-golmok7-01-수여.webp'
+WHERE title = '방배카페골목, 서초구 제7호 골목형상점가로 지정되었습니다'
+  AND COALESCE(images, '') = '' AND COALESCE(image, '') = ''
+  AND association_id IN (SELECT id FROM associations WHERE name LIKE '%방배카페골목%' AND kind = 'merchant');

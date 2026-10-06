@@ -392,3 +392,20 @@ test("매체마다 늘 같은 색 — 색이 장식이 아니라 표시가 된�
   assert.ok(tones.size >= 5, `열두 매체가 최소 다섯 색으로 갈려야 (지금 ${tones.size}색)`);
   for (const t of tones) assert.ok(t >= 0 && t <= 7, "여덟 색 안에 든다");
 });
+
+// 가판대의 읽는 차례 — 신문은 제목이 먼저다.
+//
+// 처음에는 매체 이름을 색 알약으로 제목 **위에** 올렸다. 그러면 화면을 읽어 주는
+// 프로그램도 "연합뉴스, 2026-05-12, 방배카페골목 명성 되찾는다" 순으로 읽는다.
+// 손님이 찾는 것은 제목이지 매체가 아니다.
+test("머리기사는 제목이 매체·날짜보다 먼저 나온다", async () => {
+  const env = makeEnv();
+  const a = await seed(env);
+  const row = await D.addPressItem(env.DB, { associationId: a.id, title: "방배카페골목 명성 되찾는다",
+    url: "https://yna.co.kr/view/head", source: "연합뉴스", publishedAt: "2026-05-12" });
+  await D.setPressStatus(env.DB, row.id, a.id, "live");
+  const home = await (await get(env, jar(), "/t/bangbae/")).text();
+  const lead = home.slice(home.indexOf("press-lead"), home.indexOf("press-lead") + 900);
+  assert.ok(lead.indexOf("pl-title") < lead.indexOf("pl-top"), "제목이 먼저 온다");
+  assert.ok(lead.includes("연합뉴스"), "매체는 그대로 남는다 — 지우는 것이 아니라 뒤로 보내는 것이다");
+});
