@@ -443,8 +443,10 @@ export async function home(ctx, opts = {}) {
     // 홈의 '이용권 만들러 가기' 는 유어딜 판매자 가입으로 곧장 간다 — 목표는 유어딜 유입이다.
     urdealSignup: urdealSignupUrl(ctx.env, assoc.slug),
     heroImage: assoc.hero_image ? mediaUrl(assoc.hero_image) : "",
-    // 맨 아래 '연락처·오시는 길' 의 오른쪽 기둥 — 간판·SNS 는 이미 가진 값이다
-    logoUrl: assoc.logo ? mediaUrl(assoc.logo) : "",
+    // 맨 아래 '연락처·오시는 길' 의 오른쪽 기둥 — 간판·SNS 는 이미 가진 값이다.
+    // 관리자가 올린 로고가 언제나 이긴다. 없을 때만 꾸러미의 **조직 표장**(상가연합회 로고)이
+    // 그 자리를 채운다 — 머리말의 거리 간판과는 다른 것이라 둘이 겹치지 않는다.
+    logoUrl: assoc.logo ? mediaUrl(assoc.logo) : ((bundledBrand(assoc) || {}).union || ""),
     assocSns: D.assocSnsLinks(assoc),
     heroVideo: assoc.hero_video ? mediaUrl(assoc.hero_video) : "",
     photosHtml,
