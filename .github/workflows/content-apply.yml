@@ -126,7 +126,7 @@ jobs:
             npx --yes wrangler@4 d1 execute seocho-db --remote --yes --command "$2" | tee -a $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
           }
-          show "지금 들어 있는 행사 (최근 10건)" "SELECT id, event_date, title FROM events ORDER BY id DESC LIMIT 10"
+          show "지금 들어 있는 행사 (최근 10건)" "SELECT id, event_date, CASE WHEN cover=1 THEN '대문' ELSE '' END AS 대문, title FROM events ORDER BY id DESC LIMIT 10"
           show "지금 들어 있는 공지 (최근 10건)" "SELECT id, pinned, tag, title, CASE WHEN image='' THEN '' ELSE '사진' END AS 사진 FROM notices ORDER BY id DESC LIMIT 10"
 
           # 이름이 같은 행사가 둘 이상이면 두 번 들어간 것이다 — 여기서 멈춘다.
