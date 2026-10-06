@@ -350,38 +350,38 @@ test("모르는 매체는 여전히 주소 그대로 — 없는 이름을 지어
   assert.equal(rows[0].source, "some-local.example");
 });
 
-test("홈은 여섯 건까지 — 더 있으면 '전체보기' 로 나머지를 본다", async () => {
+test("홈은 열 건까지 — 더 있으면 '전체보기' 로 나머지를 본다", async () => {
   const env = makeEnv();
   const a = await seed(env);
-  for (let i = 1; i <= 9; i++) {
+  for (let i = 1; i <= 14; i++) {
     const row = await D.addPressItem(env.DB, { associationId: a.id, title: `방배카페골목 기사 ${i}`,
-      url: `https://yna.co.kr/view/${i}`, source: "연합뉴스", publishedAt: `2026-0${(i % 9) + 1}-01` });
+      url: `https://yna.co.kr/view/${i}`, source: "연합뉴스", publishedAt: `2026-${String((i % 12) + 1).padStart(2, "0")}-01` });
     await D.setPressStatus(env.DB, row.id, a.id, "live");
   }
   const home = await (await get(env, jar(), "/t/bangbae/")).text();
   // 제목이 실제로 **카드에** 적힌 횟수만 센다 — 쪽 설명(meta)에도 같은 말이 들어간다
-  const onHome = (home.match(/-title">방배카페골목 기사 \d/g) || []).length;
-  assert.equal(onHome, 6, "홈에는 여섯 건까지");
+  const onHome = (home.match(/-title">방배카페골목 기사 \d+/g) || []).length;
+  assert.equal(onHome, 10, "홈에는 열 건까지");
   assert.match(home, /href="\/t\/bangbae\/press"/, "더 있으면 전체보기 링크가 뜬다");
 
   const all = await (await get(env, jar(), "/t/bangbae/press")).text();
-  assert.equal((all.match(/-title">방배카페골목 기사 \d/g) || []).length, 9, "전체 목록에는 아홉 건 다");
+  assert.equal((all.match(/-title">방배카페골목 기사 \d+/g) || []).length, 14, "전체 목록에는 열네 건 다");
   assert.match(all, /각 기사의 저작권은 해당 언론사에 있습니다/, "어디까지가 우리 것인지 적어 둔다");
   // 머리말·바닥글의 간판 그림은 우리 것이다. 재는 것은 **기사 목록 안**이다.
   const stand = all.slice(all.indexOf("press-stand"), all.indexOf("press-note"));
   assert.ok(!stand.includes("<img"), "기사 사진은 가져오지 않는다 — 남의 사진이다");
 });
 
-test("여섯 건 이하면 '전체보기' 를 띄우지 않는다 — 눌러도 더 없는 링크는 거짓말이다", async () => {
+test("열 건 이하면 '전체보기' 를 띄우지 않는다 — 눌러도 더 없는 링크는 거짓말이다", async () => {
   const env = makeEnv();
   const a = await seed(env);
-  for (let i = 1; i <= 3; i++) {
+  for (let i = 1; i <= 10; i++) {
     const row = await D.addPressItem(env.DB, { associationId: a.id, title: `기사 ${i}`,
       url: `https://yna.co.kr/x/${i}`, source: "연합뉴스", publishedAt: "2026-05-01" });
     await D.setPressStatus(env.DB, row.id, a.id, "live");
   }
   const home = await (await get(env, jar(), "/t/bangbae/")).text();
-  assert.ok(!/href="\/t\/bangbae\/press"/.test(home), "여섯 건 이하면 링크가 없다");
+  assert.ok(!/href="\/t\/bangbae\/press"/.test(home), "열 건 이하면 링크가 없다");
 });
 
 test("매체마다 늘 같은 색 — 색이 장식이 아니라 표시가 된다", async () => {

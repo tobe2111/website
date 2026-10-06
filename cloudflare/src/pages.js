@@ -391,7 +391,9 @@ export async function home(ctx, opts = {}) {
   // 언론 속 우리 골목 — **관리자가 고른 것(live)만** 가져온다. 구역을 껐으면 묻지도 않는다.
   const pressOn = lay.some((x) => x.type === "press" && x.enabled !== false);
   // 7건을 가져온다 — 6건을 보여주고, 일곱 번째가 있으면 '전체보기' 를 띄운다.
-  const pressRows = pressOn ? await D.listPressLive(db, assoc.id, 7).catch(() => []) : [];
+  // 홈이 거는 열 건 + 한 건. 한 건 더 받아 와야 '전체보기' 를 띄울지 말지를 알 수 있다
+  // (열 건 이하인데 링크가 있으면 눌러도 더 없는 링크가 된다).
+  const pressRows = pressOn ? await D.listPressLive(db, assoc.id, 11).catch(() => []) : [];
   const cardItems = items.slice(0, 8);
   const covers = await D.coverImagesFor(db, cardItems.map((b) => b.id));
   const businessesHtml = cardItems.map((b) => businessCard(base, b, covers.get(b.id))).join("");

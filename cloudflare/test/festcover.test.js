@@ -115,6 +115,38 @@ test("대문은 한 번에 하나다 — 새로 고르면 앞의 것이 꺼진�
   assert.equal((home.match(/class="fest-cover"/g) || []).length, 1, "대문이 둘이면 둘 다 안 읽힌다");
 });
 
+// ⑤ 대문이 서 있는 동안 아래 사진 대문은 '찾기 띠' 로 눕는다.
+//
+// 큰 대문이 둘이면 둘 다 안 읽힌다. 축제가 한 화면을 쓰는데 사진 대문이 또 한 화면을 쓰면
+// 손님은 두 번을 쓸어내려야 가게에 닿고, 머리줄 로고가 이미 말한 상인회 이름을 사진 대문이
+// 한 번 더 외친다. 그래서 축제가 서 있는 동안만 눕히되 **지우지는 않는다** —
+// 검색은 손님이 가장 많이 쓰는 것이고, 회원 신청은 상인회가 이 홈으로 이루려는 첫째 목표다.
+test("축제가 대문에 서면 사진 대문은 '찾기 띠' 로 눕는다 — 지워지지는 않는다", async () => {
+  const env = makeEnv();
+  const a = await seed(env);
+  const e = await mkEvent(env, a);
+  await D.setEventCover(env.DB, e.id, a.id);
+  const home = await (await get(env, jar(), "/t/bangbae/")).text();
+
+  assert.match(home, /class="hero-bar"/, "찾기 띠가 선다");
+  assert.ok(!home.includes('class="hero-pro'), "큰 사진 대문은 서지 않는다 — 대문이 둘이면 둘 다 안 읽힌다");
+  assert.match(home, /name="q"/, "검색은 남는다 — 손님이 가장 많이 쓰는 것이다");
+  assert.match(home, /\/t\/bangbae\/register/, "회원 신청하기도 남는다");
+  // 상인회 이름이 사진 대문의 큰 제목으로 또 나오지 않는다 (머리줄 로고가 이미 말한다)
+  assert.ok(!/class="hp-title"/.test(home), "이름을 두 번 외치지 않는다");
+});
+
+test("축제가 끝나면 사진 대문이 저절로 돌아온다 — 사람이 기억하지 않는다", async () => {
+  const env = makeEnv();
+  const a = await seed(env);
+  const e = await mkEvent(env, a, { event_date: day(-1) }); // 어제 끝난 축제
+  await D.setEventCover(env.DB, e.id, a.id);
+  const home = await (await get(env, jar(), "/t/bangbae/")).text();
+  assert.ok(!home.includes("fest-cover"), "지난 축제는 대문에서 사라진다");
+  assert.ok(!home.includes('class="hero-bar"'), "띠도 함께 걷힌다");
+  assert.match(home, /class="hero-pro/, "원래 사진 대문이 돌아온다");
+});
+
 test("같은 날 함께 열리는 행사가 대문에 함께 적힌다 — 손으로 또 안 적는다", async () => {
   const env = makeEnv();
   const a = await seed(env);
