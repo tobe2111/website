@@ -389,22 +389,38 @@ test("기본 홈에는 입점 절차·혜택·FAQ 가 없다 (모집은 맨 아�
   assert.ok(defaultLayout("x").some((s) => s.type === "steps"), "섹션 자체는 목록에 남아 있어야");
 });
 
-test("사진 붙은 공지는 활동사진 판으로 뜨고, 공지 목록에 두 번 나오지 않는다", async () => {
+// 예전에는 사진 있는 공지가 '활동사진' 몫이라 공지 구역에 글만 남았다. 그런데 그 사진들이
+// 행사 카드와 겹친다는 이유로 활동사진에서도 빠져 **어디에도 안 보이는** 일이 났다 —
+// 라이브에서 공지 여덟 건 중 홈에 두 줄만 떴다. 그래서 공지 구역이 사진을 되찾았다.
+test("사진 붙은 공지는 공지 구역의 카드로 선다", async () => {
   const { env } = await seedPhotos([["달빛축제 현장", "shot.jpg"], ["9월 정기총회 안내", ""]]);
   const html = await (await get(env, "/t/s/")).text();
 
-  assert.match(html, /class="photo-board"/, "활동사진 판이 있어야");
-  assert.match(html, /pb-card/);
+  assert.match(html, /class="nc-grid"/, "사진 카드 격자가 있어야");
+  assert.match(html, /nc-card[\s\S]*shot\.jpg/, "카드에 그 공지의 사진이 들어가야");
   assert.equal((html.match(/달빛축제 현장/g) || []).length, 1, "사진 공지는 한 번만 — 같은 말을 두 번 하지 않는다");
-  assert.match(html, /9월 정기총회 안내/, "사진 없는 공지는 공지 목록에 남는다");
+  assert.match(html, /9월 정기총회 안내/, "사진 없는 공지도 아래 한 줄 목록에 남는다");
+  assert.ok(!html.includes("photo-board"), "활동사진 판은 기본에서 꺼져 있다 — 같은 사진을 두 번 깔지 않는다");
 });
 
-test("사진 붙은 공지가 하나도 없으면 활동사진 자리가 아예 없다", async () => {
+test("사진 붙은 공지가 하나도 없으면 카드 격자가 아예 없다", async () => {
   const { env } = await seedPhotos([["주차 안내", ""]]);
   const html = await (await get(env, "/t/s/")).text();
-  assert.ok(!html.includes("photo-board"), "빈 사진판은 '아무것도 안 한 상인회' 로 읽힌다");
-  assert.ok(!html.includes("활동사진"), "제목만 남기지도 않는다");
-  assert.match(html, /주차 안내/, "공지는 그대로 목록에");
+  assert.ok(!html.includes("nc-grid"), "빈 카드 자리를 남기지 않는다");
+  assert.ok(!html.includes("photo-board"));
+  assert.match(html, /주차 안내/, "공지는 그대로 한 줄 목록에");
+});
+
+// 사진판을 따로 쓰고 싶은 상인회는 홈 구성에서 켤 수 있다. 그때는 예전 규칙으로 돌아간다 —
+// 사진은 판 몫이고 공지 구역에는 글 공지만 남는다. 둘이 같은 사진을 두 번 깔면 안 된다.
+test("활동사진 판을 켜면 사진은 판 몫이 되고 공지 카드는 서지 않는다", async () => {
+  const { env, a } = await seedPhotos([["달빛축제 현장", "shot.jpg"], ["9월 정기총회 안내", ""]]);
+  const lay = serializeLayout(parseLayout(null, a.name).map((s) => (s.type === "photos" ? { ...s, enabled: true } : s)));
+  await env.DB.prepare("UPDATE associations SET home_layout=? WHERE id=?").bind(lay, a.id).run();
+  const html = await (await get(env, "/t/s/")).text();
+  assert.match(html, /class="photo-board"/, "켜면 판이 선다");
+  assert.ok(!html.includes("nc-grid"), "판이 섰으면 공지 카드는 안 선다 — 같은 사진이 두 번 깔린다");
+  assert.equal((html.match(/달빛축제 현장/g) || []).length, 1);
 });
 
 test("영상은 주소를 넣었을 때만 뜬다 (없거나 이상하면 자리 자체가 없다)", async () => {
@@ -452,8 +468,10 @@ test("옛 공지(사진 한 칸짜리)도 그대로 읽힌다", async () => {
   assert.deepEqual(D.noticeImages(n), ["old.jpg"], "image 한 칸만 있어도 한 장으로 읽는다");
 });
 
-test("한 공지가 활동사진 판을 독차지하지 않는다 — 건당 석 장까지", async () => {
+test("한 공지가 활동사진 판을 독차지하지 않는다 — 건당 석 장까지 (판을 켠 상인회)", async () => {
   const { env, a } = await seedPhotos([]);
+  const lay = serializeLayout(parseLayout(null, a.name).map((s) => (s.type === "photos" ? { ...s, enabled: true } : s)));
+  await env.DB.prepare("UPDATE associations SET home_layout=? WHERE id=?").bind(lay, a.id).run();
   await D.createNotice(env.DB, { associationId: a.id, title: "지정식", body: "본문", tag: "소식",
     images: "p1.jpg\np2.jpg\np3.jpg\np4.jpg\np5.jpg" });
   await D.createNotice(env.DB, { associationId: a.id, title: "대청소", body: "본문", tag: "소식", images: "q1.jpg" });
@@ -461,4 +479,17 @@ test("한 공지가 활동사진 판을 독차지하지 않는다 — 건당 석
   const board = html.slice(html.indexOf("photo-board"), html.indexOf("photo-board") + 4000);
   assert.equal((board.match(/p\d\.jpg/g) || []).length, 3, "다섯 장을 올려도 판에는 석 장까지");
   assert.match(board, /q1\.jpg/, "다른 활동도 자리를 얻는다");
+});
+
+// 공지 구역의 카드는 셋까지다. 넷을 세우면 한 줄에 안 들어가고, 나머지는 사라지는 게 아니라
+// 아래 한 줄 목록으로 내려간다 — **어느 공지도 홈에서 없어지지 않는다**(예전엔 없어졌다).
+test("공지 카드는 셋까지, 나머지는 아래 목록으로 — 사라지는 공지가 없다", async () => {
+  const { env, a } = await seedPhotos([]);
+  for (const t of ["축제", "미식로드", "노래자랑", "지정식", "대청소"])
+    await D.createNotice(env.DB, { associationId: a.id, title: t, body: "본문", tag: "소식", images: `${t}.jpg` });
+  await D.createNotice(env.DB, { associationId: a.id, title: "주차 안내", body: "본문", tag: "안내", image: "" });
+  const html = await (await get(env, "/t/s/")).text();
+  assert.equal((html.match(/class="nc-card"/g) || []).length, 3, "카드는 셋까지");
+  for (const t of ["축제", "미식로드", "노래자랑", "지정식", "대청소", "주차 안내"])
+    assert.ok(html.includes(t), `${t} 가 홈에서 사라지면 안 된다`);
 });
