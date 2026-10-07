@@ -734,6 +734,35 @@ body[data-console="super"] .site-header .nav-logout .btn:hover{color:#fff;backgr
   border-radius:0;overflow:visible;border-top:1px solid var(--line-soft)}
 .notice-list.nc-rest li+li,.sec-v5 .notice-list.nc-rest li+li{border-top:1px solid var(--line-soft)}
 .notice-list.nc-rest a,.sec-v5 .notice-list.nc-rest a{padding-left:2px;padding-right:2px}
+
+/* ── 공지 목록 화면(/notices)의 큰 줄 ──────────────────────────────────────
+   목록 상자(.notice-list)를 그대로 쓰고 줄 안쪽만 키웁니다. 새 상자를 만들면 관리자가
+   줄 앞 네모칸으로 고르는 흐름(.has-pick/.rowpick/.list-pick)이 전부 .notice-list 에
+   걸려 있어 그 규칙을 다시 써야 하고, 둘이 어긋나는 날 관리 화면이 깨집니다. */
+.nl-big a{align-items:flex-start;gap:18px;padding:18px 20px}
+.nl-th{flex:none;width:136px;height:96px;border-radius:11px;overflow:hidden;background:var(--bg-alt)}
+.nl-th img{width:100%;height:100%;object-fit:contain;display:block}
+/* 사진이 없는 공지 — 회색 서류 아이콘 대신 분류 색 타일. 여덟 건 중 넷이 같은 회색
+   아이콘이라 목록이 관리자 표처럼 보였습니다. */
+.nl-flat{display:flex;align-items:center;justify-content:center;background:var(--tone-bg);color:var(--tone-fg)}
+.nl-flat b{font-size:1.02rem;font-weight:800;letter-spacing:1.5px}
+.nl-big .notice-main{gap:7px}
+.nl-head{display:flex;align-items:center;gap:10px;font-size:.8rem;color:var(--muted)}
+/* 알약(999px)이 아니라 네모 모서리다 — 이 저장소는 배지를 알약으로 두지 않는다
+   (plain.test.js 가 지킨다). 화면마다 알약이 열 개씩 뜨면 장식으로 읽히기 때문이다. */
+.nl-chip{flex:none;padding:3px 9px;border-radius:6px;font-size:.74rem;font-weight:700;
+  background:var(--tone-bg);color:var(--tone-fg)}
+/* 제목은 두 줄까지 눕습니다 — .notice-title 기본값인 한 줄 말줄임으로는 "서초구 골목형
+   상점가 상인회 연합회 창립 — 우리…" 에서 끊겨 무슨 일인지 읽히지 않습니다. */
+.nl-big .notice-title{white-space:normal;overflow:visible;font-size:1.06rem;font-weight:700;line-height:1.45}
+.nl-sum{font-size:.87rem;line-height:1.6;color:var(--muted);
+  display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
+.nl-big .notice-chev{align-self:center}
+/* 분류 색 한 쌍씩. 바탕이 옅고 글자가 짙어 작은 알약에서도 글자가 읽힙니다. */
+.t-ev{--tone-bg:#e6f6ee;--tone-fg:#15604a}
+.t-nw{--tone-bg:#eaf1f8;--tone-fg:#1f4a73}
+.t-in{--tone-bg:#fdf1e5;--tone-fg:#8a3a1e}
+.t-ed{--tone-bg:#f0edf8;--tone-fg:#473377}
 @media (max-width:860px){
   /* 폰에서는 한 줄에 하나. 카드 셋을 다 세우면 공지 구역만으로 세 화면이 되어
      그 아래 지도·행사까지 내려가는 분이 없다. 둘까지만 세운다. */
@@ -921,6 +950,15 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
   .hero-actions{flex-direction:column}
   .hero-actions .btn{width:100%}
   .notice-list a{padding:13px 14px;gap:11px}
+  /* 공지 목록 화면의 큰 줄 — 폰에서는 사진을 줄이고 요약·화살표를 접어 제목에 폭을 줍니다 */
+  .nl-big a{gap:13px;padding:14px}
+  .nl-th{width:96px;height:72px}
+  /* 관리자 화면에는 줄 앞에 44px 고르기 칸이 하나 더 붙는다 — 그만큼 사진을 줄여
+     제목에 폭을 돌려준다. 손님 화면(고르기 칸 없음)은 그대로 96px 이다. */
+  .nl-big.list-pick .nl-th{width:84px;height:62px}
+  .nl-big .notice-title{font-size:.98rem}
+  .nl-sum{display:none}
+  .nl-big .notice-chev{display:none}
   .dash-head{align-items:flex-start}
   /* 점포 카드 2열 — 1열일 때 카드 한 장이 화면을 통째로 먹던 문제 해결 */
   .market-grid{grid-template-columns:1fr 1fr;gap:10px}
