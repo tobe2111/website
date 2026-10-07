@@ -212,9 +212,12 @@ export function defaultLayout(assocName = "우리 상인회") {
     // 쇼케이스(검은 인용 띠)는 기본에서 끕니다 — 새 정보를 주지 않으면서 화면 한가운데를 끊습니다.
     // 쓰고 싶은 상인회는 홈 구성에서 켤 수 있습니다.
     { type: "showcase", enabled: false, title: "", lead: "" },
-    // 활동사진 — 사진이 붙은 공지를 사진판으로 보여준다. 상인회가 실제로 무엇을 하는 곳인지는
-    // 문장보다 사진이 빨리 말한다. 사진 붙은 공지가 하나도 없으면 섹션 자체가 안 나온다.
-    { type: "photos", enabled: true, title: "활동사진", lead: "" },
+    // 활동사진 — 기본에서 **끕니다.** 사진이 붙은 공지는 이제 바로 위 '공지' 구역이
+    // 카드로 세웁니다. 둘 다 켜 두면 같은 사진이 한 화면에 두 번 깔리고, 예전처럼
+    // 공지 구역에서 사진을 빼앗아 글만 두 줄 남는 일이 다시 생깁니다.
+    // 사진판을 따로 두고 싶은 상인회는 홈 구성에서 켜면 됩니다 — 그러면 예전처럼
+    // 공지 구역은 글 공지만 받습니다(둘이 겹치지 않게 pages.js 가 갈라 줍니다).
+    { type: "photos", enabled: false, title: "활동사진", lead: "" },
     // 언론 속 우리 골목 — 관리자가 고른 기사만 들어온다. 고른 것이 없으면 섹션 자체가 없다
     // (수집을 켜지 않은 상인회의 홈은 예전과 똑같이 보인다).
     { type: "press", enabled: true, title: `언론 속의 ${orgShortName(assocName)}`, lead: "" },
@@ -409,15 +412,20 @@ function renderSection(s, deps) {
               </div></div>`,
         { href: `${deps.base}/businesses`, label: "더보기" }
       );
-    case "notices":
-      if (!deps.noticesHtml) return ""; // 공지 없으면 공개 홈에서 섹션 자체 숨김
+    case "notices": {
+      // 사진 있는 공지는 카드로, 나머지는 그 아래 한 줄 목록으로.
+      // 둘 다 비면 섹션 자체를 숨긴다(공지가 없는 상인회의 홈은 예전과 똑같다).
+      const cards = deps.noticeCardsHtml ? `<div class="nc-grid">${deps.noticeCardsHtml}</div>` : "";
+      const rows = deps.noticesHtml ? `<ul class="notice-list${cards ? " nc-rest" : ""}">${deps.noticesHtml}</ul>` : "";
+      if (!cards && !rows) return "";
       return sectionWrap(
         "section-alt section-sub",
         s.title,
         "",
-        `<ul class="notice-list">${deps.noticesHtml}</ul>`,
+        cards + rows,
         { href: `${deps.base}/notices`, label: "전체보기" }
       );
+    }
     case "events":
       if (!deps.eventsHtml) return ""; // 행사 없으면 섹션 숨김
       return sectionWrap("section-sub", s.title, "", `<div class="event-grid">${deps.eventsHtml}</div>`, { href: `${deps.base}/events`, label: "전체보기" });

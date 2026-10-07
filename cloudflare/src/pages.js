@@ -373,7 +373,9 @@ export async function home(ctx, opts = {}) {
   // (4열 그리드는 8이라야 마지막 줄이 꽉 찬다).
   const [{ items }, notices, events, stats, cats, names, recentUpdates, hourRows] = await Promise.all([
     D.listBusinessesPaged(db, assoc.id, { perPage: 12 }),
-    D.listNotices(db, assoc.id, 5),
+    // 공지는 10건 받는다. 사진 있는 공지 셋이 카드로 서고 나머지가 한 줄 목록이 되는데,
+    // 5건만 받으면 사진 있는 것 셋을 빼고 두 줄만 남아 구역이 비어 보인다(실제로 그랬다).
+    D.listNotices(db, assoc.id, 10),
     D.listEvents(db, assoc.id, true),
     D.stats(db, assoc.id),
     D.distinctCategories(db, assoc.id),
@@ -426,6 +428,18 @@ export async function home(ctx, opts = {}) {
     ? notices.flatMap((n) => D.noticeImages(n).filter((k) => !shownImages.has(k)).slice(0, 3).map((k) => ({ n, k })))
     : [];
   const textNotices = photoOn ? notices.filter((n) => !D.noticeImages(n).length) : notices;
+  // ── 공지 구역이 사진을 되찾는다 ─────────────────────────────────────────
+  //
+  // 활동사진 구역이 꺼져 있으면(기본값) 사진 있는 공지는 **공지 구역의 카드**로 선다.
+  // 예전에는 사진 있는 공지가 활동사진 몫이라 공지 구역에 글만 남았는데, 그 사진들이
+  // 행사 카드와 겹친다는 이유로 활동사진에서도 빠져 **어디에도 안 보였다.**
+  // 실제 라이브에서 공지 여덟 건 중 홈에 두 줄만 뜨고 있었다.
+  //
+  // 셋까지만 카드로 세운다 — 넷을 세우면 한 줄에 안 들어가고, 둘이면 격자가 어색하다.
+  // 나머지는 전부 아래 한 줄 목록으로 간다. **어느 공지도 사라지지 않는다.**
+  const cardNotices = photoOn ? [] : textNotices.filter((n) => D.noticeImages(n).length).slice(0, 3);
+  const cardIds = new Set(cardNotices.map((n) => n.id));
+  const rowNotices = textNotices.filter((n) => !cardIds.has(n.id));
   const photosHtml = withPhoto.slice(0, 6).map(({ n, k }) => `<a class="pb-card" href="${base}/notices/${n.id}">
     <span class="pb-shot"><img src="${esc(mediaUrl(k))}" alt="" loading="lazy" />
       <span class="pb-view" aria-hidden="true">view <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></span></span>
@@ -461,7 +475,8 @@ export async function home(ctx, opts = {}) {
     coverDday: coverEv ? dDayLabel(coverEv.event_date) : "",
     coverWhen: coverEv ? festWhen(coverEv.event_date) : "",
     press: pressRows,
-    noticesHtml: textNotices.length ? noticeRows(base, textNotices) : "",
+    noticesHtml: rowNotices.length ? noticeRows(base, rowNotices) : "",
+    noticeCardsHtml: cardNotices.length ? noticeCards(base, cardNotices) : "",
     counts: { businesses: items.length, notices: notices.length, events: events.length },
     // 사진 카드 구성은 8곳, 한 줄 목록 구성은 12곳을 보여준다
     suggestNames: names.map((r) => r.name),
@@ -1192,6 +1207,24 @@ const DOC_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" str
 const noticeIco = (n) => n.pinned ? BELL_SVG : (/모집|참여|이벤트/.test(n.tag) ? SEND_SVG : DOC_SVG);
 // pick 을 주면 각 줄 앞에 고르기 칸이 붙는다 — 관리자가 목록을 보다가 그 자리에서
 // 지우거나 고정할 수 있게. 손님에게는 이 칸이 아예 그려지지 않는다.
+// 사진이 붙은 공지 — 카드로 선다. 포스터는 **자르지 않고 가운데를 맞춰** 담는다.
+//
+// 상인회가 올리는 사진은 대부분 포스터다. 4:3 으로 깎으면 날짜와 장소가 날아가는데,
+// 그걸 보여주려고 올린 것이다. 그래서 사진 칸은 비율만 잡아 두고 contain 으로 넣는다 —
+// 가로 사진은 좌우가, 세로 포스터는 위아래가 바탕색으로 남는다. 잘리는 것보다 낫다.
+function noticeCards(base, list) {
+  return list.map((n) => {
+    const img = D.noticeImages(n)[0] || "";
+    const lead = clip(String(n.body || "").replace(/\s+/g, " ").trim(), 70);
+    return `<a class="nc-card" href="${base}/notices/${n.id}">
+      <span class="nc-shot"><img src="${esc(mediaUrl(img))}" alt="" loading="lazy" /></span>
+      <span class="nc-body">
+        <span class="nc-meta"><b class="nc-tag">${esc(n.tag)}</b><time>${esc(kstDate(n.created_at, "."))}</time></span>
+        <strong class="nc-title">${n.pinned ? '<em class="pin-mini">고정</em>' : ""}${esc(n.title)}</strong>
+        ${lead ? `<span class="nc-lead">${esc(lead)}</span>` : ""}
+      </span></a>`;
+  }).join("");
+}
 function noticeRows(base, list, pick = false) {
   return list.length ? list.map((n) => `<li${pick ? ' class="has-pick"' : ""}>${pick
     ? `<label class="rowpick"><input type="checkbox" name="ids" value="${n.id}" form="noticePick" aria-label="${esc(n.title)} 고르기" /></label>`
