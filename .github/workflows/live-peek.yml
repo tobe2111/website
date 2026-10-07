@@ -59,8 +59,12 @@ jobs:
             rm -f "$f"
           }
           echo "### 화면" | tee -a $GITHUB_STEP_SUMMARY
-          peek "/" 'press-stand' 'press-lead' 'pr-row' 'fest-cover' '전체보기'
+          # nc-card: 사진 붙은 공지가 홈에서 카드로 서는가. 공지가 여덟 건인데 홈에 두 줄만
+          # 뜨던 사고를 숫자로 잡으려면 이 표시를 세야 한다(배포가 갔다고 그 모양으로 뜨는 건 아니다).
+          # photo-board 는 0 이어야 맞다 — 켜져 있으면 같은 사진이 한 화면에 두 번 깔린다.
+          peek "/" 'press-stand' 'press-lead' 'pr-row' 'fest-cover' '전체보기' 'nc-card' 'nc-rest' 'photo-board'
           peek "/press" 'pr-row' '언론 속의'
+          peek "/notices" 'notice-thumb-img' 'notice-ico'
 
       # 스타일시트가 **그 배포의 것인지**를 본다.
       #
