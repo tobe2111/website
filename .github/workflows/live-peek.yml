@@ -64,7 +64,9 @@ jobs:
           # photo-board 는 0 이어야 맞다 — 켜져 있으면 같은 사진이 한 화면에 두 번 깔린다.
           peek "/" 'press-stand' 'press-lead' 'pr-row' 'fest-cover' '전체보기' 'nc-card' 'nc-rest' 'photo-board'
           peek "/press" 'pr-row' '언론 속의'
-          peek "/notices" 'notice-thumb-img' 'notice-ico'
+          # 공지 목록 화면 — 사진은 큰 칸(nl-th)으로, 사진 없는 공지는 분류 색 타일(nl-flat)로
+          # 서야 한다. notice-ico(옛 회색 서류 아이콘)는 0 이어야 맞다 — 남아 있으면 옛 화면이다.
+          peek "/notices" 'nl-big' 'nl-th' 'nl-flat' 'nl-chip' 'nl-sum' 'notice-ico'
 
       # 스타일시트가 **그 배포의 것인지**를 본다.
       #
