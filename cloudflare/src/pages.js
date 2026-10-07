@@ -1225,6 +1225,38 @@ function noticeCards(base, list) {
       </span></a>`;
   }).join("");
 }
+// 분류마다 색 한 쌍. 분류는 상인회가 직접 적는 자유 글자라 무엇이 올지 모른다 —
+// 자주 쓰는 넷만 알아보고, 나머지는 기본색(소식)으로 둔다. 색을 못 찾아도 화면은 선다.
+const tagTone = (t) => /행사|축제|장터/.test(t) ? "t-ev"
+  : /안내|모집|참여|이벤트/.test(t) ? "t-in"
+  : /교육|강좌|설명회/.test(t) ? "t-ed" : "t-nw";
+// 공지 목록 화면(/notices)의 한 줄 — 홈의 줄보다 크게 본다.
+//
+// 홈은 "그런 공지가 있다"만 알리면 되지만, 이 화면은 손님이 **무엇을 열어 볼지 고르는**
+// 자리다. 그런데 여덟 건 중 넷은 회색 서류 아이콘이라 눌러 보기 전엔 무슨 글인지 알 수
+// 없었고, 사진이 붙은 넷도 썸네일이 92px 이라 포스터 글씨가 안 읽혔다. 그래서 셋을 고친다 —
+// 사진을 136px 로 키우고(세로 포스터도 contain 이라 안 잘린다), 사진이 없는 공지는
+// 분류 색 타일로 세우고, 제목 아래에 본문 첫 줄을 한 줄 붙인다.
+function noticeRowsBig(base, list, pick = false) {
+  if (!list.length) return `<li class="empty">등록된 공지가 없습니다.</li>`;
+  return list.map((n) => {
+    const img = D.noticeImages(n)[0] || "";
+    const tone = tagTone(n.tag);
+    const sum = clip(String(n.body || "").replace(/\s+/g, " ").trim(), 62);
+    return `<li${pick ? ' class="has-pick"' : ""}>${pick
+      ? `<label class="rowpick"><input type="checkbox" name="ids" value="${n.id}" form="noticePick" aria-label="${esc(n.title)} 고르기" /></label>`
+      : ""}<a href="${base}/notices/${n.id}">
+      ${img
+        ? `<span class="nl-th"><img src="${esc(mediaUrl(img))}" alt="" loading="lazy" /></span>`
+        : `<span class="nl-th nl-flat ${tone}"><b>${esc(n.tag)}</b></span>`}
+      <span class="notice-main">
+        <span class="nl-head"><b class="nl-chip ${tone}">${esc(n.tag)}</b><time>${esc(kstDate(n.created_at, "."))}</time></span>
+        <span class="notice-title">${n.pinned ? '<em class="pin-mini">고정</em>' : ""}${esc(n.title)}</span>
+        ${sum ? `<span class="nl-sum">${esc(sum)}</span>` : ""}
+      </span>
+      <span class="notice-chev">${CHEV_SVG}</span></a></li>`;
+  }).join("");
+}
 function noticeRows(base, list, pick = false) {
   return list.length ? list.map((n) => `<li${pick ? ' class="has-pick"' : ""}>${pick
     ? `<label class="rowpick"><input type="checkbox" name="ids" value="${n.id}" form="noticePick" aria-label="${esc(n.title)} 고르기" /></label>`
@@ -1291,7 +1323,7 @@ export async function notices(ctx) {
         data-confirm="고른 공지를 지울까요?&#10;이미 돌린 링크가 죽습니다 — 되돌릴 수 없습니다.">선택 삭제</button>
     </form>` : ""}
     <div class="grow">${items.length
-      ? `<ul class="notice-list${canAdmin ? " list-pick" : ""}">${noticeRows(base, items, canAdmin)}</ul>${pager((i) => `${base}/notices${qs({ q, tag, page: i })}`, cur, pages)}`
+      ? `<ul class="notice-list nl-big${canAdmin ? " list-pick" : ""}">${noticeRowsBig(base, items, canAdmin)}</ul>${pager((i) => `${base}/notices${qs({ q, tag, page: i })}`, cur, pages)}`
       : emptyNote}</div>
   </div></section>`;
   return html(layout({ title: "공지사항", assoc, base, user, body, activeNav: `${base}/notices`, csrf,
