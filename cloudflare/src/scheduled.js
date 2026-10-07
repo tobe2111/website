@@ -31,6 +31,9 @@ export const TABLES = [
   // 안건 투표 본인확인. 인증번호 자체는 5분이면 죽지만 '통과했다' 는 기록은 남는 값이다 —
   // 이걸 날리면 마감 전에 표를 바꾸려는 사람마다 22원을 다시 써야 한다. 그래서 백업한다.
   "poll_otp",
+  // 비밀투표의 표. 사람도 시각도 없는 줄이라 작지만, 날리면 찬반 숫자가 통째로 사라진다 —
+  // poll_votes 에는 '넣으셨다' 만 있고 무엇을 고르셨는지는 여기에만 있다.
+  "poll_ballots",
   "notices", "events", "posts", "comments", "post_images",
   // popups: 홈 안내창. 노출 기간까지 함께 살아나야 복원 뒤에 지난 팝업이 다시 뜨지 않는다.
   "popups",
@@ -67,7 +70,9 @@ export const TABLES = [
 
 // 일부러 백업하지 않는 표 — 몇 분이면 사라지는 값이라 복원 대상이 아니다.
 // (인증번호는 되살리면 오히려 위험하고, 웹훅 대기열은 되살리면 지난 이벤트를 다시 쏜다)
-export const BACKUP_SKIP = ["sign_otp", "ext_otp", "webhook_queue"];
+// poll_tries: 명부 대조를 몇 번 틀렸는지. 한 시간이면 저절로 풀리는 값이라 되살릴 것이 없다
+// (되살리면 오히려 멀쩡한 분이 잠긴 채로 복원된다).
+export const BACKUP_SKIP = ["sign_otp", "ext_otp", "webhook_queue", "poll_tries"];
 
 async function aesKey(secret) {
   const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("backup|" + secret));

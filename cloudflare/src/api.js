@@ -2444,7 +2444,8 @@ export async function adminCreatePoll(ctx) {
   const rawClose = (form.get("closes_at") || "").trim();
   const closesAt = /^\d{4}-\d{2}-\d{2}$/.test(rawClose) ? rawClose : "";
   await D.createPoll(db, { associationId: assoc.id, title, body: cap((form.get("body") || "").trim(), 2000), closesAt,
-    verify: pollVerifyFrom(form), createdBy: user.id });
+    verify: pollVerifyFrom(form), rosterLink: form.get("roster_link") ? 1 : 0, secret: form.get("secret") ? 1 : 0,
+    createdBy: user.id });
   await D.createNotification(db, { associationId: assoc.id, kind: "poll", message: `새 투표: ${title}`, link: base + "/polls" });
   await audit(ctx, "투표생성", title);
   return back(base + "/polls", "투표를 시작했습니다. 회원들이 투표할 수 있습니다.");
@@ -2466,13 +2467,23 @@ export async function adminUpdatePoll(ctx) {
   const title = cap((form.get("title") || "").trim(), 200);
   if (!title) return back(base + "/polls", "안건 제목을 입력해 주세요.", true);
   const rawClose = (form.get("closes_at") || "").trim();
+  // 표가 하나라도 들어온 뒤에는 비밀 여부를 바꾸지 않는다. 공개→비밀로 바꿔도 이미 이름과
+  // 함께 적힌 표는 그대로라 비밀이 아니고, 비밀→공개로 바꿔도 이름 없는 표에 이름을 붙일
+  // 길이 없어 명세가 반쪽이 된다. 어느 쪽이든 '바꿨다' 고 말하면 거짓말이 된다.
+  const cast = await D.countPollVotes(db, p.id);
+  const wantSecret = form.get("secret") ? 1 : 0;
+  const locked = cast > 0 && wantSecret !== (Number(p.secret) ? 1 : 0);
   await D.updatePoll(db, p.id, assoc.id, {
     title, body: cap((form.get("body") || "").trim(), 2000),
     closesAt: /^\d{4}-\d{2}-\d{2}$/.test(rawClose) ? rawClose : "",
     verify: pollVerifyFrom(form),
+    rosterLink: form.get("roster_link") ? 1 : 0,
+    secret: cast > 0 ? null : wantSecret,
   });
   await audit(ctx, "투표수정", `#${p.id} ${title}`);
-  return back(base + "/polls", "안건을 고쳤습니다. 이미 들어온 표는 그대로 남습니다.");
+  return back(base + "/polls", locked
+    ? `안건을 고쳤습니다. 다만 이미 ${cast}명이 투표하셔서 비밀/공개는 그대로 두었습니다 — 바꾸려면 새 안건을 올리셔야 합니다.`
+    : "안건을 고쳤습니다. 이미 들어온 표는 그대로 남습니다.");
 }
 export async function adminReopenPoll(ctx) {
   const { db, base, assoc, params } = ctx;
@@ -2517,6 +2528,12 @@ export async function pollVote(ctx) {
     if (!(await D.pollOtpVerified(db, p.id, user.id)))
       return back(base + "/polls", "이 안건은 휴대폰 인증번호로 본인확인을 한 뒤에 투표하실 수 있습니다.", true);
     how = "otp";
+  }
+  if (D.pollIsSecret(p)) {
+    const ok = await D.castSecretVote(db, p.id, user.id, choice, how);
+    return back(base + "/polls", ok
+      ? "투표했습니다. 비밀투표라 한 번 넣으면 바꿀 수 없습니다."
+      : "이미 투표하셨습니다. 비밀투표는 바꿀 수 없습니다.", !ok);
   }
   await D.votePoll(db, p.id, user.id, choice, how);
   return back(base + "/polls", "투표했습니다. 마감 전까지 다시 눌러 변경할 수 있습니다.");
@@ -4199,10 +4216,39 @@ export async function verifyPhotoToken(secret, token, assocId) {
 // 카카오·인증번호로 들어온 표와 구별된다. 계정에 본인확인 표시를 붙이지도 않는다 —
 // 링크를 받았다는 것은 그 사람이라는 증명이 아니기 때문이다.
 const VOTE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
-export async function makeVoteToken(secret, assocId, pollId, userId) {
-  const json = JSON.stringify({ a: assocId, p: pollId, u: userId, x: Date.now() + VOTE_TTL_MS });
+// 명부 대조를 통과하신 분께 그 자리에서 드리는 표 링크는 **두 시간**만 산다.
+// 30일짜리를 드리면 주소창의 그 주소가 단톡방으로 돌아가고, 그러면 다시 남의 표가 된다.
+const ROSTER_VOTE_TTL_MS = 2 * 60 * 60 * 1000;
+export async function makeVoteToken(secret, assocId, pollId, userId, { ttlMs = VOTE_TTL_MS, how = "link" } = {}) {
+  const json = JSON.stringify({ a: assocId, p: pollId, u: userId, x: Date.now() + ttlMs, h: how });
   const sig = await hmacSign(secret, "vote|" + json);
   return `${b64uFromBytes(new TextEncoder().encode(json))}.${sig}`;
+}
+
+// ── 단톡방에 뿌리는 링크 하나 ─────────────────────────────────────────────
+//
+// 이 토큰에는 **사람이 없다.** 안건만 있다. 그래서 단톡방에 올려도 "남의 표" 가 되지 않는다 —
+// 누르면 투표 화면이 아니라 명부 대조 화면이 뜨고, 상호·대표자 성함·전화번호 뒷 네 자리가
+// 명부와 맞아야 그때 그분의 표 링크가 발급된다.
+//
+// 안건이 마감되면 이 링크도 함께 닫힌다(마감 검사는 화면과 처리 양쪽에 있다).
+const ROSTER_LINK_TTL_MS = 180 * 24 * 60 * 60 * 1000;
+export async function makeRosterVoteToken(secret, assocId, pollId) {
+  const json = JSON.stringify({ a: assocId, p: pollId, x: Date.now() + ROSTER_LINK_TTL_MS });
+  const sig = await hmacSign(secret, "vote-roster|" + json);
+  return `${b64uFromBytes(new TextEncoder().encode(json))}.${sig}`;
+}
+export async function verifyRosterVoteToken(secret, token, assocId) {
+  const parts = String(token || "").split(".");
+  if (parts.length !== 2) return null;
+  let raw;
+  try { raw = new TextDecoder().decode(bytesFromB64u(parts[0])); } catch { return null; }
+  // 서명 문맥이 다르다 — 사람이 든 표 링크를 명부 대조 링크로, 또는 그 반대로 돌려 쓸 수 없다.
+  if (!(await hmacVerify(secret, "vote-roster|" + raw, parts[1]))) return null;
+  let data;
+  try { data = JSON.parse(raw); } catch { return null; }
+  if (!data || data.a !== assocId || !data.p || !data.x || Date.now() > data.x) return null;
+  return data;
 }
 export async function verifyVoteToken(secret, token, assocId) {
   const parts = String(token || "").split(".");
@@ -4235,8 +4281,59 @@ export async function voteByLink(ctx) {
   if (!u || u.association_id !== assoc.id) return back(here, "회원을 찾을 수 없습니다.", true);
   const choice = form.get("choice");
   if (!["yes", "no", "abstain"].includes(choice)) return back(here, "선택을 확인해 주세요.", true);
-  await D.votePoll(db, p.id, u.id, choice, "link");
+  const how = t.h === "roster" ? "roster" : "link";
+  if (D.pollIsSecret(p)) {
+    const ok = await D.castSecretVote(db, p.id, u.id, choice, how);
+    return ok
+      ? back(here, "투표했습니다. 비밀투표라 한 번 넣으면 바꿀 수 없습니다.")
+      : back(here, "이미 투표하셨습니다. 비밀투표는 바꿀 수 없습니다.", true);
+  }
+  await D.votePoll(db, p.id, u.id, choice, how);
   return back(here, "투표했습니다. 마감 전까지 이 링크에서 다시 바꾸실 수 있습니다.");
+}
+
+// 단톡방 링크를 누르신 분이 명부와 맞는지 본다. 맞으면 그 자리에서 그분의 표 링크를 드린다.
+//
+// 틀렸을 때 **무엇이 틀렸는지 말하지 않는다** — "상호는 맞는데 번호가 틀렸다" 고 알려 주면
+// 그게 곧 번호를 찍는 길잡이가 된다. 그래서 세 칸을 한 덩어리로만 판정한다.
+export async function rosterVoteMatch(ctx) {
+  const { db, env, form, assoc, base, ip } = ctx;
+  const token = String(ctx.params.token || "");
+  const here = `${base}/vote/g/${encodeURIComponent(token)}`;
+  const t = await verifyRosterVoteToken(env.SESSION_SECRET, token, assoc.id);
+  if (!t) return back(here, "링크가 만료되었거나 올바르지 않습니다.", true);
+  const p = await D.getPoll(db, t.p);
+  if (!p || p.association_id !== assoc.id) return back(here, "안건을 찾을 수 없습니다.", true);
+  if (!D.pollRosterLink(p)) return back(here, "이 안건은 명부 대조로 투표하지 않습니다.", true);
+  if (!D.isPollOpen(p)) return back(here, "마감된 투표입니다.", true);
+  // 확인 등급이 걸린 안건은 이 길로 열지 않는다 — **명부 대조는 본인확인이 아니다.**
+  // 회장님이 "본인확인을 마친 분만" 으로 올려 두신 안건을, 간판을 보면 알 수 있는 상호·성함과
+  // 번호 뒷자리로 통과시키면 그 등급은 켜 두기만 하고 실제로는 없는 것이 된다.
+  if (D.pollVerifyLevel(p) >= 1)
+    return back(here, D.pollVerifyLevel(p) === 2
+      ? "이 안건은 휴대폰 인증번호로 본인확인을 하셔야 합니다. 로그인해 투표해 주세요."
+      : "이 안건은 본인확인을 마친 분만 투표하실 수 있습니다. 로그인해 투표해 주세요.", true);
+
+  // 접속 주소는 그대로 적지 않는다. 몇 번 틀렸는지만 세면 되는 일에 주소를 모아 둘 이유가 없다.
+  const who = (await sha256Hex(`${env.SESSION_SECRET}|${ip || ""}`)).slice(0, 32);
+  if (rateLimited(ip)) return back(here, "잠시 후 다시 시도해 주세요.", true);
+  const left = await D.pollTriesLeft(db, p.id, who);
+  if (left <= 0) return back(here, "여러 번 맞지 않아 한 시간 동안 잠겼습니다. 상인회에 연락해 주세요.", true);
+
+  const hit = await D.matchRosterMember(db, assoc.id, {
+    shop: form.get("shop"), name: form.get("name"), last4: form.get("last4"),
+  });
+  if (!hit) {
+    recordFail(ip);
+    await D.bumpPollTry(db, p.id, who);
+    const rest = Math.max(0, left - 1);
+    return back(here, `명부와 맞지 않습니다. 간판에 적힌 그대로의 상호와 상인회에 등록된 대표자 성함으로 넣어 주세요.${
+      rest <= 3 ? ` (앞으로 ${rest}번 더 해 보실 수 있습니다)` : ""}`, true);
+  }
+  await D.clearPollTries(db, p.id, who);
+  const mine = await makeVoteToken(env.SESSION_SECRET, assoc.id, p.id, hit.id,
+    { ttlMs: ROSTER_VOTE_TTL_MS, how: "roster" });
+  return redirect(`${base}/vote/${encodeURIComponent(mine)}`);
 }
 
 export async function adminCreatePhotoLink(ctx) {

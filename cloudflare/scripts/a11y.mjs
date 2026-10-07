@@ -142,7 +142,7 @@ const mnPoll = await D.createPoll(env.DB, { associationId: m.id, title: "정관 
 for (const row of (await env.DB.prepare("SELECT id FROM users WHERE association_id=? AND role='MERCHANT' ORDER BY id LIMIT 5").bind(m.id).all()).results || [])
   await D.votePoll(env.DB, mnPoll.id, row.id, "yes", "admin");
 // 링크 보내기 화면은 회원 한 줄마다 링크를 만든다 — 줄이 있어야 잴 것이 있다
-const linkPoll = await D.createPoll(env.DB, { associationId: m.id, title: "가을 골목축제 공동 부스 운영 여부", createdBy: null });
+const linkPoll = await D.createPoll(env.DB, { associationId: m.id, title: "가을 골목축제 공동 부스 운영 여부", rosterLink: 1, createdBy: null });
 const marketCookie = await loginAs("office@market.kr", "market1234");
 await grab("/t/market/admin", "market-admin.html", marketCookie);
 await grab("/t/market/polls", "market-polls.html", marketCookie);
@@ -156,6 +156,13 @@ await grab(`/t/market/admin/polls/${linkPoll.id}/links`, "market-vlinks.html", m
   const who = await env.DB.prepare("SELECT id FROM users WHERE association_id=? AND role='MERCHANT' ORDER BY id LIMIT 1").bind(m.id).first();
   const tk = await makeVoteToken(env.SESSION_SECRET, m.id, linkPoll.id, who.id);
   await grab(`/t/market/vote/${encodeURIComponent(tk)}`, "market-vote.html");
+}
+// 단톡방에 뿌린 링크를 누르면 뜨는 명부 대조 화면 — 로그인 없이 세 칸을 채우는 자리다.
+// 이름표가 없거나 글자가 안 읽히면 그분은 전화를 거시고, 그러면 투표는 거기서 끝난다.
+{
+  const { makeRosterVoteToken } = await import("../src/api.js");
+  const tk = await makeRosterVoteToken(env.SESSION_SECRET, m.id, linkPoll.id);
+  await grab(`/t/market/vote/g/${encodeURIComponent(tk)}`, "market-vote-roster.html");
 }
 
 const MIME = { ".html": "text/html; charset=utf-8", ".css": "text/css", ".js": "text/javascript", ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg" };
@@ -316,6 +323,7 @@ const PAGES = [
   ["표결 결과 · 의사록 (모바일)", "market-minutes.html", { width: 390, height: 844, isMobile: true }],
   ["투표 링크 보내기", "market-vlinks.html", { width: 1280, height: 900 }],
   ["문자로 받은 투표 화면 (모바일)", "market-vote.html", { width: 390, height: 844, isMobile: true }],
+  ["단톡방 링크 · 명부 대조 (모바일)", "market-vote-roster.html", { width: 390, height: 844, isMobile: true }],
 ];
 let problems = 0;
 for (const [label, file, vp, hash] of PAGES) {

@@ -7,7 +7,7 @@ import { layout, flash, statusBadge, pager, mediaUrl, STOREFRONT_SVG, ORIGIN, as
 import { kakaoReady } from "./kakao.js";
 // 카카오 말풍선 —— 공식 로고 파일을 재배포하지 않고 같은 모양의 도형만 그린다.
 const KAKAO_MARK = `<svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 3C6.9 3 2.8 6.2 2.8 10.2c0 2.6 1.7 4.8 4.3 6.1l-1 3.6c-.1.3.2.6.5.4l4.3-2.8c.4 0 .7.1 1.1.1 5.1 0 9.2-3.2 9.2-7.4S17.1 3 12 3z"/></svg>`;
-import { verifyInviteToken, verifyPhotoToken, verifyVoteToken, makeVoteToken, SALES_STAGES, otpRequired, selfSignupOn, MAX_SLOTS, BULK_MAX, BULK_CHUNK, docOf, isPlaceholderEmail, importMemberRows, autoLinkChunk, farFromStreet, unlinkFar, photoChunk, makePhotoToken, mapKeys, MAP_CHUNK, PHOTO_CHUNK } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
+import { verifyInviteToken, verifyPhotoToken, verifyVoteToken, makeVoteToken, makeRosterVoteToken, verifyRosterVoteToken, SALES_STAGES, otpRequired, selfSignupOn, MAX_SLOTS, BULK_MAX, BULK_CHUNK, docOf, isPlaceholderEmail, importMemberRows, autoLinkChunk, farFromStreet, unlinkFar, photoChunk, makePhotoToken, mapKeys, MAP_CHUNK, PHOTO_CHUNK } from "./api.js"; // 초대 링크 검증 (api ↔ pages 순환 없음: api 는 pages 를 임포트하지 않음)
 import { html, notFoundResponse, back, redirect } from "./http.js";
 import { deals as urdealDeals, urdealProductUrl, urdealSellerUrl, sellerPhotos, urdealBase, urdealSignupUrl, urdealSellerLoginUrl } from "./urdeal.js";
 import { placeSourceOf } from "./placePhoto.js";
@@ -1343,6 +1343,22 @@ export async function events(ctx) {
 // 안건마다 "표를 넣으려면 어디까지 확인해야 하나" 를 고르는 칸.
 // 회식 날짜를 묻는 일에까지 확인을 걸면 아무도 투표하지 않는다. 그래서 기본은 '확인 없음' 이고,
 // 총회 안건처럼 표가 근거로 남아야 하는 건만 관리자가 올려 둔다.
+// 단톡방에 링크 하나를 뿌릴지, 그리고 비밀투표로 할지 — 안건을 올릴 때 정하는 둘.
+//
+// 체크상자로 두는 이유: 기본값이 '끔' 이어야 지금까지 쓰시던 분들의 화면이 한 글자도
+// 안 바뀐다. 그리고 비밀은 표가 들어온 뒤에는 잠근다 — 그때는 상자를 잠그고 왜인지 적는다.
+const pollExtraPick = (p, cast = 0) => {
+  const roster = p ? D.pollRosterLink(p) : false;
+  const secret = p ? D.pollIsSecret(p) : false;
+  return `<label class="check-line"><input type="checkbox" name="roster_link" value="1"${roster ? " checked" : ""} />
+    <span><b>단톡방에 링크 하나로 받기</b> — 받으신 분이 상호·대표자 성함·전화번호 뒷 네 자리를
+      넣으면 명부와 맞춰 보고 투표하게 합니다. 가입도 비밀번호도 필요 없습니다.</span></label>
+  <label class="check-line"><input type="checkbox" name="secret" value="1"${secret ? " checked" : ""}${cast ? " disabled" : ""} />
+    <span><b>비밀투표</b> — 누가 무엇을 골랐는지 어디에도 적지 않습니다. 참여하신 분 명단은
+      남아 미투표자께 연락하실 수 있지만, <b>한 번 넣으면 바꿀 수 없습니다.</b>${
+        cast ? ` (이미 ${cast}명이 투표하셔서 지금은 바꿀 수 없습니다 — 바꾸시려면 새 안건을 올려 주세요)` : ""}</span></label>`;
+};
+
 const verifyPick = (cur) => `<label>투표 자격
   <select name="verify">
     ${[[0, "확인 없음 — 로그인한 회원 누구나"],
@@ -1360,7 +1376,9 @@ export async function polls(ctx) {
     + `▶ 마감: ${p.closes_at || "마감일 없음 (마감 안내 시까지)"}\n`
     + `▶ 투표: ${ORIGIN}${base}/polls\n\n`
     + `위 링크를 누르고 로그인하신 뒤 찬성·반대·기권 중 하나를 눌러 주세요.\n`
-    + `마감 전까지는 다시 눌러 바꾸실 수 있습니다.`;
+    + (D.pollIsSecret(p)
+      ? `비밀투표라 누가 무엇을 고르셨는지는 상인회도 볼 수 없습니다. 대신 한 번 넣으면 바꾸실 수 없습니다.`
+      : `마감 전까지는 다시 눌러 바꾸실 수 있습니다.`);
   const list = await D.listPolls(db, assoc.id);
   const isAdmin = user.role === "ADMIN" || user.role === "SUPERADMIN";
   // 안건 수와 무관하게 2쿼리 (건별 결과·내 표 조회의 N+1 제거)
@@ -1378,6 +1396,11 @@ export async function polls(ctx) {
     const open = D.isPollOpen(p);
     const r = resultsMap.get(p.id) || { yes: 0, no: 0, abstain: 0, total: 0 };
     const mine = votesMap.get(p.id) || null;
+    // 비밀 안건에서는 내 표도 빈 칸으로 적힌다(무엇을 골랐는지는 어디에도 없다).
+    // 그래서 '넣었나' 는 값이 아니라 줄이 있는지로 본다 — 없으면 이미 넣으신 분께
+    // 투표 단추가 다시 보이고, 눌러 보면 "이미 투표하셨습니다" 만 뜬다.
+    const didVote = votesMap.has(p.id);
+    const isSecret = D.pollIsSecret(p);
     const pct = (n) => (r.total ? Math.round((n / r.total) * 100) : 0);
     const bar = (label, key, cls) => `<div class="poll-bar"><span class="pb-label">${label} <b>${r[key]}표</b></span>
       <span class="pb-track"><span class="pb-fill ${cls}" style="width:${pct(r[key])}%"></span></span><span class="pb-pct">${pct(r[key])}%</span></div>`;
@@ -1401,13 +1424,21 @@ export async function polls(ctx) {
             <button class="btn btn-primary btn-sm">확인</button></form>`
             : `<p class="panel-hint">계정에 휴대폰 번호가 없어 인증번호를 보낼 수 없습니다. 상인회 관리자에게 번호 등록을 요청해 주세요.</p>`}
         </div>`;
-    const voteBtns = open && passed ? `<form method="post" action="${base}/polls/${p.id}/vote" class="poll-actions">
+    const voteBtns = open && passed
+      ? (isSecret && didVote
+        ? `<p class="poll-ok">투표하셨습니다. <b>비밀투표라 무엇을 고르셨는지는 어디에도 남지 않고,
+            그래서 바꾸실 수도 없습니다.</b></p>`
+        : `<form method="post" action="${base}/polls/${p.id}/vote" class="poll-actions">
         ${[["yes", "찬성"], ["no", "반대"], ["abstain", "기권"]].map(([v, l]) =>
           `<button name="choice" value="${v}" class="btn btn-sm ${mine === v ? "btn-primary" : "btn-ghost"}">${l}${mine === v ? " ✓" : ""}</button>`).join("")}
-      </form>${mine ? `<p class="panel-hint">내 투표: <b>${{ yes: "찬성", no: "반대", abstain: "기권" }[mine]}</b> — 마감 전까지 변경할 수 있습니다.</p>` : ""}` : "";
+      </form>${mine ? `<p class="panel-hint">내 투표: <b>${{ yes: "찬성", no: "반대", abstain: "기권" }[mine]}</b> — 마감 전까지 변경할 수 있습니다.</p>`
+        : isSecret ? `<p class="panel-hint"><b>비밀투표입니다.</b> 한 번 누르면 바꾸실 수 없으니 천천히 고르세요.</p>` : ""}`)
+      : "";
     cards.push(`<section class="panel poll-card${open ? "" : " is-closed"}">
       <div class="panel-head"><h2 class="panel-title">${esc(p.title)}</h2>
         ${lv ? `<span class="badge badge-lock">${lv === 1 ? "본인확인 필요" : "인증번호 필요"}</span>` : ""}
+        ${isSecret ? '<span class="badge badge-lock">비밀투표</span>' : ""}
+        ${D.pollRosterLink(p) ? '<span class="badge badge-muted">단톡방 링크</span>' : ""}
         <span class="badge ${open ? "badge-open" : "badge-muted"}">${open ? (p.closes_at ? `~${esc(p.closes_at)}` : "진행 중") : "마감"}</span></div>
       ${p.body ? `<p class="poll-body">${esc(p.body).replace(/\n/g, "<br />")}</p>` : ""}
       ${lv && passed && open ? `<p class="poll-ok">본인확인을 마치셨습니다${
@@ -1422,9 +1453,12 @@ export async function polls(ctx) {
       </span>
       <details class="mini-edit poll-tell"><summary>
         <span class="mini-edit-hint">회원에게 알리기 — 카톡·문자로 (0원)</span></summary>
-        <p class="panel-hint">아래 글은 <b>단톡방에 통째로</b> 붙이는 글입니다 — 받으신 분은 로그인을 거쳐
+        ${D.pollRosterLink(p) ? `<p class="panel-hint">이 안건은 <b>단톡방에 링크 하나로</b> 받습니다 —
+          그 링크와 함께 붙일 글은 <a href="${base}/admin/polls/${p.id}/links">투표 링크 보내기</a>
+          화면에 있습니다. 아래 글은 <b>로그인해서 투표하실 분</b>께 보내는 글입니다.</p>`
+        : `<p class="panel-hint">아래 글은 <b>단톡방에 통째로</b> 붙이는 글입니다 — 받으신 분은 로그인을 거쳐
           투표하십니다. 로그인이 어려우신 분들껜 <b>투표 링크 보내기</b>로 한 분씩 보내시면
-          비밀번호 없이 바로 투표하십니다. 둘 다 문자 요금 말고는 돈이 들지 않습니다.</p>
+          비밀번호 없이 바로 투표하십니다. 둘 다 문자 요금 말고는 돈이 들지 않습니다.</p>`}
         <div class="stack-form"><label>보낼 글
           <textarea rows="7" readonly data-select-all>${esc(tellText(p))}</textarea></label></div>
         <span class="pill-row">
@@ -1443,6 +1477,7 @@ export async function polls(ctx) {
           <label>설명 <small>(선택)</small><textarea name="body" rows="3" maxlength="2000">${esc(p.body || "")}</textarea></label>
           <label>마감일 <small>(선택·비우면 수동 마감)</small><input type="date" name="closes_at" value="${esc(String(p.closes_at || "").slice(0, 10))}" /></label>
           ${verifyPick(lv)}
+          ${pollExtraPick(p, r.total)}
           <button class="btn btn-primary btn-sm">고친 내용 저장</button></form>
           ${r.total && lv ? `<p class="panel-hint">확인 등급을 올리면 <b>이미 들어온 표는 그대로 남습니다.</b>
             다만 그 표들은 새 등급을 통과하고 들어온 표가 아닙니다 — 등급은 안건을 올릴 때 정하는 편이 맞습니다.</p>` : ""}
@@ -1461,6 +1496,7 @@ export async function polls(ctx) {
       <label>설명 (선택)<textarea name="body" rows="3" maxlength="2000"></textarea></label>
       <label>마감일 (선택·비우면 수동 마감)<input type="date" name="closes_at" /></label>
       ${verifyPick(0)}
+      ${pollExtraPick(null, 0)}
       <button class="btn btn-primary btn-sm">투표 시작</button></form></div></details>
     <p class="panel-hint"><a href="${base}/admin/polls/verify">투표 자격 대장 보기</a> —
       지금 ${vTotal}명 중 <b>${vDone}명</b>이 본인확인을 마쳤습니다.</p>` : "";
@@ -1544,6 +1580,9 @@ export async function adminPollVerify(ctx) {
       </ol>
       <p class="honest-line">이 확인은 법이 정한 본인확인기관(PASS·아이핀 등)의 인증이 아닙니다.
         총회 결의의 근거로 쓰실 때는 서면 위임장·참석 명부를 함께 갖추시는 편이 안전합니다.</p>
+      <p class="panel-hint"><b>단톡방 링크로 받는 안건</b>은 이 확인과 별개입니다 — 그 길은
+        아래 표의 <b>가게 상호 · 회원 성함 · 번호 뒷 네 자리</b> 셋이 맞는지만 봅니다.
+        "명부와 맞지 않는다" 는 연락을 받으시면 그분 줄의 상호와 성함이 간판과 같은지 보세요.</p>
     </section>
     ${table ? `<section class="panel"><h2 class="panel-title">회원 ${rows.length}명</h2>
       <p class="panel-hint">확인 안 된 분이 위로 올라옵니다.</p>${table}</section>` : ""}`;
@@ -1567,6 +1606,80 @@ const CHOICE_KO = { yes: "찬성", no: "반대", abstain: "기권" };
 //
 // 그래서 사진 요청 링크와 같은 방식을 쓴다 — **그 사람의 그 안건 한 표만** 여는 서명된 링크.
 // 카카오 설정도, 알림톡 심사도, 비밀번호도 필요 없다. 문자 한 통이면 끝난다.
+// ── 단톡방 링크 하나: 먼저 명부와 맞는지 본다 ────────────────────────────
+//
+// 왜 이 화면이 생겼나. 지금까지 투표 링크는 **사람마다 달랐다.** 125곳이면 회장님이
+// 문자를 125번 보내야 했고, 실제로는 그래서 안 보내셨다. 그렇다고 단톡방에 하나 올리면
+// 그 링크가 곧 한 사람의 표라서 아무나 남의 표를 누를 수 있었다.
+//
+// 그래서 링크에서 **사람을 뺐다.** 단톡방 링크에는 안건만 들어 있고, 누르면 이 화면이 뜬다.
+// 여기서 상호 · 대표자 성함 · 전화번호 뒷 네 자리를 상인회 명부와 맞춰 보고, 셋이 다 맞는
+// 분께만 그 자리에서 **두 시간짜리** 표 링크를 드린다.
+//
+// 정직한 한계 — 이것은 법이 정한 본인확인이 아니다. 간판을 보고 상호와 성함을 알아낸 사람이
+// 번호 뒷자리를 맞히면 들어올 수 있다(그래서 틀린 횟수를 세어 여덟 번에서 잠근다).
+// 다툴 안건이면 종이 투표와 참석 명부를 함께 갖추셔야 한다. 화면에 그대로 적는다.
+export async function rosterVotePage(ctx) {
+  const { db, env, assoc, base, query, csrf } = ctx;
+  const token = String(ctx.params.token || "");
+  const shell = (inner, title) => html(layout({ title, assoc, base, csrf, body:
+    `<section class="section page-top"><div class="container auth-wrap"><div class="auth-card">${inner}</div></div></section>` }));
+
+  const t = await verifyRosterVoteToken(env.SESSION_SECRET, token, assoc.id);
+  if (!t) return shell(`${authHead("링크가 만료되었습니다", "이 투표 링크는 더 이상 열리지 않습니다.", assoc)}
+    <p class="auth-note">${esc(assoc.name)}에 연락해 새 링크를 요청해 주세요.</p>`, "안건 투표");
+
+  const p = await D.getPoll(db, t.p);
+  if (!p || p.association_id !== assoc.id) return notFoundResponse(ctx);
+  const open = D.isPollOpen(p);
+  const here = `${base}/vote/g/${encodeURIComponent(token)}`;
+  const secret = D.pollIsSecret(p);
+
+  if (!D.pollRosterLink(p))
+    return shell(`${authHead(esc(p.title), `${esc(assoc.name)} 안건 투표`, assoc)}
+      <p class="auth-note">이 안건은 <b>명부 대조로 투표하지 않습니다.</b> 상인회에서 보내 드린
+        개인 링크로 투표하시거나, 로그인 후 투표해 주세요.</p>
+      <p class="pill-row"><a class="btn btn-primary" href="${base}/login?next=${encodeURIComponent(base + "/polls")}">로그인하고 투표하기</a></p>`,
+      `${p.title} · 안건 투표`);
+
+  // 확인 등급이 걸려 있으면 칸을 아예 만들지 않는다. 채우게 해 놓고 마지막에 막으면
+  // 그분은 "내 상호가 틀렸나" 로 읽고 상인회에 전화를 거신다.
+  const lv = D.pollVerifyLevel(p);
+  const form = lv >= 1
+    ? `<p class="auth-note">이 안건은 <b>${lv === 2 ? "휴대폰 인증번호로 본인확인" : "본인확인을 마친 분"}</b>만
+        투표하실 수 있습니다. 명부 대조는 본인확인이 아니라서 이 길로는 열리지 않습니다.</p>
+      <p class="pill-row"><a class="btn btn-primary" href="${base}/login?next=${encodeURIComponent(base + "/polls")}">로그인하고 투표하기</a></p>`
+    : !open
+    ? `<p class="auth-note">이 안건은 <b>마감되었습니다.</b></p>`
+    : `<form method="post" action="${here}" class="stack-form">
+        <input type="hidden" name="_csrf" value="${csrf}" />
+        <label>가게 상호
+          <input type="text" name="shop" required maxlength="80" autocomplete="organization"
+            placeholder="예: 버들카페" />
+          <small>간판에 적힌 그대로 넣어 주세요. 띄어쓰기는 달라도 됩니다.</small></label>
+        <label>대표자 성함
+          <input type="text" name="name" required maxlength="40" autocomplete="name" placeholder="예: 김방배" /></label>
+        <label>전화번호 뒷 네 자리
+          <input type="tel" name="last4" required inputmode="numeric" pattern="[0-9]{4}" maxlength="4"
+            autocomplete="off" placeholder="예: 5678" />
+          <small>상인회에 등록하신 번호의 마지막 네 자리입니다.</small></label>
+        <button class="btn btn-primary btn-block">확인하고 투표하기</button></form>`;
+
+  return shell(`${authHead(esc(p.title), `${esc(assoc.name)} 안건 투표`, assoc)}
+    ${flashOf(query)}
+    ${p.body ? `<p class="vl-body">${esc(p.body).replace(/\n/g, "<br />")}</p>` : ""}
+    ${p.closes_at ? `<p class="auth-note">마감: <b>${esc(p.closes_at)}</b></p>` : ""}
+    ${secret ? `<p class="auth-note"><b>비밀투표입니다.</b> 누가 무엇을 골랐는지는 상인회도 볼 수 없고,
+      그래서 한 번 넣으면 바꾸실 수 없습니다.</p>` : ""}
+    ${lv >= 1 ? "" : `<p class="auth-note">가입하거나 비밀번호를 만드실 필요가 없습니다.
+      아래 세 칸이 상인회 명부와 맞으면 바로 투표 화면이 열립니다.</p>`}
+    ${form}
+    <p class="honest-line">이것은 <b>법이 정한 본인확인이 아닙니다.</b> 상인회 명부와 맞는지만 봅니다 —
+      다투게 될 안건이라면 종이 투표와 참석 명부를 함께 갖추셔야 합니다.
+      명부와 다르면 상인회에 연락해 등록된 상호·성함·번호를 확인해 주세요.</p>`,
+    `${p.title} · 안건 투표`);
+}
+
 export async function votePage(ctx) {
   const { db, env, assoc, base, query, csrf } = ctx;
   const token = String(ctx.params.token || "");
@@ -1584,6 +1697,9 @@ export async function votePage(ctx) {
   const mine = await D.userVote(db, p.id, u.id);
   const here = `${base}/vote/${encodeURIComponent(token)}`;
   const lv = D.pollVerifyLevel(p);
+  // 비밀 안건은 '무엇' 이 아니라 '넣으셨나' 만 안다 — 그 줄의 choice 는 빈 칸이다.
+  const secret = D.pollIsSecret(p);
+  const didVote = secret ? await D.userHasVoted(db, p.id, u.id) : !!mine;
 
   // 인증번호 등급은 이 길로 열지 않는다. 단추를 만들지 않고, 왜 안 되는지를 적는다 —
   // 없는 단추는 고장으로 보이고, 고장으로 보이면 그분은 전화를 건다.
@@ -1592,12 +1708,19 @@ export async function votePage(ctx) {
         아래에서 로그인하신 뒤 투표 화면에서 인증번호를 받아 주세요.</p>
       <p class="pill-row"><a class="btn btn-primary" href="${base}/login?next=${encodeURIComponent(base + "/polls")}">로그인하고 투표하기</a></p>`
     : !open
-      ? `<p class="auth-note">이 안건은 <b>마감되었습니다.</b>${mine ? ` 넣으셨던 표는 <b>${esc(CHOICE_KO[mine] || mine)}</b> 입니다.` : ""}</p>`
+      ? `<p class="auth-note">이 안건은 <b>마감되었습니다.</b>${
+          secret ? (didVote ? " 넣으신 표는 비밀투표라 여기에 뜨지 않습니다." : "")
+            : mine ? ` 넣으셨던 표는 <b>${esc(CHOICE_KO[mine] || mine)}</b> 입니다.` : ""}</p>`
+      : secret && didVote
+      ? `<p class="auth-note">이미 <b>투표하셨습니다.</b> 비밀투표라 무엇을 고르셨는지는 어디에도
+          남지 않고, 그래서 바꾸실 수도 없습니다.</p>`
       : `<form method="post" action="${here}" class="vl-pick">
           ${[["yes", "찬성"], ["no", "반대"], ["abstain", "기권"]].map(([v, l]) =>
             `<button name="choice" value="${v}" class="btn ${mine === v ? "btn-primary" : "btn-outline"}">${l}${mine === v ? " ✓" : ""}</button>`).join("")}
         </form>
         ${mine ? `<p class="auth-note">지금 <b>${esc(CHOICE_KO[mine] || mine)}</b> 로 되어 있습니다 — 마감 전까지 다시 눌러 바꾸실 수 있습니다.</p>`
+          : secret ? `<p class="auth-note"><b>비밀투표입니다.</b> 하나를 누르시면 그 자리에서 기록되고,
+              누가 무엇을 골랐는지는 어디에도 남지 않습니다. 대신 <b>바꾸실 수 없으니</b> 천천히 고르세요.</p>`
           : `<p class="auth-note">하나를 눌러 주시면 그 자리에서 기록됩니다. 마감 전까지 바꾸실 수 있습니다.</p>`}`;
 
   return shell(`${authHead(esc(p.title), `${esc(assoc.name)} 안건 투표`, assoc)}
@@ -1607,8 +1730,9 @@ export async function votePage(ctx) {
     ${p.closes_at ? `<p class="auth-note">마감: <b>${esc(p.closes_at)}</b></p>` : ""}
     ${body}
     <p class="honest-line"><b>이 링크는 ${esc(u.name)}님 한 분의 표입니다.</b> 다른 분께 넘기시면
-      그분이 대신 누를 수 있으니, 단톡방에 올리지 말아 주세요. 이 링크로는 투표만 되고
-      게시판·계약서 같은 다른 화면은 열리지 않습니다.</p>`, `${p.title} · 안건 투표`);
+      그분이 대신 누를 수 있으니, 단톡방에 올리지 말아 주세요.${
+        t.h === "roster" ? " 명부를 맞춰 보고 열어 드린 주소라 <b>두 시간 뒤에는 저절로 닫힙니다.</b>" : ""}
+      이 링크로는 투표만 되고 게시판·계약서 같은 다른 화면은 열리지 않습니다.</p>`, `${p.title} · 안건 투표`);
 }
 
 // ── 관리자: 사람마다 링크를 만들어 문자로 보낸다 ──────────────────────────
@@ -1634,30 +1758,74 @@ export async function adminPollLinks(ctx) {
     + `아래 링크를 누르시면 로그인 없이 바로 투표하실 수 있습니다.\n${m.url}\n\n`
     + `이 링크는 ${m.name}님 한 분의 표이니 다른 분께 넘기지 말아 주세요.`;
 
-  const done = made.filter((m) => m.choice).length;
+  const done = made.filter((m) => m.voted).length;
   const table = made.length ? `<div class="table-scroll"><table class="admin-table vl-table">
     <thead><tr><th>회원 · 보내기</th><th>연락처</th><th>표</th></tr></thead>
-    <tbody>${made.map((m) => `<tr${m.choice ? "" : ' class="vl-todo"'}>
+    <tbody>${made.map((m) => `<tr${m.voted ? "" : ' class="vl-todo"'}>
       <td><b>${esc(m.name)}</b>${m.business_name ? ` <small>${esc(m.business_name)}</small>` : ""}
         <div class="act-two">${m.phone
           ? `<a class="btn btn-xs btn-primary" href="sms:${esc(String(m.phone).replace(/\D/g, ""))}?&body=${encodeURIComponent(msgOf(m))}">문자로 보내기</a>`
           : ""}<button type="button" class="btn btn-xs btn-outline" data-copy="${esc(msgOf(m))}">이 글 복사</button></div></td>
       <td>${m.phone ? `<a href="tel:${esc(m.phone)}">${esc(D.formatPhone(m.phone))}</a>` : '<span class="muted">번호 없음</span>'}</td>
-      <td>${m.choice
-        ? `<span class="badge badge-ok">${esc(CHOICE_KO[m.choice] || m.choice)}</span>`
+      <td>${m.voted
+        ? `<span class="badge badge-ok">${m.choice ? esc(CHOICE_KO[m.choice] || m.choice) : "넣음"}</span>`
         : '<span class="badge badge-wait">아직</span>'}</td>
     </tr>`).join("")}</tbody></table></div>` : `<p class="panel-hint">아직 회원이 없습니다.</p>`;
 
+  // 단톡방에 뿌리는 링크 하나. 안건에 그 길을 켜 두셨을 때만 보인다 —
+  // 안 켠 안건에 링크를 보여 주면 올리시고, 올린 링크는 "명부 대조로 투표하지 않습니다" 만 띄운다.
+  const rosterOn = D.pollRosterLink(p);
+  const groupUrl = rosterOn
+    ? `${ORIGIN}${base}/vote/g/${encodeURIComponent(await makeRosterVoteToken(env.SESSION_SECRET, assoc.id, p.id))}`
+    : "";
+  const groupMsg = rosterOn ? `[${assoc.name}] 안건 투표를 부탁드립니다.\n\n`
+    + `▶ 안건: ${p.title}\n`
+    + `▶ 마감: ${p.closes_at || "마감 안내 시까지"}\n\n`
+    + `아래 링크를 누르시고 가게 상호 · 대표자 성함 · 전화번호 뒷 네 자리만 넣어 주시면 바로 투표하실 수 있습니다. 가입도 비밀번호도 필요 없습니다.\n${groupUrl}\n\n`
+    + (D.pollIsSecret(p) ? `비밀투표라 누가 무엇을 고르셨는지는 상인회도 볼 수 없습니다. 대신 한 번 넣으면 바꾸실 수 없습니다.` : `마감 전까지는 다시 눌러 바꾸실 수 있습니다.`) : "";
+  const groupPanel = rosterOn ? `<section class="panel panel-accent">
+      <div class="panel-head"><h2 class="panel-title">단톡방에 올릴 링크 하나</h2>
+        ${D.pollIsSecret(p) ? '<span class="badge badge-lock">비밀투표</span>' : ""}</div>
+      <p class="panel-hint">이 링크에는 <b>사람이 들어 있지 않습니다.</b> 누르면 투표 화면이 아니라
+        명부 대조 화면이 뜨고, 상호·대표자 성함·전화번호 뒷 네 자리가 명부와 맞는 분께만
+        그 자리에서 두 시간짜리 표가 열립니다. <b>단톡방에 올리셔도 됩니다.</b></p>
+      <div class="stack-form"><label>보낼 글
+        <textarea rows="8" readonly data-select-all>${esc(groupMsg)}</textarea></label></div>
+      <span class="pill-row">
+        <button type="button" class="btn btn-primary btn-sm" data-copy="${esc(groupMsg)}">이 글 복사</button>
+        <button type="button" class="btn btn-outline btn-sm" data-copy="${esc(groupUrl)}">주소만 복사</button>
+        <a class="btn btn-outline btn-sm" href="sms:?&body=${encodeURIComponent(groupMsg)}">문자로 보내기</a>
+      </span>
+      ${lv >= 1 ? `<p class="honest-line"><b>이 링크는 지금 아무도 통과하지 못합니다.</b>
+        이 안건은 '${esc(D.POLL_VERIFY[lv].label)}' 로 올리셨는데, 명부 대조는 본인확인이 아니라
+        그 등급을 대신할 수 없습니다. 단톡방 링크로 받으시려면 <a href="${base}/polls">안건 고치기</a>에서
+        투표 자격을 '확인 없음' 으로 내리셔야 합니다.</p>` : ""}
+      <p class="honest-line">명부와 맞는지만 봅니다 — <b>법이 정한 본인확인이 아닙니다.</b>
+        간판을 보고 상호와 성함을 아는 사람이 번호 뒷자리를 맞히면 들어올 수 있어, 여덟 번 틀리면
+        한 시간 잠깁니다. 다툴 안건이면 종이 투표와 참석 명부를 함께 갖추셔야 합니다.</p>
+      <p class="panel-hint">명부에 상호나 성함이 간판과 다르게 적혀 있으면 그분은 못 들어오십니다 —
+        <a href="${base}/admin/polls/verify">투표 자격 대장</a>에서 지금 적혀 있는 상호·성함·번호를
+        보실 수 있습니다.</p>
+    </section>` : `<section class="panel">
+      <h2 class="panel-title">단톡방에 링크 하나로 받기 — 꺼져 있습니다</h2>
+      <p class="panel-hint">지금은 사람마다 다른 링크를 1:1 로 보내셔야 합니다.
+        <a href="${base}/polls">안건 투표</a> 화면의 '안건 고치기' 에서
+        <b>단톡방에 링크 하나로 받기</b>를 켜시면 여기에 올릴 링크가 생깁니다.</p>
+    </section>`;
+
   const inner = `${flashOf(query)}
+    ${groupPanel}
     <section class="panel">
       <div class="panel-head"><h2 class="panel-title">${made.length}명 중 ${done}명 투표함</h2>
         <span class="badge ${done >= made.length ? "badge-ok" : "badge-muted"}">${made.length ? Math.round((done / made.length) * 100) : 0}%</span></div>
-      <p class="panel-hint">사람마다 <b>다른 링크</b>입니다. 그 링크를 누른 분은 로그인 없이 바로
+      <p class="panel-hint">아래 표의 링크는 <b>사람마다 다릅니다</b>${rosterOn
+        ? " — 위의 단톡방 링크와 다른 것입니다." : "."} 그 링크를 누른 분은 로그인 없이 바로
         투표하십니다 — 비밀번호를 만들어 드리거나 카카오를 설정할 필요가 없습니다.
         <b>문자 요금 말고는 돈이 들지 않습니다.</b></p>
-      <p class="honest-line"><b>단톡방에 올리지 마세요.</b> 링크 하나가 한 사람의 표라서,
+      <p class="honest-line"><b>아래 링크들은 단톡방에 올리지 마세요.</b> 하나가 한 사람의 표라서,
         여럿이 보는 곳에 올리면 아무나 남의 표를 누를 수 있습니다. 1:1 카톡이나 문자로
-        한 분씩 보내 주세요. 링크는 30일 뒤에 스스로 닫힙니다.</p>
+        한 분씩 보내 주세요. 링크는 30일 뒤에 스스로 닫힙니다.${rosterOn
+        ? " (단톡방에 올리실 것은 <b>위의 링크 하나</b>입니다)" : ""}</p>
       ${lv === 2 ? `<p class="honest-line">이 안건은 <b>인증번호 등급</b>이라 링크로는 투표되지 않습니다.
         링크를 누르면 로그인하라는 안내가 뜹니다 — 등급을 내리시거나 이 화면을 쓰지 마세요.</p>` : ""}
     </section>
@@ -1706,8 +1874,11 @@ export async function adminPollMinutes(ctx) {
     D.pollVerifyBreakdown(db, p.id),
   ]);
   const eligible = votes.length + left.length;          // 투표권자 = 넣은 사람 + 안 넣은 사람
-  const tally = { yes: 0, no: 0, abstain: 0 };
-  for (const v of votes) if (tally[v.choice] !== undefined) tally[v.choice]++;
+  // 비밀 안건은 사람 줄에 선택이 없다 — 숫자는 이름 없는 표에서 센다.
+  // (그래서 이 종이에는 합계만 적히고, 누가 무엇을 골랐는지 적을 줄이 아예 없다)
+  const secret = D.pollIsSecret(p);
+  const r = await D.pollResults(db, p.id, p);
+  const tally = { yes: r.yes, no: r.no, abstain: r.abstain };
   const cast = votes.length;
   const pctOf = (n, d) => (d ? Math.round((n / d) * 1000) / 10 : 0);
   // 과반은 '넘는 것' 이다 — 10명 중 5표는 과반이 아니다. 여기서 반올림하면 부결이 가결이 된다.
@@ -1745,21 +1916,33 @@ export async function adminPollMinutes(ctx) {
         <tr><td>휴대폰 인증번호로 확인</td><td class="mn-num">${breakdown.otp}표</td></tr>
         <tr><td>관리자가 확인</td><td class="mn-num">${breakdown.admin}표</td></tr>
         <tr><td>문자로 보낸 링크로 투표</td><td class="mn-num">${breakdown.link}표</td></tr>
+        <tr><td>단톡방 링크 + 명부 대조</td><td class="mn-num">${breakdown.roster}표</td></tr>
         <tr><td>확인 없음 (로그인만)</td><td class="mn-num">${breakdown.none}표</td></tr>
       </tbody>
     </table>
     <p class="mn-line mn-warn">이 확인은 <b>법이 정한 본인확인기관(PASS·아이핀 등)의 인증이 아닙니다.</b>
       카카오 계정의 번호가 명부와 맞는지, 휴대폰으로 보낸 번호를 실제로 받았는지, 관리자가
       얼굴을 보고 확인했는지 — 셋뿐입니다.${breakdown.link ? ` 그중 <b>문자 링크로 들어온 ${breakdown.link}표</b>는
-      가장 약합니다: 링크를 받은 번호는 그분의 번호이지만, 링크 자체는 남에게 넘길 수 있습니다.` : ""}
+      가장 약합니다: 링크를 받은 번호는 그분의 번호이지만, 링크 자체는 남에게 넘길 수 있습니다.` : ""}${
+      breakdown.roster ? ` <b>명부 대조로 들어온 ${breakdown.roster}표</b>는 상호·대표자 성함·전화번호 뒷
+      네 자리가 명부와 맞은 표입니다 — 간판을 보고 상호와 성함을 아는 사람이 뒷자리를 맞히면
+      통과할 수 있으니, 이것도 본인확인이 아닙니다.` : ""}
       결의의 근거로 쓰실 때는 서면 위임장·참석 명부를 함께 갖추시는 편이 안전합니다.</p>
     <table class="mn-tbl mn-meta">
       <tr><th>투표 기간</th><td>${esc(kstDate(p.created_at, "."))} ~ ${p.closes_at ? esc(p.closes_at) : "마감일 없음"}${
         open ? " <b>(진행 중)</b>" : " (마감)"}</td></tr>
-      <tr><th>투표 자격</th><td>${esc(D.POLL_VERIFY[lv].label)}</td></tr>
+      <tr><th>투표 자격</th><td>${esc(D.POLL_VERIFY[lv].label)}${
+        D.pollRosterLink(p) ? " · 단톡방 링크 + 명부 대조" : ""}</td></tr>
+      <tr><th>표결 방식</th><td>${secret
+        ? "<b>비밀투표</b> — 누가 무엇을 골랐는지는 기록에 없습니다. 참여하신 분 명단만 남습니다."
+        : "공개투표 — 누가 무엇을 골랐는지 뒤 장의 명세에 적혀 있습니다."}</td></tr>
       <tr><th>뽑은 시각</th><td>${esc(kstStamp(new Date().toISOString()))}</td></tr>
     </table>
     ${open ? `<p class="mn-line mn-warn">아직 <b>마감하지 않은</b> 안건입니다 — 지금 뽑은 숫자는 바뀔 수 있습니다.</p>` : ""}
+    ${secret ? `<p class="mn-line mn-warn"><b>비밀에도 한계가 있습니다.</b> 참여하신 분이 한두 분일 때에는
+      숫자만으로 그분의 선택이 드러나고, 마감 전에 이 화면을 자꾸 열어 숫자가 늘어나는 것을
+      지켜보면 누가 무엇을 넣었는지 짐작할 수 있습니다. <b>마감한 뒤에 한 번만 뽑으시고</b>,
+      다툴 안건이라면 종이 투표와 참관인을 함께 두십시오.</p>` : ""}
     <div class="mn-sign"><div><span>의　장</span><i>(서명)</i></div><div><span>간　사</span><i>(서명)</i></div></div>
   </div>`;
 
@@ -1772,14 +1955,17 @@ export async function adminPollMinutes(ctx) {
       <td>${i * MN_VOTE_ROWS + k + 1}</td>
       <td>${esc(v.name || "(탈퇴)")}</td>
       <td>${esc(v.business_name || "")}</td>
-      <td class="mn-ch mn-ch-${esc(v.choice)}">${esc(CHOICE_KO[v.choice] || v.choice)}</td>
+      ${secret ? "" : `<td class="mn-ch mn-ch-${esc(v.choice)}">${esc(CHOICE_KO[v.choice] || v.choice)}</td>`}
       <td>${esc(D.verifyHowLabel(v.verify) || "확인 없음")}</td>
       <td>${esc(kstStamp(v.created_at))}</td></tr>`).join("");
+    const cols = secret ? 5 : 6;
     voteSheets.push(`<div class="paper mn-paper" style="width:794px;height:1123px">
-      ${mnHead(assoc, p, "투표 명세", i + 1, votePages)}
+      ${mnHead(assoc, p, secret ? "투표 참여자 명단" : "투표 명세", i + 1, votePages)}
+      ${secret ? `<p class="mn-line"><b>비밀투표입니다.</b> 누가 무엇을 골랐는지는 적지 않습니다 —
+        이 장은 <b>누가 참여했는지</b>만 남기는 종이입니다. 찬반 숫자는 앞 장에 있습니다.</p>` : ""}
       <table class="mn-tbl mn-list"><thead><tr>
-        <th>연번</th><th>성명</th><th>가게</th><th>선택</th><th>본인확인</th><th>투표 시각</th>
-      </tr></thead><tbody>${rows || `<tr><td colspan="6" class="mn-none">들어온 표가 없습니다.</td></tr>`}</tbody></table>
+        <th>연번</th><th>성명</th><th>가게</th>${secret ? "" : "<th>선택</th>"}<th>본인확인</th><th>투표 시각</th>
+      </tr></thead><tbody>${rows || `<tr><td colspan="${cols}" class="mn-none">들어온 표가 없습니다.</td></tr>`}</tbody></table>
     </div>`);
   }
 
@@ -1834,10 +2020,13 @@ export async function adminPollMinutesCsv(ctx) {
   const [votes, left] = await Promise.all([
     D.listPollVotes(db, p.id), D.listPollNonVoters(db, p.id, assoc.id),
   ]);
+  // 비밀 안건이면 '선택' 칸을 빈 칸으로 둔다 — 칸을 지우면 엑셀에서 열이 밀려 미투표자
+  // 줄과 어긋나고, 채우면 비밀이 아니다. 머리글에 왜 비었는지를 적는다.
+  const secret = D.pollIsSecret(p);
   const lines = [
-    ["구분", "연번", "성명", "가게", "선택", "본인확인", "투표 시각", "연락처"],
+    ["구분", "연번", "성명", "가게", secret ? "선택(비밀투표라 비움)" : "선택", "본인확인", "투표 시각", "연락처"],
     ...votes.map((v, i) => ["투표", String(i + 1), v.name || "(탈퇴)", v.business_name || "",
-      CHOICE_KO[v.choice] || v.choice, D.verifyHowLabel(v.verify) || "확인 없음",
+      secret ? "" : (CHOICE_KO[v.choice] || v.choice), D.verifyHowLabel(v.verify) || "확인 없음",
       kstStamp(v.created_at), v.phone ? D.formatPhone(v.phone) : ""]),
     ...left.map((m, i) => ["미투표", String(i + 1), m.name || "", m.business_name || "",
       "", m.verified_at ? D.verifyHowLabel(m.verified_how) : "확인 안 됨", "",
