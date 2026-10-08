@@ -115,4 +115,7 @@ jobs:
           # 새 표가 실제로 생겼나. 표·칸이 늘어난 배포는 **첫 요청**에서 올라오므로,
           # 배포가 초록이라는 것과 표가 생겼다는 것은 다른 말이다. 위에서 사이트를 깨워 뒀다.
           q "투표 — 새 표가 생겼나" "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('poll_ballots','poll_tries')"
-          q "투표 — 안건마다 어떻게 받나" "SELECT id, association_id AS 조직, CASE WHEN roster_link=1 THEN '단톡방 링크' ELSE '개인 링크만' END AS 받는길, CASE WHEN secret=1 THEN '비밀' ELSE '공개' END AS 표결, closed AS 마감, title FROM polls"
+          # 후보를 여럿 두는 투표(회장 선거)용 칸이 실제로 생겼나. 칸이 늘어난 배포는 **첫 요청**에서
+          # 올라오므로, 배포가 초록이라는 것과 칸이 생겼다는 것은 다른 말이다.
+          q "투표 — 후보 칸이 생겼나" "SELECT COUNT(*) AS 후보칸 FROM pragma_table_info('polls') WHERE name='options'"
+          q "투표 — 안건마다 어떻게 받나" "SELECT id, association_id AS 조직, CASE WHEN roster_link=1 THEN '단톡방 링크' ELSE '개인 링크만' END AS 받는길, CASE WHEN secret=1 THEN '비밀' ELSE '공개' END AS 표결, CASE WHEN options='' THEN '찬반' ELSE '후보 중 하나' END AS 고를것, closed AS 마감, title FROM polls"
