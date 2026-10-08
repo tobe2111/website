@@ -44,23 +44,6 @@ jobs:
       # D1 에 기사가 열다섯 건 있다는 것과, 손님이 그 기사를 본다는 것은 다른 말이다.
       # 배포가 올라갔는데 홈이 예전 모양으로 뜨는 사고를 숫자로는 못 잡는다.
       # 그래서 홈과 기사 목록을 받아 와 **표시가 몇 개 보이는지**만 센다. 본문은 안 남긴다.
-      - name: 스타일시트가 새 것인가
-        run: |
-          site=https://xn--bb0bw4x46a2a173sv7g.kr
-          home=$(mktemp); curl -s --max-time 30 "$site/" -o "$home"
-          css=$(grep -o '/css/app\.css?v=[A-Za-z0-9]*' "$home" | head -1)
-          echo "- 홈이 가리키는 스타일시트: \`${css:-찾지 못함}\`" | tee -a $GITHUB_STEP_SUMMARY
-          if [ -n "$css" ]; then
-            f=$(mktemp); curl -s --max-time 30 "$site$css" -o "$f"
-            echo "- 받은 크기: $(wc -c <"$f") 바이트" | tee -a $GITHUB_STEP_SUMMARY
-            for pat in 'aspect-ratio:auto 16/9' 'object-fit:contain' 'aspect-ratio:16/9;max-height:440px'; do
-              n=$(grep -o -- "$pat" "$f" | wc -l)
-              echo "    - \`$pat\` ×$n" | tee -a $GITHUB_STEP_SUMMARY
-            done
-            rm -f "$f"
-          fi
-          rm -f "$home"
-
       - name: 숫자만 읽어 온다
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -90,6 +73,26 @@ jobs:
           # 올라오므로, 배포가 초록이라는 것과 칸이 생겼다는 것은 다른 말이다.
           q "투표 — 후보 칸이 생겼나" "SELECT COUNT(*) AS 후보칸 FROM pragma_table_info('polls') WHERE name='options'"
           q "투표 — 안건마다 어떻게 받나" "SELECT id, association_id AS 조직, CASE WHEN roster_link=1 THEN '단톡방 링크' ELSE '개인 링크만' END AS 받는길, CASE WHEN secret=1 THEN '비밀' ELSE '공개' END AS 표결, CASE WHEN options='' THEN '찬반' ELSE '후보 중 하나' END AS 고를것, closed AS 마감, title FROM polls"
+      # 스타일시트 확인도 같은 이유로 뒤에 둔다 — 앞에 두면 숫자 더미에 밀려 안 읽힌다.
+      - name: 스타일시트가 새 것인가
+        run: |
+          site=https://xn--bb0bw4x46a2a173sv7g.kr
+          home=$(mktemp); curl -s --max-time 30 "$site/" -o "$home"
+          css=$(grep -o '/css/app\.css?v=[A-Za-z0-9]*' "$home" | head -1)
+          echo "- 홈이 가리키는 스타일시트: \`${css:-찾지 못함}\`" | tee -a $GITHUB_STEP_SUMMARY
+          if [ -n "$css" ]; then
+            f=$(mktemp); curl -s --max-time 30 "$site$css" -o "$f"
+            echo "- 받은 크기: $(wc -c <"$f") 바이트" | tee -a $GITHUB_STEP_SUMMARY
+            # nav-count: 차림표 옆 '내 서명 ①' 숫자. 이 화면들은 로그인해야 보이므로 밖에서
+          # 긁어서는 확인할 수 없다 — 대신 스타일시트에 규칙이 올라왔는지로 배포를 확인한다.
+          for pat in 'aspect-ratio:auto 16/9' 'object-fit:contain' 'aspect-ratio:16/9;max-height:440px' '.nav-count{'; do
+              n=$(grep -o -- "$pat" "$f" | wc -l)
+              echo "    - \`$pat\` ×$n" | tee -a $GITHUB_STEP_SUMMARY
+            done
+            rm -f "$f"
+          fi
+          rm -f "$home"
+
       # ── 이 단계를 '맨 뒤' 에 둔다 ─────────────────────────────────────────
       # 로그는 뒤에서부터 읽힌다(API 가 꼬리만 준다). 이 숫자가 맨 앞에 찍히면
       # 정작 확인하려던 표시가 꼬리 바깥으로 밀려 못 읽는다 — 실제로 두 번 그랬다.
