@@ -1101,7 +1101,7 @@ export function loginForm(ctx) {
     ${assoc && assoc.kind === "merchant" ? `<p class="auth-note">아직 회원이 아니신가요? <a href="${base}/register">회원 신청하기</a></p>`
       : assoc ? "" : `<p class="auth-note">계정이 없으신가요? <a href="/esign/signup">전자계약 시작하기</a></p>`}
     </div></div></section>`;
-  return html(layout({ title: "로그인", assoc: ctx.assoc, base: ctx.base, body, csrf, scripts: turnstileScript(env) }));
+  return html(layout({ title: "로그인", assoc: ctx.assoc, base: ctx.base, body, csrf, scripts: turnstileScript(env), authScreen: true }));
 }
 
 const flashOf = (q) => flash(q.get("msg") || "", q.get("err") ? "err" : "ok");
@@ -2342,7 +2342,7 @@ export function registerForm(ctx) {
       ${turnstileWidget(env)}
       <button class="btn btn-primary btn-block">가입 신청</button>
     </form><p class="auth-note">가입 후 관리자 승인 시 일반에 공개됩니다.</p></div></div></section>`;
-  return html(layout({ title: "가입", assoc, base, body, csrf, scripts: turnstileScript(env) }));
+  return html(layout({ title: "가입", assoc, base, body, csrf, scripts: turnstileScript(env), authScreen: true }));
 }
 
 // ================= 명부 붙여넣기로 회원 한 번에 등록 =================
@@ -2985,7 +2985,7 @@ export async function invitePage(ctx) {
       <label class="check check-tap"><input type="checkbox" name="agree" value="1" required /> <a href="/privacy" target="_blank">개인정보 수집·이용</a>에 동의합니다.</label>
       <button class="btn btn-primary btn-block">가게 열기</button>
     </form><p class="auth-note">관리자 초대라 승인 절차 없이 바로 공개됩니다.</p></div></div></section>`;
-  return html(layout({ title: "초대 가입", assoc, base, body, csrf }));
+  return html(layout({ title: "초대 가입", assoc, base, body, csrf, authScreen: true }));
 }
 
 // ================= 유어딜 연동 안내 =================
@@ -7191,7 +7191,7 @@ export function forgotForm(ctx) {
     <form method="post" action="/forgot" class="stack-form"><label>이메일<input type="email" name="email" required autocomplete="email" /></label>
       <button class="btn btn-primary btn-block">${auto ? "재설정 링크 받기" : "재설정 요청"}</button></form>
     <p class="auth-note">보안을 위해 이메일 존재 여부와 관계없이 동일하게 안내됩니다.${auto ? "" : " 관리자가 확인 후 임시 비밀번호를 발급합니다."}</p></div></div></section>`;
-  return html(layout({ title: "비밀번호 찾기", assoc: ctx.assoc, base: ctx.base, body, csrf }));
+  return html(layout({ title: "비밀번호 찾기", assoc: ctx.assoc, base: ctx.base, body, csrf, authScreen: true }));
 }
 
 // 이메일 재설정 링크로 진입하는 새 비밀번호 설정 폼
@@ -7205,7 +7205,7 @@ export function resetForm(ctx) {
       <input type="hidden" name="token" value="${esc(token)}" />
       <label>새 비밀번호<input type="password" name="password" minlength="8" required autocomplete="new-password" /></label>
       <button class="btn btn-primary btn-block">비밀번호 변경</button></form></div></div></section>`;
-  return html(layout({ title: "새 비밀번호 설정", body, csrf }));
+  return html(layout({ title: "새 비밀번호 설정", body, csrf, authScreen: true }));
 }
 
 // ================= 설치 마법사 (최초 1회) =================

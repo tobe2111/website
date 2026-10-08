@@ -77,7 +77,7 @@ export function brandLogo(assoc, { wide = false, cls = "", w = 0, h = 0, lazy = 
   return "";
 }
 
-export function layout({ title, assoc, base = "", user = null, body, activeNav = "", description = "", scripts = "", csrf = "", ogImage = "", preloadImage = "", jsonLd = null, product = null, console: consoleKind = "", noIndex = false }) {
+export function layout({ title, assoc, base = "", user = null, body, activeNav = "", description = "", scripts = "", csrf = "", ogImage = "", preloadImage = "", jsonLd = null, product = null, console: consoleKind = "", noIndex = false, authScreen = false }) {
   // 업무 화면(콘솔)에는 손님용 메뉴를 걸지 않는다.
   //
   // 예전에는 관리자 화면 맨 위에 공개 홈 메뉴(소개·가입 점포·점포 지도·게시판·투표)가,
@@ -194,6 +194,7 @@ ${workScreen ? "" : `<footer class="site-footer"><div class="container">
       <strong>${brand}</strong>
       ${assoc && (assoc.phone || assoc.address) ? `<p>${assoc.address ? esc(assoc.address) : ""}${assoc.phone ? `${assoc.address ? " · " : ""}문의 ${esc(assoc.phone)}` : ""}</p>` : ""}
       <p class="foot-copy">© ${new Date().getFullYear()} ${brand}</p>
+      ${authScreen ? "" : hostLine(assoc)}
     </div>
   </div>
 </div></footer>`}
@@ -297,6 +298,23 @@ const BNAV_ICON = {
   sign: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M8.5 16.5c1.2-2.4 2-2.4 2.6-1.2.5 1 1.2 1.2 2 .4"/></svg>',
   menu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h10"/></svg>',
 };
+// 이 홈페이지를 누가 돌리고 있는지 — 상인회 사이트 맨 아래 한 줄.
+//
+// 상인회 홈페이지는 그 상인회의 이름으로 떠 있어서, 손님도 사장님도 "이걸 누가 만들고
+// 누가 고쳐 주나" 를 알 길이 없었습니다. 문제가 생겼을 때 연락할 곳이 화면에 없으면
+// 회장님 개인 번호로 전화가 갑니다. 그래서 운영사와 연락처를 한 줄로 둡니다.
+//
+// 저작권 줄 아래, 저작권 줄보다 작게. 이건 상인회의 홈페이지이지 우리 홈페이지가 아니라,
+// 우리 이름이 상인회 이름보다 크면 안 됩니다.
+const HOST_NAME = "리스터코퍼레이션";
+const HOST_EMAIL = "jiwon@ur-team.com";
+// 로그인·가입처럼 **비밀번호를 치는 화면에는 붙이지 않습니다.** 그 자리에서 남의 회사
+// 이름을 보면 "다른 사이트로 넘어갔나" 싶어지고, 그 순간 비밀번호를 치던 손이 멈춥니다
+// (tenantauth.test.js 가 그걸 지킵니다). 호스트사는 둘러보는 화면에만 둡니다.
+const hostLine = (assoc) => assoc && kindById(assoc.kind).id === "merchant"
+  ? `<p class="foot-host">호스트사 : ${HOST_NAME} · <a href="mailto:${HOST_EMAIL}">${HOST_EMAIL}</a></p>`
+  : "";
+
 function bottomNav(base, active, kind = "merchant", user = null) {
   const K = kindById(kind);
   const item = (href, label, icon) => `<a href="${href}"${active === href ? ' class="on" aria-current="page"' : ""}>${BNAV_ICON[icon]}<span>${label}</span></a>`;
