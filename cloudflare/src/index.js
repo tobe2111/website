@@ -7,6 +7,7 @@ import * as pages from "./pages.js";
 import * as api from "./api.js";
 import { setMediaBase, setOrigin, setAssetVer, layout } from "./render.js";
 import { html, text, redirect, notFoundResponse, forbidden } from "./http.js";
+import { kindOf } from "./kinds.js";
 import { ensureSchema } from "./schema.js";
 import { withStoredKeys } from "./keys.js";
 import { runCron } from "./scheduled.js";
@@ -472,6 +473,29 @@ export default {
   },
 };
 
+// 차림표 옆의 숫자 — '내 서명 ①' · '투표 ②'.
+//
+// 서명 요청과 새 안건은 문자나 이메일이 설정돼 있어야만 알림이 나간다. 설정이 없으면
+// (지금 대부분이 그렇다) 사장님은 **아무 신호도 받지 못하고**, 우연히 그 메뉴를 눌러 봐야
+// 알게 된다. 보내 놓고 아무도 모르는 계약서는 안 보낸 것과 같다.
+//
+// 그래서 화면 자체가 신호가 되게 한다. 다만 값이 싸지 않으므로(조회 두 번) 꼭 필요할 때만 센다 —
+// 화면을 그리는 GET 일 때, 로그인한 사람일 때, 그리고 그 메뉴가 실제로 보이는 역할일 때만.
+async function attachNavCounts(db, user, assoc, method) {
+  if (!user || !assoc || method !== "GET") return;
+  const esign = kindOf(assoc).nav === "esign";
+  const member = user.role === "MERCHANT";
+  const wantSign = member || esign;              // '내 서명' 이 차림표에 서는 조건 (render.js 와 같다)
+  const wantPolls = !esign && kindOf(assoc).nav !== "landing";
+  if (!wantSign && !wantPolls) return;
+  const [sign, polls] = await Promise.all([
+    wantSign ? D.countDocumentsToSign(db, assoc.id, user.id, user.role).catch(() => 0) : 0,
+    wantPolls ? D.countOpenPollsToVote(db, assoc.id, user.id).catch(() => 0) : 0,
+  ]);
+  // user 는 이 요청 동안만 사는 객체다 — 화면(render.js)이 같은 객체를 받으므로 여기 얹어 둔다.
+  user.navCounts = { sign, polls };
+}
+
 async function handle(request, env) {
   const url = new URL(request.url);
   const { pathname } = url;
@@ -601,6 +625,7 @@ async function handle(request, env) {
     if (route) {
       const ok = authorize(user, route.auth, assoc, request.method === "GET" ? pathname : "");
       if (ok !== true) return finalize(typeof ok === "string" ? redirect(ok) : forbidden(), setCookies, env, timing);
+      await attachNavCounts(db, user, assoc, request.method);
       const res = await route.handler({ ...baseCtx, assoc, base: t.base, params: route.params });
       return finalize(res, setCookies, env, timing, tCanon, assoc);
     }

@@ -315,11 +315,16 @@ const hostLine = (assoc) => assoc && kindById(assoc.kind).id === "merchant"
   ? `<p class="foot-host">호스트사 : ${HOST_NAME} · <a href="mailto:${HOST_EMAIL}">${HOST_EMAIL}</a></p>`
   : "";
 
+// 폰 아래 차림표에도 같은 숫자를 붙인다 — 사장님은 대부분 폰으로 들어오신다.
+const bnavBadge = (user, key) => {
+  const n = ((user && user.navCounts) || {})[key] || 0;
+  return n ? ` <em class="nav-count">${n}</em>` : "";
+};
 function bottomNav(base, active, kind = "merchant", user = null) {
   const K = kindById(kind);
   const item = (href, label, icon) => `<a href="${href}"${active === href ? ' class="on" aria-current="page"' : ""}>${BNAV_ICON[icon]}<span>${label}</span></a>`;
   const items = K.nav === "esign"
-    ? [item(`${base}/`, "홈", "home"), item(`${base}/notices`, "공지", "notice"), ...(user ? [item(`${base}/sign`, "내 서명", "sign")] : [])]
+    ? [item(`${base}/`, "홈", "home"), item(`${base}/notices`, "공지", "notice"), ...(user ? [item(`${base}/sign`, `내 서명${bnavBadge(user, "sign")}`, "sign")] : [])]
     : [item(`${base}/`, "홈", "home"), item(`${base}/businesses`, "점포", "store"), item(`${base}/map`, "지도", "map"), item(`${base}/notices`, "공지", "notice")];
   items.push(`<button type="button" class="bnav-menu" data-bnav-menu aria-label="전체메뉴 열기">${BNAV_ICON.menu}<span>전체메뉴</span></button>`);
   return `<nav class="bnav" aria-label="하단 메뉴">${items.join("")}</nav>`;
@@ -345,13 +350,16 @@ function navHtml(base, user, active, kind = "merchant", preset = "") {
       link(`${base}/notices`, "공지·소식"),
     ];
   if (user) {
+    // 숫자는 0 일 때 아예 붙이지 않는다 — '내 서명 0' 은 할 일이 있는 것처럼 읽힌다.
+    const nc = (user && user.navCounts) || {};
+    const badge = (n) => (n ? ` <em class="nav-count">${n}</em>` : "");
     if (!esign && !franchise) {
       items.push(link(`${base}/board`, "회원 게시판"));
-      items.push(link(`${base}/polls`, "투표"));
+      items.push(link(`${base}/polls`, `투표${badge(nc.polls)}`));
     }
     // 서명은 역할과 무관하다 — 계약을 만든 사람도 서명해야 한다.
     // 다만 상인회 메뉴는 건드리지 않는다(점포주만 보던 항목을 관리자에게 새로 띄우지 않음).
-    if (user.role === "MERCHANT" || esign) items.push(link(`${base}/sign`, "내 서명"));
+    if (user.role === "MERCHANT" || esign) items.push(link(`${base}/sign`, `내 서명${badge(nc.sign)}`));
     // 운영 메뉴는 손님용 메뉴와 섞지 않고 오른쪽에 따로 묶습니다.
     // '슈퍼'(플랫폼 콘솔)는 이 상인회의 메뉴가 아니므로 여기 두지 않습니다 —
     // 상인회 홈페이지 위에 플랫폼 운영 도구가 얹혀 있는 것처럼 보입니다. 계정 화면에서 들어갑니다.

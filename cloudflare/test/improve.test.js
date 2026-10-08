@@ -230,7 +230,10 @@ test("관리 화면은 하는 일별 탭으로 나뉜다", async () => {
   const html = await (await f("/t/tabs/admin", { headers: { cookie: jar } })).text();
 
   const tabs = [...html.matchAll(/<div class="sgroup" id="s-(\w+)"/g)].map((m) => m[1]);
-  assert.deepEqual(tabs, ["home", "people", "content", "inbox", "stats", "notify", "settings"]);
+  // 회비 장부는 '회원 관리' 가 아니라 돈 세는 일이다. 같은 탭에 두었더니 회원 표 아래로
+  // 또 한 벌의 긴 표가 붙어, 가게 125곳에서 이 탭 하나가 14,299px — 다른 탭의 열 배였다.
+  // (회비를 걷지 않는 상인회에는 이 탭이 서지 않는다 — 아래 따로 잰다.)
+  assert.deepEqual(tabs, ["home", "people", "dues", "content", "inbox", "stats", "notify", "settings"]);
   assert.match(html, /id="consoleNav"/, "탭 장치가 붙을 자리가 있어야");
   assert.match(html, /super-tabs\.js/, "탭 장치를 싣어야");
 

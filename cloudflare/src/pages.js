@@ -3287,6 +3287,8 @@ const TAB_ICO = {
   inbox: CI('<path d="M3 13l2.5-8h13L21 13v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M3 13h5l1.5 3h5L16 13h5"/>'),
   stats: CI('<path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/>'),
   notify: CI('<path d="M6 17V11a6 6 0 0 1 12 0v6l1.5 2h-15z"/><path d="M10 21a2 2 0 0 0 4 0"/>'),
+  // 회비 장부 — 지갑. 돈을 세는 자리라는 뜻이 한눈에 와야 한다.
+  dues: CI('<rect x="2.5" y="6" width="19" height="13" rx="2"/><path d="M2.5 10h19"/><circle cx="17" cy="14.5" r="1.4"/>'),
   settings: CI('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'),
 };
 
@@ -3296,6 +3298,10 @@ function consoleTabs(kind, counts = {}) {
   return [
     ["home", "현황", TAB_ICO.home, counts.unread || 0],
     ["people", isEsign ? "담당자" : "회원·점포", TAB_ICO.people, isEsign ? 0 : (counts.pending || 0)],
+    // 회비 장부는 '회원 관리' 가 아니라 **돈 세는 일**이다. 같은 탭에 두면 회원 표 아래로
+    // 또 한 벌의 긴 표가 붙어, 가게 125곳에서 이 탭 하나가 다른 탭의 열 배가 된다(실측 14,299px).
+    // 회비를 걷지 않는 상인회에는 탭 자체를 세우지 않는다 — 안 쓰는 칸은 찾는 데 방해만 된다.
+    ...(counts.dues ? [["dues", "회비", TAB_ICO.dues, 0]] : []),
     ...(isEsign ? [] : [["content", isFranchise ? "가맹점·콘텐츠" : "콘텐츠", TAB_ICO.content, 0]]),
     ...(isEsign || isFranchise ? [] : [["inbox", "문의", TAB_ICO.inbox, counts.inbox || 0]]),
     ...(isEsign || isFranchise ? [] : [["stats", "성과", TAB_ICO.stats, 0]]),
@@ -3344,7 +3350,9 @@ async function consoleShell(ctx, { title, titleHtml = "", eyebrow = "", sub = ""
     // 언론 보도 대기 건수. 표가 없는 옛 DB 에서도 화면이 죽지 않게 0 으로 받는다.
     kind !== "esign" && kind !== "franchise" ? D.countPressPending(db, assoc.id).catch(() => 0) : 0,
   ]);
-  const counts = { pending: s.pending || 0, unread: unread || 0, press: press || 0 };
+  // 회비 탭은 회비를 걷는 상인회에만 선다 — 곁가지 화면에서도 차림표가 같아야,
+  // 계약서 화면에 갔다 왔더니 탭 하나가 사라져 보이는 일이 없다.
+  const counts = { pending: s.pending || 0, unread: unread || 0, press: press || 0, dues: D.usesDues(assoc) ? 1 : 0 };
   return `<section class="dash dash-shell"><div class="container">
     <div class="dash-head"><div>${eyebrow ? `<p class="section-eyebrow">${eyebrow}</p>` : ""}<h1 class="dash-title">${titleHtml || esc(title)}</h1>${sub ? `<p class="dash-sub">${sub}</p>` : ""}</div>
       ${actions ? `<div class="dash-head-actions">${actions}</div>` : ""}</div>
@@ -4093,7 +4101,7 @@ export async function admin(ctx) {
   })();
 
   // 왼쪽 메뉴 아이콘 — 글자만 일곱 줄이면 눈이 훑을 자리가 없다. 16px 선 아이콘 하나씩.
-  const ADMIN_TABS = consoleTabs(assoc.kind, { unread: unread || 0, pending: s.pending || 0, inbox: inboxCounts.new || 0 });
+  const ADMIN_TABS = consoleTabs(assoc.kind, { unread: unread || 0, pending: s.pending || 0, inbox: inboxCounts.new || 0, dues: D.usesDues(assoc) ? 1 : 0 });
 
   // ── 며칠 기다렸는지 —— "승인 대기 3" 을 보고도 오늘 온 것인지 일주일 묵은 것인지
   // 알 수 없으면, 그 숫자는 아무 결정도 만들지 못한다.
@@ -4295,7 +4303,7 @@ export async function admin(ctx) {
         : `<a href="${base}/admin/documents" class="btn btn-primary btn-sm">계약서 만들기</a>`}</div></div>
     ${flashOf(query)}
     <div class="console-grid">
-    ${consoleSide({ base, kind: assoc.kind, counts: { unread: unread || 0, pending: s.pending || 0, inbox: inboxCounts.new || 0, press: pressPending }, inPage: true })}
+    ${consoleSide({ base, kind: assoc.kind, counts: { unread: unread || 0, pending: s.pending || 0, inbox: inboxCounts.new || 0, press: pressPending, dues: D.usesDues(assoc) ? 1 : 0 }, inPage: true })}
     <div class="console-main">
     <div class="sgroup" id="s-home" data-tab="home">
     <div class="home-sheet">
@@ -4391,8 +4399,8 @@ export async function admin(ctx) {
     ${isEsign ? "" : addMemberPanel}
     ${isEsign || isFranchise ? "" : consentPanel}
     ${isEsign ? teamsPanel : ""}
-    ${isEsign || isFranchise || !D.usesDues(assoc) ? "" : duesPanel}
     </div>
+    ${isEsign || isFranchise || !D.usesDues(assoc) ? "" : `<div class="sgroup" id="s-dues" data-tab="dues">${duesPanel}</div>`}
 
 ${isEsign ? "" : `<div class="sgroup" id="s-content" data-tab="content">`}
 ${isFranchise ? `    <section class="panel panel-accent" id="p-home"><h2 class="panel-title">랜딩페이지</h2>
