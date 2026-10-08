@@ -2445,7 +2445,7 @@ export async function adminCreatePoll(ctx) {
   const closesAt = /^\d{4}-\d{2}-\d{2}$/.test(rawClose) ? rawClose : "";
   await D.createPoll(db, { associationId: assoc.id, title, body: cap((form.get("body") || "").trim(), 2000), closesAt,
     verify: pollVerifyFrom(form), rosterLink: form.get("roster_link") ? 1 : 0, secret: form.get("secret") ? 1 : 0,
-    createdBy: user.id });
+    options: form.get("options") || "", createdBy: user.id });
   await D.createNotification(db, { associationId: assoc.id, kind: "poll", message: `새 투표: ${title}`, link: base + "/polls" });
   await audit(ctx, "투표생성", title);
   return back(base + "/polls", "투표를 시작했습니다. 회원들이 투표할 수 있습니다.");
@@ -2473,16 +2473,23 @@ export async function adminUpdatePoll(ctx) {
   const cast = await D.countPollVotes(db, p.id);
   const wantSecret = form.get("secret") ? 1 : 0;
   const locked = cast > 0 && wantSecret !== (Number(p.secret) ? 1 : 0);
+  // 고를 것들도 같은 이유로 잠근다. 표에는 줄 번호가 적혀 있어, 줄을 지우거나 순서를
+  // 바꾸면 이미 들어온 표가 다른 후보의 표가 된다 — 그건 고치는 게 아니라 표를 옮기는 것이다.
+  const wantOpts = D.normalizePollOptions(form.get("options") || "");
+  const optLocked = cast > 0 && wantOpts !== D.normalizePollOptions(p.options || "");
   await D.updatePoll(db, p.id, assoc.id, {
     title, body: cap((form.get("body") || "").trim(), 2000),
     closesAt: /^\d{4}-\d{2}-\d{2}$/.test(rawClose) ? rawClose : "",
     verify: pollVerifyFrom(form),
     rosterLink: form.get("roster_link") ? 1 : 0,
     secret: cast > 0 ? null : wantSecret,
+    options: cast > 0 ? null : wantOpts,
   });
   await audit(ctx, "투표수정", `#${p.id} ${title}`);
-  return back(base + "/polls", locked
-    ? `안건을 고쳤습니다. 다만 이미 ${cast}명이 투표하셔서 비밀/공개는 그대로 두었습니다 — 바꾸려면 새 안건을 올리셔야 합니다.`
+  // 조사까지 맞춰 적는다 — "비밀/공개은" 처럼 어긋나면 기계가 쓴 글로 읽힌다.
+  const kept = locked && optLocked ? "비밀/공개와 고를 것들은" : locked ? "비밀/공개는" : optLocked ? "고를 것들은" : "";
+  return back(base + "/polls", kept
+    ? `안건을 고쳤습니다. 다만 이미 ${cast}명이 투표하셔서 ${kept} 그대로 두었습니다 — 바꾸려면 새 안건을 올리셔야 합니다.`
     : "안건을 고쳤습니다. 이미 들어온 표는 그대로 남습니다.");
 }
 export async function adminReopenPoll(ctx) {
@@ -2515,7 +2522,9 @@ export async function pollVote(ctx) {
   if (!p || p.association_id !== assoc.id) return back(base + "/polls", "투표를 찾을 수 없습니다.", true);
   if (!D.isPollOpen(p)) return back(base + "/polls", "마감된 투표입니다.", true);
   const choice = form.get("choice");
-  if (!["yes", "no", "abstain"].includes(choice)) return back(base + "/polls", "선택을 확인해 주세요.", true);
+  // 무엇을 고를 수 있는지는 **안건마다 다르다**(후보를 적어 둔 선거형이면 o0·o1…).
+  // 화면이 그린 단추만 믿지 않고 여기서 다시 본다 — 주소로 직접 보낸 요청도 여기서 걸린다.
+  if (!D.isPollChoice(p, choice)) return back(base + "/polls", "선택을 확인해 주세요.", true);
   // 확인 등급 — 화면에서 버튼을 감추는 것만으로는 막은 것이 아니다. 주소로 직접 보낸 요청도
   // 여기서 걸린다. 표가 근거로 쓰이는 안건에서 이 한 줄이 실제로 막는 것이다.
   const lv = D.pollVerifyLevel(p);
@@ -4280,7 +4289,7 @@ export async function voteByLink(ctx) {
   const u = await D.getUserById(db, t.u);
   if (!u || u.association_id !== assoc.id) return back(here, "회원을 찾을 수 없습니다.", true);
   const choice = form.get("choice");
-  if (!["yes", "no", "abstain"].includes(choice)) return back(here, "선택을 확인해 주세요.", true);
+  if (!D.isPollChoice(p, choice)) return back(here, "선택을 확인해 주세요.", true);
   const how = t.h === "roster" ? "roster" : "link";
   if (D.pollIsSecret(p)) {
     const ok = await D.castSecretVote(db, p.id, u.id, choice, how);

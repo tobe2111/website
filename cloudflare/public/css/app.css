@@ -1104,14 +1104,28 @@ input[type="color"]{height:46px;padding:4px;cursor:pointer}
 .poll-card.is-closed{opacity:.85}
 .poll-body{color:var(--ink-soft);margin-bottom:12px}
 .poll-actions{display:flex;gap:8px;margin-bottom:14px}
-.poll-results{display:grid;gap:8px}
-.poll-bar{display:grid;grid-template-columns:110px 1fr 44px;align-items:center;gap:10px}
-.pb-label{font-size:.88rem}
+/* 결과 막대 — 이름·막대·% 세 칸이 **모든 줄에서 같은 자리**에 서야 눈이 세로로 따라갑니다.
+   줄마다 따로 grid 를 두면(예전 모양) 칸 너비가 줄마다 달라져, 후보 이름이 길고 짧은
+   선거에서 막대 시작점이 들쭉날쭉해집니다. 그래서 바깥이 칸을 잡고 줄은 칸을 빌려 씁니다.
+   이름 칸은 가장 긴 이름에 맞춰 늘되(max-content), 너무 길면 막대가 사라지므로 잘라 둡니다. */
+.poll-results{display:grid;grid-template-columns:minmax(110px,max-content) minmax(0,1fr) 44px;
+  gap:8px 10px;align-items:center}
+.poll-bar{display:contents}
+.poll-results > .panel-hint{grid-column:1/-1}
+.pb-label{font-size:.88rem;max-width:min(46vw,260px)}
 .pb-track{height:10px;border-radius:99px;background:var(--bg-alt);overflow:hidden}
 .pb-fill{display:block;height:100%;border-radius:99px;transition:width .4s ease}
 .pb-fill.is-yes{background:var(--brand)}
 .pb-fill.is-no{background:#d65745}
 .pb-fill.is-abs{background:#b9c2bc}
+/* 후보가 여럿인 투표(회장 선출 등)의 막대 색. 옆 칸과 구별되기만 하면 되는 자리라
+   글자가 올라가지 않습니다 — 그래서 대비 기준이 아니라 '서로 달라 보이는가' 로 골랐습니다. */
+.pb-fill.is-o0{background:var(--brand)}
+.pb-fill.is-o1{background:#3f7fb8}
+.pb-fill.is-o2{background:#c2743f}
+.pb-fill.is-o3{background:#7a5fa8}
+.pb-fill.is-o4{background:#4f9b6a}
+.pb-fill.is-o5{background:#b8556f}
 .pb-pct{font-size:.82rem;color:var(--muted);text-align:right}
 /* 투표 본인확인 —— 아직 못 하는 이유와, 무엇을 하면 열리는지를 그 자리에 둔다.
    버튼만 감추면 사장님은 "고장났다" 고 읽는다. 한 문장이라도 옆에 있어야 다음 걸음을 뗀다. */

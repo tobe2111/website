@@ -1415,7 +1415,15 @@ export async function events(ctx) {
 const pollExtraPick = (p, cast = 0) => {
   const roster = p ? D.pollRosterLink(p) : false;
   const secret = p ? D.pollIsSecret(p) : false;
-  return `<label class="check-line"><input type="checkbox" name="roster_link" value="1"${roster ? " checked" : ""} />
+  const opts = p ? D.pollOptionLines(p).join("\n") : "";
+  return `<label>고를 것 — 한 줄에 하나 (비워 두면 찬성·반대·기권)
+    <textarea name="options" rows="3" maxlength="800"${cast ? " readonly" : ""}
+      placeholder="기호 1번 김정숙&#10;기호 2번 이영수">${esc(opts)}</textarea></label>
+  <p class="panel-hint">회장 선출처럼 <b>여럿 중 하나</b>를 고르는 투표는 여기에 후보를 적으세요
+    (최대 ${D.POLL_MAX_OPTIONS}명). 안건 찬반이면 비워 두시면 됩니다.${
+      cast ? ` <b>이미 ${cast}명이 투표하셔서 지금은 고칠 수 없습니다</b> — 줄을 바꾸면 들어온 표가
+      다른 후보의 표가 됩니다. 바꾸시려면 새 안건을 올려 주세요.` : ""}</p>
+  <label class="check-line"><input type="checkbox" name="roster_link" value="1"${roster ? " checked" : ""} />
     <span><b>단톡방에 링크 하나로 받기</b> — 받으신 분이 상호·대표자 성함·전화번호 뒷 네 자리를
       넣으면 명부와 맞춰 보고 투표하게 합니다. 가입도 비밀번호도 필요 없습니다.</span></label>
   <label class="check-line"><input type="checkbox" name="secret" value="1"${secret ? " checked" : ""}${cast ? " disabled" : ""} />
@@ -1467,8 +1475,11 @@ export async function polls(ctx) {
     const didVote = votesMap.has(p.id);
     const isSecret = D.pollIsSecret(p);
     const pct = (n) => (r.total ? Math.round((n / r.total) * 100) : 0);
-    const bar = (label, key, cls) => `<div class="poll-bar"><span class="pb-label">${label} <b>${r[key]}표</b></span>
-      <span class="pb-track"><span class="pb-fill ${cls}" style="width:${pct(r[key])}%"></span></span><span class="pb-pct">${pct(r[key])}%</span></div>`;
+    // 고를 것들은 안건마다 다르다 — 후보를 적어 둔 안건이면 그 줄들이, 아니면 찬성·반대·기권.
+    const choices = D.pollChoices(p);
+    const nOf = (k) => Number(r[k]) || 0;
+    const bar = (label, key, cls) => `<div class="poll-bar"><span class="pb-label">${esc(label)} <b>${nOf(key)}표</b></span>
+      <span class="pb-track"><span class="pb-fill ${cls}" style="width:${pct(nOf(key))}%"></span></span><span class="pb-pct">${pct(nOf(key))}%</span></div>`;
     // 이 안건이 요구하는 확인을 내가 통과했는가. 통과하지 못했으면 버튼을 아예 만들지 않는다 —
     // 눌러 놓고 거절당하는 것보다, 무엇을 해야 열리는지를 그 자리에서 보여 주는 편이 낫다.
     const lv = D.pollVerifyLevel(p);
@@ -1494,15 +1505,16 @@ export async function polls(ctx) {
         ? `<p class="poll-ok">투표하셨습니다. <b>비밀투표라 무엇을 고르셨는지는 어디에도 남지 않고,
             그래서 바꾸실 수도 없습니다.</b></p>`
         : `<form method="post" action="${base}/polls/${p.id}/vote" class="poll-actions">
-        ${[["yes", "찬성"], ["no", "반대"], ["abstain", "기권"]].map(([v, l]) =>
-          `<button name="choice" value="${v}" class="btn btn-sm ${mine === v ? "btn-primary" : "btn-ghost"}">${l}${mine === v ? " ✓" : ""}</button>`).join("")}
-      </form>${mine ? `<p class="panel-hint">내 투표: <b>${{ yes: "찬성", no: "반대", abstain: "기권" }[mine]}</b> — 마감 전까지 변경할 수 있습니다.</p>`
+        ${choices.map((c) =>
+          `<button name="choice" value="${c.key}" class="btn btn-sm ${mine === c.key ? "btn-primary" : "btn-ghost"}">${esc(c.label)}${mine === c.key ? " ✓" : ""}</button>`).join("")}
+      </form>${mine ? `<p class="panel-hint">내 투표: <b>${esc(D.pollChoiceLabel(p, mine))}</b> — 마감 전까지 변경할 수 있습니다.</p>`
         : isSecret ? `<p class="panel-hint"><b>비밀투표입니다.</b> 한 번 누르면 바꾸실 수 없으니 천천히 고르세요.</p>` : ""}`)
       : "";
     cards.push(`<section class="panel poll-card${open ? "" : " is-closed"}">
       <div class="panel-head"><h2 class="panel-title">${esc(p.title)}</h2>
         ${lv ? `<span class="badge badge-lock">${lv === 1 ? "본인확인 필요" : "인증번호 필요"}</span>` : ""}
         ${isSecret ? '<span class="badge badge-lock">비밀투표</span>' : ""}
+        ${D.pollIsElection(p) ? `<span class="badge badge-muted">후보 ${choices.length}명 중 하나</span>` : ""}
         ${D.pollRosterLink(p) ? '<span class="badge badge-muted">단톡방 링크</span>' : ""}
         <span class="badge ${open ? "badge-open" : "badge-muted"}">${open ? (p.closes_at ? `~${esc(p.closes_at)}` : "진행 중") : "마감"}</span></div>
       ${p.body ? `<p class="poll-body">${esc(p.body).replace(/\n/g, "<br />")}</p>` : ""}
@@ -1510,7 +1522,7 @@ export async function polls(ctx) {
         lv === 1 && user.verified_how ? ` (${esc(D.verifyHowLabel(user.verified_how))})` : ""} — 투표하실 수 있습니다.</p>` : ""}
       ${gate}
       ${voteBtns}
-      <div class="poll-results">${bar("찬성", "yes", "is-yes")}${bar("반대", "no", "is-no")}${bar("기권", "abstain", "is-abs")}
+      <div class="poll-results">${choices.map((c) => bar(c.label, c.key, c.cls)).join("")}
         <p class="panel-hint">총 ${r.total}명 참여</p></div>
       ${isAdmin ? `<span class="pill-row poll-admin-row">
         <a class="btn btn-primary btn-sm" href="${base}/admin/polls/${p.id}/links">투표 링크 보내기</a>
@@ -1661,7 +1673,6 @@ export async function adminPollVerify(ctx) {
   return html(layout({ title: "투표 자격 대장", assoc, base, user, body, csrf }));
 }
 
-const CHOICE_KO = { yes: "찬성", no: "반대", abstain: "기권" };
 
 // ================= 투표 링크 (로그인 없이 한 표) =================
 //
@@ -1775,15 +1786,15 @@ export async function votePage(ctx) {
     : !open
       ? `<p class="auth-note">이 안건은 <b>마감되었습니다.</b>${
           secret ? (didVote ? " 넣으신 표는 비밀투표라 여기에 뜨지 않습니다." : "")
-            : mine ? ` 넣으셨던 표는 <b>${esc(CHOICE_KO[mine] || mine)}</b> 입니다.` : ""}</p>`
+            : mine ? ` 넣으셨던 표는 <b>${esc(D.pollChoiceLabel(p, mine))}</b> 입니다.` : ""}</p>`
       : secret && didVote
       ? `<p class="auth-note">이미 <b>투표하셨습니다.</b> 비밀투표라 무엇을 고르셨는지는 어디에도
           남지 않고, 그래서 바꾸실 수도 없습니다.</p>`
       : `<form method="post" action="${here}" class="vl-pick">
-          ${[["yes", "찬성"], ["no", "반대"], ["abstain", "기권"]].map(([v, l]) =>
-            `<button name="choice" value="${v}" class="btn ${mine === v ? "btn-primary" : "btn-outline"}">${l}${mine === v ? " ✓" : ""}</button>`).join("")}
+          ${D.pollChoices(p).map((c) =>
+            `<button name="choice" value="${c.key}" class="btn ${mine === c.key ? "btn-primary" : "btn-outline"}">${esc(c.label)}${mine === c.key ? " ✓" : ""}</button>`).join("")}
         </form>
-        ${mine ? `<p class="auth-note">지금 <b>${esc(CHOICE_KO[mine] || mine)}</b> 로 되어 있습니다 — 마감 전까지 다시 눌러 바꾸실 수 있습니다.</p>`
+        ${mine ? `<p class="auth-note">지금 <b>${esc(D.pollChoiceLabel(p, mine))}</b> 로 되어 있습니다 — 마감 전까지 다시 눌러 바꾸실 수 있습니다.</p>`
           : secret ? `<p class="auth-note"><b>비밀투표입니다.</b> 하나를 누르시면 그 자리에서 기록되고,
               누가 무엇을 골랐는지는 어디에도 남지 않습니다. 대신 <b>바꾸실 수 없으니</b> 천천히 고르세요.</p>`
           : `<p class="auth-note">하나를 눌러 주시면 그 자리에서 기록됩니다. 마감 전까지 바꾸실 수 있습니다.</p>`}`;
@@ -1833,7 +1844,7 @@ export async function adminPollLinks(ctx) {
           : ""}<button type="button" class="btn btn-xs btn-outline" data-copy="${esc(msgOf(m))}">이 글 복사</button></div></td>
       <td>${m.phone ? `<a href="tel:${esc(m.phone)}">${esc(D.formatPhone(m.phone))}</a>` : '<span class="muted">번호 없음</span>'}</td>
       <td>${m.voted
-        ? `<span class="badge badge-ok">${m.choice ? esc(CHOICE_KO[m.choice] || m.choice) : "넣음"}</span>`
+        ? `<span class="badge badge-ok">${m.choice ? esc(D.pollChoiceLabel(p, m.choice)) : "넣음"}</span>`
         : '<span class="badge badge-wait">아직</span>'}</td>
     </tr>`).join("")}</tbody></table></div>` : `<p class="panel-hint">아직 회원이 없습니다.</p>`;
 
@@ -1943,6 +1954,10 @@ export async function adminPollMinutes(ctx) {
   // (그래서 이 종이에는 합계만 적히고, 누가 무엇을 골랐는지 적을 줄이 아예 없다)
   const secret = D.pollIsSecret(p);
   const r = await D.pollResults(db, p.id, p);
+  // 후보를 적어 둔 안건(선거)은 찬성·반대·기권이 아니라 **후보별 득표**로 적는다.
+  // 같은 종이에 "찬성 0표 / 반대 0표" 를 찍으면 읽는 사람이 부결로 오해한다.
+  const choices = D.pollChoices(p);
+  const isElection = D.pollIsElection(p);
   const tally = { yes: r.yes, no: r.no, abstain: r.abstain };
   const cast = votes.length;
   const pctOf = (n, d) => (d ? Math.round((n / d) * 1000) / 10 : 0);
@@ -1961,18 +1976,31 @@ export async function adminPollMinutes(ctx) {
     <table class="mn-tbl mn-sum">
       ${numRow("투표권자", `${eligible}명`, "명부에 오른 계정 수. 정관상 재적 회원 수와 다를 수 있으니 확인해 주세요")}
       ${numRow("투표 참여", `${cast}명`, `참여율 ${pctOf(cast, eligible)}%`)}
-      ${numRow("찬성", `${tally.yes}표`, `참여자의 ${pctOf(tally.yes, cast)}%`)}
-      ${numRow("반대", `${tally.no}표`, `참여자의 ${pctOf(tally.no, cast)}%`)}
-      ${numRow("기권", `${tally.abstain}표`, `참여자의 ${pctOf(tally.abstain, cast)}%`)}
+      ${choices.map((c) => numRow(esc(c.label), `${Number(r[c.key]) || 0}표`,
+        `참여자의 ${pctOf(Number(r[c.key]) || 0, cast)}%`)).join("")}
       ${numRow("미투표", `${left.length}명`, left.length ? "명단은 뒤 장에 있습니다" : "")}
     </table>
-    <table class="mn-tbl mn-maj">
+    ${isElection ? (() => {
+      // 최다 득표. 같은 표가 둘 이상이면 **고르지 않는다** — 종이가 한 사람을 적으면
+      // 그게 곧 결정으로 읽히는데, 동점은 정관이 정한 방법으로 가려야 하는 일이다.
+      const top = Math.max(0, ...choices.map((c) => Number(r[c.key]) || 0));
+      const tops = choices.filter((c) => (Number(r[c.key]) || 0) === top && top > 0);
+      return `<table class="mn-tbl mn-maj">
+      <tr><th>최다 득표</th><td>${tops.length === 1
+        ? `<b>${esc(tops[0].label)}</b> ${top}표 / 참여 ${cast}명`
+        : tops.length > 1 ? `<b>동점</b> — ${esc(tops.map((c) => c.label).join(" · "))} 각 ${top}표`
+        : "들어온 표가 없습니다"}</td></tr>
+      <tr><th>참여자 과반</th><td>${tops.length === 1
+        ? `${esc(tops[0].label)} ${top}표 / 참여 ${cast}명 — <b>${majorityOf(top, cast) ? "넘었습니다" : "넘지 못했습니다"}</b>`
+        : "최다 득표가 가려지지 않아 판단하지 않습니다"}</td></tr>
+    </table>`;
+    })() : `<table class="mn-tbl mn-maj">
       <tr><th>참여자 과반</th><td>찬성 ${tally.yes}표 / 참여 ${cast}명 —
         <b>${majorityOf(tally.yes, cast) ? "넘었습니다" : "넘지 못했습니다"}</b></td></tr>
       <tr><th>투표권자 과반</th><td>찬성 ${tally.yes}표 / 투표권자 ${eligible}명 —
         <b>${majorityOf(tally.yes, eligible) ? "넘었습니다" : "넘지 못했습니다"}</b></td></tr>
-    </table>
-    <p class="mn-line">가결·부결은 <b>상인회 정관이 정한 기준</b>으로 판단해 주세요.
+    </table>`}
+    <p class="mn-line">${isElection ? "당선·낙선" : "가결·부결"}은 <b>상인회 정관이 정한 기준</b>으로 판단해 주세요.
       이 종이는 숫자와 과반 여부만 적습니다 — 어느 기준을 쓰는지는 정관에 있습니다.</p>
     <table class="mn-tbl mn-vf">
       <thead><tr><th>표를 받을 때의 본인확인</th><th>표 수</th></tr></thead>
@@ -2020,7 +2048,7 @@ export async function adminPollMinutes(ctx) {
       <td>${i * MN_VOTE_ROWS + k + 1}</td>
       <td>${esc(v.name || "(탈퇴)")}</td>
       <td>${esc(v.business_name || "")}</td>
-      ${secret ? "" : `<td class="mn-ch mn-ch-${esc(v.choice)}">${esc(CHOICE_KO[v.choice] || v.choice)}</td>`}
+      ${secret ? "" : `<td class="mn-ch mn-ch-${esc(v.choice)}">${esc(D.pollChoiceLabel(p, v.choice))}</td>`}
       <td>${esc(D.verifyHowLabel(v.verify) || "확인 없음")}</td>
       <td>${esc(kstStamp(v.created_at))}</td></tr>`).join("");
     const cols = secret ? 5 : 6;
@@ -2091,7 +2119,7 @@ export async function adminPollMinutesCsv(ctx) {
   const lines = [
     ["구분", "연번", "성명", "가게", secret ? "선택(비밀투표라 비움)" : "선택", "본인확인", "투표 시각", "연락처"],
     ...votes.map((v, i) => ["투표", String(i + 1), v.name || "(탈퇴)", v.business_name || "",
-      secret ? "" : (CHOICE_KO[v.choice] || v.choice), D.verifyHowLabel(v.verify) || "확인 없음",
+      secret ? "" : D.pollChoiceLabel(p, v.choice), D.verifyHowLabel(v.verify) || "확인 없음",
       kstStamp(v.created_at), v.phone ? D.formatPhone(v.phone) : ""]),
     ...left.map((m, i) => ["미투표", String(i + 1), m.name || "", m.business_name || "",
       "", m.verified_at ? D.verifyHowLabel(m.verified_how) : "확인 안 됨", "",

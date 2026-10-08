@@ -298,6 +298,11 @@ CREATE TABLE IF NOT EXISTS polls (
   roster_link    INTEGER NOT NULL DEFAULT 0,
   -- 비밀투표인가. 1 이면 누가 무엇을 골랐는지를 어디에도 적지 않는다(아래 poll_ballots).
   secret         INTEGER NOT NULL DEFAULT 0,
+  -- 고를 것들. 비어 있으면 찬성·반대·기권(안건 표결), 줄마다 하나씩 적혀 있으면 그 줄들이
+  -- 후보다(회장 선거처럼 여럿 중 하나 고르기). 표에는 줄 번호(o0·o1…)가 적히므로,
+  -- 표가 하나라도 들어온 뒤에는 이 줄들을 바꾸지 않는다 — 바꾸면 이미 들어온 표가
+  -- 다른 사람의 표가 된다.
+  options        TEXT NOT NULL DEFAULT '',
   created_by     INTEGER,
   created_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -951,7 +956,7 @@ CREATE INDEX IF NOT EXISTS idx_landing_asset_assoc ON landing_assets(association
 // 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
 // 마이그레이션 세대 — migrateColumns 에 단계를 추가할 때마다 +1
 // 36 = 두 갈래(트렁크 33 · 모집형 35)를 합친 세대. 양쪽 DB 모두 다시 한 번 마이그레이션을 타게 한다.
-export const SCHEMA_VERSION = "55";
+export const SCHEMA_VERSION = "56";
 
 // ⚠️ 이 숫자를 올리는 걸 잊으면 **마이그레이션이 통째로 안 돈다.**
 //
@@ -1266,6 +1271,11 @@ async function migrateColumns(db) {
     }
     if (!pc2.some((c) => c.name === "secret")) {
       await db.prepare("ALTER TABLE polls ADD COLUMN secret INTEGER NOT NULL DEFAULT 0").run();
+    }
+    // v56: 후보를 여럿 두는 투표(회장 선거 등). 비어 있으면 지금까지와 똑같이
+    // 찬성·반대·기권이므로, 이미 올라간 안건의 화면은 한 글자도 바뀌지 않는다.
+    if (!pc2.some((c) => c.name === "options")) {
+      await db.prepare("ALTER TABLE polls ADD COLUMN options TEXT NOT NULL DEFAULT ''").run();
     }
   }
   const ballotTbl = await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='poll_ballots'").first();
