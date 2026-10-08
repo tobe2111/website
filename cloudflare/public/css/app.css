@@ -2629,6 +2629,10 @@ input:not([type]),input[type="text"],input[type="email"],input[type="tel"],input
 .foot-info strong{color:var(--ink);font-family:var(--font-display);font-weight:700;font-size:1rem}
 .foot-info p{color:var(--muted);font-size:.86rem}
 .foot-copy{font-size:.82rem;color:var(--muted)}
+/* 호스트사 한 줄 — 저작권 줄보다 한 단계 작게. 이 화면은 상인회의 것이고
+   우리는 뒤에 서 있는 쪽이라, 우리 이름이 상인회 이름보다 커지면 안 됩니다. */
+.foot-host{font-size:.76rem;color:var(--muted)}
+.foot-host a{color:inherit;text-decoration:underline}
 
 /* 서명란이 서명란으로 보이게 —— 계약서 끝장의 서명·성명·날짜 자리는
    빈 네모가 떠 있는 곳이 아니라 '줄 그어진 빈칸' 입니다. 도장 자리는 (인) 이고요.
