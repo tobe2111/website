@@ -974,8 +974,37 @@ export const pollVerifyLevel = (p) => {
   const n = Number(p && p.verify) || 0;
   return n === 1 || n === 2 ? n : 0;
 };
-export const createPoll = (db, { associationId, title, body = "", closesAt = "", verify = 0, rosterLink = 0, secret = 0, createdBy = null }) =>
-  run(db, "INSERT INTO polls (association_id, title, body, closes_at, verify, roster_link, secret, created_by) VALUES (?,?,?,?,?,?,?,?)", associationId, title, body, closesAt, Number(verify) || 0, rosterLink ? 1 : 0, secret ? 1 : 0, createdBy).then((r) => first(db, "SELECT * FROM polls WHERE id=?", r.meta.last_row_id));
+// ── 고를 것들 ─────────────────────────────────────────────────────────────
+//
+// 지금까지 투표는 찬성·반대·기권 셋뿐이었다. 안건 표결에는 맞지만 **회장 선거**에는 못 썼다 —
+// 후보가 두 분이면 "찬성/반대" 로는 물을 수 없기 때문이다. 그래서 안건마다 고를 것을
+// 직접 적을 수 있게 했다. 비워 두면 지금까지와 똑같이 찬성·반대·기권이다.
+//
+// 표에는 줄 번호(o0·o1…)를 적는다. 이름을 그대로 적으면 "김정숙" 을 "김정숙(1번)" 으로
+// 고치는 순간 이미 들어온 표가 어느 후보 것도 아니게 된다.
+export const POLL_MAX_OPTIONS = 12;
+export const pollOptionLines = (p) => String((p && p.options) || "")
+  .split("\n").map((s) => s.trim()).filter(Boolean).slice(0, POLL_MAX_OPTIONS);
+// 후보를 적어 둔 안건인가 (= 선거형). 적지 않았으면 찬성·반대·기권 안건이다.
+export const pollIsElection = (p) => pollOptionLines(p).length > 0;
+export const pollChoices = (p) => {
+  const lines = pollOptionLines(p);
+  return lines.length
+    ? lines.map((label, i) => ({ key: `o${i}`, label, cls: `is-o${i % 6}` }))
+    : [{ key: "yes", label: "찬성", cls: "is-yes" },
+       { key: "no", label: "반대", cls: "is-no" },
+       { key: "abstain", label: "기권", cls: "is-abs" }];
+};
+// 표에 적힌 값(o0·yes…)을 사람이 읽는 말로. 후보 줄이 지워졌거나 모르는 값이면 그대로 돌려준다 —
+// 의사록에서 빈 칸으로 비는 것보다 낫다.
+export const pollChoiceLabel = (p, key) =>
+  (pollChoices(p).find((c) => c.key === key) || {}).label || key || "";
+export const isPollChoice = (p, key) => pollChoices(p).some((c) => c.key === key);
+export const createPoll = (db, { associationId, title, body = "", closesAt = "", verify = 0, rosterLink = 0, secret = 0, options = "", createdBy = null }) =>
+  run(db, "INSERT INTO polls (association_id, title, body, closes_at, verify, roster_link, secret, options, created_by) VALUES (?,?,?,?,?,?,?,?,?)", associationId, title, body, closesAt, Number(verify) || 0, rosterLink ? 1 : 0, secret ? 1 : 0, normalizePollOptions(options), createdBy).then((r) => first(db, "SELECT * FROM polls WHERE id=?", r.meta.last_row_id));
+// 관리자가 적어 넣은 줄을 저장할 꼴로 다듬는다 — 빈 줄을 버리고, 한 줄 길이와 줄 수를 자른다.
+export const normalizePollOptions = (raw) => String(raw || "")
+  .split("\n").map((s) => s.trim().slice(0, 60)).filter(Boolean).slice(0, POLL_MAX_OPTIONS).join("\n");
 export const listPolls = (db, aid) => all(db, "SELECT * FROM polls WHERE association_id=? ORDER BY closed, created_at DESC", aid);
 export const getPoll = (db, id) => first(db, "SELECT * FROM polls WHERE id=?", id);
 export const closePoll = (db, id) => run(db, "UPDATE polls SET closed=1 WHERE id=?", id);
@@ -989,10 +1018,16 @@ export const reopenPoll = (db, id) =>
 // 비밀 여부(secret)는 **표가 하나라도 들어온 뒤에는 바꾸지 않는다.** 공개→비밀로 바꾸면
 // 이미 이름과 함께 적힌 표가 그대로 남아 비밀이 아니고, 비밀→공개로 바꾸면 이름 없는 표에
 // 이름을 붙일 길이 없어 명세가 반쪽이 된다. 어느 쪽이든 '바꿨다' 고 말하면 거짓이 된다.
-export const updatePoll = (db, id, aid, { title, body = "", closesAt = "", verify = 0, rosterLink = 0, secret = null }) =>
-  secret === null
-    ? run(db, "UPDATE polls SET title=?, body=?, closes_at=?, verify=?, roster_link=? WHERE id=? AND association_id=?", title, body, closesAt, Number(verify) || 0, rosterLink ? 1 : 0, id, aid)
-    : run(db, "UPDATE polls SET title=?, body=?, closes_at=?, verify=?, roster_link=?, secret=? WHERE id=? AND association_id=?", title, body, closesAt, Number(verify) || 0, rosterLink ? 1 : 0, secret ? 1 : 0, id, aid);
+// 고를 것들(options)도 같은 이유로 **표가 들어온 뒤에는 잠근다.** 표에는 줄 번호가 적혀
+// 있으므로, 줄 하나를 지우거나 순서를 바꾸면 이미 들어온 표가 다른 후보의 표가 된다.
+// 그건 고치는 게 아니라 표를 옮기는 것이다. options === null 이면 건드리지 않는다.
+export const updatePoll = (db, id, aid, { title, body = "", closesAt = "", verify = 0, rosterLink = 0, secret = null, options = null }) => {
+  const sets = ["title=?", "body=?", "closes_at=?", "verify=?", "roster_link=?"];
+  const args = [title, body, closesAt, Number(verify) || 0, rosterLink ? 1 : 0];
+  if (secret !== null) { sets.push("secret=?"); args.push(secret ? 1 : 0); }
+  if (options !== null) { sets.push("options=?"); args.push(normalizePollOptions(options)); }
+  return run(db, `UPDATE polls SET ${sets.join(", ")} WHERE id=? AND association_id=?`, ...args, id, aid);
+};
 // 표를 먼저 지운다 — 외래키 cascade 가 켜져 있다는 보장이 없어, 안 지우면 주인 없는 표가 남는다.
 export async function deletePoll(db, id, aid) {
   const p = await first(db, "SELECT id FROM polls WHERE id=? AND association_id=?", id, aid);
@@ -1039,13 +1074,17 @@ export async function castSecretVote(db, pollId, userId, choice, verify = "") {
 // total 은 **언제나 사람 수**다 — 비밀 안건에서도 "몇 분이 참여하셨나" 는 떳떳하게 셀 수 있고,
 // 미투표자 명단도 그 수에서 나온다.
 export const pollResults = async (db, pollId, poll = null) => {
-  const p = poll || await first(db, "SELECT secret FROM polls WHERE id=?", pollId);
+  const p = poll || await first(db, "SELECT secret, options FROM polls WHERE id=?", pollId);
+  // 칸은 그 안건이 고르게 한 것들로 만든다 — 후보가 다섯이면 다섯 칸이고, 안 적었으면
+  // 지금까지와 같은 찬성·반대·기권 세 칸이다. yes/no/abstain 을 늘 두는 이유는, 이 셋을
+  // 직접 읽는 자리(의사록의 과반 계산 등)가 선거형 안건에서도 0 으로 읽혀야 하기 때문이다.
   const r = { yes: 0, no: 0, abstain: 0, total: 0 };
+  for (const c of pollChoices(p)) r[c.key] = 0;
   r.total = Number((await first(db, "SELECT COUNT(*) AS n FROM poll_votes WHERE poll_id=?", pollId))?.n) || 0;
   const src = pollIsSecret(p)
     ? await all(db, "SELECT choice, COUNT(*) AS n FROM poll_ballots WHERE poll_id=? GROUP BY choice", pollId)
     : await all(db, "SELECT choice, COUNT(*) AS n FROM poll_votes WHERE poll_id=? GROUP BY choice", pollId);
-  for (const row of src) if (row.choice in r) r[row.choice] = Number(row.n) || 0;
+  for (const row of src) if (Object.hasOwn(r, row.choice) && row.choice !== "total") r[row.choice] = Number(row.n) || 0;
   return r;
 };
 export const userVote = async (db, pollId, userId) => (await first(db, "SELECT choice FROM poll_votes WHERE poll_id=? AND user_id=?", pollId, userId))?.choice || null;
@@ -1093,7 +1132,19 @@ export async function pollVerifyBreakdown(db, pollId) {
 // IN(?,?,...) 나열 대신 서브쿼리: D1 은 쿼리당 바인드 파라미터 100개 한도라 안건 100개부터 터진다
 export async function pollResultsBulk(db, aid) {
   const out = new Map();
-  const of = (id) => { if (!out.has(id)) out.set(id, { yes: 0, no: 0, abstain: 0, total: 0 }); return out.get(id); };
+  // 안건마다 '고를 것들' 이 다르므로, 칸도 안건마다 다르게 만든다. 선거형 안건의 표는
+  // o0·o1… 로 적혀 있어, 찬성·반대·기권 세 칸만 두면 어디에도 안 담기고 0 으로 뜬다.
+  const optOf = new Map();
+  for (const row of await all(db, "SELECT id, options FROM polls WHERE association_id=?", aid))
+    optOf.set(row.id, row.options || "");
+  const of = (id) => {
+    if (!out.has(id)) {
+      const r = { yes: 0, no: 0, abstain: 0, total: 0 };
+      for (const c of pollChoices({ options: optOf.get(id) || "" })) r[c.key] = 0;
+      out.set(id, r);
+    }
+    return out.get(id);
+  };
   // 참여 인원은 언제나 사람 표에서 — 비밀 안건이든 공개 안건이든 "몇 분이 넣으셨나" 는 같다.
   for (const row of await all(db, `SELECT poll_id, COUNT(*) AS n FROM poll_votes
       WHERE poll_id IN (SELECT id FROM polls WHERE association_id=?) GROUP BY poll_id`, aid))
@@ -1102,11 +1153,11 @@ export async function pollResultsBulk(db, aid) {
   for (const row of await all(db, `SELECT v.poll_id, v.choice, COUNT(*) AS n FROM poll_votes v
       JOIN polls p ON p.id = v.poll_id
       WHERE p.association_id=? AND p.secret=0 GROUP BY v.poll_id, v.choice`, aid)) {
-    const r = of(row.poll_id); if (row.choice in r) r[row.choice] = Number(row.n) || 0;
+    const r = of(row.poll_id); if (Object.hasOwn(r, row.choice) && row.choice !== "total") r[row.choice] = Number(row.n) || 0;
   }
   for (const row of await all(db, `SELECT b.poll_id, b.choice, COUNT(*) AS n FROM poll_ballots b
       WHERE b.poll_id IN (SELECT id FROM polls WHERE association_id=?) GROUP BY b.poll_id, b.choice`, aid)) {
-    const r = of(row.poll_id); if (row.choice in r) r[row.choice] = Number(row.n) || 0;
+    const r = of(row.poll_id); if (Object.hasOwn(r, row.choice) && row.choice !== "total") r[row.choice] = Number(row.n) || 0;
   }
   return out;
 }
