@@ -1087,6 +1087,16 @@ export const pollResults = async (db, pollId, poll = null) => {
   for (const row of src) if (Object.hasOwn(r, row.choice) && row.choice !== "total") r[row.choice] = Number(row.n) || 0;
   return r;
 };
+// 아직 안 넣은 안건이 몇 건인가 — 차림표의 '투표' 옆에 붙는 숫자다.
+//
+// 왜 필요한가. 상인회가 안건을 올려도 사장님께는 아무 신호가 가지 않았다. 문자·알림톡이
+// 설정돼 있지 않으면(지금 대부분이 그렇다) 사장님은 투표가 올라온 줄을 모른다 —
+// 그래서 표가 안 들어오고, 안 들어오니 다음부터 안 쓰게 된다. 숫자 하나가 그 고리를 끊는다.
+export const countOpenPollsToVote = async (db, aid, uid) =>
+  Number((await first(db, `SELECT COUNT(*) AS n FROM polls p
+    WHERE p.association_id=? AND p.closed=0 AND (p.closes_at='' OR p.closes_at >= ?)
+      AND NOT EXISTS (SELECT 1 FROM poll_votes v WHERE v.poll_id=p.id AND v.user_id=?)`,
+    aid, kstToday(), uid))?.n) || 0;
 export const userVote = async (db, pollId, userId) => (await first(db, "SELECT choice FROM poll_votes WHERE poll_id=? AND user_id=?", pollId, userId))?.choice || null;
 // 비밀 안건에서는 choice 가 빈 칸이라 userVote 로는 '넣었는지' 를 알 수 없다. 줄이 있는지만 본다.
 export const userHasVoted = async (db, pollId, userId) => !!(await first(db, "SELECT 1 AS x FROM poll_votes WHERE poll_id=? AND user_id=?", pollId, userId));
