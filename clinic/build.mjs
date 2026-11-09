@@ -67,7 +67,7 @@ const NAV = [
   ["/notice/", "공지사항"],
 ];
 
-function layout(ctx, { path: p, title, description, body, jsonLd = [], ogImage = "" }) {
+function layout(ctx, { path: p, title, description, body, jsonLd = [], ogImage = "", over = false }) {
   const { site, assetV } = ctx;
   const url = site.siteUrl + p;
   const fullTitle = p === "/" ? `${site.name} | ${site.tagline}` : `${title} | ${site.name}`;
@@ -100,7 +100,7 @@ ${jsonLd.map(ld).join("\n")}
 </head>
 <body>
 <a class="skip" href="#main">본문 바로가기</a>
-<header class="hd">
+<header class="hd${over ? " hd-over" : ""}">
   <div class="wrap hd-in">
     <a class="logo" href="/" aria-label="${esc(site.name)} 홈">${site.logo ? `<img src="${esc(site.logo)}" alt="" />` : ""}<span>${esc(site.name)}</span></a>
     <nav class="gnb" aria-label="주 메뉴">${navHtml}</nav>
@@ -122,6 +122,8 @@ ${footer(ctx)}
   <a href="${telHref(site.phone)}">전화하기</a>
   <a href="/reservation/" class="on">상담 예약</a>
 </div>
+<script type="application/json" id="hours-data">${JSON.stringify({ hours: site.hours, lunch: site.lunch || "" }).replace(/</g, "\\u003c")}</script>
+<script src="/assets/site.js?v=${assetV}" defer></script>
 </body>
 </html>
 `;
@@ -165,8 +167,8 @@ function crumbLd(site, items) {
 
 function cta(site, title = "증상이 언제부터, 어디가 불편하신지 알려주세요") {
   return `<section class="cta"><div class="wrap cta-in">
-    <h2>${esc(title)}</h2>
-    <p>예약하시면 대기 시간이 줄어듭니다. 진료 전에 궁금한 점도 미리 여쭤보세요.</p>
+    <div><h2>${esc(title)}</h2>
+    <p>예약하시면 대기 시간이 줄어듭니다. 진료 전에 궁금한 점도 미리 여쭤보세요.</p></div>
     <div class="cta-act"><a class="btn btn-lg btn-inv" href="/reservation/">상담 예약하기</a><a class="btn btn-lg btn-ghost-inv" href="${telHref(site.phone)}">전화 ${esc(site.phone)}</a></div>
   </div></section>`;
 }
@@ -204,18 +206,46 @@ function home(ctx) {
   const { site, treatments, notices } = ctx;
   const h = site.hero;
   const variant = site.theme?.hero === "full" ? "full" : "split";
-  const heroImg = figure(h.image, { ratio: variant === "full" ? "2/1" : "1/1", className: "hero-fig", eager: true, mobile: h.imageMobile });
-  const hero = `<section class="hero hero-${variant}"><div class="wrap hero-in">
-    <div class="hero-txt">
+  // 제목은 줄마다 감싸 한 줄씩 떠오르게 한다 (동작 줄이기면 그냥 보인다)
+  const lines = String(h.title).split("\n").map((l, i) => `<span class="ln" style="--i:${i}"><span>${esc(l)}</span></span>`).join("");
+  const act = `<div class="hero-act"><a class="btn btn-lg" href="/reservation/">상담 예약하기<i aria-hidden="true">→</i></a><a class="btn btn-lg btn-line" href="/treatments/">진료 과목 보기</a></div>`;
+  let hero;
+  if (variant === "full") {
+    // 첫 화면 전체를 사진·영상으로 채운다. 영상이 있으면 영상, 없으면 사진, 둘 다 없으면 규격을 적은 자리.
+    const v = h.video?.src
+      ? `<video class="hero-v" muted loop playsinline autoplay preload="metadata"${h.video.poster ? ` poster="${esc(h.video.poster)}"` : ""} aria-hidden="true"><source src="${esc(h.video.src)}" type="video/mp4" /></video>`
+      : "";
+    const img = h.image?.src
+      ? `<picture>${h.imageMobile?.src ? `<source media="(max-width: 720px)" srcset="${esc(h.imageMobile.src)}" />` : ""}<img src="${esc(h.image.src)}" alt="${esc(h.image.alt || "")}" fetchpriority="high" /></picture>`
+      : "";
+    const ph = !v && !img ? `<span class="hero-spec">${esc(h.image?.spec || "메인 배너")}${h.video ? ` · ${esc(h.video.spec || "메인 영상 1920×1080")}` : ""}</span>` : "";
+    hero = `<section class="hero hero-full">
+    <div class="hero-media${!v && !img ? " is-ph" : ""}">${v || img}${ph}</div>
+    <div class="hero-veil" aria-hidden="true"></div>
+    <div class="wrap hero-in">
       <p class="eyebrow">${esc(h.eyebrow)}</p>
-      <h1>${br(h.title)}</h1>
+      <h1 class="hero-h">${lines}</h1>
       <p class="lead">${esc(h.body)}</p>
-      <div class="hero-act"><a class="btn btn-lg" href="/reservation/">상담 예약하기</a><a class="btn btn-lg btn-line" href="/treatments/">진료 과목 보기</a></div>
+      ${act}
     </div>
+    <a class="scroll-cue" href="#first" aria-label="아래로 이동"><span></span></a>
+  </section>`;
+  } else {
+    const heroImg = figure(h.image, { ratio: "1/1", className: "hero-fig", eager: true, mobile: h.imageMobile });
+    hero = `<section class="hero hero-split"><div class="wrap hero-in">
+    <div class="hero-txt"><p class="eyebrow">${esc(h.eyebrow)}</p><h1 class="hero-h">${lines}</h1><p class="lead">${esc(h.body)}</p>${act}</div>
     ${heroImg}
   </div></section>`;
+  }
+  // 첫 화면 바로 아래 빠른 안내 — 병원 홈페이지에 들어온 사람의 대부분은 이 네 가지 중 하나를 찾는다
+  const quick = `<section class="quick" aria-label="빠른 안내"><div class="wrap quick-in">
+    <a class="q q-today" href="/location/#hours" data-today><span class="q-k">오늘 진료</span><strong data-today-text>진료 시간 안내</strong><small data-today-sub>${esc(site.closed || "")}</small></a>
+    <a class="q" href="${telHref(site.phone)}"><span class="q-k">전화 예약</span><strong>${esc(site.phone)}</strong><small>${esc(site.hours[0] ? `평일 ${site.hours[0].open} – ${site.hours[0].close}` : "")}</small></a>
+    <a class="q" href="/reservation/"><span class="q-k">온라인 상담</span><strong>상담 예약하기</strong><small>확인 후 연락드립니다</small></a>
+    <a class="q" href="/location/"><span class="q-k">오시는 길</span><strong>${esc(site.address.locality)}</strong><small>${esc((site.transit[0] || [])[1] || site.address.full)}</small></a>
+  </div></section>`;
 
-  const principles = `<section class="sec"><div class="wrap">
+  const principles = `<section class="sec" id="first"><div class="wrap">
     <div class="sec-hd"><p class="eyebrow">진료 원칙</p><h2>${esc(site.name)}는<br />이렇게 진료합니다</h2></div>
     <ol class="steps">${site.principles.map(([t, d], i) => `<li><span class="num">${String(i + 1).padStart(2, "0")}</span><h3>${esc(t)}</h3><p>${esc(d)}</p></li>`).join("")}</ol>
   </div></section>`;
@@ -224,7 +254,7 @@ function home(ctx) {
     <div class="sec-hd row"><div><p class="eyebrow">진료 과목</p><h2>어디가 불편하신가요?</h2></div><a class="more" href="/treatments/">전체 보기</a></div>
     <ul class="cats">${site.categories.map((c) => {
       const list = treatments.filter((t) => t.category === c.id);
-      return `<li><a href="/treatments/#${c.id}"><h3>${esc(c.name)}</h3><p>${esc(c.lead)}</p><span class="cat-list">${list.map((t) => esc(t.name)).join(" · ")}</span></a></li>`;
+      return `<li><a href="/treatments/#${c.id}"><span class="cat-no">${String(site.categories.indexOf(c) + 1).padStart(2, "0")}</span><h3>${esc(c.name)}</h3><p>${esc(c.lead)}</p><span class="cat-list">${list.map((t) => esc(t.name)).join(" · ")}</span><i class="cat-go" aria-hidden="true">→</i></a></li>`;
     }).join("")}</ul>
   </div></section>`;
 
@@ -250,7 +280,7 @@ function home(ctx) {
 
   const website = { "@context": "https://schema.org", "@type": "WebSite", name: site.name, url: site.siteUrl + "/", inLanguage: "ko-KR" };
   return layout(ctx, { path: "/", title: site.name, description: site.description,
-    body: hero + principles + cats + doc + visit + news + cta(site),
+    body: hero + quick + principles + cats + doc + visit + news + cta(site), over: variant === "full",
     jsonLd: [clinicLd(ctx), website] });
 }
 
@@ -350,7 +380,7 @@ function location(ctx) {
         <a class="btn btn-line" href="${site.kakaoMap || `https://map.kakao.com/?q=${q}`}" rel="noopener" target="_blank">카카오맵에서 보기</a></p>
       <div class="two visit-detail">
         <div><h2>교통 · 주차</h2><dl class="transit">${site.transit.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl></div>
-        <div><h2>진료 시간</h2>${hoursTable(site)}<p class="call">전화 <a href="${telHref(site.phone)}">${esc(site.phone)}</a></p></div>
+        <div id="hours"><h2>진료 시간</h2>${hoursTable(site)}<p class="call">전화 <a href="${telHref(site.phone)}">${esc(site.phone)}</a></p></div>
       </div>
       ${site.exterior ? figure(site.exterior, { ratio: "3/2" }) : ""}
     </div></section>`;
@@ -380,7 +410,7 @@ function reservation(ctx) {
   const parts = (site.form?.parts || []).map((x) => `<option>${esc(x)}</option>`).join("");
   const body = pageHead({ eyebrow: "상담 예약", title: "상담 예약", lead: "남겨주신 연락처로 확인 전화를 드립니다. 급한 통증은 전화로 먼저 문의해 주세요.", crumbs: [[null, "상담 예약"]] }) +
     `<section class="sec"><div class="wrap two resv">
-      <div class="resv-call"><h2>전화 예약</h2><a class="big-tel" href="${telHref(site.phone)}">${esc(site.phone)}</a>${hoursTable(site)}
+      <div class="resv-call"><p class="today-pill" data-today><i aria-hidden="true"></i><strong data-today-text>진료 시간 안내</strong> <small data-today-sub></small></p><h2>전화 예약</h2><a class="big-tel" href="${telHref(site.phone)}">${esc(site.phone)}</a>${hoursTable(site)}
         <p class="warn">가슴 통증, 갑작스러운 마비, 심한 외상 등 응급 상황은 119 또는 가까운 응급실을 이용해 주세요.</p></div>
       <form class="form" method="post" ${ep ? `action="${esc(ep)}"` : ""} ${ep ? "" : 'aria-describedby="form-off"'}>
         <h2>온라인 상담 신청</h2>
@@ -454,7 +484,8 @@ export function build(id, { outDir } = {}) {
   const out = outDir || path.join(ROOT, "dist", id);
   rmSync(out, { recursive: true, force: true });
   const css = readFileSync(path.join(ROOT, "assets", "site.css"), "utf8");
-  const ctx = { ...data, assetV: createHash("sha1").update(css).digest("hex").slice(0, 8) };
+  const js = readFileSync(path.join(ROOT, "assets", "site.js"), "utf8");
+  const ctx = { ...data, assetV: createHash("sha1").update(css + js).digest("hex").slice(0, 8) };
 
   const pages = new Map();
   pages.set("/", home(ctx));
@@ -472,6 +503,7 @@ export function build(id, { outDir } = {}) {
   for (const [p, h] of pages) write(p === "/" ? "index.html" : `${p}index.html`, h);
   write("404.html", notFound(ctx));
   write("assets/site.css", css);
+  write("assets/site.js", js);
 
   const today = new Date().toISOString().slice(0, 10);
   const indexable = [...pages.keys()].filter((p) => p !== "/privacy/");

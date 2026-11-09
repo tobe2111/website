@@ -81,7 +81,7 @@
   "theme": {
     "preset": "calm",
     "accent": "#2B5F6B",
-    "hero": "split"
+    "hero": "full"
   },
   "hero": {
     "eyebrow": "정형외과 전문의 진료",
@@ -91,6 +91,11 @@
       "src": "",
       "alt": "천샘정형외과 진료실",
       "spec": "메인 배너 PC 2560×1280 · 모바일 1080×1440"
+    },
+    "video": {
+      "src": "",
+      "poster": "",
+      "spec": "메인 영상 1920×1080"
     }
   },
   "principles": [

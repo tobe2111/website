@@ -45,7 +45,7 @@ p { margin: 0 0 1em; }
 .more:hover::after { transform: translateX(4px); }
 
 /* ── 머리 ── */
-.hd { position: sticky; top: 0; z-index: 50; background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(10px);
+.hd { --hd-h: 72px; transition: transform .35s cubic-bezier(.2,.7,.1,1), background .3s, border-color .3s, color .3s; position: sticky; top: 0; z-index: 50; background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--line); }
 .hd-in { display: flex; align-items: center; gap: 32px; height: 72px; }
 .logo { display: flex; align-items: center; gap: 10px; text-decoration: none; font-weight: 700; font-size: 20px; letter-spacing: -0.03em; }
@@ -53,7 +53,10 @@ p { margin: 0 0 1em; }
 .gnb { display: flex; gap: 4px; margin: 0 auto; }
 .gnb a { padding: 10px 14px; text-decoration: none; font-size: 16px; font-weight: 500; color: var(--muted); border-radius: var(--r); }
 .gnb a:hover, .gnb a[aria-current] { color: var(--ink); }
-.gnb a[aria-current] { box-shadow: inset 0 -2px 0 var(--accent); border-radius: 0; }
+.gnb a { position: relative; }
+.gnb a::after { content: ""; position: absolute; left: 14px; right: 14px; bottom: 4px; height: 2px; background: var(--accent);
+  transform: scaleX(0); transform-origin: left; transition: transform .3s cubic-bezier(.2,.7,.1,1); }
+.gnb a:hover::after, .gnb a[aria-current]::after { transform: scaleX(1); }
 .hd-act { display: flex; align-items: center; gap: 16px; }
 .hd-tel { font-weight: 700; text-decoration: none; font-variant-numeric: tabular-nums; }
 .mnav { display: none; }
@@ -85,8 +88,6 @@ p { margin: 0 0 1em; }
 .hero h1 { font-size: clamp(38px, 5.2vw, 66px); line-height: 1.2; letter-spacing: -0.04em; margin-bottom: 28px; }
 .hero .lead { margin-bottom: 40px; }
 .hero-act { display: flex; flex-wrap: wrap; gap: 12px; }
-.hero-full .hero-in { display: grid; gap: 48px; }
-.hero-full .hero-fig { order: -1; }
 
 /* ── 진료 원칙: 번호가 붙은 네 칸 ── */
 .steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; border-top: 1px solid var(--ink); }
@@ -251,6 +252,117 @@ p { margin: 0 0 1em; }
 .ft-note { padding-top: 28px; font-size: 13px; color: rgba(255,255,255,.62); }
 .dock { display: none; }
 
+/* ══════════════ 첫 화면(전체 화면형) ══════════════
+ * 사진·영상이 화면을 꽉 채우고 글자는 왼쪽 아래에 앉는다. 머리는 그 위에 투명하게 떠 있다가
+ * 스크롤하면 단색이 된다. 사진이 아직 없으면 병원 색으로 칠한 면에 가는 세로줄만 둔다
+ * (흔한 '빛 번짐' 그라데이션은 쓰지 않는다 — 그게 AI 티의 대표다).
+ */
+.hd-over { position: fixed; left: 0; right: 0; top: 0; }
+.hd-over:not(.scrolled) { background: transparent; border-color: transparent; backdrop-filter: none; color: #fff; }
+.hd-over:not(.scrolled) .gnb a { color: rgba(255,255,255,.82); }
+.hd-over:not(.scrolled) .gnb a:hover, .hd-over:not(.scrolled) .gnb a[aria-current] { color: #fff; }
+.hd-over:not(.scrolled) .gnb a::after { background: #fff; }
+.hd-over:not(.scrolled) .btn { background: #fff; border-color: #fff; color: var(--ink); }
+.hd-over:not(.scrolled) .mnav summary span { background: #fff; }
+.hd.hide { transform: translateY(-100%); }
+html.lock { overflow: hidden; }
+html.lock .hd { background: var(--bg) !important; color: var(--ink) !important; transform: none; }
+html.lock .hd .mnav summary span { background: var(--ink) !important; }
+
+.hero-full { position: relative; min-height: 100vh; min-height: 100svh; display: flex; align-items: flex-end; padding: 140px 0 clamp(120px, 16vh, 168px);
+  color: #fff; overflow: hidden; background: #0E1719; isolation: isolate; }
+.hero-media { position: absolute; inset: 0; z-index: -2; }
+.hero-media img, .hero-media video, .hero-media picture { width: 100%; height: 100%; object-fit: cover; display: block; }
+.hero-media.is-ph { background:
+  repeating-linear-gradient(90deg, rgba(255,255,255,.05) 0 1px, transparent 1px 160px),
+  color-mix(in srgb, var(--accent) 52%, #0B1315); }
+.hero-spec { position: absolute; right: 24px; top: 96px; padding: 6px 10px; font-size: 12px; color: rgba(255,255,255,.6); border: 1px solid rgba(255,255,255,.22); border-radius: 2px; }
+.hero-veil { position: absolute; inset: 0; z-index: -1; background: linear-gradient(180deg, rgba(8,14,16,.45) 0%, rgba(8,14,16,0) 28%, rgba(8,14,16,.12) 55%, rgba(8,14,16,.62) 100%); }
+.hero-full .hero-in { position: relative; width: 100%; }
+.hero-full .eyebrow { color: rgba(255,255,255,.88); }
+.hero-full h1 { font-size: clamp(42px, 6.6vw, 96px); line-height: 1.1; letter-spacing: -0.045em; margin-bottom: 32px; }
+.hero-full .lead { color: rgba(255,255,255,.84); max-width: 540px; margin-bottom: 44px; }
+.hero-full .btn:not(.btn-line) { background: #fff; border-color: #fff; color: var(--ink); }
+.hero-full .btn:not(.btn-line):hover { background: color-mix(in srgb, #fff 86%, var(--accent)); }
+.hero-full .btn-line { color: #fff; border-color: rgba(255,255,255,.7); }
+.hero-full .btn-line:hover { background: #fff; color: var(--ink); }
+.ln { display: block; }
+.btn i { font-style: normal; margin-left: 12px; transition: transform .25s cubic-bezier(.2,.7,.1,1); }
+.btn:hover i { transform: translateX(4px); }
+.scroll-cue { position: absolute; left: 50%; bottom: 72px; width: 44px; height: 88px; margin-left: -22px; display: flex; justify-content: center; }
+.scroll-cue span { position: relative; width: 1px; height: 64px; background: rgba(255,255,255,.28); overflow: hidden; }
+.scroll-cue span::after { content: ""; position: absolute; left: 0; top: 0; width: 1px; height: 24px; background: #fff; }
+
+/* 빠른 안내 — 첫 화면 바로 아래에 걸쳐 앉는 네 칸 */
+.quick { position: relative; z-index: 3; }
+.hero-full + .quick { margin-top: -64px; }
+.hero-split + .quick { margin-bottom: 8px; }
+.quick-in { display: grid; grid-template-columns: repeat(4, 1fr); background: var(--surface); border: 1px solid var(--line);
+  box-shadow: 0 30px 60px -40px rgba(10,20,22,.35); }
+.q { display: flex; flex-direction: column; gap: 4px; padding: 28px 30px; text-decoration: none; transition: background .25s; min-height: 128px; }
+.q + .q { border-left: 1px solid var(--line); }
+.q:hover { background: var(--bg); }
+.q-k { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--muted); }
+.q strong { font-size: 21px; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+.q small { font-size: 14px; color: var(--muted); line-height: 1.5; }
+[data-today] .q-k::before, .today-pill i { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+[data-state="on"] .q-k::before, [data-state="on"] i { background: #23855A; box-shadow: 0 0 0 0 rgba(35,133,90,.5); }
+[data-state="soon"] .q-k::before, [data-state="soon"] i { background: #B7791F; }
+[data-state="off"] .q-k::before, [data-state="off"] i { background: #A23B2A; }
+.today-pill { display: inline-flex; align-items: center; gap: 10px; padding: 10px 16px; margin-bottom: 28px; background: var(--surface); border: 1px solid var(--line); border-radius: 999px; font-size: 15px; }
+.today-pill small { color: var(--muted); }
+
+/* 진료 과목 칸 — 올리면 병원 색이 아래에서 차오른다 */
+.cats a { position: relative; overflow: hidden; isolation: isolate; }
+.cats a::before { content: ""; position: absolute; inset: 0; z-index: -1; background: var(--accent); transform: translateY(101%); transition: transform .5s cubic-bezier(.2,.7,.1,1); }
+.cats a > * { transition: color .3s; }
+.cats a:hover::before, .cats a:focus-visible::before { transform: none; }
+.cats a:hover > *, .cats a:focus-visible > * { color: #fff; }
+.cat-no { font-size: 13px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; margin-bottom: 36px; }
+.cat-go { position: absolute; right: 22px; bottom: 20px; font-style: normal; font-size: 20px; color: var(--accent); transition: transform .3s cubic-bezier(.2,.7,.1,1), color .3s; }
+.cats a:hover .cat-go { transform: translateX(4px); }
+.cats .cat-list { padding-right: 28px; }
+
+/* 진료 원칙 — 칸 위의 선이 왼쪽부터 그어진다 */
+.steps li { position: relative; }
+.steps li::before { content: ""; position: absolute; left: 0; right: 0; top: -1px; height: 2px; background: var(--accent); transform: scaleX(0); transform-origin: left;
+  transition: transform 1.1s cubic-bezier(.2,.7,.1,1) var(--d, 0ms); }
+.steps li.in::before, html:not(.motion) .steps li::before { transform: scaleX(1); }
+
+/* 진료 상세 — 읽은 만큼 차오르는 막대, 지금 읽는 목차 */
+.progress { position: fixed; left: 0; right: 0; top: 0; height: 3px; z-index: 70; pointer-events: none; }
+.progress span { display: block; height: 100%; background: var(--accent); transform-origin: left; transform: scaleX(0); }
+.toc a.on { color: var(--ink); font-weight: 600; box-shadow: inset 2px 0 0 var(--accent); }
+.fig img { transition: transform 1.2s cubic-bezier(.2,.7,.1,1); }
+a:hover .fig img { transform: scale(1.03); }
+
+/* 자주 묻는 질문 — 부드럽게 열린다 (지원하는 브라우저에서만) */
+:root { interpolate-size: allow-keywords; }
+.faq details::details-content { block-size: 0; overflow: hidden; transition: block-size .35s cubic-bezier(.2,.7,.1,1), content-visibility .35s allow-discrete; }
+.faq details[open]::details-content { block-size: auto; }
+
+/* 페이지를 옮길 때 화면이 깜빡이지 않고 살짝 겹쳐 바뀐다 */
+@view-transition { navigation: auto; }
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: .28s; }
+
+/* ══════════════ 움직임 (동작 줄이기를 켜지 않은 사람에게만) ══════════════ */
+@keyframes lineUp { from { transform: translateY(105%); } to { transform: none; } }
+@keyframes fadeUp { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+@keyframes heroZoom { from { transform: scale(1.08); } to { transform: scale(1); } }
+@keyframes cue { 0% { transform: translateY(-24px); } 100% { transform: translateY(64px); } }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(35,133,90,.45); } 70% { box-shadow: 0 0 0 8px rgba(35,133,90,0); } 100% { box-shadow: 0 0 0 0 rgba(35,133,90,0); } }
+.motion .hero-h .ln { overflow: hidden; padding-bottom: .04em; margin-bottom: -.04em; }
+.motion .hero-h .ln > span { display: inline-block; transform: translateY(105%); animation: lineUp 1s cubic-bezier(.2,.7,.1,1) forwards; animation-delay: calc(.2s + var(--i) * .13s); }
+.motion .hero .eyebrow { opacity: 0; animation: fadeUp .8s .05s cubic-bezier(.2,.7,.1,1) forwards; }
+.motion .hero .lead { opacity: 0; animation: fadeUp .9s .55s cubic-bezier(.2,.7,.1,1) forwards; }
+.motion .hero .hero-act { opacity: 0; animation: fadeUp .9s .7s cubic-bezier(.2,.7,.1,1) forwards; }
+.motion .hero-media > :not(.hero-spec), .motion .hero-split .hero-fig { animation: heroZoom 2.4s cubic-bezier(.2,.7,.1,1) both; }
+.motion .scroll-cue span::after { animation: cue 2.2s cubic-bezier(.6,0,.4,1) infinite; }
+.motion [data-state="on"] .q-k::before, .motion [data-state="on"] i { animation: pulse 2s infinite; }
+.motion .rv { opacity: 0; transform: translateY(28px); transition: opacity .9s cubic-bezier(.2,.7,.1,1) var(--d, 0ms), transform .9s cubic-bezier(.2,.7,.1,1) var(--d, 0ms); }
+.motion .rv.in { opacity: 1; transform: none; }
+.motion .quick-in { opacity: 0; animation: fadeUp .9s .9s cubic-bezier(.2,.7,.1,1) forwards; }
+
 /* ── 태블릿 ── */
 @media (max-width: 1080px) {
   .gnb, .hd-tel { display: none; }
@@ -259,10 +371,23 @@ p { margin: 0 0 1em; }
   .mnav summary { list-style: none; display: grid; gap: 5px; place-content: center; width: 44px; height: 44px; cursor: pointer; }
   .mnav summary::-webkit-details-marker { display: none; }
   .mnav summary span { display: block; width: 22px; height: 2px; background: var(--ink); }
-  .mnav nav { position: absolute; right: 0; top: 56px; width: min(320px, calc(100vw - 32px)); padding: 8px; background: var(--surface);
-    border: 1px solid var(--line); border-radius: var(--r); box-shadow: 0 12px 32px rgba(0,0,0,.08); display: grid; }
-  .mnav nav a { padding: 14px 16px; text-decoration: none; font-size: 17px; border-radius: var(--r); }
-  .mnav nav a:hover, .mnav nav a[aria-current] { background: var(--bg); }
+  .mnav summary span { transition: transform .3s cubic-bezier(.2,.7,.1,1), opacity .2s; }
+  .mnav[open] summary span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+  .mnav[open] summary span:nth-child(2) { opacity: 0; }
+  .mnav[open] summary span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+  /* 휴대폰 메뉴는 화면 전체를 덮는 한 장 — 큰 글자로, 엄지가 닿는 곳에 예약 단추 */
+  .mnav nav { position: fixed; left: 0; right: 0; top: var(--hd-h); bottom: 0; display: flex; flex-direction: column; padding: 16px var(--gut) 32px;
+    background: var(--bg); overflow-y: auto; border-top: 1px solid var(--line); }
+  .mnav nav a { padding: 18px 2px; text-decoration: none; font-size: 26px; font-weight: 700; letter-spacing: -0.03em; border-bottom: 1px solid var(--line); color: var(--ink); }
+  .mnav nav a[aria-current] { color: var(--accent); }
+  .mnav nav a:last-child { margin-top: auto; padding: 18px; border: 0; border-radius: var(--r); background: var(--accent); color: #fff; text-align: center; font-size: 18px; }
+  .motion .mnav[open] nav a { opacity: 0; animation: fadeUp .5s cubic-bezier(.2,.7,.1,1) forwards; }
+  .motion .mnav[open] nav a:nth-child(2) { animation-delay: .04s; } .motion .mnav[open] nav a:nth-child(3) { animation-delay: .08s; }
+  .motion .mnav[open] nav a:nth-child(4) { animation-delay: .12s; } .motion .mnav[open] nav a:nth-child(5) { animation-delay: .16s; }
+  .motion .mnav[open] nav a:nth-child(6) { animation-delay: .2s; }
+  .quick-in { grid-template-columns: 1fr 1fr; }
+  .q:nth-child(3) { border-left: 0; }
+  .q:nth-child(n+3) { border-top: 1px solid var(--line); }
   .cats { grid-template-columns: repeat(3, 1fr); }
   .steps { grid-template-columns: repeat(2, 1fr); }
   .steps li:nth-child(3) { padding-left: 0; border-left: 0; }
@@ -274,7 +399,21 @@ p { margin: 0 0 1em; }
 /* ── 휴대폰 ── */
 @media (max-width: 720px) {
   body { font-size: 17px; padding-bottom: 64px; }
+  .hd { --hd-h: 64px; }
   .hd-in { height: 64px; gap: 12px; }
+  .hero-full { padding: 120px 0 112px; }
+  .hero-full h1 { font-size: clamp(36px, 10.4vw, 48px); margin-bottom: 20px; }
+  .hero-full .lead { font-size: 17px; margin-bottom: 32px; }
+  .hero-spec { left: 20px; right: 20px; top: 80px; bottom: auto; font-size: 11px; text-align: center; }
+  .scroll-cue { display: none; }
+  .hero-full + .quick { margin-top: -40px; }
+  .q { padding: 18px 16px; min-height: 0; }
+  .q strong { font-size: 17px; }
+  .q small { display: none; }
+  .q-today small { display: block; font-size: 13px; }
+  .cat-no { margin-bottom: 14px; }
+  .motion .dock { transform: translateY(110%); transition: transform .4s cubic-bezier(.2,.7,.1,1); }
+  .motion body.past-hero .dock { transform: none; }
   .hd-act .btn { display: none; }
   .sec { padding: 72px 0; }
   .sec-hd { margin-bottom: 36px; }
