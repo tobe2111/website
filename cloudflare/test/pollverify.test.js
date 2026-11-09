@@ -336,13 +336,16 @@ test("남의 상인회 안건의 의사록은 열리지 않는다", async () => 
 
 test("투표 화면이 카톡에 붙일 안내문과 링크를 만들어 준다 (0원)", async () => {
   const { env, a } = await setup();
-  const p = await D.createPoll(env.DB, { associationId: a.id, title: "회비 인상", closesAt: "2026-10-15", createdBy: null });
+  // 마감일을 고정 날짜로 박으면 그날이 지나는 순간 투표가 닫혀 이 검사가 저절로 깨진다(실제로 2026-10-15 이후 깨졌다).
+  // 언제 돌려도 열려 있도록 오늘부터 30일 뒤로 둔다.
+  const closesAt = new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10);
+  const p = await D.createPoll(env.DB, { associationId: a.id, title: "회비 인상", closesAt, createdBy: null });
   const j = jar();
   await login(env, j, "office@m.kr", "admin1234");
   const h = await (await get(env, j, `${B}/polls`)).text();
   assert.match(h, /회원에게 알리기/);
   assert.match(h, /안건 투표 안내/, "보낼 글");
-  assert.match(h, /2026-10-15/, "마감일이 글에 들어간다");
+  assert.ok(h.includes(closesAt), "마감일이 글에 들어간다");
   assert.ok(h.includes("/t/market/polls"), "투표 링크가 글에 들어간다");
   assert.match(h, /data-copy=/, "복사 단추");
   assert.match(h, /href="sms:/, "문자로 보내기");
@@ -460,7 +463,9 @@ test("링크: 확인된 계정만 투표하는 등급은 링크로 통과한다"
 
 test("링크 보내기 화면: 사람마다 다른 링크와 문자 단추가 선다", async () => {
   const { env, a, member } = await setup();
-  const p = await D.createPoll(env.DB, { associationId: a.id, title: "회비 인상", closesAt: "2026-10-15", createdBy: null });
+  // 위와 같은 이유로 마감일은 늘 미래에 둔다 — 지난 날짜면 투표가 닫혀 '1명 투표함' 이 안 나온다
+  const closesAt = new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10);
+  const p = await D.createPoll(env.DB, { associationId: a.id, title: "회비 인상", closesAt, createdBy: null });
   const j = jar();
   await login(env, j, "office@m.kr", "admin1234");
   const h = await (await get(env, j, `${B}/admin/polls/${p.id}/links`)).text();

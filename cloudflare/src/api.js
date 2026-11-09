@@ -19,7 +19,7 @@ import { turnstileVerify } from "./turnstile.js";
 import { planOf, PLANS, PLAN_KEYS, planPriceKey } from "./plans.js";
 import { seedDemo } from "./demoContent.js";
 import { seedStarter } from "./starterContent.js";
-import { KINDS, kindById, PRESETS, assocTerms } from "./kinds.js";
+import { KINDS, kindById, PRESETS, assocTerms, leadLabels } from "./kinds.js";
 import { sellerPhotos, urdealProductUrl } from "./urdeal.js";
 import { placePhoto, isPlaceUrl, placeSourceOf } from "./placePhoto.js";
 import { pickPlace, placeQuery, kmApart, NEAR_KM, repairAddress } from "./placeMatch.js";
@@ -4702,6 +4702,13 @@ export async function leadSubmit(ctx) {
   const variant = cap((form.get("variant") || "").trim(), 40).replace(/[^a-z0-9-]/g, "");
   const home = variant ? `${base}/l/${encodeURIComponent(variant)}` : `${base}/`;
   const at = (msg, err = false) => redirect(`${home}?${err ? "err=1&" : ""}msg=${encodeURIComponent(msg)}#apply`);
+  return acceptLead(ctx, at, variant);
+}
+
+// 상담 신청 한 건을 받아 저장·알림까지 끝낸다. 어디서 왔든(우리 랜딩 / 병원 홈페이지 같은 바깥 사이트)
+// 검사·저장·알림은 같아야 한다 — 그래서 둘 다 이 함수를 지나간다. at(msg, err) 가 응답을 만든다.
+async function acceptLead(ctx, at, variant = "") {
+  const { db, env, form, base, assoc, ip } = ctx;
   if (!kindById(assoc.kind).usesLanding) return at("이 조직은 상담 신청을 받지 않습니다.", true);
   if (leadRateLimited(ip)) return at("잠시 후 다시 시도해 주세요.", true);
   if (!(await turnstileVerify(env, form.get("cf-turnstile-response"), ip)))
@@ -4747,15 +4754,68 @@ export async function leadSubmit(ctx) {
     // 메일이 죽어도 신청은 이미 DB 에 있다 — 알림 실패로 접수 자체가 실패한 것처럼 보이면 안 된다
     await sendEmail(env, {
       to: assoc.email,
-      subject: `[${assoc.name}] 새 가맹 상담 신청 — ${name}`,
-      html: mailShell(`${esc(assoc.name)} 가맹 상담`,
+      subject: `[${assoc.name}] 새 ${assocTerms(assoc).consult} 신청 — ${name}`,
+      html: mailShell(`${esc(assoc.name)} ${esc(assocTerms(assoc).consult)}`,
         `<p><b>성함</b>: ${esc(name)}<br /><b>연락처</b>: ${esc(phone)}<br />
-          <b>희망 지역</b>: ${esc(lead.region || "-")}<br /><b>창업 예산</b>: ${esc(lead.budget || "-")}<br />
+          <b>${esc(leadLabels(assoc).region)}</b>: ${esc(lead.region || "-")}<br /><b>${esc(leadLabels(assoc).budget)}</b>: ${esc(lead.budget || "-")}<br />
           <b>유입 경로</b>: ${esc(lead.funnel || "-")}</p>
         ${lead.message ? `<p style="white-space:pre-wrap">${esc(lead.message)}</p>` : ""}`),
     }).catch(() => {});
   }
   return at("상담 신청이 접수되었습니다. 남겨주신 연락처로 곧 연락드리겠습니다.");
+}
+
+// ── 바깥 홈페이지에서 오는 상담 신청 (/lead-in/:slug) ──────────────────────────
+//
+// 병원 홈페이지처럼 이 엔진 밖에 있는 정적 사이트의 상담 폼이 여기로 보낸다.
+// 우리 화면의 폼이 아니라서 CSRF 토큰이 없다. 대신 아래로 막는다:
+//   ① 관리자가 등록한 주소(Origin)에서 온 신청만 받는다 — 등록 안 된 곳은 403
+//   ② 봇 방지(Turnstile) — 엔진에 시크릿이 설정돼 있으면 바깥 폼에도 똑같이 요구한다
+//   ③ 같은 IP 연타 제한 · 허니팟 · 같은 번호 10분 내 중복 차단 (acceptLead 안에서)
+// Origin 은 브라우저가 붙이는 값이라 curl 같은 도구로는 꾸밀 수 있다. ①은 남의 사이트가
+// 우리 폼을 퍼 가는 것을 막을 뿐, 봇을 막는 건 ②·③ 이다.
+export const leadOriginsKey = (assocId) => `lead_origins:${assocId}`;
+export function normalizeOrigin(raw) {
+  try {
+    const u = new URL(String(raw || "").trim());
+    if (u.protocol !== "https:" && !(u.protocol === "http:" && /^(localhost|127\.0\.0\.1)$/.test(u.hostname))) return "";
+    return u.origin;
+  } catch { return ""; }
+}
+export async function leadOrigins(db, assocId) {
+  const raw = (await D.getSetting(db, leadOriginsKey(assocId))) || "";
+  return raw.split(/\s+/).map(normalizeOrigin).filter(Boolean);
+}
+
+export async function externalLead({ env, db, request, url, ip }) {
+  const slug = decodeURIComponent(url.pathname.slice("/lead-in/".length)).replace(/\/+$/, "");
+  const text = (body, status) => new Response(body, { status, headers: { "content-type": "text/plain; charset=utf-8" } });
+  if (request.method !== "POST") return text("상담 신청은 홈페이지의 신청서로 보내 주세요.", 405);
+  const assoc = slug && /^[a-z0-9-]+$/.test(slug) ? await D.getAssociationBySlug(db, slug) : null;
+  if (!assoc || !kindById(assoc.kind).usesLanding) return text("없는 주소입니다.", 404);
+  const origin = normalizeOrigin(request.headers.get("origin"));
+  const allowed = await leadOrigins(db, assoc.id);
+  if (!origin || !allowed.includes(origin)) return text("등록되지 않은 홈페이지에서 온 신청입니다.", 403);
+  let form;
+  try { form = await request.formData(); } catch { return text("신청 내용을 읽을 수 없습니다.", 400); }
+  // 신청 뒤 돌아갈 화면 — 등록된 주소 안의 경로만 허용한다 (남의 사이트로 튕기지 않게)
+  const ret = String(form.get("return") || "/reservation/");
+  const retPath = ret.startsWith("/") && !ret.startsWith("//") ? ret : "/reservation/";
+  const at = (msg, err = false) => redirect(`${origin}${retPath}?${err ? "err" : "sent"}=${encodeURIComponent(msg)}#form`);
+  return acceptLead({ env, db, form, assoc, ip, base: `/t/${assoc.slug}` }, at);
+}
+
+// 관리자: 상담을 받을 바깥 홈페이지 주소 등록
+export async function adminSaveLeadOrigins(ctx) {
+  const { db, form, base, assoc } = ctx;
+  const lines = String(form.get("origins") || "").split(/\s+/).filter(Boolean).slice(0, 10);
+  const ok = lines.map(normalizeOrigin).filter(Boolean);
+  const bad = lines.filter((l) => !normalizeOrigin(l));
+  await D.setSetting(db, leadOriginsKey(assoc.id), [...new Set(ok)].join("\n"));
+  await audit(ctx, "외부상담주소", ok.join(", ") || "(없음)");
+  return back(base + "/admin/landing#lead-in", bad.length
+    ? `주소 ${ok.length}개를 저장했습니다. https:// 로 시작하지 않는 ${bad.length}개는 뺐습니다: ${bad.join(", ")}`
+    : `상담을 받을 홈페이지 주소 ${ok.length}개를 저장했습니다.`, bad.length > 0);
 }
 
 // 전화 클릭 집계 (sendBeacon). 응답 본문이 필요 없으니 204 로 끝낸다.

@@ -26,7 +26,7 @@ import { KEY_PREFIX } from "./apiv1.js";
 import { text } from "./http.js";
 import { parseLayout, renderHome, SECTION_CATALOG, HOME_PRESETS, pressLead, pressRow } from "./homeLayout.js";
 import { parseLandingLayout, renderLanding, LANDING_CATALOG, safeSrc } from "./franchise.js";
-import { KINDS, KIND_KEYS, PRESETS, PRESET_KEYS, kindOf, kindById, assocTerms, AREA_THEMES } from "./kinds.js";
+import { KINDS, KIND_KEYS, PRESETS, PRESET_KEYS, kindOf, kindById, assocTerms, leadLabels, dashTitleOf, AREA_THEMES } from "./kinds.js";
 import { bundledBrand } from "./brandAssets.js";
 import { turnstileWidget, turnstileScript } from "./turnstile.js";
 import { otpauthUri } from "./totp.js";
@@ -646,7 +646,7 @@ async function renderFranchisePage(ctx, { layoutJson, variant = "", preview = fa
   // CSS 파싱과 레이아웃을 기다린 뒤에야 받기 시작하는데, 광고로 들어온 사람에게는 그 지연이
   // 곧 이탈이다. 이 사진이 첫 화면의 가장 큰 그림(LCP)이라 HTML 과 동시에 받게 한다.
   return html(layout({ title: "", assoc, base, user, body: banner + body, activeNav: `${base}/`, csrf, jsonLd: orgLd, ogImage, preloadImage: ogImage,
-    description: assoc.tagline || `${assoc.name} 가맹점 모집 — 창업 비용·가맹 절차 안내와 상담 신청.`,
+    description: assoc.tagline || `${assoc.name} — ${assocTerms(assoc).process} 안내와 ${assocTerms(assoc).consult} 신청.`,
     scripts: `${turnstileScript(env)}<script src="${assetUrl("/js/lead-track.js")}" defer></script>` }));
 }
 
@@ -698,6 +698,9 @@ export async function adminLanding(ctx) {
   const hasDraft = cur ? !!cur.draft : !!assoc.landing_draft;
   const lay = parseLandingLayout(source, assoc.name, assoc.preset);
   const qv = cur ? `?v=${encodeURIComponent(cur.slug)}` : "";
+  // 바깥 홈페이지(병원 사이트 등)에서 상담 받기 — 등록된 주소에서 온 신청만 받는다 (api.externalLead)
+  const leadOriginsRaw = (await D.getSetting(db, `lead_origins:${assoc.id}`)) || "";
+  const leadInUrl = `${ctx.url ? ctx.url.origin : ""}/lead-in/${assoc.slug}`;
   const publicUrl = cur ? `${base}/l/${encodeURIComponent(cur.slug)}` : `${base}/`;
   const retention = parseInt((await D.getSetting(db, `lead_retention:${assoc.id}`)) || String(D.LEAD_RETENTION_DEFAULT), 10);
 
@@ -713,6 +716,17 @@ export async function adminLanding(ctx) {
     ${flashOf(query)}
     ${assoc.kind === "franchise" ? "" : `<div class="flash flash-warn">이 조직의 유형이 <b>프랜차이즈</b>가 아니라서, 발행해도 공개 홈에는 이 랜딩이 아닌 기존 홈페이지가 나옵니다.
       유형은 플랫폼 운영자가 바꿔 드립니다.</div>`}
+
+    <section class="panel" id="lead-in"><h2 class="panel-title">다른 홈페이지에서 상담 받기</h2>
+      <p class="panel-hint">병원 홈페이지처럼 이 랜딩 밖에 있는 사이트의 상담 신청서도 이 상담 DB 로 모을 수 있습니다.
+        ① 그 홈페이지 주소를 아래에 등록하고 ② 신청서가 보낼 곳을 <code>${esc(leadInUrl)}</code> 로 정하면 됩니다.
+        등록하지 않은 주소에서 온 신청은 받지 않습니다.</p>
+      <form method="post" action="${base}/admin/landing/origins" class="stack-form compact">
+        <input type="hidden" name="_csrf" value="${esc(csrf)}" />
+        <label>상담을 받을 홈페이지 주소 <small>(한 줄에 하나, https:// 로 시작 · 최대 10개)</small>
+          <textarea name="origins" rows="3" placeholder="https://www.example-clinic.kr">${esc(leadOriginsRaw)}</textarea></label>
+        <button class="btn btn-primary btn-sm" type="submit">주소 저장</button>
+      </form></section>
 
     <section class="panel"><div class="panel-head"><h2 class="panel-title">편집할 랜딩</h2>
       <span class="pill-row">${variantTabs}</span></div>
@@ -874,8 +888,8 @@ export async function adminLeads(ctx) {
       <div class="table-scroll"><table class="admin-table"><thead><tr><th>랜딩</th><th>방문</th><th>신청</th><th>전화</th><th>전환율</th></tr></thead>
         <tbody>${variantRows}</tbody></table></div></section>
   `;
-  const body = await consoleShell(ctx, { title: "가맹 상담 DB", sub: `랜딩페이지로 들어온 상담 신청입니다. 연락 결과를 상태로 남기면 어디까지 진행됐는지 한눈에 보입니다.`, actions: `<a href="${base}/admin/leads.csv" class="btn btn-ghost btn-sm">CSV 내려받기</a><a href="${base}/admin/landing" class="btn btn-primary btn-sm">랜딩 편집</a>`, active: "leads", body: inner });
-  return html(layout({ title: "가맹 상담 DB", assoc, base, user, body, csrf }));
+  const body = await consoleShell(ctx, { title: `${assocTerms(assoc).consult} DB`, sub: `랜딩페이지로 들어온 상담 신청입니다. 연락 결과를 상태로 남기면 어디까지 진행됐는지 한눈에 보입니다.`, actions: `<a href="${base}/admin/leads.csv" class="btn btn-ghost btn-sm">CSV 내려받기</a><a href="${base}/admin/landing" class="btn btn-primary btn-sm">랜딩 편집</a>`, active: "leads", body: inner });
+  return html(layout({ title: `${assocTerms(assoc).consult} DB`, assoc, base, user, body, csrf }));
 }
 
 export async function adminLeadsCsv(ctx) {
@@ -883,7 +897,8 @@ export async function adminLeadsCsv(ctx) {
   const leads = await D.listLeads(db, assoc.id, { limit: 5000 });
   // 추가 질문은 조직마다 다르다 — 실제로 답이 들어온 질문만 열로 편다
   const extraKeys = [...new Set(leads.flatMap((l) => Object.keys(parseExtra(l))))].slice(0, 12);
-  const rows = [["신청시각", "성함", "연락처", "이메일", "희망지역", "창업예산", ...extraKeys, "유입경로", "광고출처", "매체", "캠페인", "유입페이지", "랜딩", "문의내용", "상태", "메모", "마케팅수신"],
+  const LL = leadLabels(assoc);
+  const rows = [["신청시각", "성함", "연락처", "이메일", LL.region, LL.budget, ...extraKeys, "유입경로", "광고출처", "매체", "캠페인", "유입페이지", "랜딩", "문의내용", "상태", "메모", "마케팅수신"],
     ...leads.map((l) => { const ex = parseExtra(l);
       return [kstStamp(l.created_at), l.name, l.phone, l.email, l.region, l.budget, ...extraKeys.map((k) => ex[k] || ""), l.funnel,
         l.utm_source, l.utm_medium, l.utm_campaign, l.referrer, l.variant || "기본", l.message,
@@ -3302,7 +3317,7 @@ function consoleTabs(kind, counts = {}) {
     // 또 한 벌의 긴 표가 붙어, 가게 125곳에서 이 탭 하나가 다른 탭의 열 배가 된다(실측 14,299px).
     // 회비를 걷지 않는 상인회에는 탭 자체를 세우지 않는다 — 안 쓰는 칸은 찾는 데 방해만 된다.
     ...(counts.dues ? [["dues", "회비", TAB_ICO.dues, 0]] : []),
-    ...(isEsign ? [] : [["content", isFranchise ? "가맹점·콘텐츠" : "콘텐츠", TAB_ICO.content, 0]]),
+    ...(isEsign ? [] : [["content", isFranchise ? `${counts.unit || "가맹점"}·콘텐츠` : "콘텐츠", TAB_ICO.content, 0]]),
     ...(isEsign || isFranchise ? [] : [["inbox", "문의", TAB_ICO.inbox, counts.inbox || 0]]),
     ...(isEsign || isFranchise ? [] : [["stats", "성과", TAB_ICO.stats, 0]]),
     ["notify", "알림톡", TAB_ICO.notify, 0],
@@ -3352,7 +3367,7 @@ async function consoleShell(ctx, { title, titleHtml = "", eyebrow = "", sub = ""
   ]);
   // 회비 탭은 회비를 걷는 상인회에만 선다 — 곁가지 화면에서도 차림표가 같아야,
   // 계약서 화면에 갔다 왔더니 탭 하나가 사라져 보이는 일이 없다.
-  const counts = { pending: s.pending || 0, unread: unread || 0, press: press || 0, dues: D.usesDues(assoc) ? 1 : 0 };
+  const counts = { pending: s.pending || 0, unread: unread || 0, press: press || 0, dues: D.usesDues(assoc) ? 1 : 0, unit: assocTerms(assoc).unit };
   return `<section class="dash dash-shell"><div class="container">
     <div class="dash-head"><div>${eyebrow ? `<p class="section-eyebrow">${eyebrow}</p>` : ""}<h1 class="dash-title">${titleHtml || esc(title)}</h1>${sub ? `<p class="dash-sub">${sub}</p>` : ""}</div>
       ${actions ? `<div class="dash-head-actions">${actions}</div>` : ""}</div>
@@ -4101,7 +4116,7 @@ export async function admin(ctx) {
   })();
 
   // 왼쪽 메뉴 아이콘 — 글자만 일곱 줄이면 눈이 훑을 자리가 없다. 16px 선 아이콘 하나씩.
-  const ADMIN_TABS = consoleTabs(assoc.kind, { unread: unread || 0, pending: s.pending || 0, inbox: inboxCounts.new || 0, dues: D.usesDues(assoc) ? 1 : 0 });
+  const ADMIN_TABS = consoleTabs(assoc.kind, { unread: unread || 0, pending: s.pending || 0, inbox: inboxCounts.new || 0, dues: D.usesDues(assoc) ? 1 : 0, unit: assocTerms(assoc).unit });
 
   // ── 며칠 기다렸는지 —— "승인 대기 3" 을 보고도 오늘 온 것인지 일주일 묵은 것인지
   // 알 수 없으면, 그 숫자는 아무 결정도 만들지 못한다.
@@ -4287,7 +4302,7 @@ export async function admin(ctx) {
     : isFranchise
       ? [quick(`${base}/admin/leads`, "상담 DB", `아직 연락 못 한 ${leads.fresh}건`),
          quick(`${base}/admin/landing`, "랜딩페이지 편집", "문구·순서·표시 여부"),
-         quick("#p-addmember", "가맹점 추가", "지도에서 찾아 바로 등록"),
+         quick("#p-addmember", `${assocTerms(assoc).unit} 추가`, "지도에서 찾아 바로 등록"),
          quick("#p-brand", "브랜드 정보", "이름·로고·색")]
       : [quick("#p-content", "공지 올리기", "회원 모두에게 알립니다"),
          quick("#p-addmember", "회원·점포 추가", "지도에서 찾아 바로 등록"),
@@ -4297,13 +4312,13 @@ export async function admin(ctx) {
          quick("#p-brand", "상인회 정보", "이름·로고·색·검색 등록")]).join("");
 
   const body = `<section class="dash dash-shell"><div class="container">
-    <div class="dash-head"><div><h1 class="dash-title">${esc(kindOf(assoc).dashTitle)}</h1></div>
+    <div class="dash-head"><div><h1 class="dash-title">${esc(dashTitleOf(assoc))}</h1></div>
       <div class="dash-head-actions">${isFranchise ? `<a href="${base}/admin/leads" class="btn btn-primary btn-sm">상담 DB ${leads.total}건</a>
         <a href="${base}/admin/landing" class="btn btn-ghost btn-sm">랜딩 편집</a>`
         : `<a href="${base}/admin/documents" class="btn btn-primary btn-sm">계약서 만들기</a>`}</div></div>
     ${flashOf(query)}
     <div class="console-grid">
-    ${consoleSide({ base, kind: assoc.kind, counts: { unread: unread || 0, pending: s.pending || 0, inbox: inboxCounts.new || 0, press: pressPending, dues: D.usesDues(assoc) ? 1 : 0 }, inPage: true })}
+    ${consoleSide({ base, kind: assoc.kind, counts: { unread: unread || 0, pending: s.pending || 0, inbox: inboxCounts.new || 0, press: pressPending, dues: D.usesDues(assoc) ? 1 : 0, unit: assocTerms(assoc).unit }, inPage: true })}
     <div class="console-main">
     <div class="sgroup" id="s-home" data-tab="home">
     <div class="home-sheet">
@@ -4321,7 +4336,7 @@ export async function admin(ctx) {
     </div></div>
 
     <div class="sgroup" id="s-people" data-tab="people">
-    <section class="panel" id="p-members"><div class="panel-head"><h2 class="panel-title">${isEsign ? "담당자 관리" : `${isFranchise ? "가맹점" : "회원·점포"}`} <span class="badge badge-muted">${isEsign ? staffList.length + "명" : bizCounts.all + "곳"}</span></h2>
+    <section class="panel" id="p-members"><div class="panel-head"><h2 class="panel-title">${isEsign ? "담당자 관리" : `${isFranchise ? assocTerms(assoc).unit : "회원·점포"}`} <span class="badge badge-muted">${isEsign ? staffList.length + "명" : bizCounts.all + "곳"}</span></h2>
       <span class="pill-row">${isEsign ? "" : `<a class="btn btn-xs btn-primary" href="${base}/admin/members/import">명부로 한 번에 등록</a><a class="btn btn-xs btn-outline" href="${base}/admin/members/map">지도에 한꺼번에 연결</a><a class="btn btn-xs btn-outline" href="${base}/admin/members/photos">지도 사진 한꺼번에</a><a class="btn btn-xs btn-outline" href="${base}/admin/members/links">사진 요청 링크</a>`}${members.length && !isEsign ? `<a class="btn btn-xs btn-ghost" href="${base}/admin/members.csv">명단 CSV</a>` : ""}<a class="btn btn-xs btn-ghost" href="${base}/admin/export.json">전체 백업(JSON)</a></span></div>
       ${isEsign ? "" : `<p class="setup-strip"><b>지금 어디까지 왔나</b>
         <a href="${base}/admin/members/import">등록 <em>${setup.total}</em></a>
@@ -4404,7 +4419,7 @@ export async function admin(ctx) {
 
 ${isEsign ? "" : `<div class="sgroup" id="s-content" data-tab="content">`}
 ${isFranchise ? `    <section class="panel panel-accent" id="p-home"><h2 class="panel-title">랜딩페이지</h2>
-      <p class="panel-hint">가맹점 모집 화면의 문구·순서·표시 여부는 전용 편집기에서 바꿉니다. 들어온 상담 신청은 상담 DB 에 쌓입니다.</p>
+      <p class="panel-hint">랜딩페이지의 문구·순서·표시 여부는 전용 편집기에서 바꿉니다. 들어온 상담 신청은 상담 DB 에 쌓입니다.</p>
       <span class="pill-row"><a href="${base}/admin/landing" class="btn btn-primary btn-sm">랜딩페이지 편집</a>
         <a href="${base}/admin/leads" class="btn btn-ghost btn-sm">상담 DB (신규 ${leads.fresh}건)</a>
         <a href="${base}" target="_blank" class="btn btn-ghost btn-sm">공개 화면 보기</a></span></section>`
