@@ -119,6 +119,10 @@ for (const id of ids) {
     // 움직임을 끈 상태로 잰다 — 떠오르기 전의 투명한 글자를 '흐리다'고 오판하지 않게
     const ctx = await br.newContext({ viewport: vp, isMobile: mobile, hasTouch: mobile, reducedMotion: "reduce" });
     const page = await ctx.newPage();
+    // 바깥 서버(글꼴 CDN 등)는 막고 사이트 자체 파일로만 잰다. GitHub 검사 컴퓨터에서 CDN 이 늦으면
+    // 'load' 를 30초씩 기다리다 검사가 통째로 죽었다 — 측정이 남의 서버 상태에 흔들리면 안 된다.
+    // 글꼴은 검사 컴퓨터에 깔린 한글 글꼴(워크플로에서 설치)로 대신 그려진다.
+    await page.route((u) => !u.href.startsWith(base), (r) => r.abort());
     for (const p of pages) {
       await page.goto(base + p, { waitUntil: "load" });
       const issues = name === "확대200%" ? (await page.evaluate(measure, false)).filter((x) => x.includes("넘침")) : await page.evaluate(measure, mobile);

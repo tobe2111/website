@@ -35,9 +35,9 @@ jobs:
         with:
           node-version: 22
 
-      # 사진 압축은 ffmpeg 로 한다(npm 패키지를 들이지 않으려고). 없으면 압축 검사가 건너뛰어지므로 깔고 시작한다.
-      - name: ffmpeg 준비
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+      # ffmpeg: 사진 압축 (npm 패키지를 들이지 않으려고) · 한글 글꼴: 접근성 실측과 공유 썸네일이 글꼴 CDN 없이도 한글을 그리게
+      - name: ffmpeg · 한글 글꼴 준비
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg fonts-noto-cjk
 
       - name: 빌더 검사
         run: node --test clinic/test/*.test.mjs

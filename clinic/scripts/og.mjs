@@ -54,8 +54,10 @@ export async function makeOg(id) {
   const br = await chromium.launch();
   const page = await br.newPage({ viewport: { width: 1200, height: 630 } });
   for (const p of ogPlan) {
-    await page.setContent(ogCard(site, p.title), { waitUntil: "networkidle" });
-    await page.evaluate(() => document.fonts.ready);
+    // 글꼴 CDN 이 늦어도 멈추지 않는다 — 15초 안에 못 받으면 컴퓨터에 깔린 한글 글꼴로 그린다
+    await page.setContent(ogCard(site, p.title), { waitUntil: "domcontentloaded" });
+    await page.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => {});
+    await page.evaluate(() => Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 3000))]));
     await page.screenshot({ path: path.join(out, "og", `${p.key}.png`) });
   }
   await br.close();
