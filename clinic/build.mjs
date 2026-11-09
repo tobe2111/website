@@ -41,8 +41,11 @@ export function loadSite(id) {
   const dir = path.join(ROOT, "sites", id);
   const read = (f, fb) => (existsSync(path.join(dir, f)) ? JSON.parse(readFileSync(path.join(dir, f), "utf8")) : fb);
   const site = read("site.json");
-  const treatments = read("treatments.json", []);
-  const notices = read("notices.json", []).sort((a, b) => b.date.localeCompare(a.date));
+  // 시안·견본 사이트는 다른 병원의 진료 원고를 빌려 쓸 수 있다 ("contentFrom": "cheonsaem")
+  const from = site.contentFrom ? path.join(ROOT, "sites", site.contentFrom) : dir;
+  const readFrom = (f, fb) => (existsSync(path.join(dir, f)) ? read(f, fb) : existsSync(path.join(from, f)) ? JSON.parse(readFileSync(path.join(from, f), "utf8")) : fb);
+  const treatments = readFrom("treatments.json", []);
+  const notices = readFrom("notices.json", []).sort((a, b) => b.date.localeCompare(a.date));
   site.siteUrl = String(site.siteUrl || "").replace(/\/$/, "");
   return { id, site, treatments, notices };
 }
@@ -53,11 +56,17 @@ function themeStyle(t = {}) {
   const presets = {
     calm: { bg: "#F6F4EF", surface: "#FFFFFF", ink: "#1C2326", muted: "#5B6468", line: "#E2DDD3" },
     clean: { bg: "#FFFFFF", surface: "#F5F7F8", ink: "#15191C", muted: "#596168", line: "#E3E7EA" },
+    ivory: { bg: "#FBF8F2", surface: "#FFFFFF", ink: "#26221E", muted: "#6B635A", line: "#E8E1D5" },
   };
   const p = presets[t.preset] || presets.calm;
   const accent = /^#[0-9a-f]{6}$/i.test(t.accent || "") ? t.accent : "#2B5F6B";
   return `<style>:root{--bg:${p.bg};--surface:${p.surface};--ink:${p.ink};--muted:${p.muted};--line:${p.line};--accent:${accent}}</style>`;
 }
+
+// 병원마다 '색'만 다르면 결국 다 같은 사이트로 보인다. 배치·글꼴도 고를 수 있게 한다.
+//   type   : sans(고딕) | serif(제목만 명조)
+//   layout : a(칸 나열형) | b(목록·잡지형)
+const bodyClass = (t = {}) => [`t-${t.type === "serif" ? "serif" : "sans"}`, `L-${t.layout === "b" ? "b" : "a"}`].join(" ");
 
 const NAV = [
   ["/about/", "병원 소개"],
@@ -94,11 +103,12 @@ ${site.googleVerification ? `<meta name="google-site-verification" content="${es
 <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
+${site.theme?.type === "serif" ? `<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />\n<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@500;600;700&display=swap" />` : ""}
 <link rel="stylesheet" href="/assets/site.css?v=${assetV}" />
 ${themeStyle(site.theme)}
 ${jsonLd.map(ld).join("\n")}
 </head>
-<body>
+<body class="${bodyClass(site.theme)}">
 <a class="skip" href="#main">본문 바로가기</a>
 <header class="hd${over ? " hd-over" : ""}">
   <div class="wrap hd-in">
@@ -205,7 +215,7 @@ function doctorLd(site, d) {
 function home(ctx) {
   const { site, treatments, notices } = ctx;
   const h = site.hero;
-  const variant = site.theme?.hero === "full" ? "full" : "split";
+  const variant = ["full", "editorial"].includes(site.theme?.hero) ? site.theme.hero : "split";
   // 제목은 줄마다 감싸 한 줄씩 떠오르게 한다 (동작 줄이기면 그냥 보인다)
   const lines = String(h.title).split("\n").map((l, i) => `<span class="ln" style="--i:${i}"><span>${esc(l)}</span></span>`).join("");
   const act = `<div class="hero-act"><a class="btn btn-lg" href="/reservation/">상담 예약하기<i aria-hidden="true">→</i></a><a class="btn btn-lg btn-line" href="/treatments/">진료 과목 보기</a></div>`;
@@ -230,6 +240,14 @@ function home(ctx) {
     </div>
     <a class="scroll-cue" href="#first" aria-label="아래로 이동"><span></span></a>
   </section>`;
+  } else if (variant === "editorial") {
+    // 잡지형: 큰 제목이 먼저, 그 아래 가로로 긴 사진이 막이 걷히듯 열린다. PC 배너(2:1)를 자르지 않고 그대로 쓴다.
+    hero = `<section class="hero hero-ed"><div class="wrap">
+    <p class="eyebrow">${esc(h.eyebrow)}</p>
+    <h1 class="hero-h">${lines}</h1>
+    <div class="ed-row"><p class="lead">${esc(h.body)}</p>${act}</div>
+  </div>
+  <div class="ed-media">${figure(h.image, { ratio: "2/1", className: "hero-fig", eager: true, mobile: h.imageMobile })}</div></section>`;
   } else {
     const heroImg = figure(h.image, { ratio: "1/1", className: "hero-fig", eager: true, mobile: h.imageMobile });
     hero = `<section class="hero hero-split"><div class="wrap hero-in">

@@ -345,6 +345,47 @@ a:hover .fig img { transform: scale(1.03); }
 @view-transition { navigation: auto; }
 ::view-transition-old(root), ::view-transition-new(root) { animation-duration: .28s; }
 
+/* ══════════════ 두 번째 모양: 제목 명조(t-serif) · 잡지형 배치(L-b) ══════════════
+ * 같은 원고라도 이 두 스위치를 켜면 다른 병원처럼 보인다. 색은 따로 고른다(ivory 등).
+ */
+.t-serif h1, .t-serif h2, .t-serif .cats h3, .t-serif .tlist h3, .t-serif .q strong, .t-serif .logo span, .t-serif .ft-brand strong {
+  font-family: "Noto Serif KR", "Nanum Myeongjo", serif; font-weight: 600; letter-spacing: -0.035em; }
+.t-serif .hero h1 { font-weight: 600; letter-spacing: -0.05em; }
+.t-serif .eyebrow::before { width: 28px; }
+
+/* 잡지형 첫 화면 */
+.hero-ed { padding: 88px 0 0; }
+.hero-ed h1 { font-size: clamp(44px, 7vw, 104px); line-height: 1.08; letter-spacing: -0.05em; margin-bottom: 48px; max-width: 12em; }
+.ed-row { display: grid; grid-template-columns: 1fr auto; gap: 48px; align-items: end; padding-bottom: 64px; }
+.ed-row .lead { margin: 0; }
+.ed-media { padding: 0 var(--gut); max-width: 1680px; margin: 0 auto; }
+.ed-media .fig { border-radius: 0; }
+.hero-ed + .quick { margin-top: -56px; }
+@keyframes curtain { from { clip-path: inset(0 0 100% 0); } to { clip-path: inset(0 0 0 0); } }
+.motion .ed-media .fig { animation: curtain 1.5s .45s cubic-bezier(.7,0,.2,1) both; }
+.motion .ed-media .fig > * { animation: heroZoom 2.6s .45s cubic-bezier(.2,.7,.1,1) both; }
+
+/* 진료 원칙: 2×2, 큰 숫자 */
+.L-b .steps { grid-template-columns: 1fr 1fr; border-top: 0; gap: 0 72px; }
+.L-b .steps li, .L-b .steps li + li { padding: 36px 0 28px; border-left: 0; border-top: 1px solid var(--line); }
+.L-b .steps .num { font-size: 56px; line-height: 1; font-weight: 300; margin-bottom: 20px; letter-spacing: -0.04em; }
+.L-b.t-serif .steps .num { font-family: "Noto Serif KR", serif; font-weight: 500; }
+
+/* 진료 과목: 칸 대신 큰 목록 — 올리면 병원 색이 왼쪽부터 번진다 */
+.L-b .cats { grid-template-columns: 1fr; border-left: 0; }
+.L-b .cats li { border-right: 0; }
+.L-b .cats a { display: grid; grid-template-columns: 72px minmax(160px, 1.1fr) 1.4fr 1.6fr 40px; align-items: center; gap: 24px; min-height: 0; padding: 30px 8px; }
+.L-b .cats a::before { transform: scaleX(0); transform-origin: left; }
+.L-b .cats a:hover::before, .L-b .cats a:focus-visible::before { transform: scaleX(1); }
+.L-b .cats h3 { font-size: 30px; margin: 0; }
+.L-b .cats p, .L-b .cat-no, .L-b .cat-list { margin: 0; }
+.L-b .cats .cat-list { padding: 0; }
+.L-b .cat-go { position: static; }
+
+/* 의료진: 사진이 오른쪽 */
+.L-b .doc-hero { grid-template-columns: 7fr 5fr; }
+.L-b .doc-hero > .fig { order: 2; }
+
 /* ══════════════ 움직임 (동작 줄이기를 켜지 않은 사람에게만) ══════════════ */
 @keyframes lineUp { from { transform: translateY(105%); } to { transform: none; } }
 @keyframes fadeUp { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
@@ -412,6 +453,21 @@ a:hover .fig img { transform: scale(1.03); }
   .q small { display: none; }
   .q-today small { display: block; font-size: 13px; }
   .cat-no { margin-bottom: 14px; }
+  .hero-ed { padding-top: 40px; }
+  .hero-ed h1 { font-size: clamp(38px, 11vw, 52px); margin-bottom: 24px; }
+  .ed-row { grid-template-columns: 1fr; gap: 28px; padding-bottom: 40px; }
+  .ed-media { padding: 0; }
+  .ed-media .fig { aspect-ratio: 3/4 !important; }
+  .hero-ed + .quick { margin-top: -32px; }
+  .L-b .steps { grid-template-columns: 1fr; }
+  .L-b .steps .num { font-size: 40px; }
+  .L-b .cats a { grid-template-columns: 40px 1fr 24px; gap: 4px 12px; padding: 22px 4px; }
+  .L-b .cats h3 { font-size: 22px; }
+  .L-b .cat-no { grid-row: 1 / span 2; }
+  .L-b .cats h3 { grid-column: 2; grid-row: 1; }
+  .L-b .cats .cat-list { grid-column: 2; grid-row: 2; font-size: 13px; }
+  .L-b .cat-go { grid-column: 3; grid-row: 1 / span 2; }
+  .L-b .doc-hero > .fig { order: 0; }
   .motion .dock { transform: translateY(110%); transition: transform .4s cubic-bezier(.2,.7,.1,1); }
   .motion body.past-hero .dock { transform: none; }
   .hd-act .btn { display: none; }

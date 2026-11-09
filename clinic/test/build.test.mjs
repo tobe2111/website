@@ -107,3 +107,31 @@ test("상담 신청 주소가 없으면 신청 단추를 잠그고 전화로 안
   assert.match(h, /type="submit" disabled/);
   assert.match(h, /href="tel:/);
 });
+
+test("두 번째 모양(견본 B)은 같은 원고로 다른 배치·글꼴을 쓴다", () => {
+  const out = mkdtempSync(path.join(tmpdir(), "clinic-b-"));
+  try {
+    const r = build("sample-b", { outDir: out });
+    assert.equal(r.pages.length, pages.length, "원고를 빌려 와도 페이지 수는 같다");
+    const h = readFileSync(path.join(out, "index.html"), "utf8");
+    assert.match(h, /<body class="t-serif L-b">/);
+    assert.match(h, /class="hero hero-ed"/);
+    assert.match(h, /Noto\+Serif\+KR/);
+    assert.doesNotMatch(htmlOf("/"), /Noto\+Serif\+KR/, "고딕 병원은 명조 글꼴을 받지 않는다");
+  } finally { rmSync(out, { recursive: true, force: true }); }
+});
+
+// 원고를 빌려 쓰는 사이트에 원래 병원 이름이 남으면, 남의 병원 이름을 단 홈페이지가 된다
+test("한 병원 사이트에 다른 병원 이름이 섞이지 않는다", () => {
+  const out = mkdtempSync(path.join(tmpdir(), "clinic-b2-"));
+  try {
+    build("sample-b", { outDir: out });
+    const walk = (d) => readdirSync(d).flatMap((f) => { const x = path.join(d, f); return statSync(x).isDirectory() ? walk(x) : [x]; });
+    for (const f of walk(out).filter((f) => /\.(html|txt|xml)$/.test(f)))
+      assert.doesNotMatch(readFileSync(f, "utf8"), /천샘/, path.relative(out, f));
+  } finally { rmSync(out, { recursive: true, force: true }); }
+});
+
+test("견적서 기준 25페이지를 채운다", () => {
+  assert.ok(pages.length >= 25, `지금 ${pages.length}페이지`);
+});
