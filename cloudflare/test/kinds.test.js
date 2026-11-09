@@ -7,7 +7,7 @@ import { makeEnv } from "./shim.js";
 import * as D from "../src/db.js";
 import { hashPassword } from "../src/crypto.js";
 import { KINDS, KIND_KEYS, PRESETS, PRESET_KEYS, kindById, termsOf, presetText } from "../src/kinds.js";
-import { defaultLandingLayout } from "../src/franchise.js";
+import { defaultLandingLayout, parseLandingLayout } from "../src/franchise.js";
 import { seedStarter } from "../src/starterContent.js";
 
 const B = "http://localhost";
@@ -61,7 +61,35 @@ test("업종 프리셋: 문구를 다 안 채워도 대표 프리셋에서 빌�
     assert.ok(lay.find((x) => x.type === "faq").items.includes("|"), `${p}: FAQ 가 채워져야`);
   }
   assert.match(presetText("academy", "hero.title"), /성적/);
-  assert.match(presetText("clinic", "faq.items"), /\|/, "안 쓴 항목은 대표 프리셋에서 온다");
+  assert.doesNotMatch(presetText("clinic", "faq.items"), /외식업|창업/, "병원 FAQ 가 프랜차이즈 문답이면 안 된다");
+});
+
+// 예전에는 업종 문구가 빈 칸을 프랜차이즈 문구로 메웠다 — 병원 랜딩 아래쪽이 통째로
+// "창업의 벽을 낮추는 네 가지 · 가맹 절차 · 창업 예산" 으로 나왔다. 업종마다 문구를 다 쓰게 하고,
+// 남의 업종 말이 한 단어라도 새면 여기서 걸린다.
+test("업종 랜딩에 프랜차이즈 말이 새지 않는다", () => {
+  const LEAK = /가맹|창업|점주|외식업|본사|슈퍼바이저/;
+  for (const p of PRESET_KEYS.filter((k) => k !== "franchise")) {
+    for (const sec of defaultLandingLayout("테스트", p))
+      for (const [k, v] of Object.entries(sec))
+        if (typeof v === "string") assert.doesNotMatch(v, LEAK, `${p}.${sec.type}.${k}: "${v.slice(0, 40)}"`);
+  }
+});
+
+test("병원은 후기 칸이 기본으로 꺼진다 (의료광고 제한)", () => {
+  const lay = defaultLandingLayout("테스트의원", "clinic");
+  assert.equal(lay.find((s) => s.type === "reviews").enabled, false);
+  assert.equal(defaultLandingLayout("테스트", "franchise").find((s) => s.type === "reviews").enabled, true);
+});
+
+test("예전에 저장된 랜딩의 손대지 않은 프랜차이즈 문구는 업종 문구로 바뀌고, 고친 칸은 그대로다", () => {
+  const old = defaultLandingLayout("천샘정형외과", "franchise").map((s) => s.type === "why" ? { ...s, body: "원장이 직접 쓴 소개" } : s);
+  const lay = parseLandingLayout(JSON.stringify(old), "천샘정형외과", "clinic");
+  assert.equal(lay.find((s) => s.type === "strengths").title, "천샘정형외과의 진료 원칙");
+  assert.equal(lay.find((s) => s.type === "lead").budgetLabel, "불편한 부위");
+  assert.equal(lay.find((s) => s.type === "why").body, "원장이 직접 쓴 소개", "관리자가 고친 칸은 건드리지 않는다");
+  // 프랜차이즈 조직은 아무것도 바뀌지 않는다
+  assert.deepEqual(parseLandingLayout(JSON.stringify(old), "천샘정형외과", "franchise"), old);
 });
 
 test("업종을 바꾸면 화면의 말이 바뀐다 (같은 엔진, 다른 제품)", async () => {

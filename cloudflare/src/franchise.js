@@ -157,18 +157,21 @@ export function defaultLandingLayout(brandName = "우리 브랜드", preset = DE
   const n = brandName || "우리 브랜드";
   const t = (path, fb = "") => String(presetText(preset, path, fb)).replace(/\{name\}/g, n);
   const T = termsOf(preset);
+  // 업종이 기본으로 꺼 두는 칸 — 병원의 '후기'처럼 그 업종에서는 써서는 안 되는 칸이 있다
+  const off = new Set((PRESETS[preset] && PRESETS[preset].off) || []);
   return [
     { type: "hero", enabled: true, eyebrow: t("hero.eyebrow"), title: t("hero.title"), highlight: t("hero.highlight"),
       subtitle: t("hero.subtitle"), ctaLabel: t("hero.ctaLabel"), note: t("hero.note"), image: "" },
     { type: "ticker", enabled: true, items: tickerOf(preset, n) },
     { type: "why", enabled: true, eyebrow: "WHY", title: t("why.title"), body: t("why.body"), image: "" },
     { type: "strengths", enabled: true, title: t("strengths.title"), lead: "", items: t("strengths.items") },
-    { type: "reviews", enabled: true, title: t("reviews.title"), lead: t("reviews.lead"), items: "" },
+    { type: "reviews", enabled: !off.has("reviews"), title: t("reviews.title"), lead: t("reviews.lead"), items: "" },
     { type: "menu", enabled: true, title: t("menu.title"), lead: "", items: "" },
     { type: "process", enabled: true, title: t("process.title"), lead: t("process.lead"), items: t("process.items") },
     { type: "cost", enabled: true, title: t("cost.title"), locked: true, items: "", note: t("cost.note") },
     { type: "lead", enabled: true, title: t("lead.title"), lead: t("lead.lead"), buttonLabel: "상담 신청하기",
       budgets: t("lead.budgets"), regionLabel: t("lead.regionLabel"), budgetLabel: t("lead.budgetLabel"),
+      regionPlaceholder: t("lead.regionPlaceholder", "예: 서울 서초구"),
       funnels: "네이버 검색\n인스타그램·유튜브\n지인 소개\n방문·전단\n기타" },
     { type: "stores", enabled: true, title: t("stores.title"), lead: "" },
     { type: "faq", enabled: true, title: "자주 묻는 질문", items: t("faq.items") },
@@ -187,10 +190,26 @@ export function parseLandingLayout(json, brandName, preset = DEFAULT_PRESET) {
     // 나중에 추가된 섹션은 기본값에서 가져와 뒤에 붙인다 — 저장해 둔 구성이 옛 버전이라고 화면이 비면 안 된다
     const have = new Set(out.map((s) => s.type));
     for (const sec of defaultLandingLayout(brandName, preset)) if (!have.has(sec.type)) out.push(sec);
-    return out;
+    return preset && preset !== DEFAULT_PRESET ? replaceBorrowedCopy(out, brandName, preset) : out;
   } catch {
     return defaultLandingLayout(brandName, preset);
   }
+}
+
+// 예전에는 업종 문구가 빈 칸을 프랜차이즈 문구로 메웠다. 그때 저장된 병원·헬스장 랜딩에는
+// "창업의 벽을 낮추는 네 가지" 같은 남의 업종 문장이 그대로 들어 있다. 관리자가 손대지 않은 칸 —
+// 프랜차이즈 기본값과 글자 하나까지 같은 칸 — 만 그 업종의 문구로 바꾼다. 고친 칸은 건드리지 않는다.
+function replaceBorrowedCopy(layout, brandName, preset) {
+  const franchise = new Map(defaultLandingLayout(brandName, DEFAULT_PRESET).map((s) => [s.type, s]));
+  const own = new Map(defaultLandingLayout(brandName, preset).map((s) => [s.type, s]));
+  return layout.map((sec) => {
+    const f = franchise.get(sec.type), o = own.get(sec.type);
+    if (!f || !o) return sec;
+    const out = { ...sec };
+    for (const [k, v] of Object.entries(f))
+      if (typeof v === "string" && v && out[k] === v && typeof o[k] === "string" && o[k] !== v) out[k] = o[k];
+    return out;
+  });
 }
 
 export const serializeLandingLayout = (arr) => JSON.stringify(arr);
@@ -389,7 +408,7 @@ function leadSection(s, deps) {
         <label>연락처 <span class="req">*</span><input type="tel" name="phone" required maxlength="20" inputmode="numeric" placeholder="010-0000-0000" autocomplete="tel" /></label>
       </div>
       <div class="form-two">
-        <label>${esc(s.regionLabel || "희망 지역")}<input type="text" name="region" maxlength="60" placeholder="예: 서울 서초구" /></label>
+        <label>${esc(s.regionLabel || "희망 지역")}<input type="text" name="region" maxlength="60" placeholder="${esc(s.regionPlaceholder || "예: 서울 서초구")}" /></label>
         ${budgets.length ? `<label>${esc(s.budgetLabel || "창업 예산")}<select name="budget"><option value="">선택해 주세요</option>${opt(budgets)}</select></label>`
           : `<label>${esc(s.budgetLabel || "창업 예산")}<input type="text" name="budget" maxlength="40" /></label>`}
       </div>

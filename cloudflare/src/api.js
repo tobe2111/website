@@ -19,7 +19,7 @@ import { turnstileVerify } from "./turnstile.js";
 import { planOf, PLANS, PLAN_KEYS, planPriceKey } from "./plans.js";
 import { seedDemo } from "./demoContent.js";
 import { seedStarter } from "./starterContent.js";
-import { KINDS, kindById, PRESETS, assocTerms } from "./kinds.js";
+import { KINDS, kindById, PRESETS, assocTerms, leadLabels } from "./kinds.js";
 import { sellerPhotos, urdealProductUrl } from "./urdeal.js";
 import { placePhoto, isPlaceUrl, placeSourceOf } from "./placePhoto.js";
 import { pickPlace, placeQuery, kmApart, NEAR_KM, repairAddress } from "./placeMatch.js";
@@ -4747,10 +4747,10 @@ export async function leadSubmit(ctx) {
     // 메일이 죽어도 신청은 이미 DB 에 있다 — 알림 실패로 접수 자체가 실패한 것처럼 보이면 안 된다
     await sendEmail(env, {
       to: assoc.email,
-      subject: `[${assoc.name}] 새 가맹 상담 신청 — ${name}`,
-      html: mailShell(`${esc(assoc.name)} 가맹 상담`,
+      subject: `[${assoc.name}] 새 ${assocTerms(assoc).consult} 신청 — ${name}`,
+      html: mailShell(`${esc(assoc.name)} ${esc(assocTerms(assoc).consult)}`,
         `<p><b>성함</b>: ${esc(name)}<br /><b>연락처</b>: ${esc(phone)}<br />
-          <b>희망 지역</b>: ${esc(lead.region || "-")}<br /><b>창업 예산</b>: ${esc(lead.budget || "-")}<br />
+          <b>${esc(leadLabels(assoc).region)}</b>: ${esc(lead.region || "-")}<br /><b>${esc(leadLabels(assoc).budget)}</b>: ${esc(lead.budget || "-")}<br />
           <b>유입 경로</b>: ${esc(lead.funnel || "-")}</p>
         ${lead.message ? `<p style="white-space:pre-wrap">${esc(lead.message)}</p>` : ""}`),
     }).catch(() => {});
