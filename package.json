@@ -24,7 +24,9 @@
     "css:dead": "node cloudflare/scripts/css-dead-media.mjs",
     "test:a11y-screens": "node --experimental-sqlite cloudflare/scripts/a11y.mjs",
     "test:fast": "npm run check && npm test && npm run qa && npm run test:send && npm run test:manual && npm run test:restore && npm run test:perf && npm run browsers",
-    "test:browser": "npm run test:e2e && npm run test:a11y-screens && npm run test:limits && npm run test:mobile && npm run test:a11y"
+    "test:browser": "npm run test:e2e && npm run test:a11y-screens && npm run test:limits && npm run test:mobile && npm run test:a11y",
+    "clinic:build": "node clinic/build.mjs",
+    "test:clinic": "node --test clinic/test/*.test.mjs"
   },
   "license": "MIT"
 }
