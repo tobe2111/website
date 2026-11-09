@@ -12,7 +12,7 @@ node --test clinic/test/*.test.mjs   # 검사
 
 1. `sites/cheonsaem/`을 복사해서 새 이름을 붙입니다. 예: `sites/hanbit/`
 2. 아래 세 파일을 고칩니다.
-   - `site.json`: 병원 정보, 진료 시간, 의료진, 색(`theme.accent`), 첫 화면 배치(`theme.hero`: `split` 또는 `full`)
+   - `site.json`: 병원 정보, 진료 시간, 의료진, 디자인 스위치(`theme`, 아래 표 참고)
    - `treatments.json`: 진료 페이지. 증상 → 원인 → 진단 → 치료 → 회복 → 자주 묻는 질문 순서로 씁니다.
    - `notices.json`: 공지사항
 3. 사진은 `sites/<병원>/media/`에 넣고, 원고에는 `"src": "/media/파일이름.jpg"`로 적습니다.
