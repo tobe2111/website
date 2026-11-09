@@ -290,6 +290,7 @@ export const TENANT = [
   ["POST", "/admin/landing/variant", api.adminCreateLandingVariant, "ADMIN"],
   ["POST", "/admin/landing/variant/:slug/delete", api.adminDeleteLandingVariant, "ADMIN"],
   ["POST", "/admin/landing/asset", api.adminUploadLandingAsset, "ADMIN"],
+  ["POST", "/admin/landing/origins", api.adminSaveLeadOrigins, "ADMIN"],
   ["POST", "/admin/landing/asset/:id/delete", api.adminDeleteLandingAsset, "ADMIN"],
   ["POST", "/admin/landing/retention", api.adminSetLeadRetention, "ADMIN"],
   ["GET", "/admin/leads", pages.adminLeads, "ADMIN"],
@@ -576,6 +577,11 @@ async function handle(request, env) {
 
   // 공개 API — 폼·CSRF·세션 체계 밖이다. 인증은 Bearer 키로만 하고 본문은 JSON 이므로
   // 아래의 formData() 파싱·CSRF 검사보다 먼저 갈라져야 한다.
+  // 바깥 홈페이지(병원 사이트 등)의 상담 폼 — 우리 화면이 아니라 CSRF 토큰이 없다. 등록된 주소만 받는다 (api.externalLead)
+  if (pathname.startsWith("/lead-in/")) {
+    const res = await api.externalLead({ env, db, url, request, ip });
+    return finalize(res, setCookies, env, timing);
+  }
   if (pathname === "/api/v1" || pathname.startsWith("/api/v1/")) {
     const res = await apiv1.handle({ env, db, url, request, ip });
     return finalize(res, setCookies, env, timing);
