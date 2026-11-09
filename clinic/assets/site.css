@@ -50,13 +50,13 @@ p { margin: 0 0 1em; }
 .hd-in { display: flex; align-items: center; gap: 32px; height: 72px; }
 .logo { display: flex; align-items: center; gap: 10px; min-height: 44px; text-decoration: none; font-weight: 700; font-size: 20px; letter-spacing: -0.03em; }
 .logo img { height: 32px; width: auto; }
-.gnb { display: flex; gap: 4px; margin: 0 auto; }
-.gnb a { padding: 10px 14px; text-decoration: none; font-size: 16px; font-weight: 500; color: var(--muted); border-radius: var(--r); }
-.gnb a:hover, .gnb a[aria-current] { color: var(--ink); }
-.gnb a { position: relative; }
-.gnb a::after { content: ""; position: absolute; left: 14px; right: 14px; bottom: 4px; height: 2px; background: var(--accent);
+.gnb { display: flex; gap: 4px; margin: 0 auto; align-self: stretch; align-items: center; }
+.gnb .gl { padding: 10px 14px; text-decoration: none; font-size: 16px; font-weight: 500; color: var(--muted); border-radius: var(--r); }
+.gnb .gl:hover, .gnb .gl[aria-current] { color: var(--ink); }
+.gnb .gl { position: relative; }
+.gnb .gl::after { content: ""; position: absolute; left: 14px; right: 14px; bottom: 4px; height: 2px; background: var(--accent);
   transform: scaleX(0); transform-origin: left; transition: transform .3s cubic-bezier(.2,.7,.1,1); }
-.gnb a:hover::after, .gnb a[aria-current]::after { transform: scaleX(1); }
+.gnb .gl:hover::after, .gnb .gl[aria-current]::after { transform: scaleX(1); }
 .hd-act { display: flex; align-items: center; gap: 16px; }
 .hd-tel { font-weight: 700; text-decoration: none; font-variant-numeric: tabular-nums; }
 .mnav { display: none; }
@@ -274,9 +274,9 @@ p { margin: 0 0 1em; }
  */
 .hd-over { position: fixed; left: 0; right: 0; top: 0; }
 .hd-over:not(.scrolled) { background: transparent; border-color: transparent; backdrop-filter: none; color: #fff; }
-.hd-over:not(.scrolled) .gnb a { color: rgba(255,255,255,.82); }
-.hd-over:not(.scrolled) .gnb a:hover, .hd-over:not(.scrolled) .gnb a[aria-current] { color: #fff; }
-.hd-over:not(.scrolled) .gnb a::after { background: #fff; }
+.hd-over:not(.scrolled) .gnb .gl { color: rgba(255,255,255,.82); }
+.hd-over:not(.scrolled) .gnb .gl:hover, .hd-over:not(.scrolled) .gnb .gl[aria-current] { color: #fff; }
+.hd-over:not(.scrolled) .gnb .gl::after { background: #fff; }
 .hd-over:not(.scrolled) .btn { background: #fff; border-color: #fff; color: var(--ink); }
 .hd-over:not(.scrolled) .mnav summary span { background: #fff; }
 .hd.hide { transform: translateY(-100%); }
@@ -401,6 +401,77 @@ a:hover .fig img { transform: scale(1.03); }
 .L-b .doc-hero { grid-template-columns: 7fr 5fr; }
 .L-b .doc-hero > .fig { order: 2; }
 
+/* ══════════════ 진료 과목 그림(선 도해) ══════════════
+ * 병원 강조색으로 그린 가는 선. 강조선(.acc)은 디스크·연골·힘줄처럼 '아픈 곳'을 따뜻한 색으로 짚는다.
+ */
+.ill { display: block; color: var(--accent); overflow: visible; }
+/* 크기와 상관없이 선 굵기를 화면 기준으로 고정 — 작은 그림이 실처럼 가늘어지지 않게 */
+.ill :is(path, rect, circle, ellipse, line) { vector-effect: non-scaling-stroke; stroke-width: 1.6px; }
+.ill .acc { stroke-width: 2.2px; }
+.ill-lg :is(path, rect, circle, ellipse, line) { stroke-width: 2.2px; }
+.ill-lg .acc { stroke-width: 3px; }
+.ill .acc { stroke: color-mix(in srgb, var(--accent) 35%, #C2633A); }
+.ill-sm { width: 40px; height: 40px; }
+.ill-md { width: 72px; height: 72px; margin-bottom: 16px; }
+.ill-lg { width: 100%; height: 100%; }
+.phd-in { display: grid; grid-template-columns: 1fr 220px; gap: 48px; align-items: end; }
+.phd:not(.has-ill) .phd-in { grid-template-columns: 1fr; }
+.phd-ill { width: 220px; height: 220px; margin-bottom: -24px; }
+.cat-ill { width: 64px; height: 64px; position: absolute; right: 18px; top: 18px; transition: color .3s; }
+.cats a:hover .cat-ill, .cats a:focus-visible .cat-ill { color: #fff; }
+.cats a:hover .ill .acc { stroke: #fff; }
+.L-b .cat-no { display: none; }
+.L-b .cat-ill { position: static; width: 52px; height: 52px; }
+
+/* ══════════════ 상단 '진료 과목' 펼침 메뉴 (PC) ══════════════ */
+.gnb-item { height: 100%; display: flex; align-items: center; }
+.mega { position: absolute; left: 0; right: 0; top: 100%; background: var(--surface); color: var(--ink);
+  border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); box-shadow: 0 40px 60px -40px rgba(10,20,22,.28);
+  opacity: 0; visibility: hidden; transform: translateY(-6px); transition: opacity .2s, transform .3s cubic-bezier(.2,.7,.1,1), visibility 0s .3s; }
+.gnb-item:hover .mega, .gnb-item:focus-within .mega { opacity: 1; visibility: visible; transform: none; transition: opacity .2s, transform .3s cubic-bezier(.2,.7,.1,1); }
+.mega-in { display: grid; grid-template-columns: repeat(5, 1fr); gap: 32px; padding-top: 36px; padding-bottom: 40px; }
+.mega-col .ill-sm { width: 44px; height: 44px; margin-bottom: 14px; }
+.mega-cat { display: block; margin-bottom: 10px; font-size: 17px; font-weight: 700; color: var(--ink); text-decoration: none; }
+.mega ul { list-style: none; margin: 0; padding: 0; }
+.mega li a { display: block; padding: 6px 0; font-size: 15px; color: var(--muted); text-decoration: none; transition: color .15s, transform .2s; }
+.mega li a:hover, .mega-cat:hover { color: var(--accent); }
+.mega li a:hover { transform: translateX(3px); }
+
+/* ══════════════ 진료 시간: 오늘 줄 ══════════════ */
+.hours tr.today th, .hours tr.today td { color: var(--accent); font-weight: 700; }
+.hours tr.today th::after { content: "오늘"; display: inline-block; margin-left: 8px; padding: 1px 8px; font-size: 12px; font-weight: 700;
+  color: #fff; background: var(--accent); border-radius: 999px; vertical-align: 2px; }
+.ft .hours tr.today th, .ft .hours tr.today td { color: #fff; }
+.ft .hours tr.today th::after { background: #9FD8CB; color: var(--ink); }
+
+/* ══════════════ 진료 상세: 치료 순서 시간선 ══════════════ */
+.tx { position: relative; padding-left: 40px; }
+.tx::before { content: ""; position: absolute; left: 9px; top: 32px; bottom: 32px; width: 1px; background: var(--line); }
+.tx li { position: relative; }
+.tx li::before { content: ""; position: absolute; left: -40px; top: 26px; width: 19px; height: 19px; border-radius: 50%;
+  border: 1.5px solid var(--accent); background: var(--bg); transition: background .5s var(--d, 0ms); }
+.tx li.in::before, html:not(.motion) .tx li::before { background: var(--accent); box-shadow: inset 0 0 0 4px var(--bg); }
+
+/* ══════════════ 이용 안내: 진료 순서 ══════════════ */
+.flow { list-style: none; margin: 0; padding: 0; position: relative; display: grid; grid-template-columns: repeat(6, 1fr); gap: 28px; }
+.flow::before { content: ""; position: absolute; left: 22px; right: calc((100% - 140px) / 6 - 22px); top: 22px; height: 1px; background: var(--accent);
+  transform: scaleX(0); transform-origin: left; transition: transform 1.8s cubic-bezier(.6,0,.2,1); }
+.flow.in::before, html:not(.motion) .flow::before { transform: scaleX(1); }
+.flow-dot { position: relative; display: grid; place-items: center; width: 44px; height: 44px; margin-bottom: 24px; border-radius: 50%;
+  border: 1.5px solid var(--accent); background: var(--surface); color: var(--accent); font-weight: 700; font-variant-numeric: tabular-nums;
+  transition: background .4s calc(var(--n) * .25s), color .4s calc(var(--n) * .25s); }
+.flow.in .flow-dot, html:not(.motion) .flow-dot { background: var(--accent); color: #fff; }
+.flow h3 { font-size: 19px; margin-bottom: 8px; }
+.flow p { font-size: 15px; color: var(--muted); }
+.bring { margin: 0; border-top: 1px solid var(--ink); }
+.bring div { display: grid; grid-template-columns: 150px 1fr; gap: 16px; padding: 20px 0; border-bottom: 1px solid var(--line); }
+.bring dt { font-weight: 700; color: var(--accent); }
+.bring dd { margin: 0; }
+.notes { list-style: none; margin: 0 0 40px; padding: 0; border-top: 1px solid var(--ink); }
+.notes li { position: relative; padding: 16px 0 16px 28px; border-bottom: 1px solid var(--line); }
+.notes li::before { content: ""; position: absolute; left: 4px; top: 27px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+.mini-h { font-size: 18px; margin-bottom: 8px; }
+
 /* ══════════════ 움직임 (동작 줄이기를 켜지 않은 사람에게만) ══════════════ */
 @keyframes lineUp { from { transform: translateY(105%); } to { transform: none; } }
 @keyframes fadeUp { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
@@ -417,6 +488,38 @@ a:hover .fig img { transform: scale(1.03); }
 .motion [data-state="on"] .q-k::before, .motion [data-state="on"] i { animation: pulse 2s infinite; }
 .motion .rv { opacity: 0; transform: translateY(28px); transition: opacity .9s cubic-bezier(.2,.7,.1,1) var(--d, 0ms), transform .9s cubic-bezier(.2,.7,.1,1) var(--d, 0ms); }
 .motion .rv.in { opacity: 1; transform: none; }
+/* 제목: 화면에 들어오면 줄마다 아래에서 올라온다 */
+.motion .hl .ln { overflow: hidden; padding-bottom: .08em; margin-bottom: -.08em; }
+.motion .hl .ln > span { display: inline-block; transform: translateY(108%); transition: transform 1s cubic-bezier(.2,.7,.1,1) calc(.08s + var(--i) * .11s); }
+.motion .hl.in .ln > span, .motion .in .hl .ln > span { transform: none; }
+/* 사진: 바탕색 막이 위로 걷히듯 열린다.
+ * (사진 자체를 clip-path 로 가리면 브라우저가 '화면에 안 보인다'고 판단해 열림 신호가 오지 않는다 — 실제로 그랬다.
+ *  그래서 사진은 그대로 두고, 그 위에 덮은 막을 걷는다.) */
+.motion .rv-img { position: relative; }
+.motion .rv-img::after { content: ""; position: absolute; inset: 0; z-index: 2; background: var(--curtain, var(--bg));
+  transform-origin: top; transition: transform 1.3s cubic-bezier(.7,0,.2,1); }
+.motion .rv-img.in::after { transform: scaleY(0); }
+.sec-alt { --curtain: var(--surface); }
+.motion .rv-img > * { transform: scale(1.12); transition: transform 1.8s cubic-bezier(.2,.7,.1,1); }
+.motion .rv-img.in > * { transform: none; }
+/* 선 그림: 선이 그어진다 */
+.motion .ill :is(path, rect, circle, ellipse, line) { stroke-dasharray: 1; stroke-dashoffset: 1; transition: stroke-dashoffset 1.4s cubic-bezier(.6,0,.2,1); }
+.motion .ill.in :is(path, rect, circle, ellipse, line) { stroke-dashoffset: 0; }
+/* 펼침 메뉴: 과목이 왼쪽부터 차례로 */
+.motion .gnb-item:is(:hover, :focus-within) .mega-col { animation: fadeUp .45s cubic-bezier(.2,.7,.1,1) both; }
+.motion .mega-col:nth-child(2) { animation-delay: .04s; } .motion .mega-col:nth-child(3) { animation-delay: .08s; }
+.motion .mega-col:nth-child(4) { animation-delay: .12s; } .motion .mega-col:nth-child(5) { animation-delay: .16s; }
+.motion .gnb-item:is(:hover, :focus-within) .mega .ill :is(path, rect, circle) { stroke-dashoffset: 0; }
+/* 오늘 진료 표시가 살짝 튀어나온다 */
+@keyframes pop { 0% { transform: scale(.6); opacity: 0; } 70% { transform: scale(1.08); } 100% { transform: none; opacity: 1; } }
+.motion .hours tr.today th::after { animation: pop .5s .4s cubic-bezier(.2,.7,.1,1) both; }
+/* 첫 화면: 스크롤하면 사진이 조금 늦게 따라오고 글자는 옅어진다 (지원 브라우저에서만) */
+@keyframes drift { to { translate: 0 14%; } }
+@keyframes fadeAway { to { opacity: .25; translate: 0 -40px; } }
+@supports (animation-timeline: scroll()) {
+  .motion .hero-full .hero-media > :not(.hero-spec) { animation: heroZoom 2.4s cubic-bezier(.2,.7,.1,1) both, drift linear both; animation-timeline: auto, scroll(root); animation-range: normal, 0 100vh; }
+  .motion .hero-full .hero-in { animation: fadeAway linear both; animation-timeline: scroll(root); animation-range: 10vh 80vh; }
+}
 .motion .quick-in { opacity: 0; animation: fadeUp .9s .9s cubic-bezier(.2,.7,.1,1) forwards; }
 
 /* ── 태블릿 ── */
@@ -442,6 +545,8 @@ a:hover .fig img { transform: scale(1.03); }
   .motion .mnav[open] nav a:nth-child(4) { animation-delay: .12s; } .motion .mnav[open] nav a:nth-child(5) { animation-delay: .16s; }
   .motion .mnav[open] nav a:nth-child(6) { animation-delay: .2s; }
   .quick-in { grid-template-columns: 1fr 1fr; }
+  .flow { grid-template-columns: repeat(3, 1fr); row-gap: 48px; }
+  .flow::before { display: none; }
   .q:nth-child(3) { border-left: 0; }
   .q:nth-child(n+3) { border-top: 1px solid var(--line); }
   .cats { grid-template-columns: repeat(3, 1fr); }
@@ -468,6 +573,16 @@ a:hover .fig img { transform: scale(1.03); }
   .q small { display: none; }
   .q-today small { display: block; font-size: 13px; }
   .cat-no { margin-bottom: 14px; }
+  .phd-in { grid-template-columns: 1fr 88px; gap: 16px; align-items: start; }
+  .phd-ill { width: 88px; height: 88px; margin: 0; }
+  .cat-ill { width: 40px; height: 40px; right: 12px; top: 14px; }
+  .L-b .cat-ill { width: 36px; height: 36px; grid-row: 1 / span 2; }
+  .flow { grid-template-columns: 1fr; row-gap: 0; }
+  .flow::before { display: block; left: 22px; right: auto; top: 22px; bottom: 22px; width: 1px; height: auto; transform: scaleY(0); transform-origin: top; }
+  .flow.in::before { transform: scaleY(1); }
+  .flow li { display: grid; grid-template-columns: 44px 1fr; column-gap: 18px; padding-bottom: 28px; }
+  .flow-dot { grid-row: 1 / span 2; margin: 0; }
+  .bring div { grid-template-columns: 1fr; gap: 4px; }
   .fees { font-size: 15px; }
   .fees th, .fees td { padding: 12px 8px; }
   .fees thead th:last-child, .fees td:last-child { display: none; }

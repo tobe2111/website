@@ -10,18 +10,31 @@
 
   // ── 1. 스크롤하면 구역이 차례로 떠오른다 ──
   // 같은 줄에 놓인 형제들은 조금씩 늦게(계단식) 나와 눈이 왼쪽→오른쪽으로 따라가게 한다.
-  const REVEAL = ".sec-hd, .steps li, .cats li, .doc-hero > *, .visit > *, .notices li, .tgroup, .tlist li, .art-body > *, .art-body section > *, .cta-in > *, .phd .wrap > *, .gallery figure, .doc, .two > *, .map, .map-links, .form, .related";
+  const REVEAL = ".flow, .bring > div, .notes li, .tx li, .sec-hd, .steps li, .cats li, .doc-hero > *, .visit > *, .notices li, .tgroup, .tlist li, .art-body > *, .art-body section > *, .cta-in > *, .phd .wrap > *, .gallery figure, .doc, .two > *, .map, .map-links, .form, .related";
   if (!calm && "IntersectionObserver" in window) {
     const io = new IntersectionObserver((es) => es.forEach((e) => {
       if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); }
     }), { rootMargin: "0px 0px -8% 0px", threshold: 0.08 });
     document.querySelectorAll(REVEAL).forEach((el) => {
-      if (el.closest(".hero")) return;
+      if (el.closest(".hero") || el.classList.contains("fig")) return;
       const sib = el.parentElement ? [...el.parentElement.children].indexOf(el) : 0;
       el.style.setProperty("--d", `${Math.min(sib, 5) * 70}ms`);
       el.classList.add("rv");
       io.observe(el);
     });
+  }
+
+  // ── 1-2. 사진은 막이 걷히듯, 선 그림은 선이 그어지듯, 제목은 줄마다 ──
+  if (!calm && "IntersectionObserver" in window) {
+    const io2 = new IntersectionObserver((es) => es.forEach((e) => {
+      if (e.isIntersecting) { e.target.classList.add("in"); io2.unobserve(e.target); }
+    }), { rootMargin: "0px 0px -6% 0px", threshold: 0.12 });
+    document.querySelectorAll(".fig:not(.hero-fig)").forEach((el) => { el.classList.add("rv-img"); io2.observe(el); });
+    document.querySelectorAll(".ill:not(.mega .ill)").forEach((el) => {
+      el.querySelectorAll("path, rect, circle, ellipse, line").forEach((p, i) => { p.style.transitionDelay = `${120 + i * 70}ms`; });
+      io2.observe(el);
+    });
+    document.querySelectorAll(".hl").forEach((el) => io2.observe(el)); // 떠오르는 상자 밖에 있는 제목도 빠짐없이
   }
 
   // ── 2. 머리: 내려가면 숨고, 올라오면 나타난다. 첫 화면 위에서는 투명하다 ──
@@ -79,6 +92,12 @@
     else if (lunch && min(s.close) > min(lunch[2]) && now >= min(lunch[1]) && now < min(lunch[2])) { main = "점심시간입니다"; sub = `${lunch[2]}에 다시 진료합니다`; state = "soon"; }
     else if (now < min(s.close)) { main = "지금 진료 중"; sub = `오늘 ${s.close}까지${s.note ? ` · ${s.note}` : ""}`; state = "on"; }
     else { main = "오늘 진료가 끝났습니다"; sub = next(); state = "off"; }
+    // 진료 시간 표에서 오늘 줄을 짚는다 — 같은 요일이 두 줄에 걸치면(평일 + 수요일 야간) 늦게 끝나는 줄
+    document.querySelectorAll(".hours").forEach((tb) => {
+      const rows = [...tb.querySelectorAll("tr[data-days]")].filter((r) => r.dataset.days.split(" ").includes(todayCode));
+      const best = rows.sort((a, b) => min(b.dataset.close) - min(a.dataset.close))[0];
+      if (best) best.classList.add("today");
+    });
     document.querySelectorAll("[data-today]").forEach((el) => {
       el.dataset.state = state;
       el.querySelector("[data-today-text]").textContent = main;

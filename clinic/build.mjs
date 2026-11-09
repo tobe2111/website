@@ -15,6 +15,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { lintTree } from "./lib/adlint.mjs";
 import { optimizeMedia } from "./lib/media.mjs";
+import { illust } from "./lib/illust.mjs";
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 
@@ -22,6 +23,8 @@ const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const br = (s) => esc(s).replace(/\n/g, "<br />");
 const paras = (s) => String(s || "").split(/\n{2,}/).map((p) => `<p>${br(p.trim())}</p>`).join("");
+// 제목을 줄마다 감싼다 — 화면에 들어올 때 한 줄씩 아래에서 올라온다(동작 줄이기면 그냥 보인다)
+const lns = (t) => String(t).split("\n").map((l, i) => `<span class="ln" style="--i:${i}"><span>${esc(l)}</span></span>`).join("");
 const telHref = (p) => "tel:" + String(p || "").replace(/[^0-9+]/g, "");
 const ld = (obj) => `<script type="application/ld+json">${JSON.stringify(obj).replace(/</g, "\\u003c")}</script>`;
 const DAY = { Mo: "Monday", Tu: "Tuesday", We: "Wednesday", Th: "Thursday", Fr: "Friday", Sa: "Saturday", Su: "Sunday" };
@@ -82,6 +85,7 @@ const NAV = [
   ["/about/", "병원 소개"],
   ["/doctors/", "의료진"],
   ["/treatments/", "진료 과목"],
+  ["/guide/", "이용 안내"],
   ["/location/", "오시는 길"],
   ["/notice/", "공지사항"],
 ];
@@ -94,7 +98,16 @@ function layout(ctx, { path: p, title, description, body, jsonLd = [], ogImage =
   const ogKey = p === "/" ? "home" : p.replace(/^\/|\/$/g, "").replace(/\//g, "-");
   if (ctx.ogPlan) ctx.ogPlan.push({ key: ogKey, path: p, title: p === "/" ? site.tagline : title });
   const og = ogImage || (ctx.og ? `/og/${ogKey}.png` : "") || site.ogImage || "";
-  const navHtml = NAV.map(([href, label]) => `<a href="${href}"${p.startsWith(href) ? ' aria-current="page"' : ""}>${label}</a>`).join("");
+  const cur = (href) => (p.startsWith(href) ? ' aria-current="page"' : "");
+  const navHtml = NAV.map(([href, label]) => `<a href="${href}"${cur(href)}>${label}</a>`).join("");
+  // PC 상단 메뉴의 '진료 과목'은 올리면 과목별 진료가 펼쳐진다 — 병원 홈페이지에서 가장 많이 찾는 길이라 한 번에 닿게
+  const mega = `<div class="mega"><div class="wrap mega-in">${site.categories.map((c) => {
+    const list = ctx.treatments.filter((t) => t.category === c.id);
+    return list.length ? `<div class="mega-col">${illust(c.id, "ill-sm")}<a class="mega-cat" href="/treatments/#${c.id}">${esc(c.name)}</a><ul>${list.map((t) => `<li><a href="/treatments/${t.slug}/">${esc(t.name)}</a></li>`).join("")}</ul></div>` : "";
+  }).join("")}</div></div>`;
+  const gnbHtml = NAV.map(([href, label]) => href === "/treatments/"
+    ? `<div class="gnb-item"><a class="gl" href="${href}"${cur(href)}>${label}</a>${mega}</div>`
+    : `<a class="gl" href="${href}"${cur(href)}>${label}</a>`).join("");
   return `<!doctype html>
 <html lang="ko">
 <head>
@@ -127,7 +140,7 @@ ${extraHead}
 <header class="hd${over ? " hd-over" : ""}">
   <div class="wrap hd-in">
     <a class="logo" href="/" aria-label="${esc(site.name)} 홈">${site.logo ? `<img src="${esc(site.logo)}" alt="" />` : ""}<span>${esc(site.name)}</span></a>
-    <nav class="gnb" aria-label="주 메뉴">${navHtml}</nav>
+    <nav class="gnb" aria-label="주 메뉴">${gnbHtml}</nav>
     <div class="hd-act">
       <a class="hd-tel" href="${telHref(site.phone)}">${esc(site.phone)}</a>
       <a class="btn btn-sm" href="/reservation/">상담 예약</a>
@@ -154,7 +167,7 @@ ${footer(ctx)}
 }
 
 function hoursTable(site) {
-  const rows = site.hours.map((h) => `<tr><th scope="row">${esc(h.label)}</th><td>${esc(h.open)} – ${esc(h.close)}${h.note ? ` <em>${esc(h.note)}</em>` : ""}</td></tr>`).join("");
+  const rows = site.hours.map((h) => `<tr data-days="${h.days.join(" ")}" data-close="${esc(h.close)}"><th scope="row">${esc(h.label)}</th><td>${esc(h.open)} – ${esc(h.close)}${h.note ? ` <em>${esc(h.note)}</em>` : ""}</td></tr>`).join("");
   return `<table class="hours"><tbody>${rows}${site.lunch ? `<tr><th scope="row">점심시간</th><td>${esc(site.lunch)}</td></tr>` : ""}</tbody></table>
   ${site.closed ? `<p class="hours-off">${esc(site.closed)}</p>` : ""}`;
 }
@@ -177,11 +190,12 @@ function footer({ site }) {
 </footer>`;
 }
 
-function pageHead({ eyebrow, title, lead, crumbs = [] }) {
+function pageHead({ eyebrow, title, lead, crumbs = [], ill = "" }) {
   const c = crumbs.length
     ? `<nav class="crumb" aria-label="현재 위치"><a href="/">홈</a>${crumbs.map(([h, l]) => (h ? `<a href="${h}">${esc(l)}</a>` : `<span aria-current="page">${esc(l)}</span>`)).join("")}</nav>`
     : "";
-  return `<section class="phd"><div class="wrap">${c}${eyebrow ? `<p class="eyebrow">${esc(eyebrow)}</p>` : ""}<h1>${br(title)}</h1>${lead ? `<p class="lead">${br(lead)}</p>` : ""}</div></section>`;
+  const art = ill ? illust(ill, "ill-lg") : "";
+  return `<section class="phd${art ? " has-ill" : ""}"><div class="wrap">${c}<div class="phd-in"><div>${eyebrow ? `<p class="eyebrow">${esc(eyebrow)}</p>` : ""}<h1 class="hl">${lns(title)}</h1>${lead ? `<p class="lead">${br(lead)}</p>` : ""}</div>${art ? `<div class="phd-ill">${art}</div>` : ""}</div></div></section>`;
 }
 
 function crumbLd(site, items) {
@@ -276,15 +290,15 @@ function home(ctx) {
   </div></section>`;
 
   const principles = `<section class="sec" id="first"><div class="wrap">
-    <div class="sec-hd"><p class="eyebrow">진료 원칙</p><h2>${esc(site.name)}는<br />이렇게 진료합니다</h2></div>
+    <div class="sec-hd"><p class="eyebrow">진료 원칙</p><h2 class="hl">${lns(`${site.name}는\n이렇게 진료합니다`)}</h2></div>
     <ol class="steps">${site.principles.map(([t, d], i) => `<li><span class="num">${String(i + 1).padStart(2, "0")}</span><h3>${esc(t)}</h3><p>${esc(d)}</p></li>`).join("")}</ol>
   </div></section>`;
 
   const cats = `<section class="sec sec-alt"><div class="wrap">
-    <div class="sec-hd row"><div><p class="eyebrow">진료 과목</p><h2>어디가 불편하신가요?</h2></div><a class="more" href="/treatments/">전체 보기</a></div>
+    <div class="sec-hd row"><div><p class="eyebrow">진료 과목</p><h2 class="hl">${lns("어디가 불편하신가요?")}</h2></div><a class="more" href="/treatments/">전체 보기</a></div>
     <ul class="cats">${site.categories.map((c) => {
       const list = treatments.filter((t) => t.category === c.id);
-      return `<li><a href="/treatments/#${c.id}"><span class="cat-no">${String(site.categories.indexOf(c) + 1).padStart(2, "0")}</span><h3>${esc(c.name)}</h3><p>${esc(c.lead)}</p><span class="cat-list">${list.map((t) => esc(t.name)).join(" · ")}</span><i class="cat-go" aria-hidden="true">→</i></a></li>`;
+      return `<li><a href="/treatments/#${c.id}"><span class="cat-no">${String(site.categories.indexOf(c) + 1).padStart(2, "0")}</span>${illust(c.id, "cat-ill")}<h3>${esc(c.name)}</h3><p>${esc(c.lead)}</p><span class="cat-list">${list.map((t) => esc(t.name)).join(" · ")}</span><i class="cat-go" aria-hidden="true">→</i></a></li>`;
     }).join("")}</ul>
   </div></section>`;
 
@@ -297,14 +311,14 @@ function home(ctx) {
   </div></section>` : "";
 
   const visit = `<section class="sec sec-alt"><div class="wrap visit">
-    <div><p class="eyebrow">진료 시간</p><h2>오늘 진료하나요?</h2>${hoursTable(site)}</div>
-    <div><p class="eyebrow">오시는 길</p><h2>${esc(site.address.locality)}에 있습니다</h2><p class="addr">${esc(site.address.full)}</p>
+    <div><p class="eyebrow">진료 시간</p><h2 class="hl">${lns("오늘 진료하나요?")}</h2>${hoursTable(site)}</div>
+    <div><p class="eyebrow">오시는 길</p><h2 class="hl">${lns(`${site.address.locality}에 있습니다`)}</h2><p class="addr">${esc(site.address.full)}</p>
       <dl class="transit">${site.transit.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl>
       <a class="more" href="/location/">지도 보기</a></div>
   </div></section>`;
 
   const news = notices.length ? `<section class="sec"><div class="wrap">
-    <div class="sec-hd row"><div><p class="eyebrow">공지사항</p><h2>병원 소식</h2></div><a class="more" href="/notice/">전체 보기</a></div>
+    <div class="sec-hd row"><div><p class="eyebrow">공지사항</p><h2 class="hl">${lns("병원 소식")}</h2></div><a class="more" href="/notice/">전체 보기</a></div>
     <ul class="notices">${notices.slice(0, 3).map((n) => `<li><a href="/notice/${n.slug}/"><time datetime="${n.date}">${n.date.replace(/-/g, ".")}</time><span>${esc(n.title)}</span></a></li>`).join("")}</ul>
   </div></section>` : "";
 
@@ -323,10 +337,10 @@ function about(ctx) {
       ${figure({ ...site.doctors[0]?.photo, alt: "원장 사진" }, { ratio: "4/5" })}
     </div></section>
     <section class="sec sec-alt"><div class="wrap">
-      <div class="sec-hd"><p class="eyebrow">진료 원칙</p><h2>네 가지를 지킵니다</h2></div>
+      <div class="sec-hd"><p class="eyebrow">진료 원칙</p><h2 class="hl">${lns("네 가지를 지킵니다")}</h2></div>
       <ol class="steps">${site.principles.map(([t, d], i) => `<li><span class="num">${String(i + 1).padStart(2, "0")}</span><h3>${esc(t)}</h3><p>${esc(d)}</p></li>`).join("")}</ol>
     </div></section>
-    ${site.gallery?.length ? `<section class="sec"><div class="wrap"><div class="sec-hd"><p class="eyebrow">둘러보기</p><h2>병원 공간</h2></div>
+    ${site.gallery?.length ? `<section class="sec"><div class="wrap"><div class="sec-hd"><p class="eyebrow">둘러보기</p><h2 class="hl">${lns("병원 공간")}</h2></div>
       <div class="gallery">${site.gallery.map((g) => `<figure>${figure(g, { ratio: "3/2" })}<figcaption>${esc(g.alt)}</figcaption></figure>`).join("")}</div></div></section>` : ""}
     ${cta(site)}`;
   return layout(ctx, { path: "/about/", title: "병원 소개", description: `${site.name} 소개 — ${site.tagline}`, body,
@@ -353,7 +367,7 @@ function treatmentIndex(ctx) {
     `<section class="sec"><div class="wrap">${site.categories.map((c) => {
       const list = treatments.filter((t) => t.category === c.id);
       if (!list.length) return "";
-      return `<div class="tgroup" id="${c.id}"><div class="tgroup-hd"><h2>${esc(c.name)}</h2><p>${esc(c.lead)}</p></div>
+      return `<div class="tgroup" id="${c.id}"><div class="tgroup-hd">${illust(c.id, "ill-md")}<h2>${esc(c.name)}</h2><p>${esc(c.lead)}</p></div>
         <ul class="tlist">${list.map((t) => `<li><a href="/treatments/${t.slug}/"><h3>${esc(t.name)}${t.also ? `<small>${esc(t.also)}</small>` : ""}</h3><p>${esc(t.summary)}</p><span class="arrow" aria-hidden="true">→</span></a></li>`).join("")}</ul></div>`;
     }).join("")}</div></section>${cta(site)}`;
   return layout(ctx, { path: "/treatments/", title: "진료 과목", description: `${site.name} 진료 과목 — ${treatments.map((t) => t.name).join(", ")}`, body,
@@ -367,7 +381,7 @@ function treatmentPage(ctx, t) {
   const p = `/treatments/${t.slug}/`;
   const toc = [["symptoms", "이런 증상이 있다면"], ["causes", "원인"], ["diagnosis", "진단"], ["treatment", "치료"], ["recovery", "회복과 주의사항"], ["faq", "자주 묻는 질문"]];
   const related = treatments.filter((x) => x.category === t.category && x.slug !== t.slug);
-  const body = pageHead({ eyebrow: cat.name, title: t.name + (t.also ? ` (${t.also})` : ""), lead: t.summary, crumbs: [["/treatments/", "진료 과목"], [null, t.name]] }) +
+  const body = pageHead({ eyebrow: cat.name, title: t.name + (t.also ? `\n(${t.also})` : ""), lead: t.summary, crumbs: [["/treatments/", "진료 과목"], [null, t.name]], ill: t.category }) +
     `<div class="wrap art">
       <aside class="toc" aria-label="이 페이지 목차"><p>목차</p><ol>${toc.map(([id, l]) => `<li><a href="#${id}">${l}</a></li>`).join("")}</ol>
         <a class="btn btn-sm" href="/reservation/">상담 예약</a></aside>
@@ -399,6 +413,47 @@ function treatmentPage(ctx, t) {
     mainEntity: t.faq.map(([q, a]) => ({ "@type": "Question", name: q, acceptedAnswer: { "@type": "Answer", text: a } })) };
   return layout(ctx, { path: p, title: t.name + (t.also ? ` (${t.also})` : ""), description: `${t.summary} ${site.name}에서 증상·원인·치료 방법을 안내합니다.`.slice(0, 155),
     body, jsonLd: [page, faq, crumbLd(site, [["/treatments/", "진료 과목"], [p, t.name]])] });
+}
+
+// 이용 안내(첫 방문) — 처음 오는 환자가 가장 많이 묻는 것: 무엇을 가져가나, 가면 무엇을 하나.
+// 원고에 guide 가 없으면 어느 정형외과에나 맞는 기본 안내를 쓴다. 병원마다 다른 것(접수 마감 등)은 【확인 필요】로 둔다.
+const DEFAULT_GUIDE = {
+  steps: [
+    ["접수", "신분증을 보여주시고, 처음 오셨다면 간단한 문진표를 작성합니다."],
+    ["문진 · 진찰", "언제부터, 어떤 자세에서 아픈지 여쭙고 직접 진찰합니다."],
+    ["검사", "필요한 경우에만 엑스레이·초음파 등 검사를 합니다."],
+    ["진단 · 설명", "검사 결과를 함께 보며 원인과 치료 방법·기간·비용을 설명드립니다."],
+    ["치료", "상태에 맞는 치료를 진행합니다."],
+    ["수납 · 다음 예약", "필요하면 다음 진료를 예약하고, 서류가 필요하면 이때 말씀해 주세요."],
+  ],
+  bring: [
+    ["신분증", "건강보험으로 진료받을 때 본인 확인을 합니다(2024년 5월부터). 모바일 신분증·모바일 건강보험증도 됩니다."],
+    ["다른 병원 검사 결과", "엑스레이·MRI 영상(CD)이나 소견서가 있으면 가져오시면 검사를 줄일 수 있습니다."],
+    ["복용 중인 약", "약 이름을 적어 오시거나 약 봉투를 사진으로 찍어 오세요. 혈액을 묽게 하는 약은 꼭 알려 주세요."],
+  ],
+  notes: [
+    "예약하신 분을 먼저 진료하며, 예약 없이 오셔도 진료받으실 수 있습니다.",
+    "【확인 필요】 접수 마감 시간 (예: 진료 종료 30분 전)",
+    "실손보험 청구 서류(진료비 영수증·세부내역서 등)는 수납할 때 요청해 주세요.",
+  ],
+};
+function guide(ctx) {
+  const { site } = ctx;
+  const G = { ...DEFAULT_GUIDE, ...(site.guide || {}) };
+  const body = pageHead({ eyebrow: "이용 안내", title: "처음 오시는 분께", lead: "접수부터 진료가 끝날 때까지의 순서와, 오실 때 챙기시면 좋은 것을 정리했습니다.", crumbs: [[null, "이용 안내"]] }) +
+    `<section class="sec"><div class="wrap">
+      <div class="sec-hd"><p class="eyebrow">진료 순서</p><h2 class="hl">${lns("이렇게 진행됩니다")}</h2></div>
+      <ol class="flow">${G.steps.map(([t, d], i) => `<li style="--n:${i}"><span class="flow-dot">${i + 1}</span><h3>${esc(t)}</h3><p>${esc(d)}</p></li>`).join("")}</ol>
+    </div></section>
+    <section class="sec sec-alt"><div class="wrap two">
+      <div><div class="sec-hd"><p class="eyebrow">준비물</p><h2 class="hl">${lns("오실 때 챙겨 주세요")}</h2></div>
+        <dl class="bring">${G.bring.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl></div>
+      <div><div class="sec-hd"><p class="eyebrow">알아두실 점</p><h2 class="hl">${lns("진료 전에 확인하세요")}</h2></div>
+        <ul class="notes">${G.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul>
+        <h3 class="mini-h">진료 시간</h3>${hoursTable(site)}</div>
+    </div></section>${cta(site)}`;
+  return layout(ctx, { path: "/guide/", title: "이용 안내", description: `${site.name} 이용 안내 — 처음 오시는 분을 위한 진료 순서와 준비물(신분증 등)을 안내합니다.`, body,
+    jsonLd: [crumbLd(site, [["/guide/", "이용 안내"]])] });
 }
 
 function location(ctx) {
@@ -552,6 +607,7 @@ export function build(id, { outDir, og = false } = {}) {
   pages.set("/doctors/", doctors(ctx));
   pages.set("/treatments/", treatmentIndex(ctx));
   for (const t of data.treatments) pages.set(`/treatments/${t.slug}/`, treatmentPage(ctx, t));
+  pages.set("/guide/", guide(ctx));
   pages.set("/location/", location(ctx));
   pages.set("/notice/", noticeIndex(ctx));
   for (const n of data.notices) pages.set(`/notice/${n.slug}/`, noticePage(ctx, n));
