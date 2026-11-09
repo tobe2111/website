@@ -4,9 +4,14 @@
 서버·데이터베이스가 없어서 유지비가 들지 않고, 고장 날 곳도 없습니다.
 
 ```bash
-node clinic/build.mjs cheonsaem      # → clinic/dist/cheonsaem/
-node --test clinic/test/*.test.mjs   # 검사
+node clinic/build.mjs cheonsaem        # 사이트 만들기 → clinic/dist/cheonsaem/
+node clinic/scripts/og.mjs cheonsaem   # 위 + 페이지마다 공유 썸네일(카톡 미리보기) — 공개할 때는 이걸로
+node --test clinic/test/*.test.mjs     # 빌더 검사
+node clinic/scripts/a11y.mjs cheonsaem # 접근성 실측 (휴대폰·PC·200% 확대)
 ```
+
+`clinic/` 아래를 고쳐 올리면 GitHub 이 위 검사를 전부 자동으로 돌리고(`.github/workflows/clinic.yml`),
+완성된 사이트를 Actions 화면의 '결과물(clinic-sites)'로 올려 둡니다. 내려받아 열어 보면 됩니다.
 
 ## 병원 하나 추가하기
 
@@ -42,6 +47,10 @@ node --test clinic/test/*.test.mjs   # 검사
 
 ## 빌드가 대신 지켜주는 것
 
+- **사진 자동 압축**: `media/`에 넣은 사진을 휴대폰·태블릿·PC 폭(640·1280·1920·2560px)의 WebP 로 줄이고, 화면에 맞는 것만 받게 합니다.
+- **공유 썸네일**: `og.mjs`로 빌드하면 페이지마다 병원 이름·제목이 들어간 1200×630 그림을 만듭니다.
+- **비급여 진료비 페이지**: `site.json`의 `fees`에 항목을 적으면 표로 만듭니다(의료법상 홈페이지가 있으면 게시해야 함).
+
 - **의료광고 금지 표현**: 원고에 "최고·완치·후기·전후 사진·할인" 같은 말이 있으면 빌드가 멈추고, 어느 칸인지 알려줍니다. (`lib/adlint.mjs`)
 - **공개 전에 채울 자리**: `【확인 필요】`, `○○`, `000-0000` 같은 자리 표시가 남아 있으면 빌드할 때 목록으로 보여줍니다.
 - **검색 노출**: 페이지마다 다음을 자동으로 넣습니다.
@@ -52,7 +61,7 @@ node --test clinic/test/*.test.mjs   # 검사
 
 ## 아직 안 되는 것 (정직한 한계)
 
-- **온라인 상담 접수**: `site.json`의 `form.endpoint`가 비어 있으면 신청 단추가 잠기고 전화 예약으로 안내합니다. 접수를 받을 곳은 따로 연결해야 합니다.
 - **지도**: 네이버·카카오 지도로 넘어가는 링크만 있습니다. 화면 안에 넣는 지도는 주소가 확정된 뒤에 붙입니다.
 - **움직임**: 기기에서 '동작 줄이기'를 켠 분과 스크립트가 꺼진 화면에서는 모든 내용이 움직임 없이 처음부터 보입니다. 데이터 절약 모드에서는 첫 화면 영상을 틀지 않습니다.
-- **사진 자동 압축**: 받은 사진을 그대로 씁니다. 올리기 전에 규격표 크기로 맞춰 주세요.
+- **사진 자동 압축은 ffmpeg 가 있는 컴퓨터에서만**: 없으면 원본을 그대로 씁니다(GitHub 검사에서는 늘 깔고 돕니다).
+- **온라인 상담 접수**: 상인회 엔진의 랜딩 편집 화면에서 병원 홈페이지 주소를 등록하고, `form.endpoint`에 `https://<엔진 주소>/lead-in/<조직 주소>`를 적으면 켜집니다. 봇 방지(Turnstile)를 쓰면 `form.turnstileSiteKey`도 적고, Cloudflare 에서 그 사이트 키에 병원 도메인을 허용해야 합니다.

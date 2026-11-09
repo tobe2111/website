@@ -108,6 +108,20 @@
     update();
   }
 
+  // ── 5-2. 상담 신청 결과 — 접수 서버가 ?sent= 또는 ?err= 를 붙여 이 화면으로 돌려보낸다 ──
+  const msgEl = document.querySelector("[data-form-msg]");
+  if (msgEl) {
+    const q = new URLSearchParams(location.search);
+    const text = q.get("sent") || q.get("err");
+    if (text) {
+      msgEl.textContent = text;
+      msgEl.dataset.kind = q.has("err") ? "err" : "ok";
+      msgEl.hidden = false;
+      // 새로고침해도 같은 안내가 또 뜨지 않게 주소창의 꼬리를 지운다
+      history.replaceState(null, "", location.pathname + location.hash);
+    }
+  }
+
   // ── 6. 첫 화면 영상: 데이터 절약 모드이거나 동작 줄이기면 틀지 않고 첫 장면 사진만 둔다 ──
   const v = document.querySelector(".hero video");
   if (v) {

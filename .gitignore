@@ -20,3 +20,4 @@ node_modules/
 
 # 병원 홈페이지 빌드 결과물 (node clinic/build.mjs <병원>)
 /clinic/dist/
+/clinic/.cache/

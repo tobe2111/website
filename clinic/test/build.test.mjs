@@ -135,3 +135,32 @@ test("한 병원 사이트에 다른 병원 이름이 섞이지 않는다", () =
 test("견적서 기준 25페이지를 채운다", () => {
   assert.ok(pages.length >= 25, `지금 ${pages.length}페이지`);
 });
+
+// 사진 자동 압축은 ffmpeg 가 있는 컴퓨터에서만 돈다. 없으면 이 검사는 건너뛴다(빌드는 원본으로 계속된다).
+import { hasFfmpeg } from "../lib/media.mjs";
+import { execFileSync } from "node:child_process";
+test("사진을 넣으면 휴대폰·PC 크기의 WebP 를 만들고, 화면이 맞는 것을 고르게 한다", { skip: !hasFfmpeg() && "ffmpeg 없음" }, () => {
+  const sites = path.join(ROOT, "sites");
+  const id = "__media_probe";
+  const out = mkdtempSync(path.join(tmpdir(), "clinic-media-"));
+  try {
+    cpSync(path.join(sites, "cheonsaem"), path.join(sites, id), { recursive: true });
+    mkdirSync(path.join(sites, id, "media"), { recursive: true });
+    execFileSync("ffmpeg", ["-v", "error", "-f", "lavfi", "-i", "testsrc=size=2000x1000", "-frames:v", "1", path.join(sites, id, "media", "hero.jpg")]);
+    const f = path.join(sites, id, "site.json");
+    const s = JSON.parse(readFileSync(f, "utf8"));
+    s.hero.image.src = "/media/hero.jpg";
+    writeFileSync(f, JSON.stringify(s));
+    build(id, { outDir: out });
+    for (const w of [640, 1280, 1920]) assert.ok(existsSync(path.join(out, "media", `hero-${w}.webp`)), `${w}px`);
+    assert.ok(!existsSync(path.join(out, "media", "hero-2560.webp")), "원본(2000px)보다 큰 폭은 만들지 않는다");
+    assert.ok(statSync(path.join(out, "media", "hero-640.webp")).size < statSync(path.join(out, "media", "hero.jpg")).size, "작은 폭이 원본보다 가볍다");
+    const h = readFileSync(path.join(out, "index.html"), "utf8");
+    assert.match(h, /type="image\/webp" srcset="\/media\/hero-640\.webp 640w, \/media\/hero-1280\.webp 1280w/);
+    assert.match(h, /<img src="\/media\/hero\.jpg"[^>]*width="2000" height="1000"/, "크기를 적어 두어 화면이 덜컥이지 않는다");
+  } finally {
+    rmSync(path.join(sites, id), { recursive: true, force: true });
+    rmSync(path.join(ROOT, ".cache", id), { recursive: true, force: true });
+    rmSync(out, { recursive: true, force: true });
+  }
+});

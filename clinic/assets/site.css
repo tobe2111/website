@@ -48,7 +48,7 @@ p { margin: 0 0 1em; }
 .hd { --hd-h: 72px; transition: transform .35s cubic-bezier(.2,.7,.1,1), background .3s, border-color .3s, color .3s; position: sticky; top: 0; z-index: 50; background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--line); }
 .hd-in { display: flex; align-items: center; gap: 32px; height: 72px; }
-.logo { display: flex; align-items: center; gap: 10px; text-decoration: none; font-weight: 700; font-size: 20px; letter-spacing: -0.03em; }
+.logo { display: flex; align-items: center; gap: 10px; min-height: 44px; text-decoration: none; font-weight: 700; font-size: 20px; letter-spacing: -0.03em; }
 .logo img { height: 32px; width: auto; }
 .gnb { display: flex; gap: 4px; margin: 0 auto; }
 .gnb a { padding: 10px 14px; text-decoration: none; font-size: 16px; font-weight: 500; color: var(--muted); border-radius: var(--r); }
@@ -152,7 +152,7 @@ p { margin: 0 0 1em; }
 .phd h1 { font-size: clamp(32px, 4.4vw, 54px); letter-spacing: -0.04em; margin-bottom: 20px; }
 .phd .lead { margin: 0; }
 .crumb { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 40px; font-size: 14px; color: var(--muted); }
-.crumb a { text-decoration: none; }
+.crumb a { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; min-width: 44px; margin: -10px 0; text-decoration: none; }
 .crumb a:hover { color: var(--ink); }
 .crumb > * + *::before { content: "/"; margin-right: 8px; color: var(--line); }
 .prose { font-size: 18px; line-height: 1.85; }
@@ -237,7 +237,21 @@ p { margin: 0 0 1em; }
 .agree input { width: 22px; height: 22px; margin-top: 3px; flex: none; accent-color: var(--accent); }
 .agree small { display: block; color: var(--muted); font-size: 14px; margin-top: 4px; }
 .hp { position: absolute; left: -9999px; }
+.form-msg { padding: 14px 16px; border-radius: var(--r); font-size: 16px; font-weight: 600; }
+.form-msg[data-kind="ok"] { background: color-mix(in srgb, #23855A 10%, var(--surface)); color: #1B6B48; }
+.form-msg[data-kind="err"] { background: color-mix(in srgb, #A23B2A 8%, var(--surface)); color: #8A2F21; }
+.cf-turnstile { margin-bottom: 16px; }
 .form-off { padding: 14px 16px; background: color-mix(in srgb, var(--accent) 8%, var(--surface)); border-radius: var(--r); font-size: 15px; font-weight: 600; color: var(--accent); }
+
+/* ── 비급여 진료비 ── */
+.fee-link { padding-top: 24px; }
+.fees { width: 100%; border-collapse: collapse; font-size: 16px; margin-bottom: 32px; }
+.fees caption { text-align: left; font-weight: 700; padding-bottom: 12px; }
+.fees th, .fees td { padding: 14px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.fees thead th { border-bottom: 1px solid var(--ink); font-size: 14px; color: var(--muted); }
+.fees tbody th { font-weight: 600; background: var(--surface); }
+.fees .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fee-notes { margin: 0 0 24px; padding-left: 20px; color: var(--muted); font-size: 15px; }
 
 /* ── 바닥 ── */
 .ft { background: var(--ink); color: rgba(255,255,255,.78); padding: 72px 0 40px; font-size: 15px; }
@@ -246,9 +260,10 @@ p { margin: 0 0 1em; }
 .ft-brand strong { display: block; color: #fff; font-size: 20px; margin-bottom: 16px; }
 .ft h2 { font-size: 15px; color: #fff; margin-bottom: 8px; }
 .ft .hours th, .ft .hours td { font-size: 15px; padding: 8px 0; border-color: rgba(255,255,255,.14); }
+.ft .hours em { color: #9FD8CB; }
 .ft .hours-off { color: #F2B8A8; font-size: 15px; }
 .ft-nav { display: flex; flex-direction: column; gap: 4px; }
-.ft-nav a { text-decoration: none; padding: 6px 0; }
+.ft-nav a { display: flex; align-items: center; min-height: 44px; text-decoration: none; }
 .ft-note { padding-top: 28px; font-size: 13px; color: rgba(255,255,255,.62); }
 .dock { display: none; }
 
@@ -453,6 +468,9 @@ a:hover .fig img { transform: scale(1.03); }
   .q small { display: none; }
   .q-today small { display: block; font-size: 13px; }
   .cat-no { margin-bottom: 14px; }
+  .fees { font-size: 15px; }
+  .fees th, .fees td { padding: 12px 8px; }
+  .fees thead th:last-child, .fees td:last-child { display: none; }
   .hero-ed { padding-top: 40px; }
   .hero-ed h1 { font-size: clamp(38px, 11vw, 52px); margin-bottom: 24px; }
   .ed-row { grid-template-columns: 1fr; gap: 28px; padding-bottom: 40px; }

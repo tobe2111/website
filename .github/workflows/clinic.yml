@@ -1,0 +1,65 @@
+# 병원 홈페이지 검사 — clinic/ 아래가 바뀔 때마다 사람이 안 돌려도 돈다.
+#
+# 무엇을 보나:
+#   1) 빌더 검사 — 의료광고 금지 표현, 페이지마다 검색 정보, 사이트 안 링크, 사진 압축
+#   2) 모든 병원 사이트를 실제로 빌드 (금지 표현이 있으면 여기서 빨개진다)
+#   3) 접근성 실측 — 휴대폰·PC·200% 확대에서 글자 대비와 누르는 곳 크기
+#   4) 공유 썸네일까지 만든 완성본을 '결과물'로 올려 둔다 — Actions 화면에서 내려받아 바로 열어 볼 수 있다
+#
+# 상인회 엔진(cloudflare/)과는 따로 돈다. 병원 원고만 고쳤는데 엔진 검사를 기다릴 이유가 없다.
+
+name: 병원 홈페이지 검사
+
+on:
+  push:
+    paths: ["clinic/**", ".github/workflows/clinic.yml"]
+  pull_request:
+    paths: ["clinic/**", ".github/workflows/clinic.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: clinic-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  clinic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # 사진 압축은 ffmpeg 로 한다(npm 패키지를 들이지 않으려고). 없으면 압축 검사가 건너뛰어지므로 깔고 시작한다.
+      - name: ffmpeg 준비
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+
+      - name: 빌더 검사
+        run: node --test clinic/test/*.test.mjs
+
+      - name: 모든 병원 사이트 빌드
+        run: for d in clinic/sites/*/; do node clinic/build.mjs "$(basename "$d")"; done
+
+      # playwright 는 검사 도구일 뿐이라 package.json 에 넣지 않고 여기서만 전역 설치한다 (checks.yml 과 같은 방식)
+      - name: 크로미움 준비
+        run: |
+          npm i -g playwright
+          npx playwright install --with-deps chromium
+
+      - name: 접근성 실측 (WCAG AA)
+        run: node clinic/scripts/a11y.mjs $(ls clinic/sites)
+
+      - name: 공유 썸네일 만들기
+        run: for d in clinic/sites/*/; do node clinic/scripts/og.mjs "$(basename "$d")"; done
+
+      - name: 완성본 올리기 (내려받아 열어 보기용)
+        uses: actions/upload-artifact@v4
+        with:
+          name: clinic-sites
+          path: clinic/dist/
+          retention-days: 14

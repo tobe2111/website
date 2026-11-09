@@ -14,6 +14,7 @@ import { createHash } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { lintTree } from "./lib/adlint.mjs";
+import { optimizeMedia } from "./lib/media.mjs";
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 
@@ -25,15 +26,24 @@ const telHref = (p) => "tel:" + String(p || "").replace(/[^0-9+]/g, "");
 const ld = (obj) => `<script type="application/ld+json">${JSON.stringify(obj).replace(/</g, "\\u003c")}</script>`;
 const DAY = { Mo: "Monday", Tu: "Tuesday", We: "Wednesday", Th: "Thursday", Fr: "Friday", Sa: "Saturday", Su: "Sunday" };
 
+// 빌드 중 변환된 사진 목록 ("/media/a.jpg" → 폭별 WebP). build() 가 채운다.
+let MEDIA = new Map();
+// <img> 하나 — 변환본이 있으면 폭별 WebP 를 함께 내서 브라우저가 화면에 맞는 것만 받게 한다
+function img(src, alt, { eager = false, sizes = "(max-width: 720px) 100vw, 760px", mobile = "" } = {}) {
+  const m = MEDIA.get(src), mm = mobile ? MEDIA.get(mobile) : null;
+  const set = (x) => x.webp.map(([w, u]) => `${u} ${w}w`).join(", ");
+  const wh = m ? ` width="${m.w}" height="${m.h}"` : "";
+  const mob = mobile ? (mm ? `<source media="(max-width: 720px)" type="image/webp" srcset="${set(mm)}" sizes="100vw" />` : `<source media="(max-width: 720px)" srcset="${esc(mobile)}" />`) : "";
+  const web = m ? `<source type="image/webp" srcset="${set(m)}" sizes="${sizes}" />` : "";
+  return `<picture>${mob}${web}<img src="${esc(src)}" alt="${esc(alt)}"${wh} ${eager ? 'fetchpriority="high"' : 'loading="lazy"'} decoding="async" /></picture>`;
+}
+
 // 사진 자리. 사진이 있으면 그림을, 없으면 규격을 적은 빈 칸을 그린다 —
 // 시안을 본 병원이 "여기엔 이 크기 사진이 들어간다"를 바로 알게.
-function figure(img, { ratio = "3/2", className = "", eager = false, mobile = null } = {}) {
-  const alt = esc(img?.alt || "");
-  if (img?.src) {
-    const m = mobile?.src ? `<source media="(max-width: 720px)" srcset="${esc(mobile.src)}" />` : "";
-    return `<picture class="fig ${className}" style="aspect-ratio:${ratio}">${m}<img src="${esc(img.src)}" alt="${alt}" ${eager ? 'fetchpriority="high"' : 'loading="lazy"'} decoding="async" /></picture>`;
-  }
-  return `<div class="fig ph ${className}" style="aspect-ratio:${ratio}" role="img" aria-label="${alt || "사진 자리"}"><span>${esc(img?.spec || "사진")}${alt ? `<small>${alt}</small>` : ""}</span></div>`;
+function figure(pic, { ratio = "3/2", className = "", eager = false, mobile = null, sizes } = {}) {
+  const alt = esc(pic?.alt || "");
+  if (pic?.src) return `<div class="fig ${className}" style="aspect-ratio:${ratio}">${img(pic.src, pic.alt || "", { eager, mobile: mobile?.src, sizes })}</div>`;
+  return `<div class="fig ph ${className}" style="aspect-ratio:${ratio}" role="img" aria-label="${alt || "사진 자리"}"><span>${esc(pic?.spec || "사진")}${alt ? `<small>${alt}</small>` : ""}</span></div>`;
 }
 
 // ───────────────────────── 읽기 ─────────────────────────
@@ -76,11 +86,14 @@ const NAV = [
   ["/notice/", "공지사항"],
 ];
 
-function layout(ctx, { path: p, title, description, body, jsonLd = [], ogImage = "", over = false }) {
+function layout(ctx, { path: p, title, description, body, jsonLd = [], ogImage = "", over = false, extraHead = "" }) {
   const { site, assetV } = ctx;
   const url = site.siteUrl + p;
   const fullTitle = p === "/" ? `${site.name} | ${site.tagline}` : `${title} | ${site.name}`;
-  const og = ogImage || site.ogImage || "";
+  // 공유 썸네일: 페이지마다 만든 그림(ctx.og) > 원고에 지정한 그림 > 없음
+  const ogKey = p === "/" ? "home" : p.replace(/^\/|\/$/g, "").replace(/\//g, "-");
+  if (ctx.ogPlan) ctx.ogPlan.push({ key: ogKey, path: p, title: p === "/" ? site.tagline : title });
+  const og = ogImage || (ctx.og ? `/og/${ogKey}.png` : "") || site.ogImage || "";
   const navHtml = NAV.map(([href, label]) => `<a href="${href}"${p.startsWith(href) ? ' aria-current="page"' : ""}>${label}</a>`).join("");
   return `<!doctype html>
 <html lang="ko">
@@ -107,6 +120,7 @@ ${site.theme?.type === "serif" ? `<link rel="preconnect" href="https://fonts.gst
 <link rel="stylesheet" href="/assets/site.css?v=${assetV}" />
 ${themeStyle(site.theme)}
 ${jsonLd.map(ld).join("\n")}
+${extraHead}
 </head>
 <body class="${bodyClass(site.theme)}">
 <a class="skip" href="#main">본문 바로가기</a>
@@ -154,7 +168,7 @@ function footer({ site }) {
       ${site.bizInfo ? `<p class="ft-biz">${esc(site.bizInfo)}</p>` : ""}
     </div>
     <div class="ft-hours"><h2>진료 시간</h2>${hoursTable(site)}</div>
-    <nav class="ft-nav" aria-label="바닥 메뉴">${NAV.map(([h, l]) => `<a href="${h}">${l}</a>`).join("")}<a href="/privacy/"><b>개인정보처리방침</b></a></nav>
+    <nav class="ft-nav" aria-label="바닥 메뉴">${NAV.map(([h, l]) => `<a href="${h}">${l}</a>`).join("")}<a href="/fees/">비급여 진료비</a><a href="/privacy/"><b>개인정보처리방침</b></a></nav>
   </div>
   <div class="wrap ft-note">
     <p>이 홈페이지의 의료 정보는 이해를 돕기 위한 일반적인 안내이며, 진료와 진단을 대신하지 않습니다. 치료 방법과 경과는 개인에 따라 다를 수 있습니다.</p>
@@ -225,12 +239,10 @@ function home(ctx) {
     const v = h.video?.src
       ? `<video class="hero-v" muted loop playsinline autoplay preload="metadata"${h.video.poster ? ` poster="${esc(h.video.poster)}"` : ""} aria-hidden="true"><source src="${esc(h.video.src)}" type="video/mp4" /></video>`
       : "";
-    const img = h.image?.src
-      ? `<picture>${h.imageMobile?.src ? `<source media="(max-width: 720px)" srcset="${esc(h.imageMobile.src)}" />` : ""}<img src="${esc(h.image.src)}" alt="${esc(h.image.alt || "")}" fetchpriority="high" /></picture>`
-      : "";
-    const ph = !v && !img ? `<span class="hero-spec">${esc(h.image?.spec || "메인 배너")}${h.video ? ` · ${esc(h.video.spec || "메인 영상 1920×1080")}` : ""}</span>` : "";
+    const photo = h.image?.src ? img(h.image.src, h.image.alt || "", { eager: true, sizes: "100vw", mobile: h.imageMobile?.src }) : "";
+    const ph = !v && !photo ? `<span class="hero-spec">${esc(h.image?.spec || "메인 배너")}${h.video ? ` · ${esc(h.video.spec || "메인 영상 1920×1080")}` : ""}</span>` : "";
     hero = `<section class="hero hero-full">
-    <div class="hero-media${!v && !img ? " is-ph" : ""}">${v || img}${ph}</div>
+    <div class="hero-media${!v && !photo ? " is-ph" : ""}">${v || photo}${ph}</div>
     <div class="hero-veil" aria-hidden="true"></div>
     <div class="wrap hero-in">
       <p class="eyebrow">${esc(h.eyebrow)}</p>
@@ -247,7 +259,7 @@ function home(ctx) {
     <h1 class="hero-h">${lines}</h1>
     <div class="ed-row"><p class="lead">${esc(h.body)}</p>${act}</div>
   </div>
-  <div class="ed-media">${figure(h.image, { ratio: "2/1", className: "hero-fig", eager: true, mobile: h.imageMobile })}</div></section>`;
+  <div class="ed-media">${figure(h.image, { ratio: "2/1", className: "hero-fig", eager: true, mobile: h.imageMobile, sizes: "100vw" })}</div></section>`;
   } else {
     const heroImg = figure(h.image, { ratio: "1/1", className: "hero-fig", eager: true, mobile: h.imageMobile });
     hero = `<section class="hero hero-split"><div class="wrap hero-in">
@@ -337,6 +349,7 @@ function doctors(ctx) {
 function treatmentIndex(ctx) {
   const { site, treatments } = ctx;
   const body = pageHead({ eyebrow: "진료 과목", title: "증상으로 찾아보세요", lead: "각 페이지는 증상 · 원인 · 진단 · 치료 · 회복 순서로 정리했습니다.", crumbs: [[null, "진료 과목"]] }) +
+    `<div class="wrap fee-link"><a class="more" href="/fees/">비급여 진료비 보기</a></div>` +
     `<section class="sec"><div class="wrap">${site.categories.map((c) => {
       const list = treatments.filter((t) => t.category === c.id);
       if (!list.length) return "";
@@ -430,21 +443,48 @@ function reservation(ctx) {
     `<section class="sec"><div class="wrap two resv">
       <div class="resv-call"><p class="today-pill" data-today><i aria-hidden="true"></i><strong data-today-text>진료 시간 안내</strong> <small data-today-sub></small></p><h2>전화 예약</h2><a class="big-tel" href="${telHref(site.phone)}">${esc(site.phone)}</a>${hoursTable(site)}
         <p class="warn">가슴 통증, 갑작스러운 마비, 심한 외상 등 응급 상황은 119 또는 가까운 응급실을 이용해 주세요.</p></div>
-      <form class="form" method="post" ${ep ? `action="${esc(ep)}"` : ""} ${ep ? "" : 'aria-describedby="form-off"'}>
+      <form class="form" id="form" method="post" ${ep ? `action="${esc(ep)}"` : ""} ${ep ? "" : 'aria-describedby="form-off"'}>
+        <input type="hidden" name="return" value="/reservation/" />
         <h2>온라인 상담 신청</h2>
         ${ep ? "" : `<p class="form-off" id="form-off">온라인 접수는 준비 중입니다. 지금은 전화로 예약해 주세요.</p>`}
+        <p class="form-msg" data-form-msg role="status" hidden></p>
         <div class="f2"><label>성함 <b aria-hidden="true">*</b><input name="name" required maxlength="40" autocomplete="name" /></label>
           <label>연락처 <b aria-hidden="true">*</b><input name="phone" type="tel" required maxlength="20" inputmode="tel" autocomplete="tel" placeholder="010-0000-0000" /></label></div>
-        <div class="f2"><label>불편한 부위<select name="part"><option value="">선택해 주세요</option>${parts}</select></label>
-          <label>통화 가능한 시간<input name="time" maxlength="40" placeholder="예: 평일 오후 2시 이후" /></label></div>
+        <div class="f2"><label>불편한 부위<select name="budget"><option value="">선택해 주세요</option>${parts}</select></label>
+          <label>통화 가능한 시간<input name="region" maxlength="40" placeholder="예: 평일 오후 2시 이후" /></label></div>
         <label>증상 · 문의 내용<textarea name="message" rows="5" maxlength="1000" placeholder="언제부터, 어떤 자세에서 불편한지 적어 주시면 상담에 도움이 됩니다."></textarea></label>
         <input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" />
         <label class="agree"><input type="checkbox" name="agree" value="1" required /> <span><a href="/privacy/" target="_blank">개인정보 수집·이용</a>에 동의합니다. <small>입력하신 증상은 건강 정보로, 상담 목적에만 사용하고 상담 후 지체 없이 파기합니다.</small></span></label>
+        ${ep && site.form?.turnstileSiteKey ? `<div class="cf-turnstile" data-sitekey="${esc(site.form.turnstileSiteKey)}" data-language="ko"></div>` : ""}
         <button class="btn btn-lg btn-block" type="submit"${ep ? "" : " disabled"}>상담 신청하기</button>
       </form>
     </div></section>`;
-  return layout(ctx, { path: "/reservation/", title: "상담 예약", description: `${site.name} 상담 예약 — 전화 ${site.phone} 또는 온라인으로 상담을 신청하세요.`, body,
+  const ts = ep && site.form?.turnstileSiteKey ? `<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>` : "";
+  return layout(ctx, { path: "/reservation/", title: "상담 예약", extraHead: ts, description: `${site.name} 상담 예약 — 전화 ${site.phone} 또는 온라인으로 상담을 신청하세요.`, body,
     jsonLd: [crumbLd(site, [["/reservation/", "상담 예약"]])] });
+}
+
+// 비급여 진료비 안내 — 의료기관은 비급여 항목과 가격을 환자가 쉽게 볼 수 있게 알려야 하고,
+// 홈페이지가 있으면 홈페이지에도 올려야 한다(의료법 제45조, 같은 법 시행규칙). 금액은 병원 내 게시와 같아야 한다.
+function fees(ctx) {
+  const { site } = ctx;
+  const F = site.fees || { items: [] };
+  const groups = [...new Set(F.items.map((r) => r[0]))];
+  const body = pageHead({ eyebrow: "비용 안내", title: "비급여 진료비 안내", lead: "건강보험이 적용되지 않는 진료의 비용입니다. 병원 안에 게시한 금액과 같습니다.", crumbs: [[null, "비급여 진료비"]] }) +
+    `<section class="sec"><div class="wrap narrow">
+      ${F.items.length ? `<table class="fees"><caption>비급여 진료비 (단위: 원)</caption>
+        <thead><tr><th scope="col">구분</th><th scope="col">항목</th><th scope="col">금액</th><th scope="col">비고</th></tr></thead>
+        <tbody>${groups.map((g) => F.items.filter((r) => r[0] === g).map((r, i, arr) => `<tr>${i === 0 ? `<th scope="rowgroup" rowspan="${arr.length}">${esc(g)}</th>` : ""}<td>${esc(r[1])}</td><td class="num">${esc(r[2])}</td><td>${esc(r[3] || "")}</td></tr>`).join("")).join("")}</tbody></table>`
+        : `<p>비급여 항목은 병원에 문의해 주세요. 대표전화 <a href="${telHref(site.phone)}">${esc(site.phone)}</a></p>`}
+      <ul class="fee-notes">
+        <li>위 금액은 「의료법」 제45조에 따라 고지하는 비급여 진료비용입니다.</li>
+        <li>실제 비용은 진료 내용·횟수·부위에 따라 달라질 수 있으며, 진료 전에 미리 안내드립니다.</li>
+        <li>실손보험 청구에 필요한 서류는 접수처에서 발급해 드립니다.</li>
+      </ul>
+      ${F.updated ? `<p class="meta">게시일: ${esc(F.updated)}</p>` : ""}
+    </div></section>${cta(site)}`;
+  return layout(ctx, { path: "/fees/", title: "비급여 진료비 안내", description: `${site.name} 비급여 진료비 안내 — 건강보험이 적용되지 않는 진료 항목과 비용을 안내합니다.`, body,
+    jsonLd: [crumbLd(site, [["/fees/", "비급여 진료비"]])] });
 }
 
 function privacy(ctx) {
@@ -492,7 +532,7 @@ ${treatments.map((t) => `- [${t.name}${t.also ? ` (${t.also})` : ""}](${site.sit
 }
 
 // ───────────────────────── 조립 ─────────────────────────
-export function build(id, { outDir } = {}) {
+export function build(id, { outDir, og = false } = {}) {
   const data = loadSite(id);
   const problems = lintTree({ site: data.site, treatments: data.treatments, notices: data.notices });
   if (problems.length) {
@@ -503,7 +543,8 @@ export function build(id, { outDir } = {}) {
   rmSync(out, { recursive: true, force: true });
   const css = readFileSync(path.join(ROOT, "assets", "site.css"), "utf8");
   const js = readFileSync(path.join(ROOT, "assets", "site.js"), "utf8");
-  const ctx = { ...data, assetV: createHash("sha1").update(css + js).digest("hex").slice(0, 8) };
+  MEDIA = optimizeMedia(path.join(ROOT, "sites", id, "media"), path.join(out, "media"), { cacheDir: path.join(ROOT, ".cache", id), log: console.log });
+  const ctx = { ...data, og, ogPlan: [], assetV: createHash("sha1").update(css + js).digest("hex").slice(0, 8) };
 
   const pages = new Map();
   pages.set("/", home(ctx));
@@ -515,6 +556,7 @@ export function build(id, { outDir } = {}) {
   pages.set("/notice/", noticeIndex(ctx));
   for (const n of data.notices) pages.set(`/notice/${n.slug}/`, noticePage(ctx, n));
   pages.set("/reservation/", reservation(ctx));
+  pages.set("/fees/", fees(ctx));
   pages.set("/privacy/", privacy(ctx));
 
   const write = (rel, content) => { const f = path.join(out, rel); mkdirSync(path.dirname(f), { recursive: true }); writeFileSync(f, content); };
@@ -532,10 +574,7 @@ export function build(id, { outDir } = {}) {
   write("_headers", `/assets/*\n  Cache-Control: public, max-age=31536000, immutable\n/*\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: strict-origin-when-cross-origin\n`);
   const initial = esc((data.site.shortName || data.site.name).slice(0, 1));
   write("favicon.svg", `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="${data.site.theme?.accent || "#2B5F6B"}"/><text x="32" y="44" font-family="sans-serif" font-size="34" font-weight="700" text-anchor="middle" fill="#fff">${initial}</text></svg>`);
-  // 병원이 보낸 사진·로고 (sites/<병원>/media/ → /media/)
-  const media = path.join(ROOT, "sites", id, "media");
-  if (existsSync(media)) for (const f of readdirSync(media)) { mkdirSync(path.join(out, "media"), { recursive: true }); copyFileSync(path.join(media, f), path.join(out, "media", f)); }
-  return { out, pages: [...pages.keys()] };
+  return { out, pages: [...pages.keys()], ogPlan: ctx.ogPlan.filter((x) => x.path !== "/404"), site: data.site };
 }
 
 // 공개 전에 병원에서 받아 채워야 할 자리 목록
