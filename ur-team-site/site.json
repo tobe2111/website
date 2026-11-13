@@ -1,0 +1,38 @@
+{
+  "name": "유어팀",
+  "fullTitle": "유어팀 U·Team | 국내 유통 · 해외 수출 · 마케팅 파트너",
+  "description": "국내 매출과 해외 확장, 그리고 마케팅까지 한 팀이 설계합니다. 고객사의 순수익을 목표로 일하는 유어팀입니다.",
+  "url": "https://ur-team.com",
+  "ogImage": "/assets/img/og.jpg",
+  "phone": "0503-7151-4726",
+  "email": "jiwon@ur-team.com",
+  "kakao": "https://open.kakao.com/o/sfDjQInh",
+  "urdeal": "https://urdeal.kr/",
+  "form": {
+    "endpoint": "",
+    "turnstileSiteKey": "",
+    "retentionDays": 365
+  },
+  "redirects": {
+    "/home": "/",
+    "/kr/distribution": "/distribution/",
+    "/kr/export": "/export/",
+    "/kr/contact": "/contact/",
+    "/en/home": "/",
+    "/en/distribution": "/distribution/",
+    "/en/export": "/export/",
+    "/en/contact": "/contact/",
+    "/hospital": "/marketing/hospital/",
+    "/37": "/marketing/global-patients/",
+    "/product": "/marketing/naver/",
+    "/product-1": "/marketing/naver/",
+    "/product-2": "/marketing/google/",
+    "/product-3": "/marketing/blog-marketing/",
+    "/product-4": "/marketing/daangn/",
+    "/product-5": "/marketing/momcafe/",
+    "/product-6": "/marketing/place/",
+    "/product-7": "/marketing/",
+    "/product-8": "/marketing/experience/",
+    "/product-9": "/marketing/press/"
+  }
+}
