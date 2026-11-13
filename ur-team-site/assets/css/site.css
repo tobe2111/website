@@ -87,10 +87,9 @@ button { font: inherit; color: inherit; }
 .hd.is-scrolled { background: rgba(5, 6, 10, .72); backdrop-filter: saturate(160%) blur(16px); -webkit-backdrop-filter: saturate(160%) blur(16px); box-shadow: 0 1px 0 var(--line); }
 .hd.is-hidden { transform: translateY(-100%); }
 .hd__in { height: 100%; max-width: calc(1360px + var(--gut) * 2); margin: 0 auto; padding: 0 var(--gut); display: flex; align-items: center; gap: 32px; }
-.logo { display: inline-flex; align-items: center; flex: none; }
-.logo img { height: 40px; width: auto; }
-.ft .logo img { height: 46px; }
-.hero-logo { display: inline-block; height: 1.02em; width: auto; vertical-align: -.12em; margin-left: .08em; }
+.logo { font-weight: 900; font-size: 27px; letter-spacing: -.06em; line-height: 1; color: #fff; }
+.logo i, .logo-in i { font-style: normal; color: var(--blue); }
+.logo-in { font-weight: 900; letter-spacing: -.06em; }
 .nav { display: flex; align-items: center; gap: 4px; margin-left: auto; }
 .nav > a, .nav__group > a { display: inline-flex; align-items: center; height: 40px; padding: 0 14px; border-radius: 999px; font-size: 15px; font-weight: 500; color: rgba(255, 255, 255, .82); transition: color .2s, background .2s; }
 .nav > a:hover, .nav__group > a:hover, .nav [aria-current] { color: #fff; background: rgba(255, 255, 255, .08); }
