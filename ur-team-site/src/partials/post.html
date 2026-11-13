@@ -1,0 +1,18 @@
+<article class="post">
+  <header class="post__head">
+    <div class="wrap wrap--narrow">
+      <p class="crumb"><a href="/">홈</a><span aria-hidden="true">/</span><a href="/blog/">블로그</a></p>
+      <p class="eyebrow">{{postCategory}} · <time datetime="{{postDate}}">{{postDateDot}}</time></p>
+      <h1 class="h2">{{postTitle}}</h1>
+    </div>
+  </header>
+  <div class="wrap wrap--narrow">
+    {{postCover}}
+    <div class="prose">
+{{postBody}}
+    </div>
+    <p class="post__back"><a class="btn btn--ghost" href="/blog/">← 블로그 목록</a></p>
+  </div>
+</article>
+
+<!--@ cta -->

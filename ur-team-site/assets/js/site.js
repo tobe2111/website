@@ -103,26 +103,48 @@
     step();
   }
 
-  // ── 상담 신청: 엔진의 상담 DB(/lead-in/)로 보낸다
+  // ── 상담 신청: 엔진의 상담 DB(/lead-in/<조직>)로 보낸다
   d.querySelectorAll("form[data-lead]").forEach((f) => {
     const out = f.querySelector("[data-msg]");
+    const say = (text, ok) => { if (!out) return; out.textContent = text; out.className = "msg " + (ok ? "ok" : "err"); out.scrollIntoView({ block: "center", behavior: reduce ? "auto" : "smooth" }); };
     const q = new URLSearchParams(location.search);
-    if (q.get("sent") && out) { out.textContent = q.get("sent"); out.className = "msg ok"; }
-    if (q.get("err") && out) { out.textContent = q.get("err"); out.className = "msg err"; }
+    if (q.get("sent")) say(q.get("sent"), true);
+    if (q.get("err")) say(q.get("err"), false);
+    // 어디서 왔는지(광고 링크의 utm, 들어오기 전 페이지) — 어떤 광고가 상담을 만들었는지 보려고
+    for (const k of ["utm_source", "utm_medium", "utm_campaign"]) {
+      const v = q.get(k) || sessionStorageGet(k);
+      if (v) { sessionStorageSet(k, v); const el = f.querySelector(`[name="${k}"]`); if (el) el.value = v; }
+    }
+    const ref = f.querySelector('[name="referrer"]');
+    if (ref && d.referrer && !d.referrer.startsWith(location.origin)) ref.value = d.referrer.slice(0, 200);
     f.addEventListener("submit", (e) => {
-      // 여러 칸(문제점·강점·URL·관심 서비스)을 상담 내용 한 칸으로 묶는다
-      const parts = [];
+      const need = [["name", "업체명 · 담당자를 적어 주세요."], ["phone", "연락처를 적어 주세요."]];
+      for (const [n, m] of need) {
+        const el = f.querySelector(`[name="${n}"]`);
+        if (el && !el.value.trim()) { e.preventDefault(); say(m, false); el.focus(); return; }
+      }
+      const agree = f.querySelector('[name="agree"]');
+      if (agree && !agree.checked) { e.preventDefault(); say("개인정보 수집 · 이용에 동의해 주세요.", false); agree.focus(); return; }
+      // 여러 칸(관심 분야 · URL · 문제점 · 강점 · 희망 채널)을 상담 내용 한 칸으로 묶는다
+      const groups = new Map();
       f.querySelectorAll("[data-msg-part]").forEach((el) => {
         if ((el.type === "checkbox" || el.type === "radio") && !el.checked) return;
         const v = (el.value || "").trim();
-        if (v) parts.push(`${el.dataset.msgPart}: ${v}`);
+        if (!v) return;
+        const k = el.dataset.msgPart;
+        groups.set(k, [...(groups.get(k) || []), v]);
       });
       const msg = f.querySelector('[name="message"]');
-      if (msg) msg.value = parts.join("\n");
-      if (!f.action || f.getAttribute("action") === "#") {
+      if (msg) msg.value = [...groups].map(([k, v]) => `[${k}] ${v.join(", ")}`).join("\n").slice(0, 2000);
+      if (f.getAttribute("action") === "#") {
         e.preventDefault();
-        if (out) { out.textContent = "지금은 온라인 접수 준비 중입니다. 카카오톡이나 전화로 문의해 주세요."; out.className = "msg err"; }
+        say("지금은 온라인 접수 준비 중입니다. 카카오톡이나 전화로 문의해 주세요.", false);
+        return;
       }
+      const btn = f.querySelector('button[type="submit"]');
+      if (btn) { btn.disabled = true; btn.textContent = "보내는 중…"; }
     });
   });
+  function sessionStorageGet(k) { try { return sessionStorage.getItem("ut_" + k); } catch { return null; } }
+  function sessionStorageSet(k, v) { try { sessionStorage.setItem("ut_" + k, v); } catch { /* 저장 못 해도 접수는 된다 */ } }
 })();

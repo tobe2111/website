@@ -8,6 +8,11 @@
   "email": "jiwon@ur-team.com",
   "kakao": "https://open.kakao.com/o/sfDjQInh",
   "urdeal": "https://urdeal.kr/",
+  "form": {
+    "endpoint": "",
+    "turnstileSiteKey": "",
+    "retentionDays": 365
+  },
   "redirects": {
     "/home": "/",
     "/kr/distribution": "/distribution/",

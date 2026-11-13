@@ -1,0 +1,87 @@
+<!-- {"title": "상담 신청", "description": "국내 유통 · 해외 수출 · 마케팅 상담을 신청하세요. 상담 시 네이버 광고 컨설팅 또는 세팅을 무료로 제공합니다.", "nav": "contact"} -->
+<section class="phero" style="min-height:52svh">
+  <div class="phero__bg" aria-hidden="true"><img src="/assets/img/f/UjTdxLuVBXfOzB3kYb5j8CeBhK4.webp" alt=""></div>
+  <div class="wrap">
+    <p class="crumb" data-reveal><a href="/">홈</a><span aria-hidden="true">/</span><span>상담 신청</span></p>
+    <p class="eyebrow" data-reveal>Contact</p>
+    <h1 class="h1" data-reveal style="--i:1">급변하는 비즈니스 환경,<br>유어팀이 파트너가 되겠습니다.</h1>
+    <p class="lead" data-reveal style="--i:2">상담란에 문의를 남겨 주시면 신속하고 친절하게 회신드립니다.<br>상담 시 <strong style="color:#fff">네이버 광고 컨설팅 혹은 세팅을 무료로 제공</strong>하는 이벤트를 진행 중입니다.</p>
+  </div>
+</section>
+
+<section class="sec sec--light">
+  <div class="wrap contact">
+    <aside class="contact__side" data-reveal="left">
+      <h2 class="h3">빠르게 이야기하고 싶다면</h2>
+      <a class="quick quick--kakao" href="{{kakao}}" target="_blank" rel="noopener"><b>카카오톡 실시간 상담</b><span>바로 대화 시작하기 →</span></a>
+      <a class="quick quick--call" href="tel:{{phone}}"><b>전화 상담 {{phone}}</b><span>평일 9:00 – 19:00</span></a>
+      <a class="quick" href="mailto:{{email}}"><b>이메일 · 제휴 문의</b><span>{{email}}</span></a>
+      <div class="contact__map">
+        <iframe title="유어팀 본사 위치 지도" src="https://maps.google.com/maps?q=%EC%84%9C%EC%9A%B8%ED%8A%B9%EB%B3%84%EC%8B%9C%20%EA%B0%95%EB%82%A8%EA%B5%AC%20%EB%82%A8%EB%B6%80%EC%88%9C%ED%99%98%EB%A1%9C359%EA%B8%B8%2014&amp;output=embed&amp;hl=ko" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
+        <p>본사 · 서울특별시 강남구 남부순환로359길 14, 3F</p>
+      </div>
+    </aside>
+
+    <form class="form" id="form" method="post" action="{{formAction}}" data-lead data-reveal="right" novalidate>
+      <h2 class="h3">온라인 상담 신청</h2>
+      {{formOff}}
+      <p class="msg" data-msg role="status" aria-live="polite"></p>
+      <input type="hidden" name="return" value="/contact/">
+      <input type="hidden" name="message" value="">
+      <input type="hidden" name="utm_source"><input type="hidden" name="utm_medium"><input type="hidden" name="utm_campaign"><input type="hidden" name="referrer">
+
+      <fieldset class="chips">
+        <legend>관심 분야 <small>(여러 개 선택 가능)</small></legend>
+        <label><input type="checkbox" value="국내 유통" data-msg-part="관심 분야"><span>국내 유통</span></label>
+        <label><input type="checkbox" value="해외 수출" data-msg-part="관심 분야"><span>해외 수출</span></label>
+        <label><input type="checkbox" value="일반 마케팅" data-msg-part="관심 분야"><span>일반 마케팅</span></label>
+        <label><input type="checkbox" value="병원 마케팅" data-msg-part="관심 분야"><span>병원 마케팅</span></label>
+        <label><input type="checkbox" value="해외 환자 유치" data-msg-part="관심 분야"><span>해외 환자 유치</span></label>
+      </fieldset>
+
+      <div class="f2">
+        <label><span>업체명 · 담당자 <b aria-hidden="true">*</b></span><input name="name" required maxlength="60" autocomplete="organization" placeholder="예: 유어팀 / 홍길동"></label>
+        <label><span>연락처 <b aria-hidden="true">*</b></span><input name="phone" type="tel" required maxlength="20" inputmode="tel" autocomplete="tel" placeholder="010-0000-0000"></label>
+      </div>
+      <div class="f2">
+        <label>이메일<input name="email" type="email" maxlength="120" autocomplete="email" placeholder="name@company.com"></label>
+        <label>월 광고 예산<input name="budget" maxlength="40" placeholder="예: 300만 원"></label>
+      </div>
+      <div class="f2">
+        <label>회사 URL<input type="url" maxlength="200" data-msg-part="회사 URL" placeholder="https://"></label>
+        <label>상담 신청 경로<input name="funnel" maxlength="40" placeholder="예: 네이버 검색, 지인 소개"></label>
+      </div>
+
+      <fieldset class="chips">
+        <legend>입점 · 판매 희망 채널 <small>(유통 · 수출 상담 시)</small></legend>
+        <label><input type="checkbox" value="토스 쇼핑" data-msg-part="희망 채널"><span>토스 쇼핑</span></label>
+        <label><input type="checkbox" value="올리브영" data-msg-part="희망 채널"><span>올리브영</span></label>
+        <label><input type="checkbox" value="라이브커머스" data-msg-part="희망 채널"><span>라이브커머스</span></label>
+        <label><input type="checkbox" value="공동 구매" data-msg-part="희망 채널"><span>공동 구매</span></label>
+        <label><input type="checkbox" value="폐쇄몰" data-msg-part="희망 채널"><span>폐쇄몰</span></label>
+        <label><input type="checkbox" value="대형마트" data-msg-part="희망 채널"><span>대형마트</span></label>
+        <label><input type="checkbox" value="면세점" data-msg-part="희망 채널"><span>면세점</span></label>
+        <label><input type="checkbox" value="오프라인 입점(병원)" data-msg-part="희망 채널"><span>오프라인 입점(병원)</span></label>
+        <label><input type="checkbox" value="해외 수출" data-msg-part="희망 채널"><span>해외 수출</span></label>
+      </fieldset>
+
+      <label>업체 문제점<textarea rows="3" maxlength="600" data-msg-part="업체 문제점" placeholder="지금 가장 답답한 점을 적어 주세요."></textarea></label>
+      <label>업체 차별점(강점)<textarea rows="3" maxlength="600" data-msg-part="업체 차별점" placeholder="우리 제품 · 서비스만의 강점을 적어 주세요."></textarea></label>
+      <label>문의 내용<textarea rows="4" maxlength="800" data-msg-part="문의 내용"></textarea></label>
+
+      <input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+      <label class="agree"><input type="checkbox" name="agree" value="1" required>
+        <span>개인정보 수집 · 이용에 동의합니다. <b aria-hidden="true">*</b>
+          <details><summary>내용 보기</summary>
+            <p><strong>수집 항목</strong> 업체명 · 담당자, 연락처, 이메일, 상담 내용(예산, 회사 URL, 신청 경로 등 적어 주신 것)</p>
+            <p><strong>이용 목적</strong> 상담 신청 확인과 회신</p>
+            <p><strong>보유 기간</strong> 상담이 끝난 뒤 {{retention}}일까지 보관하고 지체 없이 파기합니다.</p>
+            <p>동의하지 않으실 수 있으며, 이 경우 온라인 상담 신청이 어렵습니다. 전화나 카카오톡으로 문의하실 수 있습니다.</p>
+          </details>
+        </span>
+      </label>
+      {{turnstile}}
+      <button class="btn btn--blue btn--lg btn--block" type="submit">상담 신청하기 <span class="arr">→</span></button>
+    </form>
+  </div>
+</section>

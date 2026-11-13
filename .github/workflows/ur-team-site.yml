@@ -1,0 +1,48 @@
+# 유어팀 통합 홈페이지 검사 — ur-team-site/ 아래가 바뀔 때마다 사람이 안 돌려도 돈다.
+#
+# 무엇을 보나:
+#   1) 사이트를 실제로 빌드 (페이지 · 블로그 글 · 예전 주소 넘김 표)
+#   2) 사이트 안 링크 · 사진 · 영상 경로가 모두 실제 파일을 가리키는지, 예전 주소가 다 이어지는지
+#   3) 완성본을 '결과물'로 올려 둔다 — Actions 화면에서 내려받아 바로 열어 볼 수 있다
+#
+# 상인회 엔진(cloudflare/)과는 따로 돈다.
+
+name: 유어팀 홈페이지 검사
+
+on:
+  push:
+    paths: ["ur-team-site/**", ".github/workflows/ur-team-site.yml"]
+  pull_request:
+    paths: ["ur-team-site/**", ".github/workflows/ur-team-site.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ur-team-site-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ur-team-site:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 빌드
+        run: node ur-team-site/build.mjs
+
+      - name: 링크 · 사진 · 예전 주소 검사
+        run: node ur-team-site/check.mjs
+
+      - name: 완성본 올리기 (내려받아 열어 보기용)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ur-team-site
+          path: ur-team-site/dist/
+          retention-days: 14
