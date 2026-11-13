@@ -44,7 +44,9 @@ function renderRaw(raw, file, route) {
   if (!m) throw new Error(`${file}: 맨 위에 {"title": …} 주석이 없습니다`);
   const meta = JSON.parse(m[1]);
   // <!--@ team --> 처럼 적으면 src/partials/team.html 을 끼워 넣는다 (여러 페이지가 같은 칸을 쓸 때)
-  const body = raw.slice(m[0].length).replace(/<!--@\s*([\w-]+)\s*-->/g, (_, n) => partial(n));
+  let body = raw.slice(m[0].length).replace(/<!--@\s*([\w-]+)\s*-->/g, (_, n) => partial(n));
+  // 마케팅 상품 탭: 지금 보고 있는 상품에 표시
+  if (meta.tab) body = body.replace(`data-tab="${meta.tab}"`, `data-tab="${meta.tab}" aria-current="page"`);
   const { url, out } = route;
   const title = meta.title ? `${meta.title} | ${site.name}` : site.fullTitle;
   const desc = meta.description || site.description;

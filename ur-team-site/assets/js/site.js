@@ -75,7 +75,7 @@
       io.unobserve(el);
     }
   }, { rootMargin: "0px 0px -12% 0px", threshold: 0.08 });
-  d.querySelectorAll("[data-reveal], .bubbles, .steps, .bars, [data-count]").forEach((el) => io.observe(el));
+  d.querySelectorAll("[data-reveal], .bubbles, .steps, .bars, .funnel, [data-count]").forEach((el) => io.observe(el));
 
   // ── 카드 위 빛이 마우스를 따라온다
   d.querySelectorAll(".bizcard").forEach((c) => c.addEventListener("pointermove", (e) => {
