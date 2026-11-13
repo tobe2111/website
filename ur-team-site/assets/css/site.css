@@ -627,3 +627,84 @@ main { overflow-x: clip; }
   .contact__side { position: static; }
   .form .f2 { grid-template-columns: 1fr; }
 }
+
+/* ── 마케팅 상품 페이지 (새 디자인) ─────────────────────── */
+.ph { --pc: var(--blue-2); }
+.ph .phero { min-height: 62svh; }
+.ph__badge { display: inline-flex; align-items: center; gap: 10px; padding: 8px 16px 8px 8px; border-radius: 999px; background: rgba(255, 255, 255, .06); border: 1px solid var(--line); font-weight: 700; margin-bottom: 22px; }
+.ph__badge i { width: 28px; height: 28px; border-radius: 50%; background: var(--pc); box-shadow: 0 0 24px var(--pc); }
+.ph .hero__glow { background: radial-gradient(circle, color-mix(in srgb, var(--pc) 55%, transparent), transparent 60%); }
+.ph .h1 em { font-style: normal; color: var(--pc); }
+.ph .eyebrow, .ph .card .k, .ph .k { color: var(--pc); }
+.ph .sec--light .eyebrow, .ph .sec--soft .eyebrow { color: color-mix(in srgb, var(--pc) 75%, #000); }
+.chips-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
+.chips-row span { padding: 7px 14px; border-radius: 999px; font-size: 14px; font-weight: 600; background: rgba(255, 255, 255, .07); border: 1px solid var(--line); }
+.sec--light .chips-row span, .sec--soft .chips-row span { background: #fff; border-color: var(--line-l); color: var(--ink); }
+
+/* 광고 상품 한 덩어리 */
+.pblock { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(32px, 5vw, 72px); align-items: center; }
+.pblock + .pblock { margin-top: clamp(80px, 11vw, 140px); }
+.pblock:nth-child(even) > .pblock__media { order: -1; }
+.pblock__n { font-size: 14px; font-weight: 800; letter-spacing: .1em; color: var(--pc); }
+.pblock h3 { margin: 10px 0 14px; }
+.pblock p { color: var(--muted-d); }
+.pblock p + p { margin-top: 10px; }
+.sec--light .pblock p, .sec--soft .pblock p { color: var(--muted); }
+.pblock__media { position: relative; }
+.pblock__media img { border-radius: 20px; box-shadow: 0 40px 80px -40px rgba(0, 0, 0, .55); }
+.shot { position: relative; padding: 14px; border-radius: 26px; background: linear-gradient(160deg, color-mix(in srgb, var(--pc) 25%, #151a2b), #0d111c); border: 1px solid var(--line); }
+.sec--light .shot, .sec--soft .shot { background: linear-gradient(160deg, color-mix(in srgb, var(--pc) 18%, #fff), #f4f6fb); border-color: var(--line-l); }
+.shot img { width: 100%; border-radius: 14px; box-shadow: 0 20px 40px -24px rgba(0, 0, 0, .45); }
+.shot figcaption { margin-top: 10px; font-size: 13px; color: var(--muted-d); text-align: center; }
+.sec--light .shot figcaption, .sec--soft .shot figcaption { color: var(--muted); }
+
+/* 사양 표 (과금 · 노출 위치 등) */
+.spec { margin: 20px 0 0; display: grid; gap: 0; border-radius: 18px; overflow: hidden; border: 1px solid var(--line); }
+.spec > div { display: grid; grid-template-columns: 120px 1fr; gap: 16px; padding: 14px 18px; border-top: 1px solid var(--line); font-size: 15.5px; }
+.spec > div:first-child { border-top: 0; }
+.spec dt { font-weight: 700; color: var(--pc); }
+.spec dd { margin: 0; color: rgba(255, 255, 255, .85); }
+.sec--light .spec, .sec--soft .spec { border-color: var(--line-l); background: #fff; }
+.sec--light .spec > div, .sec--soft .spec > div { border-color: var(--line-l); }
+.sec--light .spec dd, .sec--soft .spec dd { color: var(--ink); }
+.sec--light .spec dt, .sec--soft .spec dt { color: color-mix(in srgb, var(--pc) 75%, #000); }
+
+/* 표 */
+.tbl-wrap { overflow-x: auto; border-radius: 22px; border: 1px solid var(--line-l); background: #fff; }
+.tbl { width: 100%; border-collapse: collapse; min-width: 560px; color: var(--ink); font-size: 15px; }
+.tbl th, .tbl td { padding: 16px 18px; text-align: left; vertical-align: top; border-top: 1px solid var(--line-l); }
+.tbl thead th { background: var(--paper-2); font-size: 14px; border-top: 0; }
+.tbl tbody th { font-weight: 700; white-space: nowrap; color: var(--muted); }
+.tbl .us { background: color-mix(in srgb, var(--pc) 12%, #fff); font-weight: 600; }
+.tbl thead .us { background: var(--pc); color: #fff; }
+
+/* 전략 단계 (세로) */
+.strat { display: grid; gap: 12px; counter-reset: st; }
+.strat > div { position: relative; display: grid; grid-template-columns: 64px 1fr; gap: 20px; align-items: start; padding: 24px 26px; border-radius: 22px; background: var(--panel); border: 1px solid var(--line); }
+.strat > div::before { counter-increment: st; content: counter(st, decimal-leading-zero); width: 64px; height: 64px; border-radius: 18px; display: grid; place-items: center; font-weight: 800; font-size: 20px; color: #fff; background: linear-gradient(140deg, var(--pc), color-mix(in srgb, var(--pc) 50%, #000)); }
+.strat b { display: block; font-size: 19px; margin-top: 4px; }
+.strat p { margin-top: 6px; color: var(--muted-d); font-size: 15.5px; }
+.sec--light .strat > div, .sec--soft .strat > div { background: #fff; border-color: var(--line-l); }
+.sec--light .strat p, .sec--soft .strat p { color: var(--muted); }
+.sec--light .strat b, .sec--soft .strat b { color: var(--ink); }
+
+/* 막대 그래프 */
+.bars { display: grid; gap: 14px; }
+.bar { display: grid; grid-template-columns: 140px 1fr 56px; gap: 14px; align-items: center; font-size: 15px; }
+.bar__track { height: 14px; border-radius: 999px; background: rgba(255, 255, 255, .08); overflow: hidden; }
+.sec--light .bar__track, .sec--soft .bar__track { background: #e8ecf3; }
+.bar__fill { height: 100%; width: var(--v); border-radius: inherit; background: linear-gradient(90deg, color-mix(in srgb, var(--pc) 60%, #fff), var(--pc)); transform-origin: left; transform: scaleX(0); transition: transform 1.4s var(--ease); }
+.bars.is-in .bar__fill { transform: scaleX(1); }
+.bar b { text-align: right; }
+
+/* 큰 인용 · 핵심 문장 */
+.callout { padding: clamp(28px, 4vw, 44px); border-radius: var(--r); background: linear-gradient(140deg, color-mix(in srgb, var(--pc) 32%, #0b0d12), #0b0d12 70%); border: 1px solid color-mix(in srgb, var(--pc) 40%, transparent); }
+.callout .h3 b, .callout .h2 b { color: var(--pc); }
+.callout p { margin-top: 12px; color: rgba(255, 255, 255, .78); }
+
+@media (max-width: 860px) {
+  .pblock { grid-template-columns: 1fr; }
+  .pblock:nth-child(even) > .pblock__media { order: 0; }
+  .spec > div { grid-template-columns: 96px 1fr; }
+  .bar { grid-template-columns: 96px 1fr 48px; font-size: 14px; }
+}
