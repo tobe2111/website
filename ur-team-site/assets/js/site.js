@@ -96,7 +96,8 @@
       if (!b) return;
       bar.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
       const f = b.dataset.f;
-      list.querySelectorAll("[data-cat]").forEach((p) => p.classList.toggle("is-dim", f !== "all" && p.dataset.cat !== f));
+      const hide = list.hasAttribute("data-hide");
+      list.querySelectorAll("[data-cat]").forEach((p) => { const off = f !== "all" && p.dataset.cat !== f; if (hide) p.hidden = off; else p.classList.toggle("is-dim", off); });
     });
   });
 

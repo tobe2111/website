@@ -1108,3 +1108,27 @@ a.prod:hover b { color: var(--accent); }
   .mk-chan a { padding: 7px 11px; font-size: 13px; }
   .mk-hero__card b { font-size: 24px; }
 }
+
+/* 매체 광고 소개서 */
+.kits { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.kit { display: flex; flex-direction: column; background: #fff; border: 1px solid var(--line); transition: border-color .2s, box-shadow .2s; }
+.kit[hidden] { display: none; }
+.kit:hover { border-color: var(--line-2); box-shadow: 0 18px 36px -28px rgba(15, 18, 22, .35); }
+.kit__img { display: block; aspect-ratio: 16 / 9; overflow: hidden; border-bottom: 1px solid var(--line); background: var(--bg-2); }
+.kit__img img { width: 100%; height: 100%; object-fit: cover; object-position: top left; transition: transform .6s var(--ease); }
+.kit:hover .kit__img img { transform: scale(1.03); }
+.kit__tx { display: flex; flex-direction: column; gap: 6px; padding: 16px 18px 18px; flex: 1; }
+.kit__tx .k { font-size: 12px; font-weight: 600; color: var(--accent); }
+.kit__tx h3 { font-size: 16px; font-weight: 700; line-height: 1.4; letter-spacing: -.01em; }
+.kit__tx h3 a:hover { color: var(--accent); }
+.kit__tx p { font-size: 14px; color: var(--muted); line-height: 1.55; }
+.kit__btns { margin-top: auto; padding-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.kit__btns a { display: flex; align-items: center; justify-content: center; gap: 4px; min-height: 38px; font-size: 14px; font-weight: 600; border: 1px solid var(--line-2); transition: background .2s, color .2s, border-color .2s; }
+.kit__btns a:first-child { background: var(--ink); color: #fff; border-color: var(--ink); }
+.kit__btns a:hover { border-color: var(--accent); color: var(--accent); }
+.kit__btns a:first-child:hover { background: var(--accent); color: #fff; }
+.kit__btns small { font-size: 12px; font-weight: 500; color: var(--muted); }
+.kits__note { margin-top: 22px; font-size: 14px; color: var(--muted); }
+.kits__note a { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+@media (max-width: 1100px) { .kits { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 760px) { .kits { grid-template-columns: repeat(2, 1fr); gap: 10px; } .kit__tx { padding: 12px 12px 14px; } .kit__tx p { display: none; } .kit__btns { grid-template-columns: 1fr; } }
