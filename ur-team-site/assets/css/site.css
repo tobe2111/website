@@ -373,6 +373,14 @@ body.menu-open { overflow: hidden; }
 .ticks li { position: relative; padding-left: 26px; }
 .ticks li::before { content: ""; position: absolute; left: 0; top: .78em; width: 12px; height: 2px; background: var(--accent); }
 
+.fixes { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--ink); }
+.fix { padding: 24px 24px 28px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; }
+.fix:not(:nth-child(4n+1)) { border-left: 1px solid var(--line); }
+.fix__k { font-size: 13px; font-weight: 600; color: var(--accent); }
+.fix__v { font-size: clamp(28px, 2.6vw, 38px); font-weight: 600; letter-spacing: -.03em; line-height: 1.1; }
+.fix__v small { font-size: .5em; margin-left: 2px; font-weight: 500; }
+.fix p { margin: 0; font-size: 15px; line-height: 1.6; color: var(--ink-2); }
+@media (max-width: 860px) { .fixes { grid-template-columns: repeat(2, 1fr); } .fix:not(:nth-child(4n+1)) { border-left: 0; } .fix:nth-child(even) { border-left: 1px solid var(--line); } .fix { padding: 20px 16px 22px; } }
 .phones { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px 20px; }
 .phone { background: var(--bg-2); }
 .phone img { width: 100%; mix-blend-mode: multiply; }
