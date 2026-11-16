@@ -1286,3 +1286,8 @@ a.prod:hover b { color: var(--accent); }
 .phero--media .crumb a:hover { color: #fff; }
 .phero--media .h1 em { filter: brightness(1.25) saturate(1.1); }
 @media (max-width: 760px) { .phero--prod.phero--media .phero__bg::after { background: linear-gradient(180deg, rgba(8, 10, 14, .62) 0%, rgba(8, 10, 14, .86) 100%); } }
+/* 첫 페이지 '왜 남는 돈이 없을까요': 글 + 세로 사진 */
+.pains-split { display: grid; grid-template-columns: 1.35fr .65fr; gap: clamp(28px, 4vw, 64px); align-items: center; }
+.pains-split__img { margin: 0; aspect-ratio: 4 / 5; overflow: hidden; }
+.pains-split__img img { width: 100%; height: 100%; object-fit: cover; }
+@media (max-width: 960px) { .pains-split { grid-template-columns: 1fr; } .pains-split__img { aspect-ratio: 16 / 10; order: -1; } }
