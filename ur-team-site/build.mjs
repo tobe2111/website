@@ -346,8 +346,12 @@ function blogList(lang) {
   const t = T(lang);
   const list = posts(lang);
   if (!list.length) return `<p class="empty">${t.blogEmpty}</p>`;
-  return `<div class="posts" data-stagger>` + list.map((p) => `
-      <a class="post-card" href="${LANGS[lang].prefix}/blog/${p.slug}/">
+  // 분류 버튼: 글이 많아져도 원하는 주제만 골라 보게
+  const cats = [...list.reduce((m, p) => m.set(p.category || t.blogDefaultCategory, (m.get(p.category || t.blogDefaultCategory) || 0) + 1), new Map())];
+  const bar = cats.length > 1 ? `<div class="pfilter" role="group" aria-label="${lang === "en" ? "Filter by topic" : "주제별로 보기"}"><button type="button" aria-pressed="true" data-f="all">${lang === "en" ? "All" : "전체"} <span>${list.length}</span></button>` +
+    cats.map(([c, n]) => `<button type="button" aria-pressed="false" data-f="${esc(c)}">${esc(c)} <span>${n}</span></button>`).join("") + `</div>\n    ` : "";
+  return bar + `<div class="posts" data-prods data-hide data-stagger>` + list.map((p) => `
+      <a class="post-card" data-cat="${esc(p.category || t.blogDefaultCategory)}" href="${LANGS[lang].prefix}/blog/${p.slug}/">
         <div class="post-card__img">${p.cover ? `<img src="${esc(p.cover)}" alt="" loading="lazy">` : ""}</div>
         <div class="post-card__tx"><span class="k">${esc(p.category || t.blogDefaultCategory)} · <time datetime="${p.date}">${p.date.replace(/-/g, ".")}</time></span>
         <b>${esc(p.title)}</b><p>${esc(p.summary || "")}</p></div>

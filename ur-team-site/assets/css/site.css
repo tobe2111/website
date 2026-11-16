@@ -1132,3 +1132,12 @@ a.prod:hover b { color: var(--accent); }
 .kits__note a { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
 @media (max-width: 1100px) { .kits { grid-template-columns: repeat(3, 1fr); } }
 @media (max-width: 760px) { .kits { grid-template-columns: repeat(2, 1fr); gap: 10px; } .kit__tx { padding: 12px 12px 14px; } .kit__tx p { display: none; } .kit__btns { grid-template-columns: 1fr; } }
+
+/* 회색 · 남색 띠 바로 다음 흰 섹션은 위 여백을 되살린다 (제목이 띠에 붙지 않게) */
+.sec--soft + .sec:not(.sec--soft), .sec--blue + .sec:not(.sec--blue) { padding-top: clamp(52px, 6vw, 88px) !important; }
+/* 세계 지도가 화면을 다 덮지 않게 */
+.board .map { max-width: 1040px; margin-inline: auto; }
+/* 이어 붙인 흰 섹션: 구분선 바로 밑에 제목이 붙지 않게 최소 여백 */
+.sec + .sec[style*="padding-top:0"] { padding-top: clamp(32px, 3.6vw, 52px) !important; }
+.board[style*="text-align:center"] .lead { margin-inline: auto; }
+.post-card[hidden] { display: none; }
