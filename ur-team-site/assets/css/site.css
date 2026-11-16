@@ -1190,3 +1190,13 @@ a.prod:hover b { color: var(--accent); }
   .crumb a { display: inline-block; padding: 10px 6px; margin: -10px -6px; }
   .ft a { display: inline-block; padding-block: 6px; }
 }
+/* 상품 페이지 첫 화면: 장면 사진 위에서도 글자가 또렷하게 */
+.phero--prod.phero--media { min-height: 0; align-items: center; }
+.phero--prod.phero--media .phero__bg::after { background: linear-gradient(90deg, rgba(8, 10, 14, .88) 0%, rgba(8, 10, 14, .7) 50%, rgba(8, 10, 14, .38) 100%); }
+.phero--media .ph__badge { color: #fff; }
+.phero--media .chips-row { color: rgba(255, 255, 255, .78); }
+.phero--media .chips-row span + span::before { color: rgba(255, 255, 255, .35); }
+.phero--media .crumb a { color: rgba(255, 255, 255, .78); }
+.phero--media .crumb a:hover { color: #fff; }
+.phero--media .h1 em { filter: brightness(1.25) saturate(1.1); }
+@media (max-width: 760px) { .phero--prod.phero--media .phero__bg::after { background: linear-gradient(180deg, rgba(8, 10, 14, .62) 0%, rgba(8, 10, 14, .86) 100%); } }
