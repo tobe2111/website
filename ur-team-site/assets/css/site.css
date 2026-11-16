@@ -1293,3 +1293,25 @@ a.prod:hover b { color: var(--accent); }
 .phero--media .crumb a:hover { color: #fff; }
 .phero--media .h1 em { filter: brightness(1.25) saturate(1.1); }
 @media (max-width: 760px) { .phero--prod.phero--media .phero__bg::after { background: linear-gradient(180deg, rgba(8, 10, 14, .62) 0%, rgba(8, 10, 14, .86) 100%); } }
+
+/* ═══ 마케팅: 상품 카드의 대표 숫자 · 업종별 출발점 · 맡기는 이유 ═══ */
+.prod__fig { display: block; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); font-style: normal; font-size: 13px; line-height: 1.5; color: var(--muted); }
+.prod__fig b { display: block; font-size: 20px; font-weight: 600; letter-spacing: -.03em; line-height: 1.25; color: var(--pc, var(--accent)); }
+.prod .go { margin-top: 14px; }
+.starts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.start { display: flex; flex-direction: column; padding: 26px 24px 24px; background: var(--bg); border: 1px solid var(--line); border-top: 2px solid var(--ink); }
+.start .k { font-size: 13px; font-weight: 600; color: var(--accent); }
+.start h3 { margin-top: 8px; font-size: 19px; font-weight: 600; letter-spacing: -.025em; line-height: 1.4; }
+.start p { margin-top: 8px; font-size: 15px; color: var(--muted); }
+.start ol { list-style: none; margin: auto 0 0; padding: 20px 0 0; display: grid; gap: 0; counter-reset: st; }
+.start li { counter-increment: st; border-top: 1px solid var(--line); }
+.start li a { display: flex; align-items: center; gap: 12px; padding: 11px 0; font-size: 15px; font-weight: 600; transition: color .2s; }
+.start li a::before { content: counter(st); display: grid; place-items: center; width: 22px; height: 22px; flex: none; font-size: 12px; font-weight: 600; color: #fff; background: var(--ink); border-radius: 50%; }
+.start li a::after { content: "→"; margin-left: auto; color: var(--muted); transition: transform .2s, color .2s; }
+.start li a:hover { color: var(--accent); }
+.start li a:hover::after { color: var(--accent); transform: translateX(3px); }
+.why .principle { grid-template-columns: 84px 5fr 6fr; padding: 28px 0; }
+.why .principle .n { font-size: clamp(24px, 2.2vw, 32px); }
+.why .principle h3 { font-size: clamp(18px, 1.5vw, 21px); }
+@media (max-width: 1080px) { .starts { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 700px) { .starts { grid-template-columns: 1fr; } .why .principle { grid-template-columns: 1fr; gap: 6px; padding: 22px 0; } }
