@@ -179,7 +179,10 @@
     const q = new URLSearchParams(location.search);
     // ?topic=병원 마케팅 처럼 들어오면 관심 분야를 미리 체크해 둔다 (어느 페이지에서 왔는지)
     const topic = q.get("topic");
-    if (topic) f.querySelectorAll('[data-msg-part][type="checkbox"]').forEach((el) => { if (el.value === topic) el.checked = true; });
+    if (topic) { const want = topic.split(","); f.querySelectorAll('[data-msg-part][type="checkbox"]').forEach((el) => { if (want.includes(el.value)) el.checked = true; }); }
+    // 블로그 글의 상담 버튼으로 들어오면 어떤 글을 읽고 왔는지 상담 내용에 함께 남긴다
+    const from = q.get("from"), fromEl = f.querySelector("[data-from]");
+    if (from && fromEl) fromEl.value = from.slice(0, 120);
     // '더 자세히' 안에서는 고른 분야에 맞는 질문만 보인다 (아무것도 안 골랐으면 둘 다)
     const interest = [...f.querySelectorAll('fieldset:not([data-for]) input[type="checkbox"]')];
     const DIST = ["국내 유통", "해외 수출", "Domestic Distribution", "Global Export"];
