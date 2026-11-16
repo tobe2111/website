@@ -29,8 +29,9 @@
       <input type="hidden" name="message" value="">
       <input type="hidden" name="utm_source"><input type="hidden" name="utm_medium"><input type="hidden" name="utm_campaign"><input type="hidden" name="referrer">
 
+      <p class="fstep"><i>1</i>무엇을 상담받고 싶으세요?</p>
       <fieldset class="chips">
-        <legend>관심 분야 <small>(여러 개 선택 가능)</small></legend>
+        <legend>관심 분야 <small>여러 개 골라도 됩니다</small></legend>
         <label><input type="checkbox" value="국내 유통" data-msg-part="관심 분야"><span>국내 유통</span></label>
         <label><input type="checkbox" value="해외 수출" data-msg-part="관심 분야"><span>해외 수출</span></label>
         <label><input type="checkbox" value="일반 마케팅" data-msg-part="관심 분야"><span>일반 마케팅</span></label>
@@ -38,20 +39,26 @@
         <label><input type="checkbox" value="해외 환자 유치" data-msg-part="관심 분야"><span>해외 환자 유치</span></label>
       </fieldset>
 
+      <p class="fstep"><i>2</i>연락받으실 곳</p>
       <div class="f2">
         <label><span>업체명 · 담당자 <b aria-hidden="true">*</b></span><input name="name" required maxlength="60" autocomplete="organization" placeholder="예: 유어팀 / 홍길동"></label>
         <label><span>연락처 <b aria-hidden="true">*</b></span><input name="phone" type="tel" required maxlength="20" inputmode="tel" autocomplete="tel" placeholder="010-0000-0000"></label>
       </div>
-      <div class="f2">
-        <label>이메일<input name="email" type="email" maxlength="120" autocomplete="email" placeholder="name@company.com"></label>
-        <label>월 광고 예산<input name="budget" maxlength="40" placeholder="예: 300만 원"></label>
-      </div>
-      <div class="f2">
-        <label>회사 URL<input type="url" maxlength="200" data-msg-part="회사 URL" placeholder="https://"></label>
-        <label>상담 신청 경로<input name="funnel" maxlength="40" placeholder="예: 네이버 검색, 지인 소개"></label>
-      </div>
+      <label>이메일<input name="email" type="email" maxlength="120" autocomplete="email" placeholder="name@company.com"></label>
 
-      <fieldset class="chips">
+      <p class="fstep"><i>3</i>궁금한 점을 짧게 적어 주세요</p>
+      <label>문의 내용<textarea rows="3" maxlength="800" data-msg-part="문의 내용"></textarea></label>
+
+      <details class="fmore">
+        <summary><b>더 자세히 알려 주기</b><small>선택 · 적어 주시면 첫 상담이 훨씬 구체적입니다</small></summary>
+        <div class="fmore__body">
+      <div class="f2">
+        <label>월 광고 예산<input name="budget" maxlength="40" placeholder="예: 300만 원"></label>
+        <label>회사 URL<input type="url" maxlength="200" data-msg-part="회사 URL" placeholder="https://"></label>
+      </div>
+      <label>상담 신청 경로<input name="funnel" maxlength="40" placeholder="예: 네이버 검색, 지인 소개"></label>
+
+      <fieldset class="chips" data-for="mk">
         <legend>관심 마케팅 상품 <small>(마케팅 상담 시)</small></legend>
         <label><input type="checkbox" value="네이버 광고" data-msg-part="마케팅 상품"><span>네이버 광고</span></label>
         <label><input type="checkbox" value="구글 광고" data-msg-part="마케팅 상품"><span>구글 광고</span></label>
@@ -66,7 +73,7 @@
         <label><input type="checkbox" value="아직 모르겠어요" data-msg-part="마케팅 상품"><span>아직 모르겠어요</span></label>
       </fieldset>
 
-      <fieldset class="chips">
+      <fieldset class="chips" data-for="dist">
         <legend>입점 · 판매 희망 채널 <small>(유통 · 수출 상담 시)</small></legend>
         <label><input type="checkbox" value="토스 쇼핑" data-msg-part="희망 채널"><span>토스 쇼핑</span></label>
         <label><input type="checkbox" value="올리브영" data-msg-part="희망 채널"><span>올리브영</span></label>
@@ -81,7 +88,8 @@
 
       <label>업체 문제점<textarea rows="3" maxlength="600" data-msg-part="업체 문제점" placeholder="지금 가장 답답한 점을 적어 주세요."></textarea></label>
       <label>업체 차별점(강점)<textarea rows="3" maxlength="600" data-msg-part="업체 차별점" placeholder="우리 제품 · 서비스만의 강점을 적어 주세요."></textarea></label>
-      <label>문의 내용<textarea rows="4" maxlength="800" data-msg-part="문의 내용"></textarea></label>
+        </div>
+      </details>
 
       <input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
       <label class="agree"><input type="checkbox" name="agree" value="1" required>
