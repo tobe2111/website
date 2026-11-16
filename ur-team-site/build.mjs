@@ -321,7 +321,7 @@ function renderRaw(raw, file, route, lang, post) {
   const rss = PATHS[lang].has("/blog/")
     ? `<link rel="alternate" type="application/rss+xml" title="${esc(BLOG_NAME[lang])}" href="${LANGS[lang].prefix}/blog/rss.xml">` : "";
   const headExtra = [
-    `<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">`,
+    meta.noindex ? `<meta name="robots" content="noindex, follow">` : `<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">`,
     verifyTags(),
     ...langsHere.filter((l) => l !== lang).map((l) => `<meta property="og:locale:alternate" content="${LANGS[l].locale}">`),
     `<meta property="og:image:alt" content="${esc(meta.title || t.fullTitle)}">`,
@@ -357,7 +357,7 @@ function renderRaw(raw, file, route, lang, post) {
   const dest = join(DIST, out);
   mkdirSync(dirname(dest), { recursive: true });
   writeFileSync(dest, versioned(responsive(html)));
-  PAGES.push({ lang, path, url, canonical, meta: { ...meta, description: desc }, title, modified, post, main });
+  if (!meta.noindex) PAGES.push({ lang, path, url, canonical, meta: { ...meta, description: desc }, title, modified, post, main });
   return url;
 }
 
@@ -601,6 +601,11 @@ for (const f of ["assets/css/site.css"]) {
 const urls = [];
 for (const lang of Object.keys(LANGS)) {
   urls.push(...pagesOf(lang).map((f) => render(f, lang)), ...renderPosts(lang));
+}
+// 없는 주소로 들어오면 보여 줄 화면 (Cloudflare Pages 는 가장 가까운 404.html 을 쓴다)
+for (const lang of Object.keys(LANGS)) {
+  const src = join(LANGS[lang].dir, "404.html");
+  if (existsSync(src)) renderRaw(readFileSync(src, "utf8"), src, { path: "/404/", url: LANGS[lang].prefix + "/404/", out: (LANGS[lang].prefix ? LANGS[lang].prefix.slice(1) + "/" : "") + "404.html" }, lang);
 }
 redirects();
 sitemap();

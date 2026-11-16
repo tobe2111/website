@@ -1388,3 +1388,9 @@ a.prod:hover b { color: var(--accent); }
 .principle.is-in .n { color: var(--ink); }
 .principle .n { font-variant-numeric: tabular-nums; }
 .mk-steps span { color: var(--ink-2); }
+/* 없는 페이지 (404) */
+.nf { min-height: 62svh; display: flex; align-items: center; }
+.nf__code { font-size: clamp(64px, 9vw, 120px); font-weight: 600; letter-spacing: -.05em; line-height: 1; color: var(--line-2); margin-bottom: 18px; font-variant-numeric: tabular-nums; }
+.nf__links { list-style: none; margin: 40px 0 0; padding: 20px 0 0; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 8px 28px; }
+.nf__links a { font-weight: 600; color: var(--ink-2); }
+.nf__links a:hover { color: var(--accent); }
