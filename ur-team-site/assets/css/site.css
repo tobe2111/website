@@ -1394,7 +1394,6 @@ a.prod:hover b { color: var(--accent); }
 .nf__links { list-style: none; margin: 40px 0 0; padding: 20px 0 0; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 8px 28px; }
 .nf__links a { font-weight: 600; color: var(--ink-2); }
 .nf__links a:hover { color: var(--accent); }
-<<<<<<< HEAD
 
 /* ═══ 블로그: 검색 · 더 보기, 글 화면의 목차 · 상담 안내 · 공유, 상품 페이지의 관련 글 ═══ */
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
@@ -1429,7 +1428,7 @@ a.prod:hover b { color: var(--accent); }
   .post__cta > p, .post__cta .btn { width: 100%; }
   .psearch input { max-width: none; }
 }
-=======
+
 /* 상담 신청서: 3단계 + '더 자세히' 접기 */
 .fstep { display: flex; align-items: center; gap: 10px; margin: 26px 0 12px; font-size: 16px; font-weight: 700; color: var(--ink); }
 .form .fstep:first-of-type { margin-top: 8px; }
@@ -1444,4 +1443,3 @@ a.prod:hover b { color: var(--accent); }
 .fmore__body { padding: 4px 18px 18px; border-top: 1px solid var(--line); }
 .fmore fieldset[hidden] { display: none; }
 .fmore__body { display: grid; gap: 16px; padding-top: 16px; }
->>>>>>> 4d96d15ad78c14d8b3aa807022393f0aa0f71411

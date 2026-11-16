@@ -111,6 +111,14 @@ for (const css of walk(join(DIST, "assets")).filter((x) => x.endsWith(".css"))) 
   if (c.split("{").length !== c.split("}").length) bad.push(`${css.slice(DIST.length)}: 여는 { 와 닫는 } 개수가 다름`);
 }
 
+// 갈래를 합치다 겹친 자리에 남는 표시(<<<<<<< · >>>>>>>)가 원본에 남아 있으면 실패.
+// 이 표시가 스타일 · 스크립트에 섞여 올라가면 그 아래가 조용히 무시된다.
+for (const f of [...walk(join(ROOT, "src")), ...walk(join(ROOT, "assets", "css")), ...walk(join(ROOT, "assets", "js")), join(ROOT, "build.mjs"), join(ROOT, "site.json")]) {
+  if (!/\.(html|css|js|mjs|json)$/.test(f)) continue;
+  const m = readFileSync(f, "utf8").split("\n").findIndex((l) => /^(<<<<<<<|>>>>>>>) /.test(l));
+  if (m >= 0) bad.push(`${f.slice(ROOT.length)}: ${m + 1}번째 줄에 합치다 남은 표시가 있음`);
+}
+
 if (bad.length) {
   console.error(`검사 실패 ${bad.length}건`);
   for (const b of bad) console.error("  - " + b);
