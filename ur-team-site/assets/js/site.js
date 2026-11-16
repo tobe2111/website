@@ -10,11 +10,13 @@
     needName: "Please enter your company and name.", needPhone: "Please enter your phone number.",
     needAgree: "Please agree to the collection and use of personal information.",
     off: "Online submissions are not open yet. Please reach us by KakaoTalk or phone.", sending: "Sending…",
+    done: "Thank you. We received your request and will contact you within one business day.", fail: "Sending failed. Please try again, or reach us by KakaoTalk or phone.", submit: "Send",
   } : {
     menuOpen: "메뉴 열기", menuClose: "메뉴 닫기",
     needName: "업체명 · 담당자를 적어 주세요.", needPhone: "연락처를 적어 주세요.",
     needAgree: "개인정보 수집 · 이용에 동의해 주세요.",
     off: "지금은 온라인 접수 준비 중입니다. 카카오톡이나 전화로 문의해 주세요.", sending: "보내는 중…",
+    done: "상담 신청이 접수되었습니다. 영업일 기준 1일 안에 연락드리겠습니다.", fail: "보내지 못했습니다. 다시 한 번 눌러 주시거나 카카오톡 · 전화로 문의해 주세요.", submit: "상담 신청하기",
   };
 
   // ── 머리말: 어두운 첫 화면 위에서는 투명, 지나가면 흰 바탕. 빨리 내리면 숨고 올리면 나타난다
@@ -124,7 +126,7 @@
   // ── 첫 화면 영상: 움직임 줄이기 설정이면 멈춘다
   d.querySelectorAll("video[autoplay]").forEach((v) => { if (reduce) v.pause(); });
 
-  // ── 상담 신청: 엔진의 상담 DB(/lead-in/<조직>)로 보낸다
+  // ── 상담 신청: 구글 스프레드시트(Apps Script) 또는 엔진의 상담 DB(/lead-in/<조직>)로 보낸다
   d.querySelectorAll("form[data-lead]").forEach((f) => {
     const out = f.querySelector("[data-msg]");
     const say = (text, ok) => { if (!out) return; out.textContent = text; out.className = "msg " + (ok ? "ok" : "err"); out.scrollIntoView({ block: "center", behavior: reduce ? "auto" : "smooth" }); };
@@ -163,7 +165,18 @@
         return;
       }
       const btn = f.querySelector('button[type="submit"]');
+      const label = btn?.textContent;
       if (btn) { btn.disabled = true; btn.textContent = L.sending; }
+      // 구글 스프레드시트(Apps Script)로 받을 때: 페이지를 떠나지 않고 보내고, 여기서 접수 완료를 알린다
+      if (/^https:\/\/script\.google\.com\//.test(f.action)) {
+        e.preventDefault();
+        const body = new URLSearchParams(new FormData(f));
+        body.set("page", location.pathname); body.set("lang", EN ? "en" : "ko");
+        fetch(f.action, { method: "POST", mode: "no-cors", body })
+          .then(() => { f.reset(); say(L.done, true); })
+          .catch(() => say(L.fail, false))
+          .finally(() => { if (btn) { btn.disabled = false; btn.textContent = label || L.submit; } });
+      }
     });
   });
   function sessionStorageGet(k) { try { return sessionStorage.getItem("ut_" + k); } catch { return null; } }
