@@ -83,7 +83,9 @@
     "/product-7": "/marketing/",
     "/product-8": "/marketing/experience/",
     "/product-9": "/marketing/press/",
-    "/en/home": "/en/"
+    "/en/home": "/en/",
+    "/service": "/contact/",
+    "/service/": "/contact/"
   },
   "i18n": {
     "ko": {
