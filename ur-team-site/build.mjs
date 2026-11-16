@@ -27,11 +27,6 @@ const SRC = join(ROOT, "src");
 const DIST = join(ROOT, "dist");
 const site = JSON.parse(readFileSync(join(ROOT, "site.json"), "utf8"));
 
-// 디자인(CSS) · 움직임(JS) 주소 끝에 내용 지문을 붙인다. 파일이 바뀌면 주소도 바뀌어,
-// 방문자 브라우저가 옛 디자인을 붙들고 새 화면이 깨져 보이는 일을 막는다.
-const VER = Object.fromEntries(["css/site.css", "js/site.js"].map((f) =>
-  [`/assets/${f}`, createHash("sha256").update(readFileSync(join(ROOT, "assets", f))).digest("hex").slice(0, 10)]));
-const stamp = (html) => html.replace(/(href|src)="(\/assets\/(?:css\/site\.css|js\/site\.js))"/g, (_, a, u) => `${a}="${u}?v=${VER[u]}"`);
 const BASE = site.url.replace(/\/$/, "");
 const TODAY = new Date().toISOString().slice(0, 10);
 
@@ -267,6 +262,20 @@ const VERIFY = { google: "google-site-verification", naver: "naver-site-verifica
 const verifyTags = () => Object.entries(VERIFY).filter(([k]) => site.verification?.[k])
   .map(([k, n]) => `<meta name="${n}" content="${esc(site.verification[k])}">`).join("\n");
 
+
+// 파일 내용이 바뀌면 주소 끝의 ?v= 값도 바뀐다 → 브라우저 · Cloudflare 가 예전 CSS · 사진 · PDF 를 붙잡지 않는다
+const VERSIONS = new Map();
+function versioned(html) {
+  return html.replace(/(["'(])(\/assets\/[^"'()?#\s]+)(?=["')])/g, (m, q, url) => {
+    if (!VERSIONS.has(url)) {
+      const file = join(ROOT, decodeURIComponent(url));
+      VERSIONS.set(url, existsSync(file) ? createHash("sha1").update(readFileSync(file)).digest("hex").slice(0, 8) : "");
+    }
+    const v = VERSIONS.get(url);
+    return v ? `${q}${url}?v=${v}` : m;
+  });
+}
+
 const PAGES = []; // 검색엔진에 내보내는 페이지 (sitemap · llms.txt · RSS 가 쓴다)
 
 function render(file, lang) {
@@ -331,7 +340,7 @@ function renderRaw(raw, file, route, lang, post) {
   const html = fill(partial(lang, "head")) + fill(header) + `<main id="main">\n${main}\n</main>\n` + fill(partial(lang, "footer"));
   const dest = join(DIST, out);
   mkdirSync(dirname(dest), { recursive: true });
-  writeFileSync(dest, stamp(html));
+  writeFileSync(dest, versioned(html));
   PAGES.push({ lang, path, url, canonical, meta: { ...meta, description: desc }, title, modified, post, main });
   return url;
 }
@@ -340,8 +349,12 @@ function blogList(lang) {
   const t = T(lang);
   const list = posts(lang);
   if (!list.length) return `<p class="empty">${t.blogEmpty}</p>`;
-  return `<div class="posts" data-stagger>` + list.map((p) => `
-      <a class="post-card" href="${LANGS[lang].prefix}/blog/${p.slug}/">
+  // 분류 버튼: 글이 많아져도 원하는 주제만 골라 보게
+  const cats = [...list.reduce((m, p) => m.set(p.category || t.blogDefaultCategory, (m.get(p.category || t.blogDefaultCategory) || 0) + 1), new Map())];
+  const bar = cats.length > 1 ? `<div class="pfilter" role="group" aria-label="${lang === "en" ? "Filter by topic" : "주제별로 보기"}"><button type="button" aria-pressed="true" data-f="all">${lang === "en" ? "All" : "전체"} <span>${list.length}</span></button>` +
+    cats.map(([c, n]) => `<button type="button" aria-pressed="false" data-f="${esc(c)}">${esc(c)} <span>${n}</span></button>`).join("") + `</div>\n    ` : "";
+  return bar + `<div class="posts" data-prods data-hide data-stagger>` + list.map((p) => `
+      <a class="post-card" data-cat="${esc(p.category || t.blogDefaultCategory)}" href="${LANGS[lang].prefix}/blog/${p.slug}/">
         <div class="post-card__img">${p.cover ? `<img src="${esc(p.cover)}" alt="" loading="lazy">` : ""}</div>
         <div class="post-card__tx"><span class="k">${esc(p.category || t.blogDefaultCategory)} · <time datetime="${p.date}">${p.date.replace(/-/g, ".")}</time></span>
         <b>${esc(p.title)}</b><p>${esc(p.summary || "")}</p></div>
