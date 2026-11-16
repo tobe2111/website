@@ -1,12 +1,13 @@
 # 사진 · 영상 · 디자인 파일은 오래 보관해 두 번째 방문부터 바로 뜨게 한다
+# (CSS · JS 는 내용이 바뀌면 주소 끝 ?v= 가 바뀌므로 1년 보관해도 옛 화면이 남지 않는다)
 /assets/img/*
   Cache-Control: public, max-age=604800, stale-while-revalidate=86400
 /assets/video/*
   Cache-Control: public, max-age=604800, stale-while-revalidate=86400
 /assets/css/*
-  Cache-Control: public, max-age=3600, stale-while-revalidate=86400
+  Cache-Control: public, max-age=31536000, immutable
 /assets/js/*
-  Cache-Control: public, max-age=3600, stale-while-revalidate=86400
+  Cache-Control: public, max-age=31536000, immutable
 # AI · 검색엔진용 글 (한글이 깨지지 않게 글자 방식을 밝힌다)
 /llms.txt
   Content-Type: text/plain; charset=utf-8

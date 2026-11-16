@@ -276,6 +276,22 @@ function versioned(html) {
   });
 }
 
+// 휴대폰은 작은 사진만: tools/resize.py 가 만든 '이름.w800.webp' 가 있으면 <img> 에 srcset 을 단다
+const WIDTHS = existsSync(join(ROOT, "tools", "img-widths.json")) ? JSON.parse(readFileSync(join(ROOT, "tools", "img-widths.json"), "utf8")) : {};
+const ver = (url) => { versioned(`"${url}"`); const v = VERSIONS.get(url); return v ? `${url}?v=${v}` : url; };
+function responsive(html) {
+  return html.replace(/<img\b([^>]*?)\ssrc="(\/assets\/img\/[^"?]+)"([^>]*)>/g, (m, a, url, b, off, all) => {
+    const w = WIDTHS[url];
+    if (!w || /\ssrcset=/.test(a + b)) return m;
+    const small = url.replace(/\.(webp|jpe?g|png)$/i, ".w800.webp");
+    if (!existsSync(join(ROOT, small))) return m;
+    // 화면 전체 배경(첫 화면)은 화면 폭 그대로, 나머지는 휴대폰 100% · PC 절반 기준
+    const before = all.slice(Math.max(0, off - 80), off);
+    const sizes = /(phero__bg|hero__bg|bizcard__img)[^<]*$/.test(before) || /phero__bg|hero__bg/.test(before) ? "100vw" : "(max-width: 760px) 100vw, 50vw";
+    return `<img${a} src="${url}" srcset="${ver(small)} 800w, ${ver(url)} ${w}w" sizes="${sizes}"${b}>`;
+  });
+}
+
 const PAGES = []; // 검색엔진에 내보내는 페이지 (sitemap · llms.txt · RSS 가 쓴다)
 
 function render(file, lang) {
@@ -340,7 +356,7 @@ function renderRaw(raw, file, route, lang, post) {
   const html = fill(partial(lang, "head")) + fill(header) + `<main id="main">\n${main}\n</main>\n` + fill(partial(lang, "footer"));
   const dest = join(DIST, out);
   mkdirSync(dirname(dest), { recursive: true });
-  writeFileSync(dest, versioned(html));
+  writeFileSync(dest, versioned(responsive(html)));
   PAGES.push({ lang, path, url, canonical, meta: { ...meta, description: desc }, title, modified, post, main });
   return url;
 }
@@ -571,6 +587,14 @@ mkdirSync(DIST, { recursive: true });
 cpSync(join(ROOT, "assets"), join(DIST, "assets"), { recursive: true });
 // static/ 은 사이트 맨 위에 그대로 놓는다 (_headers: 사진 보관 기간 등)
 if (existsSync(join(ROOT, "static"))) cpSync(join(ROOT, "static"), DIST, { recursive: true });
+// 디자인 파일(CSS)은 설명 글 · 빈칸을 걷어내 가볍게 내보낸다 (원본은 그대로 두고 dist 만)
+for (const f of ["assets/css/site.css"]) {
+  const out = join(DIST, f);
+  if (!existsSync(out)) continue;
+  const css = readFileSync(out, "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/\s+/g, " ")
+    .replace(/\s*([{};])\s*/g, "$1").replace(/;}/g, "}").trim();
+  writeFileSync(out, css);
+}
 const urls = [];
 for (const lang of Object.keys(LANGS)) {
   urls.push(...pagesOf(lang).map((f) => render(f, lang)), ...renderPosts(lang));
