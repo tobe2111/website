@@ -302,7 +302,16 @@ function renderRaw(raw, file, route, lang, post) {
   const { meta, body: rawBody } = metaOf(raw, file);
   const t = T(lang);
   // <!--@ team --> 처럼 적으면 그 언어의 partials/team.html 을 끼워 넣는다
-  let body = rawBody.replace(/<!--@\s*([\w-]+)\s*-->/g, (_, n) => partial(lang, n));
+  // 관련 글은 상담 안내(공통 조각 또는 그 페이지가 직접 쓴 것) 바로 위에 놓는다
+  const withTopic = (h) => {
+    const add = topicPosts(route.path, lang);
+    if (!add) return h;
+    if (/<!--@\s*cta\s*-->/.test(h)) return h.replace(/<!--@\s*cta\s*-->/, (m) => add + m);
+    const at = h.lastIndexOf('<section class="cta">');
+    return at < 0 ? h : h.slice(0, at) + add + h.slice(at);
+  };
+  let body = (post ? rawBody : withTopic(rawBody))
+    .replace(/<!--@\s*([\w-]+)\s*-->/g, (_, n) => partial(lang, n));
   // 마케팅 상품 탭: 지금 보고 있는 상품에 표시
   if (meta.tab) body = body.replace(`data-tab="${meta.tab}"`, `data-tab="${meta.tab}" aria-current="page"`);
   const { path, url, out } = route;
@@ -361,6 +370,41 @@ function renderRaw(raw, file, route, lang, post) {
   return url;
 }
 
+// 상품 · 서비스 페이지 맨 아래(상담 안내 바로 위)에 그 주제의 최신 글 3편을 붙인다.
+// [블로그 주제(전체 보기가 가는 곳), 이 페이지에 맞는 글을 고르는 조건]. 조건에 맞는 글이 3편이 안 되면 같은 주제의 최신 글로 채운다.
+const PAGE_TOPIC = {
+  "/marketing/": ["마케팅 전략 · 성과", (p) => p.category === "마케팅 전략 · 성과"],
+  "/marketing/naver/": ["네이버 광고", (p) => p.category === "네이버 광고"],
+  "/marketing/google/": ["구글 · 인스타그램 광고", (p) => /google|retargeting|search-ads-vs-display/.test(p.slug)],
+  "/marketing/daangn/": ["당근 · 지역 마케팅", (p) => /daangn/.test(p.slug)],
+  "/marketing/momcafe/": ["당근 · 지역 마케팅", (p) => /momcafe|blog-cafe/.test(p.slug)],
+  "/marketing/place/": ["당근 · 지역 마케팅", (p) => /place|review/.test(p.slug) && p.category !== "병원 마케팅"],
+  "/marketing/blog-marketing/": ["블로그 · 콘텐츠", (p) => /blog/.test(p.slug) && p.category === "블로그 · 콘텐츠"],
+  "/marketing/experience/": ["블로그 · 콘텐츠", (p) => /experience|influencer/.test(p.slug)],
+  "/marketing/press/": ["블로그 · 콘텐츠", (p) => /press/.test(p.slug)],
+  "/marketing/hospital/": ["병원 마케팅", (p) => p.category === "병원 마케팅" && !/global-patient|foreign-patient|xiaohongshu/.test(p.slug)],
+  "/marketing/global-patients/": ["병원 마케팅", (p) => /global-patient|foreign-patient|xiaohongshu|douyin|wanghong/.test(p.slug)],
+  "/distribution/": ["국내 유통", (p) => p.category === "국내 유통"],
+  "/export/": ["해외 수출", (p) => p.category === "해외 수출"],
+};
+function topicPosts(path, lang) {
+  if (lang !== "ko" || !PAGE_TOPIC[path]) return "";
+  const [topic, pickFn] = PAGE_TOPIC[path];
+  const all = posts(lang);
+  const same = all.filter((p) => p.category === topic);
+  const pick = [...new Set([...all.filter(pickFn), ...same])].slice(0, 3);
+  if (pick.length < 3) return "";
+  return `<section class="sec sec--soft topicposts"><div class="wrap">
+    <div class="topicposts__head"><div><p class="eyebrow">블로그</p><h2 class="h3">${esc(topic)}, 더 깊이 읽기</h2></div>
+    <a class="btn btn--ghost" href="/blog/#${encodeURIComponent(topic)}">${esc(topic)} 글 ${same.length}편 모두 보기 →</a></div>
+    <div class="posts">` + pick.map((x) => `
+      <a class="post-card" href="/blog/${x.slug}/">
+        <div class="post-card__img">${x.cover ? `<img src="${esc(x.cover)}" alt="" loading="lazy">` : ""}</div>
+        <div class="post-card__tx"><span class="k">${esc(x.category)} · <time datetime="${x.date}">${x.date.replace(/-/g, ".")}</time></span>
+        <b>${esc(x.title)}</b></div>
+      </a>`).join("") + `\n    </div></div></section>\n\n`;
+}
+
 function blogList(lang) {
   const t = T(lang);
   const list = posts(lang);
@@ -372,12 +416,15 @@ function blogList(lang) {
   const cats = [...list.reduce((m, p) => m.set(p.category || t.blogDefaultCategory, (m.get(p.category || t.blogDefaultCategory) || 0) + 1), new Map())].sort((a, b) => rank(a[0]) - rank(b[0]));
   const bar = cats.length > 1 ? `<div class="pfilter" role="group" aria-label="${lang === "en" ? "Filter by topic" : "주제별로 보기"}"><button type="button" aria-pressed="true" data-f="all">${lang === "en" ? "All" : "전체"} <span>${list.length}</span></button>` +
     cats.map(([c, n]) => `<button type="button" aria-pressed="false" data-f="${esc(c)}">${esc(c)} <span>${n}</span></button>`).join("") + `</div>\n    ` : "";
-  return bar + `<div class="posts" data-prods data-hide data-stagger>` + list.map((p) => `
+  const en = lang === "en";
+  const search = list.length > 12 ? `<div class="psearch"><label class="sr-only" for="psearch">${en ? "Search articles" : "글 검색"}</label><input id="psearch" type="search" placeholder="${en ? "Search articles" : "제목 · 내용으로 글 찾기"}" autocomplete="off" data-psearch><p class="psearch__n" data-pcount aria-live="polite"></p></div>\n    ` : "";
+  const more = list.length > 12 ? `\n    <p class="pmore"><button type="button" class="btn btn--ghost" data-pmore data-label="${en ? "Show more" : "글 더 보기"}">${en ? "Show more" : "글 더 보기"}</button></p>\n    <p class="empty" data-pempty hidden>${en ? "No articles match." : "찾는 글이 없습니다. 다른 낱말로 찾아보세요."}</p>` : "";
+  return bar + search + `<div class="posts" data-prods data-hide data-page="12" data-unit="${en ? "" : "편"}">` + list.map((p) => `
       <a class="post-card" data-cat="${esc(p.category || t.blogDefaultCategory)}" href="${LANGS[lang].prefix}/blog/${p.slug}/">
         <div class="post-card__img">${p.cover ? `<img src="${esc(p.cover)}" alt="" loading="lazy">` : ""}</div>
         <div class="post-card__tx"><span class="k">${esc(p.category || t.blogDefaultCategory)} · <time datetime="${p.date}">${p.date.replace(/-/g, ".")}</time></span>
         <b>${esc(p.title)}</b><p>${esc(p.summary || "")}</p></div>
-      </a>`).join("") + `\n    </div>`;
+      </a>`).join("") + `\n    </div>` + more;
 }
 
 // 요약이 없는 글은 본문 앞부분으로 설명을 만든다 (사이트 공통 설명이 글마다 겹치지 않게)
@@ -400,10 +447,25 @@ function renderPosts(lang) {
         <b>${esc(x.title)}</b></div>
       </a>`).join("") + `\n    </div></div></section>`;
   };
+  // 소제목에 번호표(id)를 달고 목차를 만든다. '참고한 자료'는 목차에서 뺀다
+  const withToc = (html) => {
+    const items = []; let i = 0;
+    const body = html.replace(/<h2>([\s\S]*?)<\/h2>/g, (m, inner) => {
+      const id = "s" + (++i); if (!/참고한 자료|Sources/.test(inner)) items.push([id, plain(inner)]);
+      return `<h2 id="${id}">${inner}</h2>`;
+    });
+    const toc = items.length >= 4 ? `<nav class="toc" aria-label="${lang === "en" ? "Contents" : "목차"}"><b>${lang === "en" ? "In this article" : "이 글의 순서"}</b><ol>` +
+      items.map(([id, tx]) => `<li><a href="#${id}">${esc(tx)}</a></li>`).join("") + `</ol></nav>` : "";
+    return { body, toc };
+  };
+  const aside = lang === "en" ? "" : `<aside class="post__cta"><div><b>이 주제, 우리 회사에는 어떻게 적용할까요?</b><p>상담은 무료입니다. 시작 전에 모든 비용이 적힌 견적서를 드립니다.</p></div>
+      <p><a class="btn btn--blue" href="/contact/">상담 신청</a><a class="btn btn--ghost" href="${esc(site.kakao)}" target="_blank" rel="noopener">카카오톡으로 묻기</a></p></aside>
+    <p class="post__share"><span>이 글 공유</span><button type="button" class="btn btn--ghost" data-share>공유하기</button><button type="button" class="btn btn--ghost" data-copy data-done="주소를 복사했습니다">주소 복사</button></p>`;
   return all.map((p) => {
+    const { body: tocBody, toc } = withToc(p.body);
     const page = `<!-- ${JSON.stringify({ title: p.title, description: p.summary || excerpt(p.body), nav: "blog", image: p.cover })} -->\n` +
       tpl.replace(/\{\{post(\w+)\}\}/g, (_, k) => ({ Title: esc(p.title), Date: p.date, DateDot: p.date.replace(/-/g, "."),
-        Category: esc(p.category || t.blogDefaultCategory), Body: p.body, Cover: p.cover ? `<img class="post__cover" src="${esc(p.cover)}" alt="">` : "", Related: related(p) })[k] ?? "");
+        Category: esc(p.category || t.blogDefaultCategory), Body: tocBody, Toc: toc, Aside: aside, Cover: p.cover ? `<img class="post__cover" src="${esc(p.cover)}" alt="">` : "", Related: related(p) })[k] ?? "");
     const path = `/blog/${p.slug}/`, url = LANGS[lang].prefix + path;
     return renderRaw(page, p.file, { path, url, out: url.replace(/^\//, "") + "index.html" }, lang, p);
   });

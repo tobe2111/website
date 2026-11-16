@@ -71,26 +71,66 @@
     requestAnimationFrame(() => requestAnimationFrame(() => hero.classList.add("is-ready")));
   }
 
-  // ── 마케팅 상품 분류 버튼: 고른 분류만 또렷하게
+  // ── 분류 버튼: 마케팅 상품은 고른 분류만 또렷하게, 블로그는 고른 주제만 남긴다
   d.querySelectorAll(".pfilter").forEach((bar) => {
     const list = bar.parentElement.querySelector("[data-prods]");
     if (!list) return;
+    const hide = list.hasAttribute("data-hide");
+    const cards = [...list.querySelectorAll("[data-cat]")];
+    // 블로그 목록: 주제 + 검색어에 맞는 글을 12편씩 보여 준다
+    const step = +list.dataset.page || 0;
+    const box = bar.parentElement;
+    const q = box.querySelector("[data-psearch]"), more = box.querySelector("[data-pmore]"), count = box.querySelector("[data-pcount]"), empty = box.querySelector("[data-pempty]");
+    let f = "all", shown = step;
+    const text = new Map();
+    const apply = () => {
+      const words = q ? q.value.trim().toLowerCase().split(/\s+/).filter(Boolean) : [];
+      let n = 0;
+      cards.forEach((p) => {
+        let ok = f === "all" || p.dataset.cat === f;
+        if (ok && words.length) {
+          if (!text.has(p)) text.set(p, p.textContent.toLowerCase());
+          ok = words.every((w) => text.get(p).includes(w));
+        }
+        if (ok) n++;
+        const off = !ok || (step && n > shown);
+        if (hide) p.hidden = off; else p.classList.toggle("is-dim", off);
+      });
+      if (more) { more.parentElement.hidden = n <= shown; more.textContent = more.dataset.label + " (" + Math.min(shown, n) + " / " + n + ")"; }
+      if (count) count.textContent = words.length ? n + (list.dataset.unit || "") : "";
+      if (empty) empty.hidden = n > 0;
+    };
     bar.addEventListener("click", (e) => {
       const b = e.target.closest("button[data-f]");
       if (!b) return;
       bar.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
-      const f = b.dataset.f;
-      const hide = list.hasAttribute("data-hide");
-      list.querySelectorAll("[data-cat]").forEach((p) => { const off = f !== "all" && p.dataset.cat !== f; if (hide) p.hidden = off; else p.classList.toggle("is-dim", off); });
+      f = b.dataset.f; shown = step;
+      apply();
       // 고른 주제를 주소에 남겨, 그 주제만 보이는 화면을 공유 · 즐겨찾기할 수 있게
       if (hide) try { history.replaceState(null, "", f === "all" ? location.pathname : "#" + encodeURIComponent(f)); } catch (_) {}
     });
+    if (q) q.addEventListener("input", () => { shown = step; apply(); });
+    if (more) more.addEventListener("click", () => { shown += step; apply(); });
     // 주소에 주제가 적혀 들어왔으면 그 주제를 눌러 둔다
-    if (list.hasAttribute("data-hide") && location.hash.length > 1) {
+    let pre = null;
+    if (hide && location.hash.length > 1) {
       let want = ""; try { want = decodeURIComponent(location.hash.slice(1)); } catch (_) {}
-      const b = [...bar.querySelectorAll("button[data-f]")].find((x) => x.dataset.f === want);
-      if (b) b.click();
+      pre = [...bar.querySelectorAll("button[data-f]")].find((x) => x.dataset.f === want);
     }
+    if (pre) pre.click(); else if (step) apply();
+  });
+
+  // ── 블로그 글: 공유하기 · 주소 복사
+  d.querySelectorAll("[data-share]").forEach((b) => {
+    if (!navigator.share) { b.hidden = true; return; }
+    b.addEventListener("click", () => { navigator.share({ title: d.title, url: location.href }).catch(() => {}); });
+  });
+  d.querySelectorAll("[data-copy]").forEach((b) => {
+    const label = b.textContent;
+    b.addEventListener("click", () => {
+      const done = () => { b.textContent = b.dataset.done; setTimeout(() => { b.textContent = label; }, 2000); };
+      if (navigator.clipboard) navigator.clipboard.writeText(location.href).then(done).catch(() => {});
+    });
   });
 
   // ── 흐르는 로고 줄: 내용을 한 번 더 붙여 끊김 없이 돈다
