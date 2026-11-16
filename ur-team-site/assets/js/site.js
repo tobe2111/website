@@ -87,6 +87,19 @@
     if (!matchMedia("(prefers-reduced-motion: reduce)").matches) setInterval(() => { if (!d.hidden) show((n + 1) % items.length); }, 3600);
   }
 
+  // ── 마케팅 상품 분류 버튼: 고른 분류만 또렷하게
+  d.querySelectorAll(".pfilter").forEach((bar) => {
+    const list = bar.parentElement.querySelector("[data-prods]");
+    if (!list) return;
+    bar.addEventListener("click", (e) => {
+      const b = e.target.closest("button[data-f]");
+      if (!b) return;
+      bar.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+      const f = b.dataset.f;
+      list.querySelectorAll("[data-cat]").forEach((p) => p.classList.toggle("is-dim", f !== "all" && p.dataset.cat !== f));
+    });
+  });
+
   // ── 흐르는 로고 줄: 내용을 한 번 더 붙여 끊김 없이 돈다
   d.querySelectorAll(".marquee__track").forEach((t) => {
     t.append(...[...t.children].map((c) => { const k = c.cloneNode(true); k.setAttribute("aria-hidden", "true"); return k; }));
@@ -131,6 +144,9 @@
     const out = f.querySelector("[data-msg]");
     const say = (text, ok) => { if (!out) return; out.textContent = text; out.className = "msg " + (ok ? "ok" : "err"); out.scrollIntoView({ block: "center", behavior: reduce ? "auto" : "smooth" }); };
     const q = new URLSearchParams(location.search);
+    // ?topic=병원 마케팅 처럼 들어오면 관심 분야를 미리 체크해 둔다 (어느 페이지에서 왔는지)
+    const topic = q.get("topic");
+    if (topic) f.querySelectorAll('[data-msg-part][type="checkbox"]').forEach((el) => { if (el.value === topic) el.checked = true; });
     if (q.get("sent")) say(q.get("sent"), true);
     if (q.get("err")) say(q.get("err"), false);
     // 어디서 왔는지(광고 링크의 utm, 들어오기 전 페이지) — 어떤 광고가 상담을 만들었는지 보려고
