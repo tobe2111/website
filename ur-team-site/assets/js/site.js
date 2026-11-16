@@ -4,20 +4,27 @@
   root.classList.add("js");
   const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-  // ── 머리말: 내리면 반투명, 빠르게 내리면 숨고 올리면 나타난다
+  // ── 머리말: 어두운 첫 화면 위에서는 투명, 지나가면 흰 바탕. 빨리 내리면 숨고 올리면 나타난다
   const hd = d.querySelector("[data-hd]");
   const float = d.querySelector(".float");
-  let lastY = 0;
-  const onScroll = () => {
-    const y = scrollY;
-    hd?.classList.toggle("is-scrolled", y > 20);
-    if (!d.body.classList.contains("menu-open")) hd?.classList.toggle("is-hidden", y > 400 && y > lastY + 4);
-    if (y < lastY - 4) hd?.classList.remove("is-hidden");
-    float?.classList.toggle("is-off", y < 300);
-    lastY = y;
-  };
-  addEventListener("scroll", onScroll, { passive: true });
-  onScroll();
+  const darkTop = d.querySelector(".hero, .phero--media");
+  if (darkTop && hd) {
+    new IntersectionObserver(([en]) => hd.classList.toggle("is-over", en.isIntersecting && !d.body.classList.contains("menu-open")),
+      { rootMargin: `-${hd.offsetHeight}px 0px 0px 0px`, threshold: 0.02 }).observe(darkTop);
+  }
+  let lastY = 0, ticking = false;
+  addEventListener("scroll", () => {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(() => {
+      const y = scrollY;
+      if (!d.body.classList.contains("menu-open")) hd?.classList.toggle("is-hidden", y > 500 && y > lastY + 4);
+      if (y < lastY - 4) hd?.classList.remove("is-hidden");
+      float?.classList.toggle("is-off", y < 300);
+      lastY = y; ticking = false;
+    });
+  }, { passive: true });
+  float?.classList.add("is-off");
 
   // ── 모바일 메뉴
   const burger = d.querySelector("[data-burger]");
@@ -27,7 +34,7 @@
     burger.setAttribute("aria-label", open ? "메뉴 닫기" : "메뉴 열기");
     mnav.hidden = !open;
     d.body.classList.toggle("menu-open", open);
-    hd.classList.add("is-scrolled");
+    hd.classList.toggle("is-over", false);
     if (open) [...mnav.children].forEach((a, i) => a.style.setProperty("--i", i));
   };
   burger?.addEventListener("click", () => setMenu(burger.getAttribute("aria-expanded") !== "true"));
@@ -74,34 +81,11 @@
       if (el.matches("[data-count]")) countUp(el);
       io.unobserve(el);
     }
-  }, { rootMargin: "0px 0px -12% 0px", threshold: 0.08 });
-  d.querySelectorAll("[data-reveal], .bubbles, .steps, .bars, .funnel, [data-count]").forEach((el) => io.observe(el));
-
-  // ── 카드 위 빛이 마우스를 따라온다
-  d.querySelectorAll(".bizcard").forEach((c) => c.addEventListener("pointermove", (e) => {
-    const r = c.getBoundingClientRect();
-    c.style.setProperty("--mx", `${e.clientX - r.left}px`);
-    c.style.setProperty("--my", `${e.clientY - r.top}px`);
-  }));
+  }, { rootMargin: "0px 0px -12% 0px", threshold: 0 });
+  d.querySelectorAll("[data-reveal], [data-wipe], .bubbles, .steps, .bars, .funnel, .flow, .principle, .slogan, [data-count]").forEach((el) => io.observe(el));
 
   // ── 첫 화면 영상: 움직임 줄이기 설정이면 멈춘다
   d.querySelectorAll("video[autoplay]").forEach((v) => { if (reduce) v.pause(); });
-
-  // ── 살짝 따라 움직이는 그림 (data-parallax="0.15")
-  const par = [...d.querySelectorAll("[data-parallax]")];
-  if (par.length && !reduce) {
-    const step = () => {
-      const vh = innerHeight;
-      for (const el of par) {
-        const r = el.getBoundingClientRect();
-        if (r.bottom < 0 || r.top > vh) continue;
-        const k = parseFloat(el.dataset.parallax) || 0.1;
-        el.style.transform = `translate3d(0, ${((r.top + r.height / 2 - vh / 2) * -k).toFixed(1)}px, 0)`;
-      }
-    };
-    addEventListener("scroll", () => requestAnimationFrame(step), { passive: true });
-    step();
-  }
 
   // ── 상담 신청: 엔진의 상담 DB(/lead-in/<조직>)로 보낸다
   d.querySelectorAll("form[data-lead]").forEach((f) => {
