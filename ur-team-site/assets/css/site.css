@@ -922,3 +922,10 @@ a.prod:hover b { color: var(--accent); }
 .js [data-reveal].is-in { transform: none; }
 .js [data-wipe] { transition-duration: .5s; }
 .js [data-wipe] img { transition-duration: .7s; }
+
+/* 어두운 바탕용으로 만든 그림(흰 글씨)은 어두운 판 위에 함께 올린다 */
+.darkpair { display: grid; grid-template-columns: 5fr 7fr; gap: clamp(20px, 3vw, 48px); align-items: center; padding: clamp(24px, 3.2vw, 48px); background: #0b0d12; border-radius: var(--r); }
+.darkpair figure { margin: 0; display: grid; gap: 14px; justify-items: center; }
+.darkpair img { width: 100%; max-height: 460px; object-fit: contain; }
+.darkpair figcaption { font-size: 13px; color: rgba(255, 255, 255, .62); }
+@media (max-width: 860px) { .darkpair { grid-template-columns: 1fr; gap: 28px; } }
