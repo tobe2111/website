@@ -879,3 +879,15 @@ a.prod:hover b { color: var(--accent); }
   .hero__idx a { padding-top: 16px; padding-bottom: 16px; }
   .marquee--dark { padding: 15px 0; }
 }
+
+/* ═══ 맨 아래 상담 띠: 왼쪽에 말 · 버튼, 오른쪽에 '무료로 확인해 드리는 네 가지' 목록 ═══ */
+@media (min-width: 961px) {
+  .cta .wrap { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 460px); column-gap: clamp(40px, 6vw, 96px); align-items: start; }
+  .cta .wrap > * { grid-column: 1; }
+  .cta .perks { grid-column: 2; grid-row: 1 / span 4; align-self: center; margin-top: 0; }
+}
+.cta .perks { grid-template-columns: 1fr; counter-reset: perk; border-top-color: rgba(255, 255, 255, .4); }
+.cta .perk, .cta .perk + .perk { display: flex; align-items: center; gap: 18px; padding: 19px 0; border-left: 0; border-bottom: 1px solid rgba(255, 255, 255, .16); counter-increment: perk; }
+.cta .perk::before { content: "0" counter(perk); font-size: 13px; font-weight: 600; color: #a9bdff; font-variant-numeric: tabular-nums; }
+.cta .perk::after { content: "무료"; margin-left: auto; font-size: 12px; font-weight: 600; padding: 3px 9px; border: 1px solid rgba(255, 255, 255, .35); border-radius: var(--r); color: rgba(255, 255, 255, .85); }
+:root[lang="en"] .cta .perk::after { content: "Free"; }
