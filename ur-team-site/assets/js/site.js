@@ -61,6 +61,22 @@
     requestAnimationFrame(() => requestAnimationFrame(() => hero.classList.add("is-ready")));
   }
 
+  // ── 첫 화면 오른쪽 '기록'이 차례로 바뀐다
+  const rec = d.querySelector(".hero__rec");
+  if (rec) {
+    const items = [...rec.querySelectorAll("li")];
+    const dots = rec.querySelector(".hero__dots");
+    const bars = items.map(() => dots.appendChild(d.createElement("i")));
+    let n = 0;
+    const show = (k) => {
+      items.forEach((li, i) => { li.classList.toggle("is-on", i === k); li.classList.toggle("is-out", i === n && i !== k); });
+      bars.forEach((b, i) => { b.classList.remove("is-on"); if (i === k) { void b.offsetWidth; b.classList.add("is-on"); } });
+      n = k;
+    };
+    show(0);
+    if (!matchMedia("(prefers-reduced-motion: reduce)").matches) setInterval(() => { if (!d.hidden) show((n + 1) % items.length); }, 3600);
+  }
+
   // ── 흐르는 로고 줄: 내용을 한 번 더 붙여 끊김 없이 돈다
   d.querySelectorAll(".marquee__track").forEach((t) => {
     t.append(...[...t.children].map((c) => { const k = c.cloneNode(true); k.setAttribute("aria-hidden", "true"); return k; }));
