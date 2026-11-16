@@ -755,3 +755,8 @@ main { overflow-x: clip; }
 .ph .step::before { color: color-mix(in srgb, var(--pc) 75%, #000); }
 @media (max-width: 1080px) { .steps[style*="repeat(5"] { grid-template-columns: repeat(2, 1fr) !important; } }
 @media (max-width: 560px) { .steps[style*="repeat(5"] { grid-template-columns: 1fr !important; } }
+/* 첫 화면 배경 영상 (비메오 배경 모드 — 재생 버튼 · 막대 없음) */
+.phero__vid { position: absolute; inset: 0; overflow: hidden; z-index: 1; }
+.phero__vid iframe { position: absolute; top: 50%; left: 50%; width: 177.78vh; height: 56.25vw; min-width: 100%; min-height: 100%; transform: translate(-50%, -50%); border: 0; pointer-events: none; }
+.phero__bg--video img { position: absolute; inset: 0; z-index: 0; }
+.phero__bg--video::after { z-index: 2; }
