@@ -82,7 +82,15 @@
       const f = b.dataset.f;
       const hide = list.hasAttribute("data-hide");
       list.querySelectorAll("[data-cat]").forEach((p) => { const off = f !== "all" && p.dataset.cat !== f; if (hide) p.hidden = off; else p.classList.toggle("is-dim", off); });
+      // 고른 주제를 주소에 남겨, 그 주제만 보이는 화면을 공유 · 즐겨찾기할 수 있게
+      if (hide) try { history.replaceState(null, "", f === "all" ? location.pathname : "#" + encodeURIComponent(f)); } catch (_) {}
     });
+    // 주소에 주제가 적혀 들어왔으면 그 주제를 눌러 둔다
+    if (list.hasAttribute("data-hide") && location.hash.length > 1) {
+      let want = ""; try { want = decodeURIComponent(location.hash.slice(1)); } catch (_) {}
+      const b = [...bar.querySelectorAll("button[data-f]")].find((x) => x.dataset.f === want);
+      if (b) b.click();
+    }
   });
 
   // ── 흐르는 로고 줄: 내용을 한 번 더 붙여 끊김 없이 돈다

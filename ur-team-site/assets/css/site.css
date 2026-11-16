@@ -1362,3 +1362,10 @@ a.prod:hover b { color: var(--accent); }
 .prose .sources li + li { margin-top: 6px; }
 .prose .sources a { color: var(--ink-2); text-decoration-color: var(--line-2); overflow-wrap: anywhere; }
 .prose .sources a:hover { color: var(--accent); }
+
+/* 블로그 주제 버튼: 휴대폰에서는 여러 줄로 쌓지 않고 옆으로 밀어 본다 */
+@media (max-width: 720px) {
+  .pfilter { flex-wrap: nowrap; overflow-x: auto; margin-left: -20px; margin-right: -20px; padding: 2px 20px 10px; scrollbar-width: none; -webkit-overflow-scrolling: touch; scroll-snap-type: x proximity; }
+  .pfilter::-webkit-scrollbar { display: none; }
+  .pfilter button { flex: 0 0 auto; white-space: nowrap; scroll-snap-align: start; }
+}
