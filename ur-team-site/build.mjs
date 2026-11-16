@@ -153,7 +153,9 @@ function renderPosts(lang) {
 // 예전 주소(아임웹 · 프레이머) → 새 주소. 검색엔진 · 명함 · 광고에 남은 링크가 끊기지 않게 한다.
 function redirects() {
   const lines = [];
-  for (const [from, to] of Object.entries(site.redirects)) {
+  for (let [from, to] of Object.entries(site.redirects)) {
+    // 영어판이 아직 없으면 영어 주소는 한국어 첫 화면으로
+    if (!ENGLISH_READY && to.startsWith("/en/")) to = "/";
     lines.push(`${from} ${to} 301`);
     const dest = join(DIST, from.replace(/^\//, ""), "index.html");
     if (existsSync(dest)) continue;

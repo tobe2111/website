@@ -35,7 +35,9 @@ for (const f of walk(DIST).filter((x) => x.endsWith(".html"))) {
   if (/imweb\.me|framerusercontent\.com/.test(html)) bad.push(`${where}: 예전 사이트(아임웹·프레이머) 파일을 아직 불러옴`);
   if (!/<title>[^<]+<\/title>/.test(html)) bad.push(`${where}: 제목(title) 없음`);
 }
-for (const [from, to] of Object.entries(site.redirects)) {
+const englishReady = existsSync(join(DIST, "en", "index.html"));
+for (let [from, to] of Object.entries(site.redirects)) {
+  if (!englishReady && to.startsWith("/en/")) to = "/"; // 영어판이 올라가기 전에는 한국어 첫 화면으로 보낸다
   if (!existsSync(join(DIST, from, "index.html"))) bad.push(`예전 주소 ${from} 가 이어지지 않음`);
   if (!existsSync(resolve(to))) bad.push(`예전 주소 ${from} → ${to} 의 새 페이지가 없음`);
 }
