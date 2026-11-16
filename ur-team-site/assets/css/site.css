@@ -1453,8 +1453,13 @@ a.prod:hover b { color: var(--accent); }
 .gloss > div { display: flex; flex-wrap: wrap; gap: 6px 32px; padding: 18px 0; border-bottom: 1px solid var(--line); }
 .gloss > div:target { background: var(--bg-2); }
 .gloss dt { flex: 0 0 220px; max-width: 100%; font-size: 16px; font-weight: 600; color: var(--ink); }
-.gloss dd { flex: 1 1 320px; min-width: 0; font-size: 15px; line-height: 1.75; color: var(--ink-2); overflow-wrap: anywhere; }
+.gloss dd { flex: 1 1 320px; min-width: 0; max-width: 72ch; font-size: 15px; line-height: 1.75; color: var(--ink-2); overflow-wrap: anywhere; }
 .gloss dd a { display: block; margin-top: 6px; font-size: 14px; color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
-.gloss dd a::before { content: "관련 글 · "; color: var(--muted); text-decoration: none; display: inline-block; }
+.gloss dd a::before { content: "관련 글 ·"; margin-right: 6px; color: var(--muted); text-decoration: none; display: inline-block; }
 .gloss-more { margin-top: 40px; color: var(--ink-2); }
 .gloss-more a { color: var(--accent); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+
+/* 표 · 구간 아래의 작은 안내 문장 */
+.note { font-size: 14px; line-height: 1.7; color: var(--muted); }
+.note a { color: var(--ink-2); text-decoration: underline; text-underline-offset: 3px; }
+.note a:hover { color: var(--accent); }
