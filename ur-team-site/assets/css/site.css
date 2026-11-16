@@ -1024,6 +1024,7 @@ a.prod:hover b { color: var(--accent); }
 
 /* ═══ 마케팅 메인 ═══ */
 .mk-hero { min-height: 0; display: block; padding-bottom: 0; }
+.mk-hero--plain { padding-bottom: clamp(44px, 5vw, 68px); }
 .mk-hero .phero__bg::after { background: linear-gradient(90deg, rgba(8, 10, 14, .9) 0%, rgba(8, 10, 14, .72) 55%, rgba(8, 10, 14, .55) 100%); }
 .mk-hero__in { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: clamp(32px, 5vw, 72px); align-items: end; }
 .mk-hero .btns { margin-top: 28px; }
