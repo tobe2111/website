@@ -459,14 +459,19 @@ function renderPosts(lang) {
       items.map(([id, tx]) => `<li><a href="#${id}">${esc(tx)}</a></li>`).join("") + `</ol></nav>` : "";
     return { body, toc };
   };
+  // 블로그 주제 → 상담 신청서에서 미리 체크할 칸(관심 분야, 마케팅 상품)
+  const TOPIC_FORM = { "네이버 광고": "일반 마케팅,네이버 광고", "구글 · 인스타그램 광고": "일반 마케팅,구글 광고,메타(인스타그램) 광고",
+    "당근 · 지역 마케팅": "일반 마케팅,당근마켓", "블로그 · 콘텐츠": "일반 마케팅,블로그 마케팅", "마케팅 전략 · 성과": "일반 마케팅",
+    "병원 마케팅": "병원 마케팅", "국내 유통": "국내 유통", "해외 수출": "해외 수출" };
+  const contactFor = (p) => `/contact/?${new URLSearchParams({ ...(TOPIC_FORM[p.category] ? { topic: TOPIC_FORM[p.category] } : {}), from: p.title })}`.replace(/&/g, "&amp;");
   const aside = lang === "en" ? "" : `<aside class="post__cta"><div><b>이 주제, 우리 회사에는 어떻게 적용할까요?</b><p>상담은 무료입니다. 시작 전에 모든 비용이 적힌 견적서를 드립니다.</p></div>
-      <p><a class="btn btn--blue" href="/contact/">상담 신청</a><a class="btn btn--ghost" href="${esc(site.kakao)}" target="_blank" rel="noopener">카카오톡으로 묻기</a></p></aside>
+      <p><a class="btn btn--blue" href="{{contactHref}}">상담 신청</a><a class="btn btn--ghost" href="${esc(site.kakao)}" target="_blank" rel="noopener">카카오톡으로 묻기</a></p></aside>
     <p class="post__share"><span>이 글 공유</span><button type="button" class="btn btn--ghost" data-share>공유하기</button><button type="button" class="btn btn--ghost" data-copy data-done="주소를 복사했습니다">주소 복사</button></p>`;
   return all.map((p) => {
     const { body: tocBody, toc } = withToc(p.body);
     const page = `<!-- ${JSON.stringify({ title: p.title, description: p.summary || excerpt(p.body), nav: "blog", image: p.cover })} -->\n` +
       tpl.replace(/\{\{post(\w+)\}\}/g, (_, k) => ({ Title: esc(p.title), Date: p.date, DateDot: p.date.replace(/-/g, "."),
-        Category: esc(p.category || t.blogDefaultCategory), Body: tocBody, Toc: toc, Aside: aside, Cover: p.cover ? `<img class="post__cover" src="${esc(p.cover)}" alt="">` : "", Related: related(p) })[k] ?? "");
+        Category: esc(p.category || t.blogDefaultCategory), Body: tocBody, Toc: toc, Aside: aside.replace("{{contactHref}}", contactFor(p)), Cover: p.cover ? `<img class="post__cover" src="${esc(p.cover)}" alt="">` : "", Related: related(p) })[k] ?? "");
     const path = `/blog/${p.slug}/`, url = LANGS[lang].prefix + path;
     return renderRaw(page, p.file, { path, url, out: url.replace(/^\//, "") + "index.html" }, lang, p);
   });
