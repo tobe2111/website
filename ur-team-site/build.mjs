@@ -20,6 +20,7 @@ import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, cpSync, 
 import { join, dirname, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const SRC = join(ROOT, "src");
@@ -260,6 +261,20 @@ const VERIFY = { google: "google-site-verification", naver: "naver-site-verifica
 const verifyTags = () => Object.entries(VERIFY).filter(([k]) => site.verification?.[k])
   .map(([k, n]) => `<meta name="${n}" content="${esc(site.verification[k])}">`).join("\n");
 
+
+// 파일 내용이 바뀌면 주소 끝의 ?v= 값도 바뀐다 → 브라우저 · Cloudflare 가 예전 CSS · 사진 · PDF 를 붙잡지 않는다
+const VERSIONS = new Map();
+function versioned(html) {
+  return html.replace(/(["'(])(\/assets\/[^"'()?#\s]+)(?=["')])/g, (m, q, url) => {
+    if (!VERSIONS.has(url)) {
+      const file = join(ROOT, decodeURIComponent(url));
+      VERSIONS.set(url, existsSync(file) ? createHash("sha1").update(readFileSync(file)).digest("hex").slice(0, 8) : "");
+    }
+    const v = VERSIONS.get(url);
+    return v ? `${q}${url}?v=${v}` : m;
+  });
+}
+
 const PAGES = []; // 검색엔진에 내보내는 페이지 (sitemap · llms.txt · RSS 가 쓴다)
 
 function render(file, lang) {
@@ -322,7 +337,7 @@ function renderRaw(raw, file, route, lang, post) {
   const html = fill(partial(lang, "head")) + fill(header) + `<main id="main">\n${main}\n</main>\n` + fill(partial(lang, "footer"));
   const dest = join(DIST, out);
   mkdirSync(dirname(dest), { recursive: true });
-  writeFileSync(dest, html);
+  writeFileSync(dest, versioned(html));
   PAGES.push({ lang, path, url, canonical, meta: { ...meta, description: desc }, title, modified, post, main });
   return url;
 }
