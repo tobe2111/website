@@ -1043,6 +1043,11 @@ a.prod:hover b { color: var(--accent); }
 .mk-chan a { display: inline-flex; align-items: center; gap: 8px; padding: 9px 14px; border: 1px solid rgba(255, 255, 255, .24); border-radius: 999px; color: #fff; font-size: 14px; font-weight: 500; transition: background .2s, border-color .2s, color .2s; }
 .mk-chan a:hover { background: #fff; color: var(--ink); border-color: #fff; }
 .mk-chan i { width: 8px; height: 8px; border-radius: 50%; background: var(--pc); }
+.mk-chan i.ic { display: grid; place-items: center; width: 24px; height: 24px; margin-left: -4px; border-radius: 50%; background: var(--pc); color: #fff; flex: none; transition: transform .25s var(--ease); }
+.mk-chan i.ic svg { width: 14px; height: 14px; }
+.mk-chan i.ic--brand svg { width: 11px; height: 11px; }
+.mk-chan a:hover i.ic { transform: rotate(-8deg) scale(1.08); }
+.mk-chan a { padding-left: 10px; }
 .pains { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
 .pains > div { border: 1px solid var(--line); padding: 24px 24px 20px; display: flex; flex-direction: column; gap: 10px; }
 .pains__q { font-size: clamp(18px, 1.5vw, 21px); font-weight: 600; letter-spacing: -.02em; color: var(--ink); }
@@ -1141,3 +1146,47 @@ a.prod:hover b { color: var(--accent); }
 .sec + .sec[style*="padding-top:0"] { padding-top: clamp(32px, 3.6vw, 52px) !important; }
 .board[style*="text-align:center"] .lead { margin-inline: auto; }
 .post-card[hidden] { display: none; }
+
+/* 슬로건 모션: 앞 줄이 올라오고 → 줄이 그어지며 흐려지고 → 뒷 줄이 한 단어씩 → 옆 그래프가 그려진다 */
+.slogan--motion { display: grid; grid-template-columns: 1.1fr .9fr; gap: clamp(28px, 4vw, 64px); align-items: center; }
+.slogan--motion .lead { margin-top: 24px; }
+.slogan--motion .w { display: inline-block; }
+.slogan--motion .strike { color: var(--ink); transition: color .7s var(--ease) 1.3s; }
+.slogan--motion .strike::after { height: .09em; border-radius: 2px; transition: transform .7s cubic-bezier(.7, 0, .2, 1) .85s; }
+.slogan--motion.is-in .strike { color: var(--muted); }
+.js .slogan--motion .w { opacity: 0; transform: translateY(.45em); transition: opacity .6s var(--ease), transform .7s var(--ease); }
+.js .slogan--motion .strike .w { transition-delay: calc(var(--w) * 120ms + 150ms); }
+.js .slogan--motion .slogan__no .w { transition-delay: calc(var(--w) * 160ms + 1.7s); }
+.js .slogan--motion.is-in .w { opacity: 1; transform: none; }
+.slogan__no .w:last-child { position: relative; }
+.slogan__no .w:last-child::after { content: ""; position: absolute; left: 0; right: .2em; bottom: .02em; height: .22em; background: color-mix(in srgb, var(--accent) 22%, transparent); z-index: -1; transform-origin: left; transform: scaleX(0); transition: transform .8s var(--ease) 2.4s; }
+.slogan--motion.is-in .slogan__no .w:last-child::after { transform: scaleX(1); }
+.slogan__chart { margin: 0; padding: clamp(16px, 2vw, 24px); background: var(--bg-2); }
+.slogan__chart svg { width: 100%; height: auto; overflow: visible; }
+.slogan__chart figcaption { margin-top: 10px; font-size: 13px; color: var(--muted); }
+.sc__grid line { stroke: var(--line); stroke-width: 1; }
+.sc__axis { stroke: var(--line-2); stroke-width: 1.5; }
+.sc__ax { font-size: 12px; fill: var(--muted); }
+.sc__down, .sc__flat { fill: none; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1; stroke-dashoffset: 1; }
+.sc__down { stroke: #9aa3ad; stroke-width: 3; transition: stroke-dashoffset 1.8s ease-in .9s; }
+.sc__flat { stroke: var(--accent); stroke-width: 4; transition: stroke-dashoffset 1.8s var(--ease) .9s; }
+.slogan--motion.is-in .sc__down, .slogan--motion.is-in .sc__flat { stroke-dashoffset: 0; }
+.sc__dot { opacity: 0; transform-box: fill-box; transform-origin: center; transform: scale(0); transition: opacity .3s 2.6s, transform .5s cubic-bezier(.3, 1.6, .5, 1) 2.6s; }
+.sc__dot--down { fill: #9aa3ad; }
+.sc__dot--flat { fill: var(--accent); }
+.slogan--motion.is-in .sc__dot { opacity: 1; transform: scale(1); }
+.slogan--motion.is-in .sc__dot--flat { animation: scPulse 2s ease-out 3.2s infinite; }
+@keyframes scPulse { 0% { filter: drop-shadow(0 0 0 rgba(23, 71, 230, .6)); } 70% { filter: drop-shadow(0 0 10px rgba(23, 71, 230, 0)); } 100% { filter: none; } }
+.sc__lb { font-size: 14px; font-weight: 700; opacity: 0; transition: opacity .6s 2.8s; }
+.sc__lb--flat { fill: var(--accent); }
+.sc__lb--down { fill: #6b7580; }
+.slogan--motion.is-in .sc__lb { opacity: 1; }
+@media (max-width: 860px) { .slogan--motion { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) {
+  .js .slogan--motion .w, .slogan--motion *, .slogan--motion *::after { transition: none !important; animation: none !important; }
+}
+/* 휴대폰: 손가락으로 누르기 쉬운 크기 (경로 · 바닥글 링크) */
+@media (max-width: 760px) {
+  .crumb a { display: inline-block; padding: 10px 6px; margin: -10px -6px; }
+  .ft a { display: inline-block; padding-block: 6px; }
+}
