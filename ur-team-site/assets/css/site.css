@@ -1019,8 +1019,8 @@ a.prod:hover b { color: var(--accent); }
   .pbar > div { grid-template-columns: 84px 1fr 70px; font-size: 12px; }
   .funnels li { font-size: 12px; padding: 0 12px; min-height: 44px; }
 }
-.country__more { display: inline-block; margin-top: 12px; font-size: 14px; font-weight: 600; color: var(--accent); }
-.country__more:hover { text-decoration: underline; text-underline-offset: 3px; }
+.country__more { grid-column: 2; justify-self: start; margin-top: 12px; padding: 7px 14px; border: 1px solid var(--accent); border-radius: 999px; font-size: 14px; font-weight: 600; color: var(--accent); transition: background .2s, color .2s; }
+.country__more:hover { background: var(--accent); color: #fff; }
 
 /* ═══ 마케팅 메인 ═══ */
 .mk-hero { min-height: 0; display: block; padding-bottom: 0; }
