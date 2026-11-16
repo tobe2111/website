@@ -891,3 +891,18 @@ a.prod:hover b { color: var(--accent); }
 .cta .perk::before { content: "0" counter(perk); font-size: 13px; font-weight: 600; color: #a9bdff; font-variant-numeric: tabular-nums; }
 .cta .perk::after { content: "무료"; margin-left: auto; font-size: 12px; font-weight: 600; padding: 3px 9px; border: 1px solid rgba(255, 255, 255, .35); border-radius: var(--r); color: rgba(255, 255, 255, .85); }
 :root[lang="en"] .cta .perk::after { content: "Free"; }
+
+/* ═══ 홈: 고민마다 유어팀의 답 · 지도 아래 수출 권역 · 사례 더 보기 ═══ */
+.bubble .q { margin: 0; }
+.bubble .a { margin-top: 12px; font-size: 16px; font-weight: 400; line-height: 1.7; letter-spacing: -.01em; color: var(--muted); }
+.bubble .a b { margin-right: 6px; font-weight: 600; color: var(--accent); }
+.bubble .a a { margin-left: 6px; font-weight: 600; color: var(--ink); white-space: nowrap; border-bottom: 1px solid var(--line-2); transition: color .2s, border-color .2s; }
+.bubble .a a:hover { color: var(--accent); border-color: var(--accent); }
+.regions { margin-top: 20px; display: grid; gap: 12px; }
+.regions b { font-size: 14px; font-weight: 600; }
+.regions ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.regions li { padding: 6px 12px; font-size: 14px; line-height: 1.4; background: var(--bg); border: 1px solid var(--line-2); border-radius: var(--r); }
+.regions a, .more a { justify-self: start; font-size: 15px; font-weight: 600; border-bottom: 1px solid var(--ink); padding-bottom: 2px; transition: color .2s, border-color .2s; }
+.regions a:hover, .more a:hover { color: var(--accent); border-color: var(--accent); }
+.more { margin-top: clamp(28px, 3vw, 40px); }
+@media (min-width: 961px) { .story__aside { position: sticky; top: calc(var(--hd) + 32px); } }
