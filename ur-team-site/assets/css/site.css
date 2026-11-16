@@ -1443,3 +1443,18 @@ a.prod:hover b { color: var(--accent); }
 .fmore__body { padding: 4px 18px 18px; border-top: 1px solid var(--line); }
 .fmore fieldset[hidden] { display: none; }
 .fmore__body { display: grid; gap: 16px; padding-top: 16px; }
+
+/* 용어 사전 (/glossary/) */
+.gloss-nav { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.gloss-nav a { padding: 8px 14px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg-2); font-size: 14px; color: var(--ink-2); }
+.gloss-nav a:hover { border-color: var(--accent); color: var(--accent); }
+.gloss-nav ~ .h3 { margin-top: clamp(40px, 5vw, 64px); }
+.gloss { margin-top: 14px; border-top: 1px solid var(--ink); }
+.gloss > div { display: flex; flex-wrap: wrap; gap: 6px 32px; padding: 18px 0; border-bottom: 1px solid var(--line); }
+.gloss > div:target { background: var(--bg-2); }
+.gloss dt { flex: 0 0 220px; max-width: 100%; font-size: 16px; font-weight: 600; color: var(--ink); }
+.gloss dd { flex: 1 1 320px; min-width: 0; font-size: 15px; line-height: 1.75; color: var(--ink-2); overflow-wrap: anywhere; }
+.gloss dd a { display: block; margin-top: 6px; font-size: 14px; color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+.gloss dd a::before { content: "관련 글 · "; color: var(--muted); text-decoration: none; display: inline-block; }
+.gloss-more { margin-top: 40px; color: var(--ink-2); }
+.gloss-more a { color: var(--accent); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
