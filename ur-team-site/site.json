@@ -62,7 +62,7 @@
     "bing": ""
   },
   "form": {
-    "endpoint": "",
+    "endpoint": "https://formsubmit.co/ajax/jiwon@ur-team.com",
     "turnstileSiteKey": "",
     "retentionDays": 365
   },

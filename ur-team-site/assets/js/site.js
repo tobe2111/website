@@ -126,7 +126,7 @@
   // ── 첫 화면 영상: 움직임 줄이기 설정이면 멈춘다
   d.querySelectorAll("video[autoplay]").forEach((v) => { if (reduce) v.pause(); });
 
-  // ── 상담 신청: 구글 스프레드시트(Apps Script) 또는 엔진의 상담 DB(/lead-in/<조직>)로 보낸다
+  // ── 상담 신청: 담당자 메일(FormSubmit) 또는 엔진의 상담 DB(/lead-in/<조직>)로 보낸다
   d.querySelectorAll("form[data-lead]").forEach((f) => {
     const out = f.querySelector("[data-msg]");
     const say = (text, ok) => { if (!out) return; out.textContent = text; out.className = "msg " + (ok ? "ok" : "err"); out.scrollIntoView({ block: "center", behavior: reduce ? "auto" : "smooth" }); };
@@ -167,12 +167,21 @@
       const btn = f.querySelector('button[type="submit"]');
       const label = btn?.textContent;
       if (btn) { btn.disabled = true; btn.textContent = L.sending; }
-      // 구글 스프레드시트(Apps Script)로 받을 때: 페이지를 떠나지 않고 보내고, 여기서 접수 완료를 알린다
-      if (/^https:\/\/script\.google\.com\//.test(f.action)) {
+      // 메일로 받을 때(FormSubmit): 페이지를 떠나지 않고 보내고, 여기서 접수 완료를 알린다
+      if (/^https:\/\/formsubmit\.co\/ajax\//.test(f.action)) {
         e.preventDefault();
-        const body = new URLSearchParams(new FormData(f));
-        body.set("page", location.pathname); body.set("lang", EN ? "en" : "ko");
-        fetch(f.action, { method: "POST", mode: "no-cors", body })
+        const v = (n) => (f.querySelector(`[name="${n}"]`)?.value || "").trim();
+        if (v("website")) { f.reset(); say(L.done, true); return; } // 사람 눈에 안 보이는 칸이 채워졌으면 스팸 로봇
+        const utm = ["utm_source", "utm_medium", "utm_campaign"].map(v).filter(Boolean).join(" / ");
+        const data = {
+          _subject: `[유어팀 홈페이지] 새 상담 신청 · ${v("name")}`, _template: "table", _captcha: "false",
+          "업체명 · 담당자": v("name"), "연락처": v("phone"), "이메일": v("email") || "-",
+          "월 광고 예산": v("budget") || "-", "알게 된 경로": v("funnel") || "-", "상담 내용": v("message") || "-",
+          "신청 페이지": location.pathname + (EN ? " (English)" : ""), "광고 유입(utm)": utm || "-", "이전 페이지": v("referrer") || "-",
+        };
+        if (v("email")) data._replyto = v("email");
+        fetch(f.action, { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(data) })
+          .then((r) => r.json().catch(() => ({})).then((j) => { if (!r.ok || String(j.success) !== "true") throw new Error(j.message || r.status); }))
           .then(() => { f.reset(); say(L.done, true); })
           .catch(() => say(L.fail, false))
           .finally(() => { if (btn) { btn.disabled = false; btn.textContent = label || L.submit; } });
