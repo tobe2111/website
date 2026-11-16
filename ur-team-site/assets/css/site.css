@@ -1394,3 +1394,17 @@ a.prod:hover b { color: var(--accent); }
 .nf__links { list-style: none; margin: 40px 0 0; padding: 20px 0 0; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 8px 28px; }
 .nf__links a { font-weight: 600; color: var(--ink-2); }
 .nf__links a:hover { color: var(--accent); }
+/* 상담 신청서: 3단계 + '더 자세히' 접기 */
+.fstep { display: flex; align-items: center; gap: 10px; margin: 26px 0 12px; font-size: 16px; font-weight: 700; color: var(--ink); }
+.form .fstep:first-of-type { margin-top: 8px; }
+.fstep i { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--ink); color: #fff; font-size: 12px; font-style: normal; font-weight: 700; font-variant-numeric: tabular-nums; }
+.fmore { margin: 18px 0 6px; border: 1px solid var(--line); background: #fff; }
+.fmore > summary { list-style: none; cursor: pointer; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; padding: 14px 18px; }
+.fmore > summary::-webkit-details-marker { display: none; }
+.fmore > summary b { font-size: 15px; }
+.fmore > summary b::before { content: "+ "; color: var(--accent); }
+.fmore[open] > summary b::before { content: "− "; }
+.fmore > summary small { font-size: 13px; color: var(--muted); }
+.fmore__body { padding: 4px 18px 18px; border-top: 1px solid var(--line); }
+.fmore fieldset[hidden] { display: none; }
+.fmore__body { display: grid; gap: 16px; padding-top: 16px; }

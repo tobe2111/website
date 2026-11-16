@@ -29,6 +29,7 @@
       <input type="hidden" name="message" value="">
       <input type="hidden" name="utm_source"><input type="hidden" name="utm_medium"><input type="hidden" name="utm_campaign"><input type="hidden" name="referrer">
 
+      <p class="fstep"><i>1</i>What would you like to discuss?</p>
       <fieldset class="chips">
         <legend>Areas of interest <small>(select all that apply)</small></legend>
         <label><input type="checkbox" value="Domestic Distribution" data-msg-part="Areas of interest"><span>Domestic Distribution</span></label>
@@ -38,20 +39,26 @@
         <label><input type="checkbox" value="International Patients" data-msg-part="Areas of interest"><span>International Patients</span></label>
       </fieldset>
 
+      <p class="fstep"><i>2</i>How can we reach you?</p>
       <div class="f2">
         <label><span>Company and contact name <b aria-hidden="true">*</b></span><input name="name" required maxlength="60" autocomplete="organization" placeholder="e.g. UrTeam / Alex Kim"></label>
         <label><span>Phone <b aria-hidden="true">*</b></span><input name="phone" type="tel" required maxlength="20" inputmode="tel" autocomplete="tel" placeholder="010-0000-0000"></label>
       </div>
-      <div class="f2">
-        <label>Email<input name="email" type="email" maxlength="120" autocomplete="email" placeholder="name@company.com"></label>
-        <label>Monthly ad budget<input name="budget" maxlength="40" placeholder="e.g. KRW 3 million"></label>
-      </div>
-      <div class="f2">
-        <label>Company URL<input type="url" maxlength="200" data-msg-part="Company URL" placeholder="https://"></label>
-        <label>How did you hear about us?<input name="funnel" maxlength="40" placeholder="e.g. Naver search, referral"></label>
-      </div>
+      <label>Email<input name="email" type="email" maxlength="120" autocomplete="email" placeholder="name@company.com"></label>
 
-      <fieldset class="chips">
+      <p class="fstep"><i>3</i>Tell us briefly what you need</p>
+      <label>Your inquiry<textarea rows="3" maxlength="800" data-msg-part="Inquiry"></textarea></label>
+
+      <details class="fmore">
+        <summary><b>Add more detail</b><small>Optional · helps us prepare a sharper first call</small></summary>
+        <div class="fmore__body">
+      <div class="f2">
+        <label>Monthly ad budget<input name="budget" maxlength="40" placeholder="e.g. KRW 3 million"></label>
+        <label>Company URL<input type="url" maxlength="200" data-msg-part="Company URL" placeholder="https://"></label>
+      </div>
+      <label>How did you hear about us?<input name="funnel" maxlength="40" placeholder="e.g. Naver search, referral"></label>
+
+      <fieldset class="chips" data-for="mk">
         <legend>Marketing services of interest <small>(for marketing inquiries)</small></legend>
         <label><input type="checkbox" value="Naver Ads" data-msg-part="Marketing services"><span>Naver Ads</span></label>
         <label><input type="checkbox" value="Google Ads" data-msg-part="Marketing services"><span>Google Ads</span></label>
@@ -66,7 +73,7 @@
         <label><input type="checkbox" value="Not sure yet" data-msg-part="Marketing services"><span>Not sure yet</span></label>
       </fieldset>
 
-      <fieldset class="chips">
+      <fieldset class="chips" data-for="dist">
         <legend>Preferred sales channels <small>(for distribution and export inquiries)</small></legend>
         <label><input type="checkbox" value="Toss Shopping" data-msg-part="Preferred channels"><span>Toss Shopping</span></label>
         <label><input type="checkbox" value="Olive Young" data-msg-part="Preferred channels"><span>Olive Young</span></label>
@@ -81,7 +88,8 @@
 
       <label>Current challenges<textarea rows="3" maxlength="600" data-msg-part="Current challenges" placeholder="Tell us what frustrates you most right now."></textarea></label>
       <label>Strengths and differentiators<textarea rows="3" maxlength="600" data-msg-part="Strengths" placeholder="Tell us what makes your product or service stand out."></textarea></label>
-      <label>Your inquiry<textarea rows="4" maxlength="800" data-msg-part="Inquiry"></textarea></label>
+        </div>
+      </details>
 
       <input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
       <label class="agree"><input type="checkbox" name="agree" value="1" required>
