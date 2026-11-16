@@ -20,6 +20,14 @@
   // ── 머리말: 어두운 첫 화면 위에서는 투명, 지나가면 흰 바탕. 빨리 내리면 숨고 올리면 나타난다
   const hd = d.querySelector("[data-hd]");
   const float = d.querySelector(".float");
+  if (float) {
+    const up = d.createElement("button");
+    up.type = "button"; up.className = "totop";
+    up.setAttribute("aria-label", EN ? "Back to top" : "맨 위로");
+    up.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>';
+    up.addEventListener("click", () => scrollTo({ top: 0, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }));
+    float.prepend(up);
+  }
   const darkTop = d.querySelector(".hero, .phero--media");
   if (darkTop && hd) {
     new IntersectionObserver(([en]) => hd.classList.toggle("is-over", en.isIntersecting && !d.body.classList.contains("menu-open")),
