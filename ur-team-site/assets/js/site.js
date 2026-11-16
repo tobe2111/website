@@ -122,7 +122,7 @@
 
   // ── 화면에 들어오면 나타나기
   const groups = d.querySelectorAll("[data-stagger]");
-  groups.forEach((g) => [...g.children].forEach((c, i) => { if (!c.hasAttribute("data-reveal")) c.setAttribute("data-reveal", g.dataset.stagger || ""); c.style.setProperty("--i", i); }));
+  groups.forEach((g) => [...g.children].forEach((c, i) => { if (!c.hasAttribute("data-reveal")) c.setAttribute("data-reveal", g.dataset.stagger || ""); c.style.setProperty("--i", Math.min(i, 8)); }));
   d.querySelectorAll(".bubbles").forEach((g) => [...g.children].forEach((c, i) => c.style.setProperty("--i", i)));
   const io = new IntersectionObserver((entries) => {
     for (const en of entries) {

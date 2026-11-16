@@ -448,7 +448,9 @@ a.prod:hover b { color: var(--accent); }
 .ph .h1 em { font-style: normal; color: var(--pc); }
 .chips-row { display: flex; flex-wrap: wrap; gap: 6px 0; margin-top: 28px; font-size: 15px; color: var(--muted); }
 .chips-row span + span::before { content: "/"; margin: 0 14px; color: var(--line-2); }
-.pblock { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(32px, 4.5vw, 64px); align-items: center; }
+.pblock { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(32px, 4.5vw, 64px); align-items: start; }
+.pblock > div:first-child { padding-top: clamp(4px, 1.4vw, 20px); }
+.pblock__media img { max-height: 540px; }
 .pblock + .pblock { margin-top: clamp(44px, 5.5vw, 76px); }
 .pblock__n { display: block; font-size: 14px; font-weight: 600; color: var(--accent); }
 .pblock h3 { margin: 10px 0 14px; }
@@ -456,7 +458,7 @@ a.prod:hover b { color: var(--accent); }
 .pblock p + p { margin-top: 10px; }
 .shot { background: var(--bg-2); padding: clamp(16px, 2vw, 28px); }
 .sec--soft .shot { background: #fff; }
-.shot img { width: 100%; box-shadow: 0 18px 40px -28px rgba(15, 18, 22, .45); }
+.shot img { width: auto; max-width: 100%; margin-inline: auto; box-shadow: 0 18px 40px -28px rgba(15, 18, 22, .45); }
 .shot figcaption { margin-top: 14px; font-size: 14px; color: var(--muted); }
 .spec { margin-top: 24px; border-top: 1px solid var(--ink); }
 .spec > div { display: grid; grid-template-columns: 112px 1fr; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--line); font-size: 16px; }
