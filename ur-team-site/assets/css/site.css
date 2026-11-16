@@ -1394,3 +1394,37 @@ a.prod:hover b { color: var(--accent); }
 .nf__links { list-style: none; margin: 40px 0 0; padding: 20px 0 0; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 8px 28px; }
 .nf__links a { font-weight: 600; color: var(--ink-2); }
 .nf__links a:hover { color: var(--accent); }
+
+/* ═══ 블로그: 검색 · 더 보기, 글 화면의 목차 · 상담 안내 · 공유, 상품 페이지의 관련 글 ═══ */
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.psearch { display: flex; align-items: center; gap: 14px; margin: 0 0 32px; }
+.psearch input { flex: 1; max-width: 420px; min-height: 46px; padding: 0 16px; font: inherit; font-size: 16px; color: var(--ink); background: #fff; border: 1px solid var(--line-2); border-radius: var(--r); }
+.psearch input:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
+.psearch__n { font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.pmore { margin-top: 48px; text-align: center; }
+.pmore[hidden] { display: none; }
+.toc { margin: 0 0 36px; padding: 20px 24px; background: var(--bg-2); border-left: 2px solid var(--ink); }
+.toc b { display: block; margin-bottom: 10px; font-size: 14px; font-weight: 600; color: var(--muted); }
+.toc ol { margin: 0; padding-left: 1.3em; font-size: 15.500px; line-height: 1.6; }
+.toc li + li { margin-top: 6px; }
+.toc a { color: var(--ink-2); }
+.toc a:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+.prose h2 { scroll-margin-top: calc(var(--hd) + 20px); }
+.post__cta { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 18px 28px; margin-top: 56px; padding: 28px; background: var(--ink); color: #fff; }
+.post__cta b { display: block; font-size: 19px; line-height: 1.4; letter-spacing: -.02em; }
+.post__cta div p { margin-top: 6px; font-size: 15px; color: rgba(255, 255, 255, .72); }
+.post__cta > p { display: flex; flex-wrap: wrap; gap: 10px; }
+.post__cta .btn--ghost { border-color: rgba(255, 255, 255, .5); color: #fff; }
+.post__cta .btn--ghost:hover { background: #fff; color: var(--ink); }
+.post__share { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 24px; font-size: 14px; color: var(--muted); }
+.post__share span { margin-right: 4px; }
+.post__share .btn { min-height: 38px; padding: 0 14px; font-size: 14px; }
+.post__share .btn[hidden] { display: none; }
+.topicposts__head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px 24px; margin-bottom: 32px; }
+.topicposts__head .h3 { margin-top: 8px; }
+.topicposts .post-card b { font-size: 17px; }
+@media (max-width: 700px) {
+  .post__cta { padding: 24px 20px; }
+  .post__cta > p, .post__cta .btn { width: 100%; }
+  .psearch input { max-width: none; }
+}
