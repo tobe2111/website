@@ -1356,3 +1356,9 @@ a.prod:hover b { color: var(--accent); }
   .journey__tags a { background: #fff; border: 1px solid var(--line); }
 }
 @media (prefers-reduced-motion: reduce) { .js .pains > div[data-reveal] .pv i { transform: none; } }
+
+/* 블로그 글 끝의 '참고한 자료' 목록 */
+.prose .sources { list-style: none; padding: 16px 20px; background: var(--bg-2); border-left: 2px solid var(--line-2); font-size: 14px; line-height: 1.6; }
+.prose .sources li + li { margin-top: 6px; }
+.prose .sources a { color: var(--ink-2); text-decoration-color: var(--line-2); overflow-wrap: anywhere; }
+.prose .sources a:hover { color: var(--accent); }
