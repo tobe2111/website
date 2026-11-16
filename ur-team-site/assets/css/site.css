@@ -816,3 +816,29 @@ a.prod:hover b { color: var(--accent); }
   .cards--4 .card h3 { font-size: 16px; }
   .cards--4 .card p { font-size: 14px; }
 }
+
+/* ═══ 해외 수출: 유어팀 vs 타 수출업체 비교표, 5가지 서비스 ═══ */
+.cmp { border-top: 1px solid var(--ink); max-width: 960px; }
+.cmp__row { display: grid; grid-template-columns: 1fr 140px 140px; align-items: center; border-bottom: 1px solid var(--line); padding: 16px 0; }
+.cmp__row > span { font-size: 16px; font-weight: 500; color: var(--ink); padding-right: 16px; }
+.cmp__head { padding: 14px 0; }
+.cmp__head b { text-align: center; font-size: 15px; font-weight: 600; }
+.cmp__head b:first-of-type { color: var(--accent); }
+.cmp__head b:last-of-type { color: var(--muted); }
+.cmp i { font-style: normal; justify-self: center; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; font-size: 15px; font-weight: 700; }
+.cmp i.y { background: var(--accent); color: #fff; }
+.cmp i.n { background: var(--bg-2); color: var(--muted); }
+.svc { display: grid; grid-template-columns: repeat(5, 1fr); border-top: 1px solid var(--ink); }
+.svc > div { padding: 22px 20px 26px 0; }
+.svc > div + div { padding-left: 20px; border-left: 1px solid var(--line); }
+.svc .k { display: block; font-size: 12px; font-weight: 600; color: var(--accent); letter-spacing: .01em; }
+.svc h3 { margin-top: 10px; font-size: 18px; font-weight: 600; letter-spacing: -.02em; }
+.svc p { margin-top: 8px; font-size: 15px; color: var(--muted); line-height: 1.6; }
+@media (max-width: 1100px) { .svc { grid-template-columns: repeat(3, 1fr); } .svc > div:nth-child(4) { padding-left: 0; border-left: 0; } .svc > div { border-bottom: 1px solid var(--line); } }
+@media (max-width: 560px) {
+  .cmp__row { grid-template-columns: 1fr 64px 64px; padding: 12px 0; }
+  .cmp__row > span { font-size: 14px; }
+  .cmp__head b { font-size: 12px; }
+  .svc { grid-template-columns: 1fr; }
+  .svc > div, .svc > div + div { padding: 18px 0; border-left: 0; }
+}
