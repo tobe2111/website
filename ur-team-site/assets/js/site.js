@@ -71,22 +71,6 @@
     requestAnimationFrame(() => requestAnimationFrame(() => hero.classList.add("is-ready")));
   }
 
-  // ── 첫 화면 오른쪽 '기록'이 차례로 바뀐다
-  const rec = d.querySelector(".hero__rec");
-  if (rec) {
-    const items = [...rec.querySelectorAll("li")];
-    const dots = rec.querySelector(".hero__dots");
-    const bars = items.map(() => dots.appendChild(d.createElement("i")));
-    let n = 0;
-    const show = (k) => {
-      items.forEach((li, i) => { li.classList.toggle("is-on", i === k); li.classList.toggle("is-out", i === n && i !== k); });
-      bars.forEach((b, i) => { b.classList.remove("is-on"); if (i === k) { void b.offsetWidth; b.classList.add("is-on"); } });
-      n = k;
-    };
-    show(0);
-    if (!matchMedia("(prefers-reduced-motion: reduce)").matches) setInterval(() => { if (!d.hidden) show((n + 1) % items.length); }, 3600);
-  }
-
   // ── 마케팅 상품 분류 버튼: 고른 분류만 또렷하게
   d.querySelectorAll(".pfilter").forEach((bar) => {
     const list = bar.parentElement.querySelector("[data-prods]");
@@ -134,7 +118,7 @@
       if (el.matches("[data-count]")) countUp(el);
       io.unobserve(el);
     }
-  }, { rootMargin: "0px 0px 8% 0px", threshold: 0 });
+  }, { rootMargin: "0px 0px 20% 0px", threshold: 0 });
   d.querySelectorAll("[data-reveal], [data-wipe], .bubbles, .steps, .bars, .funnel, .flow, .principle, .slogan, [data-count]").forEach((el) => io.observe(el));
 
   // ── 첫 화면 영상: 움직임 줄이기 설정이면 멈춘다

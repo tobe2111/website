@@ -26,6 +26,7 @@ const ROOT = dirname(fileURLToPath(import.meta.url));
 const SRC = join(ROOT, "src");
 const DIST = join(ROOT, "dist");
 const site = JSON.parse(readFileSync(join(ROOT, "site.json"), "utf8"));
+
 const BASE = site.url.replace(/\/$/, "");
 const TODAY = new Date().toISOString().slice(0, 10);
 
@@ -291,7 +292,9 @@ function renderRaw(raw, file, route, lang, post) {
   const { path, url, out } = route;
   const title = meta.title ? `${meta.title} | ${t.name}` : t.fullTitle;
   const desc = meta.description || t.description;
-  const image = BASE + (meta.image || site.ogImage);
+  // 공유 그림: tools/og.mjs 가 만들어 둔 것(로고 + 페이지 이름)이 있으면 그것을 쓴다
+  const ogSlug = url.replace(/^\/|\/$/g, "").replace(/\//g, "-") || "home";
+  const image = BASE + (existsSync(join(ROOT, "assets", "img", "og", ogSlug + ".jpg")) ? `/assets/img/og/${ogSlug}.jpg` : (meta.image || site.ogImage));
   const canonical = BASE + url;
   const modified = post ? (post.updated || post.date) : lastmod(file);
   // 다른 언어 판 (검색엔진용)
