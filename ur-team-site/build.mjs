@@ -367,10 +367,24 @@ const excerpt = (html, n = 150) => { const s = plain(html); return [...s].length
 function renderPosts(lang) {
   const t = T(lang);
   const tpl = partial(lang, "post");
-  return posts(lang).map((p) => {
+  const all = posts(lang);
+  // 글 아래 '함께 읽으면 좋은 글' 세 편: 같은 분류의 글을 먼저, 모자라면 최신 글로 채운다
+  const related = (p) => {
+    const cat = (x) => x.category || t.blogDefaultCategory;
+    const rest = all.filter((x) => x.slug !== p.slug);
+    const pick = [...rest.filter((x) => cat(x) === cat(p)), ...rest.filter((x) => cat(x) !== cat(p))].slice(0, 3);
+    if (!pick.length) return "";
+    return `<section class="post__more"><div class="wrap"><h2 class="h3">${lang === "en" ? "Read next" : "함께 읽으면 좋은 글"}</h2><div class="posts">` + pick.map((x) => `
+      <a class="post-card" href="${LANGS[lang].prefix}/blog/${x.slug}/">
+        <div class="post-card__img">${x.cover ? `<img src="${esc(x.cover)}" alt="" loading="lazy">` : ""}</div>
+        <div class="post-card__tx"><span class="k">${esc(cat(x))} · <time datetime="${x.date}">${x.date.replace(/-/g, ".")}</time></span>
+        <b>${esc(x.title)}</b></div>
+      </a>`).join("") + `\n    </div></div></section>`;
+  };
+  return all.map((p) => {
     const page = `<!-- ${JSON.stringify({ title: p.title, description: p.summary || excerpt(p.body), nav: "blog", image: p.cover })} -->\n` +
       tpl.replace(/\{\{post(\w+)\}\}/g, (_, k) => ({ Title: esc(p.title), Date: p.date, DateDot: p.date.replace(/-/g, "."),
-        Category: esc(p.category || t.blogDefaultCategory), Body: p.body, Cover: p.cover ? `<img class="post__cover" src="${esc(p.cover)}" alt="">` : "" })[k] ?? "");
+        Category: esc(p.category || t.blogDefaultCategory), Body: p.body, Cover: p.cover ? `<img class="post__cover" src="${esc(p.cover)}" alt="">` : "", Related: related(p) })[k] ?? "");
     const path = `/blog/${p.slug}/`, url = LANGS[lang].prefix + path;
     return renderRaw(page, p.file, { path, url, out: url.replace(/^\//, "") + "index.html" }, lang, p);
   });
