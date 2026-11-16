@@ -90,6 +90,18 @@ node ur-team-site/check.mjs     # 링크 · 사진 · 예전 주소가 다 이�
 3. **Bing 웹마스터 도구** (bing.com/webmasters) — ChatGPT 검색 · Copilot 이 Bing 색인을 씁니다.
    구글 서치 콘솔에서 가져오기를 누르면 따로 확인 없이 끝납니다. 직접 하려면 `msvalidate.01` 코드를 `"bing"` 에 넣습니다.
 
+## 카톡 · SNS 공유 그림
+
+주소를 카톡이나 문자에 붙였을 때 뜨는 그림은 페이지마다 따로 있습니다(`assets/img/og/`). 유어팀 로고와 페이지 이름이 들어갑니다.
+페이지를 새로 만들거나 제목을 바꿨으면 다시 만듭니다. 브라우저(Playwright)가 있는 컴퓨터에서만 돕니다.
+
+```bash
+node ur-team-site/build.mjs && node ur-team-site/tools/og.mjs && node ur-team-site/build.mjs
+```
+
+- 그림이 없는 페이지는 `site.json` 의 기본 그림(`ogImage`)을 씁니다.
+- 카카오톡은 한 번 본 주소의 그림을 오래 기억합니다. 바뀐 그림이 안 뜨면 카카오 개발자 사이트의 "공유 디버거 → 캐시 초기화"에 주소를 넣습니다.
+
 ## ur-team.com 에 올리기
 
 `dist/` 폴더가 완성본입니다. 정적 파일을 올릴 수 있는 곳이면 어디든 됩니다.
