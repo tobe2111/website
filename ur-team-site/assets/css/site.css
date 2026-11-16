@@ -906,3 +906,19 @@ a.prod:hover b { color: var(--accent); }
 .regions a:hover, .more a:hover { color: var(--accent); border-color: var(--accent); }
 .more { margin-top: clamp(28px, 3vw, 40px); }
 @media (min-width: 961px) { .story__aside { position: sticky; top: calc(var(--hd) + 32px); } }
+
+/* ═══ 마케팅 첫 화면: 오른쪽 숫자판 · 채널 묶기 ═══ */
+.phero--media > .phero__grid--board { width: 100%; grid-template-columns: minmax(0, 1fr) minmax(0, 440px); }
+@media (max-width: 960px) { .phero--media > .phero__grid--board { grid-template-columns: 1fr; } .phero__grid--board .hero__board { max-width: 520px; } }
+.journey ul { list-style: none; margin: 16px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.journey li a { display: block; padding: 7px 12px; font-size: 14px; font-weight: 500; line-height: 1.4; border: 1px solid var(--line-2); border-radius: var(--r); transition: border-color .2s, color .2s; }
+.journey li a:hover { border-color: var(--accent); color: var(--accent); }
+
+/* 위 여백을 0 으로 붙인 구역은 가름선도 없앤다 (작은 제목이 선에 붙어 보이던 자리) */
+.sec[style*="padding-top:0"] { border-top: 0 !important; }
+
+/* 스크롤하며 나타나는 효과를 빠르게: 사진 · 카드가 늦게 뜨는 느낌을 줄인다 */
+.js [data-reveal] { transform: translateY(14px); transition-duration: .45s; transition-delay: calc(min(var(--i, 0), 5) * 45ms); }
+.js [data-reveal].is-in { transform: none; }
+.js [data-wipe] { transition-duration: .5s; }
+.js [data-wipe] img { transition-duration: .7s; }

@@ -104,7 +104,7 @@
       if (el.matches("[data-count]")) countUp(el);
       io.unobserve(el);
     }
-  }, { rootMargin: "0px 0px 8% 0px", threshold: 0 });
+  }, { rootMargin: "0px 0px 20% 0px", threshold: 0 });
   d.querySelectorAll("[data-reveal], [data-wipe], .bubbles, .steps, .bars, .funnel, .flow, .principle, .slogan, [data-count]").forEach((el) => io.observe(el));
 
   // ── 첫 화면 영상: 움직임 줄이기 설정이면 멈춘다
