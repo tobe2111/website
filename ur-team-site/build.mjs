@@ -315,7 +315,7 @@ function renderRaw(raw, file, route, lang, post) {
   // 마케팅 상품 탭: 지금 보고 있는 상품에 표시
   if (meta.tab) body = body.replace(`data-tab="${meta.tab}"`, `data-tab="${meta.tab}" aria-current="page"`);
   const { path, url, out } = route;
-  const title = meta.title ? `${meta.title} | ${t.name}` : t.fullTitle;
+  const title = meta.title ? ((meta.title + " | " + t.name).length > 60 ? meta.title : `${meta.title} | ${t.name}`) : t.fullTitle;
   const desc = meta.description || t.description;
   // 공유 그림: tools/og.mjs 가 만들어 둔 것(로고 + 페이지 이름)이 있으면 그것을 쓴다
   const ogSlug = url.replace(/^\/|\/$/g, "").replace(/\//g, "-") || "home";
