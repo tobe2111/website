@@ -7,3 +7,14 @@
   Cache-Control: public, max-age=3600, stale-while-revalidate=86400
 /assets/js/*
   Cache-Control: public, max-age=3600, stale-while-revalidate=86400
+# AI · 검색엔진용 글 (한글이 깨지지 않게 글자 방식을 밝힌다)
+/llms.txt
+  Content-Type: text/plain; charset=utf-8
+/llms-full.txt
+  Content-Type: text/plain; charset=utf-8
+/robots.txt
+  Content-Type: text/plain; charset=utf-8
+/blog/rss.xml
+  Content-Type: application/rss+xml; charset=utf-8
+/en/blog/rss.xml
+  Content-Type: application/rss+xml; charset=utf-8

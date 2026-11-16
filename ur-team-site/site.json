@@ -8,6 +8,59 @@
   "email": "jiwon@ur-team.com",
   "kakao": "https://open.kakao.com/o/sfDjQInh",
   "urdeal": "https://urdeal.kr/",
+  "org": {
+    "legalName": "리스터코퍼레이션 유어팀",
+    "legalNameEn": "Lister Corporation, UrTeam",
+    "alternateName": [
+      "유어팀",
+      "UrTeam",
+      "U·Team"
+    ],
+    "ceo": "정지원",
+    "ceoEn": "Jiwon Jung",
+    "businessNumber": "479-09-02930",
+    "logo": {
+      "url": "/assets/img/urteam_black.png",
+      "width": 760,
+      "height": 144
+    },
+    "address": {
+      "ko": {
+        "streetAddress": "남부순환로359길 14, 3F",
+        "addressLocality": "강남구",
+        "addressRegion": "서울특별시"
+      },
+      "en": {
+        "streetAddress": "3F, 14 Nambusunhwan-ro 359-gil",
+        "addressLocality": "Gangnam-gu",
+        "addressRegion": "Seoul"
+      }
+    },
+    "logistics": {
+      "ko": {
+        "name": "인천 물류센터",
+        "address": {
+          "streetAddress": "주부토로 236, U1센터 C동 109호",
+          "addressLocality": "부평구",
+          "addressRegion": "인천광역시"
+        }
+      },
+      "en": {
+        "name": "Incheon logistics center",
+        "address": {
+          "streetAddress": "C-109, U1 Center, 236 Jubuto-ro",
+          "addressLocality": "Bupyeong-gu",
+          "addressRegion": "Incheon"
+        }
+      }
+    },
+    "sameAs": []
+  },
+  "verification": {
+    "google": "",
+    "naver": "",
+    "bing": ""
+  },
   "form": {
     "endpoint": "",
     "turnstileSiteKey": "",
