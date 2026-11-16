@@ -1276,6 +1276,13 @@ a.prod:hover b { color: var(--accent); }
   .crumb a { display: inline-block; padding: 10px 6px; margin: -10px -6px; }
   .ft a { display: inline-block; padding-block: 6px; }
 }
+
+/* ═══ 블로그 글 아래: 함께 읽으면 좋은 글 ═══ */
+.post__more { padding: clamp(40px, 5vw, 64px) 0 clamp(52px, 6vw, 80px); background: var(--bg-2); border-top: 1px solid var(--line); }
+.post__more .h3 { margin-bottom: 28px; }
+.post__more .post-card b { font-size: 17px; }
+.post__back { margin-bottom: 56px; }
+
 /* 상품 페이지 첫 화면: 장면 사진 위에서도 글자가 또렷하게 */
 .phero--prod.phero--media { min-height: 0; align-items: center; }
 .phero--prod.phero--media .phero__bg::after { background: linear-gradient(90deg, rgba(8, 10, 14, .88) 0%, rgba(8, 10, 14, .7) 50%, rgba(8, 10, 14, .38) 100%); }
