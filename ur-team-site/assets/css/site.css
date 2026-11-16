@@ -1369,3 +1369,22 @@ a.prod:hover b { color: var(--accent); }
   .pfilter::-webkit-scrollbar { display: none; }
   .pfilter button { flex: 0 0 auto; white-space: nowrap; scroll-snap-align: start; }
 }
+
+/* ═══ 'AI 가 만든 것 같은' 인상 걷어내기 ═══
+   · 반짝이는 격자 · 빛 번짐 배경 → 깊은 단색
+   · 유리처럼 비치는 카드 → 불투명한 판
+   · 상자 위 굵은 색 띠 → 가는 먹선
+   · 칸마다 붙던 파란 작은 제목 → 짧은 선 + 먹색
+   · 번호가 파랗게 켜지는 효과 → 먹색 그대로 */
+.cta { background: #0e1320; }
+.cta::before { display: none; }
+.cta .eyebrow { color: rgba(255, 255, 255, .62); }
+.hero__board, .mk-hero__card { -webkit-backdrop-filter: none; backdrop-filter: none; background: rgba(10, 13, 20, .78); border-color: rgba(255, 255, 255, .14); }
+.mk-steps li, .start, .bro__flow li { border-top: 1px solid var(--ink); }
+.prod__img { border-top: 0; }
+.eyebrow { display: inline-flex; align-items: center; gap: 10px; color: var(--ink-2); font-weight: 600; }
+.eyebrow::before { content: ""; width: 18px; height: 1px; background: currentColor; flex: none; }
+.phero--media .eyebrow, .hero .eyebrow, .sec--blue .eyebrow { color: rgba(255, 255, 255, .7); }
+.principle.is-in .n { color: var(--ink); }
+.principle .n { font-variant-numeric: tabular-nums; }
+.mk-steps span { color: var(--ink-2); }
