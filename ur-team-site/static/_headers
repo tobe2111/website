@@ -1,0 +1,9 @@
+# 사진 · 영상 · 디자인 파일은 오래 보관해 두 번째 방문부터 바로 뜨게 한다
+/assets/img/*
+  Cache-Control: public, max-age=604800, stale-while-revalidate=86400
+/assets/video/*
+  Cache-Control: public, max-age=604800, stale-while-revalidate=86400
+/assets/css/*
+  Cache-Control: public, max-age=3600, stale-while-revalidate=86400
+/assets/js/*
+  Cache-Control: public, max-age=3600, stale-while-revalidate=86400

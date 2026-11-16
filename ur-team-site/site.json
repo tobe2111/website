@@ -18,10 +18,6 @@
     "/kr/distribution": "/distribution/",
     "/kr/export": "/export/",
     "/kr/contact": "/contact/",
-    "/en/home": "/",
-    "/en/distribution": "/distribution/",
-    "/en/export": "/export/",
-    "/en/contact": "/contact/",
     "/hospital": "/marketing/hospital/",
     "/37": "/marketing/global-patients/",
     "/product": "/marketing/naver/",
@@ -33,6 +29,22 @@
     "/product-6": "/marketing/place/",
     "/product-7": "/marketing/",
     "/product-8": "/marketing/experience/",
-    "/product-9": "/marketing/press/"
+    "/product-9": "/marketing/press/",
+    "/en/home": "/en/"
+  },
+  "i18n": {
+    "ko": {
+      "formOffText": "온라인 접수는 준비 중입니다. 지금은 카카오톡이나 전화(0503-7151-4726)로 문의해 주세요.",
+      "blogEmpty": "아직 올라온 글이 없습니다. 곧 유어팀의 이야기를 전해 드릴게요.",
+      "blogDefaultCategory": "소식"
+    },
+    "en": {
+      "name": "UrTeam",
+      "fullTitle": "UrTeam | Domestic Distribution, Global Export and Marketing Partner",
+      "description": "One team designs your domestic distribution, global export and marketing. UrTeam works toward your net profit, not just revenue.",
+      "formOffText": "Online submissions are not open yet. Please reach us by KakaoTalk or phone (+82 503-7151-4726).",
+      "blogEmpty": "Our English articles are on the way. Please check back soon.",
+      "blogDefaultCategory": "News"
+    }
   }
 }

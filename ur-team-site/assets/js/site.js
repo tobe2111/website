@@ -3,6 +3,19 @@
   const d = document, root = d.documentElement;
   root.classList.add("js");
   const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  // 화면 문구는 페이지 언어를 따른다 (한국어가 기본)
+  const EN = root.lang === "en";
+  const L = EN ? {
+    menuOpen: "Open menu", menuClose: "Close menu",
+    needName: "Please enter your company and name.", needPhone: "Please enter your phone number.",
+    needAgree: "Please agree to the collection and use of personal information.",
+    off: "Online submissions are not open yet. Please reach us by KakaoTalk or phone.", sending: "Sending…",
+  } : {
+    menuOpen: "메뉴 열기", menuClose: "메뉴 닫기",
+    needName: "업체명 · 담당자를 적어 주세요.", needPhone: "연락처를 적어 주세요.",
+    needAgree: "개인정보 수집 · 이용에 동의해 주세요.",
+    off: "지금은 온라인 접수 준비 중입니다. 카카오톡이나 전화로 문의해 주세요.", sending: "보내는 중…",
+  };
 
   // ── 머리말: 어두운 첫 화면 위에서는 투명, 지나가면 흰 바탕. 빨리 내리면 숨고 올리면 나타난다
   const hd = d.querySelector("[data-hd]");
@@ -31,7 +44,7 @@
   const mnav = d.getElementById("mnav");
   const setMenu = (open) => {
     burger.setAttribute("aria-expanded", String(open));
-    burger.setAttribute("aria-label", open ? "메뉴 닫기" : "메뉴 열기");
+    burger.setAttribute("aria-label", open ? L.menuClose : L.menuOpen);
     mnav.hidden = !open;
     d.body.classList.toggle("menu-open", open);
     hd.classList.toggle("is-over", false);
@@ -81,7 +94,7 @@
       if (el.matches("[data-count]")) countUp(el);
       io.unobserve(el);
     }
-  }, { rootMargin: "0px 0px -12% 0px", threshold: 0 });
+  }, { rootMargin: "0px 0px 8% 0px", threshold: 0 });
   d.querySelectorAll("[data-reveal], [data-wipe], .bubbles, .steps, .bars, .funnel, .flow, .principle, .slogan, [data-count]").forEach((el) => io.observe(el));
 
   // ── 첫 화면 영상: 움직임 줄이기 설정이면 멈춘다
@@ -102,13 +115,13 @@
     const ref = f.querySelector('[name="referrer"]');
     if (ref && d.referrer && !d.referrer.startsWith(location.origin)) ref.value = d.referrer.slice(0, 200);
     f.addEventListener("submit", (e) => {
-      const need = [["name", "업체명 · 담당자를 적어 주세요."], ["phone", "연락처를 적어 주세요."]];
+      const need = [["name", L.needName], ["phone", L.needPhone]];
       for (const [n, m] of need) {
         const el = f.querySelector(`[name="${n}"]`);
         if (el && !el.value.trim()) { e.preventDefault(); say(m, false); el.focus(); return; }
       }
       const agree = f.querySelector('[name="agree"]');
-      if (agree && !agree.checked) { e.preventDefault(); say("개인정보 수집 · 이용에 동의해 주세요.", false); agree.focus(); return; }
+      if (agree && !agree.checked) { e.preventDefault(); say(L.needAgree, false); agree.focus(); return; }
       // 여러 칸(관심 분야 · URL · 문제점 · 강점 · 희망 채널)을 상담 내용 한 칸으로 묶는다
       const groups = new Map();
       f.querySelectorAll("[data-msg-part]").forEach((el) => {
@@ -122,11 +135,11 @@
       if (msg) msg.value = [...groups].map(([k, v]) => `[${k}] ${v.join(", ")}`).join("\n").slice(0, 2000);
       if (f.getAttribute("action") === "#") {
         e.preventDefault();
-        say("지금은 온라인 접수 준비 중입니다. 카카오톡이나 전화로 문의해 주세요.", false);
+        say(L.off, false);
         return;
       }
       const btn = f.querySelector('button[type="submit"]');
-      if (btn) { btn.disabled = true; btn.textContent = "보내는 중…"; }
+      if (btn) { btn.disabled = true; btn.textContent = L.sending; }
     });
   });
   function sessionStorageGet(k) { try { return sessionStorage.getItem("ut_" + k); } catch { return null; } }

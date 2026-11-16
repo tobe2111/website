@@ -1,13 +1,15 @@
 <!doctype html>
-<html lang="ko">
+<html lang="{{lang}}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>{{title}}</title>
 <meta name="description" content="{{description}}">
 <link rel="canonical" href="{{canonical}}">
+{{alternates}}
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="유어팀 U·Team">
+<meta property="og:locale" content="{{ogLocale}}">
 <meta property="og:title" content="{{title}}">
 <meta property="og:description" content="{{description}}">
 <meta property="og:url" content="{{canonical}}">
@@ -20,5 +22,5 @@
 <link rel="stylesheet" href="/assets/css/site.css">
 <script defer src="/assets/js/site.js"></script>
 </head>
-<body class="{{bodyClass}}">
+<body>
 <a class="skip" href="#main">본문으로 건너뛰기</a>
