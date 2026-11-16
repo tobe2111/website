@@ -1322,6 +1322,54 @@ a.prod:hover b { color: var(--accent); }
 .pains-split__img img { width: 100%; height: 100%; object-fit: cover; }
 @media (max-width: 960px) { .pains-split { grid-template-columns: 1fr; } .pains-split__img { aspect-ratio: 16 / 10; order: -1; } }
 
+/* ═══ 마케팅: 고민 카드의 그림 · 근거 숫자, 고객 여정의 단계 표시 ═══ */
+.pains > div { padding: 0 0 20px; overflow: hidden; }
+.pains > div > p, .pains > div > a { margin-left: 24px; margin-right: 24px; }
+.pv { margin: 0 0 12px; padding: 22px 24px 18px; background: var(--bg-2); border-bottom: 1px solid var(--line); display: grid; gap: 10px; min-height: 148px; align-content: center; }
+.pv > div { display: grid; grid-template-columns: 76px 1fr auto; align-items: center; gap: 10px; font-size: 13px; font-weight: 600; color: var(--ink-2); }
+.pv i { display: block; height: 16px; width: var(--w); min-width: 10px; background: var(--line-2); border-radius: 2px; transform-origin: left; }
+.pv i.on { background: var(--accent); }
+.pv em { font-style: normal; font-variant-numeric: tabular-nums; font-weight: 700; color: var(--ink); min-width: 64px; text-align: right; }
+.pv--bars > div:nth-child(2) em { color: var(--accent); }
+.pv figcaption { margin-top: 4px; font-size: 12.500px; line-height: 1.5; color: var(--muted); }
+.pv figcaption b { display: inline-block; margin-right: 8px; font-size: 20px; font-weight: 700; letter-spacing: -.03em; color: var(--accent); vertical-align: -2px; }
+.pv--map svg { width: 100%; height: auto; max-height: 120px; }
+.js .pains > div[data-reveal] .pv i { transform: scaleX(0); transition: transform .9s var(--ease) .25s; }
+.js .pains > div[data-reveal].is-in .pv i { transform: none; }
+.journey--v li { padding-top: 26px; }
+.journey__ic { display: grid; place-items: center; width: 52px; height: 52px; margin-bottom: 6px; color: #fff; background: var(--accent); border-radius: 50%; }
+.journey__ic svg { width: 28px; height: 28px; }
+.journey--v li:nth-child(2) .journey__ic { background: #0f36b8; }
+.journey--v li:nth-child(3) .journey__ic { background: var(--ink); }
+.journey--v li:nth-child(4) .journey__ic { background: #fff; color: var(--accent); box-shadow: inset 0 0 0 2px var(--accent); }
+.journey__kpi { margin-top: 6px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 13px; color: var(--ink-2); }
+.journey__kpi b { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 2px; }
+.journey--v .journey__tags { padding-top: 12px; }
+@media (max-width: 700px) {
+  /* 휴대폰: 세로 타임라인. 왼쪽 선 위에 단계 표시가 놓인다 */
+  .journey--v { position: relative; gap: 0; }
+  .journey--v::before { content: ""; position: absolute; left: 25px; top: 26px; bottom: 26px; width: 2px; background: linear-gradient(var(--accent), var(--line-2)); }
+  .journey--v li { background: transparent; border: 0; padding: 0 0 28px 72px; min-height: 76px; }
+  .journey--v li:last-child { padding-bottom: 0; }
+  .journey--v .journey__ic { position: absolute; left: 0; top: 0; margin: 0; box-shadow: 0 0 0 6px var(--bg-2); }
+  .journey--v li:nth-child(4) .journey__ic { box-shadow: inset 0 0 0 2px var(--accent), 0 0 0 6px var(--bg-2); }
+  .journey__tags a { background: #fff; border: 1px solid var(--line); }
+}
+@media (prefers-reduced-motion: reduce) { .js .pains > div[data-reveal] .pv i { transform: none; } }
+
+/* 블로그 글 끝의 '참고한 자료' 목록 */
+.prose .sources { list-style: none; padding: 16px 20px; background: var(--bg-2); border-left: 2px solid var(--line-2); font-size: 14px; line-height: 1.6; }
+.prose .sources li + li { margin-top: 6px; }
+.prose .sources a { color: var(--ink-2); text-decoration-color: var(--line-2); overflow-wrap: anywhere; }
+.prose .sources a:hover { color: var(--accent); }
+
+/* 블로그 주제 버튼: 휴대폰에서는 여러 줄로 쌓지 않고 옆으로 밀어 본다 */
+@media (max-width: 720px) {
+  .pfilter { flex-wrap: nowrap; overflow-x: auto; margin-left: -20px; margin-right: -20px; padding: 2px 20px 10px; scrollbar-width: none; -webkit-overflow-scrolling: touch; scroll-snap-type: x proximity; }
+  .pfilter::-webkit-scrollbar { display: none; }
+  .pfilter button { flex: 0 0 auto; white-space: nowrap; scroll-snap-align: start; }
+}
+
 /* ═══ 'AI 가 만든 것 같은' 인상 걷어내기 ═══
    · 반짝이는 격자 · 빛 번짐 배경 → 깊은 단색
    · 유리처럼 비치는 카드 → 불투명한 판
