@@ -376,6 +376,7 @@ const PAGE_TOPIC = {
   "/marketing/": ["마케팅 전략 · 성과", (p) => p.category === "마케팅 전략 · 성과"],
   "/marketing/naver/": ["네이버 광고", (p) => p.category === "네이버 광고"],
   "/marketing/google/": ["구글 · 인스타그램 광고", (p) => /google|retargeting|search-ads-vs-display/.test(p.slug)],
+  "/marketing/meta/": ["구글 · 인스타그램 광고", (p) => /meta-|instagram/.test(p.slug)],
   "/marketing/daangn/": ["당근 · 지역 마케팅", (p) => /daangn/.test(p.slug)],
   "/marketing/momcafe/": ["당근 · 지역 마케팅", (p) => /momcafe|blog-cafe/.test(p.slug)],
   "/marketing/place/": ["당근 · 지역 마케팅", (p) => /place|review/.test(p.slug) && p.category !== "병원 마케팅"],
@@ -575,7 +576,7 @@ const L = {
 const addrLine = (a) => a && (a.lang === "en" ? [a.streetAddress, a.addressLocality, a.addressRegion, "Korea"] : [a.addressRegion, a.addressLocality, a.streetAddress]).filter(Boolean).join(a.lang === "en" ? ", " : " ");
 
 // 마케팅 상품을 소개하는 순서 (홈페이지 문구 순서와 같게)
-const MK_ORDER = ["hospital", "global-patients", "naver", "google", "blog-marketing", "daangn", "momcafe", "place", "experience", "press"];
+const MK_ORDER = ["hospital", "global-patients", "naver", "google", "meta", "blog-marketing", "daangn", "momcafe", "place", "experience", "press"];
 // 한 언어의 페이지를 소개 순서대로 묶는다: 첫 화면 · 사업 분야 · 마케팅 상품 · 그 밖 · 블로그 글
 function grouped(lang) {
   const pages = PAGES.filter((p) => p.lang === lang);
