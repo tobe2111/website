@@ -169,7 +169,7 @@ function organization(lang) {
 }
 
 function jsonld(ctx) {
-  const { lang, path, canonical, meta, image, post, modified } = ctx;
+  const { lang, path, canonical, meta, image, post, modified, body = "" } = ctx;
   const t = T(lang), P = LANGS[lang].prefix;
   const siteId = BASE + P + "/#website", pageId = canonical + "#webpage";
   const graph = [organization(lang), {
@@ -241,6 +241,14 @@ function jsonld(ctx) {
     });
     page.mainEntity = { "@id": canonical + "#article" };
   }
+  // 자주 묻는 질문(<section id="faq"> 안의 <details>)은 검색엔진이 질문 · 답으로 읽게 한다
+  const faqSec = body.match(/<section[^>]*id="faq"[\s\S]*?<\/section>/);
+  if (faqSec) {
+    const text = (h) => h.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+    const qa = [...faqSec[0].matchAll(/<summary>(?:<span[^>]*>[^<]*<\/span>)?([\s\S]*?)<\/summary>\s*<div class="acc__body">([\s\S]*?)<\/div>/g)]
+      .map(([, q, a]) => ({ "@type": "Question", name: text(q), acceptedAnswer: { "@type": "Answer", text: text(a) } }));
+    if (qa.length) graph.push({ "@type": "FAQPage", "@id": canonical + "#faq", inLanguage: lang, mainEntity: qa });
+  }
   // 빈 값은 빼고, </script> 가 글 속에 있어도 깨지지 않게 '<' 를 바꿔 쓴다
   const clean = JSON.stringify({ "@context": "https://schema.org", "@graph": graph }, (k, v) =>
     v === undefined || v === "" || (Array.isArray(v) && !v.length) ? undefined : v);
@@ -289,7 +297,7 @@ function renderRaw(raw, file, route, lang, post) {
     post ? `<meta property="article:published_time" content="${kst(post.date)}">\n<meta property="article:modified_time" content="${kst(modified)}">` +
       (post.category ? `\n<meta property="article:section" content="${esc(post.category)}">` : "") : "",
     rss,
-    jsonld({ lang, path, canonical, meta: { ...meta, description: desc }, image, post, modified }),
+    jsonld({ lang, path, canonical, meta: { ...meta, description: desc }, image, post, modified, body }),
   ].filter(Boolean).join("\n");
   const vars = {
     lang, title: esc(title), description: esc(desc), canonical, image, alternates, headExtra,
