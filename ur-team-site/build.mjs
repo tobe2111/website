@@ -20,11 +20,18 @@ import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, cpSync, 
 import { join, dirname, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const SRC = join(ROOT, "src");
 const DIST = join(ROOT, "dist");
 const site = JSON.parse(readFileSync(join(ROOT, "site.json"), "utf8"));
+
+// 디자인(CSS) · 움직임(JS) 주소 끝에 내용 지문을 붙인다. 파일이 바뀌면 주소도 바뀌어,
+// 방문자 브라우저가 옛 디자인을 붙들고 새 화면이 깨져 보이는 일을 막는다.
+const VER = Object.fromEntries(["css/site.css", "js/site.js"].map((f) =>
+  [`/assets/${f}`, createHash("sha256").update(readFileSync(join(ROOT, "assets", f))).digest("hex").slice(0, 10)]));
+const stamp = (html) => html.replace(/(href|src)="(\/assets\/(?:css\/site\.css|js\/site\.js))"/g, (_, a, u) => `${a}="${u}?v=${VER[u]}"`);
 const BASE = site.url.replace(/\/$/, "");
 const TODAY = new Date().toISOString().slice(0, 10);
 
@@ -322,7 +329,7 @@ function renderRaw(raw, file, route, lang, post) {
   const html = fill(partial(lang, "head")) + fill(header) + `<main id="main">\n${main}\n</main>\n` + fill(partial(lang, "footer"));
   const dest = join(DIST, out);
   mkdirSync(dirname(dest), { recursive: true });
-  writeFileSync(dest, html);
+  writeFileSync(dest, stamp(html));
   PAGES.push({ lang, path, url, canonical, meta: { ...meta, description: desc }, title, modified, post, main });
   return url;
 }
