@@ -144,8 +144,9 @@
     const dec = (el.dataset.count.split(".")[1] || "").length;
     const fmt = (v) => v.toLocaleString("ko-KR", { minimumFractionDigits: dec, maximumFractionDigits: dec });
     if (reduce) { el.textContent = fmt(end); return; }
-    const t0 = performance.now(), dur = 1600;
+    const t0 = performance.now(), dur = 1600, run = (el._run = (el._run || 0) + 1);
     const tick = (t) => {
+      if (run !== el._run) return; // 다시 들어와 새로 시작했으면 이전 것은 멈춘다
       const p = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - p, 4);
       el.textContent = fmt(end * e);
       if (p < 1) requestAnimationFrame(tick);
@@ -157,14 +158,21 @@
   const groups = d.querySelectorAll("[data-stagger]");
   groups.forEach((g) => [...g.children].forEach((c, i) => { if (!c.hasAttribute("data-reveal")) c.setAttribute("data-reveal", g.dataset.stagger || ""); c.style.setProperty("--i", Math.min(i, 8)); }));
   d.querySelectorAll(".bubbles").forEach((g) => [...g.children].forEach((c, i) => c.style.setProperty("--i", i)));
+  // 화면 밖으로 완전히 나가면 처음 상태로 되돌려, 다시 스크롤해 오면 또 움직인다
+  // (움직임 줄이기 설정이면 한 번 보여 준 뒤 그대로 둔다)
   const io = new IntersectionObserver((entries) => {
     for (const en of entries) {
-      if (!en.isIntersecting) continue;
       const el = en.target;
-      el.classList.add("is-in");
-      el.querySelectorAll("[data-count]").forEach(countUp);
-      if (el.matches("[data-count]")) countUp(el);
-      io.unobserve(el);
+      const counts = el.matches("[data-count]") ? [el] : [...el.querySelectorAll("[data-count]")];
+      if (en.isIntersecting) {
+        if (el.classList.contains("is-in")) continue;
+        el.classList.add("is-in");
+        counts.forEach(countUp);
+        if (reduce) io.unobserve(el);
+      } else if (el.classList.contains("is-in")) {
+        el.classList.remove("is-in");
+        counts.forEach((c) => { c._run = (c._run || 0) + 1; });
+      }
     }
   }, { rootMargin: "0px 0px 20% 0px", threshold: 0 });
   d.querySelectorAll("[data-reveal], [data-wipe], .bubbles, .steps, .bars, .funnel, .flow, .principle, .slogan, [data-count]").forEach((el) => io.observe(el));
