@@ -445,7 +445,7 @@ a.prod:hover b { color: var(--accent); }
 .ph { --pc: var(--accent); }
 .ph__badge { display: inline-flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 600; margin-bottom: 20px; }
 .ph__badge i { width: 10px; height: 10px; background: var(--pc); }
-.ph .h1 em { font-style: normal; color: var(--pc); }
+.ph .h1 em { font-style: normal; color: var(--pt, var(--pc)); }
 .chips-row { display: flex; flex-wrap: wrap; gap: 6px 0; margin-top: 28px; font-size: 15px; color: var(--muted); }
 .chips-row span + span::before { content: "/"; margin: 0 14px; color: var(--line-2); }
 .pblock { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(32px, 4.5vw, 64px); align-items: start; }
@@ -782,7 +782,7 @@ a.prod:hover b { color: var(--accent); }
 .glance li { display: grid; gap: 2px; padding: 14px 0; border-top: 1px solid var(--line); }
 .glance li:first-child { border-top: 0; }
 .glance b { font-size: clamp(22px, 1.9vw, 28px); font-weight: 600; letter-spacing: -.03em; line-height: 1.2; color: var(--ink); }
-.glance li:first-child b { color: var(--pc, var(--accent)); }
+.glance li:first-child b { color: var(--pt, var(--pc, var(--accent))); }
 .glance span { font-size: 14px; color: var(--muted); line-height: 1.5; }
 @media (max-width: 960px) { .phero__grid { grid-template-columns: 1fr; } .glance { max-width: 520px; } }
 
@@ -791,7 +791,7 @@ a.prod:hover b { color: var(--accent); }
 .prod__img { aspect-ratio: 16 / 10; margin-bottom: 18px; background: var(--bg-2); overflow: hidden; border-top: 3px solid var(--pc); }
 .prod__img img { width: 100%; height: 100%; object-fit: cover; object-position: top center; transition: transform .8s var(--ease); }
 .prod:hover .prod__img img { transform: scale(1.04); }
-.prod:hover b { color: var(--pc); }
+.prod:hover b { color: var(--pt, var(--pc)); }
 /* 자주 묻는 질문: 제목 왼쪽, 질문 오른쪽 */
 .faq { display: grid; grid-template-columns: 4fr 8fr; gap: clamp(28px, 4vw, 64px); align-items: start; }
 .faq .head { margin-bottom: 0; position: sticky; top: calc(var(--hd) + 32px); }
@@ -1296,7 +1296,7 @@ a.prod:hover b { color: var(--accent); }
 
 /* ═══ 마케팅: 상품 카드의 대표 숫자 · 업종별 출발점 · 맡기는 이유 ═══ */
 .prod__fig { display: block; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); font-style: normal; font-size: 13px; line-height: 1.5; color: var(--muted); }
-.prod__fig b { display: block; font-size: 20px; font-weight: 600; letter-spacing: -.03em; line-height: 1.25; color: var(--pc, var(--accent)); }
+.prod__fig b { display: block; font-size: 20px; font-weight: 600; letter-spacing: -.03em; line-height: 1.25; color: var(--pt, var(--pc, var(--accent))); }
 .prod .go { margin-top: 14px; }
 .starts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
 .start { display: flex; flex-direction: column; padding: 26px 24px 24px; background: var(--bg); border: 1px solid var(--line); border-top: 2px solid var(--ink); }
@@ -1538,3 +1538,20 @@ a.prod:hover b { color: var(--accent); }
   .bizcard::before { background: linear-gradient(0deg, rgba(8, 10, 14, .92) 0%, rgba(8, 10, 14, .72) 55%, rgba(8, 10, 14, .45) 100%); }
   .bizcard p { color: rgba(255, 255, 255, .9); }
 }
+
+/* 브랜드 색을 글자로 쓸 때는 같은 색 계열에서 한 단계 진하게 (흰 바탕에서 읽히도록). 막대 · 테두리는 원래 색 그대로 */
+[style*="--pc:#03c75a"], [style*="--pc: #03c75a"] { --pt: #02863c; }
+[style*="--pc:#267dff"], [style*="--pc: #267dff"] { --pt: #076bff; }
+[style*="--pc:#2db400"], [style*="--pc: #2db400"] { --pt: #228600; }
+[style*="--pc:#2fa8c9"], [style*="--pc: #2fa8c9"] { --pt: #237f97; }
+[style*="--pc:#3aa0ff"], [style*="--pc: #3aa0ff"] { --pt: #0073dd; }
+[style*="--pc:#4285f4"], [style*="--pc: #4285f4"] { --pt: #1b6cf2; }
+[style*="--pc:#b45cd0"], [style*="--pc: #b45cd0"] { --pt: #ab48ca; }
+[style*="--pc:#ff6f0f"], [style*="--pc: #ff6f0f"] { --pt: #c74f00; }
+
+/* 언어 전환: 선택 안 된 쪽 글씨도 충분히 진하게 */
+.lang a { color: #535a63; }
+.hd.is-over .lang a { color: rgba(255, 255, 255, .82); }
+/* 큰 번호: 스크립트가 없을 때도 진하게, 있을 때만 흐린 데서 진해지는 움직임 */
+.principle .n { color: var(--ink); }
+.js .principle:not(.is-in) .n { color: var(--line-2); }

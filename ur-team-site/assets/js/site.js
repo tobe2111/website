@@ -133,6 +133,11 @@
     });
   });
 
+  // ── 옆으로 밀리는 표: 키보드로도 좌우로 움직일 수 있게 (넘칠 때만)
+  d.querySelectorAll(".tbl-wrap, .bro__table, .prose table").forEach((t) => {
+    if (t.scrollWidth > t.clientWidth + 1) { t.tabIndex = 0; if (!t.hasAttribute("aria-label")) t.setAttribute("aria-label", d.documentElement.lang === "en" ? "Table, scroll sideways" : "표, 좌우로 밀어서 보기"); }
+  });
+
   // ── 흐르는 로고 줄: 내용을 한 번 더 붙여 끊김 없이 돈다
   d.querySelectorAll(".marquee__track").forEach((t) => {
     t.append(...[...t.children].map((c) => { const k = c.cloneNode(true); k.setAttribute("aria-hidden", "true"); return k; }));
