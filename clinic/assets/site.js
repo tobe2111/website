@@ -10,7 +10,7 @@
 
   // ── 1. 스크롤하면 구역이 차례로 떠오른다 ──
   // 같은 줄에 놓인 형제들은 조금씩 늦게(계단식) 나와 눈이 왼쪽→오른쪽으로 따라가게 한다.
-  const REVEAL = ".flow, .bring > div, .notes li, .tx li, .sec-hd, .steps li, .cats li, .doc-hero > *, .visit > *, .notices li, .tgroup, .tlist li, .art-body > *, .art-body section > *, .cta-in > *, .phd .wrap > *, .gallery figure, .doc, .two > *, .map, .map-links, .form, .related";
+  const REVEAL = ".sym-list li, .sym-hd > *, .stat, .flow, .bring > div, .notes li, .tx li, .sec-hd, .steps li, .cats li, .doc-hero > *, .visit > *, .notices li, .tgroup, .tlist li, .art-body > *, .art-body section > *, .cta-in > *, .phd .wrap > *, .gallery figure, .doc, .two > *, .map, .map-links, .form, .related";
   if (!calm && "IntersectionObserver" in window) {
     const io = new IntersectionObserver((es) => es.forEach((e) => {
       if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); }
@@ -35,6 +35,26 @@
       io2.observe(el);
     });
     document.querySelectorAll(".hl").forEach((el) => io2.observe(el)); // 떠오르는 상자 밖에 있는 제목도 빠짐없이
+  }
+
+  // ── 1-3. 숫자: 화면에 들어오면 0부터 올라간다 (동작 줄이기면 처음부터 제 숫자) ──
+  if (!calm && "IntersectionObserver" in window) {
+    const ease = (t) => 1 - Math.pow(1 - t, 3);
+    const io3 = new IntersectionObserver((es) => es.forEach((e) => {
+      if (!e.isIntersecting) return;
+      io3.unobserve(e.target);
+      e.target.querySelectorAll("[data-count]").forEach((b) => {
+        const to = +b.dataset.count, t0 = performance.now(), dur = 1400;
+        const tick = (now) => {
+          const k = Math.min(1, (now - t0) / dur);
+          b.textContent = Math.round(to * ease(k)).toLocaleString("ko-KR");
+          if (k < 1) requestAnimationFrame(tick);
+        };
+        b.textContent = "0";
+        requestAnimationFrame(tick);
+      });
+    }), { threshold: 0.4 });
+    document.querySelectorAll(".stats").forEach((el) => io3.observe(el));
   }
 
   // ── 2. 머리: 내려가면 숨고, 올라오면 나타난다. 첫 화면 위에서는 투명하다 ──

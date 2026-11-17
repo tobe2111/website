@@ -164,3 +164,17 @@ test("사진을 넣으면 휴대폰·PC 크기의 WebP 를 만들고, 화면이 
     rmSync(out, { recursive: true, force: true });
   }
 });
+
+// 숫자 띠는 의료광고에 걸리지 않는 사실만 — 원고에서 바로 세는 수와 진료 시간.
+// 환자 수·치료 건수·만족도·재방문율 같은 숫자는 심의 대상이라 자동으로 만들면 안 된다.
+test("첫 화면 숫자 띠는 원고에서 센 사실만 보여준다", () => {
+  const h = htmlOf("/");
+  const band = (/<section class="stats"[\s\S]*?<\/section>/.exec(h) || [""])[0];
+  assert.ok(band, "숫자 띠가 있다");
+  const treatments = JSON.parse(readFileSync(path.join(ROOT, "sites", "cheonsaem", "treatments.json"), "utf8"));
+  assert.match(band, new RegExp(`data-count="${treatments.length}"`), "진료 안내 수 = 원고의 진료 수");
+  assert.doesNotMatch(band, /환자|만족|재방문|건수|치료 성공|%/, "효과·실적 숫자를 만들지 않는다");
+  assert.match(h, /class="hero-panel" data-today/, "첫 화면에 오늘 진료 판");
+  assert.match(h, /class="marq"/, "흐르는 진료 이름");
+  assert.equal((h.match(/class="marq-row" aria-hidden="true"/g) || []).length, 1, "끊김 없이 돌게 붙인 두 번째 줄은 화면 읽기에서 뺀다");
+});

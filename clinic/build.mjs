@@ -239,6 +239,42 @@ function doctorLd(site, d) {
     medicalSpecialty: site.specialty, worksFor: { "@id": site.siteUrl + "/#clinic" } };
 }
 
+// ───────────────────────── 홈 전용 조각 ─────────────────────────
+// 흐르는 띠 — 진료 이름이 천천히 흐른다. 끊김 없이 돌게 같은 줄을 한 번 더 붙이고, 두 번째 줄은 화면 읽기에서 뺀다.
+// 동작 줄이기면 흐르지 않고 줄바꿈되어 그대로 보인다.
+function marquee(treatments) {
+  if (!treatments.length) return "";
+  const row = treatments.map((t) => `<span>${esc(t.name)}</span>`).join("");
+  return `<div class="marq" aria-label="진료 목록"><div class="marq-track"><div class="marq-row">${row}</div><div class="marq-row" aria-hidden="true">${row}</div></div></div>`;
+}
+// 숫자 띠 — 확인한 사실만 쓴다. 원고에서 바로 세는 것(진료 안내 수, 전문의 수)과 진료 시간뿐.
+// 환자 수·치료 건수·만족도 같은 숫자는 의료광고 심의 대상이라 자동으로 만들지 않는다.
+function statsBand(site, treatments) {
+  const items = [];
+  items.push([treatments.length, "개", "진료별 안내 페이지"]);
+  const sp = site.doctors.filter((d) => /전문의/.test(d.title || "")).length;
+  if (sp) items.push([sp, "명", "정형외과 전문의 진료"]);
+  const wk = site.hours[0];
+  if (wk) items.push([wk.close, "", `${wk.label} 진료 마감`]);
+  const late = site.hours.find((x) => x.note) || site.hours.find((x) => x.days.includes("Sa"));
+  if (late) items.push([late.close, "", `${late.label}${late.note ? "" : " 진료 마감"}`]);
+  return `<section class="stats" aria-label="${esc(site.name)} 한눈에"><div class="wrap stats-in">${items.map(([v, u, l]) =>
+    `<div class="stat"><p class="stat-v">${typeof v === "number" ? `<b data-count="${v}">${v}</b>` : `<b>${esc(v)}</b>`}${u ? `<span>${esc(u)}</span>` : ""}</p><p class="stat-l">${esc(l)}</p></div>`).join("")}</div></section>`;
+}
+// 증상으로 찾기 — 환자가 쓰는 말(증상)에서 진료 페이지로 바로 잇는다. 과목마다 대표 진료 하나씩.
+function symptomFinder(site, treatments) {
+  const picks = site.categories.map((c) => treatments.find((t) => t.category === c.id && c.id !== "nonsurgical")).filter(Boolean).slice(0, 4);
+  if (!picks.length) return "";
+  return `<section class="sec"><div class="wrap sym">
+    <div class="sym-hd"><p class="eyebrow">증상으로 찾기</p><h2 class="hl">${lns("이런 증상,\n어디가 문제일까요?")}</h2>
+      <p class="lead">처음 오시는 분들이 가장 많이 하시는 말씀입니다. 증상을 누르면 원인과 치료 방법을 볼 수 있습니다.</p></div>
+    <ul class="sym-list">${picks.map((t) => {
+      const c = site.categories.find((x) => x.id === t.category);
+      return `<li><a href="/treatments/${t.slug}/"><span class="sym-cat">${esc(c ? c.name : "")}</span><q>${esc(t.symptoms[0])}</q><span class="sym-go">${esc(t.name)}<i aria-hidden="true">→</i></span>${illust(t.category, "sym-ill")}</a></li>`;
+    }).join("")}</ul>
+  </div></section>`;
+}
+
 // ───────────────────────── 페이지들 ─────────────────────────
 function home(ctx) {
   const { site, treatments, notices } = ctx;
@@ -255,16 +291,32 @@ function home(ctx) {
       : "";
     const photo = h.image?.src ? img(h.image.src, h.image.alt || "", { eager: true, sizes: "100vw", mobile: h.imageMobile?.src }) : "";
     const ph = !v && !photo ? `<span class="hero-spec">${esc(h.image?.spec || "메인 배너")}${h.video ? ` · ${esc(h.video.spec || "메인 영상 1920×1080")}` : ""}</span>` : "";
+    // 오른쪽 위 유리판: 오늘 진료 상태와 진료 시간 — 병원 홈페이지에 들어온 사람이 가장 먼저 찾는 것
+    const panel = `<aside class="hero-panel" data-today aria-label="오늘 진료 안내">
+      <p class="hp-k"><i aria-hidden="true"></i><span>오늘 진료</span></p>
+      <strong class="hp-now" data-today-text>진료 시간 안내</strong><small class="hp-sub" data-today-sub>${esc(site.closed || "")}</small>
+      <dl class="hp-hours">${site.hours.map((x) => `<div><dt>${esc(x.label)}</dt><dd>${esc(x.open)} – ${esc(x.close)}</dd></div>`).join("")}${site.lunch ? `<div><dt>점심시간</dt><dd>${esc(site.lunch)}</dd></div>` : ""}</dl>
+      <a class="hp-tel" href="${telHref(site.phone)}"><span>전화 예약</span><b>${esc(site.phone)}</b></a>
+    </aside>`;
+    // 아래쪽 띠: 진료 과목 세 칸 (첫 화면에서 바로 증상으로 들어가게)
+    const strip = site.categories.slice(0, 3).map((c, i) => {
+      const list = treatments.filter((t) => t.category === c.id);
+      return `<a class="hs-item" href="/treatments/#${c.id}"><span class="hs-no">${String(i + 1).padStart(2, "0")}</span><span class="hs-body"><b>${esc(c.name)}</b><span>${esc(c.lead)}</span><small>${list.map((t) => esc(t.name)).join(" · ")}</small></span><i aria-hidden="true">→</i></a>`;
+    }).join("");
     hero = `<section class="hero hero-full">
-    <div class="hero-media${!v && !photo ? " is-ph" : ""}">${v || photo}${ph}</div>
+    <div class="hero-media${!v && !photo ? " is-ph" : ""}">${v || photo}${ph}${!v && !photo && site.categories[0] ? `<div class="hero-art" aria-hidden="true">${illust(site.categories[0].id, "ill-hero")}</div>` : ""}</div>
     <div class="hero-veil" aria-hidden="true"></div>
     <div class="wrap hero-in">
-      <p class="eyebrow">${esc(h.eyebrow)}</p>
-      <h1 class="hero-h">${lines}</h1>
-      <p class="lead">${esc(h.body)}</p>
-      ${act}
+      <div class="hero-copy">
+        <p class="hero-pill"><i aria-hidden="true"></i>${esc(h.eyebrow)}</p>
+        <h1 class="hero-h">${lines}</h1>
+        <p class="lead">${esc(h.body)}</p>
+        ${act}
+      </div>
+      ${panel}
     </div>
-    <a class="scroll-cue" href="#first" aria-label="아래로 이동"><span></span></a>
+    <nav class="wrap hero-strip" aria-label="주요 진료 과목">${strip}</nav>
+    ${marquee(treatments)}
   </section>`;
   } else if (variant === "editorial") {
     // 잡지형: 큰 제목이 먼저, 그 아래 가로로 긴 사진이 막이 걷히듯 열린다. PC 배너(2:1)를 자르지 않고 그대로 쓴다.
@@ -303,28 +355,28 @@ function home(ctx) {
   </div></section>`;
 
   const d = site.doctors[0];
-  const doc = d ? `<section class="sec"><div class="wrap doc-hero">
+  const doc = d ? `<section class="sec sec-alt"><div class="wrap doc-hero">
     ${figure({ ...d.photo, alt: `${d.name} ${d.role}` }, { ratio: "4/5", className: "doc-fig" })}
     <div><p class="eyebrow">의료진</p><h2>${esc(d.name)} <small>${esc(d.role)}</small></h2><p class="doc-title">${esc(d.title)}</p>
       <blockquote>${br(site.greeting.body.split(/\n{2,}/)[0])}</blockquote>
       <a class="more" href="/doctors/">의료진 소개</a></div>
   </div></section>` : "";
 
-  const visit = `<section class="sec sec-alt"><div class="wrap visit">
+  const visit = `<section class="sec"><div class="wrap visit">
     <div><p class="eyebrow">진료 시간</p><h2 class="hl">${lns("오늘 진료하나요?")}</h2>${hoursTable(site)}</div>
     <div><p class="eyebrow">오시는 길</p><h2 class="hl">${lns(`${site.address.locality}에 있습니다`)}</h2><p class="addr">${esc(site.address.full)}</p>
       <dl class="transit">${site.transit.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl>
       <a class="more" href="/location/">지도 보기</a></div>
   </div></section>`;
 
-  const news = notices.length ? `<section class="sec"><div class="wrap">
+  const news = notices.length ? `<section class="sec sec-alt"><div class="wrap">
     <div class="sec-hd row"><div><p class="eyebrow">공지사항</p><h2 class="hl">${lns("병원 소식")}</h2></div><a class="more" href="/notice/">전체 보기</a></div>
     <ul class="notices">${notices.slice(0, 3).map((n) => `<li><a href="/notice/${n.slug}/"><time datetime="${n.date}">${n.date.replace(/-/g, ".")}</time><span>${esc(n.title)}</span></a></li>`).join("")}</ul>
   </div></section>` : "";
 
   const website = { "@context": "https://schema.org", "@type": "WebSite", name: site.name, url: site.siteUrl + "/", inLanguage: "ko-KR" };
   return layout(ctx, { path: "/", title: site.name, description: site.description,
-    body: hero + quick + principles + cats + doc + visit + news + cta(site), over: variant === "full",
+    body: hero + (variant === "full" ? statsBand(site, treatments) : quick) + symptomFinder(site, treatments) + cats + principles + doc + visit + news + cta(site), over: variant === "full",
     jsonLd: [clinicLd(ctx), website] });
 }
 
