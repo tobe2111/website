@@ -140,8 +140,10 @@ ${site.naverVerification ? `<meta name="naver-site-verification" content="${esc(
 ${site.googleVerification ? `<meta name="google-site-verification" content="${esc(site.googleVerification)}" />` : ""}
 <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
-${site.theme?.type === "serif" ? `<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />\n<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@500;600;700&display=swap" />` : ""}
+<!-- 글꼴은 첫 화면을 막지 않게 받는다: 먼저 기기 글꼴로 그리고, 받아지면 바꾼다 (느린 휴대폰에서 첫 글자가 빨리 뜬다) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" media="print" onload="this.media='all'" />
+<noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" /></noscript>
+${site.theme?.type === "serif" ? `<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />\n<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@500;600;700&display=swap" media="print" onload="this.media='all'" />` : ""}
 <link rel="stylesheet" href="/assets/site.css?v=${assetV}" />
 ${themeStyle(site.theme)}
 ${jsonLd.map(ld).join("\n")}
@@ -711,7 +713,9 @@ function englishPage(ctx) {
 <meta property="og:locale" content="en_US" />
 ${ctx.og ? `<meta property="og:image" content="${esc(site.siteUrl)}/og/home.png" />` : ""}
 <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
+<!-- 글꼴은 첫 화면을 막지 않게 받는다: 먼저 기기 글꼴로 그리고, 받아지면 바꾼다 (느린 휴대폰에서 첫 글자가 빨리 뜬다) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" media="print" onload="this.media='all'" />
+<noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" /></noscript>
 <link rel="stylesheet" href="/assets/site.css?v=${assetV}" />
 ${themeStyle(site.theme)}
 ${ld ? `<script type="application/ld+json">${JSON.stringify(ld).replace(/</g, "\\u003c")}</script>` : ""}
