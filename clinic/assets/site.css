@@ -283,6 +283,24 @@ p { margin: 0 0 1em; }
 .col-tx:hover { background: var(--surface); }
 .col-tx:hover i { transform: translate(4px, -50%); }
 
+/* ── 영어 페이지 · 언어 바꾸기 ── */
+.hd-lang { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; min-width: 44px; padding: 0 6px; font-size: 14px; font-weight: 700; text-decoration: none; letter-spacing: .02em; }
+.hd-lang:hover { text-decoration: underline; text-underline-offset: 4px; }
+.lang-en { word-break: normal; }
+.lang-en .hours tr.today th::after { content: "Today"; }
+.lang-en .hl .ln > span { letter-spacing: -0.03em; }
+.en-hero h1 { font-size: clamp(36px, 5vw, 64px); }
+.en-lang { margin-top: 24px; padding: 14px 18px; border-left: 3px solid var(--accent); background: var(--surface); font-size: 15px; max-width: 640px; }
+.en-cats { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0; border-top: 1px solid var(--ink); }
+.en-cat { padding: 28px 24px 24px 0; }
+.en-cat + .en-cat { padding-left: 24px; border-left: 1px solid var(--line); }
+.en-cat h3 { font-size: 21px; margin-bottom: 6px; }
+.en-cat > p { font-size: 15px; color: var(--muted); }
+.en-cat ul { list-style: none; margin: 16px 0 0; padding: 0; border-top: 1px solid var(--line); }
+.en-cat li { padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 15px; font-weight: 600; }
+.en-cat li span { display: block; font-size: 13px; font-weight: 400; color: var(--muted); }
+.en-ins { font-size: 15px; color: var(--muted); }
+
 /* ── 바닥 ── */
 .ft { background: var(--ink); color: rgba(255,255,255,.78); padding: 72px 0 40px; font-size: 15px; }
 .ft a { color: #fff; }
@@ -650,6 +668,7 @@ a:hover .fig img { transform: scale(1.03); }
   .tbar { grid-template-columns: 1fr auto; gap: 20px 32px; }
   .tbar-scale { grid-column: 1 / -1; grid-row: 2; }
   .sym { grid-template-columns: 1fr; gap: 40px; }
+  .en-cat + .en-cat { padding-left: 0; border-left: 0; border-top: 1px solid var(--line); }
   .cols { grid-template-columns: 1fr; }
   .cols li + li { border-left: 0; border-top: 1px solid var(--line); }
   .cols a, .cols li + li a { padding: 24px 0; }

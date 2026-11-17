@@ -13,6 +13,13 @@ export const BANNED = [
   [/(치료|시술|수술)\s*(전\s*후|전후)|비포\s*(&|앤드)?\s*애프터|before\s*(&|and)?\s*after/i, "치료 전후 비교"],
   [/후기|체험담|치료\s*사례|생생한\s*경험/, "환자 후기·체험담"],
   [/특가|할인|이벤트\s*가|무료\s*(시술|치료|검사)|선착순|파격/, "가격 할인·무료로 환자를 끄는 표현"],
+  // 영어 페이지(해외 환자용)도 같은 의료광고다
+  [/\b(best|number one|no\.?\s?1|top-rated|leading|world-class)\b/i, "superlatives or comparisons (English)"],
+  [/\b(cures?|cured|guaranteed?|100\s?%|permanent(ly)? (fix|relief))\b/i, "promising results (English)"],
+  [/\b(painless|pain-free (treatment|procedure)|no side effects|risk-free)\b/i, "claiming no pain or side effects (English)"],
+  [/before[\s-]*(&|and)[\s-]*after/i, "before/after comparison (English)"],
+  [/\b(testimonials?|patient reviews?)\b/i, "patient testimonials (English)"],
+  [/\b(discount|free (consultation|treatment|surgery)|promotion)\b/i, "discounts or free treatment (English)"],
 ];
 
 // 값 하나(문자열)를 검사해 걸린 항목을 돌려준다

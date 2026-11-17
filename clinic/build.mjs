@@ -124,6 +124,7 @@ function layout(ctx, { path: p, title, description, body, jsonLd = [], ogImage =
 <title>${esc(fullTitle)}</title>
 <meta name="description" content="${esc(description)}" />
 <link rel="canonical" href="${esc(url)}" />
+${site.en && p === "/" ? `<link rel="alternate" hreflang="ko" href="${esc(url)}" />\n<link rel="alternate" hreflang="en" href="${esc(site.siteUrl + "/en/")}" />\n<link rel="alternate" hreflang="x-default" href="${esc(url)}" />` : ""}
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="${esc(site.name)}" />
 <meta property="og:title" content="${esc(fullTitle)}" />
@@ -150,6 +151,7 @@ ${extraHead}
     <a class="logo" href="/" aria-label="${esc(site.name)} 홈">${site.logo ? `<img src="${esc(site.logo)}" alt="" />` : ""}<span>${esc(site.name)}</span></a>
     <nav class="gnb" aria-label="주 메뉴">${gnbHtml}</nav>
     <div class="hd-act">
+      ${site.en ? `<a class="hd-lang" href="/en/" hreflang="en" lang="en">EN</a>` : ""}
       <a class="hd-tel" href="${telHref(site.phone)}">${esc(site.phone)}</a>
       <a class="btn btn-sm" href="/reservation/">상담 예약</a>
     </div>
@@ -670,6 +672,96 @@ function notFound(ctx) {
       `<section class="sec"><div class="wrap"><p><a class="btn" href="/">홈으로</a> <a class="btn btn-line" href="/treatments/">진료 과목 보기</a></p></div></section>` });
 }
 
+// ───────────────────────── 영어 페이지 (해외 환자용) ─────────────────────────
+// 한 장짜리 안내: 소개·진료 원칙·진료 과목·진료 목록·의료진·진료 시간·오시는 길·연락.
+// 영어 상담이 되는지는 병원마다 다르므로 "된다"고 쓰지 않는다 — 미리 전화로 확인하라고 안내한다.
+const intlTel = (p) => "+82-" + String(p || "").replace(/^0/, "");
+function englishPage(ctx) {
+  const { site, treatments, assetV } = ctx;
+  const E = site.en;
+  const url = site.siteUrl + "/en/";
+  const cats = site.categories.filter((c) => treatments.some((t) => t.category === c.id));
+  const hoursRows = site.hours.map((h) => `<tr data-days="${h.days.join(" ")}" data-close="${esc(h.close)}"><th scope="row">${esc((E.hours || {})[h.label] || h.label)}</th><td>${esc(h.open)} – ${esc(h.close)}</td></tr>`).join("")
+    + (site.lunch ? `<tr><th scope="row">${esc((E.hours || {})["점심시간"] || "Lunch break")}</th><td>${esc(site.lunch)}</td></tr>` : "");
+  const doc = site.doctors[0];
+  const lines = String(E.title).split("\n").map((l, i) => `<span class="ln" style="--i:${i}"><span>${esc(l)}</span></span>`).join("");
+  const nav = [["#departments", "Departments"], ["#doctor", "Doctor"], ["#visit", "Hours & location"], ["#contact", "Contact"]];
+  const ld = { "@context": "https://schema.org", "@type": "MedicalClinic", "@id": site.siteUrl + "/#clinic", name: E.name, alternateName: site.name,
+    url, telephone: intlTel(site.phone), medicalSpecialty: site.specialty, inLanguage: "en",
+    openingHoursSpecification: site.hours.map((h) => ({ "@type": "OpeningHoursSpecification", dayOfWeek: h.days.map((d) => DAY[d]), opens: h.open, closes: h.close })) };
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${esc(E.name)} | ${esc(String(E.title).replace(/\n/g, " "))}</title>
+<meta name="description" content="${esc(E.intro.slice(0, 155))}" />
+<link rel="canonical" href="${esc(url)}" />
+<link rel="alternate" hreflang="en" href="${esc(url)}" />
+<link rel="alternate" hreflang="ko" href="${esc(site.siteUrl + "/")}" />
+<link rel="alternate" hreflang="x-default" href="${esc(site.siteUrl + "/")}" />
+<meta property="og:type" content="website" />
+<meta property="og:title" content="${esc(E.name)}" />
+<meta property="og:description" content="${esc(E.intro.slice(0, 155))}" />
+<meta property="og:url" content="${esc(url)}" />
+<meta property="og:locale" content="en_US" />
+${ctx.og ? `<meta property="og:image" content="${esc(site.siteUrl)}/og/home.png" />` : ""}
+<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
+<link rel="stylesheet" href="/assets/site.css?v=${assetV}" />
+${themeStyle(site.theme)}
+${ld ? `<script type="application/ld+json">${JSON.stringify(ld).replace(/</g, "\\u003c")}</script>` : ""}
+</head>
+<body class="${bodyClass(site.theme)} lang-en">
+<a class="skip" href="#main">Skip to content</a>
+<header class="hd">
+  <div class="wrap hd-in">
+    <a class="logo" href="/en/"><span>${esc(E.name)}</span></a>
+    <nav class="gnb" aria-label="Main">${nav.map(([h, l]) => `<a class="gl" href="${h}">${l}</a>`).join("")}</nav>
+    <div class="hd-act"><a class="hd-lang" href="/" hreflang="ko" lang="ko">한국어</a><a class="btn btn-sm" href="tel:${esc(intlTel(site.phone).replace(/-/g, ""))}">Call us</a></div>
+  </div>
+</header>
+<main id="main">
+<section class="phd en-hero has-ill"><div class="wrap"><div class="phd-in">
+  <div><p class="eyebrow">${esc(E.eyebrow)}</p><h1 class="hero-h hl">${lines}</h1><p class="lead">${esc(E.intro)}</p>
+    <p class="en-lang">${esc(E.languageNote)}</p></div>
+  ${site.categories[0] ? `<div class="phd-ill">${illust(site.categories[0].id, "ill-lg")}</div>` : ""}
+</div></div></section>
+<section class="sec"><div class="wrap">
+  <div class="sec-hd"><p class="eyebrow">How we work</p><h2 class="hl">${lns("Four things we keep")}</h2></div>
+  <ol class="steps">${(E.principles || []).map(([t, d], i) => `<li><span class="num">${String(i + 1).padStart(2, "0")}</span><h3>${esc(t)}</h3><p>${esc(d)}</p></li>`).join("")}</ol>
+</div></section>
+<section class="sec sec-alt" id="departments"><div class="wrap">
+  <div class="sec-hd"><p class="eyebrow">Departments</p><h2 class="hl">${lns("What we treat")}</h2></div>
+  <div class="en-cats">${cats.map((c) => {
+    const [name, lead] = (E.categories || {})[c.id] || [c.name, c.lead];
+    return `<div class="en-cat">${illust(c.id, "ill-md")}<h3>${esc(name)}</h3><p>${esc(lead)}</p><ul>${treatments.filter((t) => t.category === c.id).map((t) => `<li>${esc(t.en || t.name)} <span lang="ko">${esc(t.name)}</span></li>`).join("")}</ul></div>`;
+  }).join("")}</div>
+</div></section>
+${doc ? `<section class="sec" id="doctor"><div class="wrap two">
+  <div><p class="eyebrow">Doctor</p><h2 class="hl">${lns(E.doctorName || doc.name)}</h2><p class="doc-title">${/전문의/.test(doc.title) ? "Board-certified orthopedic surgeon" : esc(doc.title)}</p>
+    <p>${esc(E.name)} is led by a board-certified orthopedic surgeon who examines every patient in person.</p></div>
+  ${figure({ ...doc.photo, alt: doc.name }, { ratio: "4/5", className: "doc-fig" })}
+</div></section>` : ""}
+<section class="sec sec-alt" id="visit"><div class="wrap visit">
+  <div><p class="eyebrow">Opening hours</p><h2 class="hl">${lns("When to visit")}</h2><table class="hours"><tbody>${hoursRows}</tbody></table><p class="hours-off">${esc(E.closed || site.closed)}</p></div>
+  <div><p class="eyebrow">Location</p><h2 class="hl">${lns("How to find us")}</h2><p class="addr">${esc(E.address)}</p>
+    <dl class="transit">${site.transit.map(([k, v]) => `<div><dt>${esc((E.transit || {})[k] || k)}</dt><dd lang="ko">${esc(v)}</dd></div>`).join("")}</dl>
+    <p class="en-ins">${esc(E.insurance)}</p></div>
+</div></section>
+<section class="cta" id="contact"><div class="wrap cta-in">
+  <div><h2>Call us to book a visit</h2><p>${esc(E.languageNote)}</p></div>
+  <div class="cta-act"><a class="btn btn-lg btn-inv" href="tel:${esc(intlTel(site.phone).replace(/-/g, ""))}">${esc(intlTel(site.phone))}</a><a class="btn btn-lg btn-ghost-inv" href="/" hreflang="ko">한국어 홈페이지</a></div>
+</div></section>
+</main>
+<footer class="ft"><div class="wrap ft-note"><p>The medical information on this page is general guidance and does not replace a consultation or diagnosis. Results vary between individuals.</p><p>© ${new Date().getFullYear()} ${esc(E.name)}</p></div></footer>
+<script type="application/json" id="hours-data">${JSON.stringify({ hours: site.hours, lunch: site.lunch || "" }).replace(/</g, "\\u003c")}</script>
+<script src="/assets/site.js?v=${assetV}" defer></script>
+</body>
+</html>
+`;
+}
+
 // AI 검색(ChatGPT·퍼플렉시티 등)이 사이트를 한 번에 이해하도록 요점만 담은 안내문.
 function llmsTxt({ site, treatments, columns = [] }) {
   const h = site.hours.map((x) => `${x.label} ${x.open}–${x.close}${x.note ? ` (${x.note})` : ""}`).join(", ");
@@ -725,6 +817,7 @@ export function build(id, { outDir, og = false } = {}) {
   pages.set("/reservation/", reservation(ctx));
   pages.set("/fees/", fees(ctx));
   pages.set("/privacy/", privacy(ctx));
+  if (data.site.en) pages.set("/en/", englishPage(ctx));
 
   const write = (rel, content) => { const f = path.join(out, rel); mkdirSync(path.dirname(f), { recursive: true }); writeFileSync(f, content); };
   for (const [p, h] of pages) write(p === "/" ? "index.html" : `${p}index.html`, h);
