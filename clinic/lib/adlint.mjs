@@ -20,6 +20,13 @@ export const BANNED = [
   [/before[\s-]*(&|and)[\s-]*after/i, "before/after comparison (English)"],
   [/\b(testimonials?|patient reviews?)\b/i, "patient testimonials (English)"],
   [/\b(discount|free (consultation|treatment|surgery)|promotion)\b/i, "discounts or free treatment (English)"],
+  // 중국어 페이지(번체·간체) — '第一'만 막으면 '第一步(첫걸음)'까지 걸리므로 순위 표현으로만 막는다
+  [/最好|最佳|第一名|排名第一|首選|首选|唯一|頂尖|顶尖|權威|权威/, "最高級・比較表現（中文）"],
+  [/根治|治癒|治愈|痊癒|痊愈|保證|保证|永久(改善|治好)/, "保證療效（中文）"],
+  [/無痛|无痛|無副作用|无副作用|零風險|零风险|絕對安全|绝对安全/, "宣稱無痛・無副作用（中文）"],
+  [/(治療|治疗|手術|手术)前後|前後對比|前后对比/, "治療前後對比（中文）"],
+  [/患者評價|患者评价|真實案例|真实案例|好評|好评|見證|见证/, "患者評價・見證（中文）"],
+  [/優惠|优惠|折扣|特價|特价|免費(治療|檢查)|免费(治疗|检查)/, "折扣・免費療程（中文）"],
 ];
 
 // 값 하나(문자열)를 검사해 걸린 항목을 돌려준다

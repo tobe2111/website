@@ -232,66 +232,201 @@
       ]
     ]
   },
-  "en": {
-    "name": "Cheonsaem Orthopedic Clinic",
-    "eyebrow": "Orthopedic clinic in Seoul",
-    "title": "Orthopedic care that\nstarts with an explanation",
-    "intro": "We treat neck, back, shoulder, knee and foot pain. We look for the cause through examination and imaging, then explain the treatment plan, how long it may take and what it costs before we begin.",
-    "address": "【확인 필요】 English address",
-    "languageNote": "Consultations are held in Korean. Please call ahead to check whether English support or an interpreter is available on the day of your visit.",
-    "principles": [
-      [
-        "We listen first",
-        "When it started, which movements hurt, how much — diagnosis begins with your story."
+  "i18n": {
+    "en": {
+      "name": "Cheonsaem Orthopedic Clinic",
+      "eyebrow": "Orthopedic clinic in Seoul",
+      "title": "Orthopedic care that\nstarts with an explanation",
+      "intro": "We treat neck, back, shoulder, knee and foot pain. We look for the cause through examination and imaging, then explain the treatment plan, how long it may take and what it costs before we begin.",
+      "address": "【확인 필요】 English address",
+      "languageNote": "Consultations are held in Korean. Please call ahead to check whether English support or an interpreter is available on the day of your visit.",
+      "principles": [
+        [
+          "We listen first",
+          "When it started, which movements hurt, how much — diagnosis begins with your story."
+        ],
+        [
+          "We find the cause",
+          "Only the tests you need, such as X-ray or ultrasound, and we go through the results with you."
+        ],
+        [
+          "We explain the plan",
+          "What treatment, how many sessions and the cost — before we start."
+        ],
+        [
+          "We follow up",
+          "We check what has changed and adjust the treatment if needed."
+        ]
       ],
-      [
-        "We find the cause",
-        "Only the tests you need, such as X-ray or ultrasound, and we go through the results with you."
-      ],
-      [
-        "We explain the plan",
-        "What treatment, how many sessions and the cost — before we start."
-      ],
-      [
-        "We follow up",
-        "We check what has changed and adjust the treatment if needed."
-      ]
-    ],
-    "categories": {
-      "spine": [
-        "Spine",
-        "Neck and back pain, numbness down the leg"
-      ],
-      "shoulder": [
-        "Shoulder & elbow",
-        "Stiff or painful shoulder, elbow pain when gripping"
-      ],
-      "knee": [
-        "Knee & ankle",
-        "Knee pain on stairs, recurrent ankle sprains"
-      ],
-      "hand-foot": [
-        "Hand & foot",
-        "Numb fingers, heel pain with the first steps"
-      ],
-      "nonsurgical": [
-        "Non-surgical care",
-        "Injections, manual therapy, shockwave, physical therapy"
-      ]
+      "categories": {
+        "spine": [
+          "Spine",
+          "Neck and back pain, numbness down the leg"
+        ],
+        "shoulder": [
+          "Shoulder & elbow",
+          "Stiff or painful shoulder, elbow pain when gripping"
+        ],
+        "knee": [
+          "Knee & ankle",
+          "Knee pain on stairs, recurrent ankle sprains"
+        ],
+        "hand-foot": [
+          "Hand & foot",
+          "Numb fingers, heel pain with the first steps"
+        ],
+        "nonsurgical": [
+          "Non-surgical care",
+          "Injections, manual therapy, shockwave, physical therapy"
+        ]
+      },
+      "hours": {
+        "평일": "Weekdays",
+        "수요일 야간": "Wednesday (evening hours)",
+        "토요일": "Saturday",
+        "점심시간": "Lunch break"
+      },
+      "closed": "Closed on Sundays and public holidays",
+      "transit": {
+        "지하철": "Subway",
+        "버스": "Bus",
+        "주차": "Parking"
+      },
+      "insurance": "Patients without Korean National Health Insurance pay the full cost of treatment. Please ask about fees before treatment begins; receipts and medical documents are issued at the front desk.",
+      "doctorName": "【확인 필요】 Dr. (English name)",
+      "reviewed": false,
+      "doctorTitle": "Board-certified orthopedic surgeon",
+      "doctorLine": "Cheonsaem Orthopedic Clinic is led by a board-certified orthopedic surgeon who examines every patient in person."
     },
-    "hours": {
-      "평일": "Weekdays",
-      "수요일 야간": "Wednesday (evening hours)",
-      "토요일": "Saturday",
-      "점심시간": "Lunch break"
+    "zh-TW": {
+      "reviewed": false,
+      "name": "Cheonsaem 骨科診所",
+      "eyebrow": "首爾骨科診所",
+      "title": "先說明，\n再治療",
+      "intro": "我們診治頸部、腰背、肩膀、膝蓋與足部疼痛。透過問診與影像檢查找出原因後，會在開始治療前說明治療方式、所需時間與費用。",
+      "address": "【확인 필요】 中文地址",
+      "doctorName": "【확인 필요】 醫師中文姓名",
+      "languageNote": "診療以韓語進行。是否能提供中文協助或口譯，請於就診前來電確認。",
+      "principles": [
+        [
+          "先仔細聆聽",
+          "從何時開始、哪些動作會痛、痛到什麼程度——診斷從您的描述開始。"
+        ],
+        [
+          "找出原因",
+          "只做必要的檢查，例如X光或超音波，並與您一起看結果。"
+        ],
+        [
+          "事先說明治療計畫",
+          "治療方式、次數與費用，開始前先告訴您。"
+        ],
+        [
+          "持續追蹤",
+          "確認治療後的變化，必要時調整方法。"
+        ]
+      ],
+      "categories": {
+        "spine": [
+          "脊椎",
+          "頸部、腰部疼痛，腿部麻木"
+        ],
+        "shoulder": [
+          "肩膀・手肘",
+          "手臂抬不起來、握物時手肘痠痛"
+        ],
+        "knee": [
+          "膝蓋・腳踝",
+          "上下樓梯膝蓋痛、經常扭傷腳踝"
+        ],
+        "hand-foot": [
+          "手・腳",
+          "手指麻木、早上下床踩地時腳跟痛"
+        ],
+        "nonsurgical": [
+          "非手術治療",
+          "注射、徒手治療、震波、物理治療"
+        ]
+      },
+      "hours": {
+        "평일": "平日（週一至週五）",
+        "수요일 야간": "週三（夜間門診）",
+        "토요일": "週六",
+        "점심시간": "午休"
+      },
+      "closed": "週日及國定假日休診",
+      "transit": {
+        "지하철": "地鐵",
+        "버스": "公車",
+        "주차": "停車"
+      },
+      "insurance": "未加入韓國國民健康保險的患者需自費全額。開始治療前請先詢問費用；收據與醫療文件可在櫃檯申請。",
+      "doctorTitle": "骨科專科醫師",
+      "doctorLine": "由骨科專科醫師親自為每位患者看診。"
     },
-    "closed": "Closed on Sundays and public holidays",
-    "transit": {
-      "지하철": "Subway",
-      "버스": "Bus",
-      "주차": "Parking"
-    },
-    "insurance": "Patients without Korean National Health Insurance pay the full cost of treatment. Please ask about fees before treatment begins; receipts and medical documents are issued at the front desk.",
-    "doctorName": "【확인 필요】 Dr. (English name)"
+    "zh-CN": {
+      "reviewed": false,
+      "name": "Cheonsaem 骨科诊所",
+      "eyebrow": "首尔骨科诊所",
+      "title": "先讲清楚，\n再开始治疗",
+      "intro": "我们诊治颈部、腰背、肩部、膝部和足部疼痛。通过问诊和影像检查找出病因后，在开始治疗前说明治疗方法、所需时间和费用。",
+      "address": "【확인 필요】 中文地址",
+      "doctorName": "【확인 필요】 医生中文姓名",
+      "languageNote": "诊疗以韩语进行。能否提供中文协助或翻译，请在就诊前致电确认。",
+      "principles": [
+        [
+          "先认真倾听",
+          "从什么时候开始、哪些动作会痛、痛到什么程度——诊断从您的描述开始。"
+        ],
+        [
+          "找出病因",
+          "只做必要的检查，如X光或超声波，并和您一起看结果。"
+        ],
+        [
+          "事先说明治疗方案",
+          "治疗方法、次数和费用，开始前先告诉您。"
+        ],
+        [
+          "持续随访",
+          "确认治疗后的变化，必要时调整方案。"
+        ]
+      ],
+      "categories": {
+        "spine": [
+          "脊柱",
+          "颈部、腰部疼痛，腿部发麻"
+        ],
+        "shoulder": [
+          "肩・肘",
+          "手臂抬不起来、握物时肘部酸痛"
+        ],
+        "knee": [
+          "膝・踝",
+          "上下楼梯膝盖痛、经常崴脚"
+        ],
+        "hand-foot": [
+          "手・足",
+          "手指发麻、早上下床踩地时脚跟痛"
+        ],
+        "nonsurgical": [
+          "非手术治疗",
+          "注射、手法治疗、冲击波、物理治疗"
+        ]
+      },
+      "hours": {
+        "평일": "工作日（周一至周五）",
+        "수요일 야간": "周三（夜间门诊）",
+        "토요일": "周六",
+        "점심시간": "午休"
+      },
+      "closed": "周日及法定节假日休诊",
+      "transit": {
+        "지하철": "地铁",
+        "버스": "公交",
+        "주차": "停车"
+      },
+      "insurance": "未参加韩国国民健康保险的患者需自费。开始治疗前请先咨询费用；收据和医疗文件可在前台申请。",
+      "doctorTitle": "骨科专科医生",
+      "doctorLine": "由骨科专科医生亲自为每位患者诊疗。"
+    }
   }
 }

@@ -32,7 +32,8 @@ test("모든 페이지에 검색용 제목·설명·대표 주소·h1 하나가 
     assert.ok(desc.length >= 20 && desc.length <= 160, `${p}: 설명 길이 ${desc.length}`);
     assert.match(h, new RegExp(`<link rel="canonical" href="[^"]+${p.replace(/\//g, "\\/")}"`), `${p}: 대표 주소`);
     assert.equal((h.match(/<h1[\s>]/g) || []).length, 1, `${p}: h1 은 하나`);
-    assert.match(h, p === "/en/" ? /<html lang="en">/ : /<html lang="ko">/);
+    const lang = { "/en/": "en", "/zh-tw/": "zh-TW", "/zh-cn/": "zh-CN" }[p] || "ko";
+    assert.match(h, new RegExp(`<html lang="${lang}">`));
   }
 });
 
@@ -113,7 +114,7 @@ test("두 번째 모양(견본 B)은 같은 원고로 다른 배치·글꼴을 �
   try {
     const r = build("sample-b", { outDir: out });
     // 영어 원고(site.en)는 병원마다 따로 쓰므로 빌려 오지 않는다 — 견본 B 는 영어 페이지만 없다
-    assert.deepEqual(r.pages, pages.filter((p) => p !== "/en/"), "원고를 빌려 와도 영어 말고는 같은 페이지가 선다");
+    assert.deepEqual(r.pages, pages.filter((p) => !["/en/", "/zh-tw/", "/zh-cn/"].includes(p)), "원고를 빌려 와도 외국어 말고는 같은 페이지가 선다");
     const h = readFileSync(path.join(out, "index.html"), "utf8");
     assert.match(h, /<body class="t-serif L-b">/);
     assert.match(h, /class="hero hero-ed"/);
@@ -213,12 +214,12 @@ test("영어 페이지: 한국어 홈과 서로 가리키고, 영어 상담이 �
   const en = htmlOf("/en/"), ko = htmlOf("/");
   assert.match(en, /hreflang="ko"/);
   assert.match(ko, /<link rel="alternate" hreflang="en" href="[^"]+\/en\/"/);
-  assert.match(ko, /class="hd-lang" href="\/en\/"/, "한국어 머리에 EN 단추");
+  assert.match(ko, /<details class="lng">[\s\S]*?href="\/en\/"/, "한국어 머리의 언어 메뉴에 영어");
   assert.match(en, /tel:\+822/, "국제 전화 형식");
   assert.match(en, /call ahead/i, "영어 상담 가능 여부는 미리 확인하라고 안내");
   assert.doesNotMatch(en, /English-speaking (staff|doctor)s? (are|is) available/i);
   const treatments = JSON.parse(readFileSync(path.join(ROOT, "sites", "cheonsaem", "treatments.json"), "utf8"));
-  for (const t of treatments) assert.ok(en.includes(t.en), `영어 진료명: ${t.en}`);
+  for (const t of treatments) assert.ok(en.includes(t.i18n.en), `영어 진료명: ${t.i18n.en}`);
   assert.equal(lintText(en.replace(/<[^>]+>/g, " ")).length, 0, "영어 페이지도 의료광고 금지 표현이 없다");
 });
 
@@ -246,4 +247,20 @@ test("카카오톡 상담: 채널 주소가 있을 때만, 카카오 채널 주�
     rmSync(path.join(ROOT, ".cache", id), { recursive: true, force: true });
     rmSync(tmp, { recursive: true, force: true });
   }
+});
+
+test("중국어 번체·간체 페이지: 언어가 맞고, 모든 언어끼리 서로 가리키고, 중국어 금지 표현이 없다", () => {
+  const treatments = JSON.parse(readFileSync(path.join(ROOT, "sites", "cheonsaem", "treatments.json"), "utf8"));
+  for (const [p, code, html] of [["/zh-tw/", "zh-TW", "zh-TW"], ["/zh-cn/", "zh-CN", "zh-CN"]]) {
+    const h = htmlOf(p);
+    assert.match(h, new RegExp(`<html lang="${html}">`));
+    for (const alt of ["ko", "en", "zh-TW", "zh-CN", "x-default"]) assert.match(h, new RegExp(`hreflang="${alt}"`), `${p} → ${alt}`);
+    for (const t of treatments) assert.ok(h.includes(t.i18n[code]), `${code} 진료명: ${t.i18n[code]}`);
+    assert.equal(lintText(h.replace(/<[^>]+>/g, " ")).length, 0, `${p} 의료광고 금지 표현 없음`);
+    assert.match(h, /tel:\+822/);
+  }
+  assert.match(htmlOf("/zh-tw/"), /來電確認/, "번체: 중국어 상담 가능 여부는 미리 확인하라고");
+  assert.match(htmlOf("/zh-cn/"), /致电确认/, "간체: 같은 안내");
+  for (const bad of ["根治腰痛", "排名第一", "無痛治療", "前后对比", "患者評價", "优惠活动"]) assert.ok(lintText(bad).length, `"${bad}" 를 잡아야 한다`);
+  assert.equal(lintText("早上下床踩地時腳跟痛").length, 0, "평범한 말은 통과");
 });
