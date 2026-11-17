@@ -178,3 +178,32 @@ test("한눈에 보는 사실은 원고에서 센 것만 보여준다", () => {
   // 빌드 때는 평일 기준으로 칠해 둔다 — 평일 09:00~18:30, 점심 13:00~14:00 이면 구간이 둘
   assert.equal((h.match(/class="seg"/g) || []).length, 2, "점심시간은 빈칸으로 나뉜다");
 });
+
+test("건강 칼럼: 글 페이지·목록·검색 정보가 만들어지고, 진료 페이지와 서로 잇는다", () => {
+  const h = htmlOf("/column/herniated-disc-surgery/");
+  assert.match(h, /"@type":"BlogPosting"/);
+  assert.match(h, /href="\/treatments\/herniated-disc\/"/, "칼럼 → 관련 진료");
+  assert.match(h, /<h2 id="s1">/, "소제목에 목차용 주소");
+  assert.match(htmlOf("/treatments/herniated-disc/"), /href="\/column\/herniated-disc-surgery\/"/, "진료 → 관련 칼럼");
+  assert.match(htmlOf("/column/"), /frozen-shoulder-stretch/);
+  assert.match(readFileSync(path.join(OUT, "sitemap.xml"), "utf8"), /\/column\/herniated-disc-surgery\//);
+  assert.match(readFileSync(path.join(OUT, "llms.txt"), "utf8"), /## 건강 칼럼/);
+});
+
+test("칼럼 원고의 꺾쇠는 화면을 깨지 않고, 금지 표현은 칼럼에서도 걸린다", async () => {
+  const { renderMarkdown } = await import("../lib/md.mjs");
+  const { html } = renderMarkdown("<script>alert(1)</script> **굵게**\n\n- 하나\n- 둘\n\n> 주의");
+  assert.doesNotMatch(html, /<script>/);
+  assert.match(html, /<strong>굵게<\/strong>/);
+  assert.match(html, /<ul><li>하나<\/li><li>둘<\/li><\/ul>/);
+  assert.match(html, /<aside class="note">/);
+  const sites = path.join(ROOT, "sites"), id = "__col_probe", tmp = mkdtempSync(path.join(tmpdir(), "clinic-col-"));
+  try {
+    cpSync(path.join(sites, "cheonsaem"), path.join(sites, id), { recursive: true });
+    writeFileSync(path.join(sites, id, "columns", "bad.md"), "---\ntitle: 테스트\n---\n이 시술은 통증을 완치합니다.");
+    assert.throws(() => build(id, { outDir: tmp }), /의료광고 금지 표현/);
+  } finally {
+    rmSync(path.join(sites, id), { recursive: true, force: true });
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});

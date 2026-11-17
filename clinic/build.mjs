@@ -16,6 +16,7 @@ import { fileURLToPath } from "node:url";
 import { lintTree } from "./lib/adlint.mjs";
 import { optimizeMedia } from "./lib/media.mjs";
 import { illust } from "./lib/illust.mjs";
+import { parseFrontMatter, renderMarkdown, plainText } from "./lib/md.mjs";
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 
@@ -59,8 +60,14 @@ export function loadSite(id) {
   const readFrom = (f, fb) => (existsSync(path.join(dir, f)) ? read(f, fb) : existsSync(path.join(from, f)) ? JSON.parse(readFileSync(path.join(from, f), "utf8")) : fb);
   const treatments = readFrom("treatments.json", []);
   const notices = readFrom("notices.json", []).sort((a, b) => b.date.localeCompare(a.date));
+  // 건강 칼럼 — columns/*.md 한 편이 한 페이지. 파일 이름이 주소가 된다(herniated-disc-surgery.md → /column/herniated-disc-surgery/)
+  const colDir = existsSync(path.join(dir, "columns")) ? path.join(dir, "columns") : path.join(from, "columns");
+  const columns = existsSync(colDir) ? readdirSync(colDir).filter((f) => f.endsWith(".md")).map((f) => {
+    const { meta, body } = parseFrontMatter(readFileSync(path.join(colDir, f), "utf8"));
+    return { slug: f.replace(/\.md$/, ""), title: meta.title || f, date: meta.date || "", category: meta.category || "", treatment: meta.treatment || "", summary: meta.summary || "", body };
+  }).sort((a, b) => b.date.localeCompare(a.date)) : [];
   site.siteUrl = String(site.siteUrl || "").replace(/\/$/, "");
-  return { id, site, treatments, notices };
+  return { id, site, treatments, notices, columns };
 }
 
 // ───────────────────────── 공통 틀 ─────────────────────────
@@ -85,6 +92,7 @@ const NAV = [
   ["/about/", "병원 소개"],
   ["/doctors/", "의료진"],
   ["/treatments/", "진료 과목"],
+  ["/column/", "건강 칼럼"],
   ["/guide/", "이용 안내"],
   ["/location/", "오시는 길"],
   ["/notice/", "공지사항"],
@@ -366,6 +374,10 @@ function home(ctx) {
       <a class="more" href="/location/">지도 보기</a></div>
   </div></section>`;
 
+  const cols = ctx.columns.length ? `<section class="sec"><div class="wrap">
+    <div class="sec-hd row"><div><p class="eyebrow">건강 칼럼</p><h2 class="hl">${lns("진료실에서\n자주 하는 이야기")}</h2></div><a class="more" href="/column/">전체 보기</a></div>
+    ${columnCards(ctx, ctx.columns.slice(0, 3))}
+  </div></section>` : "";
   const news = notices.length ? `<section class="sec sec-alt"><div class="wrap">
     <div class="sec-hd row"><div><p class="eyebrow">공지사항</p><h2 class="hl">${lns("병원 소식")}</h2></div><a class="more" href="/notice/">전체 보기</a></div>
     <ul class="notices">${notices.slice(0, 3).map((n) => `<li><a href="/notice/${n.slug}/"><time datetime="${n.date}">${n.date.replace(/-/g, ".")}</time><span>${esc(n.title)}</span></a></li>`).join("")}</ul>
@@ -373,7 +385,7 @@ function home(ctx) {
 
   const website = { "@context": "https://schema.org", "@type": "WebSite", name: site.name, url: site.siteUrl + "/", inLanguage: "ko-KR" };
   return layout(ctx, { path: "/", title: site.name, description: site.description,
-    body: hero + (variant === "full" ? "" : `<section class="tbar-sec"><div class="wrap">${todayBar(site)}</div></section>`) + symptomFinder(site, treatments) + cats + principles + doc + visit + news + cta(site), over: variant === "full",
+    body: hero + (variant === "full" ? "" : `<section class="tbar-sec"><div class="wrap">${todayBar(site)}</div></section>`) + symptomFinder(site, treatments) + cats + principles + doc + visit + cols + news + cta(site), over: variant === "full",
     jsonLd: [clinicLd(ctx), website] });
 }
 
@@ -445,6 +457,7 @@ function treatmentPage(ctx, t) {
         <section id="faq"><h2><span>06</span>자주 묻는 질문</h2>
           <div class="faq">${t.faq.map(([q, a]) => `<details><summary>${esc(q)}</summary><p>${esc(a)}</p></details>`).join("")}</div></section>
         ${doc ? `<p class="reviewed">이 글은 <b>${esc(doc.name)} ${esc(doc.role)}</b>(${esc(doc.title)})가 감수했습니다.${site.contentUpdated ? ` · 최종 수정 <time datetime="${site.contentUpdated}">${site.contentUpdated.replace(/-/g, ".")}</time>` : ""}</p>` : ""}
+        ${(() => { const cs = ctx.columns.filter((c) => c.treatment === t.slug); return cs.length ? `<nav class="related" aria-label="관련 건강 칼럼"><h2>함께 읽으면 좋은 칼럼</h2><ul>${cs.map((c) => `<li><a href="/column/${c.slug}/">${esc(c.title)}<span aria-hidden="true">→</span></a></li>`).join("")}</ul></nav>` : ""; })()}
         ${related.length ? `<nav class="related" aria-label="같은 진료 과목"><h2>${esc(cat.name)}의 다른 진료</h2><ul>${related.map((r) => `<li><a href="/treatments/${r.slug}/">${esc(r.name)}<span aria-hidden="true">→</span></a></li>`).join("")}</ul></nav>` : ""}
       </article>
     </div>${cta(site, `${t.name} 증상이 걱정되신다면`)}`;
@@ -503,6 +516,51 @@ function guide(ctx) {
     </div></section>${cta(site)}`;
   return layout(ctx, { path: "/guide/", title: "이용 안내", description: `${site.name} 이용 안내 — 처음 오시는 분을 위한 진료 순서와 준비물(신분증 등)을 안내합니다.`, body,
     jsonLd: [crumbLd(site, [["/guide/", "이용 안내"]])] });
+}
+
+// ───────────────────────── 건강 칼럼 ─────────────────────────
+// 진료실에서 자주 하는 설명을 글로 남긴다. 글이 쌓일수록 검색·AI 답변에 이 병원이 걸리는 문이 늘어난다.
+// 의료광고 금지 표현 검사는 칼럼 본문에도 똑같이 적용된다.
+const fmtDate = (d) => String(d || "").replace(/-/g, ".");
+function columnCards(ctx, list) {
+  const { site } = ctx;
+  return `<ul class="cols">${list.map((c) => {
+    const cat = site.categories.find((x) => x.id === c.category);
+    return `<li><a href="/column/${c.slug}/">${illust(c.category, "col-ill")}<span class="col-meta">${cat ? `<b>${esc(cat.name)}</b>` : ""}<time datetime="${esc(c.date)}">${fmtDate(c.date)}</time></span><h3>${esc(c.title)}</h3><p>${esc(c.summary)}</p><span class="col-go">읽기<i aria-hidden="true">→</i></span></a></li>`;
+  }).join("")}</ul>`;
+}
+function columnIndex(ctx) {
+  const { site, columns } = ctx;
+  const body = pageHead({ eyebrow: "건강 칼럼", title: "진료실에서\n자주 하는 이야기", lead: "원장이 진료 중에 자주 설명드리는 내용을 글로 정리했습니다. 모든 글은 원장이 직접 감수합니다.", crumbs: [[null, "건강 칼럼"]] }) +
+    `<section class="sec"><div class="wrap">${columns.length ? columnCards(ctx, columns) : "<p>준비 중입니다.</p>"}</div></section>${cta(site)}`;
+  return layout(ctx, { path: "/column/", title: "건강 칼럼", description: `${site.name} 건강 칼럼 — ${columns.slice(0, 3).map((c) => c.title).join(", ")}`.slice(0, 155), body,
+    jsonLd: [crumbLd(site, [["/column/", "건강 칼럼"]])] });
+}
+function columnPage(ctx, c) {
+  const { site, treatments, columns } = ctx;
+  const p = `/column/${c.slug}/`;
+  const doc = site.doctors[0];
+  const t = treatments.find((x) => x.slug === c.treatment);
+  const cat = site.categories.find((x) => x.id === c.category);
+  const { html, toc } = renderMarkdown(c.body);
+  const others = columns.filter((x) => x.slug !== c.slug).slice(0, 3);
+  const body = pageHead({ eyebrow: cat ? `건강 칼럼 · ${cat.name}` : "건강 칼럼", title: c.title, lead: c.summary, crumbs: [["/column/", "건강 칼럼"], [null, c.title]], ill: c.category }) +
+    `<div class="wrap art">
+      <aside class="toc" aria-label="이 글 목차">${toc.length ? `<p>목차</p><ol>${toc.map(([id, l]) => `<li><a href="#${id}">${esc(l)}</a></li>`).join("")}</ol>` : ""}
+        <a class="btn btn-sm" href="/reservation/">상담 예약</a></aside>
+      <article class="art-body col-body">
+        <p class="col-byline"><time datetime="${esc(c.date)}">${fmtDate(c.date)}</time>${doc ? ` · 글·감수 <b>${esc(doc.name)} ${esc(doc.role)}</b>(${esc(doc.title)})` : ""}</p>
+        <div class="prose">${html}</div>
+        ${t ? `<a class="col-tx" href="/treatments/${t.slug}/"><span>이 글과 관련된 진료</span><b>${esc(t.name)}${t.also ? ` (${esc(t.also)})` : ""}</b><small>증상 · 원인 · 진단 · 치료 · 회복</small><i aria-hidden="true">→</i></a>` : ""}
+        <p class="reviewed">이 글은 이해를 돕기 위한 일반적인 안내이며, 진료와 진단을 대신하지 않습니다. 증상이 있으면 진료를 받아 보세요.</p>
+        ${others.length ? `<nav class="related" aria-label="다른 칼럼"><h2>다른 칼럼</h2><ul>${others.map((o) => `<li><a href="/column/${o.slug}/">${esc(o.title)}<span aria-hidden="true">→</span></a></li>`).join("")}</ul></nav>` : ""}
+      </article>
+    </div>${cta(site)}`;
+  const post = { "@context": "https://schema.org", "@type": "BlogPosting", headline: c.title, description: c.summary, datePublished: c.date || undefined,
+    url: site.siteUrl + p, inLanguage: "ko-KR", author: doc ? doctorLd(site, doc) : undefined, publisher: { "@id": site.siteUrl + "/#clinic" },
+    about: t ? { "@type": "MedicalCondition", name: t.name, url: `${site.siteUrl}/treatments/${t.slug}/` } : undefined };
+  return layout(ctx, { path: p, title: c.title, description: (c.summary || plainText(c.body)).slice(0, 155), body,
+    jsonLd: [post, crumbLd(site, [["/column/", "건강 칼럼"], [p, c.title]])] });
 }
 
 function location(ctx) {
@@ -613,7 +671,7 @@ function notFound(ctx) {
 }
 
 // AI 검색(ChatGPT·퍼플렉시티 등)이 사이트를 한 번에 이해하도록 요점만 담은 안내문.
-function llmsTxt({ site, treatments }) {
+function llmsTxt({ site, treatments, columns = [] }) {
   const h = site.hours.map((x) => `${x.label} ${x.open}–${x.close}${x.note ? ` (${x.note})` : ""}`).join(", ");
   return `# ${site.name}
 
@@ -627,6 +685,7 @@ function llmsTxt({ site, treatments }) {
 ## 진료 과목
 ${treatments.map((t) => `- [${t.name}${t.also ? ` (${t.also})` : ""}](${site.siteUrl}/treatments/${t.slug}/): ${t.summary}`).join("\n")}
 
+${columns.length ? `## 건강 칼럼\n${columns.map((c) => `- [${c.title}](${site.siteUrl}/column/${c.slug}/): ${c.summary}`).join("\n")}\n` : ""}
 ## 안내
 - [병원 소개](${site.siteUrl}/about/)
 - [의료진](${site.siteUrl}/doctors/)
@@ -638,7 +697,8 @@ ${treatments.map((t) => `- [${t.name}${t.also ? ` (${t.also})` : ""}](${site.sit
 // ───────────────────────── 조립 ─────────────────────────
 export function build(id, { outDir, og = false } = {}) {
   const data = loadSite(id);
-  const problems = lintTree({ site: data.site, treatments: data.treatments, notices: data.notices });
+  const problems = lintTree({ site: data.site, treatments: data.treatments, notices: data.notices,
+    columns: data.columns.map((c) => ({ slug: c.slug, title: c.title, summary: c.summary, body: plainText(c.body) })) });
   if (problems.length) {
     const msg = problems.map((p) => `  · ${p.where}\n    "${p.word}" — ${p.why}\n    ${p.text}`).join("\n");
     throw new Error(`의료광고 금지 표현이 ${problems.length}건 있습니다. 고친 뒤 다시 빌드하세요.\n${msg}`);
@@ -658,6 +718,8 @@ export function build(id, { outDir, og = false } = {}) {
   for (const t of data.treatments) pages.set(`/treatments/${t.slug}/`, treatmentPage(ctx, t));
   pages.set("/guide/", guide(ctx));
   pages.set("/location/", location(ctx));
+  pages.set("/column/", columnIndex(ctx));
+  for (const c of data.columns) pages.set(`/column/${c.slug}/`, columnPage(ctx, c));
   pages.set("/notice/", noticeIndex(ctx));
   for (const n of data.notices) pages.set(`/notice/${n.slug}/`, noticePage(ctx, n));
   pages.set("/reservation/", reservation(ctx));
