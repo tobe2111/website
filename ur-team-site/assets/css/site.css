@@ -1018,17 +1018,17 @@ a.prod:hover b { color: var(--accent); }
 .bro__stats > div:nth-child(even) { padding-left: 16px; border-left: 1px solid var(--line); }
 .bro__stats b { display: block; font-size: clamp(26px, 2.4vw, 34px); font-weight: 600; letter-spacing: -.03em; line-height: 1.1; }
 .bro__stats small { font-size: .45em; margin-left: 2px; font-weight: 500; }
-.bro__stats span { font-size: 14px; color: var(--muted); }
+.bro__stats div > span { font-size: 14px; color: var(--muted); }
 .bro__stats--hero { grid-template-columns: repeat(4, 1fr); border-color: rgba(255, 255, 255, .25); margin-top: clamp(28px, 4vw, 48px); }
 .bro__stats--hero > div { border-color: rgba(255, 255, 255, .15) !important; padding-left: 16px; border-left: 1px solid rgba(255, 255, 255, .15); }
 .bro__stats--hero > div:first-child { padding-left: 0; border-left: 0; }
 .bro__stats--hero b { color: var(--lime); }
-.bro__stats--hero span { color: rgba(255, 255, 255, .72); }
+.bro__stats--hero div > span { color: rgba(255, 255, 255, .72); }
 .bro__nums { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 24px; }
 .bro__nums > div { background: var(--ink-d); color: #fff; padding: 18px 16px; border-radius: 6px; }
 .bro__nums b { display: block; font-size: clamp(24px, 2.2vw, 32px); font-weight: 700; color: var(--lime); letter-spacing: -.03em; line-height: 1.1; }
 .bro__nums small { font-size: .45em; margin-left: 2px; color: #fff; }
-.bro__nums span { display: block; margin-top: 6px; font-size: 13px; color: rgba(255, 255, 255, .72); }
+.bro__nums div > span { display: block; margin-top: 6px; font-size: 13px; color: rgba(255, 255, 255, .72); }
 .bro__fig img { width: 100%; border-radius: 6px; background: var(--ink-d); }
 .bro__fig figcaption { margin-top: 10px; font-size: 14px; color: var(--muted); }
 .svcrow { display: grid; grid-template-columns: 1fr 1.1fr; gap: clamp(28px, 4vw, 56px); align-items: center; padding: clamp(28px, 3.5vw, 44px) 0; border-top: 1px solid var(--line); }
@@ -1044,7 +1044,7 @@ a.prod:hover b { color: var(--accent); }
 .bro__mini > div { border: 1px solid var(--line); padding: 12px 14px; }
 .bro__mini b { display: block; font-size: 24px; font-weight: 700; letter-spacing: -.03em; color: var(--vio); line-height: 1.15; }
 .bro__mini small { font-size: .5em; margin-left: 2px; color: var(--ink); }
-.bro__mini span { font-size: 13px; color: var(--muted); }
+.bro__mini div > span { font-size: 13px; color: var(--muted); }
 .svcrow p { color: var(--ink-2); }
 .bro__table { overflow-x: auto; }
 .bro__table table { width: 100%; min-width: 760px; border-collapse: collapse; background: #fff; font-size: 15px; }
@@ -1160,7 +1160,7 @@ a.prod:hover b { color: var(--accent); }
 .results { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--ink); }
 .results a { padding: 22px 22px 24px 0; display: grid; gap: 6px; color: var(--ink); }
 .results a + a { padding-left: 22px; border-left: 1px solid var(--line); }
-.results span { font-size: 13px; font-weight: 600; color: var(--accent); }
+.results a > span { font-size: 13px; font-weight: 600; color: var(--accent); }
 .results b { font-size: clamp(36px, 3.4vw, 50px); font-weight: 600; letter-spacing: -.04em; line-height: 1.05; }
 .results b small { font-size: .4em; margin-left: 3px; font-weight: 500; }
 .results p { font-size: 14px; color: var(--muted); }
@@ -1531,4 +1531,10 @@ a.prod:hover b { color: var(--accent); }
   .js .routes path { stroke-dashoffset: 0; transition: none; }
   .js .routes .d, .js .journey--v .journey__ic, .js .mk-steps li::before { transform: none; opacity: 1; transition: none; }
   .js .is-in .routes .k--ring { animation: none; }
+}
+
+/* 모바일: 카드가 낮아 글씨가 사진 위쪽까지 올라오므로 어둡게 깔아 읽히게 한다 */
+@media (max-width: 760px) {
+  .bizcard::before { background: linear-gradient(0deg, rgba(8, 10, 14, .92) 0%, rgba(8, 10, 14, .72) 55%, rgba(8, 10, 14, .45) 100%); }
+  .bizcard p { color: rgba(255, 255, 255, .9); }
 }
