@@ -127,7 +127,7 @@ function layout(ctx, { path: p, title, description, body, jsonLd = [], ogImage =
 <title>${esc(fullTitle)}</title>
 <meta name="description" content="${esc(description)}" />
 <link rel="canonical" href="${esc(url)}" />
-${site.en && p === "/" ? `<link rel="alternate" hreflang="ko" href="${esc(url)}" />\n<link rel="alternate" hreflang="en" href="${esc(site.siteUrl + "/en/")}" />\n<link rel="alternate" hreflang="x-default" href="${esc(url)}" />` : ""}
+${p === "/" ? alternates(site) : ""}
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="${esc(site.name)}" />
 <meta property="og:title" content="${esc(fullTitle)}" />
@@ -156,7 +156,7 @@ ${extraHead}
     <a class="logo" href="/" aria-label="${esc(site.name)} 홈">${site.logo ? `<img src="${esc(site.logo)}" alt="" />` : ""}<span>${esc(site.name)}</span></a>
     <nav class="gnb" aria-label="주 메뉴">${gnbHtml}</nav>
     <div class="hd-act">
-      ${site.en ? `<a class="hd-lang" href="/en/" hreflang="en" lang="en">EN</a>` : ""}
+      ${langMenu(site)}
       <a class="hd-tel" href="${telHref(site.phone)}">${esc(site.phone)}</a>
       <a class="btn btn-sm" href="/reservation/">상담 예약</a>
     </div>
@@ -678,55 +678,96 @@ function notFound(ctx) {
       `<section class="sec"><div class="wrap"><p><a class="btn" href="/">홈으로</a> <a class="btn btn-line" href="/treatments/">진료 과목 보기</a></p></div></section>` });
 }
 
-// ───────────────────────── 영어 페이지 (해외 환자용) ─────────────────────────
-// 한 장짜리 안내: 소개·진료 원칙·진료 과목·진료 목록·의료진·진료 시간·오시는 길·연락.
-// 영어 상담이 되는지는 병원마다 다르므로 "된다"고 쓰지 않는다 — 미리 전화로 확인하라고 안내한다.
+// ───────────────────────── 외국어 페이지 (해외 환자용) ─────────────────────────
+// 언어마다 한 장: 소개·진료 원칙·진료 과목·진료 목록·의사·진료 시간·오시는 길·연락.
+// 병원 원고(site.i18n[언어])에 그 언어 한 벌을 쓰면 페이지가 선다. 화면 틀의 문구는 아래 표가 맡는다.
+// 그 언어로 상담이 되는지는 병원마다 다르므로 "된다"고 쓰지 않는다 — 미리 전화로 확인하라고 안내한다.
+export const LANGS = {
+  en: { path: "/en/", html: "en", og: "en_US", label: "English", short: "EN",
+    ui: { skip: "Skip to content", nav: ["Departments", "Doctor", "Hours & location", "Contact"], call: "Call us",
+      howEye: "How we work", howH: "Four things we keep", deptEye: "Departments", deptH: "What we treat", docEye: "Doctor",
+      hoursEye: "Opening hours", hoursH: "When to visit", locEye: "Location", locH: "How to find us", lunch: "Lunch break",
+      ctaH: "Call us to book a visit", ko: "한국어 홈페이지", today: "Today",
+      foot: "The medical information on this page is general guidance and does not replace a consultation or diagnosis. Results vary between individuals." } },
+  "zh-TW": { path: "/zh-tw/", html: "zh-TW", og: "zh_TW", label: "繁體中文", short: "繁中",
+    ui: { skip: "跳至主要內容", nav: ["診療科目", "醫師", "門診時間與交通", "聯絡我們"], call: "來電預約",
+      howEye: "診療原則", howH: "我們堅持的四件事", deptEye: "診療科目", deptH: "我們診治的疾病", docEye: "醫師",
+      hoursEye: "門診時間", hoursH: "何時就診", locEye: "交通位置", locH: "如何前往", lunch: "午休",
+      ctaH: "請來電預約", ko: "한국어 홈페이지", today: "今日",
+      foot: "本頁醫療資訊僅供一般參考，不能取代診察與診斷。治療效果因人而異。" } },
+  "zh-CN": { path: "/zh-cn/", html: "zh-CN", og: "zh_CN", label: "简体中文", short: "简中",
+    ui: { skip: "跳到主要内容", nav: ["诊疗科目", "医生", "门诊时间与交通", "联系我们"], call: "致电预约",
+      howEye: "诊疗原则", howH: "我们坚持的四件事", deptEye: "诊疗科目", deptH: "我们诊治的疾病", docEye: "医生",
+      hoursEye: "门诊时间", hoursH: "何时就诊", locEye: "交通位置", locH: "如何前往", lunch: "午休",
+      ctaH: "请致电预约", ko: "한국어 홈페이지", today: "今日",
+      foot: "本页医疗信息仅供一般参考，不能代替诊察和诊断。治疗效果因人而异。" } },
+};
+// 이 병원이 원고를 갖춘 외국어들 (옛 원고의 site.en 도 영어로 받는다)
+export const siteLangs = (site) => {
+  const m = { ...(site.i18n || {}) };
+  if (site.en && !m.en) m.en = site.en;
+  return Object.keys(LANGS).filter((k) => m[k]).map((k) => [k, m[k]]);
+};
+const tName = (t, code) => (t.i18n && t.i18n[code]) || (code === "en" && t.en) || t.name;
 const intlTel = (p) => "+82-" + String(p || "").replace(/^0/, "");
-function englishPage(ctx) {
+// 언어 바꾸기 — 머리에 작은 펼침 하나. 지금 언어를 빼고 나머지(한국어 포함)를 보여준다.
+function langMenu(site, current = "ko") {
+  const langs = siteLangs(site);
+  if (!langs.length) return "";
+  const items = [["ko", "/", "한국어"], ...langs.map(([k]) => [k, LANGS[k].path, LANGS[k].label])].filter(([k]) => k !== current);
+  const label = current === "ko" ? langs.map(([k]) => LANGS[k].short).join(" · ") : "한국어 · Language";
+  return `<details class="lng"><summary aria-label="${current === "ko" ? "다른 언어로 보기" : "Language"}">${esc(label)}</summary><nav>${items.map(([k, h, l]) => `<a href="${h}" hreflang="${k === "ko" ? "ko" : LANGS[k].html}" lang="${k === "ko" ? "ko" : LANGS[k].html}">${esc(l)}</a>`).join("")}</nav></details>`;
+}
+function alternates(site) {
+  const langs = siteLangs(site);
+  if (!langs.length) return "";
+  return [`<link rel="alternate" hreflang="ko" href="${esc(site.siteUrl + "/")}" />`,
+    ...langs.map(([k]) => `<link rel="alternate" hreflang="${LANGS[k].html}" href="${esc(site.siteUrl + LANGS[k].path)}" />`),
+    `<link rel="alternate" hreflang="x-default" href="${esc(site.siteUrl + "/")}" />`].join("\n");
+}
+function foreignPage(ctx, code, E) {
   const { site, treatments, assetV } = ctx;
-  const E = site.en;
-  const url = site.siteUrl + "/en/";
+  const L = LANGS[code], U = L.ui;
+  const url = site.siteUrl + L.path;
   const cats = site.categories.filter((c) => treatments.some((t) => t.category === c.id));
   const hoursRows = site.hours.map((h) => `<tr data-days="${h.days.join(" ")}" data-close="${esc(h.close)}"><th scope="row">${esc((E.hours || {})[h.label] || h.label)}</th><td>${esc(h.open)} – ${esc(h.close)}</td></tr>`).join("")
-    + (site.lunch ? `<tr><th scope="row">${esc((E.hours || {})["점심시간"] || "Lunch break")}</th><td>${esc(site.lunch)}</td></tr>` : "");
+    + (site.lunch ? `<tr><th scope="row">${esc((E.hours || {})["점심시간"] || U.lunch)}</th><td>${esc(site.lunch)}</td></tr>` : "");
   const doc = site.doctors[0];
   const lines = String(E.title).split("\n").map((l, i) => `<span class="ln" style="--i:${i}"><span>${esc(l)}</span></span>`).join("");
-  const nav = [["#departments", "Departments"], ["#doctor", "Doctor"], ["#visit", "Hours & location"], ["#contact", "Contact"]];
+  const nav = ["#departments", "#doctor", "#visit", "#contact"].map((h, i) => [h, U.nav[i]]);
+  const tel = intlTel(site.phone);
   const ld = { "@context": "https://schema.org", "@type": "MedicalClinic", "@id": site.siteUrl + "/#clinic", name: E.name, alternateName: site.name,
-    url, telephone: intlTel(site.phone), medicalSpecialty: site.specialty, inLanguage: "en",
+    url, telephone: tel, medicalSpecialty: site.specialty, inLanguage: L.html,
     openingHoursSpecification: site.hours.map((h) => ({ "@type": "OpeningHoursSpecification", dayOfWeek: h.days.map((d) => DAY[d]), opens: h.open, closes: h.close })) };
+  const desc = String(E.intro).slice(0, 155);
   return `<!doctype html>
-<html lang="en">
+<html lang="${L.html}">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>${esc(E.name)} | ${esc(String(E.title).replace(/\n/g, " "))}</title>
-<meta name="description" content="${esc(E.intro.slice(0, 155))}" />
+<meta name="description" content="${esc(desc)}" />
 <link rel="canonical" href="${esc(url)}" />
-<link rel="alternate" hreflang="en" href="${esc(url)}" />
-<link rel="alternate" hreflang="ko" href="${esc(site.siteUrl + "/")}" />
-<link rel="alternate" hreflang="x-default" href="${esc(site.siteUrl + "/")}" />
+${alternates(site)}
 <meta property="og:type" content="website" />
 <meta property="og:title" content="${esc(E.name)}" />
-<meta property="og:description" content="${esc(E.intro.slice(0, 155))}" />
+<meta property="og:description" content="${esc(desc)}" />
 <meta property="og:url" content="${esc(url)}" />
-<meta property="og:locale" content="en_US" />
+<meta property="og:locale" content="${L.og}" />
 ${ctx.og ? `<meta property="og:image" content="${esc(site.siteUrl)}/og/home.png" />` : ""}
 <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-<!-- 글꼴은 첫 화면을 막지 않게 받는다: 먼저 기기 글꼴로 그리고, 받아지면 바꾼다 (느린 휴대폰에서 첫 글자가 빨리 뜬다) -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" media="print" onload="this.media='all'" />
-<noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" /></noscript>
 <link rel="stylesheet" href="/assets/site.css?v=${assetV}" />
 ${themeStyle(site.theme)}
-${ld ? `<script type="application/ld+json">${JSON.stringify(ld).replace(/</g, "\\u003c")}</script>` : ""}
+<script type="application/ld+json">${JSON.stringify(ld).replace(/</g, "\\u003c")}</script>
 </head>
-<body class="${bodyClass(site.theme)} lang-en">
-<a class="skip" href="#main">Skip to content</a>
+<body class="${bodyClass(site.theme)} lang-x lang-${code.toLowerCase()}" data-today-word="${esc(U.today)}">
+<a class="skip" href="#main">${esc(U.skip)}</a>
 <header class="hd">
   <div class="wrap hd-in">
-    <a class="logo" href="/en/"><span>${esc(E.name)}</span></a>
-    <nav class="gnb" aria-label="Main">${nav.map(([h, l]) => `<a class="gl" href="${h}">${l}</a>`).join("")}</nav>
-    <div class="hd-act"><a class="hd-lang" href="/" hreflang="ko" lang="ko">한국어</a><a class="btn btn-sm" href="tel:${esc(intlTel(site.phone).replace(/-/g, ""))}">Call us</a></div>
+    <a class="logo" href="${L.path}"><span>${esc(E.name)}</span></a>
+    <nav class="gnb" aria-label="${esc(U.nav[0])}">${nav.map(([h, l]) => `<a class="gl" href="${h}">${esc(l)}</a>`).join("")}</nav>
+    <div class="hd-act">${langMenu(site, code)}<a class="btn btn-sm" href="tel:${esc(tel.replace(/-/g, ""))}">${esc(U.call)}</a></div>
   </div>
 </header>
 <main id="main">
@@ -736,33 +777,34 @@ ${ld ? `<script type="application/ld+json">${JSON.stringify(ld).replace(/</g, "\
   ${site.categories[0] ? `<div class="phd-ill">${illust(site.categories[0].id, "ill-lg")}</div>` : ""}
 </div></div></section>
 <section class="sec"><div class="wrap">
-  <div class="sec-hd"><p class="eyebrow">How we work</p><h2 class="hl">${lns("Four things we keep")}</h2></div>
+  <div class="sec-hd"><p class="eyebrow">${esc(U.howEye)}</p><h2 class="hl">${lns(U.howH)}</h2></div>
   <ol class="steps">${(E.principles || []).map(([t, d], i) => `<li><span class="num">${String(i + 1).padStart(2, "0")}</span><h3>${esc(t)}</h3><p>${esc(d)}</p></li>`).join("")}</ol>
 </div></section>
 <section class="sec sec-alt" id="departments"><div class="wrap">
-  <div class="sec-hd"><p class="eyebrow">Departments</p><h2 class="hl">${lns("What we treat")}</h2></div>
+  <div class="sec-hd"><p class="eyebrow">${esc(U.deptEye)}</p><h2 class="hl">${lns(U.deptH)}</h2></div>
   <div class="en-cats">${cats.map((c) => {
     const [name, lead] = (E.categories || {})[c.id] || [c.name, c.lead];
-    return `<div class="en-cat">${illust(c.id, "ill-md")}<h3>${esc(name)}</h3><p>${esc(lead)}</p><ul>${treatments.filter((t) => t.category === c.id).map((t) => `<li>${esc(t.en || t.name)} <span lang="ko">${esc(t.name)}</span></li>`).join("")}</ul></div>`;
+    return `<div class="en-cat">${illust(c.id, "ill-md")}<h3>${esc(name)}</h3><p>${esc(lead)}</p><ul>${treatments.filter((t) => t.category === c.id).map((t) => `<li>${esc(tName(t, code))} <span lang="ko">${esc(t.name)}</span></li>`).join("")}</ul></div>`;
   }).join("")}</div>
 </div></section>
 ${doc ? `<section class="sec" id="doctor"><div class="wrap two">
-  <div><p class="eyebrow">Doctor</p><h2 class="hl">${lns(E.doctorName || doc.name)}</h2><p class="doc-title">${/전문의/.test(doc.title) ? "Board-certified orthopedic surgeon" : esc(doc.title)}</p>
-    <p>${esc(E.name)} is led by a board-certified orthopedic surgeon who examines every patient in person.</p></div>
-  ${figure({ ...doc.photo, alt: doc.name }, { ratio: "4/5", className: "doc-fig" })}
+  <div><p class="eyebrow">${esc(U.docEye)}</p><h2 class="hl">${lns(E.doctorName || doc.name)}</h2><p class="doc-title">${esc(E.doctorTitle || doc.title)}</p>
+    ${E.doctorLine ? `<p>${esc(E.doctorLine)}</p>` : ""}</div>
+  ${figure({ ...doc.photo, alt: E.doctorName || doc.name }, { ratio: "4/5", className: "doc-fig" })}
 </div></section>` : ""}
 <section class="sec sec-alt" id="visit"><div class="wrap visit">
-  <div><p class="eyebrow">Opening hours</p><h2 class="hl">${lns("When to visit")}</h2><table class="hours"><tbody>${hoursRows}</tbody></table><p class="hours-off">${esc(E.closed || site.closed)}</p></div>
-  <div><p class="eyebrow">Location</p><h2 class="hl">${lns("How to find us")}</h2><p class="addr">${esc(E.address)}</p>
+  <div><p class="eyebrow">${esc(U.hoursEye)}</p><h2 class="hl">${lns(U.hoursH)}</h2><table class="hours"><tbody>${hoursRows}</tbody></table><p class="hours-off">${esc(E.closed || site.closed)}</p></div>
+  <div><p class="eyebrow">${esc(U.locEye)}</p><h2 class="hl">${lns(U.locH)}</h2><p class="addr">${esc(E.address)}</p>
     <dl class="transit">${site.transit.map(([k, v]) => `<div><dt>${esc((E.transit || {})[k] || k)}</dt><dd lang="ko">${esc(v)}</dd></div>`).join("")}</dl>
     <p class="en-ins">${esc(E.insurance)}</p></div>
 </div></section>
 <section class="cta" id="contact"><div class="wrap cta-in">
-  <div><h2>Call us to book a visit</h2><p>${esc(E.languageNote)}</p></div>
-  <div class="cta-act"><a class="btn btn-lg btn-inv" href="tel:${esc(intlTel(site.phone).replace(/-/g, ""))}">${esc(intlTel(site.phone))}</a><a class="btn btn-lg btn-ghost-inv" href="/" hreflang="ko">한국어 홈페이지</a></div>
+  <div><h2>${esc(U.ctaH)}</h2><p>${esc(E.languageNote)}</p></div>
+  <div class="cta-act"><a class="btn btn-lg btn-inv" href="tel:${esc(tel.replace(/-/g, ""))}">${esc(tel)}</a><a class="btn btn-lg btn-ghost-inv" href="/" hreflang="ko" lang="ko">${esc(U.ko)}</a></div>
 </div></section>
 </main>
-<footer class="ft"><div class="wrap ft-note"><p>The medical information on this page is general guidance and does not replace a consultation or diagnosis. Results vary between individuals.</p><p>© ${new Date().getFullYear()} ${esc(E.name)}</p></div></footer>
+<footer class="ft"><div class="wrap ft-note"><p>${esc(U.foot)}</p><p>© ${new Date().getFullYear()} ${esc(E.name)}</p></div></footer>
+<div class="dock dock-1" aria-label="${esc(U.call)}"><a href="tel:${esc(tel.replace(/-/g, ""))}" class="on">${esc(U.call)} ${esc(tel)}</a></div>
 <script type="application/json" id="hours-data">${JSON.stringify({ hours: site.hours, lunch: site.lunch || "" }).replace(/</g, "\\u003c")}</script>
 <script src="/assets/site.js?v=${assetV}" defer></script>
 </body>
@@ -825,7 +867,7 @@ export function build(id, { outDir, og = false } = {}) {
   pages.set("/reservation/", reservation(ctx));
   pages.set("/fees/", fees(ctx));
   pages.set("/privacy/", privacy(ctx));
-  if (data.site.en) pages.set("/en/", englishPage(ctx));
+  for (const [code, E] of siteLangs(data.site)) pages.set(LANGS[code].path, foreignPage(ctx, code, E));
 
   const write = (rel, content) => { const f = path.join(out, rel); mkdirSync(path.dirname(f), { recursive: true }); writeFileSync(f, content); };
   for (const [p, h] of pages) write(p === "/" ? "index.html" : `${p}index.html`, h);
@@ -855,6 +897,7 @@ export function pendingItems(id) {
     else if (v && typeof v === "object") for (const [k, x] of Object.entries(v)) if (!k.startsWith("_")) walk(x, p ? `${p}.${k}` : k);
   };
   walk(site, "site"); walk(treatments, "treatments"); walk(notices, "notices");
+  for (const [code, E] of siteLangs(site)) if (E.reviewed !== true) out.push(`site.i18n.${code}: ${LANGS[code].label} 번역 — 원어민 검수 후 "reviewed": true`);
   if (/\.example$/.test(site.siteUrl)) out.push(`site.siteUrl: 실제 도메인으로 바꿔야 합니다 (${site.siteUrl})`);
   return out;
 }
