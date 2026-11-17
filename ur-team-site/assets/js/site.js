@@ -237,12 +237,22 @@
         const v = (n) => (f.querySelector(`[name="${n}"]`)?.value || "").trim();
         if (v("website")) { f.reset(); say(L.done, true); return; } // 사람 눈에 안 보이는 칸이 채워졌으면 스팸 로봇
         const utm = ["utm_source", "utm_medium", "utm_campaign"].map(v).filter(Boolean).join(" / ");
-        const data = {
-          _subject: `[유어팀 홈페이지] 새 상담 신청 · ${v("name")}`, _template: "table", _captcha: "false",
-          "업체명 · 담당자": v("name"), "연락처": v("phone"), "이메일": v("email") || "-",
-          "월 광고 예산": v("budget") || "-", "알게 된 경로": v("funnel") || "-", "상담 내용": v("message") || "-",
-          "신청 페이지": location.pathname + (EN ? " (English)" : ""), "광고 유입(utm)": utm || "-", "이전 페이지": v("referrer") || "-",
-        };
+        // 메일은 대표님이 읽기 쉽게: 한국어 항목 이름, 빈 칸은 빼고, 중요한 것부터
+        const KO = { "Areas of interest": "관심 분야", "Inquiry": "문의 내용", "Company URL": "회사 URL", "Marketing services": "마케팅 상품",
+          "Preferred channels": "희망 채널", "Current challenges": "업체 문제점", "Strengths": "업체 차별점" };
+        const part = new Map([...groups].map(([k, list]) => [KO[k] || k, list.join(", ")]));
+        const interest = part.get("관심 분야") || "";
+        const rows = [
+          ["업체명 · 담당자", v("name")], ["연락처", v("phone")], ["이메일", v("email")],
+          ["관심 분야", interest], ["문의 내용", part.get("문의 내용")],
+          ["월 광고 예산", v("budget")], ["회사 URL", part.get("회사 URL")], ["마케팅 상품", part.get("마케팅 상품")],
+          ["희망 채널", part.get("희망 채널")], ["업체 문제점", part.get("업체 문제점")], ["업체 차별점", part.get("업체 차별점")],
+          ["읽고 온 글", part.get("읽고 온 글")], ["알게 된 경로", v("funnel")],
+        ];
+        const where = [location.pathname + (EN ? " (영어 페이지)" : ""), utm && "광고: " + utm, v("referrer") && "이전: " + v("referrer")].filter(Boolean).join(" · ");
+        const data = { _subject: `[유어팀 상담] ${interest ? interest + " · " : ""}${v("name")}${EN ? " (영어)" : ""}`, _template: "box", _captcha: "false" };
+        for (const [k, val] of rows) if (val) data[k] = val;
+        data["접수 경로"] = where;
         if (v("email")) data._replyto = v("email");
         fetch(f.action, { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(data) })
           .then((r) => r.json().catch(() => ({})).then((j) => { if (!r.ok || String(j.success) !== "true") throw new Error(j.message || r.status); }))
