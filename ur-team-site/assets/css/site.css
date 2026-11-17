@@ -1463,3 +1463,5 @@ a.prod:hover b { color: var(--accent); }
 .note { font-size: 14px; line-height: 1.7; color: var(--muted); }
 .note a { color: var(--ink-2); text-decoration: underline; text-underline-offset: 3px; }
 .note a:hover { color: var(--accent); }
+/* 첫 페이지 마케팅 상품 9개: PC 에서는 3 × 3 으로 */
+@media (min-width: 961px) { #mk .prods { grid-template-columns: repeat(3, 1fr); } }
