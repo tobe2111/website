@@ -32,7 +32,7 @@ test("모든 페이지에 검색용 제목·설명·대표 주소·h1 하나가 
     assert.ok(desc.length >= 20 && desc.length <= 160, `${p}: 설명 길이 ${desc.length}`);
     assert.match(h, new RegExp(`<link rel="canonical" href="[^"]+${p.replace(/\//g, "\\/")}"`), `${p}: 대표 주소`);
     assert.equal((h.match(/<h1[\s>]/g) || []).length, 1, `${p}: h1 은 하나`);
-    assert.match(h, /<html lang="ko">/);
+    assert.match(h, p === "/en/" ? /<html lang="en">/ : /<html lang="ko">/);
   }
 });
 
@@ -112,7 +112,8 @@ test("두 번째 모양(견본 B)은 같은 원고로 다른 배치·글꼴을 �
   const out = mkdtempSync(path.join(tmpdir(), "clinic-b-"));
   try {
     const r = build("sample-b", { outDir: out });
-    assert.equal(r.pages.length, pages.length, "원고를 빌려 와도 페이지 수는 같다");
+    // 영어 원고(site.en)는 병원마다 따로 쓰므로 빌려 오지 않는다 — 견본 B 는 영어 페이지만 없다
+    assert.deepEqual(r.pages, pages.filter((p) => p !== "/en/"), "원고를 빌려 와도 영어 말고는 같은 페이지가 선다");
     const h = readFileSync(path.join(out, "index.html"), "utf8");
     assert.match(h, /<body class="t-serif L-b">/);
     assert.match(h, /class="hero hero-ed"/);
@@ -162,5 +163,87 @@ test("사진을 넣으면 휴대폰·PC 크기의 WebP 를 만들고, 화면이 
     rmSync(path.join(sites, id), { recursive: true, force: true });
     rmSync(path.join(ROOT, ".cache", id), { recursive: true, force: true });
     rmSync(out, { recursive: true, force: true });
+  }
+});
+
+// 숫자 띠는 의료광고에 걸리지 않는 사실만 — 원고에서 바로 세는 수와 진료 시간.
+// 환자 수·치료 건수·만족도·재방문율 같은 숫자는 심의 대상이라 자동으로 만들면 안 된다.
+test("한눈에 보는 사실은 원고에서 센 것만 보여준다", () => {
+  const h = htmlOf("/");
+  const band = (/<dl class="facts">[\s\S]*?<\/dl>/.exec(h) || [""])[0];
+  assert.ok(band, "숫자 띠가 있다");
+  const treatments = JSON.parse(readFileSync(path.join(ROOT, "sites", "cheonsaem", "treatments.json"), "utf8"));
+  assert.match(band, new RegExp(`data-count="${treatments.length}"`), "진료 안내 수 = 원고의 진료 수");
+  assert.doesNotMatch(band, /환자|만족|재방문|건수|치료 성공|%/, "효과·실적 숫자를 만들지 않는다");
+  assert.match(h, /class="tbar tbar-dark" data-today data-tbar/, "첫 화면에 오늘 진료 시간 막대");
+  // 빌드 때는 평일 기준으로 칠해 둔다 — 평일 09:00~18:30, 점심 13:00~14:00 이면 구간이 둘
+  assert.equal((h.match(/class="seg"/g) || []).length, 2, "점심시간은 빈칸으로 나뉜다");
+});
+
+test("건강 칼럼: 글 페이지·목록·검색 정보가 만들어지고, 진료 페이지와 서로 잇는다", () => {
+  const h = htmlOf("/column/herniated-disc-surgery/");
+  assert.match(h, /"@type":"BlogPosting"/);
+  assert.match(h, /href="\/treatments\/herniated-disc\/"/, "칼럼 → 관련 진료");
+  assert.match(h, /<h2 id="s1">/, "소제목에 목차용 주소");
+  assert.match(htmlOf("/treatments/herniated-disc/"), /href="\/column\/herniated-disc-surgery\/"/, "진료 → 관련 칼럼");
+  assert.match(htmlOf("/column/"), /frozen-shoulder-stretch/);
+  assert.match(readFileSync(path.join(OUT, "sitemap.xml"), "utf8"), /\/column\/herniated-disc-surgery\//);
+  assert.match(readFileSync(path.join(OUT, "llms.txt"), "utf8"), /## 건강 칼럼/);
+});
+
+test("칼럼 원고의 꺾쇠는 화면을 깨지 않고, 금지 표현은 칼럼에서도 걸린다", async () => {
+  const { renderMarkdown } = await import("../lib/md.mjs");
+  const { html } = renderMarkdown("<script>alert(1)</script> **굵게**\n\n- 하나\n- 둘\n\n> 주의");
+  assert.doesNotMatch(html, /<script>/);
+  assert.match(html, /<strong>굵게<\/strong>/);
+  assert.match(html, /<ul><li>하나<\/li><li>둘<\/li><\/ul>/);
+  assert.match(html, /<aside class="note">/);
+  const sites = path.join(ROOT, "sites"), id = "__col_probe", tmp = mkdtempSync(path.join(tmpdir(), "clinic-col-"));
+  try {
+    cpSync(path.join(sites, "cheonsaem"), path.join(sites, id), { recursive: true });
+    writeFileSync(path.join(sites, id, "columns", "bad.md"), "---\ntitle: 테스트\n---\n이 시술은 통증을 완치합니다.");
+    assert.throws(() => build(id, { outDir: tmp }), /의료광고 금지 표현/);
+  } finally {
+    rmSync(path.join(sites, id), { recursive: true, force: true });
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test("영어 페이지: 한국어 홈과 서로 가리키고, 영어 상담이 된다고 쓰지 않는다", () => {
+  const en = htmlOf("/en/"), ko = htmlOf("/");
+  assert.match(en, /hreflang="ko"/);
+  assert.match(ko, /<link rel="alternate" hreflang="en" href="[^"]+\/en\/"/);
+  assert.match(ko, /class="hd-lang" href="\/en\/"/, "한국어 머리에 EN 단추");
+  assert.match(en, /tel:\+822/, "국제 전화 형식");
+  assert.match(en, /call ahead/i, "영어 상담 가능 여부는 미리 확인하라고 안내");
+  assert.doesNotMatch(en, /English-speaking (staff|doctor)s? (are|is) available/i);
+  const treatments = JSON.parse(readFileSync(path.join(ROOT, "sites", "cheonsaem", "treatments.json"), "utf8"));
+  for (const t of treatments) assert.ok(en.includes(t.en), `영어 진료명: ${t.en}`);
+  assert.equal(lintText(en.replace(/<[^>]+>/g, " ")).length, 0, "영어 페이지도 의료광고 금지 표현이 없다");
+});
+
+test("카카오톡 상담: 채널 주소가 있을 때만, 카카오 채널 주소만 단추가 된다", () => {
+  assert.doesNotMatch(htmlOf("/"), /카톡 상담/, "주소가 없으면 단추도 없다");
+  const sites = path.join(ROOT, "sites"), id = "__kk_probe";
+  const tmp = mkdtempSync(path.join(tmpdir(), "clinic-kk-"));
+  try {
+    cpSync(path.join(sites, "cheonsaem"), path.join(sites, id), { recursive: true });
+    const f = path.join(sites, id, "site.json");
+    const s = JSON.parse(readFileSync(f, "utf8"));
+    s.kakaoChannel = "https://pf.kakao.com/_abcDEF";
+    writeFileSync(f, JSON.stringify(s));
+    build(id, { outDir: tmp });
+    const home = readFileSync(path.join(tmp, "index.html"), "utf8");
+    assert.match(home, /class="dock dock-3"/);
+    assert.match(home, /href="https:\/\/pf\.kakao\.com\/_abcDEF" class="kk" target="_blank" rel="noopener">카톡 상담/);
+    assert.match(readFileSync(path.join(tmp, "reservation", "index.html"), "utf8"), /카카오톡으로 상담하기/);
+    s.kakaoChannel = "https://evil.example/kakao";
+    writeFileSync(f, JSON.stringify(s));
+    build(id, { outDir: tmp });
+    assert.doesNotMatch(readFileSync(path.join(tmp, "index.html"), "utf8"), /evil\.example/, "카카오 채널이 아닌 주소는 무시한다");
+  } finally {
+    rmSync(path.join(sites, id), { recursive: true, force: true });
+    rmSync(path.join(ROOT, ".cache", id), { recursive: true, force: true });
+    rmSync(tmp, { recursive: true, force: true });
   }
 });

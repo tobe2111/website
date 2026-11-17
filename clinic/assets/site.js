@@ -10,7 +10,7 @@
 
   // ── 1. 스크롤하면 구역이 차례로 떠오른다 ──
   // 같은 줄에 놓인 형제들은 조금씩 늦게(계단식) 나와 눈이 왼쪽→오른쪽으로 따라가게 한다.
-  const REVEAL = ".flow, .bring > div, .notes li, .tx li, .sec-hd, .steps li, .cats li, .doc-hero > *, .visit > *, .notices li, .tgroup, .tlist li, .art-body > *, .art-body section > *, .cta-in > *, .phd .wrap > *, .gallery figure, .doc, .two > *, .map, .map-links, .form, .related";
+  const REVEAL = ".sym-list li, .sym-hd > *, .facts div, .flow, .bring > div, .notes li, .tx li, .sec-hd, .steps li, .cats li, .doc-hero > *, .visit > *, .notices li, .tgroup, .tlist li, .art-body > *, .art-body section > *, .cta-in > *, .phd .wrap > *, .gallery figure, .doc, .two > *, .map, .map-links, .form, .related";
   if (!calm && "IntersectionObserver" in window) {
     const io = new IntersectionObserver((es) => es.forEach((e) => {
       if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); }
@@ -34,7 +34,27 @@
       el.querySelectorAll("path, rect, circle, ellipse, line").forEach((p, i) => { p.style.transitionDelay = `${120 + i * 70}ms`; });
       io2.observe(el);
     });
-    document.querySelectorAll(".hl").forEach((el) => io2.observe(el)); // 떠오르는 상자 밖에 있는 제목도 빠짐없이
+    document.querySelectorAll(".hl, .tbar").forEach((el) => io2.observe(el)); // 떠오르는 상자 밖에 있는 제목도 빠짐없이
+  }
+
+  // ── 1-3. 숫자: 화면에 들어오면 0부터 올라간다 (동작 줄이기면 처음부터 제 숫자) ──
+  if (!calm && "IntersectionObserver" in window) {
+    const ease = (t) => 1 - Math.pow(1 - t, 3);
+    const io3 = new IntersectionObserver((es) => es.forEach((e) => {
+      if (!e.isIntersecting) return;
+      io3.unobserve(e.target);
+      e.target.querySelectorAll("[data-count]").forEach((b) => {
+        const to = +b.dataset.count, t0 = performance.now(), dur = 1400;
+        const tick = (now) => {
+          const k = Math.min(1, (now - t0) / dur);
+          b.textContent = Math.round(to * ease(k)).toLocaleString("ko-KR");
+          if (k < 1) requestAnimationFrame(tick);
+        };
+        b.textContent = "0";
+        requestAnimationFrame(tick);
+      });
+    }), { threshold: 0.4 });
+    document.querySelectorAll(".facts").forEach((el) => io3.observe(el));
   }
 
   // ── 2. 머리: 내려가면 숨고, 올라오면 나타난다. 첫 화면 위에서는 투명하다 ──
@@ -92,6 +112,27 @@
     else if (lunch && min(s.close) > min(lunch[2]) && now >= min(lunch[1]) && now < min(lunch[2])) { main = "점심시간입니다"; sub = `${lunch[2]}에 다시 진료합니다`; state = "soon"; }
     else if (now < min(s.close)) { main = "지금 진료 중"; sub = `오늘 ${s.close}까지${s.note ? ` · ${s.note}` : ""}`; state = "on"; }
     else { main = "오늘 진료가 끝났습니다"; sub = next(); state = "off"; }
+    // 오늘 진료 시간 막대 — 오늘 요일의 진료 구간을 다시 칠하고, 지금 시각에 바늘을 꽂는다
+    const T0 = 8 * 60, T1 = 21 * 60;
+    const pc = (m) => ((Math.min(T1, Math.max(T0, m)) - T0) / (T1 - T0)) * 100;
+    document.querySelectorAll("[data-tbar] .tbar-track").forEach((tr) => {
+      tr.querySelectorAll(".seg").forEach((x) => x.remove());
+      const ts = slot(todayCode);
+      let segs = [];
+      if (ts) {
+        const o = min(ts.open), c = min(ts.close);
+        segs = lunch && min(lunch[1]) > o && min(lunch[2]) < c ? [[o, min(lunch[1])], [min(lunch[2]), c]] : [[o, c]];
+      }
+      segs.forEach(([a, b]) => {
+        const i = document.createElement("i");
+        i.className = "seg";
+        i.style.left = pc(a) + "%";
+        i.style.width = (pc(b) - pc(a)) + "%";
+        tr.prepend(i);
+      });
+      const nd = tr.querySelector(".tbar-needle");
+      if (nd && now >= T0 && now <= T1) { nd.style.left = pc(now) + "%"; nd.hidden = false; }
+    });
     // 진료 시간 표에서 오늘 줄을 짚는다 — 같은 요일이 두 줄에 걸치면(평일 + 수요일 야간) 늦게 끝나는 줄
     document.querySelectorAll(".hours").forEach((tb) => {
       const rows = [...tb.querySelectorAll("tr[data-days]")].filter((r) => r.dataset.days.split(" ").includes(todayCode));

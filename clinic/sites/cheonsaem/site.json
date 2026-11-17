@@ -231,5 +231,67 @@
         ""
       ]
     ]
+  },
+  "en": {
+    "name": "Cheonsaem Orthopedic Clinic",
+    "eyebrow": "Orthopedic clinic in Seoul",
+    "title": "Orthopedic care that\nstarts with an explanation",
+    "intro": "We treat neck, back, shoulder, knee and foot pain. We look for the cause through examination and imaging, then explain the treatment plan, how long it may take and what it costs before we begin.",
+    "address": "【확인 필요】 English address",
+    "languageNote": "Consultations are held in Korean. Please call ahead to check whether English support or an interpreter is available on the day of your visit.",
+    "principles": [
+      [
+        "We listen first",
+        "When it started, which movements hurt, how much — diagnosis begins with your story."
+      ],
+      [
+        "We find the cause",
+        "Only the tests you need, such as X-ray or ultrasound, and we go through the results with you."
+      ],
+      [
+        "We explain the plan",
+        "What treatment, how many sessions and the cost — before we start."
+      ],
+      [
+        "We follow up",
+        "We check what has changed and adjust the treatment if needed."
+      ]
+    ],
+    "categories": {
+      "spine": [
+        "Spine",
+        "Neck and back pain, numbness down the leg"
+      ],
+      "shoulder": [
+        "Shoulder & elbow",
+        "Stiff or painful shoulder, elbow pain when gripping"
+      ],
+      "knee": [
+        "Knee & ankle",
+        "Knee pain on stairs, recurrent ankle sprains"
+      ],
+      "hand-foot": [
+        "Hand & foot",
+        "Numb fingers, heel pain with the first steps"
+      ],
+      "nonsurgical": [
+        "Non-surgical care",
+        "Injections, manual therapy, shockwave, physical therapy"
+      ]
+    },
+    "hours": {
+      "평일": "Weekdays",
+      "수요일 야간": "Wednesday (evening hours)",
+      "토요일": "Saturday",
+      "점심시간": "Lunch break"
+    },
+    "closed": "Closed on Sundays and public holidays",
+    "transit": {
+      "지하철": "Subway",
+      "버스": "Bus",
+      "주차": "Parking"
+    },
+    "insurance": "Patients without Korean National Health Insurance pay the full cost of treatment. Please ask about fees before treatment begins; receipts and medical documents are issued at the front desk.",
+    "doctorName": "【확인 필요】 Dr. (English name)"
   }
 }

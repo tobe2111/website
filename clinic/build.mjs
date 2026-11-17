@@ -16,6 +16,7 @@ import { fileURLToPath } from "node:url";
 import { lintTree } from "./lib/adlint.mjs";
 import { optimizeMedia } from "./lib/media.mjs";
 import { illust } from "./lib/illust.mjs";
+import { parseFrontMatter, renderMarkdown, plainText } from "./lib/md.mjs";
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 
@@ -25,6 +26,9 @@ const br = (s) => esc(s).replace(/\n/g, "<br />");
 const paras = (s) => String(s || "").split(/\n{2,}/).map((p) => `<p>${br(p.trim())}</p>`).join("");
 // 제목을 줄마다 감싼다 — 화면에 들어올 때 한 줄씩 아래에서 올라온다(동작 줄이기면 그냥 보인다)
 const lns = (t) => String(t).split("\n").map((l, i) => `<span class="ln" style="--i:${i}"><span>${esc(l)}</span></span>`).join("");
+// 카카오톡 채널 상담 — 병원 채널 주소(pf.kakao.com/…)가 원고에 있을 때만 단추가 선다. 다른 주소는 받지 않는다
+// (남의 사이트로 보내는 링크가 '카톡 상담'이라는 이름으로 박히면 안 된다).
+const kakaoUrl = (site) => (/^https?:\/\/pf\.kakao\.com\/[A-Za-z0-9_]+(\/chat)?\/?$/.test(site.kakaoChannel || "") ? site.kakaoChannel.replace(/^http:/, "https:") : "");
 const telHref = (p) => "tel:" + String(p || "").replace(/[^0-9+]/g, "");
 const ld = (obj) => `<script type="application/ld+json">${JSON.stringify(obj).replace(/</g, "\\u003c")}</script>`;
 const DAY = { Mo: "Monday", Tu: "Tuesday", We: "Wednesday", Th: "Thursday", Fr: "Friday", Sa: "Saturday", Su: "Sunday" };
@@ -59,8 +63,14 @@ export function loadSite(id) {
   const readFrom = (f, fb) => (existsSync(path.join(dir, f)) ? read(f, fb) : existsSync(path.join(from, f)) ? JSON.parse(readFileSync(path.join(from, f), "utf8")) : fb);
   const treatments = readFrom("treatments.json", []);
   const notices = readFrom("notices.json", []).sort((a, b) => b.date.localeCompare(a.date));
+  // 건강 칼럼 — columns/*.md 한 편이 한 페이지. 파일 이름이 주소가 된다(herniated-disc-surgery.md → /column/herniated-disc-surgery/)
+  const colDir = existsSync(path.join(dir, "columns")) ? path.join(dir, "columns") : path.join(from, "columns");
+  const columns = existsSync(colDir) ? readdirSync(colDir).filter((f) => f.endsWith(".md")).map((f) => {
+    const { meta, body } = parseFrontMatter(readFileSync(path.join(colDir, f), "utf8"));
+    return { slug: f.replace(/\.md$/, ""), title: meta.title || f, date: meta.date || "", category: meta.category || "", treatment: meta.treatment || "", summary: meta.summary || "", body };
+  }).sort((a, b) => b.date.localeCompare(a.date)) : [];
   site.siteUrl = String(site.siteUrl || "").replace(/\/$/, "");
-  return { id, site, treatments, notices };
+  return { id, site, treatments, notices, columns };
 }
 
 // ───────────────────────── 공통 틀 ─────────────────────────
@@ -85,6 +95,7 @@ const NAV = [
   ["/about/", "병원 소개"],
   ["/doctors/", "의료진"],
   ["/treatments/", "진료 과목"],
+  ["/column/", "건강 칼럼"],
   ["/guide/", "이용 안내"],
   ["/location/", "오시는 길"],
   ["/notice/", "공지사항"],
@@ -116,6 +127,7 @@ function layout(ctx, { path: p, title, description, body, jsonLd = [], ogImage =
 <title>${esc(fullTitle)}</title>
 <meta name="description" content="${esc(description)}" />
 <link rel="canonical" href="${esc(url)}" />
+${site.en && p === "/" ? `<link rel="alternate" hreflang="ko" href="${esc(url)}" />\n<link rel="alternate" hreflang="en" href="${esc(site.siteUrl + "/en/")}" />\n<link rel="alternate" hreflang="x-default" href="${esc(url)}" />` : ""}
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="${esc(site.name)}" />
 <meta property="og:title" content="${esc(fullTitle)}" />
@@ -128,8 +140,10 @@ ${site.naverVerification ? `<meta name="naver-site-verification" content="${esc(
 ${site.googleVerification ? `<meta name="google-site-verification" content="${esc(site.googleVerification)}" />` : ""}
 <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
-${site.theme?.type === "serif" ? `<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />\n<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@500;600;700&display=swap" />` : ""}
+<!-- 글꼴은 첫 화면을 막지 않게 받는다: 먼저 기기 글꼴로 그리고, 받아지면 바꾼다 (느린 휴대폰에서 첫 글자가 빨리 뜬다) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" media="print" onload="this.media='all'" />
+<noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" /></noscript>
+${site.theme?.type === "serif" ? `<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />\n<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@500;600;700&display=swap" media="print" onload="this.media='all'" />` : ""}
 <link rel="stylesheet" href="/assets/site.css?v=${assetV}" />
 ${themeStyle(site.theme)}
 ${jsonLd.map(ld).join("\n")}
@@ -142,6 +156,7 @@ ${extraHead}
     <a class="logo" href="/" aria-label="${esc(site.name)} 홈">${site.logo ? `<img src="${esc(site.logo)}" alt="" />` : ""}<span>${esc(site.name)}</span></a>
     <nav class="gnb" aria-label="주 메뉴">${gnbHtml}</nav>
     <div class="hd-act">
+      ${site.en ? `<a class="hd-lang" href="/en/" hreflang="en" lang="en">EN</a>` : ""}
       <a class="hd-tel" href="${telHref(site.phone)}">${esc(site.phone)}</a>
       <a class="btn btn-sm" href="/reservation/">상담 예약</a>
     </div>
@@ -155,8 +170,9 @@ ${extraHead}
 ${body}
 </main>
 ${footer(ctx)}
-<div class="dock" aria-label="빠른 연락">
+<div class="dock${kakaoUrl(site) ? " dock-3" : ""}" aria-label="빠른 연락">
   <a href="${telHref(site.phone)}">전화하기</a>
+  ${kakaoUrl(site) ? `<a href="${esc(kakaoUrl(site))}" class="kk" target="_blank" rel="noopener">카톡 상담</a>` : ""}
   <a href="/reservation/" class="on">상담 예약</a>
 </div>
 <script type="application/json" id="hours-data">${JSON.stringify({ hours: site.hours, lunch: site.lunch || "" }).replace(/</g, "\\u003c")}</script>
@@ -207,7 +223,7 @@ function cta(site, title = "증상이 언제부터, 어디가 불편하신지 �
   return `<section class="cta"><div class="wrap cta-in">
     <div><h2>${esc(title)}</h2>
     <p>예약하시면 대기 시간이 줄어듭니다. 진료 전에 궁금한 점도 미리 여쭤보세요.</p></div>
-    <div class="cta-act"><a class="btn btn-lg btn-inv" href="/reservation/">상담 예약하기</a><a class="btn btn-lg btn-ghost-inv" href="${telHref(site.phone)}">전화 ${esc(site.phone)}</a></div>
+    <div class="cta-act"><a class="btn btn-lg btn-inv" href="/reservation/">상담 예약하기</a>${kakaoUrl(site) ? `<a class="btn btn-lg btn-kk" href="${esc(kakaoUrl(site))}" target="_blank" rel="noopener">카카오톡 상담</a>` : ""}<a class="btn btn-lg btn-ghost-inv" href="${telHref(site.phone)}">전화 ${esc(site.phone)}</a></div>
   </div></section>`;
 }
 
@@ -239,6 +255,55 @@ function doctorLd(site, d) {
     medicalSpecialty: site.specialty, worksFor: { "@id": site.siteUrl + "/#clinic" } };
 }
 
+// ───────────────────────── 홈 전용 조각 ─────────────────────────
+// 오늘 진료 시간 막대 — 아침 8시부터 밤 9시까지를 한 줄로 놓고, 진료하는 구간을 칠한다.
+// 점심시간은 비워 두고, 지금 시각에 바늘을 꽂는다. "지금 가면 진료하나?"를 글보다 먼저 눈으로 답한다.
+// 빌드할 때는 평일 기준으로 그려 두고(스크립트가 꺼져도 보이게), 브라우저가 오늘 요일로 다시 그린다.
+const T0 = 8 * 60, T1 = 21 * 60;
+const toMin = (t) => { const [h, m] = String(t).split(":").map(Number); return h * 60 + (m || 0); };
+const pct = (m) => (((Math.min(T1, Math.max(T0, m)) - T0) / (T1 - T0)) * 100).toFixed(2);
+export function daySegments(slot, lunch) {
+  if (!slot) return [];
+  const o = toMin(slot.open), c = toMin(slot.close);
+  const L = String(lunch || "").match(/(\d{1,2}:\d{2})\D+(\d{1,2}:\d{2})/);
+  if (L && toMin(L[1]) > o && toMin(L[2]) < c) return [[o, toMin(L[1])], [toMin(L[2]), c]];
+  return [[o, c]];
+}
+function todayBar(site, dark = false) {
+  const wk = site.hours[0];
+  const segs = daySegments(wk, site.lunch).map(([a, b]) => `<i class="seg" style="left:${pct(a)}%;width:${(pct(b) - pct(a)).toFixed(2)}%"></i>`).join("");
+  const ticks = [9, 12, 15, 18, 21].map((h) => `<span style="left:${pct(h * 60)}%">${h}시</span>`).join("");
+  return `<div class="tbar${dark ? " tbar-dark" : ""}" data-today data-tbar>
+    <div class="tbar-now"><span class="tbar-k">오늘 진료</span><strong data-today-text>${wk ? `${esc(wk.label)} ${esc(wk.open)} – ${esc(wk.close)}` : "진료 시간 안내"}</strong><small data-today-sub>${esc(site.closed || "")}</small></div>
+    <div class="tbar-scale" aria-hidden="true"><div class="tbar-track">${segs}<b class="tbar-needle" hidden></b></div><div class="tbar-ticks">${ticks}</div></div>
+    <a class="tbar-tel" href="${telHref(site.phone)}"><span>전화 예약</span><b>${esc(site.phone)}</b></a>
+  </div>`;
+}
+// 한눈에 보는 사실 — 확인한 것만 쓴다. 원고에서 바로 세는 것(진료 안내 수, 전문의 수)과 진료 시간뿐.
+// 환자 수·치료 건수·만족도 같은 숫자는 의료광고 심의 대상이라 자동으로 만들지 않는다.
+function facts(site, treatments) {
+  const items = [[treatments.length, "개", "진료별 안내"]];
+  const sp = site.doctors.filter((d) => /전문의/.test(d.title || "")).length;
+  if (sp) items.push([sp, "명", "정형외과 전문의"]);
+  const late = site.hours.find((x) => x.note);
+  if (late) items.push([late.close, "", `${late.label}까지`]);
+  return `<dl class="facts">${items.map(([v, u, l]) =>
+    `<div><dt>${typeof v === "number" ? `<b data-count="${v}">${v}</b>` : `<b>${esc(v)}</b>`}${u ? `<span>${esc(u)}</span>` : ""}</dt><dd>${esc(l)}</dd></div>`).join("")}</dl>`;
+}
+// 증상으로 찾기 — 환자가 쓰는 말(증상)에서 진료 페이지로 바로 잇는다. 과목마다 대표 진료 하나씩.
+function symptomFinder(site, treatments) {
+  const picks = site.categories.map((c) => treatments.find((t) => t.category === c.id && c.id !== "nonsurgical")).filter(Boolean).slice(0, 4);
+  if (!picks.length) return "";
+  return `<section class="sec"><div class="wrap sym">
+    <div class="sym-hd"><p class="eyebrow">증상으로 찾기</p><h2 class="hl">${lns("이런 증상,\n어디가 문제일까요?")}</h2>
+      <p class="lead">처음 오시는 분들이 가장 많이 하시는 말씀입니다. 증상을 누르면 원인과 치료 방법을 볼 수 있습니다.</p>${facts(site, treatments)}</div>
+    <ul class="sym-list">${picks.map((t) => {
+      const c = site.categories.find((x) => x.id === t.category);
+      return `<li><a href="/treatments/${t.slug}/"><span class="sym-cat">${esc(c ? c.name : "")}</span><q>${esc(t.symptoms[0])}</q><span class="sym-go">${esc(t.name)}<i aria-hidden="true">→</i></span>${illust(t.category, "sym-ill")}</a></li>`;
+    }).join("")}</ul>
+  </div></section>`;
+}
+
 // ───────────────────────── 페이지들 ─────────────────────────
 function home(ctx) {
   const { site, treatments, notices } = ctx;
@@ -255,16 +320,21 @@ function home(ctx) {
       : "";
     const photo = h.image?.src ? img(h.image.src, h.image.alt || "", { eager: true, sizes: "100vw", mobile: h.imageMobile?.src }) : "";
     const ph = !v && !photo ? `<span class="hero-spec">${esc(h.image?.spec || "메인 배너")}${h.video ? ` · ${esc(h.video.spec || "메인 영상 1920×1080")}` : ""}</span>` : "";
+    // 사진·영상이 없을 때 오른쪽은 진료 과목 선 그림이 차지한다 — 이 사이트의 얼굴.
+    const art = !v && !photo && site.categories[0] ? `<div class="hero-art" aria-hidden="true">${illust(site.categories[0].id, "ill-hero")}</div>` : "";
     hero = `<section class="hero hero-full">
     <div class="hero-media${!v && !photo ? " is-ph" : ""}">${v || photo}${ph}</div>
     <div class="hero-veil" aria-hidden="true"></div>
     <div class="wrap hero-in">
-      <p class="eyebrow">${esc(h.eyebrow)}</p>
-      <h1 class="hero-h">${lines}</h1>
-      <p class="lead">${esc(h.body)}</p>
-      ${act}
+      <div class="hero-copy">
+        <p class="eyebrow">${esc(h.eyebrow)}</p>
+        <h1 class="hero-h">${lines}</h1>
+        <p class="lead">${esc(h.body)}</p>
+        ${act}
+      </div>
+      ${art}
     </div>
-    <a class="scroll-cue" href="#first" aria-label="아래로 이동"><span></span></a>
+    <div class="wrap hero-foot">${todayBar(site, true)}</div>
   </section>`;
   } else if (variant === "editorial") {
     // 잡지형: 큰 제목이 먼저, 그 아래 가로로 긴 사진이 막이 걷히듯 열린다. PC 배너(2:1)를 자르지 않고 그대로 쓴다.
@@ -273,7 +343,10 @@ function home(ctx) {
     <h1 class="hero-h">${lines}</h1>
     <div class="ed-row"><p class="lead">${esc(h.body)}</p>${act}</div>
   </div>
-  <div class="ed-media">${figure(h.image, { ratio: "2/1", className: "hero-fig", eager: true, mobile: h.imageMobile, sizes: "100vw" })}</div></section>`;
+  <div class="ed-media">${h.image?.src
+    ? figure(h.image, { ratio: "2/1", className: "hero-fig", eager: true, mobile: h.imageMobile, sizes: "100vw" })
+    // 사진이 오기 전에는 병원 색 면에 진료 과목 도해를 크게 — 빈 줄무늬 상자보다 '이 병원의 얼굴'이 먼저 보이게
+    : `<div class="fig hero-fig ed-art" style="aspect-ratio:2/1" role="img" aria-label="${esc(h.image?.alt || "사진 자리")}">${site.categories[0] ? illust(site.categories[0].id, "ill-hero") : ""}<span class="hero-spec">${esc(h.image?.spec || "메인 배너")}</span></div>`}</div></section>`;
   } else {
     const heroImg = figure(h.image, { ratio: "1/1", className: "hero-fig", eager: true, mobile: h.imageMobile });
     hero = `<section class="hero hero-split"><div class="wrap hero-in">
@@ -281,14 +354,6 @@ function home(ctx) {
     ${heroImg}
   </div></section>`;
   }
-  // 첫 화면 바로 아래 빠른 안내 — 병원 홈페이지에 들어온 사람의 대부분은 이 네 가지 중 하나를 찾는다
-  const quick = `<section class="quick" aria-label="빠른 안내"><div class="wrap quick-in">
-    <a class="q q-today" href="/location/#hours" data-today><span class="q-k">오늘 진료</span><strong data-today-text>진료 시간 안내</strong><small data-today-sub>${esc(site.closed || "")}</small></a>
-    <a class="q" href="${telHref(site.phone)}"><span class="q-k">전화 예약</span><strong>${esc(site.phone)}</strong><small>${esc(site.hours[0] ? `평일 ${site.hours[0].open} – ${site.hours[0].close}` : "")}</small></a>
-    <a class="q" href="/reservation/"><span class="q-k">온라인 상담</span><strong>상담 예약하기</strong><small>확인 후 연락드립니다</small></a>
-    <a class="q" href="/location/"><span class="q-k">오시는 길</span><strong>${esc(site.address.locality)}</strong><small>${esc((site.transit[0] || [])[1] || site.address.full)}</small></a>
-  </div></section>`;
-
   const principles = `<section class="sec" id="first"><div class="wrap">
     <div class="sec-hd"><p class="eyebrow">진료 원칙</p><h2 class="hl">${lns(`${site.name}는\n이렇게 진료합니다`)}</h2></div>
     <ol class="steps">${site.principles.map(([t, d], i) => `<li><span class="num">${String(i + 1).padStart(2, "0")}</span><h3>${esc(t)}</h3><p>${esc(d)}</p></li>`).join("")}</ol>
@@ -303,28 +368,32 @@ function home(ctx) {
   </div></section>`;
 
   const d = site.doctors[0];
-  const doc = d ? `<section class="sec"><div class="wrap doc-hero">
+  const doc = d ? `<section class="sec sec-alt"><div class="wrap doc-hero">
     ${figure({ ...d.photo, alt: `${d.name} ${d.role}` }, { ratio: "4/5", className: "doc-fig" })}
     <div><p class="eyebrow">의료진</p><h2>${esc(d.name)} <small>${esc(d.role)}</small></h2><p class="doc-title">${esc(d.title)}</p>
       <blockquote>${br(site.greeting.body.split(/\n{2,}/)[0])}</blockquote>
       <a class="more" href="/doctors/">의료진 소개</a></div>
   </div></section>` : "";
 
-  const visit = `<section class="sec sec-alt"><div class="wrap visit">
+  const visit = `<section class="sec"><div class="wrap visit">
     <div><p class="eyebrow">진료 시간</p><h2 class="hl">${lns("오늘 진료하나요?")}</h2>${hoursTable(site)}</div>
     <div><p class="eyebrow">오시는 길</p><h2 class="hl">${lns(`${site.address.locality}에 있습니다`)}</h2><p class="addr">${esc(site.address.full)}</p>
       <dl class="transit">${site.transit.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl>
       <a class="more" href="/location/">지도 보기</a></div>
   </div></section>`;
 
-  const news = notices.length ? `<section class="sec"><div class="wrap">
+  const cols = ctx.columns.length ? `<section class="sec"><div class="wrap">
+    <div class="sec-hd row"><div><p class="eyebrow">건강 칼럼</p><h2 class="hl">${lns("진료실에서\n자주 하는 이야기")}</h2></div><a class="more" href="/column/">전체 보기</a></div>
+    ${columnCards(ctx, ctx.columns.slice(0, 3))}
+  </div></section>` : "";
+  const news = notices.length ? `<section class="sec sec-alt"><div class="wrap">
     <div class="sec-hd row"><div><p class="eyebrow">공지사항</p><h2 class="hl">${lns("병원 소식")}</h2></div><a class="more" href="/notice/">전체 보기</a></div>
     <ul class="notices">${notices.slice(0, 3).map((n) => `<li><a href="/notice/${n.slug}/"><time datetime="${n.date}">${n.date.replace(/-/g, ".")}</time><span>${esc(n.title)}</span></a></li>`).join("")}</ul>
   </div></section>` : "";
 
   const website = { "@context": "https://schema.org", "@type": "WebSite", name: site.name, url: site.siteUrl + "/", inLanguage: "ko-KR" };
   return layout(ctx, { path: "/", title: site.name, description: site.description,
-    body: hero + quick + principles + cats + doc + visit + news + cta(site), over: variant === "full",
+    body: hero + (variant === "full" ? "" : `<section class="tbar-sec"><div class="wrap">${todayBar(site)}</div></section>`) + symptomFinder(site, treatments) + cats + principles + doc + visit + cols + news + cta(site), over: variant === "full",
     jsonLd: [clinicLd(ctx), website] });
 }
 
@@ -396,6 +465,7 @@ function treatmentPage(ctx, t) {
         <section id="faq"><h2><span>06</span>자주 묻는 질문</h2>
           <div class="faq">${t.faq.map(([q, a]) => `<details><summary>${esc(q)}</summary><p>${esc(a)}</p></details>`).join("")}</div></section>
         ${doc ? `<p class="reviewed">이 글은 <b>${esc(doc.name)} ${esc(doc.role)}</b>(${esc(doc.title)})가 감수했습니다.${site.contentUpdated ? ` · 최종 수정 <time datetime="${site.contentUpdated}">${site.contentUpdated.replace(/-/g, ".")}</time>` : ""}</p>` : ""}
+        ${(() => { const cs = ctx.columns.filter((c) => c.treatment === t.slug); return cs.length ? `<nav class="related" aria-label="관련 건강 칼럼"><h2>함께 읽으면 좋은 칼럼</h2><ul>${cs.map((c) => `<li><a href="/column/${c.slug}/">${esc(c.title)}<span aria-hidden="true">→</span></a></li>`).join("")}</ul></nav>` : ""; })()}
         ${related.length ? `<nav class="related" aria-label="같은 진료 과목"><h2>${esc(cat.name)}의 다른 진료</h2><ul>${related.map((r) => `<li><a href="/treatments/${r.slug}/">${esc(r.name)}<span aria-hidden="true">→</span></a></li>`).join("")}</ul></nav>` : ""}
       </article>
     </div>${cta(site, `${t.name} 증상이 걱정되신다면`)}`;
@@ -456,6 +526,51 @@ function guide(ctx) {
     jsonLd: [crumbLd(site, [["/guide/", "이용 안내"]])] });
 }
 
+// ───────────────────────── 건강 칼럼 ─────────────────────────
+// 진료실에서 자주 하는 설명을 글로 남긴다. 글이 쌓일수록 검색·AI 답변에 이 병원이 걸리는 문이 늘어난다.
+// 의료광고 금지 표현 검사는 칼럼 본문에도 똑같이 적용된다.
+const fmtDate = (d) => String(d || "").replace(/-/g, ".");
+function columnCards(ctx, list) {
+  const { site } = ctx;
+  return `<ul class="cols">${list.map((c) => {
+    const cat = site.categories.find((x) => x.id === c.category);
+    return `<li><a href="/column/${c.slug}/">${illust(c.category, "col-ill")}<span class="col-meta">${cat ? `<b>${esc(cat.name)}</b>` : ""}<time datetime="${esc(c.date)}">${fmtDate(c.date)}</time></span><h3>${esc(c.title)}</h3><p>${esc(c.summary)}</p><span class="col-go">읽기<i aria-hidden="true">→</i></span></a></li>`;
+  }).join("")}</ul>`;
+}
+function columnIndex(ctx) {
+  const { site, columns } = ctx;
+  const body = pageHead({ eyebrow: "건강 칼럼", title: "진료실에서\n자주 하는 이야기", lead: "원장이 진료 중에 자주 설명드리는 내용을 글로 정리했습니다. 모든 글은 원장이 직접 감수합니다.", crumbs: [[null, "건강 칼럼"]] }) +
+    `<section class="sec"><div class="wrap">${columns.length ? columnCards(ctx, columns) : "<p>준비 중입니다.</p>"}</div></section>${cta(site)}`;
+  return layout(ctx, { path: "/column/", title: "건강 칼럼", description: `${site.name} 건강 칼럼 — ${columns.slice(0, 3).map((c) => c.title).join(", ")}`.slice(0, 155), body,
+    jsonLd: [crumbLd(site, [["/column/", "건강 칼럼"]])] });
+}
+function columnPage(ctx, c) {
+  const { site, treatments, columns } = ctx;
+  const p = `/column/${c.slug}/`;
+  const doc = site.doctors[0];
+  const t = treatments.find((x) => x.slug === c.treatment);
+  const cat = site.categories.find((x) => x.id === c.category);
+  const { html, toc } = renderMarkdown(c.body);
+  const others = columns.filter((x) => x.slug !== c.slug).slice(0, 3);
+  const body = pageHead({ eyebrow: cat ? `건강 칼럼 · ${cat.name}` : "건강 칼럼", title: c.title, lead: c.summary, crumbs: [["/column/", "건강 칼럼"], [null, c.title]], ill: c.category }) +
+    `<div class="wrap art">
+      <aside class="toc" aria-label="이 글 목차">${toc.length ? `<p>목차</p><ol>${toc.map(([id, l]) => `<li><a href="#${id}">${esc(l)}</a></li>`).join("")}</ol>` : ""}
+        <a class="btn btn-sm" href="/reservation/">상담 예약</a></aside>
+      <article class="art-body col-body">
+        <p class="col-byline"><time datetime="${esc(c.date)}">${fmtDate(c.date)}</time>${doc ? ` · 글·감수 <b>${esc(doc.name)} ${esc(doc.role)}</b>(${esc(doc.title)})` : ""}</p>
+        <div class="prose">${html}</div>
+        ${t ? `<a class="col-tx" href="/treatments/${t.slug}/"><span>이 글과 관련된 진료</span><b>${esc(t.name)}${t.also ? ` (${esc(t.also)})` : ""}</b><small>증상 · 원인 · 진단 · 치료 · 회복</small><i aria-hidden="true">→</i></a>` : ""}
+        <p class="reviewed">이 글은 이해를 돕기 위한 일반적인 안내이며, 진료와 진단을 대신하지 않습니다. 증상이 있으면 진료를 받아 보세요.</p>
+        ${others.length ? `<nav class="related" aria-label="다른 칼럼"><h2>다른 칼럼</h2><ul>${others.map((o) => `<li><a href="/column/${o.slug}/">${esc(o.title)}<span aria-hidden="true">→</span></a></li>`).join("")}</ul></nav>` : ""}
+      </article>
+    </div>${cta(site)}`;
+  const post = { "@context": "https://schema.org", "@type": "BlogPosting", headline: c.title, description: c.summary, datePublished: c.date || undefined,
+    url: site.siteUrl + p, inLanguage: "ko-KR", author: doc ? doctorLd(site, doc) : undefined, publisher: { "@id": site.siteUrl + "/#clinic" },
+    about: t ? { "@type": "MedicalCondition", name: t.name, url: `${site.siteUrl}/treatments/${t.slug}/` } : undefined };
+  return layout(ctx, { path: p, title: c.title, description: (c.summary || plainText(c.body)).slice(0, 155), body,
+    jsonLd: [post, crumbLd(site, [["/column/", "건강 칼럼"], [p, c.title]])] });
+}
+
 function location(ctx) {
   const { site } = ctx;
   const q = encodeURIComponent(site.name);
@@ -496,7 +611,7 @@ function reservation(ctx) {
   const parts = (site.form?.parts || []).map((x) => `<option>${esc(x)}</option>`).join("");
   const body = pageHead({ eyebrow: "상담 예약", title: "상담 예약", lead: "남겨주신 연락처로 확인 전화를 드립니다. 급한 통증은 전화로 먼저 문의해 주세요.", crumbs: [[null, "상담 예약"]] }) +
     `<section class="sec"><div class="wrap two resv">
-      <div class="resv-call"><p class="today-pill" data-today><i aria-hidden="true"></i><strong data-today-text>진료 시간 안내</strong> <small data-today-sub></small></p><h2>전화 예약</h2><a class="big-tel" href="${telHref(site.phone)}">${esc(site.phone)}</a>${hoursTable(site)}
+      <div class="resv-call"><p class="today-pill" data-today><i aria-hidden="true"></i><strong data-today-text>진료 시간 안내</strong> <small data-today-sub></small></p><h2>전화 예약</h2><a class="big-tel" href="${telHref(site.phone)}">${esc(site.phone)}</a>${kakaoUrl(site) ? `<a class="btn btn-kk btn-block kk-resv" href="${esc(kakaoUrl(site))}" target="_blank" rel="noopener">카카오톡으로 상담하기</a><p class="kk-note">채팅 상담은 진료 시간에 순서대로 답변드립니다. 증상 사진·개인 건강 정보는 보내지 마세요.</p>` : ""}${hoursTable(site)}
         <p class="warn">가슴 통증, 갑작스러운 마비, 심한 외상 등 응급 상황은 119 또는 가까운 응급실을 이용해 주세요.</p></div>
       <form class="form" id="form" method="post" ${ep ? `action="${esc(ep)}"` : ""} ${ep ? "" : 'aria-describedby="form-off"'}>
         <input type="hidden" name="return" value="/reservation/" />
@@ -563,8 +678,100 @@ function notFound(ctx) {
       `<section class="sec"><div class="wrap"><p><a class="btn" href="/">홈으로</a> <a class="btn btn-line" href="/treatments/">진료 과목 보기</a></p></div></section>` });
 }
 
+// ───────────────────────── 영어 페이지 (해외 환자용) ─────────────────────────
+// 한 장짜리 안내: 소개·진료 원칙·진료 과목·진료 목록·의료진·진료 시간·오시는 길·연락.
+// 영어 상담이 되는지는 병원마다 다르므로 "된다"고 쓰지 않는다 — 미리 전화로 확인하라고 안내한다.
+const intlTel = (p) => "+82-" + String(p || "").replace(/^0/, "");
+function englishPage(ctx) {
+  const { site, treatments, assetV } = ctx;
+  const E = site.en;
+  const url = site.siteUrl + "/en/";
+  const cats = site.categories.filter((c) => treatments.some((t) => t.category === c.id));
+  const hoursRows = site.hours.map((h) => `<tr data-days="${h.days.join(" ")}" data-close="${esc(h.close)}"><th scope="row">${esc((E.hours || {})[h.label] || h.label)}</th><td>${esc(h.open)} – ${esc(h.close)}</td></tr>`).join("")
+    + (site.lunch ? `<tr><th scope="row">${esc((E.hours || {})["점심시간"] || "Lunch break")}</th><td>${esc(site.lunch)}</td></tr>` : "");
+  const doc = site.doctors[0];
+  const lines = String(E.title).split("\n").map((l, i) => `<span class="ln" style="--i:${i}"><span>${esc(l)}</span></span>`).join("");
+  const nav = [["#departments", "Departments"], ["#doctor", "Doctor"], ["#visit", "Hours & location"], ["#contact", "Contact"]];
+  const ld = { "@context": "https://schema.org", "@type": "MedicalClinic", "@id": site.siteUrl + "/#clinic", name: E.name, alternateName: site.name,
+    url, telephone: intlTel(site.phone), medicalSpecialty: site.specialty, inLanguage: "en",
+    openingHoursSpecification: site.hours.map((h) => ({ "@type": "OpeningHoursSpecification", dayOfWeek: h.days.map((d) => DAY[d]), opens: h.open, closes: h.close })) };
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${esc(E.name)} | ${esc(String(E.title).replace(/\n/g, " "))}</title>
+<meta name="description" content="${esc(E.intro.slice(0, 155))}" />
+<link rel="canonical" href="${esc(url)}" />
+<link rel="alternate" hreflang="en" href="${esc(url)}" />
+<link rel="alternate" hreflang="ko" href="${esc(site.siteUrl + "/")}" />
+<link rel="alternate" hreflang="x-default" href="${esc(site.siteUrl + "/")}" />
+<meta property="og:type" content="website" />
+<meta property="og:title" content="${esc(E.name)}" />
+<meta property="og:description" content="${esc(E.intro.slice(0, 155))}" />
+<meta property="og:url" content="${esc(url)}" />
+<meta property="og:locale" content="en_US" />
+${ctx.og ? `<meta property="og:image" content="${esc(site.siteUrl)}/og/home.png" />` : ""}
+<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+<!-- 글꼴은 첫 화면을 막지 않게 받는다: 먼저 기기 글꼴로 그리고, 받아지면 바꾼다 (느린 휴대폰에서 첫 글자가 빨리 뜬다) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" media="print" onload="this.media='all'" />
+<noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" /></noscript>
+<link rel="stylesheet" href="/assets/site.css?v=${assetV}" />
+${themeStyle(site.theme)}
+${ld ? `<script type="application/ld+json">${JSON.stringify(ld).replace(/</g, "\\u003c")}</script>` : ""}
+</head>
+<body class="${bodyClass(site.theme)} lang-en">
+<a class="skip" href="#main">Skip to content</a>
+<header class="hd">
+  <div class="wrap hd-in">
+    <a class="logo" href="/en/"><span>${esc(E.name)}</span></a>
+    <nav class="gnb" aria-label="Main">${nav.map(([h, l]) => `<a class="gl" href="${h}">${l}</a>`).join("")}</nav>
+    <div class="hd-act"><a class="hd-lang" href="/" hreflang="ko" lang="ko">한국어</a><a class="btn btn-sm" href="tel:${esc(intlTel(site.phone).replace(/-/g, ""))}">Call us</a></div>
+  </div>
+</header>
+<main id="main">
+<section class="phd en-hero has-ill"><div class="wrap"><div class="phd-in">
+  <div><p class="eyebrow">${esc(E.eyebrow)}</p><h1 class="hero-h hl">${lines}</h1><p class="lead">${esc(E.intro)}</p>
+    <p class="en-lang">${esc(E.languageNote)}</p></div>
+  ${site.categories[0] ? `<div class="phd-ill">${illust(site.categories[0].id, "ill-lg")}</div>` : ""}
+</div></div></section>
+<section class="sec"><div class="wrap">
+  <div class="sec-hd"><p class="eyebrow">How we work</p><h2 class="hl">${lns("Four things we keep")}</h2></div>
+  <ol class="steps">${(E.principles || []).map(([t, d], i) => `<li><span class="num">${String(i + 1).padStart(2, "0")}</span><h3>${esc(t)}</h3><p>${esc(d)}</p></li>`).join("")}</ol>
+</div></section>
+<section class="sec sec-alt" id="departments"><div class="wrap">
+  <div class="sec-hd"><p class="eyebrow">Departments</p><h2 class="hl">${lns("What we treat")}</h2></div>
+  <div class="en-cats">${cats.map((c) => {
+    const [name, lead] = (E.categories || {})[c.id] || [c.name, c.lead];
+    return `<div class="en-cat">${illust(c.id, "ill-md")}<h3>${esc(name)}</h3><p>${esc(lead)}</p><ul>${treatments.filter((t) => t.category === c.id).map((t) => `<li>${esc(t.en || t.name)} <span lang="ko">${esc(t.name)}</span></li>`).join("")}</ul></div>`;
+  }).join("")}</div>
+</div></section>
+${doc ? `<section class="sec" id="doctor"><div class="wrap two">
+  <div><p class="eyebrow">Doctor</p><h2 class="hl">${lns(E.doctorName || doc.name)}</h2><p class="doc-title">${/전문의/.test(doc.title) ? "Board-certified orthopedic surgeon" : esc(doc.title)}</p>
+    <p>${esc(E.name)} is led by a board-certified orthopedic surgeon who examines every patient in person.</p></div>
+  ${figure({ ...doc.photo, alt: doc.name }, { ratio: "4/5", className: "doc-fig" })}
+</div></section>` : ""}
+<section class="sec sec-alt" id="visit"><div class="wrap visit">
+  <div><p class="eyebrow">Opening hours</p><h2 class="hl">${lns("When to visit")}</h2><table class="hours"><tbody>${hoursRows}</tbody></table><p class="hours-off">${esc(E.closed || site.closed)}</p></div>
+  <div><p class="eyebrow">Location</p><h2 class="hl">${lns("How to find us")}</h2><p class="addr">${esc(E.address)}</p>
+    <dl class="transit">${site.transit.map(([k, v]) => `<div><dt>${esc((E.transit || {})[k] || k)}</dt><dd lang="ko">${esc(v)}</dd></div>`).join("")}</dl>
+    <p class="en-ins">${esc(E.insurance)}</p></div>
+</div></section>
+<section class="cta" id="contact"><div class="wrap cta-in">
+  <div><h2>Call us to book a visit</h2><p>${esc(E.languageNote)}</p></div>
+  <div class="cta-act"><a class="btn btn-lg btn-inv" href="tel:${esc(intlTel(site.phone).replace(/-/g, ""))}">${esc(intlTel(site.phone))}</a><a class="btn btn-lg btn-ghost-inv" href="/" hreflang="ko">한국어 홈페이지</a></div>
+</div></section>
+</main>
+<footer class="ft"><div class="wrap ft-note"><p>The medical information on this page is general guidance and does not replace a consultation or diagnosis. Results vary between individuals.</p><p>© ${new Date().getFullYear()} ${esc(E.name)}</p></div></footer>
+<script type="application/json" id="hours-data">${JSON.stringify({ hours: site.hours, lunch: site.lunch || "" }).replace(/</g, "\\u003c")}</script>
+<script src="/assets/site.js?v=${assetV}" defer></script>
+</body>
+</html>
+`;
+}
+
 // AI 검색(ChatGPT·퍼플렉시티 등)이 사이트를 한 번에 이해하도록 요점만 담은 안내문.
-function llmsTxt({ site, treatments }) {
+function llmsTxt({ site, treatments, columns = [] }) {
   const h = site.hours.map((x) => `${x.label} ${x.open}–${x.close}${x.note ? ` (${x.note})` : ""}`).join(", ");
   return `# ${site.name}
 
@@ -578,6 +785,7 @@ function llmsTxt({ site, treatments }) {
 ## 진료 과목
 ${treatments.map((t) => `- [${t.name}${t.also ? ` (${t.also})` : ""}](${site.siteUrl}/treatments/${t.slug}/): ${t.summary}`).join("\n")}
 
+${columns.length ? `## 건강 칼럼\n${columns.map((c) => `- [${c.title}](${site.siteUrl}/column/${c.slug}/): ${c.summary}`).join("\n")}\n` : ""}
 ## 안내
 - [병원 소개](${site.siteUrl}/about/)
 - [의료진](${site.siteUrl}/doctors/)
@@ -589,7 +797,8 @@ ${treatments.map((t) => `- [${t.name}${t.also ? ` (${t.also})` : ""}](${site.sit
 // ───────────────────────── 조립 ─────────────────────────
 export function build(id, { outDir, og = false } = {}) {
   const data = loadSite(id);
-  const problems = lintTree({ site: data.site, treatments: data.treatments, notices: data.notices });
+  const problems = lintTree({ site: data.site, treatments: data.treatments, notices: data.notices,
+    columns: data.columns.map((c) => ({ slug: c.slug, title: c.title, summary: c.summary, body: plainText(c.body) })) });
   if (problems.length) {
     const msg = problems.map((p) => `  · ${p.where}\n    "${p.word}" — ${p.why}\n    ${p.text}`).join("\n");
     throw new Error(`의료광고 금지 표현이 ${problems.length}건 있습니다. 고친 뒤 다시 빌드하세요.\n${msg}`);
@@ -609,11 +818,14 @@ export function build(id, { outDir, og = false } = {}) {
   for (const t of data.treatments) pages.set(`/treatments/${t.slug}/`, treatmentPage(ctx, t));
   pages.set("/guide/", guide(ctx));
   pages.set("/location/", location(ctx));
+  pages.set("/column/", columnIndex(ctx));
+  for (const c of data.columns) pages.set(`/column/${c.slug}/`, columnPage(ctx, c));
   pages.set("/notice/", noticeIndex(ctx));
   for (const n of data.notices) pages.set(`/notice/${n.slug}/`, noticePage(ctx, n));
   pages.set("/reservation/", reservation(ctx));
   pages.set("/fees/", fees(ctx));
   pages.set("/privacy/", privacy(ctx));
+  if (data.site.en) pages.set("/en/", englishPage(ctx));
 
   const write = (rel, content) => { const f = path.join(out, rel); mkdirSync(path.dirname(f), { recursive: true }); writeFileSync(f, content); };
   for (const [p, h] of pages) write(p === "/" ? "index.html" : `${p}index.html`, h);
