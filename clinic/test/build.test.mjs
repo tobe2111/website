@@ -221,3 +221,29 @@ test("영어 페이지: 한국어 홈과 서로 가리키고, 영어 상담이 �
   for (const t of treatments) assert.ok(en.includes(t.en), `영어 진료명: ${t.en}`);
   assert.equal(lintText(en.replace(/<[^>]+>/g, " ")).length, 0, "영어 페이지도 의료광고 금지 표현이 없다");
 });
+
+test("카카오톡 상담: 채널 주소가 있을 때만, 카카오 채널 주소만 단추가 된다", () => {
+  assert.doesNotMatch(htmlOf("/"), /카톡 상담/, "주소가 없으면 단추도 없다");
+  const sites = path.join(ROOT, "sites"), id = "__kk_probe";
+  const tmp = mkdtempSync(path.join(tmpdir(), "clinic-kk-"));
+  try {
+    cpSync(path.join(sites, "cheonsaem"), path.join(sites, id), { recursive: true });
+    const f = path.join(sites, id, "site.json");
+    const s = JSON.parse(readFileSync(f, "utf8"));
+    s.kakaoChannel = "https://pf.kakao.com/_abcDEF";
+    writeFileSync(f, JSON.stringify(s));
+    build(id, { outDir: tmp });
+    const home = readFileSync(path.join(tmp, "index.html"), "utf8");
+    assert.match(home, /class="dock dock-3"/);
+    assert.match(home, /href="https:\/\/pf\.kakao\.com\/_abcDEF" class="kk" target="_blank" rel="noopener">카톡 상담/);
+    assert.match(readFileSync(path.join(tmp, "reservation", "index.html"), "utf8"), /카카오톡으로 상담하기/);
+    s.kakaoChannel = "https://evil.example/kakao";
+    writeFileSync(f, JSON.stringify(s));
+    build(id, { outDir: tmp });
+    assert.doesNotMatch(readFileSync(path.join(tmp, "index.html"), "utf8"), /evil\.example/, "카카오 채널이 아닌 주소는 무시한다");
+  } finally {
+    rmSync(path.join(sites, id), { recursive: true, force: true });
+    rmSync(path.join(ROOT, ".cache", id), { recursive: true, force: true });
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});

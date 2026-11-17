@@ -26,6 +26,9 @@ const br = (s) => esc(s).replace(/\n/g, "<br />");
 const paras = (s) => String(s || "").split(/\n{2,}/).map((p) => `<p>${br(p.trim())}</p>`).join("");
 // 제목을 줄마다 감싼다 — 화면에 들어올 때 한 줄씩 아래에서 올라온다(동작 줄이기면 그냥 보인다)
 const lns = (t) => String(t).split("\n").map((l, i) => `<span class="ln" style="--i:${i}"><span>${esc(l)}</span></span>`).join("");
+// 카카오톡 채널 상담 — 병원 채널 주소(pf.kakao.com/…)가 원고에 있을 때만 단추가 선다. 다른 주소는 받지 않는다
+// (남의 사이트로 보내는 링크가 '카톡 상담'이라는 이름으로 박히면 안 된다).
+const kakaoUrl = (site) => (/^https?:\/\/pf\.kakao\.com\/[A-Za-z0-9_]+(\/chat)?\/?$/.test(site.kakaoChannel || "") ? site.kakaoChannel.replace(/^http:/, "https:") : "");
 const telHref = (p) => "tel:" + String(p || "").replace(/[^0-9+]/g, "");
 const ld = (obj) => `<script type="application/ld+json">${JSON.stringify(obj).replace(/</g, "\\u003c")}</script>`;
 const DAY = { Mo: "Monday", Tu: "Tuesday", We: "Wednesday", Th: "Thursday", Fr: "Friday", Sa: "Saturday", Su: "Sunday" };
@@ -165,8 +168,9 @@ ${extraHead}
 ${body}
 </main>
 ${footer(ctx)}
-<div class="dock" aria-label="빠른 연락">
+<div class="dock${kakaoUrl(site) ? " dock-3" : ""}" aria-label="빠른 연락">
   <a href="${telHref(site.phone)}">전화하기</a>
+  ${kakaoUrl(site) ? `<a href="${esc(kakaoUrl(site))}" class="kk" target="_blank" rel="noopener">카톡 상담</a>` : ""}
   <a href="/reservation/" class="on">상담 예약</a>
 </div>
 <script type="application/json" id="hours-data">${JSON.stringify({ hours: site.hours, lunch: site.lunch || "" }).replace(/</g, "\\u003c")}</script>
@@ -217,7 +221,7 @@ function cta(site, title = "증상이 언제부터, 어디가 불편하신지 �
   return `<section class="cta"><div class="wrap cta-in">
     <div><h2>${esc(title)}</h2>
     <p>예약하시면 대기 시간이 줄어듭니다. 진료 전에 궁금한 점도 미리 여쭤보세요.</p></div>
-    <div class="cta-act"><a class="btn btn-lg btn-inv" href="/reservation/">상담 예약하기</a><a class="btn btn-lg btn-ghost-inv" href="${telHref(site.phone)}">전화 ${esc(site.phone)}</a></div>
+    <div class="cta-act"><a class="btn btn-lg btn-inv" href="/reservation/">상담 예약하기</a>${kakaoUrl(site) ? `<a class="btn btn-lg btn-kk" href="${esc(kakaoUrl(site))}" target="_blank" rel="noopener">카카오톡 상담</a>` : ""}<a class="btn btn-lg btn-ghost-inv" href="${telHref(site.phone)}">전화 ${esc(site.phone)}</a></div>
   </div></section>`;
 }
 
@@ -605,7 +609,7 @@ function reservation(ctx) {
   const parts = (site.form?.parts || []).map((x) => `<option>${esc(x)}</option>`).join("");
   const body = pageHead({ eyebrow: "상담 예약", title: "상담 예약", lead: "남겨주신 연락처로 확인 전화를 드립니다. 급한 통증은 전화로 먼저 문의해 주세요.", crumbs: [[null, "상담 예약"]] }) +
     `<section class="sec"><div class="wrap two resv">
-      <div class="resv-call"><p class="today-pill" data-today><i aria-hidden="true"></i><strong data-today-text>진료 시간 안내</strong> <small data-today-sub></small></p><h2>전화 예약</h2><a class="big-tel" href="${telHref(site.phone)}">${esc(site.phone)}</a>${hoursTable(site)}
+      <div class="resv-call"><p class="today-pill" data-today><i aria-hidden="true"></i><strong data-today-text>진료 시간 안내</strong> <small data-today-sub></small></p><h2>전화 예약</h2><a class="big-tel" href="${telHref(site.phone)}">${esc(site.phone)}</a>${kakaoUrl(site) ? `<a class="btn btn-kk btn-block kk-resv" href="${esc(kakaoUrl(site))}" target="_blank" rel="noopener">카카오톡으로 상담하기</a><p class="kk-note">채팅 상담은 진료 시간에 순서대로 답변드립니다. 증상 사진·개인 건강 정보는 보내지 마세요.</p>` : ""}${hoursTable(site)}
         <p class="warn">가슴 통증, 갑작스러운 마비, 심한 외상 등 응급 상황은 119 또는 가까운 응급실을 이용해 주세요.</p></div>
       <form class="form" id="form" method="post" ${ep ? `action="${esc(ep)}"` : ""} ${ep ? "" : 'aria-describedby="form-off"'}>
         <input type="hidden" name="return" value="/reservation/" />

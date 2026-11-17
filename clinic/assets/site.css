@@ -301,6 +301,13 @@ p { margin: 0 0 1em; }
 .en-cat li span { display: block; font-size: 13px; font-weight: 400; color: var(--muted); }
 .en-ins { font-size: 15px; color: var(--muted); }
 
+/* ── 카카오톡 상담 — 카카오 공식 노랑(#FEE500)·글자색(#191919)을 그대로 써야 한눈에 알아본다 ── */
+.btn-kk { background: #FEE500; border-color: #FEE500; color: #191919; }
+.btn-kk:hover { background: #F2DA00; border-color: #F2DA00; }
+.kk-resv { margin: -8px 0 8px; }
+.kk-note { font-size: 14px; color: var(--muted); margin-bottom: 28px; }
+.dock .kk { background: #FEE500; color: #191919; }
+
 /* ── 바닥 ── */
 .ft { background: var(--ink); color: rgba(255,255,255,.78); padding: 72px 0 40px; font-size: 15px; }
 .ft a { color: #fff; }
@@ -425,9 +432,9 @@ html.lock .hd .mnav summary span { background: var(--ink) !important; }
 .sym-ill { width: 56px; height: 56px; }
 
 .today-pill i { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
-[data-state="on"] .today-pill i, [data-state="on"] .tbar-k::before { background: #23855A; box-shadow: 0 0 0 0 rgba(35,133,90,.5); }
-[data-state="soon"] .today-pill i, [data-state="soon"] .tbar-k::before { background: #B7791F; }
-[data-state="off"] .today-pill i, [data-state="off"] .tbar-k::before { background: #A23B2A; }
+.today-pill[data-state="on"] i, [data-state="on"] .tbar-k::before { background: #23855A; box-shadow: 0 0 0 0 rgba(35,133,90,.5); }
+.today-pill[data-state="soon"] i, [data-state="soon"] .tbar-k::before { background: #B7791F; }
+.today-pill[data-state="off"] i, [data-state="off"] .tbar-k::before { background: #A23B2A; }
 .today-pill { display: inline-flex; align-items: center; gap: 10px; padding: 10px 16px; margin-bottom: 28px; background: var(--surface); border: 1px solid var(--line); border-radius: 999px; font-size: 15px; }
 .today-pill small { color: var(--muted); }
 
@@ -597,7 +604,7 @@ a:hover .fig img { transform: scale(1.03); }
 .motion .hero .hero-act { opacity: 0; animation: fadeUp .9s .7s cubic-bezier(.2,.7,.1,1) forwards; }
 .motion .hero-media > :not(.hero-spec), .motion .hero-split .hero-fig { animation: heroZoom 2.4s cubic-bezier(.2,.7,.1,1) both; }
 .motion .scroll-cue span::after { animation: cue 2.2s cubic-bezier(.6,0,.4,1) infinite; }
-.motion [data-state="on"] .today-pill i, .motion [data-state="on"] .tbar-k::before { animation: pulse 2s infinite; }
+.motion .today-pill[data-state="on"] i, .motion [data-state="on"] .tbar-k::before { animation: pulse 2s infinite; }
 .motion .rv { opacity: 0; transform: translateY(28px); transition: opacity .9s cubic-bezier(.2,.7,.1,1) var(--d, 0ms), transform .9s cubic-bezier(.2,.7,.1,1) var(--d, 0ms); }
 .motion .rv.in { opacity: 1; transform: none; }
 .motion .tbar .seg { transform: scaleX(0); transition: transform 1.2s cubic-bezier(.6,0,.2,1); }
@@ -758,6 +765,7 @@ a:hover .fig img { transform: scale(1.03); }
   .form { padding: 24px 20px; }
   .cta { padding: 72px 0; }
   .cta-act .btn { flex: 1 1 100%; }
+  .dock-3 { grid-template-columns: 1fr 1fr 1fr !important; }
   .dock { display: grid; grid-template-columns: 1fr 1fr; position: fixed; left: 0; right: 0; bottom: 0; z-index: 60;
     background: var(--surface); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
   .dock a { display: grid; place-items: center; height: 60px; font-weight: 700; text-decoration: none; font-size: 17px; }
