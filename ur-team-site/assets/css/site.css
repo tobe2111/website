@@ -1658,3 +1658,27 @@ a.prod:hover b { color: var(--accent); }
   .v2-tile > div { padding: 14px 14px; }
   .v2-nums { grid-template-columns: 1fr 1fr; gap: 0 20px; } .v2-num--lead, .v2-num--wide { grid-column: span 2; grid-row: auto; }
 }
+
+/* ── 성공 사례 페이지 */
+.cases-top { padding: clamp(48px, 6vw, 80px) 0; }
+.cases-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.case-card { display: flex; flex-direction: column; gap: 8px; padding: 26px 24px 28px; background: #fff; border: 1px solid var(--line); border-top: 3px solid var(--ink); color: var(--ink); transition: border-color .2s, transform .3s var(--ease); }
+.sec--soft .case-card { border-color: #fff; border-top-color: var(--ink); }
+.case-card:hover { border-top-color: var(--accent); transform: translateY(-2px); }
+.case-card--lead { grid-row: span 2; background: var(--ink); color: #fff; border-color: var(--ink); }
+.case-card .k { font-size: 13px; font-weight: 600; color: var(--muted); }
+.case-card--lead .k { color: rgba(255, 255, 255, .7); }
+.case-card > b { font-size: clamp(40px, 4vw, 56px); font-weight: 600; letter-spacing: -.04em; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.case-card--lead > b { font-size: clamp(56px, 6vw, 88px); }
+.case-card > b small { font-size: .38em; font-weight: 500; margin-left: 4px; letter-spacing: 0; }
+.case-card h3 { font-size: 18px; font-weight: 600; letter-spacing: -.02em; }
+.case-card p { font-size: 15px; color: var(--muted); line-height: 1.6; }
+.case-card--lead p, .case-card--lead .ticks { color: rgba(255, 255, 255, .78); }
+.case-card .ticks { margin-top: 4px; font-size: 15px; }
+.case-card .go { margin-top: auto; padding-top: 14px; font-size: 15px; font-weight: 600; color: #8fb0ff; }
+.cases-note { font-size: 14px; color: var(--muted); max-width: 70ch; }
+@media (max-width: 960px) { .cases-grid { grid-template-columns: 1fr 1fr; } .case-card--lead { grid-column: span 2; grid-row: auto; } }
+@media (max-width: 560px) { .cases-grid { grid-template-columns: 1fr; } .case-card--lead { grid-column: auto; } }
+.cases-more { margin-top: 32px; }
+.v2-results .cases-more .btn--ghost { color: #fff; border-color: rgba(255, 255, 255, .5); }
+.v2-results .cases-more .btn--ghost:hover { background: #fff; color: var(--ink); }
