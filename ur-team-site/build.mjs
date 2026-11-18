@@ -472,15 +472,21 @@ function renderPosts(lang) {
   // 글 아래 '함께 읽으면 좋은 글' 세 편: 같은 분류의 글을 먼저, 모자라면 최신 글로 채운다
   const related = (p) => {
     const cat = (x) => x.category || t.blogDefaultCategory;
-    const rest = all.filter((x) => x.slug !== p.slug);
-    const pick = [...rest.filter((x) => cat(x) === cat(p)), ...rest.filter((x) => cat(x) !== cat(p))].slice(0, 3);
+    // 제목에 같은 낱말이 많을수록, 같은 분야일수록, 날짜가 가까울수록 먼저 고른다 (글마다 다른 3편이 나오게)
+    const words = (x) => new Set((x.title + " " + (x.summary || "")).replace(/[^0-9A-Za-z가-힣 ]/g, " ").split(/\s+/).filter((w) => w.length >= 2));
+    const mine = words(p);
+    const score = (x) => { let n = 0; for (const w of words(x)) if (mine.has(w)) n++; return n * 3 + (cat(x) === cat(p) ? 5 : 0) - Math.abs(Date.parse(x.date) - Date.parse(p.date)) / (864e5 * 365); };
+    const rest = all.filter((x) => x.slug !== p.slug).map((x) => [score(x), x]).sort((a, b) => b[0] - a[0]).map(([, x]) => x);
+    const pick = rest.slice(0, 3);
     if (!pick.length) return "";
+    const same = all.filter((x) => cat(x) === cat(p)).length;
+    const allLink = `<p class="post__more-all"><a class="btn btn--ghost" href="${LANGS[lang].prefix}/blog/#${encodeURIComponent(cat(p))}">${lang === "en" ? `All ${esc(cat(p))} articles (${same})` : `${esc(cat(p))} 글 ${same}편 모두 보기`} →</a></p>`;
     return `<section class="post__more"><div class="wrap"><h2 class="h3">${lang === "en" ? "Read next" : "함께 읽으면 좋은 글"}</h2><div class="posts">` + pick.map((x) => `
       <a class="post-card" href="${LANGS[lang].prefix}/blog/${x.slug}/">
         <div class="post-card__img">${x.cover ? `<img src="${esc(x.cover)}" alt="" loading="lazy">` : ""}</div>
         <div class="post-card__tx"><span class="k">${esc(cat(x))} · <time datetime="${x.date}">${x.date.replace(/-/g, ".")}</time>${viewsTag(x, lang)}</span>
         <b>${esc(x.title)}</b></div>
-      </a>`).join("") + `\n    </div></div></section>`;
+      </a>`).join("") + `\n    </div>${allLink}</div></section>`;
   };
   // 소제목에 번호표(id)를 달고 목차를 만든다. '참고한 자료'는 목차에서 뺀다
   const withToc = (html) => {

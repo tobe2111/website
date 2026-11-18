@@ -1618,3 +1618,4 @@ a.prod:hover b { color: var(--accent); }
   .js .is-in .routes .dr { animation: none; }
   .js .routes .lb { opacity: 1; transform: none; transition: none; }
 }
+.post__more-all { margin-top: 28px; text-align: center; }
