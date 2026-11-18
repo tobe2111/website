@@ -1682,3 +1682,11 @@ a.prod:hover b { color: var(--accent); }
 .cases-more { margin-top: 32px; }
 .v2-results .cases-more .btn--ghost { color: #fff; border-color: rgba(255, 255, 255, .5); }
 .v2-results .cases-more .btn--ghost:hover { background: #fff; color: var(--ink); }
+
+/* 첫 페이지 8단계: 휴대폰에서는 단계 이름만 두 줄로 짧게 */
+@media (max-width: 760px) {
+  .steps--compact { grid-template-columns: 1fr 1fr; }
+  .steps--compact .step { padding: 16px 12px 16px 0; }
+  .steps--compact .step p { display: none; }
+  .steps--compact .step b { font-size: 15px; }
+}
