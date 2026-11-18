@@ -1509,9 +1509,9 @@ a.prod:hover b { color: var(--accent); }
 .routes path { fill: none; stroke: var(--accent); stroke-width: 4; stroke-linecap: round; stroke-dasharray: 1; stroke-dashoffset: 0; }
 .routes .d { fill: #fff; stroke: var(--accent); stroke-width: 6; transform-box: fill-box; transform-origin: center; }
 .routes .k { fill: var(--accent); transform-box: fill-box; transform-origin: center; }
-.js .routes path { stroke-dashoffset: 1; transition: stroke-dashoffset 1.1s var(--ease) calc(.35s + var(--i) * .16s); }
+.js .routes path { stroke-dashoffset: 1; transition: stroke-dashoffset 1.1s var(--ease) calc(.35s + var(--i) * .12s); }
 .js .is-in .routes path, .js .is-in.routes path { stroke-dashoffset: 0; }
-.js .routes .d { transform: scale(0); transition: transform .45s var(--ease) calc(1.2s + var(--i) * .16s); }
+.js .routes .d { transform: scale(0); transition: transform .45s var(--ease) calc(1.2s + var(--i) * .12s); }
 .js .is-in .routes .d { transform: scale(1); }
 .routes .k--ring { fill: none; stroke: var(--accent); stroke-width: 4; }
 .js .is-in .routes .k--ring { animation: ringOut 2.4s ease-out 1s infinite; }
@@ -1610,7 +1610,7 @@ a.prod:hover b { color: var(--accent); }
 .routes .dr { fill: none; stroke: var(--accent); stroke-width: 3; opacity: 0; transform-box: fill-box; transform-origin: center; }
 .js .is-in .routes .dr { animation: ringOut 2.6s ease-out calc(1.6s + var(--i) * .3s) infinite; }
 .routes .lb { font-size: 30px; font-weight: 700; letter-spacing: -.02em; fill: var(--ink); stroke: #fff; stroke-width: 9px; stroke-linejoin: round; paint-order: stroke; }
-.js .routes .lb { opacity: 0; transform: translateY(12px); transition: opacity .5s ease, transform .6s var(--ease); transition-delay: calc(1.35s + var(--i) * .16s); }
+.js .routes .lb { opacity: 0; transform: translateY(12px); transition: opacity .5s ease, transform .6s var(--ease); transition-delay: calc(1.35s + var(--i) * .12s); }
 .js .is-in .routes .lb { opacity: 1; transform: none; }
 @media (max-width: 760px) { .routes .lb { display: none; } .routes .pk { r: 9; } }
 @media (prefers-reduced-motion: reduce) {
