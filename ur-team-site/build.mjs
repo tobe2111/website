@@ -279,6 +279,17 @@ function versioned(html) {
 // 휴대폰은 작은 사진만: tools/resize.py 가 만든 '이름.w800.webp' 가 있으면 <img> 에 srcset 을 단다
 const WIDTHS = existsSync(join(ROOT, "tools", "img-widths.json")) ? JSON.parse(readFileSync(join(ROOT, "tools", "img-widths.json"), "utf8")) : {};
 const ver = (url) => { versioned(`"${url}"`); const v = VERSIONS.get(url); return v ? `${url}?v=${v}` : url; };
+// 예시 화면(.shot) 사진: 원래 크기보다 키우지 않으면서도, 사진이 뜨기 전에 제 자리 높이를
+// 미리 비워 두게 한다 (안 그러면 사진이 뜨는 순간 아래 내용이 밀려 내려간다)
+function shotSize(html) {
+  return html.replace(/(<figure\b[^>]*class="([^"]*\bshot\b[^"]*)"[^>]*>\s*<img\b)([^>]*>)/g, (m, head, cls, rest) => {
+    const w = +(rest.match(/\swidth="(\d+)"/) || [])[1], h = +(rest.match(/\sheight="(\d+)"/) || [])[1];
+    if (!w || !h || /\sstyle=/.test(rest)) return m;
+    const cap = /pblock__media/.test(cls) ? Math.min(w, Math.round(540 * w / h)) : w; // 칸 안 사진은 높이 540px 까지
+    return `${head} style="max-width:min(100%,${cap}px)"${rest}`;
+  });
+}
+
 function responsive(html) {
   return html.replace(/<img\b([^>]*?)\ssrc="(\/assets\/img\/[^"?]+)"([^>]*)>/g, (m, a, url, b, off, all) => {
     const w = WIDTHS[url];
@@ -365,7 +376,7 @@ function renderRaw(raw, file, route, lang, post) {
   const html = fill(partial(lang, "head")) + fill(header) + `<main id="main">\n${main}\n</main>\n` + fill(partial(lang, "footer"));
   const dest = join(DIST, out);
   mkdirSync(dirname(dest), { recursive: true });
-  writeFileSync(dest, versioned(responsive(html)));
+  writeFileSync(dest, versioned(responsive(shotSize(html))));
   if (!meta.noindex) PAGES.push({ lang, path, url, canonical, meta: { ...meta, description: desc }, title, modified, post, main });
   return url;
 }

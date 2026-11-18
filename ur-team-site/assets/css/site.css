@@ -1491,16 +1491,16 @@ a.prod:hover b { color: var(--accent); }
 .rank { margin-top: 26px; background: var(--bg-2); padding: 20px 20px 16px; max-width: 460px; }
 .rank__k { font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 10px; }
 .rank__list { list-style: none; margin: 0; padding: 0; position: relative; height: calc(5 * 52px); }
-.rank__list li { position: absolute; left: 0; right: 0; height: 46px; top: calc(var(--to) * 52px); display: flex; align-items: center; gap: 12px; padding: 0 14px; background: #fff; border: 1px solid var(--line); font-size: 15px; font-weight: 600; transition: top 1s var(--ease) .5s, box-shadow .4s; }
+.rank__list li { position: absolute; left: 0; right: 0; height: 46px; top: 0; transform: translateY(calc(var(--to) * 52px)); display: flex; align-items: center; gap: 12px; padding: 0 14px; background: #fff; border: 1px solid var(--line); font-size: 15px; font-weight: 600; transition: transform 1s var(--ease) .5s, box-shadow .4s; }
 .rank__list li small { margin-left: auto; font-size: 12px; font-weight: 500; color: var(--muted); }
 .rank__list li i { font-style: normal; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--line); font-size: 12px; color: var(--ink-2); }
 .rank__list li.me { border-color: var(--accent); color: var(--accent); z-index: 2; }
 .rank__list li.me i { background: var(--accent); color: #fff; }
-.js .rank:not(.is-in) .rank__list li { top: calc(var(--from) * 52px); }
+.js .rank:not(.is-in) .rank__list li { transform: translateY(calc(var(--from) * 52px)); }
 .js .rank.is-in .rank__list li.me { box-shadow: 0 10px 24px -14px rgba(23, 71, 230, .55); }
 .rank__note { margin-top: 8px; font-size: 12px; color: var(--muted); }
 @media (max-width: 760px) { .grow { grid-template-columns: 1fr; } .grow__bars { height: 170px; } }
-@media (prefers-reduced-motion: reduce) { .js .pv i, .js .grow__bar, .js .grow__bar b, .rank__list li { transition: none !important; transform: none !important; opacity: 1 !important; } }
+@media (prefers-reduced-motion: reduce) { .js .pv i, .js .grow__bar, .js .grow__bar b, .rank__list li { transition: none !important; opacity: 1 !important; } .js .pv i, .js .grow__bar, .js .grow__bar b { transform: none !important; } }
 
 /* ── 수출 지도: 한국에서 나라별로 선이 뻗어 나간다 */
 .map { position: relative; }
@@ -1555,3 +1555,8 @@ a.prod:hover b { color: var(--accent); }
 /* 큰 번호: 스크립트가 없을 때도 진하게, 있을 때만 흐린 데서 진해지는 움직임 */
 .principle .n { color: var(--ink); }
 .js .principle:not(.is-in) .n { color: var(--line-2); }
+
+/* 예시 화면 사진: 폭은 칸에 맞추되 원래 크기 이상 키우지 않는다(상한은 빌드가 사진마다 적어 둔다) */
+.shot img { width: 100%; }
+.pblock__media.shot img { max-height: none; }
+.pblock__media.shot, .shot { width: 100%; } /* 가운데 정렬한 칸도 사진이 뜨기 전부터 폭을 정해 둔다 */
