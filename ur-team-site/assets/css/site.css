@@ -1568,3 +1568,37 @@ a.prod:hover b { color: var(--accent); }
   .prose th, .prose td { padding: 9px 8px; word-break: keep-all; overflow-wrap: anywhere; }
   .prose th:first-child, .prose td:first-child { padding-left: 0; }
 }
+
+/* ── 블로그 글 끝 상담: 짧은 폼 + 카카오톡 · 전화 */
+.post__cta { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); align-items: start; gap: 22px 40px; padding: clamp(24px, 3.4vw, 40px); }
+.post__cta-tx b { font-size: clamp(20px, 2vw, 24px); }
+.post__cta-tx p { margin-top: 10px; font-size: 15px; line-height: 1.65; color: rgba(255, 255, 255, .75); }
+.qform { display: grid; gap: 12px; }
+.qform__row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.qform label > span { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 600; color: rgba(255, 255, 255, .8); }
+.qform input:not([type="checkbox"]):not(.hp) { width: 100%; height: 48px; padding: 0 14px; font: inherit; font-size: 16px; color: var(--ink); background: #fff; border: 1px solid transparent; border-radius: var(--r); }
+.qform input:focus-visible { outline: 3px solid #8fb0ff; outline-offset: 1px; }
+.qform .agree { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; line-height: 1.5; color: rgba(255, 255, 255, .75); }
+.qform .agree input { margin-top: 2px; width: 18px; height: 18px; flex: none; accent-color: var(--accent); }
+.qform .agree span { margin: 0; font-weight: 400; color: inherit; }
+.qform .agree a { color: #fff; text-decoration: underline; }
+.qform .btn { justify-self: start; }
+.qform .msg:empty { display: none; }
+.qform .msg { padding: 10px 12px; font-size: 14px; border-radius: var(--r); background: rgba(255, 255, 255, .1); color: #fff; }
+.qform .msg.err { background: #fde8e8; color: #9b1c1c; }
+.qform .msg.ok { background: #e6f4ea; color: #14532d; }
+.post__cta-alt { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding-top: 20px; border-top: 1px solid rgba(255, 255, 255, .16); font-size: 14px; color: rgba(255, 255, 255, .7); }
+.post__cta-alt span { margin-right: 6px; }
+.btn--kakao { display: inline-flex; align-items: center; gap: 8px; background: #fee500; color: #191600; border-color: #fee500; }
+.btn--kakao:hover { background: #f5dc00; color: #191600; }
+.btn--kakao svg { width: 18px; height: 18px; }
+.post__cta-alt .btn--ghost { border-color: rgba(255, 255, 255, .45); color: #fff; }
+.post__cta-alt .btn--ghost:hover { background: #fff; color: var(--ink); }
+@media (max-width: 860px) {
+  .post__cta { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+  .qform__row { grid-template-columns: 1fr; }
+  .qform .btn, .post__cta-alt .btn { width: 100%; justify-content: center; }
+  .post__cta-alt span { width: 100%; }
+}

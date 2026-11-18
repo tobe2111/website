@@ -475,14 +475,33 @@ function renderPosts(lang) {
     "당근 · 지역 마케팅": "일반 마케팅,당근마켓", "블로그 · 콘텐츠": "일반 마케팅,블로그 마케팅", "마케팅 전략 · 성과": "일반 마케팅",
     "병원 마케팅": "병원 마케팅", "국내 유통": "국내 유통", "해외 수출": "해외 수출" };
   const contactFor = (p) => `/contact/?${new URLSearchParams({ ...(TOPIC_FORM[p.category] ? { topic: TOPIC_FORM[p.category] } : {}), from: p.title })}`.replace(/&/g, "&amp;");
-  const aside = lang === "en" ? "" : `<aside class="post__cta"><div><b>이 주제, 우리 회사에는 어떻게 적용할까요?</b><p>상담은 무료입니다. 시작 전에 모든 비용이 적힌 견적서를 드립니다.</p></div>
-      <p><a class="btn btn--blue" href="{{contactHref}}">상담 신청</a><a class="btn btn--ghost" href="${esc(site.kakao)}" target="_blank" rel="noopener">카카오톡으로 묻기</a></p></aside>
+  // 글 끝 상담: 이름 · 연락처만 적으면 바로 접수되는 짧은 폼 + 카카오톡 · 전화
+  // (상담 페이지로 한 번 더 넘어가지 않아도 되게. 접수 방식은 상담 페이지 폼과 같다)
+  const EN_ = lang === "en";
+  const aside = `<aside class="post__cta" id="ask">
+      <div class="post__cta-tx"><b>${EN_ ? "How would this apply to your business?" : "이 주제, 우리 회사에는 어떻게 적용할까요?"}</b>
+        <p>${EN_ ? "Leave your name and number and we will call you back. Consultations are free, and you get a full written quote before anything starts." : "이름과 연락처만 남기시면 담당자가 연락드립니다. 상담은 무료이고, 시작 전에 모든 비용이 적힌 견적서를 드립니다."}</p></div>
+      <form class="qform" method="post" action="{{formAction}}" data-lead novalidate>
+        <p class="msg" data-msg role="status" aria-live="polite"></p>
+        <input type="hidden" name="message" value="">{{topicField}}
+        <input type="hidden" data-msg-part="읽고 온 글" value="{{postTitle}}">
+        <div class="qform__row">
+          <label><span>${EN_ ? "Company · name" : "업체명 · 담당자"}</span><input name="name" required maxlength="60" autocomplete="organization" placeholder="${EN_ ? "e.g. UrTeam / Jane" : "예: 유어팀 / 홍길동"}"></label>
+          <label><span>${EN_ ? "Phone" : "연락처"}</span><input name="phone" type="tel" required maxlength="20" inputmode="tel" autocomplete="tel" placeholder="010-0000-0000"></label>
+        </div>
+        <label class="qform__q"><span>${EN_ ? "Question (optional)" : "궁금한 점 (선택)"}</span><input maxlength="300" data-msg-part="문의 내용" placeholder="${EN_ ? "e.g. Our ads cost too much per lead" : "예: 광고비 대비 문의가 적어요"}"></label>
+        <input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+        <label class="agree"><input type="checkbox" name="agree" value="1" required><span>${EN_ ? 'I agree to the collection and use of my details for this consultation (<a href="/en/privacy/" target="_blank">privacy policy</a>).' : '상담 회신을 위한 개인정보 수집 · 이용에 동의합니다 (<a href="/privacy/" target="_blank">개인정보처리방침</a>).'}</span></label>
+        <button class="btn btn--blue btn--lg" type="submit">${EN_ ? "Request a free call" : "무료 상담 받기"} <span class="arr">→</span></button>
+      </form>
+      <p class="post__cta-alt"><span>${EN_ ? "Prefer to chat?" : "바로 물어보고 싶다면"}</span><a class="btn btn--kakao" href="${esc(site.kakao)}" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 3C6.5 3 2 6.6 2 11c0 2.8 1.8 5.3 4.6 6.7l-1 3.6c-.1.3.3.6.6.4l4.2-2.8c.5.1 1.1.1 1.6.1 5.5 0 10-3.6 10-8S17.5 3 12 3z"/></svg>${EN_ ? "KakaoTalk" : "카카오톡 상담"}</a><a class="btn btn--ghost" href="tel:${esc(site.phone)}">${EN_ ? "Call" : "전화"} ${esc(site.phone)}</a></p>
+    </aside>
     <p class="post__share"><span>이 글 공유</span><button type="button" class="btn btn--ghost" data-share>공유하기</button><button type="button" class="btn btn--ghost" data-copy data-done="주소를 복사했습니다">주소 복사</button></p>`;
   return all.map((p) => {
     const { body: tocBody, toc } = withToc(p.body);
     const page = `<!-- ${JSON.stringify({ title: p.title, description: p.summary || excerpt(p.body), nav: "blog", image: p.cover })} -->\n` +
       tpl.replace(/\{\{post(\w+)\}\}/g, (_, k) => ({ Title: esc(p.title), Date: p.date, DateDot: p.date.replace(/-/g, "."),
-        Category: esc(p.category || t.blogDefaultCategory), Body: tocBody, Toc: toc, Aside: aside.replace("{{contactHref}}", contactFor(p)), Cover: p.cover ? `<img class="post__cover" src="${esc(p.cover)}" alt="">` : "", Related: related(p) })[k] ?? "");
+        Category: esc(p.category || t.blogDefaultCategory), Body: tocBody, Toc: toc, Aside: aside.replace("{{postTitle}}", esc(p.title)).replace("{{topicField}}", !EN_ && TOPIC_FORM[p.category] ? TOPIC_FORM[p.category].split(",").map((v, i) => `<input type="hidden" data-msg-part="${i ? "마케팅 상품" : "관심 분야"}" value="${esc(v)}">`).join("") : ""), Cover: p.cover ? `<img class="post__cover" src="${esc(p.cover)}" alt="">` : "", Related: related(p) })[k] ?? "");
     const path = `/blog/${p.slug}/`, url = LANGS[lang].prefix + path;
     return renderRaw(page, p.file, { path, url, out: url.replace(/^\//, "") + "index.html" }, lang, p);
   });
