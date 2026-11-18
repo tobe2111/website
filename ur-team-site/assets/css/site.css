@@ -1619,3 +1619,42 @@ a.prod:hover b { color: var(--accent); }
   .js .routes .lb { opacity: 1; transform: none; transition: none; }
 }
 .post__more-all { margin-top: 28px; text-align: center; }
+
+/* ── 마케팅 상품: 사진 타일 (시안 적용) */
+.v2-hint { margin: -8px 0 24px; color: var(--muted); font-size: 15px; }
+.v2-bento { display: grid; grid-template-columns: repeat(4, 1fr); grid-auto-rows: 230px; gap: 10px; }
+.v2-tile { position: relative; overflow: hidden; color: #fff; display: block; background: #111; }
+.v2-tile--big { grid-column: span 2; grid-row: span 2; }
+.v2-tile--wide { grid-column: span 2; }
+.v2-tile img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transition: transform .8s var(--ease); }
+.v2-tile::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(8,10,14,.05) 30%, rgba(8,10,14,.85) 100%); }
+.v2-tile:hover img { transform: scale(1.04); }
+.v2-tile > div { position: absolute; left: 0; right: 0; bottom: 0; z-index: 1; padding: 18px 20px; display: grid; gap: 2px; }
+.v2-tile span { font-size: 14px; font-weight: 600; opacity: .9; }
+.v2-tile b { font-size: 30px; font-weight: 700; letter-spacing: -.03em; line-height: 1.15; }
+.v2-tile--big b { font-size: 48px; }
+.v2-tile small { font-size: 13px; opacity: .85; }
+.v2-tile p { display: none; font-size: 14px; opacity: .9; margin-top: 8px; }
+.v2-tile--big p { display: block; }
+.v2-tile:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+/* ── 마케팅 성과: 어두운 큰 숫자 */
+.v2-results { background: #0e1320; color: #fff; padding: clamp(64px, 8vw, 112px) 0; }
+.v2-results .eyebrow { color: rgba(255, 255, 255, .7); }
+.v2-results .eyebrow::before { background: rgba(255, 255, 255, .5); }
+.v2-results .h2 { color: #fff; }
+.v2-nums { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 0 48px; margin-top: 12px; }
+.v2-num { display: block; padding: 26px 0; border-top: 1px solid rgba(255, 255, 255, .18); color: #fff; }
+.v2-num--lead { grid-row: span 2; }
+.v2-num--wide { grid-column: span 2; }
+.v2-num b { display: block; font-size: clamp(44px, 5vw, 72px); font-weight: 600; letter-spacing: -.04em; line-height: 1; font-variant-numeric: tabular-nums; }
+.v2-num--lead b { font-size: clamp(72px, 9vw, 140px); }
+.v2-num b small { font-size: .32em; font-weight: 500; margin-left: 6px; letter-spacing: 0; }
+.v2-num p { margin-top: 12px; color: rgba(255, 255, 255, .72); font-size: 15px; }
+.v2-num:hover b { color: #8fb0ff; }
+@media (max-width: 860px) {
+  .v2-bento { grid-template-columns: 1fr 1fr; grid-auto-rows: 150px; }
+  .v2-tile--big b { font-size: 36px; } .v2-tile b { font-size: 22px; } .v2-tile small { display: none; }
+  .v2-tile > div { padding: 14px 14px; }
+  .v2-nums { grid-template-columns: 1fr 1fr; gap: 0 20px; } .v2-num--lead, .v2-num--wide { grid-column: span 2; grid-row: auto; }
+}
