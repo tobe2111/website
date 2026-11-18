@@ -138,6 +138,12 @@
     if (t.scrollWidth > t.clientWidth + 1) { t.tabIndex = 0; if (!t.hasAttribute("aria-label")) t.setAttribute("aria-label", d.documentElement.lang === "en" ? "Table, scroll sideways" : "표, 좌우로 밀어서 보기"); }
   });
 
+  // ── 오른쪽 마우스(우클릭) 메뉴와 사진 끌어다 저장하기를 막는다
+  // 글자 입력 칸에서는 붙여넣기 등을 위해 그대로 둔다
+  const editable = (t) => t && t.closest && t.closest("input, textarea, [contenteditable]");
+  d.addEventListener("contextmenu", (e) => { if (!editable(e.target)) e.preventDefault(); });
+  d.addEventListener("dragstart", (e) => { if (e.target && e.target.tagName === "IMG") e.preventDefault(); });
+
   // ── 흐르는 로고 줄: 내용을 한 번 더 붙여 끊김 없이 돈다
   d.querySelectorAll(".marquee__track").forEach((t) => {
     t.append(...[...t.children].map((c) => { const k = c.cloneNode(true); k.setAttribute("aria-hidden", "true"); return k; }));
