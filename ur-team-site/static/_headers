@@ -19,3 +19,8 @@
   Content-Type: application/rss+xml; charset=utf-8
 /en/blog/rss.xml
   Content-Type: application/rss+xml; charset=utf-8
+
+# 글꼴은 파일 이름이 바뀌지 않으므로 오래 보관한다
+/assets/fonts/*
+  Cache-Control: public, max-age=31536000, immutable
+  Access-Control-Allow-Origin: *
