@@ -332,3 +332,14 @@ test("토스 열쇠 입력 칸은 자동결제용 키(ck/sk)만 받는다", asyn
   assert.ok(!re.TOSS_CLIENT_KEY.test("test_gck_docs_Ovk5rk1EwkEbP0W43n07xlzm"), "결제위젯 키는 자동결제가 안 된다");
   assert.ok(!re.TOSS_SECRET_KEY.test("test_ck_abcdefgh12345678"), "클라이언트 키를 시크릿 칸에 넣으면 거른다");
 });
+
+test("주문번호는 hp- 로 시작한다 — 유어딜과 같은 상점(MID)을 써도 번호가 겹치지 않는다", async () => {
+  const { env, sub, boss } = await startedSub();
+  const t = intercept();
+  try {
+    await get(env, boss, `/t/brand/admin/billing/success?customerKey=${sub.customer_key}&authKey=ak_1`);
+    const id = t.charges()[0].body.orderId;
+    assert.match(id, /^hp-s\d+-\d{8}-1$/);
+    assert.ok(id.length >= 6 && id.length <= 64 && /^[A-Za-z0-9_=.-]+$/.test(id), "토스 주문번호 규칙(6~64자, 영문·숫자·-_=.)");
+  } finally { t.restore(); }
+});

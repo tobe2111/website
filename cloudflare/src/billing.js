@@ -31,6 +31,10 @@ const TIMEOUT_MS = 10000;
 export const MAX_TRIES = 3;      // 같은 달 결제를 몇 번까지 시도할지
 export const RETRY_DAYS = 3;     // 실패 뒤 며칠 있다가 다시 시도할지
 export const TOSS_SDK = "https://js.tosspayments.com/v2/standard";
+// 주문번호 머리. 유어딜과 **같은 상점(MID)** 을 쓸 수 있게 둔 것이다 — 토스는 주문번호를 상점 안에서
+// 겹치지 않게 요구하므로, 두 서비스의 번호가 우연히 같아지는 일을 머리글자로 막는다.
+// 토스 대시보드·정산 내역에서도 "hp-" 로 시작하는 줄이 홈페이지 이용료다.
+export const ORDER_PREFIX = "hp-";
 
 // ---------- 열쇠 ----------
 // 자동결제에는 'API 개별 연동 키'(test_ck_/live_ck_ · test_sk_/live_sk_)가 필요하다.
@@ -257,7 +261,7 @@ export async function startSubscription(env, assoc, payer, now = Date.now()) {
   if (amount > 0) {
     const orderName = setup ? `${NAME(assoc)} 제작비+이용료(${p.label})` : `${NAME(assoc)} 이용료(${p.label})`;
     // 같은 날 다시 눌러도(새로고침 등) 같은 번호 → 두 번 빠지지 않는다
-    const orderId = `s${assoc.id}-${today.replace(/-/g, "")}-${(sub.fail_count || 0) + 1}`;
+    const orderId = `${ORDER_PREFIX}s${assoc.id}-${today.replace(/-/g, "")}-${(sub.fail_count || 0) + 1}`;
     const r = await chargeOnce(env, sub, { orderId, kind: setup ? "setup+monthly" : "monthly", amount, orderName, period: `${p.start}~${p.end}`, payer });
     if (!r.ok) {
       // 첫 결제가 안 됐으면 구독을 시작하지 않는다. 시도 횟수만 올려 다음 시도가 새 번호를 쓰게 한다
@@ -289,7 +293,7 @@ async function chargeDue(env, sub, payer, now) {
   const due = sub.next_charge_on;
   const p = periodOf(due, sub.billing_day);
   const tries = sub.fail_count || 0;
-  const orderId = `m${sub.association_id}-${due.replace(/-/g, "")}-${tries + 1}`;
+  const orderId = `${ORDER_PREFIX}m${sub.association_id}-${due.replace(/-/g, "")}-${tries + 1}`;
   const assoc = { id: sub.association_id, name: sub.assoc_name || "" };
   const r = await chargeOnce(env, sub, { orderId, kind: "monthly", amount: sub.monthly_amount,
     orderName: `${NAME(assoc)} 이용료(${p.label})`, period: `${p.start}~${p.end}`, payer });
