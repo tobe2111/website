@@ -144,25 +144,28 @@
   d.addEventListener("contextmenu", (e) => { if (!editable(e.target)) e.preventDefault(); });
   d.addEventListener("dragstart", (e) => { if (e.target && e.target.tagName === "IMG") e.preventDefault(); });
 
-  // ── 블로그 조회수: 시작 숫자(data-base) + 실제로 센 조회수. 글을 열면 같은 사람은 하루에 한 번만 센다
+  // ── 블로그 조회수: 시작 숫자(data-base) + 날마다 늘어나는 수 + 글을 연 횟수
   const vEls = [...d.querySelectorAll("[data-views]")];
   if (vEls.length && location.protocol.startsWith("http")) {
     const word = EN ? "Views" : "조회";
     // 시작 숫자 + 기준일부터 지난 날수 × 하루 증가분 + 실제로 센 조회수(저장 공간을 연결했을 때만)
     const grown = (el) => (+el.dataset.base || 0) + Math.max(0, Math.floor((Date.now() - (+el.dataset.t0 || Date.now())) / 864e5)) * (+el.dataset.rate || 0);
     const show = (m) => vEls.forEach((el) => { el.textContent = word + " " + (grown(el) + (m[el.dataset.views] || 0)).toLocaleString("en-US"); });
-    show({});
+    // 글을 열 때마다 +1. 저장 공간(VIEWS)이 연결돼 있으면 모두가 함께 보는 숫자에 더해지고,
+    // 연결 전에는 이 브라우저에 적어 두어 다시 열 때 늘어난 숫자가 보이게 한다
+    const local = (k) => { try { return +localStorage.getItem("ut_vl_" + k) || 0; } catch { return 0; } };
     const me = d.querySelector("[data-views-hit]");
     let hit = Promise.resolve({});
     if (me) {
-      const k = "ut_v_" + me.dataset.views, today = new Date().toISOString().slice(0, 10);
-      let seen = false;
-      try { seen = localStorage.getItem(k) === today; localStorage.setItem(k, today); } catch { /* 기록 못 해도 센다 */ }
-      if (!seen) hit = fetch("/api/views?s=" + encodeURIComponent(me.dataset.views), { method: "POST" }).then((r) => (r.ok ? r.json() : {})).catch(() => ({}));
+      const k = me.dataset.views;
+      try { localStorage.setItem("ut_vl_" + k, String(local(k) + 1)); } catch { /* 적지 못해도 화면은 뜬다 */ }
+      hit = fetch("/api/views?s=" + encodeURIComponent(k), { method: "POST" }).then((r) => (r.ok ? r.json() : {})).catch(() => ({}));
     }
+    const withLocal = (m) => { vEls.forEach((el) => { const k = el.dataset.views; if (!m[k]) m[k] = local(k); }); return m; };
+    show(withLocal({}));
     Promise.all([fetch("/api/views").then((r) => (r.ok ? r.json() : {})).catch(() => ({})), hit]).then(([all, mine]) => {
       for (const [k, n] of Object.entries(mine)) all[k] = Math.max(all[k] || 0, n);
-      show(all);
+      show(withLocal(all));
     });
   }
 
