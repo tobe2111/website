@@ -116,6 +116,21 @@ function posts(lang) {
 
 // 두 언어에 어떤 경로가 있는지 먼저 모은다 (서로 잇기 위해)
 const pagesOf = (lang) => walk(join(LANGS[lang].dir, "pages")).filter((f) => f.endsWith(".html")).sort();
+
+// 조회수: 글마다 정해진 시작 숫자(1,000~35,000, 오래된 글일수록 큰 편) + 실제로 센 조회수(_worker.js · /api/views)
+// 시작 숫자는 글 주소로 정해지므로 빌드할 때마다 바뀌지 않는다
+function viewsBase(slug, date) {
+  let h = 2166136261; for (const c of slug) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619) >>> 0; }
+  const r = (h % 100000) / 100000;
+  const t0 = Date.UTC(2021, 0, 1), t1 = Date.UTC(2026, 10, 18);
+  const age = Math.min(1, Math.max(0, (t1 - Date.parse(date)) / (t1 - t0)));
+  return Math.round(1000 + 34000 * Math.min(1, 0.5 * age + 0.5 * Math.pow(r, 1.4)));
+}
+function viewsTag(p, lang, hit) {
+  const key = (lang === "en" ? "en/" : "") + p.slug, n = viewsBase(key, p.date);
+  return ` · <span class="views" data-views="${key}" data-base="${n}"${hit ? " data-views-hit" : ""}>${lang === "en" ? "Views" : "조회"} ${n.toLocaleString("en-US")}</span>`;
+}
+
 const postsOf = (lang) => posts(lang).map((p) => `/blog/${p.slug}/`);
 const PATHS = Object.fromEntries(Object.keys(LANGS).map((l) => [l, new Set([...pagesOf(l).map((f) => routeOf(f, l).path), ...postsOf(l)])]));
 const altUrl = (path, lang) => LANGS[lang].prefix + (PATHS[lang].has(path) ? path : "/");
@@ -412,7 +427,7 @@ function topicPosts(path, lang) {
     <div class="posts">` + pick.map((x) => `
       <a class="post-card" href="/blog/${x.slug}/">
         <div class="post-card__img">${x.cover ? `<img src="${esc(x.cover)}" alt="" loading="lazy">` : ""}</div>
-        <div class="post-card__tx"><span class="k">${esc(x.category)} · <time datetime="${x.date}">${x.date.replace(/-/g, ".")}</time></span>
+        <div class="post-card__tx"><span class="k">${esc(x.category)} · <time datetime="${x.date}">${x.date.replace(/-/g, ".")}</time>${viewsTag(x, "ko")}</span>
         <b>${esc(x.title)}</b></div>
       </a>`).join("") + `\n    </div></div></section>\n\n`;
 }
@@ -434,7 +449,7 @@ function blogList(lang) {
   return bar + search + `<div class="posts" data-prods data-hide data-page="12" data-unit="${en ? "" : "편"}">` + list.map((p) => `
       <a class="post-card" data-cat="${esc(p.category || t.blogDefaultCategory)}" href="${LANGS[lang].prefix}/blog/${p.slug}/">
         <div class="post-card__img">${p.cover ? `<img src="${esc(p.cover)}" alt="" loading="lazy">` : ""}</div>
-        <div class="post-card__tx"><span class="k">${esc(p.category || t.blogDefaultCategory)} · <time datetime="${p.date}">${p.date.replace(/-/g, ".")}</time></span>
+        <div class="post-card__tx"><span class="k">${esc(p.category || t.blogDefaultCategory)} · <time datetime="${p.date}">${p.date.replace(/-/g, ".")}</time>${viewsTag(p, lang)}</span>
         <b>${esc(p.title)}</b><p>${esc(p.summary || "")}</p></div>
       </a>`).join("") + `\n    </div>` + more;
 }
@@ -455,7 +470,7 @@ function renderPosts(lang) {
     return `<section class="post__more"><div class="wrap"><h2 class="h3">${lang === "en" ? "Read next" : "함께 읽으면 좋은 글"}</h2><div class="posts">` + pick.map((x) => `
       <a class="post-card" href="${LANGS[lang].prefix}/blog/${x.slug}/">
         <div class="post-card__img">${x.cover ? `<img src="${esc(x.cover)}" alt="" loading="lazy">` : ""}</div>
-        <div class="post-card__tx"><span class="k">${esc(cat(x))} · <time datetime="${x.date}">${x.date.replace(/-/g, ".")}</time></span>
+        <div class="post-card__tx"><span class="k">${esc(cat(x))} · <time datetime="${x.date}">${x.date.replace(/-/g, ".")}</time>${viewsTag(x, lang)}</span>
         <b>${esc(x.title)}</b></div>
       </a>`).join("") + `\n    </div></div></section>`;
   };
@@ -500,7 +515,7 @@ function renderPosts(lang) {
   return all.map((p) => {
     const { body: tocBody, toc } = withToc(p.body);
     const page = `<!-- ${JSON.stringify({ title: p.title, description: p.summary || excerpt(p.body), nav: "blog", image: p.cover })} -->\n` +
-      tpl.replace(/\{\{post(\w+)\}\}/g, (_, k) => ({ Title: esc(p.title), Date: p.date, DateDot: p.date.replace(/-/g, "."),
+      tpl.replace(/\{\{post(\w+)\}\}/g, (_, k) => ({ Title: esc(p.title), Date: p.date, DateDot: p.date.replace(/-/g, "."), Views: viewsTag(p, lang, true),
         Category: esc(p.category || t.blogDefaultCategory), Body: tocBody, Toc: toc, Aside: aside.replace("{{postTitle}}", esc(p.title)).replace("{{topicField}}", !EN_ && TOPIC_FORM[p.category] ? TOPIC_FORM[p.category].split(",").map((v, i) => `<input type="hidden" data-msg-part="${i ? "마케팅 상품" : "관심 분야"}" value="${esc(v)}">`).join("") : ""), Cover: p.cover ? `<img class="post__cover" src="${esc(p.cover)}" alt="">` : "", Related: related(p) })[k] ?? "");
     const path = `/blog/${p.slug}/`, url = LANGS[lang].prefix + path;
     return renderRaw(page, p.file, { path, url, out: url.replace(/^\//, "") + "index.html" }, lang, p);

@@ -144,6 +144,25 @@
   d.addEventListener("contextmenu", (e) => { if (!editable(e.target)) e.preventDefault(); });
   d.addEventListener("dragstart", (e) => { if (e.target && e.target.tagName === "IMG") e.preventDefault(); });
 
+  // ── 블로그 조회수: 시작 숫자(data-base) + 실제로 센 조회수. 글을 열면 같은 사람은 하루에 한 번만 센다
+  const vEls = [...d.querySelectorAll("[data-views]")];
+  if (vEls.length && location.protocol.startsWith("http")) {
+    const word = EN ? "Views" : "조회";
+    const show = (m) => vEls.forEach((el) => { el.textContent = word + " " + ((+el.dataset.base || 0) + (m[el.dataset.views] || 0)).toLocaleString("en-US"); });
+    const me = d.querySelector("[data-views-hit]");
+    let hit = Promise.resolve({});
+    if (me) {
+      const k = "ut_v_" + me.dataset.views, today = new Date().toISOString().slice(0, 10);
+      let seen = false;
+      try { seen = localStorage.getItem(k) === today; localStorage.setItem(k, today); } catch { /* 기록 못 해도 센다 */ }
+      if (!seen) hit = fetch("/api/views?s=" + encodeURIComponent(me.dataset.views), { method: "POST" }).then((r) => (r.ok ? r.json() : {})).catch(() => ({}));
+    }
+    Promise.all([fetch("/api/views").then((r) => (r.ok ? r.json() : {})).catch(() => ({})), hit]).then(([all, mine]) => {
+      for (const [k, n] of Object.entries(mine)) all[k] = Math.max(all[k] || 0, n);
+      show(all);
+    });
+  }
+
   // ── 흐르는 로고 줄: 내용을 한 번 더 붙여 끊김 없이 돈다
   d.querySelectorAll(".marquee__track").forEach((t) => {
     t.append(...[...t.children].map((c) => { const k = c.cloneNode(true); k.setAttribute("aria-hidden", "true"); return k; }));
