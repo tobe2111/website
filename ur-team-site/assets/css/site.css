@@ -1560,3 +1560,11 @@ a.prod:hover b { color: var(--accent); }
 .shot img { width: 100%; }
 .pblock__media.shot img { max-height: none; }
 .pblock__media.shot, .shot { width: 100%; } /* 가운데 정렬한 칸도 사진이 뜨기 전부터 폭을 정해 둔다 */
+
+/* 휴대폰: 글 속 표가 옆으로 잘리지 않게 제목 칸도 줄바꿈하고, 칸 여백을 줄인다 */
+@media (max-width: 760px) {
+  .prose table { font-size: 14px; }
+  .prose thead th { white-space: normal; }
+  .prose th, .prose td { padding: 9px 8px; word-break: keep-all; overflow-wrap: anywhere; }
+  .prose th:first-child, .prose td:first-child { padding-left: 0; }
+}
