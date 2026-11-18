@@ -163,9 +163,13 @@
     }
     const withLocal = (m) => { vEls.forEach((el) => { const k = el.dataset.views; if (!m[k]) m[k] = local(k); }); return m; };
     show(withLocal({}));
+    // 뒤로 가기로 목록에 돌아오면 브라우저가 저장해 둔 옛 화면을 그대로 꺼내므로, 그때 다시 계산한다
+    let last = {};
+    addEventListener("pageshow", (e) => { if (e.persisted) show(withLocal({ ...last })); });
     Promise.all([fetch("/api/views").then((r) => (r.ok ? r.json() : {})).catch(() => ({})), hit]).then(([all, mine]) => {
       for (const [k, n] of Object.entries(mine)) all[k] = Math.max(all[k] || 0, n);
-      show(withLocal(all));
+      last = all;
+      show(withLocal({ ...all }));
     });
   }
 
