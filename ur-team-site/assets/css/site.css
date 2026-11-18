@@ -1690,3 +1690,25 @@ a.prod:hover b { color: var(--accent); }
   .steps--compact .step p { display: none; }
   .steps--compact .step b { font-size: 15px; }
 }
+
+/* ── 상품 타일: 실제 광고 화면 캡처 + 아래 글씨 칸 (AI 사진 대신) */
+.v2-tile { background: #eef1f5; }
+.v2-tile img { height: 62%; object-fit: cover; object-position: top center; }
+.v2-tile::after { display: none; }
+.v2-tile > div { top: 62%; background: #0e1320; align-content: center; }
+.v2-tile--big img { height: 70%; }
+.v2-tile--big > div { top: 70%; }
+.v2-tile--big b { font-size: 40px; }
+.v2-tile--big p { display: none; }
+@media (max-width: 860px) {
+  .v2-tile img { height: 55%; } .v2-tile > div { top: 55%; padding: 10px 14px; }
+  .v2-tile--big img { height: 66%; } .v2-tile--big > div { top: 66%; }
+  .v2-tile--big b { font-size: 30px; } .v2-tile b { font-size: 20px; } .v2-tile span { font-size: 12px; }
+}
+
+/* ── 첫 페이지 고민 구역: 사진 대신 '매출은 오르는데 순이익은 줄어드는' 예시 그래프 */
+.pains-chart svg { width: 100%; height: 100%; display: block; }
+.js .pains-chart path { stroke-dasharray: 1; stroke-dashoffset: 1; transition: stroke-dashoffset 1.6s var(--ease) .4s; }
+.js .pains-chart.is-in path { stroke-dashoffset: 0; }
+@media (prefers-reduced-motion: reduce) { .js .pains-chart path { stroke-dashoffset: 0; transition: none; } }
+@media (max-width: 960px) { .pains-split__img.pains-chart { aspect-ratio: 4 / 5; max-width: 360px; width: 100%; margin-inline: auto; } }
