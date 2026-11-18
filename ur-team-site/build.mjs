@@ -551,6 +551,8 @@ function redirects() {
       `<meta name="robots" content="noindex, follow"><link rel="canonical" href="${BASE}${to}"><meta http-equiv="refresh" content="0; url=${to}">` +
       `<p><a href="${to}">새 주소로 이동합니다 · Moving to the new address</a></p></html>`);
   }
+  // 예전 아임웹 한국어 주소(/kr/…)는 위에서 따로 정하지 않은 것도 같은 이름의 새 주소로 보낸다 (Cloudflare 전용 규칙)
+  lines.push("/kr/* /:splat 301");
   writeFileSync(join(DIST, "_redirects"), lines.join("\n") + "\n");
 }
 

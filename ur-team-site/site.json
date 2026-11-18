@@ -137,7 +137,16 @@
     "/blog/2026-12-21-google-ads-vs-naver-search-ads": "/blog/2026-10-07-google-ads-vs-naver-search-ads/",
     "/en/blog/2026-12-21-google-ads-vs-naver-search-ads": "/en/blog/2026-10-07-google-ads-vs-naver-search-ads/",
     "/blog/2026-12-28-naver-brand-search-ads": "/blog/2026-11-10-naver-brand-search-ads/",
-    "/en/blog/2026-12-28-naver-brand-search-ads": "/en/blog/2026-11-10-naver-brand-search-ads/"
+    "/en/blog/2026-12-28-naver-brand-search-ads": "/en/blog/2026-11-10-naver-brand-search-ads/",
+    "/kr": "/",
+    "/kr/home": "/",
+    "/kr/index": "/",
+    "/main": "/",
+    "/kr/marketing": "/marketing/",
+    "/kr/blog": "/blog/",
+    "/kr/hospital": "/marketing/hospital/",
+    "/kr/brochure": "/brochures/",
+    "/en/hospital": "/en/marketing/hospital/"
   },
   "i18n": {
     "ko": {
