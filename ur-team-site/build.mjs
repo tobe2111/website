@@ -126,9 +126,17 @@ function viewsBase(slug, date) {
   const age = Math.min(1, Math.max(0, (t1 - Date.parse(date)) / (t1 - t0)));
   return Math.round(1000 + 34000 * Math.min(1, 0.5 * age + 0.5 * Math.pow(r, 1.4)));
 }
+// 하루에 늘어나는 수: 글마다 4~24회로 정해 둔다. 기준일(2026-11-18 또는 글이 올라간 날)부터 날마다 더해진다
+const VIEWS_T0 = Date.UTC(2026, 10, 18);
+function viewsRate(key) {
+  let h = 5381; for (const c of key) h = (Math.imul(h, 33) ^ c.charCodeAt(0)) >>> 0;
+  return 4 + (h % 21);
+}
 function viewsTag(p, lang, hit) {
-  const key = (lang === "en" ? "en/" : "") + p.slug, n = viewsBase(key, p.date);
-  return ` · <span class="views" data-views="${key}" data-base="${n}"${hit ? " data-views-hit" : ""}>${lang === "en" ? "Views" : "조회"} ${n.toLocaleString("en-US")}</span>`;
+  const key = (lang === "en" ? "en/" : "") + p.slug, base = viewsBase(key, p.date), rate = viewsRate(key);
+  const t0 = Math.max(VIEWS_T0, Date.parse(p.date));
+  const n = base + Math.max(0, Math.floor((Date.now() - t0) / 864e5)) * rate;
+  return ` · <span class="views" data-views="${key}" data-base="${base}" data-rate="${rate}" data-t0="${t0}"${hit ? " data-views-hit" : ""}>${lang === "en" ? "Views" : "조회"} ${n.toLocaleString("en-US")}</span>`;
 }
 
 const postsOf = (lang) => posts(lang).map((p) => `/blog/${p.slug}/`);

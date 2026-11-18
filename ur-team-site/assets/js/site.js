@@ -148,7 +148,10 @@
   const vEls = [...d.querySelectorAll("[data-views]")];
   if (vEls.length && location.protocol.startsWith("http")) {
     const word = EN ? "Views" : "조회";
-    const show = (m) => vEls.forEach((el) => { el.textContent = word + " " + ((+el.dataset.base || 0) + (m[el.dataset.views] || 0)).toLocaleString("en-US"); });
+    // 시작 숫자 + 기준일부터 지난 날수 × 하루 증가분 + 실제로 센 조회수(저장 공간을 연결했을 때만)
+    const grown = (el) => (+el.dataset.base || 0) + Math.max(0, Math.floor((Date.now() - (+el.dataset.t0 || Date.now())) / 864e5)) * (+el.dataset.rate || 0);
+    const show = (m) => vEls.forEach((el) => { el.textContent = word + " " + (grown(el) + (m[el.dataset.views] || 0)).toLocaleString("en-US"); });
+    show({});
     const me = d.querySelector("[data-views-hit]");
     let hit = Promise.resolve({});
     if (me) {
