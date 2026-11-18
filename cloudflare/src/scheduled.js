@@ -66,6 +66,9 @@ export const TABLES = [
   "coupon_uses",
   // 간편동의서 — 개인정보 동의 기록이다. 사고로 날리면 "동의를 받았다" 를 증명할 수 없다.
   "consent_forms", "consents",
+  // 월 구독 — 누가 얼마를 언제 냈는지. 날리면 다음 결제일을 몰라 결제가 통째로 멈추거나 두 번 빠진다.
+  // 빌링키는 잠긴 채로 들어가고, 백업 파일 자체도 한 번 더 잠긴다.
+  "subscriptions", "billing_payments",
 ];
 
 // 일부러 백업하지 않는 표 — 몇 분이면 사라지는 값이라 복원 대상이 아니다.
@@ -348,8 +351,32 @@ export async function runDaily(env) {
   const anchor = await runChainAnchor(env).catch((e) => ({ error: String(e) }));
   const hooks = await runWebhooks(env).catch((e) => ({ error: String(e) }));
   const leads = await runLeadPurge(env).catch((e) => ({ error: String(e) }));
-  console.log("daily job", JSON.stringify({ expired, reminders, anchor, hooks, leads, press }));
-  return { expired, reminders, anchor, hooks, leads, press };
+  const billing = await runMonthlyBilling(env).catch((e) => ({ error: String(e) }));
+  console.log("daily job", JSON.stringify({ expired, reminders, anchor, hooks, leads, press, billing }));
+  return { expired, reminders, anchor, hooks, leads, press, billing };
+}
+
+// 월 구독 결제 — 오늘이 결제일인 조직의 카드에서 이용료를 받는다(billing.js).
+// 매일 09시(KST) 일일 작업에 얹는다. 크론을 하나 더 만들지 않는 이유는 위 CRON 주석과 같다.
+// 운영사가 콘솔에 붙여넣은 토스 열쇠는 요청 때만 env 에 채워지므로 여기서 직접 채운다.
+export async function runMonthlyBilling(env, now = Date.now()) {
+  const { runBilling } = await import("./billing.js");
+  const { withStoredKeys } = await import("./keys.js");
+  const full = await withStoredKeys(env, env.DB, null);
+  const db = env.DB;
+  return runBilling(full, {
+    now,
+    notify: async (aid, message) => {
+      const a = await D.getAssociationById(db, aid);
+      await D.createNotification(db, { associationId: aid, kind: "billing", message,
+        link: a ? `/t/${a.slug}/admin/billing` : "" });
+    },
+    // 영수증을 받을 사람 — 그 조직의 첫 관리자
+    payerOf: async (aid) => {
+      const [u] = await D.listUsersByAssociation(db, aid, "ADMIN");
+      return u ? { email: u.email, name: u.name } : null;
+    },
+  });
 }
 
 // 보관 기간이 지난 상담 신청 파기.
