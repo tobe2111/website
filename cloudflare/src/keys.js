@@ -17,6 +17,10 @@ export const STORED_KEYS = [
   // 카카오 로그인은 지도와 **같은 앱의 REST 키**를 쓴다(위 KAKAO_REST_KEY).
   // 보안 강화를 켠 앱만 아래 시크릿이 필요하다 — 안 켰으면 비워 두면 된다.
   ["KAKAO_CLIENT_SECRET", "카카오 로그인 Client Secret", /^[\w-]{4,128}$/, "developers.kakao.com → 카카오 로그인 → 보안 → Client Secret (코드를 발급하지 않았으면 비워 두세요)"],
+  // 월 구독 정기결제(billing.js). 자동결제는 'API 개별 연동 키' 로만 된다 — 결제위젯 키(gck/gsk)는 받지 않는다.
+  // test_ 로 시작하면 테스트 결제(실제 돈이 안 빠짐), live_ 로 시작하면 실제 결제다.
+  ["TOSS_CLIENT_KEY", "토스페이먼츠 클라이언트 키", /^(test|live)_ck_[\w]{8,100}$/, "토스페이먼츠 개발자센터 → API 키 → API 개별 연동 키의 클라이언트 키 (test_ck_… 또는 live_ck_…)"],
+  ["TOSS_SECRET_KEY", "토스페이먼츠 시크릿 키", /^(test|live)_sk_[\w]{8,100}$/, "같은 곳의 시크릿 키 (test_sk_… 또는 live_sk_…). 클라이언트 키와 같은 상점·같은 모드여야 합니다"],
 ];
 const settingKey = (name) => `key_${name}`;
 

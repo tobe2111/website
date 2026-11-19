@@ -92,6 +92,9 @@ export const GLOBAL = [
   ["POST", "/super/association/:id/slug", api.superSetSlug, "SUPERADMIN"],
   ["POST", "/super/association/:id/domain", api.superSetDomain, "SUPERADMIN"],
   ["POST", "/super/association/:id/plan", api.superSetPlan, "SUPERADMIN"],
+  // 월 구독 정기결제 — 금액을 정해 결제 안내를 열고, 필요하면 운영사가 끝낸다 (billing.js)
+  ["POST", "/super/association/:id/billing", api.superBillingOffer, "SUPERADMIN"],
+  ["POST", "/super/association/:id/billing/end", api.superBillingEnd, "SUPERADMIN"],
   ["POST", "/super/association/:id/mapkey", api.superSetMapKey, "SUPERADMIN"],
   ["POST", "/super/association/:id/starter", api.superSeedStarter, "SUPERADMIN"],
   ["POST", "/super/association/:id/delete", api.superDeleteAssociation, "SUPERADMIN"],
@@ -306,6 +309,12 @@ export const TENANT = [
   ["POST", "/admin/leads/:id/delete", api.adminLeadDelete, "ADMIN"],
   ["GET", "/admin/documents", pages.adminDocuments, "STAFF"],
   ["POST", "/admin/credit/order", api.adminCreditOrder, "ADMIN"],
+  // 월 구독 정기결제 — 카드 등록창(토스)에서 돌아오는 두 자리는 토스가 주소를 붙여 보내므로 GET 이다
+  ["GET",  "/admin/billing", pages.adminBilling, "ADMIN"],
+  ["GET",  "/admin/billing/success", api.adminBillingSuccess, "ADMIN"],
+  ["GET",  "/admin/billing/fail", api.adminBillingFail, "ADMIN"],
+  ["POST", "/admin/billing/cancel", api.adminBillingCancel, "ADMIN"],
+  ["POST", "/admin/billing/resume", api.adminBillingResume, "ADMIN"],
   ["POST", "/admin/notify-auto", api.adminNotifyAuto, "ADMIN"],
   ["POST", "/admin/documents", api.adminCreateDocument, "STAFF"],
   ["GET",  "/admin/documents/new", pages.adminDocumentNew, "STAFF"],
@@ -397,13 +406,16 @@ function securityHeaders(env, opts = {}) {
   // 스크립트를 받을 수 있는 상태가 됩니다. 쓰는 곳에서만, 쓰는 만큼만 엽니다.
   const ga = opts.ga ? " https://www.googletagmanager.com" : "";
   const gaConn = opts.ga ? " https://www.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com" : "";
+  // 토스페이먼츠 카드 등록창 — 이용료 결제 화면에서만 연다(그 화면이 응답에 표시를 남긴다).
+  // 결제 SDK 는 js.tosspayments.com 에서 받고, 카드 입력창은 토스 도메인의 틀(iframe)로 뜬다.
+  const tossAny = opts.toss ? " https://*.tosspayments.com" : "";
   const csp = [
     "default-src 'self'", "base-uri 'self'", "object-src 'none'", "frame-ancestors 'self'", "form-action 'self'",
-    `script-src 'self'${naver}${ts}${cfa}${ga}`, "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
+    `script-src 'self'${naver}${ts}${cfa}${ga}${tossAny}`, "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
     // blob: — PDF 양식을 쪽 그림으로 굽는 화면에서 미리보기를 그린다(우리 스크립트가 만든 같은 출처 값).
     "img-src 'self' data: blob: https:", "media-src 'self' https:",
-    `frame-src 'self' https://www.youtube-nocookie.com https://www.youtube.com https://www.instagram.com https://tv.naver.com${ts}`,
-    `connect-src 'self'${naver}${naverImg}${ts}${cfaConn}${gaConn}`, "font-src 'self' https://cdn.jsdelivr.net",
+    `frame-src 'self' https://www.youtube-nocookie.com https://www.youtube.com https://www.instagram.com https://tv.naver.com${ts}${tossAny}`,
+    `connect-src 'self'${naver}${naverImg}${ts}${cfaConn}${gaConn}${tossAny}`, "font-src 'self' https://cdn.jsdelivr.net",
   ].join("; ");
   return {
     "X-Content-Type-Options": "nosniff", "X-Frame-Options": "SAMEORIGIN",
@@ -712,7 +724,10 @@ function instrumentDb(db, acc) {
 
 async function finalize(res, setCookies, env, timing, canonical = "", assoc = null) {
   const headers = new Headers(res.headers);
-  const sec = securityHeaders(env, { ga: !!(assoc && assoc.ga_measurement_id) });
+  // 결제 화면이 남긴 표시는 정책에만 쓰고 바깥으로 내보내지 않는다
+  const toss = headers.get("x-allow-toss") === "1";
+  headers.delete("x-allow-toss");
+  const sec = securityHeaders(env, { ga: !!(assoc && assoc.ga_measurement_id), toss });
   for (const [k, v] of Object.entries(sec)) headers.set(k, v);
   const isHtml = (headers.get("content-type") || "").includes("text/html");
   // 호버 시 다음 페이지 선(先)로딩 — 지원 브라우저만 반응, 나머지는 무시

@@ -17,6 +17,7 @@ import { kakaoReady, kakaoRedirectUri, kakaoAuthUrl, kakaoExchange, kakaoMe, mak
 import { enqueueDocEvent, newApiKey, hashApiKey, KEY_PREFIX, checkWebhookUrl } from "./apiv1.js";
 import { turnstileVerify } from "./turnstile.js";
 import { planOf, PLANS, PLAN_KEYS, planPriceKey } from "./plans.js";
+import * as B from "./billing.js";
 import { seedDemo } from "./demoContent.js";
 import { seedStarter } from "./starterContent.js";
 import { KINDS, kindById, PRESETS, assocTerms, leadLabels } from "./kinds.js";
@@ -5722,4 +5723,96 @@ export async function adminPressCollect(ctx) {
   return back(base + "/admin/press", r.added
     ? `${r.added}건을 새로 찾았습니다. 아래에서 고르면 홈에 올라갑니다.`
     : "새로 찾은 기사가 없습니다. 검색어를 넓혀 보세요.");
+}
+
+// ================= 월 구독 정기결제 (billing.js) =================
+//
+// 운영사가 금액을 정한다 → 고객 관리 화면에 '이용료 결제' 가 열린다 → 사장님이 카드를 등록하면
+// 그 자리에서 첫 결제(제작비가 있으면 제작비+첫 달)가 되고, 그 뒤로는 매달 같은 날 정기 작업이 뺀다.
+const MONEY_MAX = 10000000;
+const parseWon = (v) => { const n = parseInt(String(v || "").replace(/[,\s원]/g, ""), 10); return Number.isFinite(n) ? n : NaN; };
+
+export async function superBillingOffer(ctx) {
+  const { db, form, params } = ctx;
+  const a = await D.getAssociationById(db, Number(params.id));
+  if (!a) return back(superBackTo(ctx), "조직을 찾을 수 없습니다.", true);
+  const plan = PLAN_KEYS.includes(form.get("plan")) ? form.get("plan") : "basic";
+  const monthly = parseWon(form.get("monthly"));
+  const setup = form.get("setup") === "" || form.get("setup") == null ? 0 : parseWon(form.get("setup"));
+  // 토스는 100원 미만 결제를 받지 않는다. 월 이용료가 없는 구독은 이 화면의 일이 아니다.
+  if (!(monthly >= 1000 && monthly <= MONEY_MAX)) return back(superBackTo(ctx), "월 이용료는 1,000원 이상 1,000만원 이하로 입력해 주세요.", true);
+  if (!(setup >= 0 && setup <= MONEY_MAX)) return back(superBackTo(ctx), "제작비는 0원 이상 1,000만원 이하로 입력해 주세요(따로 받으셨으면 0).", true);
+  const before = await B.getSubscription(db, a.id);
+  await B.saveOffer(db, a.id, { plan, monthly, setup });
+  await audit(ctx, "구독안내", `${a.name} → ${PLANS[plan].label} 월 ${monthly.toLocaleString()}원 · 제작비 ${setup.toLocaleString()}원`, a.id);
+  const live = before && ["active", "past_due", "canceled"].includes(before.status);
+  return back(superBackTo(ctx), live && before.monthly_amount !== monthly
+    ? `저장했습니다. 다음 결제일(${before.next_charge_on})부터 새 금액이 빠집니다 — 고객에게 미리 알려 주세요(가격 변경은 사전 고지가 필요합니다).`
+    : `'${a.name}' 결제 안내를 열었습니다. 고객 관리 화면의 [이용료 결제] 에서 카드를 등록하면 바로 첫 결제가 됩니다.`);
+}
+
+export async function superBillingEnd(ctx) {
+  const { db, params } = ctx;
+  const a = await D.getAssociationById(db, Number(params.id));
+  if (!a) return back(superBackTo(ctx), "조직을 찾을 수 없습니다.", true);
+  await B.endSubscription(db, a.id);
+  await audit(ctx, "구독종료", `${a.name} — 운영사가 자동결제를 끝냄`, a.id);
+  return back(superBackTo(ctx), `'${a.name}' 자동결제를 끝냈습니다. 더는 결제되지 않고, 등록된 카드 정보도 지웠습니다. 요금제는 무료로 바뀌었습니다.`);
+}
+
+// 카드 등록창에서 돌아오는 자리(토스가 브라우저를 여기로 보낸다).
+// GET 인 이유: 토스가 주소에 authKey 를 붙여 되돌려 보내는 방식이라 폼 토큰을 실을 수 없다.
+// 대신 ① 로그인한 이 조직 관리자만 ② 이 조직의 고객 번호와 맞을 때만 ③ authKey 는 한 번 쓰면 끝이라
+// 다른 사람이 이 주소를 다시 불러도 카드를 바꿀 수 없다.
+export async function adminBillingSuccess(ctx) {
+  const { db, env, assoc, base, user, query } = ctx;
+  const to = `${base}/admin/billing`;
+  const sub = await B.getSubscription(db, assoc.id);
+  const customerKey = String(query.get("customerKey") || "");
+  const authKey = String(query.get("authKey") || "");
+  if (!sub || !authKey || customerKey !== sub.customer_key) return back(to, "카드 등록 정보가 맞지 않습니다. 다시 시도해 주세요.", true);
+  const issued = await B.issueBillingKey(env, { authKey, customerKey });
+  if (!issued.ok) {
+    // 새로고침으로 같은 authKey 가 다시 오면 토스가 거절한다 — 이미 등록이 끝난 상태면 조용히 돌려보낸다
+    if (sub.billing_key && sub.status === "active") return redirect(to);
+    return back(to, `카드를 등록하지 못했습니다 — ${B.friendlyError(issued.code, issued.message)}`, true);
+  }
+  await B.setCard(db, assoc.id, await B.sealBillingKey(env, issued.billingKey), issued.cardLabel);
+  await audit(ctx, "카드등록", issued.cardLabel);
+  const payer = { email: user.email, name: user.name };
+  if (sub.status === "active" || sub.status === "canceled") return back(to, `카드를 바꿨습니다(${issued.cardLabel}). 다음 결제부터 이 카드로 빠집니다.`);
+  if (sub.status === "past_due") {
+    const r = await B.retryNow(env, assoc, payer);
+    return r.ok ? back(to, `카드를 바꾸고 밀린 이용료 ${sub.monthly_amount.toLocaleString()}원을 결제했습니다.`)
+      : back(to, `카드는 바꿨지만 결제는 아직 안 됐습니다 — ${r.message || "잠시 뒤 다시 시도합니다."}`, true);
+  }
+  // offered · ended → 지금 시작
+  const r = await B.startSubscription(env, assoc, payer);
+  if (!r.ok) return back(to, r.unknown
+    ? "결제 결과를 아직 받지 못했습니다. 잠시 뒤 이 화면을 새로 열어 확인해 주세요 — 같은 결제가 두 번 빠지지는 않습니다."
+    : `카드는 등록됐지만 첫 결제가 되지 않았습니다 — ${r.message}`, true);
+  await audit(ctx, "구독시작", `${r.amount.toLocaleString()}원 결제${r.setup ? ` (제작비 ${r.setup.toLocaleString()}원 포함)` : ""}`);
+  return back(to, `결제가 끝났습니다 — ${r.amount.toLocaleString()}원. 다음 달부터 매달 같은 날 ${r.monthly.toLocaleString()}원이 자동으로 결제됩니다.`);
+}
+
+export async function adminBillingFail(ctx) {
+  const { base, query } = ctx;
+  return back(`${base}/admin/billing`, B.friendlyError(String(query.get("code") || ""), String(query.get("message") || "").slice(0, 200)), true);
+}
+
+export async function adminBillingCancel(ctx) {
+  const { db, assoc, base } = ctx;
+  const sub = await B.getSubscription(db, assoc.id);
+  if (!sub || !["active", "past_due"].includes(sub.status)) return back(`${base}/admin/billing`, "해지할 구독이 없습니다.", true);
+  await B.cancelSubscription(db, assoc.id);
+  await audit(ctx, "구독해지", `다음 결제일 ${sub.next_charge_on} 부터 결제 안 함`);
+  await D.createNotification(db, { associationId: null, kind: "billing", message: `'${assoc.name}' 이(가) 월 구독 해지를 신청했습니다 (${sub.next_charge_on} 까지 이용).`, link: `/super/org/${assoc.id}` }).catch(() => {});
+  return back(`${base}/admin/billing`, `해지를 예약했습니다. ${sub.next_charge_on} 전날까지는 그대로 쓰시고, 그날부터 결제되지 않습니다.`);
+}
+
+export async function adminBillingResume(ctx) {
+  const { db, assoc, base } = ctx;
+  await B.resumeSubscription(db, assoc.id);
+  await audit(ctx, "구독해지취소", "");
+  return back(`${base}/admin/billing`, "해지를 취소했습니다. 지금처럼 매달 결제됩니다.");
 }

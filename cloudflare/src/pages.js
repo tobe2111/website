@@ -31,6 +31,7 @@ import { bundledBrand } from "./brandAssets.js";
 import { turnstileWidget, turnstileScript } from "./turnstile.js";
 import { otpauthUri } from "./totp.js";
 import { PLANS, PLAN_KEYS, planPrices, planOf } from "./plans.js";
+import * as B from "./billing.js";
 import { emailEnabled as emailOn } from "./email.js";
 import { CRON, CRON_JOBS, cronRunKey } from "./scheduled.js";
 
@@ -3307,6 +3308,11 @@ const TAB_ICO = {
   settings: CI('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'),
 };
 
+// 이용료 결제 칸은 운영사가 결제 안내를 연 조직에만 선다 — 지자체 예산으로 쓰는 상인회처럼
+// 카드로 낼 일이 없는 곳에 결제 메뉴가 있으면 "돈을 내야 하나" 하고 운영사에 전화가 온다.
+// 결제가 밀렸으면 빨간 배지 1 을 단다.
+const billingCounts = (sub) => (sub ? { billing: 1, billingAlert: sub.status === "past_due" ? 1 : 0 } : {});
+
 // 탭 목록 — 제품 유형마다 있는 탭이 다르다. counts 는 배지(승인 대기·안 읽은 문의 등).
 function consoleTabs(kind, counts = {}) {
   const isEsign = kind === "esign", isFranchise = kind === "franchise";
@@ -3341,6 +3347,7 @@ function consoleSide({ base, kind, counts = {}, active = "", inPage = false }) {
     ${ext(`${base}/admin/documents`, "계약서", "documents")}
     ${ext(`${base}/admin/templates`, "서식", "templates")}
     ${ext(`${base}/admin/api`, "API 연동", "api")}
+    ${counts.billing ? ext(`${base}/admin/billing`, "이용료 결제", "billing", counts.billingAlert || 0) : ""}
     <a href="${base}" target="_blank" class="side-ext">사이트 보기 ↗</a>
   </nav></aside>`;
 }
@@ -3359,15 +3366,16 @@ async function consoleShell(ctx, { title, titleHtml = "", eyebrow = "", sub = ""
   const { db, assoc, base, query } = ctx;
   const kind = assoc.kind;
   // 배지는 두 번의 조회로 끝난다 — 없으면 다른 탭으로 옮길 때 숫자가 사라져 보인다
-  const [s, unread, press] = await Promise.all([
+  const [s, unread, press, subscription] = await Promise.all([
     D.stats(db, assoc.id).catch(() => ({})),
     D.unreadCount(db, assoc.id).catch(() => 0),
     // 언론 보도 대기 건수. 표가 없는 옛 DB 에서도 화면이 죽지 않게 0 으로 받는다.
     kind !== "esign" && kind !== "franchise" ? D.countPressPending(db, assoc.id).catch(() => 0) : 0,
+    B.getSubscription(db, assoc.id).catch(() => null),
   ]);
   // 회비 탭은 회비를 걷는 상인회에만 선다 — 곁가지 화면에서도 차림표가 같아야,
   // 계약서 화면에 갔다 왔더니 탭 하나가 사라져 보이는 일이 없다.
-  const counts = { pending: s.pending || 0, unread: unread || 0, press: press || 0, dues: D.usesDues(assoc) ? 1 : 0, unit: assocTerms(assoc).unit };
+  const counts = { pending: s.pending || 0, unread: unread || 0, press: press || 0, dues: D.usesDues(assoc) ? 1 : 0, unit: assocTerms(assoc).unit, ...billingCounts(subscription) };
   return `<section class="dash dash-shell"><div class="container">
     <div class="dash-head"><div>${eyebrow ? `<p class="section-eyebrow">${eyebrow}</p>` : ""}<h1 class="dash-title">${titleHtml || esc(title)}</h1>${sub ? `<p class="dash-sub">${sub}</p>` : ""}</div>
       ${actions ? `<div class="dash-head-actions">${actions}</div>` : ""}</div>
@@ -4318,7 +4326,7 @@ export async function admin(ctx) {
         : `<a href="${base}/admin/documents" class="btn btn-primary btn-sm">계약서 만들기</a>`}</div></div>
     ${flashOf(query)}
     <div class="console-grid">
-    ${consoleSide({ base, kind: assoc.kind, counts: { unread: unread || 0, pending: s.pending || 0, inbox: inboxCounts.new || 0, press: pressPending, dues: D.usesDues(assoc) ? 1 : 0, unit: assocTerms(assoc).unit }, inPage: true })}
+    ${consoleSide({ base, kind: assoc.kind, counts: { unread: unread || 0, pending: s.pending || 0, inbox: inboxCounts.new || 0, press: pressPending, dues: D.usesDues(assoc) ? 1 : 0, unit: assocTerms(assoc).unit, ...billingCounts(await B.getSubscription(db, assoc.id).catch(() => null)) }, inPage: true })}
     <div class="console-main">
     <div class="sgroup" id="s-home" data-tab="home">
     <div class="home-sheet">
@@ -6441,6 +6449,8 @@ export async function superOrg(ctx) {
         <button class="btn btn-ghost btn-sm">변경</button></form>
     </section>
 
+    ${await superBillingPanel(db, a, ret)}
+
     <section class="panel"><h2 class="panel-title">알림톡 <span class="badge ${autoNotifyOn(a) ? "badge-ok" : "badge-muted"}">자동화 ${autoNotifyOn(a) ? "켜짐" : "꺼짐"}</span> <span class="badge ${balance > 0 ? "badge-ok" : "badge-no"}">잔액 ${balance.toLocaleString()}원</span></h2>
       ${autoNotifyOn(a) ? "" : `<p class="panel-hint"><b>이 조직은 자동 발송을 쓰지 않습니다.</b> 관리자가 서명 링크를 카톡·문자로 직접 보내 계약을 진행합니다 —
         정상 상태이며, 켜고 끄는 것은 그 조직 관리자가 자기 관리 화면에서 정합니다(운영사가 대신 켜지 않습니다).</p>`}
@@ -6527,6 +6537,8 @@ export async function superConsole(ctx) {
     ["네이버 지도", !!env.NAVER_MAP_CLIENT_ID, "NAVER_MAP_CLIENT_ID", "상인회 홈의 점포 지도. 지도가 안 뜨면 Maps 콘솔의 Web 서비스 URL 에 이 사이트 도메인이 등록됐는지 확인하세요."],
     ["사진 직접 서빙", !!env.MEDIA_PUBLIC_BASE, "MEDIA_PUBLIC_BASE", "R2 버킷에 공개 도메인을 켜고 그 주소를 워커 변수에 넣으면 사진이 워커를 거치지 않고 CDN 직행합니다."],
     ["방문 통계", !!env.CF_ANALYTICS_TOKEN, "CF_ANALYTICS_TOKEN", "Cloudflare Web Analytics 에서 사이트를 추가하고 발급된 토큰을 넣으면 모든 페이지에 자동 삽입됩니다."],
+    ["카드 자동결제 (토스페이먼츠)", B.tossKeys(env).ready, "TOSS_CLIENT_KEY · TOSS_SECRET_KEY",
+      "홈페이지 고객에게 초기 제작비와 월 이용료를 카드로 받습니다. 토스페이먼츠 자동결제(빌링) 계약이 된 상점의 API 개별 연동 키가 필요합니다. test_ 키를 넣으면 실제 돈이 빠지지 않는 시험 결제가 됩니다."],
     ["지도에서 가게 찾기 (카카오)", !!String(env.KAKAO_REST_KEY || "").trim(), "KAKAO_REST_KEY",
       "카카오 개발자센터에서 앱을 만들고 <b>REST API 키</b>를 넣으면, 관리자가 점포 정보를 채울 때 가게 이름만으로 주소·전화·업종·좌표가 채워집니다. 같은 키로 <b>가게 사진 찾기</b>도 함께 열립니다."],
     ["지도에서 가게 찾기 (네이버)", !!(String(env.NAVER_SEARCH_ID || "").trim() && String(env.NAVER_SEARCH_SECRET || "").trim()), "NAVER_SEARCH_ID · NAVER_SEARCH_SECRET",
@@ -6543,7 +6555,7 @@ export async function superConsole(ctx) {
     ${supers.some((u) => !u.totp_enabled) ? `<p class="panel-hint">이 계정 하나가 뚫리면 <b>모든 고객사</b>의 데이터가 열립니다. <a href="/account">계정 설정</a>에서 2단계 인증을 켜 두시길 권합니다.</p>` : ""}</section>`;
   const keyRows = await Promise.all(STORED_KEYS.map(async (k) => [...k, await storedKeyHint(db, k[0]).catch(() => "")]));
   const wiredPanel = `<details class="panel panel-fold"><summary class="panel-title">있으면 좋은 것 <span class="badge ${wired.every((w) => w[1]) ? "badge-ok" : "badge-muted"}">${wired.filter((w) => w[1]).length}/${wired.length} 켜짐</span></summary>
-    <p class="panel-hint">모두 선택 사항입니다. 꺼져 있어도 사이트는 정상 동작합니다. <b>지도 열쇠 넷은 아래 칸에 붙여넣으면 바로 켜집니다.</b>
+    <p class="panel-hint">모두 선택 사항입니다. 꺼져 있어도 사이트는 정상 동작합니다. <b>지도·카카오 로그인·토스 결제 열쇠는 아래 칸에 붙여넣으면 바로 켜집니다.</b>
       그 밖의 값은 <b>Workers &amp; Pages → 이 워커 → Settings → Variables</b> 에서 넣습니다.</p>
     <form method="post" action="/super/keys" class="stack-form compact key-form" data-once>
       <input type="hidden" name="_csrf" value="${esc(csrf)}" />
@@ -7068,6 +7080,7 @@ export async function superConsole(ctx) {
       </div>
 
       <div class="sgroup" id="s-money" data-tab="money">
+        ${await superBillingList(db, env)}
         <section class="panel"><h2 class="panel-title">이번 달 알림톡 손익 <span class="badge ${margin > 0 ? "badge-ok" : "badge-muted"}">${margin.toLocaleString()}원</span></h2>
           <p class="panel-hint">건당 판매 ${unitPrice.toLocaleString()}원 · 마진율 ${marginPct}%.</p></section>
         ${notifySuperPanel}
@@ -7345,8 +7358,15 @@ export async function terms(ctx) {
     <h2>제4조 (회원의 의무)</h2><p>회원은 타인의 권리를 침해하거나 법령·공서양속에 반하는 게시물을 등록해서는 안 되며, 계정 정보를 안전하게 관리할 책임이 있습니다.</p>
     <h2>제5조 (게시물의 관리)</h2><p>운영자·상인회 관리자는 관련 법령을 위반하거나 부적절한 게시물을 사전 통지 없이 삭제·이동할 수 있습니다.</p>
     <h2>제6조 (전자서명)</h2><p>서비스가 제공하는 전자서명은 서명자 확인(로그인)·서명 의사(동의)·위변조 방지(해시·디지털 서명)·감사추적(시각·IP·기기)을 갖춘 일반 전자서명입니다. 고강도 인증이 필요한 용도는 별도 검토가 필요합니다.</p>
-    <h2>제7조 (면책)</h2><p>운영자는 천재지변, 이용자의 귀책, 제3자 서비스(지도·영상 등)의 장애로 인한 손해에 대해 책임을 지지 않습니다.</p>
-    <h2>제8조 (문의)</h2><p>본 약관 관련 문의는 위 연락처로 접수합니다.</p>`;
+    <h2 id="billing">제7조 (유료 서비스 · 자동결제 · 환불)</h2>
+    <p>① 홈페이지 제작·운영 서비스의 요금은 <b>초기 제작비(1회)</b>와 <b>월 이용료</b>로 구성되며, 금액은 계약 시 운영자와 이용자가 정하고 관리 화면의 [이용료 결제]에 표시합니다. 표시 금액은 부가가치세를 포함합니다.</p>
+    <p>② 이용자가 카드를 등록하면 그 즉시 초기 제작비(남아 있는 경우)와 첫 달 이용료가 결제되고, 이후 <b>매월 같은 날</b>(그 날짜가 없는 달은 말일) 월 이용료가 등록한 카드로 자동 결제됩니다. 결제는 토스페이먼츠(주)가 대행하며, 카드번호는 서비스에 저장되지 않습니다.</p>
+    <p>③ 이용자는 관리 화면에서 <b>언제든 해지</b>할 수 있습니다. 해지하면 다음 결제일부터 결제되지 않으며, 이미 결제한 기간이 끝날 때까지 서비스를 이용할 수 있습니다.</p>
+    <p>④ 결제가 실패하면 3일 간격으로 최대 3회 다시 시도하며, 모두 실패하면 자동결제가 중단되고 요금제가 무료로 전환됩니다.</p>
+    <p>⑤ 환불: 월 이용료는 결제일로부터 7일 이내이고 그 기간에 서비스를 이용하지 않은 경우 전액 환불합니다. 이미 이용이 시작된 기간의 이용료는 일할 계산하여 환불하지 않습니다. 초기 제작비는 제작 착수 전에는 전액 환불하고, 착수 후에는 진행된 작업 범위를 뺀 금액을 환불합니다. 환불은 위 연락처로 요청합니다.</p>
+    <p>⑥ 운영자가 요금을 바꾸는 경우 적용 30일 전까지 이용자에게 알리며, 이용자는 그 전에 해지할 수 있습니다.</p>
+    <h2>제8조 (면책)</h2><p>운영자는 천재지변, 이용자의 귀책, 제3자 서비스(지도·영상 등)의 장애로 인한 손해에 대해 책임을 지지 않습니다.</p>
+    <h2>제9조 (문의)</h2><p>본 약관 관련 문의는 위 연락처로 접수합니다.</p>`;
   return legalWrap("이용약관", inner, info, ctx.csrf);
 }
 export async function privacy(ctx) {
@@ -7356,7 +7376,7 @@ export async function privacy(ctx) {
     <h2>1. 수집하는 개인정보 항목</h2><p>회원가입·입점신청 시 <b>이름, 이메일, 연락처, 점포 정보</b>를 수집합니다. <b>가맹 상담 신청</b> 시에는 <b>성함, 연락처, 희망 지역, 창업 예산, 유입 경로, 문의 내용</b>을 수집하며, 마케팅 정보 수신은 선택 동의 항목입니다. 서비스 이용 과정에서 접속 IP·기기 정보·서비스 이용 기록이 자동 생성·수집될 수 있습니다. 전자서명 시 서명자·시각·IP·기기 정보가 기록됩니다.</p>
     <h2>2. 수집·이용 목적</h2><p>회원 식별 및 관리, 서비스 제공(점포 안내·공지·게시판·전자서명), <b>가맹·창업 상담 응대</b>, 문의 응대, 부정 이용 방지를 위해 이용합니다. 가맹 상담 신청 정보는 해당 브랜드(가맹본부)의 상담 목적으로만 쓰이며, 별도 동의 없이 다른 목적으로 이용하지 않습니다.</p>
     <h2>3. 보유·이용 기간</h2><p>수집·이용 목적 달성 시 지체 없이 파기합니다. 다만 관련 법령에 따라 보존이 필요한 경우 해당 기간 동안 보관합니다. 회원 탈퇴 시 계정 정보는 삭제되며, 전자서명 기록은 법적 효력·분쟁 대비를 위해 별도 기간 보관될 수 있습니다. <b>가맹 상담 신청 정보는 상담이 종료되면 지체 없이 삭제</b>하며, 신청자는 아래 연락처로 삭제를 요청할 수 있습니다.</p>
-    <h2>4. 제3자 제공·처리위탁</h2><p>서비스는 원칙적으로 개인정보를 외부에 제공하지 않습니다. 지도(네이버) 및 영상(유튜브·인스타그램·네이버TV)은 이용자가 직접 링크·연동하는 외부 서비스이며, 해당 서비스의 정책이 적용됩니다. 서비스 인프라는 Cloudflare를 통해 운영됩니다.</p>
+    <h2>4. 제3자 제공·처리위탁</h2><p>서비스는 원칙적으로 개인정보를 외부에 제공하지 않습니다. 지도(네이버) 및 영상(유튜브·인스타그램·네이버TV)은 이용자가 직접 링크·연동하는 외부 서비스이며, 해당 서비스의 정책이 적용됩니다. 서비스 인프라는 Cloudflare를 통해 운영됩니다. <b>유료 서비스의 카드 결제는 토스페이먼츠(주)에 위탁</b>하며, 서비스는 카드사명과 가려진 카드번호 일부·결제 내역만 보관합니다(카드번호 전체는 보관하지 않습니다).</p>
     <h2>5. 쿠키</h2><p>로그인 유지와 보안(위조 요청 차단)에 쿠키를 씁니다. 이와 별개로, 상인회 홈을 여러 구성으로 나눠 비교하는 동안
       <b>어느 구성으로 들어왔는지</b>를 30분간 기억하는 쿠키(<code>sc_hv</code>)를 둘 수 있습니다. 사본 이름 한 조각만 담기며
       개인을 식별하지 않고, 해당 상인회 주소 안에서만 쓰이고, 30분 뒤 스스로 사라집니다. 브라우저 설정에서 쿠키를 거부해도
@@ -7947,4 +7967,165 @@ export async function pressList(ctx) {
   return html(layout({ title: `언론 속의 ${who}`, assoc, base, user, body, csrf,
     activeNav: `${base}/press`,
     description: `${assoc.name} — 언론에 실린 ${who} 기사 ${items.length}건.` }));
+}
+
+// ================= 이용료 결제 (월 구독 · 토스 자동결제) =================
+//
+// 이 화면의 사장님은 "얼마가, 언제, 어디서 빠지나" 셋만 궁금하다. 그 셋을 맨 위에 두고,
+// 카드 등록 단추 바로 위에 **자동결제 안내**(금액·결제일·해지 방법)를 적는다 — 결제대행사 심사가
+// 이 문구를 보고, 나중에 "이렇게 빠질 줄 몰랐다" 는 다툼도 여기서 끝난다.
+const won = (n) => `${Number(n || 0).toLocaleString()}원`;
+const ymd = (s) => { const t = String(s || "").slice(0, 10); return t ? `${Number(t.slice(0, 4))}년 ${Number(t.slice(5, 7))}월 ${Number(t.slice(8, 10))}일` : ""; };
+const PAY_BADGE = { done: ["결제 완료", "badge-ok"], failed: ["실패", "badge-no"], unknown: ["확인 중", "badge-wait"], pending: ["처리 중", "badge-wait"] };
+
+export async function adminBilling(ctx) {
+  const { db, env, assoc, base, user, csrf } = ctx;
+  const sub = await B.getSubscription(db, assoc.id);
+  const keys = B.tossKeys(env);
+  const title = "이용료 결제";
+  if (!sub) {
+    const body = await consoleShell(ctx, { title, active: "billing", body: `<section class="panel">
+      <p class="panel-hint">아직 결제 안내가 없습니다. 운영사와 금액을 정하면 이 화면에서 카드를 등록해 결제하실 수 있습니다.</p></section>` });
+    return html(layout({ title, assoc, base, user, body, csrf }));
+  }
+  const payments = await B.listPayments(db, assoc.id, 24);
+  const [stLabel, stBadge] = B.SUB_STATUS[sub.status] || [sub.status, "badge-muted"];
+  const plan = PLANS[sub.plan] || PLANS.basic;
+  const setupDue = sub.setup_amount > 0 && !sub.setup_paid_at;
+  const today = D.kstToday();
+  const day = Number(today.slice(8, 10));
+  const starting = sub.status === "offered" || sub.status === "ended";
+  const firstAmount = (setupDue ? sub.setup_amount : 0) + sub.monthly_amount;
+
+  // 휴대폰에서 긴 안내가 표 밖으로 잘리지 않게 칸 안에서 줄을 바꾼다
+  const row = (k, v) => `<tr><th scope="row">${esc(k)}</th><td style="white-space:normal">${v}</td></tr>`;
+  const facts = `<div class="table-scroll"><table class="admin-table"><tbody>
+    ${row("요금제", esc(plan.label))}
+    ${row("월 이용료", `<b>${won(sub.monthly_amount)}</b> <small>(부가세 포함)</small>`)}
+    ${sub.setup_amount > 0 ? row("초기 제작비", sub.setup_paid_at
+      ? `${won(sub.setup_amount)} <span class="badge badge-ok">${esc(ymd(kstDate(sub.setup_paid_at)))} 결제 완료</span>`
+      : `${won(sub.setup_amount)} <small>(첫 결제 때 한 번만)</small>`) : ""}
+    ${row("결제일", sub.status === "active" || sub.status === "past_due"
+      ? `매달 ${sub.billing_day}일 · 다음 결제 <b>${esc(ymd(sub.next_charge_on))}</b>`
+      : sub.status === "canceled" ? `<b>${esc(ymd(sub.next_charge_on))}</b>부터 결제되지 않습니다`
+      : "카드 등록일 = 매달 결제일")}
+    ${sub.card_label && sub.status !== "ended" ? row("결제 카드", esc(sub.card_label)) : ""}
+  </tbody></table></div>`;
+
+  // 카드 등록 단추 — 토스 SDK 가 이 data- 값으로 카드 등록창을 연다(public/js/billing.js).
+  const cardBtn = (label, { agree = false, primary = true } = {}) => keys.ready
+    ? `<button type="button" class="btn ${primary ? "btn-primary" : "btn-ghost"}" data-toss-billing
+        data-ck="${esc(keys.ck)}" data-customer="${esc(sub.customer_key)}"
+        data-success="${esc(`${base}/admin/billing/success`)}" data-fail="${esc(`${base}/admin/billing/fail`)}"
+        data-email="${esc(user.email && !isPlaceholderEmail(user.email) ? user.email : "")}" data-name="${esc(user.name || "")}"
+        ${agree ? 'data-need-agree="billAgree"' : ""}>${esc(label)}</button>`
+    : `<button type="button" class="btn btn-primary" disabled>${esc(label)}</button>
+       <p class="panel-hint">운영사가 결제 연결을 마무리하는 중입니다. 준비되면 이 단추가 열립니다.</p>`;
+
+  let action = "";
+  if (starting) {
+    action = `<section class="panel panel-accent" id="p-start"><h2 class="panel-title">카드 등록하고 시작하기</h2>
+      <div class="honest-box">
+        <h3>자동결제 안내</h3>
+        <ul>
+          <li>지금 <b>${won(firstAmount)}</b>이 결제됩니다${setupDue ? ` — 초기 제작비 ${won(sub.setup_amount)} + 첫 달 이용료 ${won(sub.monthly_amount)}` : ""}.</li>
+          <li>그 뒤로 <b>매달 ${day}일</b>에 <b>${won(sub.monthly_amount)}</b>이 같은 카드에서 자동으로 결제됩니다${day > 28 ? ` (그 날짜가 없는 달은 말일)` : ""}.</li>
+          <li><b>언제든 이 화면에서 해지</b>할 수 있습니다. 해지하면 다음 결제일부터 결제되지 않고, 이미 낸 기간은 끝까지 쓰십니다.</li>
+          <li>결제가 실패하면 ${B.RETRY_DAYS}일 간격으로 ${B.MAX_TRIES}번까지 다시 시도하고, 그래도 안 되면 자동결제가 멈춥니다.</li>
+          <li>카드번호는 토스페이먼츠가 보관하며 이 사이트에는 저장되지 않습니다.</li>
+        </ul>
+        <p>자세한 내용은 <a href="/terms#billing" target="_blank">이용약관 제7조(유료 서비스·자동결제·환불)</a>를 확인해 주세요.</p>
+      </div>
+      <label class="check"><input type="checkbox" id="billAgree" /> 위 자동결제 내용을 확인했고 동의합니다</label>
+      <div class="finish-acts">${cardBtn(`카드 등록하고 ${won(firstAmount)} 결제하기`, { agree: true })}</div>
+    </section>`;
+  } else if (sub.status === "past_due") {
+    action = `<section class="panel panel-warn"><h2 class="panel-title">결제가 되지 않았습니다</h2>
+      <p class="panel-hint"><b>${esc(sub.last_error || "카드 결제가 거절되었습니다.")}</b><br />
+        ${esc(ymd(sub.retry_on))}에 다시 시도합니다 (${sub.fail_count}/${B.MAX_TRIES}번째 실패). 다른 카드로 바꾸시면 <b>바로</b> 다시 결제합니다.</p>
+      <div class="finish-acts">${cardBtn("다른 카드로 바꾸고 바로 결제")}</div></section>`;
+  } else if (sub.status === "active") {
+    action = `<section class="panel"><h2 class="panel-title">카드·해지</h2>
+      <div class="finish-acts">${cardBtn("결제 카드 바꾸기", { primary: false })}
+        <form method="post" action="${base}/admin/billing/cancel" class="inline-form"
+          data-confirm="월 구독을 해지할까요?&#10;&#10;${esc(ymd(sub.next_charge_on))}부터 결제되지 않고, 그 전날까지는 지금처럼 쓰실 수 있습니다.&#10;해지 예약은 그 전에 언제든 취소할 수 있습니다.">
+          <input type="hidden" name="_csrf" value="${esc(csrf)}" /><button class="btn btn-ghost">해지 신청</button></form></div></section>`;
+  } else if (sub.status === "canceled") {
+    action = `<section class="panel"><h2 class="panel-title">해지 예약됨</h2>
+      <p class="panel-hint">${esc(ymd(sub.next_charge_on))} 전날까지 지금처럼 쓰실 수 있고, 그날부터는 결제되지 않습니다.</p>
+      <div class="finish-acts"><form method="post" action="${base}/admin/billing/resume" class="inline-form">
+        <input type="hidden" name="_csrf" value="${esc(csrf)}" /><button class="btn btn-primary">해지 취소하고 계속 쓰기</button></form>
+        ${cardBtn("결제 카드 바꾸기", { primary: false })}</div></section>`;
+  }
+
+  const rows = payments.length ? payments.map((p) => {
+    const [l, b] = PAY_BADGE[p.status] || [p.status, "badge-muted"];
+    return `<tr><td>${esc(kstStamp(p.created_at, { year: true }))}</td><td>${esc(p.order_name || "")}</td><td>${won(p.amount)}</td>
+      <td><span class="badge ${b}">${esc(l)}</span>${p.status === "failed" && p.error ? `<br /><small>${esc(p.error)}</small>` : ""}</td>
+      <td>${p.receipt_url ? `<a href="${esc(p.receipt_url)}" target="_blank" rel="noopener">영수증</a>` : "-"}</td></tr>`;
+  }).join("") : `<tr><td colspan="5" class="empty">아직 결제 내역이 없습니다.</td></tr>`;
+
+  const inner = `
+    ${keys.test ? `<div class="flash flash-warn"><b>테스트 모드</b> — 지금은 시험 결제라 실제 카드에서 돈이 빠지지 않습니다.</div>` : ""}
+    <section class="panel"><h2 class="panel-title">지금 상태 <span class="badge ${stBadge}">${esc(stLabel)}</span></h2>${facts}</section>
+    ${action}
+    <section class="panel"><h2 class="panel-title">결제 내역</h2>
+      <div class="table-scroll"><table class="admin-table"><thead><tr><th>시각</th><th>내용</th><th>금액</th><th>상태</th><th>영수증</th></tr></thead>
+        <tbody>${rows}</tbody></table></div>
+      <p class="panel-hint">카드 결제는 영수증이 곧 증빙입니다(카드 매출전표). 세금계산서가 따로 필요하시면 운영사에 문의해 주세요.</p></section>`;
+  const body = await consoleShell(ctx, { title, sub: "홈페이지 월 이용료를 등록한 카드로 매달 자동 결제합니다.", active: "billing", body: inner });
+  const scripts = keys.ready ? `<script src="${B.TOSS_SDK}"></script><script src="${assetUrl("/js/billing.js")}" defer></script>` : "";
+  const res = html(layout({ title, assoc, base, user, body, csrf, scripts }));
+  if (keys.ready) res.headers.set("x-allow-toss", "1");
+  return res;
+}
+
+// 운영사 콘솔 — 고객사 상세의 '월 구독' 칸.
+export async function superBillingPanel(db, a, ret) {
+  const sub = await B.getSubscription(db, a.id);
+  const payments = sub ? await B.listPayments(db, a.id, 6) : [];
+  const [stLabel, stBadge] = sub ? (B.SUB_STATUS[sub.status] || [sub.status, "badge-muted"]) : ["없음", "badge-muted"];
+  const planOpts = PLAN_KEYS.map((k) => `<option value="${k}"${k === ((sub && sub.plan) || "basic") ? " selected" : ""}>${esc(PLANS[k].label)}</option>`).join("");
+  const live = sub && ["active", "past_due", "canceled"].includes(sub.status);
+  return `<section class="panel" id="p-billing"><h2 class="panel-title">월 구독 (카드 자동결제) <span class="badge ${stBadge}">${esc(stLabel)}</span></h2>
+    ${sub ? `<p class="panel-hint">월 ${won(sub.monthly_amount)}${sub.setup_amount ? ` · 제작비 ${won(sub.setup_amount)}${sub.setup_paid_at ? " (받음)" : " (첫 결제 때)"}` : ""}
+      ${sub.card_label ? ` · ${esc(sub.card_label)}` : ""}${sub.next_charge_on ? ` · 다음 결제 ${esc(sub.next_charge_on)}` : ""}
+      ${sub.status === "past_due" ? `<br /><b>실패 ${sub.fail_count}회 — ${esc(sub.last_error)}</b> (다시 시도 ${esc(sub.retry_on)})` : ""}</p>`
+      : `<p class="panel-hint">금액을 정해 저장하면 이 고객의 관리 화면에 <b>[이용료 결제]</b> 가 열립니다. 고객이 카드를 등록하는 순간 첫 결제가 됩니다.</p>`}
+    <form method="post" action="/super/association/${a.id}/billing" class="stack-form compact">${ret}
+      <div class="form-two">
+        <label class="mini-label">요금제<select name="plan">${planOpts}</select></label>
+        <label class="mini-label">월 이용료 (원, 부가세 포함)<input type="text" inputmode="numeric" name="monthly" value="${sub ? sub.monthly_amount : ""}" placeholder="예: 55000" required /></label></div>
+      <label class="mini-label">초기 제작비 (원, 한 번) <small>— 계좌이체 등으로 따로 받으셨으면 0</small>
+        <input type="text" inputmode="numeric" name="setup" value="${sub ? sub.setup_amount : ""}" placeholder="예: 330000"${sub && sub.setup_paid_at ? " disabled" : ""} /></label>
+      ${sub && sub.setup_paid_at ? `<input type="hidden" name="setup" value="${sub.setup_amount}" />` : ""}
+      <button class="btn btn-ghost btn-sm">${sub ? "금액 저장" : "결제 안내 열기"}</button>
+      ${live ? `<p class="panel-hint">이용 중에 금액을 바꾸면 <b>다음 결제일부터</b> 새 금액이 빠집니다. 고객에게 먼저 알려 주세요.</p>` : ""}
+    </form>
+    ${payments.length ? `<ul class="admin-mini-list">${payments.map((p) => `<li>${esc(kstStamp(p.created_at, { year: false }))} · ${won(p.amount)}
+      <span class="badge ${(PAY_BADGE[p.status] || [])[1] || "badge-muted"}">${esc((PAY_BADGE[p.status] || [p.status])[0])}</span></li>`).join("")}</ul>` : ""}
+    ${live ? `<form method="post" action="/super/association/${a.id}/billing/end" class="inline-form"
+      data-confirm="'${esc(a.name)}' 의 자동결제를 지금 끝낼까요?&#10;&#10;더는 결제되지 않고 등록된 카드 정보도 지웁니다. 요금제는 무료로 바뀝니다.&#10;(고객이 직접 해지하면 이미 낸 달 끝까지 쓰게 됩니다 — 보통은 그쪽이 맞습니다.)">${ret}
+      <button class="btn btn-ghost btn-xs">자동결제 지금 끝내기</button></form>` : ""}
+  </section>`;
+}
+
+// 운영사 콘솔 — 알림톡·정산 탭의 '월 구독' 한눈에 보기.
+export async function superBillingList(db, env) {
+  const subs = await B.listSubscriptions(db).catch(() => []);
+  const keys = B.tossKeys(env);
+  const monthStart = `${D.kstToday().slice(0, 7)}-01`;
+  const rev = await B.revenueSince(db, monthStart).catch(() => ({ sum: 0, n: 0 }));
+  const mrr = subs.filter((s) => s.status === "active" || s.status === "past_due").reduce((t, s) => t + (s.monthly_amount || 0), 0);
+  return `<section class="panel" id="p-subs"><h2 class="panel-title">월 구독 (카드 자동결제)
+      <span class="badge ${keys.ready ? (keys.test ? "badge-wait" : "badge-ok") : "badge-no"}">${keys.ready ? (keys.test ? "테스트 모드" : "실결제") : "토스 열쇠 없음"}</span></h2>
+    <p class="panel-hint">이번 달 결제 <b>${won(rev.sum)}</b> (${rev.n}건) · 매달 들어올 금액 <b>${won(mrr)}</b>.
+      ${keys.ready ? "" : "<b>토스 열쇠가 없어 카드 등록·결제가 꺼져 있습니다.</b> 설정·보안 탭의 열쇠 칸에 붙여넣으세요."}</p>
+    ${subs.length ? `<div class="table-scroll"><table class="admin-table"><thead><tr><th>고객사</th><th>상태</th><th>월 이용료</th><th>다음 결제</th><th>카드</th></tr></thead><tbody>
+      ${subs.map((s) => { const [l, b] = B.SUB_STATUS[s.status] || [s.status, "badge-muted"]; return `<tr>
+        <td><a href="/super/org/${s.association_id}#p-billing">${esc(s.assoc_name)}</a></td>
+        <td><span class="badge ${b}">${esc(l)}</span>${s.status === "past_due" ? `<br /><small>${esc(s.last_error)}</small>` : ""}</td>
+        <td>${won(s.monthly_amount)}</td><td>${esc(s.status === "past_due" ? `재시도 ${s.retry_on}` : s.next_charge_on || "-")}</td><td>${esc(s.card_label || "-")}</td></tr>`; }).join("")}
+    </tbody></table></div>` : `<p class="panel-hint">아직 구독 고객이 없습니다. 고객사 상세 화면의 '월 구독' 칸에서 금액을 정하면 시작됩니다.</p>`}
+  </section>`;
 }
