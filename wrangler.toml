@@ -55,6 +55,9 @@ PUBLIC_SCHEME = "https"
 # 비워 두면 관리자가 문서를 만들 때 자동으로 학습해 저장하지만, 여기 적어 두는 편이 확실하다.
 # 상인회에 개별 도메인이 연결되어 있으면 그 도메인이 우선 적용된다.
 PUBLIC_ORIGIN = "https://website.tobe211167.workers.dev"
+# 홈페이지 제작 서비스 판매 사이트(/service)의 전용 도메인. 이 도메인으로 들어오면 첫 화면이 그 사이트가 된다
+# (결제대행사 심사용 — 마케팅과 분리된 사이트). 도메인을 이 워커의 Custom Domain 으로 연결한 뒤 주석을 푼다.
+# SERVICE_HOST = "example.kr"
 # BASE_DOMAIN = "example.com"        # 서브도메인 방식 쓸 때
 # 네이버 지도 Client ID (도메인 화이트리스트로 보호되는 공개 값 — 콘솔에 배포 도메인 등록 필요).
 # ⚠️ Client Secret 은 지도에 불필요하며 여기에 절대 넣지 마세요.
