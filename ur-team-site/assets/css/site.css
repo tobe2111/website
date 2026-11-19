@@ -1872,3 +1872,13 @@ a.prod:hover b { color: var(--accent); }
   .hp-toast__dot, .hp-chip__live { animation: none; }
   .hp-months::after, .hp-months li::before, .hp-months li::after, .hp-chip--bars i, .hp-chip__track b { transition: none; }
 }
+
+/* 메뉴가 여덟 칸이 되면서(홈페이지 제작 추가) 1100~1400px 화면에서 글자가 두 줄로 꺾였다.
+   메뉴 글자는 꺾지 않고, 이 폭에서는 칸 사이를 줄인다. */
+.nav > a, .nav__group > a { white-space: nowrap; }
+@media (max-width: 1400px) {
+  .hd__in { gap: 20px; }
+  .nav { gap: 0; }
+  .nav > a, .nav__group > a { padding: 0 10px; font-size: 14px; }
+  .nav > a::after, .nav__group > a::after { left: 10px; right: 10px; }
+}
