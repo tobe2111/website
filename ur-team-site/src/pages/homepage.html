@@ -12,7 +12,7 @@
     <!-- 업종을 고르면(또는 몇 초마다 저절로) 창 안의 실제 화면이 그 업종으로 바뀐다 -->
     <div class="hp-stage" data-hp-stage data-reveal="right" style="--i:2">
       <div class="hp-browser" aria-hidden="true">
-        <div class="hp-browser__bar"><i></i><i></i><i></i><span class="hp-browser__url" data-hp-url>bangbae-cafe.kr</span></div>
+        <div class="hp-browser__bar"><i></i><i></i><i></i><span class="hp-browser__url" data-hp-url>our-street.kr</span></div>
         <div class="hp-browser__view">
           <img class="is-on" data-hp-shot="merchant" src="/assets/img/hp/merchant-desk.webp" alt="" width="1280" height="800" fetchpriority="high">
           <img data-hp-shot="franchise" src="/assets/img/hp/franchise-desk.webp" alt="" width="1280" height="800" loading="lazy">
@@ -24,10 +24,11 @@
         <img data-hp-shot="franchise" src="/assets/img/hp/franchise-phone.webp" alt="" width="585" height="1266" loading="lazy">
         <img data-hp-shot="clinic" src="/assets/img/hp/clinic-phone.webp" alt="" width="585" height="1266" loading="lazy">
       </div>
+      <div class="hp-toast" data-hp-toast aria-hidden="true"><i class="hp-toast__dot"></i><div><b data-hp-toast-t>새 회원 가입 신청</b><small data-hp-toast-d>카페 · 방금 전</small></div><span class="hp-toast__n">오늘 <b data-hp-toast-n>3</b>건</span></div>
       <div class="hp-tabs" role="tablist" aria-label="업종별 예시 화면">
-        <button type="button" role="tab" aria-selected="true" data-hp-tab="merchant" data-url="bangbae-cafe.kr"><span>상인회</span><i class="hp-tabs__bar"></i></button>
-        <button type="button" role="tab" aria-selected="false" data-hp-tab="franchise" data-url="basak-chicken.co.kr"><span>가맹점 모집</span><i class="hp-tabs__bar"></i></button>
-        <button type="button" role="tab" aria-selected="false" data-hp-tab="clinic" data-url="cheonsaem-clinic.kr"><span>병원</span><i class="hp-tabs__bar"></i></button>
+        <button type="button" role="tab" aria-selected="true" data-hp-tab="merchant" data-url="our-street.kr" data-toast-t="새 회원 가입 신청" data-toast-d="카페 · 방금 전"><span>상인회</span><i class="hp-tabs__bar"></i></button>
+        <button type="button" role="tab" aria-selected="false" data-hp-tab="franchise" data-url="our-brand.co.kr" data-toast-t="새 가맹 상담 신청" data-toast-d="네이버 광고로 들어옴 · 방금 전"><span>가맹점 모집</span><i class="hp-tabs__bar"></i></button>
+        <button type="button" role="tab" aria-selected="false" data-hp-tab="clinic" data-url="our-clinic.kr" data-toast-t="새 진료 상담 문의" data-toast-d="허리 통증 · 방금 전"><span>병원</span><i class="hp-tabs__bar"></i></button>
       </div>
       <p class="hp-stage__note">실제로 만든 화면입니다. 이름과 내용은 예시입니다.</p>
     </div>
@@ -37,7 +38,7 @@
 <section class="sec sec--tight">
   <div class="wrap">
     <div class="nums nums--4" data-stagger>
-      <div><b>3<small>가지</small></b><span>업종별 틀 (상인회 · 가맹점 모집 · 병원)</span></div>
+      <div><b><span data-count="3">3</span><small>가지</small></b><span>업종별 틀 (상인회 · 가맹점 모집 · 병원)</span></div>
       <div><b>PC<small> · </small>폰</b><span>한 번 만들면 두 화면 모두</span></div>
       <div><b>매주</b><span>내용 전체 자동 백업</span></div>
       <div><b>언제든</b><span>해지 가능 · 위약금 없음</span></div>
@@ -54,7 +55,8 @@
     </div>
 
     <div class="hp-kind">
-      <div class="hp-kind__media" data-wipe><img src="/assets/img/hp/merchant-desk.webp" alt="상인회 홈페이지 예시 — 가입 점포 검색과 지금 문 연 가게" loading="lazy" width="1280" height="800"></div>
+      <div class="hp-kind__media" data-wipe><img src="/assets/img/hp/merchant-desk.webp" alt="상인회 홈페이지 예시 — 가입 점포 검색과 지금 문 연 가게" loading="lazy" width="1280" height="800">
+        <div class="hp-chip hp-chip--open" aria-hidden="true"><i class="hp-chip__live"></i><span>지금 문 연 가게</span><b><span data-count="17">17</span>곳</b></div></div>
       <div data-reveal="left">
         <span class="k">01 · 상인회 · 골목 상권</span>
         <h3 class="h3">우리 골목 가게를 한 곳에서 찾게</h3>
@@ -69,7 +71,9 @@
     </div>
 
     <div class="hp-kind hp-kind--flip">
-      <div class="hp-kind__media" data-wipe><img src="/assets/img/hp/franchise-desk.webp" alt="가맹점 모집 랜딩 예시 — 가맹 상담 신청" loading="lazy" width="1280" height="800"></div>
+      <div class="hp-kind__media" data-wipe><img src="/assets/img/hp/franchise-desk.webp" alt="가맹점 모집 랜딩 예시 — 가맹 상담 신청" loading="lazy" width="1280" height="800">
+        <div class="hp-chip hp-chip--bars" aria-hidden="true"><span>광고별 상담 신청</span>
+          <p><em>네이버</em><i style="--w:86%"></i></p><p><em>인스타</em><i style="--w:58%"></i></p><p><em>당근</em><i style="--w:34%"></i></p></div></div>
       <div data-reveal="right">
         <span class="k">02 · 프랜차이즈 · 가맹점 모집</span>
         <h3 class="h3">보고 나면 연락처를 남기는 한 장</h3>
@@ -84,7 +88,8 @@
     </div>
 
     <div class="hp-kind">
-      <div class="hp-kind__media" data-wipe><img src="/assets/img/hp/clinic-desk.webp" alt="병원 홈페이지 예시 — 오늘 진료 시간 막대" loading="lazy" width="1280" height="800"></div>
+      <div class="hp-kind__media" data-wipe><img src="/assets/img/hp/clinic-desk.webp" alt="병원 홈페이지 예시 — 오늘 진료 시간 막대" loading="lazy" width="1280" height="800">
+        <div class="hp-chip hp-chip--hours" aria-hidden="true"><span><i class="hp-chip__live"></i>지금 진료 중</span><div class="hp-chip__track"><i></i><i></i><b></b></div><small>9시 · · · 18시 30분</small></div></div>
       <div data-reveal="left">
         <span class="k">03 · 병원 · 의원</span>
         <h3 class="h3">"지금 진료하나요"에 첫 화면이 답하게</h3>
@@ -173,6 +178,14 @@
         <ul class="ticks"><li>진료 과목 · 의료진 · 칼럼 페이지</li><li>오늘 진료 시간 · 오시는 길</li><li>의료광고 표현 검사</li></ul>
       </article>
     </div>
+    <ol class="hp-months" data-reveal aria-label="결제 흐름 예시">
+      <li><b>카드 등록</b><small>제작비 + 1개월</small></li>
+      <li><b>2개월</b><small>자동 결제</small></li>
+      <li><b>3개월</b><small>자동 결제</small></li>
+      <li><b>4개월</b><small>자동 결제</small></li>
+      <li><b>5개월</b><small>자동 결제</small></li>
+      <li class="hp-months__end"><b>해지하면</b><small>다음 달부터 멈춤</small></li>
+    </ol>
     <div class="hp-pay" data-reveal>
       <b>결제 방법</b>
       <p>제작비와 첫 달 이용료는 카드를 등록할 때 한 번에 결제되고, 그 뒤로는 <strong>매달 같은 날</strong> 등록한 카드에서 월 이용료가 자동 결제됩니다(토스페이먼츠).

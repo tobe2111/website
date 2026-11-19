@@ -315,7 +315,8 @@
     const tabs = [...st.querySelectorAll("[data-hp-tab]")], url = st.querySelector("[data-hp-url]");
     const DUR = 5000;
     st.style.setProperty("--hp-dur", DUR / 1000 + "s");
-    let i = 0, timer = 0, paused = reduce;
+    const toast = st.querySelector("[data-hp-toast]");
+    let i = 0, timer = 0, paused = reduce, toastT = 0, count = 2;
     if (paused) st.classList.add("is-paused");
     const show = (n) => {
       i = (n + tabs.length) % tabs.length;
@@ -327,11 +328,22 @@
         im.classList.toggle("is-on", on);
       });
       if (url) url.textContent = tabs[i].dataset.url || "";
+      // 화면이 바뀌고 조금 뒤 "새 신청" 알림이 뜬다 — 문의가 쌓이는 홈페이지라는 뜻
+      if (toast) {
+        toast.classList.remove("is-show"); clearTimeout(toastT);
+        toastT = setTimeout(() => {
+          toast.querySelector("[data-hp-toast-t]").textContent = tabs[i].dataset.toastT || "";
+          toast.querySelector("[data-hp-toast-d]").textContent = tabs[i].dataset.toastD || "";
+          const n = toast.querySelector("[data-hp-toast-n]"); n.textContent = String(++count);
+          toast.classList.add("is-show");
+        }, reduce ? 0 : 1300);
+      }
     };
     const loop = () => { clearTimeout(timer); if (!paused) timer = setTimeout(() => { show(i + 1); loop(); }, DUR); };
     tabs.forEach((t, j) => t.addEventListener("click", () => { paused = true; st.classList.add("is-paused"); clearTimeout(timer); show(j); }));
     // 화면 밖에 있으면 돌리지 않는다
-    new IntersectionObserver(([en]) => { if (en.isIntersecting) loop(); else clearTimeout(timer); }).observe(st);
+    let first = true;
+    new IntersectionObserver(([en]) => { if (en.isIntersecting) { if (first) { first = false; show(0); } loop(); } else clearTimeout(timer); }).observe(st);
     // 다음 화면을 미리 받아 둔다(바뀔 때 빈 창이 보이지 않게)
     addEventListener("load", () => st.querySelectorAll('img[loading="lazy"]').forEach((im) => { im.loading = "eager"; }), { once: true });
   });
