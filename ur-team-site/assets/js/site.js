@@ -310,6 +310,56 @@
       }
     });
   });
+  // ── 홈페이지 제작: 창 안의 실제 화면을 업종별로 갈아 끼운다(5초마다, 누르면 그 업종에서 멈춤)
+  d.querySelectorAll("[data-hp-stage]").forEach((st) => {
+    const tabs = [...st.querySelectorAll("[data-hp-tab]")], url = st.querySelector("[data-hp-url]");
+    const DUR = 5000;
+    st.style.setProperty("--hp-dur", DUR / 1000 + "s");
+    let i = 0, timer = 0, paused = reduce;
+    if (paused) st.classList.add("is-paused");
+    const show = (n) => {
+      i = (n + tabs.length) % tabs.length;
+      const k = tabs[i].dataset.hpTab;
+      tabs.forEach((t, j) => t.setAttribute("aria-selected", String(j === i)));
+      st.querySelectorAll("[data-hp-shot]").forEach((im) => {
+        const on = im.dataset.hpShot === k;
+        if (on && im.loading === "lazy") im.loading = "eager";
+        im.classList.toggle("is-on", on);
+      });
+      if (url) url.textContent = tabs[i].dataset.url || "";
+    };
+    const loop = () => { clearTimeout(timer); if (!paused) timer = setTimeout(() => { show(i + 1); loop(); }, DUR); };
+    tabs.forEach((t, j) => t.addEventListener("click", () => { paused = true; st.classList.add("is-paused"); clearTimeout(timer); show(j); }));
+    // 화면 밖에 있으면 돌리지 않는다
+    new IntersectionObserver(([en]) => { if (en.isIntersecting) loop(); else clearTimeout(timer); }).observe(st);
+    // 다음 화면을 미리 받아 둔다(바뀔 때 빈 창이 보이지 않게)
+    addEventListener("load", () => st.querySelectorAll('img[loading="lazy"]').forEach((im) => { im.loading = "eager"; }), { once: true });
+  });
+
+  // ── 홈페이지 제작: 관리 화면에 글자를 치고 저장하면 홈페이지 공지가 바뀐다
+  d.querySelectorAll("[data-hp-demo]").forEach((box) => {
+    const typeEl = box.querySelector("[data-hp-type]"), out = box.querySelector("[data-hp-out]"), save = box.querySelector("[data-hp-save]");
+    const LINES = ["이번 주 토요일 골목 장터 열려요", "12월 진료 시간이 바뀝니다", "신메뉴 출시 기념 가맹 상담 이벤트"];
+    if (reduce) { typeEl.textContent = LINES[0]; out.textContent = LINES[0]; return; }
+    let n = 0, running = false, alive = false;
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const run = async () => {
+      if (running) return; running = true;
+      while (alive) {
+        const text = LINES[n++ % LINES.length];
+        typeEl.textContent = "";
+        for (const ch of text) { if (!alive) break; typeEl.textContent += ch; await wait(70); }
+        await wait(500);
+        save.classList.add("is-press"); await wait(160); save.classList.remove("is-press");
+        out.textContent = text; out.classList.add("is-new");
+        await wait(900); out.classList.remove("is-new");
+        await wait(1800);
+      }
+      running = false;
+    };
+    new IntersectionObserver(([en]) => { alive = en.isIntersecting; if (alive) run(); }, { threshold: 0.3 }).observe(box);
+  });
+
   function sessionStorageGet(k) { try { return sessionStorage.getItem("ut_" + k); } catch { return null; } }
   function sessionStorageSet(k, v) { try { sessionStorage.setItem("ut_" + k, v); } catch { /* 저장 못 해도 접수는 된다 */ } }
 })();
