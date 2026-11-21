@@ -1,0 +1,65 @@
+<!-- {"title": "Conversion tracking: how to put inquiries, calls and purchases into numbers", "date": "2025-02-25", "category": "Marketing insights", "summary": "Click counts alone cannot tell you which ad brought in customers. How to count inquiries, calls and purchases, and the order in which to set tracking up and check it.", "cover": "/assets/img/blog/conversion-tracking-basics-en-cover.webp"} -->
+<p>Conversion tracking records whether a person who saw your ad went on to inquire, call or buy. The counting point differs by action. An inquiry is counted at the submission confirmation page, a call by the number of taps on the call button, and a purchase at the payment confirmation page. Each is recorded together with the ad the person came from.</p>
+<p><strong>Key takeaways</strong></p>
+<ul>
+  <li>Unlike clicks, a conversion (the action the advertiser wants actually taking place) is only recorded if you set it up.</li>
+  <li>Inquiries, calls and purchases are counted at different points, so define them one by one.</li>
+  <li>Taps on a call button are not the same as actual calls. Check them against your call log.</li>
+  <li>After setup, submit a test inquiry and a test order yourself and confirm that each one is counted exactly once.</li>
+</ul>
+
+<h2>What do you miss without conversion tracking?</h2>
+<p>By default, an ad console shows only impressions and clicks. What a person did after clicking is recorded only if your website reports it.</p>
+<p>Say keyword A gets 1 inquiry from 100 clicks, and keyword B gets 5 inquiries from 30 clicks. Without conversion tracking, the screen shows only clicks, so A looks like the one doing the work. Budget shifts to A, and B, which was producing the inquiries, shrinks. Metrics such as click-through rate and conversion rate only mean something once you have conversion counts. We explain how to read them in <a href="/en/blog/2026-01-05-reading-ctr-cvr-roas/">our guide to reading CTR, CVR and ROAS</a>.</p>
+
+<h2>How do you count inquiries, calls and purchases?</h2>
+<table>
+  <thead><tr><th>Action</th><th>Counting point</th><th>Watch out for</th></tr></thead>
+  <tbody>
+    <tr><td>Inquiry form</td><td>Number of times the submission confirmation page opens</td><td>If you count presses of the "Send" button, you include submissions that failed because of input errors</td></tr>
+    <tr><td>Phone call</td><td>Number of taps on the call button on a mobile screen</td><td>Taps followed by an immediate hang-up are mixed in, and calls made after seeing the number on a PC are left out</td></tr>
+    <tr><td>Messenger and booking</td><td>Number of taps on the chat button, number of completed bookings</td><td>What happens after the visitor moves to an outside service has to be checked separately in that service's statistics</td></tr>
+    <tr><td>Purchase</td><td>Payment confirmation page, together with the order amount</td><td>Refreshing the confirmation page can count the order twice, and cancellations and refunds must be subtracted separately</td></tr>
+  </tbody>
+</table>
+<p>Actions that end outside your website have to be recorded by a person. Ask phone and walk-in customers "How did you hear about us?" and keep the answer as one column in your intake log. It may look like a chore, but it is often the only way to match the numbers on the screen with actual customer counts.</p>
+<p>Also decide how many times to count when the same person repeats the same action. The conversion settings of ad platforms usually offer two options: count every time the action happens, or count only once per ad click. Google Ads calls these "Every" and "One", and you can choose separately for each type of conversion. For purchases, each one brings revenue, so the first option fits. For inquiries, one person sending the form twice is still one customer, so the second fits. When you count every purchase, set tracking up to pass the order number as well. Then the same order is not counted twice even if the confirmation page is refreshed, because an order number that comes in again is treated as a duplicate and not counted. On the other hand, if the order number field is built so that it always carries the same value, only the first order is counted and the rest are dropped. When you test, confirm that a different number is passed for each order.</p>
+<p>Another option is to keep a phone number used only for ads. Calls to that number can be treated as coming from the ad, so the call log alone gives you the number of calls and their length. Google Ads splits call conversions three ways: calls made directly from an ad, calls to a phone number shown on your website, and taps on a phone number on your mobile website. Read reports with care for whether a figure is calls or taps.</p>
+
+<h2>How do you record which ad a visitor came from?</h2>
+<p>There are two main ways, and they are usually used together.</p>
+<ul>
+  <li><strong>The ad platform's conversion tracking feature</strong>: put the short piece of code the platform gives you on your website, and conversions by people who clicked that platform's ads show up in the ad console by keyword and by ad creative.</li>
+  <li><strong>An analytics tool and tags</strong>: add tags that state the traffic source (UTM parameters) to the end of your ad links, and a web analytics tool lets you compare different routes, such as search ads, blogs and text messages, on one screen.</li>
+</ul>
+<p>Keep in mind that each platform counts by its own rules. If one person sees ads on two platforms in turn and then inquires, both platforms may count it as their own result. So the sum of conversions across platforms often comes out higher than the actual number of inquiries received. The benchmark is always the actual number received. The names of settings menus and how they work can change, so check each platform's latest guidance before you start.</p>
+
+<h2>In what order should you set it up the first time?</h2>
+<ol>
+  <li><strong>Choose one or two conversions.</strong> Pick the actions closest to revenue. For a consultation-based business, that is form inquiries and calls. For an online store, it is completed payment.</li>
+  <li><strong>Create a confirmation page.</strong> If the form only shows a message in the same place after it is sent, change it so that it moves to a "Your inquiry has been received" page with its own address.</li>
+  <li><strong>Install the code.</strong> If this is hard to do yourself, pass the platform's installation guide to whoever built your website.</li>
+  <li><strong>Tag your ad links.</strong> Set naming rules at the start so the data can be grouped into tables later. Tags usually fill in three fields together: where the visit came from (source), what kind of route it is (medium), and which campaign. If even one field is empty, the visit is lumped under "(not set)" in the analytics screen. Analytics tools read uppercase and lowercase letters as different values, so use lowercase throughout, with no spaces.</li>
+  <li><strong>Test it yourself.</strong> Click an ad, submit an inquiry and tap the call button. Check whether one action is counted twice or not counted at all.</li>
+  <li><strong>Match against actual inquiries received.</strong> Once a week, put the conversion count on the screen next to the count in your log.</li>
+</ol>
+
+<h2>Common mistakes</h2>
+<ul>
+  <li>Treating button presses as the number of inquiries. Pressed and received are not the same thing.</li>
+  <li>Adding scrolls and time on page as conversions, so only the numbers grow. Keep actions far from revenue as reference metrics.</li>
+  <li>Mixing in visits from staff and the agency. Mark test inquiries and exclude them.</li>
+  <li>Finding out weeks later that the code went missing after a website update. Test again on the day of any redesign.</li>
+  <li>Blaming the ads when the landing page is what blocks inquiries. If clicks are high and conversions are absent, also see <a href="/en/blog/2025-05-07-landing-page-conversion-mistakes/">seven common landing page mistakes that waste ad spend</a>.</li>
+</ul>
+
+<h2>If you need someone to read the numbers with you</h2>
+<p>UrTeam runs <a href="/en/marketing/">marketing</a> that includes Naver Ads (the ad platform of Korea's largest search portal) and Google Ads, and shares metrics and next steps in regular reports. Because our goal is the client's net profit, not revenue, we look first at how many inquiries and purchases there actually were, before clicks. If your ads are running but you cannot tell what is producing inquiries, <a href="/en/contact/">send us an inquiry</a>.</p>
+
+<h2>Sources</h2>
+<ul class="sources">
+  <li><a href="https://support.google.com/google-ads/answer/1722022?hl=ko" target="_blank" rel="noopener nofollow">Google Ads Help, About conversion measurement (Korean)</a></li>
+  <li><a href="https://support.google.com/google-ads/answer/3438531?hl=ko" target="_blank" rel="noopener nofollow">Google Ads Help, About conversion counting options (Korean)</a></li>
+  <li><a href="https://support.google.com/google-ads/answer/6386790?hl=ko" target="_blank" rel="noopener nofollow">Google Ads Help, Use a transaction ID to minimize duplicate conversions (Korean)</a></li>
+  <li><a href="https://support.google.com/analytics/answer/10917952?hl=ko" target="_blank" rel="noopener nofollow">Analytics Help, URL builders: Collect campaign data with custom URLs (Korean)</a></li>
+</ul>

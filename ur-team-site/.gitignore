@@ -1,0 +1,4 @@
+dist/
+tools/.fonts/
+tools/decks/fonts/
+tools/decks/*.html
