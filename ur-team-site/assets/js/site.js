@@ -11,12 +11,14 @@
     needAgree: "Please agree to the collection and use of personal information.",
     off: "Online submissions are not open yet. Please reach us by KakaoTalk or phone.", sending: "Sending…",
     done: "Thank you. We received your request and will contact you within one business day.", fail: "Sending failed. Please try again, or reach us by KakaoTalk or phone.", submit: "Send",
+    fileBig: "The file is larger than {n}MB. Please paste a share link instead, or send it by KakaoTalk or email.",
   } : {
     menuOpen: "메뉴 열기", menuClose: "메뉴 닫기",
     needName: "업체명 · 담당자를 적어 주세요.", needPhone: "연락처를 적어 주세요.",
     needAgree: "개인정보 수집 · 이용에 동의해 주세요.",
     off: "지금은 온라인 접수 준비 중입니다. 카카오톡이나 전화로 문의해 주세요.", sending: "보내는 중…",
     done: "상담 신청이 접수되었습니다. 영업일 기준 1일 안에 연락드리겠습니다.", fail: "보내지 못했습니다. 다시 한 번 눌러 주시거나 카카오톡 · 전화로 문의해 주세요.", submit: "상담 신청하기",
+    fileBig: "첨부 파일이 {n}MB 를 넘습니다. 공유 링크를 붙여 주시거나 카카오톡 · 이메일로 보내 주세요.",
   };
 
   // ── 머리말: 어두운 첫 화면 위에서는 투명, 지나가면 흰 바탕. 빨리 내리면 숨고 올리면 나타난다
@@ -260,6 +262,10 @@
       }
       const agree = f.querySelector('[name="agree"]');
       if (agree && !agree.checked) { e.preventDefault(); say(L.needAgree, false); agree.focus(); return; }
+      // 첨부 파일(견적 문의): 메일 전달 서비스가 받는 크기를 넘으면 보내기 전에 알린다
+      const fileEl = f.querySelector('input[type="file"]'), picked = fileEl && fileEl.files && fileEl.files[0];
+      const maxMb = Number(fileEl?.dataset.maxMb) || 5;
+      if (picked && picked.size > maxMb * 1024 * 1024) { e.preventDefault(); say(L.fileBig.replace("{n}", maxMb), false); fileEl.focus(); return; }
       // 여러 칸(관심 분야 · URL · 문제점 · 강점 · 희망 채널)을 상담 내용 한 칸으로 묶는다
       const groups = new Map();
       f.querySelectorAll("[data-msg-part]").forEach((el) => {
@@ -281,9 +287,22 @@
       if (btn) { btn.disabled = true; btn.textContent = L.sending; }
       // 메일로 받을 때(FormSubmit): 페이지를 떠나지 않고 보내고, 여기서 접수 완료를 알린다
       if (/^https:\/\/formsubmit\.co\/ajax\//.test(f.action)) {
-        e.preventDefault();
         const v = (n) => (f.querySelector(`[name="${n}"]`)?.value || "").trim();
-        if (v("website")) { f.reset(); say(L.done, true); return; } // 사람 눈에 안 보이는 칸이 채워졌으면 스팸 로봇
+        if (v("website")) { e.preventDefault(); f.reset(); say(L.done, true); return; } // 사람 눈에 안 보이는 칸이 채워졌으면 스팸 로봇
+        // 파일이 붙었으면 JSON 으로는 못 보낸다 — 같은 서비스의 일반 접수 주소로 폼째 보내고(파일 포함), 끝나면 이 페이지로 돌아와 접수 완료를 알린다
+        if (picked) {
+          const hid = (n, val) => { let el = f.querySelector(`input[type="hidden"][name="${n}"]`); if (!el) { el = d.createElement("input"); el.type = "hidden"; el.name = n; f.appendChild(el); } el.value = val; };
+          const topic = (f.querySelector('input[type="hidden"][data-msg-part]')?.value || "").trim();
+          hid("_subject", `[유어팀 상담] ${topic ? topic + " · " : ""}${v("name")} (파일 첨부)`);
+          hid("_template", "box"); hid("_captcha", "false");
+          hid("_next", location.origin + location.pathname + "?sent=" + encodeURIComponent(L.done));
+          if (v("email")) hid("_replyto", v("email"));
+          f.querySelectorAll("input:not([type=file]), textarea").forEach((el) => { if (el.name && !el.value) el.disabled = true; }); // 빈 칸은 메일에 안 나오게
+          f.action = f.action.replace("/ajax/", "/");
+          f.enctype = "multipart/form-data";
+          return; // 브라우저가 폼을 그대로 보낸다
+        }
+        e.preventDefault();
         const utm = ["utm_source", "utm_medium", "utm_campaign"].map(v).filter(Boolean).join(" / ");
         // 메일은 대표님이 읽기 쉽게: 한국어 항목 이름, 빈 칸은 빼고, 중요한 것부터
         const KO = { "Areas of interest": "관심 분야", "Inquiry": "문의 내용", "Company URL": "회사 URL", "Marketing services": "마케팅 상품",
@@ -300,6 +319,8 @@
         const where = [location.pathname + (EN ? " (영어 페이지)" : ""), utm && "광고: " + utm, v("referrer") && "이전: " + v("referrer")].filter(Boolean).join(" · ");
         const data = { _subject: `[유어팀 상담] ${interest ? interest + " · " : ""}${v("name")}${EN ? " (영어)" : ""}`, _template: "box", _captcha: "false" };
         for (const [k, val] of rows) if (val) data[k] = val;
+        // 위 표에 없는 칸(견적 문의의 수량 · 크기 · 파일 링크 등)도 빠짐없이 싣는다
+        for (const [k, val] of part) if (val && !(k in data)) data[k] = val;
         data["접수 경로"] = where;
         if (v("email")) data._replyto = v("email");
         fetch(f.action, { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(data) })

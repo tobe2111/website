@@ -1897,3 +1897,63 @@ a.prod:hover b { color: var(--accent); }
   .nav > a, .nav__group > a { padding: 0 10px; font-size: 14px; }
   .nav > a::after, .nav__group > a::after { left: 10px; right: 10px; }
 }
+
+/* ── 3D프린팅 제작 (/3d-printing/) ──
+   첫 화면은 홈페이지 제작(.hp-hero)의 틀을 같이 쓰고, 오른쪽에 '한 층씩 쌓이는' 출력 그림을 둔다 */
+.p3-stage { position: relative; padding-bottom: 34px; }
+.p3-bed { border: 1px solid var(--line-2); border-radius: var(--r); background: #fff; box-shadow: 0 30px 60px -30px rgba(15, 18, 22, .35); overflow: hidden; }
+.p3-bed__bar { display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 14px; border-bottom: 1px solid var(--line); background: var(--bg-2); font-size: 12px; color: var(--muted); }
+.p3-bed__bar i { width: 8px; height: 8px; border-radius: 50%; background: #18a058; animation: hp-live 1.8s infinite; }
+.p3-bed__bar span { font-weight: 600; color: var(--ink-2); }
+.p3-bed__bar b { margin-left: auto; font-weight: 500; }
+.p3-print { display: block; width: 100%; height: auto; max-height: 420px; background: linear-gradient(var(--line) 1px, transparent 1px) 0 0 / 100% 32px, #fff; }
+.p3-layers rect { fill: var(--accent); animation: p3-layer 10s linear infinite both; animation-delay: calc(var(--i) * .2s); }
+.p3-layers rect:nth-child(even) { fill: #3a63ee; }
+.p3-nozzle { animation: p3-rise 10s linear infinite; }
+.p3-nozzle__x { fill: var(--ink); animation: p3-sweep .9s ease-in-out infinite alternate; }
+.p3-plate { fill: var(--ink); }
+.p3-plate--foot { fill: var(--line-2); }
+@keyframes p3-layer { 0% { opacity: 0; } 2%, 78% { opacity: 1; } 84%, 100% { opacity: 0; } }
+@keyframes p3-rise { 0% { transform: translateY(195px); } 60%, 80% { transform: translateY(-12px); } 90%, 100% { transform: translateY(195px); } }
+@keyframes p3-sweep { from { transform: translateX(-34px); } to { transform: translateX(34px); } }
+.p3-path { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--ink); margin-top: 20px; }
+.p3-path li { position: relative; padding: 14px 16px 0 0; }
+.p3-path li + li { padding-left: 16px; border-left: 1px solid var(--line); }
+.p3-path b { display: block; font-size: 15px; font-weight: 600; }
+.p3-path small { display: block; font-size: 13px; color: var(--muted); }
+.p3-svc { display: grid; grid-template-columns: repeat(2, 1fr); border-top: 1px solid var(--ink); background: #fff; }
+.p3-svc article { padding: 28px 32px 32px; border-bottom: 1px solid var(--line); }
+.p3-svc article:nth-child(odd) { border-right: 1px solid var(--line); }
+.p3-svc .k { display: block; font-size: 14px; font-weight: 600; color: var(--accent); margin-bottom: 10px; }
+.p3-svc p { margin-top: 10px; color: var(--muted); }
+.p3-own { display: grid; grid-template-columns: 5fr 7fr; gap: clamp(28px, 4vw, 72px); align-items: center; }
+.p3-own .lead { margin-top: 16px; }
+.p3-brands { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.p3-brand { display: grid; align-content: end; gap: 4px; min-height: 300px; padding: 28px; background: var(--dark); color: var(--on-dark); }
+.p3-brand--warm { background: #f3ede2; color: #2a2620; }
+.p3-brand small { font-size: 12px; font-weight: 600; letter-spacing: .04em; opacity: .7; margin-bottom: auto; align-self: start; }
+.p3-brand b { font-size: clamp(40px, 4.4vw, 60px); font-weight: 500; letter-spacing: -.04em; line-height: 1.1; }
+.p3-brand span { font-size: 15px; font-weight: 600; }
+.p3-brand p { margin-top: 10px; font-size: 14px; opacity: .78; }
+.p3-tip { display: grid; grid-template-columns: 64px 1fr; gap: 12px; padding: 16px 0; border-bottom: 1px solid var(--line); font-size: 15px; }
+.p3-tip b { color: var(--accent); }
+.p3-tip span { color: var(--muted); }
+.p3-hint, .p3-opt { font-weight: 400; font-size: 13px; color: var(--muted); }
+.p3-opt { margin-left: 8px; }
+.form input[type="file"] { padding: 10px 12px; min-height: 52px; cursor: pointer; }
+.form input[type="file"]::file-selector-button { margin-right: 12px; padding: 6px 14px; border: 1px solid var(--line-2); border-radius: var(--r); background: var(--bg-2); font: inherit; font-size: 14px; font-weight: 600; color: var(--ink); cursor: pointer; }
+@media (max-width: 960px) {
+  .p3-own { grid-template-columns: 1fr; }
+  .p3-stage { max-width: 560px; }
+}
+@media (max-width: 760px) {
+  .p3-svc { grid-template-columns: 1fr; }
+  .p3-svc article { padding: 22px 20px 24px; }
+  .p3-svc article:nth-child(odd) { border-right: 0; }
+  .p3-brands { grid-template-columns: 1fr; }
+  .p3-brand { min-height: 220px; }
+  .p3-print { max-height: 300px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .p3-layers rect, .p3-nozzle, .p3-nozzle__x, .p3-bed__bar i { animation: none; }
+}
