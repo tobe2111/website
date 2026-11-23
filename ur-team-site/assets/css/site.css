@@ -1899,28 +1899,14 @@ a.prod:hover b { color: var(--accent); }
 }
 
 /* ── 3D프린팅 제작 (/3d-printing/) ──
-   첫 화면은 홈페이지 제작(.hp-hero)의 틀을 같이 쓰고, 오른쪽에 '한 층씩 쌓이는' 출력 그림을 둔다 */
-.p3-stage { position: relative; padding-bottom: 34px; }
-.p3-bed { border: 1px solid var(--line-2); border-radius: var(--r); background: #fff; box-shadow: 0 30px 60px -30px rgba(15, 18, 22, .35); overflow: hidden; }
-.p3-bed__bar { display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 14px; border-bottom: 1px solid var(--line); background: var(--bg-2); font-size: 12px; color: var(--muted); }
-.p3-bed__bar i { width: 8px; height: 8px; border-radius: 50%; background: #18a058; animation: hp-live 1.8s infinite; }
-.p3-bed__bar span { font-weight: 600; color: var(--ink-2); }
-.p3-bed__bar b { margin-left: auto; font-weight: 500; }
-.p3-print { display: block; width: 100%; height: auto; max-height: 420px; background: linear-gradient(var(--line) 1px, transparent 1px) 0 0 / 100% 32px, #fff; }
-.p3-layers rect { fill: var(--accent); animation: p3-layer 10s linear infinite both; animation-delay: calc(var(--i) * .2s); }
-.p3-layers rect:nth-child(even) { fill: #3a63ee; }
-.p3-nozzle { animation: p3-rise 10s linear infinite; }
-.p3-nozzle__x { fill: var(--ink); animation: p3-sweep .9s ease-in-out infinite alternate; }
-.p3-plate { fill: var(--ink); }
-.p3-plate--foot { fill: var(--line-2); }
-@keyframes p3-layer { 0% { opacity: 0; } 2%, 78% { opacity: 1; } 84%, 100% { opacity: 0; } }
-@keyframes p3-rise { 0% { transform: translateY(195px); } 60%, 80% { transform: translateY(-12px); } 90%, 100% { transform: translateY(195px); } }
-@keyframes p3-sweep { from { transform: translateX(-34px); } to { transform: translateX(34px); } }
-.p3-path { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--ink); margin-top: 20px; }
-.p3-path li { position: relative; padding: 14px 16px 0 0; }
-.p3-path li + li { padding-left: 16px; border-left: 1px solid var(--line); }
-.p3-path b { display: block; font-size: 15px; font-weight: 600; }
-.p3-path small { display: block; font-size: 13px; color: var(--muted); }
+   첫 화면은 홈페이지 제작(.hp-hero)의 틀을 같이 쓰고, 오른쪽에 아득 · 온등 사진이 차례로 바뀐다 */
+.p3-reel { position: relative; aspect-ratio: 3 / 2; background: var(--dark); overflow: hidden; box-shadow: 0 30px 60px -30px rgba(15, 18, 22, .45); }
+.p3-reel figure { position: absolute; inset: 0; margin: 0; opacity: 0; animation: p3-reel 20s linear infinite both; animation-delay: calc(var(--i) * 5s); }
+.p3-reel img { width: 100%; height: 100%; object-fit: cover; display: block; animation: p3-zoom 20s linear infinite both; animation-delay: inherit; }
+.p3-reel figcaption { position: absolute; left: 0; right: 0; bottom: 0; padding: 48px 22px 18px; font-size: 14px; color: #e6e9ee; background: linear-gradient(transparent, rgba(8, 10, 14, .78)); }
+.p3-reel figcaption b { display: inline-block; margin-right: 10px; padding-right: 10px; border-right: 1px solid rgba(255, 255, 255, .4); font-weight: 600; color: #fff; }
+@keyframes p3-reel { 0% { opacity: 0; } 3%, 25% { opacity: 1; } 30%, 100% { opacity: 0; } }
+@keyframes p3-zoom { 0% { transform: scale(1); } 30%, 100% { transform: scale(1.07); } }
 .p3-svc { display: grid; grid-template-columns: repeat(2, 1fr); border-top: 1px solid var(--ink); background: #fff; }
 .p3-svc article { padding: 28px 32px 32px; border-bottom: 1px solid var(--line); }
 .p3-svc article:nth-child(odd) { border-right: 1px solid var(--line); }
@@ -1931,7 +1917,7 @@ a.prod:hover b { color: var(--accent); }
 .p3-view__in { display: grid; grid-template-columns: 5fr 7fr; gap: clamp(28px, 4vw, 72px); align-items: center; }
 .p3-view .lead { margin-top: 16px; color: var(--on-dark-2); }
 .p3-vtabs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 28px; }
-.p3-vtabs button { min-height: 42px; padding: 0 16px; border: 1px solid rgba(255, 255, 255, .28); border-radius: var(--r); background: none; color: var(--on-dark); font: inherit; font-size: 15px; font-weight: 500; cursor: pointer; transition: background .2s, color .2s, border-color .2s; }
+.p3-vtabs button { min-height: 38px; padding: 0 12px; border: 1px solid rgba(255, 255, 255, .28); border-radius: var(--r); background: none; color: var(--on-dark); font: inherit; font-size: 14px; font-weight: 500; cursor: pointer; transition: background .2s, color .2s, border-color .2s; }
 .p3-vtabs button:hover { border-color: #fff; }
 .p3-vtabs button[aria-selected="true"] { background: #fff; border-color: #fff; color: var(--ink); font-weight: 600; }
 .p3-view__hint { margin-top: 14px; font-size: 13px; color: var(--on-dark-2); }
@@ -1939,7 +1925,7 @@ a.prod:hover b { color: var(--accent); }
 .p3-viewer canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; touch-action: pan-y; opacity: 0; transition: opacity .5s; }
 .p3-viewer canvas:active { cursor: grabbing; }
 .p3-viewer.is-ready canvas { opacity: 1; }
-.p3-viewer__poster { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: .55; transition: opacity .5s; }
+.p3-viewer__poster { pointer-events: none; position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: .55; transition: opacity .5s; }
 .p3-viewer.is-ready .p3-viewer__poster { opacity: 0; }
 .p3-viewer__info { position: absolute; left: 20px; bottom: 18px; display: grid; gap: 2px; pointer-events: none; }
 .p3-viewer__info b { font-size: 18px; font-weight: 600; color: #fff; }
@@ -1963,6 +1949,11 @@ a.prod:hover b { color: var(--accent); }
 .p3-case .ticks { margin-top: 20px; font-size: 15px; gap: 8px; }
 .p3-case--adeuk .ticks li::before { background: #e8dfcc; }
 .p3-case--ondeung .ticks li::before { background: #b8711f; }
+.p3-shop { justify-self: start; margin-top: 26px; border: 1px solid currentColor; background: none; color: inherit; }
+.p3-shop:hover { background: rgba(127, 127, 127, .16); }
+.p3-shop.is-soon { cursor: default; opacity: .6; }
+.p3-shop.is-soon:hover { background: none; }
+.p3-shop small { margin-left: 8px; padding: 2px 7px; font-size: 12px; font-weight: 600; border: 1px solid currentColor; border-radius: 2px; }
 .p3-case__thumbs { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; }
 .p3-case__thumbs img { width: 100%; aspect-ratio: 3 / 2; object-fit: cover; display: block; }
 .p3-roll { margin-top: 24px; overflow: hidden; background: #15181b; padding: 20px 0; }
@@ -2015,7 +2006,6 @@ a.prod:hover b { color: var(--accent); }
 .form input[type="file"] { padding: 10px 12px; min-height: 52px; cursor: pointer; }
 .form input[type="file"]::file-selector-button { margin-right: 12px; padding: 6px 14px; border: 1px solid var(--line-2); border-radius: var(--r); background: var(--bg-2); font: inherit; font-size: 14px; font-weight: 600; color: var(--ink); cursor: pointer; }
 @media (max-width: 960px) {
-  .p3-stage { max-width: 560px; }
   .p3-view__in, .p3-fleet, .p3-class, .p3-flows { grid-template-columns: 1fr; }
   .p3-case, .p3-case--ondeung { grid-template-columns: 1fr; }
   .p3-case--ondeung .p3-case__main { order: -1; }
@@ -2026,7 +2016,6 @@ a.prod:hover b { color: var(--accent); }
   .p3-svc { grid-template-columns: 1fr; }
   .p3-svc article { padding: 22px 20px 24px; }
   .p3-svc article:nth-child(odd) { border-right: 0; }
-  .p3-print { max-height: 300px; }
   .p3-case__thumbs { grid-template-columns: 1fr 1fr; }
   .p3-roll figure, .p3-roll img { width: 150px; }
   .p3-roll img { height: 188px; }
@@ -2040,7 +2029,8 @@ a.prod:hover b { color: var(--accent); }
   .p3-dots { grid-template-columns: repeat(11, 1fr); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .p3-layers rect, .p3-nozzle, .p3-nozzle__x, .p3-bed__bar i, .p3-roll__track { animation: none; }
+  .p3-roll__track, .p3-reel figure, .p3-reel img { animation: none; }
+  .p3-reel figure:first-child { opacity: 1; }
   .p3-dots i { animation: none; background: var(--accent); }
   .p3-roll { overflow-x: auto; }
 }

@@ -38,6 +38,9 @@ const LANGS = {
 const T = (lang) => ({ ...site, ...(site.i18n?.[lang] || {}) });
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+const shopBtn = (url, name) => url
+  ? `<a class="btn p3-shop" href="${esc(url)}" target="_blank" rel="noopener">${name} 쇼핑몰 가기 <span aria-hidden="true">↗</span></a>`
+  : `<span class="btn p3-shop is-soon" aria-disabled="true">${name} 쇼핑몰 <small>준비 중</small></span>`;
 const xml = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const partial = (lang, name) => {
   const f = join(LANGS[lang].dir, "partials", name + ".html");
@@ -388,6 +391,9 @@ function renderRaw(raw, file, route, lang, post) {
       ? `<div class="cf-turnstile" data-sitekey="${esc(site.form.turnstileSiteKey)}" data-language="${lang}" data-theme="light"></div><script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>`
       : "",
     retention: String(site.form?.retentionDays || 365),
+    // 자체 브랜드 쇼핑몰 버튼: site.json 의 shops 에 주소를 넣으면 링크가 되고, 비어 있으면 '준비 중' 으로 보인다
+    adeukShop: shopBtn(site.shops?.adeuk, "아득"),
+    ondeungShop: shopBtn(site.shops?.ondeung, "온등"),
     blogList: blogList(lang),
   };
   const fill = (s) => s.replace(/\{\{(\w+)\}\}/g, (_, k) => vars[k] ?? t[k] ?? "");

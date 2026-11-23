@@ -8,6 +8,10 @@
   "email": "jiwon@ur-team.com",
   "kakao": "https://pf.kakao.com/_AITdn/chat",
   "urdeal": "https://urdeal.kr/",
+  "shops": {
+    "adeuk": "",
+    "ondeung": ""
+  },
   "org": {
     "legalName": "유어팀",
     "legalNameEn": "UrTeam",
