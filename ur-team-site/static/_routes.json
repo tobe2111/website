@@ -1,5 +1,28 @@
 {
   "version": 1,
   "include": ["/*"],
-  "exclude": ["/assets/*"]
+  "exclude": [
+    "/assets/*",
+    "/blog/*",
+    "/en/*",
+    "/marketing/*",
+    "/distribution/*",
+    "/export/*",
+    "/brochures/*",
+    "/cases/*",
+    "/contact/*",
+    "/glossary/*",
+    "/hospital/*",
+    "/kr/*",
+    "/home/*",
+    "/main/*",
+    "/homepage/*",
+    "/37/*",
+    "/product/*",
+    "/product-*",
+    "/favicon.ico",
+    "/llms.txt",
+    "/llms-full.txt",
+    "/sitemap.xml"
+  ]
 }
