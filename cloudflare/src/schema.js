@@ -951,12 +951,54 @@ CREATE TABLE IF NOT EXISTS landing_assets (
   created_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_landing_asset_assoc ON landing_assets(association_id, created_at);
+
+-- 월 구독 정기결제 (토스페이먼츠 자동결제). 조직당 한 줄.
+-- 운영사가 금액을 정하면 'offered' 로 생기고, 고객이 카드를 등록해 첫 결제가 되면 'active'.
+CREATE TABLE IF NOT EXISTS subscriptions (
+  association_id INTEGER PRIMARY KEY REFERENCES associations(id) ON DELETE CASCADE,
+  plan           TEXT NOT NULL DEFAULT 'basic',
+  monthly_amount INTEGER NOT NULL DEFAULT 0,       -- 매달 카드에서 빠지는 금액(부가세 포함)
+  setup_amount   INTEGER NOT NULL DEFAULT 0,       -- 초기 제작비(한 번). 0 = 없음 / 따로 받음
+  setup_paid_at  TEXT NOT NULL DEFAULT '',
+  status         TEXT NOT NULL DEFAULT 'offered',  -- offered|active|past_due|canceled|ended
+  customer_key   TEXT NOT NULL UNIQUE,             -- 토스에 보내는 고객 번호(무작위 — 이메일·전화 금지)
+  billing_key    TEXT NOT NULL DEFAULT '',         -- 잠근 빌링키(billing.js sealBillingKey)
+  card_label     TEXT NOT NULL DEFAULT '',
+  billing_day    INTEGER NOT NULL DEFAULT 0,
+  next_charge_on TEXT NOT NULL DEFAULT '',         -- 한국 날짜 YYYY-MM-DD
+  retry_on       TEXT NOT NULL DEFAULT '',
+  fail_count     INTEGER NOT NULL DEFAULT 0,
+  last_error     TEXT NOT NULL DEFAULT '',
+  started_at     TEXT NOT NULL DEFAULT '',
+  canceled_at    TEXT NOT NULL DEFAULT '',
+  created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_sub_due ON subscriptions(status, next_charge_on);
+
+-- 구독 결제 기록. 주문번호가 겹칠 수 없어서 같은 달을 두 번 빼지 못한다.
+CREATE TABLE IF NOT EXISTS billing_payments (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
+  order_id       TEXT NOT NULL UNIQUE,
+  kind           TEXT NOT NULL DEFAULT 'monthly',  -- monthly|setup+monthly
+  amount         INTEGER NOT NULL,
+  period         TEXT NOT NULL DEFAULT '',
+  order_name     TEXT NOT NULL DEFAULT '',
+  status         TEXT NOT NULL DEFAULT 'pending',  -- pending|done|failed|unknown
+  payment_key    TEXT NOT NULL DEFAULT '',
+  receipt_url    TEXT NOT NULL DEFAULT '',
+  error          TEXT NOT NULL DEFAULT '',
+  approved_at    TEXT NOT NULL DEFAULT '',
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_billpay_assoc ON billing_payments(association_id, id);
 `;
 
 // 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
 // 마이그레이션 세대 — migrateColumns 에 단계를 추가할 때마다 +1
 // 36 = 두 갈래(트렁크 33 · 모집형 35)를 합친 세대. 양쪽 DB 모두 다시 한 번 마이그레이션을 타게 한다.
-export const SCHEMA_VERSION = "56";
+export const SCHEMA_VERSION = "57";
 
 // ⚠️ 이 숫자를 올리는 걸 잊으면 **마이그레이션이 통째로 안 돈다.**
 //
@@ -1609,6 +1651,43 @@ async function migrateColumns(db) {
       await db.prepare(`ALTER TABLE associations ADD COLUMN ${col} TEXT NOT NULL DEFAULT ''`).run();
     }
   }
+
+  // v57: 월 구독 정기결제(토스 자동결제). 조직당 구독 한 줄 + 결제 기록.
+  await db.prepare(`CREATE TABLE IF NOT EXISTS subscriptions (
+  association_id INTEGER PRIMARY KEY REFERENCES associations(id) ON DELETE CASCADE,
+  plan           TEXT NOT NULL DEFAULT 'basic',
+  monthly_amount INTEGER NOT NULL DEFAULT 0,
+  setup_amount   INTEGER NOT NULL DEFAULT 0,
+  setup_paid_at  TEXT NOT NULL DEFAULT '',
+  status         TEXT NOT NULL DEFAULT 'offered',
+  customer_key   TEXT NOT NULL UNIQUE,
+  billing_key    TEXT NOT NULL DEFAULT '',
+  card_label     TEXT NOT NULL DEFAULT '',
+  billing_day    INTEGER NOT NULL DEFAULT 0,
+  next_charge_on TEXT NOT NULL DEFAULT '',
+  retry_on       TEXT NOT NULL DEFAULT '',
+  fail_count     INTEGER NOT NULL DEFAULT 0,
+  last_error     TEXT NOT NULL DEFAULT '',
+  started_at     TEXT NOT NULL DEFAULT '',
+  canceled_at    TEXT NOT NULL DEFAULT '',
+  created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at     TEXT NOT NULL DEFAULT (datetime('now')))`).run();
+  await db.prepare(`CREATE TABLE IF NOT EXISTS billing_payments (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  association_id INTEGER NOT NULL REFERENCES associations(id) ON DELETE CASCADE,
+  order_id       TEXT NOT NULL UNIQUE,
+  kind           TEXT NOT NULL DEFAULT 'monthly',
+  amount         INTEGER NOT NULL,
+  period         TEXT NOT NULL DEFAULT '',
+  order_name     TEXT NOT NULL DEFAULT '',
+  status         TEXT NOT NULL DEFAULT 'pending',
+  payment_key    TEXT NOT NULL DEFAULT '',
+  receipt_url    TEXT NOT NULL DEFAULT '',
+  error          TEXT NOT NULL DEFAULT '',
+  approved_at    TEXT NOT NULL DEFAULT '',
+  created_at     TEXT NOT NULL DEFAULT (datetime('now')))`).run();
+  await db.prepare("CREATE INDEX IF NOT EXISTS idx_sub_due ON subscriptions(status, next_charge_on)").run();
+  await db.prepare("CREATE INDEX IF NOT EXISTS idx_billpay_assoc ON billing_payments(association_id, id)").run();
 
   await romanizeSlugs(db);
 

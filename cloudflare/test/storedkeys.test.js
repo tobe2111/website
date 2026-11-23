@@ -50,7 +50,7 @@ test("콘솔에 붙여넣은 카카오 열쇠가 저장되고, 화면에는 앞 
   const k = stubKakao(200);
   try {
     const before = await (await s.f("/super", { headers: { cookie: s.cookie } })).text();
-    assert.match(before, /지도 열쇠 넷은 아래 칸에/);
+    assert.match(before, /열쇠는 아래 칸에 붙여넣으면/);
     assert.match(before, /name="KAKAO_REST_KEY"/);
     const r = await s.post("/super/keys", { KAKAO_REST_KEY: ` ${KEY}\n` });
     assert.equal(r.status, 303);
@@ -65,7 +65,7 @@ test("콘솔에 붙여넣은 카카오 열쇠가 저장되고, 화면에는 앞 
     assert.ok(!after.includes(KEY), "열쇠 전체는 화면에 다시 보이지 않는다");
     // '있으면 좋은 것' 이 켜짐으로 센다
     const at = after.indexOf("있으면 좋은 것");
-    assert.match(after.slice(at, at + 200), /1\/6 켜짐/);
+    assert.match(after.slice(at, at + 200), /1\/7 켜짐/);
   } finally { k.restore(); }
 });
 
