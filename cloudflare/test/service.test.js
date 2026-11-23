@@ -56,3 +56,11 @@ test("전용 도메인으로 들어오면 첫 화면이 이 사이트다 — 다
   assert.match(h, /유어팀<span[^>]*>홈페이지/);
   assert.match(h, /사업장 소재지/);
 });
+
+test("가격이 정해진 금액으로 적혀 있다 — 빈칸(○○)이 없다", async () => {
+  const env = await ready();
+  const h = await (await go(env, "https://example.com/service")).text();
+  assert.ok(!h.includes("○○</b>"), "가격 빈칸이 남아 있다");
+  assert.equal((h.match(/<b>990,000<\/b>원/g) || []).length, 3, "초기 제작비 990,000원이 업종 셋에");
+  assert.equal((h.match(/<b>15,000<\/b>원/g) || []).length, 3, "월 이용료 15,000원이 업종 셋에");
+});
