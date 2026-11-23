@@ -1898,6 +1898,146 @@ a.prod:hover b { color: var(--accent); }
   .nav > a::after, .nav__group > a::after { left: 10px; right: 10px; }
 }
 
+/* ── 3D프린팅 제작 (/3d-printing/) ──
+   첫 화면은 홈페이지 제작(.hp-hero)의 틀을 같이 쓰고, 오른쪽에 아득 · 온등 사진이 차례로 바뀐다 */
+.p3-reel { position: relative; aspect-ratio: 3 / 2; background: var(--dark); overflow: hidden; box-shadow: 0 30px 60px -30px rgba(15, 18, 22, .45); }
+.p3-reel figure { position: absolute; inset: 0; margin: 0; opacity: 0; animation: p3-reel 20s linear infinite both; animation-delay: calc(var(--i) * 5s); }
+.p3-reel img { width: 100%; height: 100%; object-fit: cover; display: block; animation: p3-zoom 20s linear infinite both; animation-delay: inherit; }
+.p3-reel figcaption { position: absolute; left: 0; right: 0; bottom: 0; padding: 48px 22px 18px; font-size: 14px; color: #e6e9ee; background: linear-gradient(transparent, rgba(8, 10, 14, .78)); }
+.p3-reel figcaption b { display: inline-block; margin-right: 10px; padding-right: 10px; border-right: 1px solid rgba(255, 255, 255, .4); font-weight: 600; color: #fff; }
+@keyframes p3-reel { 0% { opacity: 0; } 3%, 25% { opacity: 1; } 30%, 100% { opacity: 0; } }
+@keyframes p3-zoom { 0% { transform: scale(1); } 30%, 100% { transform: scale(1.07); } }
+.p3-svc { display: grid; grid-template-columns: repeat(2, 1fr); border-top: 1px solid var(--ink); background: #fff; }
+.p3-svc article { padding: 28px 32px 32px; border-bottom: 1px solid var(--line); }
+.p3-svc article:nth-child(odd) { border-right: 1px solid var(--line); }
+.p3-svc .k { display: block; font-size: 14px; font-weight: 600; color: var(--accent); margin-bottom: 10px; }
+.p3-svc p { margin-top: 10px; color: var(--muted); }
+.p3-svc a { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; white-space: nowrap; }
+/* 3D 뷰어: 어두운 전시실 위에서 모델이 천천히 돈다 */
+.p3-view__in { display: grid; grid-template-columns: 5fr 7fr; gap: clamp(28px, 4vw, 72px); align-items: center; }
+.p3-view .lead { margin-top: 16px; color: var(--on-dark-2); }
+.p3-vtabs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 28px; }
+.p3-vtabs button { min-height: 38px; padding: 0 12px; border: 1px solid rgba(255, 255, 255, .28); border-radius: var(--r); background: none; color: var(--on-dark); font: inherit; font-size: 14px; font-weight: 500; cursor: pointer; transition: background .2s, color .2s, border-color .2s; }
+.p3-vtabs button:hover { border-color: #fff; }
+.p3-vtabs button[aria-selected="true"] { background: #fff; border-color: #fff; color: var(--ink); font-weight: 600; }
+.p3-view__hint { margin-top: 14px; font-size: 13px; color: var(--on-dark-2); }
+.p3-viewer { position: relative; aspect-ratio: 4 / 3; background: radial-gradient(70% 60% at 50% 42%, #2a2f38, #12151a 78%); border: 1px solid rgba(255, 255, 255, .12); overflow: hidden; }
+.p3-viewer canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; touch-action: pan-y; opacity: 0; transition: opacity .5s; }
+.p3-viewer canvas:active { cursor: grabbing; }
+.p3-viewer.is-ready canvas { opacity: 1; }
+.p3-viewer__poster { pointer-events: none; position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: .55; transition: opacity .5s; }
+.p3-viewer.is-ready .p3-viewer__poster { opacity: 0; }
+.p3-viewer__info { position: absolute; left: 20px; bottom: 18px; display: grid; gap: 2px; pointer-events: none; }
+.p3-viewer__info b { font-size: 18px; font-weight: 600; color: #fff; }
+.p3-viewer__info small { font-size: 13px; color: var(--on-dark-2); }
+.p3-viewer__load { position: absolute; right: 20px; bottom: 18px; font-size: 13px; color: var(--on-dark-2); }
+.p3-viewer.is-ready .p3-viewer__load, .p3-viewer.is-off .p3-viewer__load { display: none; }
+.p3-viewer.is-off .p3-viewer__poster { opacity: 1; }
+/* 자체 브랜드: 아득(어두운 전시실) · 온등(따뜻한 크림) */
+.p3-brandsec { overflow: hidden; }
+.p3-case { display: grid; grid-template-columns: 7fr 5fr; gap: 0; margin-top: 24px; }
+.p3-case--ondeung { grid-template-columns: 5fr 7fr; }
+.p3-case__main { position: relative; min-height: 360px; }
+.p3-case__main img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.p3-case__tx { padding: clamp(28px, 3.4vw, 52px); display: grid; align-content: center; }
+.p3-case--adeuk .p3-case__tx { background: var(--dark); color: var(--on-dark); }
+.p3-case--ondeung .p3-case__tx { background: #f7f1e6; color: #2a2622; }
+.p3-case__logo { width: 132px; height: auto; margin-bottom: 22px; }
+.p3-case__logo--wide { width: 200px; margin-left: -10px; }
+.p3-case .k { display: block; font-size: 13px; font-weight: 600; margin-bottom: 10px; opacity: .72; }
+.p3-case p { margin-top: 12px; opacity: .82; }
+.p3-case .ticks { margin-top: 20px; font-size: 15px; gap: 8px; }
+.p3-case--adeuk .ticks li::before { background: #e8dfcc; }
+.p3-case--ondeung .ticks li::before { background: #b8711f; }
+.p3-shop { justify-self: start; margin-top: 26px; border: 1px solid currentColor; background: none; color: inherit; }
+.p3-shop:hover { background: rgba(127, 127, 127, .16); }
+.p3-shop.is-soon { cursor: default; opacity: .6; }
+.p3-shop.is-soon:hover { background: none; }
+.p3-shop small { margin-left: 8px; padding: 2px 7px; font-size: 12px; font-weight: 600; border: 1px solid currentColor; border-radius: 2px; }
+.p3-case__thumbs { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; }
+.p3-case__thumbs img { width: 100%; aspect-ratio: 3 / 2; object-fit: cover; display: block; }
+.p3-roll { margin-top: 24px; overflow: hidden; background: #15181b; padding: 20px 0; }
+.p3-roll__track { display: flex; gap: 16px; width: max-content; animation: p3-roll 70s linear infinite; }
+.p3-roll:hover .p3-roll__track { animation-play-state: paused; }
+.p3-roll figure { margin: 0; width: 200px; flex: none; }
+.p3-roll img { width: 200px; height: 250px; object-fit: cover; display: block; }
+.p3-roll figcaption { margin-top: 8px; font-size: 13px; color: #b4bbc5; }
+@keyframes p3-roll { to { transform: translateX(calc(-50% - 8px)); } }
+.p3-copy { margin-top: 20px; padding: 16px 20px; border: 1px solid var(--line-2); border-left: 3px solid var(--ink); background: var(--bg-2); font-size: 14px; color: var(--ink-2); }
+.p3-copy b { display: block; margin-bottom: 4px; color: var(--ink); }
+.p3-copy small { display: block; margin-top: 6px; font-size: 13px; color: var(--muted); }
+.p3-view__copy { margin-top: 6px; opacity: .8; }
+.p3-viewer__mark { position: absolute; right: 16px; top: 14px; font-size: 12px; color: rgba(255, 255, 255, .5); pointer-events: none; }
+/* 장비: 프린터 41대가 차례로 켜지는 점판 + 장비 표 */
+.p3-fleet { display: grid; grid-template-columns: 5fr 7fr; gap: clamp(28px, 4vw, 72px); align-items: center; }
+.p3-fleet .lead { margin-top: 16px; }
+.p3-dots { display: grid; grid-template-columns: repeat(14, 1fr); gap: 6px; max-width: 420px; margin-top: 28px; }
+.p3-dots i { aspect-ratio: 1; background: var(--line-2); animation: p3-dot 6s linear infinite both; animation-delay: calc(var(--i) * .09s); }
+@keyframes p3-dot { 0% { background: var(--line-2); } 4%, 70% { background: var(--accent); } 78%, 100% { background: var(--line-2); } }
+.p3-dots__cap { margin-top: 10px; font-size: 13px; color: var(--muted); }
+.p3-table { background: #fff; border-top: 1px solid var(--ink); }
+.p3-table > div { display: grid; grid-template-columns: 1.1fr 1.5fr 1fr; gap: 16px; padding: 16px 20px; border-bottom: 1px solid var(--line); font-size: 15px; align-items: center; }
+.p3-table__head { font-size: 13px !important; font-weight: 600; color: var(--muted); padding-top: 12px !important; padding-bottom: 12px !important; }
+.p3-table b { font-weight: 600; }
+.p3-table b small { margin-left: 6px; padding: 2px 6px; font-size: 11px; font-weight: 600; color: var(--accent); border: 1px solid currentColor; border-radius: 2px; vertical-align: 1px; }
+.p3-table > div > span { color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.p3-table__note { padding: 16px 20px 20px; font-size: 14px; color: var(--muted); }
+/* 진행 순서: 모델링 · 프린팅 두 줄 */
+.p3-flows { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(28px, 4vw, 64px); }
+.p3-flow ol { list-style: none; margin: 18px 0 0; padding: 0; counter-reset: p3; border-top: 1px solid var(--ink); }
+.p3-flow li { counter-increment: p3; display: grid; grid-template-columns: 44px 150px 1fr; gap: 8px; align-items: baseline; padding: 15px 0; border-bottom: 1px solid var(--line); }
+.p3-flow li::before { content: "0" counter(p3); font-size: 14px; font-weight: 600; color: var(--accent); font-variant-numeric: tabular-nums; }
+.p3-flow li b { font-weight: 600; }
+.p3-flow li span { color: var(--muted); font-size: 15px; }
+/* 강의 */
+.p3-class { display: grid; grid-template-columns: 5fr 7fr; gap: clamp(28px, 4vw, 72px); align-items: center; }
+.p3-class .lead { margin-top: 16px; }
+.p3-lessons { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--ink); }
+.p3-lessons article { padding: 24px 24px 28px 0; border-bottom: 1px solid var(--line); }
+.p3-lessons article:nth-child(even) { padding-left: 24px; border-left: 1px solid var(--line); }
+.p3-lessons i { display: block; font-style: normal; font-size: 14px; font-weight: 600; color: var(--accent); margin-bottom: 10px; }
+.p3-lessons h3 { font-size: 19px; font-weight: 600; letter-spacing: -.02em; }
+.p3-lessons p { margin-top: 8px; color: var(--muted); font-size: 15px; }
+.p3-notes { display: grid; grid-template-columns: repeat(4, 1fr); gap: clamp(20px, 2.4vw, 36px); }
+.p3-notes > div { padding-top: 16px; border-top: 1px solid var(--ink); }
+.p3-notes b { font-size: 15px; }
+.p3-notes p { margin-top: 6px; font-size: 14px; color: var(--muted); }
+.p3-tip { display: grid; grid-template-columns: 76px 1fr; gap: 12px; padding: 16px 0; border-bottom: 1px solid var(--line); font-size: 15px; }
+.p3-tip b { color: var(--accent); }
+.p3-tip span { color: var(--muted); }
+.p3-hint, .p3-opt { font-weight: 400; font-size: 13px; color: var(--muted); }
+.p3-opt { margin-left: 8px; }
+.form input[type="file"] { padding: 10px 12px; min-height: 52px; cursor: pointer; }
+.form input[type="file"]::file-selector-button { margin-right: 12px; padding: 6px 14px; border: 1px solid var(--line-2); border-radius: var(--r); background: var(--bg-2); font: inherit; font-size: 14px; font-weight: 600; color: var(--ink); cursor: pointer; }
+@media (max-width: 960px) {
+  .p3-view__in, .p3-fleet, .p3-class, .p3-flows { grid-template-columns: 1fr; }
+  .p3-case, .p3-case--ondeung { grid-template-columns: 1fr; }
+  .p3-case--ondeung .p3-case__main { order: -1; }
+  .p3-case__main { min-height: 0; }
+  .p3-notes { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 760px) {
+  .p3-svc { grid-template-columns: 1fr; }
+  .p3-svc article { padding: 22px 20px 24px; }
+  .p3-svc article:nth-child(odd) { border-right: 0; }
+  .p3-case__thumbs { grid-template-columns: 1fr 1fr; }
+  .p3-roll figure, .p3-roll img { width: 150px; }
+  .p3-roll img { height: 188px; }
+  .p3-table > div { grid-template-columns: 1fr 1fr; gap: 4px 12px; padding: 14px 16px; }
+  .p3-table > div > :first-child { grid-column: 1 / -1; }
+  .p3-table__head { display: none !important; }
+  .p3-flow li { grid-template-columns: 36px 1fr; }
+  .p3-flow li span { grid-column: 2; }
+  .p3-lessons { grid-template-columns: 1fr; }
+  .p3-lessons article:nth-child(even) { padding-left: 0; border-left: 0; }
+  .p3-dots { grid-template-columns: repeat(11, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .p3-roll__track, .p3-reel figure, .p3-reel img { animation: none; }
+  .p3-reel figure:first-child { opacity: 1; }
+  .p3-dots i { animation: none; background: var(--accent); }
+  .p3-roll { overflow-x: auto; }
+}
 /* ── 유통 · 수출 한 페이지: 첫 화면(왼쪽 글 + 오른쪽 두 문 카드) + 붙어 다니는 탭 줄 */
 .bx-hero { align-items: center; min-height: 0; padding-bottom: clamp(48px, 6vw, 88px);
   background: radial-gradient(900px 480px at 85% 20%, rgba(23,71,230,.28), transparent 60%), radial-gradient(700px 420px at 0% 100%, rgba(23,71,230,.14), transparent 60%), var(--dark); }
