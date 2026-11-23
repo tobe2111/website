@@ -1994,6 +1994,34 @@ a.prod:hover b { color: var(--accent); }
 .p3-table b small { margin-left: 6px; padding: 2px 6px; font-size: 11px; font-weight: 600; color: var(--accent); border: 1px solid currentColor; border-radius: 2px; vertical-align: 1px; }
 .p3-table > div > span { color: var(--ink-2); font-variant-numeric: tabular-nums; }
 .p3-table__note { padding: 16px 20px 20px; font-size: 14px; color: var(--muted); }
+/* 처음 맡기는 분께: 방식 비교 · 재료 · 도면 팁 (직접 그린 설명 그림) */
+.p3-gh { margin: clamp(36px, 4vw, 56px) 0 18px; }
+.p3-gh:first-of-type { margin-top: 0; }
+.p3-vs { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.p3-vs article { padding: 28px; border: 1px solid var(--line); background: var(--bg-2); }
+.p3-vs svg { width: 100%; max-width: 240px; height: auto; display: block; margin-bottom: 18px; color: var(--ink); }
+.p3-vs .k { font-size: 13px; font-weight: 700; color: var(--accent); }
+.p3-vs h4 { margin-top: 4px; font-size: 19px; font-weight: 600; letter-spacing: -.02em; }
+.p3-vs dl { margin: 18px 0 0; display: grid; }
+.p3-vs dl div { display: grid; grid-template-columns: 64px 1fr; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); font-size: 15px; }
+.p3-vs dt { color: var(--muted); }
+.p3-vs dd { margin: 0; }
+.p3-vs__new { animation: p3-grow 2.4s ease-in-out infinite; transform-origin: 60px 80px; }
+.p3-vs__beam { animation: p3-beam 1.2s linear infinite; }
+@keyframes p3-grow { 0% { transform: scaleX(.1); } 70%, 100% { transform: scaleX(1.72); } }
+@keyframes p3-beam { to { stroke-dashoffset: -18; } }
+.p3-mats { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--ink); }
+.p3-mats article { padding: 22px 22px 24px 0; }
+.p3-mats article + article { padding-left: 22px; border-left: 1px solid var(--line); }
+.p3-mats i { display: block; width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--line-2); margin-bottom: 14px; }
+.p3-mats b { font-size: 17px; font-weight: 600; }
+.p3-mats p { margin-top: 6px; font-size: 15px; color: var(--muted); }
+.p3-tips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.p3-tips article { padding: 24px; border: 1px solid var(--line); }
+.p3-tips svg { width: 100%; max-width: 200px; height: auto; display: block; margin-bottom: 14px; color: var(--ink); }
+.p3-tips b { font-size: 17px; font-weight: 600; }
+.p3-tips p { margin-top: 6px; font-size: 15px; color: var(--muted); }
+.p3-gnote { margin-top: 18px; font-size: 14px; color: var(--muted); }
 /* 진행 순서: 모델링 · 프린팅 두 줄 */
 .p3-flows { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(28px, 4vw, 64px); }
 .p3-flow ol { list-style: none; margin: 18px 0 0; padding: 0; counter-reset: p3; border-top: 1px solid var(--ink); }
@@ -2031,6 +2059,9 @@ a.prod:hover b { color: var(--accent); }
   .p3-notes { grid-template-columns: 1fr 1fr; }
 }
 @media (max-width: 760px) {
+  .p3-vs, .p3-tips { grid-template-columns: 1fr; }
+  .p3-mats { grid-template-columns: 1fr 1fr; }
+  .p3-mats article, .p3-mats article + article { padding: 18px 12px 18px 0; border-left: 0; border-bottom: 1px solid var(--line); }
   .p3-top__nums { grid-template-columns: 1fr 1fr; }
   .p3-top__nums > div { padding: 16px 12px 18px 0; }
   .p3-top__nums > div:nth-child(odd) { padding-left: 0; }
@@ -2052,7 +2083,8 @@ a.prod:hover b { color: var(--accent); }
   .p3-dots { grid-template-columns: repeat(11, 1fr); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .p3-roll__track { animation: none; }
+  .p3-roll__track, .p3-vs__new, .p3-vs__beam { animation: none; }
+  .p3-vs__new { transform: scaleX(1.72); }
   .p3-dots i { animation: none; background: var(--accent); }
   .p3-roll { overflow-x: auto; }
 }
@@ -2107,5 +2139,7 @@ a.prod:hover b { color: var(--accent); }
 }
 @media (prefers-reduced-motion: reduce) { .bx-door, .bx-door:hover { transform: none; } }
 @media (min-width: 861px) { .hero__idx--2 { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 861px) { .hero__idx--4 { grid-template-columns: repeat(4, 1fr); } .hero__idx--4 a { padding-right: 16px; } .hero__idx--4 a + a { padding-left: 16px; } }
+@media (min-width: 861px) and (max-width: 1180px) { .hero__idx--4 { grid-template-columns: repeat(2, 1fr); } .hero__idx--4 a:nth-child(3) { padding-left: 0; border-left: 0; } .hero__idx--4 a:nth-child(n+3) { border-top: 1px solid rgba(255, 255, 255, .22); } }
 .bx-tabs { transition: top .35s var(--ease); background: #fff; box-shadow: 0 6px 18px rgba(15,25,50,.06); }
 .hd.is-hidden ~ main .bx-tabs { top: 0; }
