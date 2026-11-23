@@ -2107,3 +2107,5 @@ a.prod:hover b { color: var(--accent); }
 }
 @media (prefers-reduced-motion: reduce) { .bx-door, .bx-door:hover { transform: none; } }
 @media (min-width: 861px) { .hero__idx--2 { grid-template-columns: repeat(2, 1fr); } }
+.bx-tabs { transition: top .35s var(--ease); background: #fff; box-shadow: 0 6px 18px rgba(15,25,50,.06); }
+.hd.is-hidden ~ main .bx-tabs { top: 0; }

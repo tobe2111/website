@@ -342,6 +342,12 @@ function renderRaw(raw, file, route, lang, post) {
   // <!--@ team --> 처럼 적으면 그 언어의 partials/team.html 을 끼워 넣는다
   // 관련 글은 상담 안내(공통 조각 또는 그 페이지가 직접 쓴 것) 바로 위에 놓는다
   const withTopic = (h) => {
+    // 한 페이지가 두 분야를 다루면 <!--@ topic 0 --> · <!--@ topic 1 --> 자리에 분야별 관련 글을 따로 둔다 (유통 · 수출의 탭 안)
+    if (/<!--@\s*topic\s+\d+\s*-->/.test(h)) {
+      const cfg = PAGE_TOPIC[route.path];
+      return h.replace(/<!--@\s*topic\s+(\d+)\s*-->/g, (m, n) =>
+        lang === "ko" && cfg && Array.isArray(cfg[0]) && cfg[+n] ? topicSection(cfg[+n], lang) : "");
+    }
     const add = topicPosts(route.path, lang);
     if (!add) return h;
     if (/<!--@\s*cta\s*-->/.test(h)) return h.replace(/<!--@\s*cta\s*-->/, (m) => add + m);
