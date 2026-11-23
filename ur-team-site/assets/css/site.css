@@ -1691,20 +1691,35 @@ a.prod:hover b { color: var(--accent); }
   .steps--compact .step b { font-size: 15px; }
 }
 
-/* ── 상품 타일: 실제 광고 화면 캡처 + 아래 글씨 칸 (AI 사진 대신) */
-.v2-tile { background: #eef1f5; }
-.v2-tile img { height: 62%; object-fit: cover; object-position: top center; }
-.v2-tile::after { display: none; }
-.v2-tile > div { top: 62%; background: #0e1320; align-content: center; }
-.v2-tile--big img { height: 70%; }
+/* ── 상품 타일: 밝은 카드 + 실제 광고 화면을 액자처럼 + 아래 글씨 (어두운 띠 대신) */
+.v2-bento { gap: 12px; }
+.v2-tile { background: var(--bg-2); color: var(--ink); border: 1px solid var(--line); border-radius: var(--r);
+  transition: transform .5s var(--ease), box-shadow .5s var(--ease), border-color .5s var(--ease), background .5s var(--ease); }
+.v2-tile img { left: 16px; right: 16px; top: 16px; width: calc(100% - 32px); height: calc(60% - 16px);
+  object-fit: cover; object-position: top center; border-radius: 3px; background: #fff;
+  box-shadow: 0 1px 2px rgba(15,25,50,.06), 0 8px 22px rgba(15,25,50,.10); }
+.v2-tile:hover { transform: translateY(-4px); background: #fff; border-color: var(--line-2); box-shadow: 0 18px 40px rgba(15,25,50,.12); }
+.v2-tile:hover img { transform: none; }
+.v2-tile > div { top: 60%; background: none; align-content: center; padding: 12px 52px 14px 20px; gap: 3px; }
+.v2-tile span { color: var(--accent); font-size: 13px; font-weight: 700; opacity: 1; letter-spacing: 0; }
+.v2-tile b { color: var(--ink); }
+.v2-tile small { color: var(--muted); opacity: 1; }
+.v2-tile::after { display: grid; place-items: center; content: "→"; inset: auto 16px 16px auto; width: 30px; height: 30px;
+  border-radius: 50%; background: #fff; border: 1px solid var(--line); color: var(--ink); font-size: 14px;
+  transition: background .4s var(--ease), color .4s var(--ease), transform .4s var(--ease); }
+.v2-tile:hover::after { background: var(--accent); border-color: var(--accent); color: #fff; transform: translateX(3px); }
+.v2-tile--big img { height: calc(70% - 16px); }
 .v2-tile--big > div { top: 70%; }
 .v2-tile--big b { font-size: 40px; }
 .v2-tile--big p { display: none; }
 @media (max-width: 860px) {
-  .v2-tile img { height: 55%; } .v2-tile > div { top: 55%; padding: 10px 14px; }
-  .v2-tile--big img { height: 66%; } .v2-tile--big > div { top: 66%; }
+  .v2-tile img { left: 10px; right: 10px; top: 10px; width: calc(100% - 20px); height: calc(55% - 10px); }
+  .v2-tile > div { top: 55%; padding: 8px 12px; }
+  .v2-tile--big img { height: calc(66% - 10px); } .v2-tile--big > div { top: 66%; }
   .v2-tile--big b { font-size: 30px; } .v2-tile b { font-size: 20px; } .v2-tile span { font-size: 12px; }
+  .v2-tile::after { display: none; }
 }
+@media (prefers-reduced-motion: reduce) { .v2-tile, .v2-tile:hover { transform: none; } }
 
 /* ── 첫 페이지 고민 구역: 사진 대신 '매출은 오르는데 순이익은 줄어드는' 예시 그래프 */
 .pains-chart svg { width: 100%; height: 100%; display: block; }

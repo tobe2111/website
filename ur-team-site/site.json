@@ -1,6 +1,6 @@
 {
   "name": "유어팀",
-  "fullTitle": "유어팀 U·Team | 국내 유통 · 해외 수출 · 마케팅 파트너",
+  "fullTitle": "유어팀 UrTeam | 국내 유통 · 해외 수출 · 마케팅 파트너",
   "description": "국내 매출과 해외 확장, 그리고 마케팅까지 한 팀이 설계합니다. 고객사의 순수익을 목표로 일하는 유어팀입니다.",
   "url": "https://ur-team.com",
   "ogImage": "/assets/img/og.jpg",
@@ -13,8 +13,7 @@
     "legalNameEn": "UrTeam",
     "alternateName": [
       "유어팀",
-      "UrTeam",
-      "U·Team"
+      "UrTeam"
     ],
     "ceo": "정지원",
     "ceoEn": "Jiwon Jung",
