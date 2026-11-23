@@ -1899,26 +1899,37 @@ a.prod:hover b { color: var(--accent); }
 }
 
 /* ── 3D프린팅 제작 (/3d-printing/) ──
-   첫 화면은 어두운 전시실: 오른쪽에서 3D 모델이 돌고, 아래에 숫자 네 칸 */
-.p3-top { display: block; min-height: 0; padding-bottom: 0; background: radial-gradient(58% 62% at 74% 40%, #26324d 0%, #131822 46%, var(--dark) 76%); }
-.p3-top::before { content: ""; position: absolute; inset: 0; z-index: -1; background: linear-gradient(rgba(255, 255, 255, .05) 1px, transparent 1px) 0 0 / 72px 72px, linear-gradient(90deg, rgba(255, 255, 255, .05) 1px, transparent 1px) 0 0 / 72px 72px; -webkit-mask-image: radial-gradient(65% 70% at 74% 40%, #000, transparent 78%); mask-image: radial-gradient(65% 70% at 74% 40%, #000, transparent 78%); }
-.p3-top__in { display: grid; grid-template-columns: 5fr 7fr; gap: clamp(16px, 2vw, 40px); align-items: center; }
-.p3-top .h1 em { font-style: normal; color: #a9bdff; }
-.p3-top__model { position: relative; aspect-ratio: 4 / 3; margin-right: calc(var(--gut) * -.5); }
-.p3-top__model canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; touch-action: pan-y; opacity: 0; transition: opacity .6s; }
-.p3-top__model canvas:active { cursor: grabbing; }
-.p3-top__model.is-ready canvas { opacity: 1; }
-.p3-top__model .p3-viewer__poster { opacity: .9; -webkit-mask-image: radial-gradient(60% 60% at 50% 50%, #000 40%, transparent 78%); mask-image: radial-gradient(60% 60% at 50% 50%, #000 40%, transparent 78%); }
-.p3-top__model.is-ready .p3-viewer__poster { opacity: 0; }
-.p3-top__tag { position: absolute; right: 8%; bottom: 6%; display: flex; align-items: center; gap: 10px; font-size: 13px; color: rgba(255, 255, 255, .7); pointer-events: none; }
-.p3-top__tag b { padding: 4px 9px; border: 1px solid rgba(255, 255, 255, .35); border-radius: 2px; font-weight: 600; color: #fff; }
-.p3-top__nums { display: grid; grid-template-columns: repeat(4, 1fr); margin-top: clamp(20px, 3vw, 44px); border-top: 1px solid rgba(255, 255, 255, .2); }
-.p3-top__nums > div { padding: 24px 24px 30px 0; border-right: 1px solid rgba(255, 255, 255, .12); }
-.p3-top__nums > div + div { padding-left: 24px; }
-.p3-top__nums > div:last-child { border-right: 0; }
-.p3-top__nums b { display: block; font-size: clamp(30px, 3vw, 42px); font-weight: 500; letter-spacing: -.04em; line-height: 1.05; font-variant-numeric: tabular-nums; }
-.p3-top__nums small { font-size: .42em; font-weight: 500; margin-left: 3px; letter-spacing: -.02em; }
-.p3-top__nums > div > span { display: block; margin-top: 8px; font-size: 14px; color: rgba(255, 255, 255, .68); }
+   첫 화면은 밝은 도면 바탕: 오른쪽 '출력 미리보기' 창에서 부품이 한 층씩 쌓이고, 아래에 제작 분야 사진 세 장 */
+.p3-top { position: relative; padding: calc(var(--hd) + clamp(36px, 5vw, 72px)) 0 clamp(40px, 5vw, 72px); background: linear-gradient(rgba(23, 71, 230, .055) 1px, transparent 1px) 0 0 / 24px 24px, linear-gradient(90deg, rgba(23, 71, 230, .055) 1px, transparent 1px) 0 0 / 24px 24px, linear-gradient(rgba(23, 71, 230, .09) 1px, transparent 1px) 0 0 / 120px 120px, linear-gradient(90deg, rgba(23, 71, 230, .09) 1px, transparent 1px) 0 0 / 120px 120px, #f6f8fc; border-bottom: 1px solid var(--line); }
+.p3-top__in { display: grid; grid-template-columns: 6fr 6fr; gap: clamp(28px, 4vw, 72px); align-items: center; }
+.p3-top .lead { margin-top: 20px; max-width: 34em; }
+.p3-top .btns { margin-top: 30px; }
+.p3-spec { list-style: none; margin: 30px 0 0; padding: 0; display: grid; grid-template-columns: repeat(4, auto); justify-content: start; border-top: 1px solid var(--ink); }
+.p3-spec li { padding: 14px 22px 0 0; }
+.p3-spec li + li { padding-left: 22px; border-left: 1px solid var(--line-2); }
+.p3-spec b { display: block; font-size: clamp(20px, 2vw, 26px); font-weight: 600; letter-spacing: -.03em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.p3-spec li > span { display: block; margin-top: 2px; font-size: 13px; color: var(--muted); white-space: nowrap; }
+.p3-slicer { background: #fff; border: 1px solid var(--line-2); border-radius: var(--r); box-shadow: 0 30px 60px -34px rgba(15, 18, 22, .4); overflow: hidden; }
+.p3-slicer__bar { display: flex; align-items: center; gap: 6px; height: 38px; padding: 0 14px; border-bottom: 1px solid var(--line); background: var(--bg-2); font-size: 12px; color: var(--muted); }
+.p3-slicer__bar i { width: 9px; height: 9px; border-radius: 50%; background: var(--line-2); }
+.p3-slicer__bar span { margin-left: 8px; font-weight: 600; color: var(--ink-2); }
+.p3-slicer__bar b { margin-left: auto; font-weight: 500; }
+.p3-slicer__view { position: relative; aspect-ratio: 16 / 11; background: linear-gradient(var(--line) 1px, transparent 1px) 0 0 / 32px 32px, linear-gradient(90deg, var(--line) 1px, transparent 1px) 0 0 / 32px 32px, #fbfcfe; }
+.p3-slicer__view canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; touch-action: pan-y; opacity: 0; transition: opacity .5s; }
+.p3-slicer__view canvas:active { cursor: grabbing; }
+.p3-slicer__view.is-ready canvas { opacity: 1; }
+.p3-slicer__hint { position: absolute; right: 12px; bottom: 10px; font-size: 12px; color: var(--muted); pointer-events: none; }
+.p3-slicer__meta { margin: 0; display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--line); }
+.p3-slicer__meta div { padding: 12px 14px; }
+.p3-slicer__meta div + div { border-left: 1px solid var(--line); }
+.p3-slicer__meta dt { font-size: 12px; color: var(--muted); }
+.p3-slicer__meta dd { margin: 2px 0 0; font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.p3-works { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: clamp(28px, 4vw, 56px); }
+.p3-works a { position: relative; display: block; aspect-ratio: 16 / 9; overflow: hidden; background: var(--dark); color: #fff; }
+.p3-works img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .8s var(--ease); }
+.p3-works a:hover img { transform: scale(1.05); }
+.p3-works span { position: absolute; left: 0; right: 0; bottom: 0; padding: 40px 16px 14px; font-size: 13px; color: rgba(255, 255, 255, .82); background: linear-gradient(transparent, rgba(8, 10, 14, .82)); }
+.p3-works b { display: block; font-size: 16px; font-weight: 600; color: #fff; }
 .p3-svc { display: grid; grid-template-columns: repeat(2, 1fr); border-top: 1px solid var(--ink); background: #fff; }
 .p3-svc article { padding: 28px 32px 32px; border-bottom: 1px solid var(--line); }
 .p3-svc article:nth-child(odd) { border-right: 1px solid var(--line); }
@@ -1929,6 +1940,8 @@ a.prod:hover b { color: var(--accent); }
 .p3-view__in { display: grid; grid-template-columns: 5fr 7fr; gap: clamp(28px, 4vw, 72px); align-items: center; }
 .p3-view .lead { margin-top: 16px; color: var(--on-dark-2); }
 .p3-vtabs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 28px; }
+.p3-vtabs small { flex-basis: 100%; margin-top: 10px; font-size: 12px; font-weight: 600; letter-spacing: .02em; color: var(--on-dark-2); }
+.p3-vtabs small:first-child { margin-top: 0; }
 .p3-vtabs button { min-height: 38px; padding: 0 12px; border: 1px solid rgba(255, 255, 255, .28); border-radius: var(--r); background: none; color: var(--on-dark); font: inherit; font-size: 14px; font-weight: 500; cursor: pointer; transition: background .2s, color .2s, border-color .2s; }
 .p3-vtabs button:hover { border-color: #fff; }
 .p3-vtabs button[aria-selected="true"] { background: #fff; border-color: #fff; color: var(--ink); font-weight: 600; }
@@ -2020,16 +2033,6 @@ a.prod:hover b { color: var(--accent); }
 .p3-gnote { margin-top: 18px; font-size: 14px; color: var(--muted); }
 /* ── 3D프린팅: 모션그래픽 모음 (전부 꾸밈이라 '움직임 줄이기'에서는 멈춘다) */
 .p3-progress { position: fixed; left: 0; top: 0; z-index: 60; height: 3px; width: 100%; background: var(--accent); transform: scaleX(0); transform-origin: left; pointer-events: none; }
-.p3-orbit { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-.p3-orbit ellipse { fill: none; stroke: rgba(169, 189, 255, .38); stroke-width: 1; stroke-dasharray: 3 9; animation: p3-dash 14s linear infinite; }
-.p3-orbit__b { stroke: rgba(169, 189, 255, .22); animation-direction: reverse; animation-duration: 20s; }
-@keyframes p3-dash { to { stroke-dashoffset: -240; } }
-.p3-top::after { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 120px; z-index: -1; background: linear-gradient(rgba(169, 189, 255, 0), rgba(169, 189, 255, .08), rgba(169, 189, 255, 0)); animation: p3-scan 7s linear infinite; pointer-events: none; }
-@keyframes p3-scan { from { transform: translateY(-120px); } to { transform: translateY(900px); } }
-.p3-top .h1 em { background: linear-gradient(90deg, #a9bdff 0%, #fff 45%, #a9bdff 90%) 0 0 / 220% 100%; -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; animation: p3-shine 5s linear infinite; }
-@keyframes p3-shine { to { background-position: -220% 0; } }
-.p3-top__tag b { animation: p3-pulse 2.4s ease-in-out infinite; }
-@keyframes p3-pulse { 50% { border-color: #fff; box-shadow: 0 0 0 6px rgba(255, 255, 255, .07); } }
 .p3-band { overflow: hidden; padding: 18px 0; background: var(--accent); color: #fff; }
 .p3-band__track { display: flex; gap: 0; width: max-content; animation: p3-band 46s linear infinite; }
 .p3-band--rev { background: var(--dark); }
@@ -2157,7 +2160,6 @@ a.prod:hover b { color: var(--accent); }
 .form input[type="file"]::file-selector-button { margin-right: 12px; padding: 6px 14px; border: 1px solid var(--line-2); border-radius: var(--r); background: var(--bg-2); font: inherit; font-size: 14px; font-weight: 600; color: var(--ink); cursor: pointer; }
 @media (max-width: 960px) {
   .p3-top__in { grid-template-columns: 1fr; }
-  .p3-top__model { margin: 0 calc(var(--gut) * -.5); max-height: 420px; }
   .p3-view__in, .p3-fleet, .p3-class, .p3-flows { grid-template-columns: 1fr; }
   .p3-case, .p3-case--ondeung { grid-template-columns: 1fr; }
   .p3-case--ondeung .p3-case__main { order: -1; }
@@ -2168,11 +2170,13 @@ a.prod:hover b { color: var(--accent); }
   .p3-vs, .p3-tips { grid-template-columns: 1fr; }
   .p3-mats { grid-template-columns: 1fr 1fr; }
   .p3-mats article, .p3-mats article + article { padding: 18px 12px 18px 0; border-left: 0; border-bottom: 1px solid var(--line); }
-  .p3-top__nums { grid-template-columns: 1fr 1fr; }
-  .p3-top__nums > div { padding: 16px 12px 18px 0; }
-  .p3-top__nums > div:nth-child(odd) { padding-left: 0; }
-  .p3-top__nums > div:nth-child(even) { border-right: 0; }
-  .p3-top__nums > div:nth-child(n+3) { border-top: 1px solid rgba(255, 255, 255, .12); }
+  .p3-spec { grid-template-columns: 1fr 1fr; }
+  .p3-spec li, .p3-spec li + li { padding: 12px 0 10px; border-left: 0; }
+  .p3-spec li:nth-child(n+3) { border-top: 1px solid var(--line); }
+  .p3-works { grid-template-columns: 1fr; gap: 10px; }
+  .p3-slicer__meta { grid-template-columns: 1fr 1fr; }
+  .p3-slicer__meta div:nth-child(3) { border-left: 0; }
+  .p3-slicer__meta div:nth-child(n+3) { border-top: 1px solid var(--line); }
   .p3-svc { grid-template-columns: 1fr; }
   .p3-svc article { padding: 22px 20px 24px; }
   .p3-svc article:nth-child(odd) { border-right: 0; }
@@ -2189,7 +2193,7 @@ a.prod:hover b { color: var(--accent); }
   .p3-dots { grid-template-columns: repeat(11, 1fr); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .p3-roll__track, .p3-band__track, .p3-orbit ellipse, .p3-top::after, .p3-top .h1 em, .p3-top__tag b, .p3-ico *, .p3-viewer::before, .p3-vtabs button::after,
+  .p3-roll__track, .p3-band__track, .p3-ico *, .p3-viewer::before, .p3-vtabs button::after,
   .p3-case__main img, .p3-case__main::after, .p3-case__logo, .p3-shop small, .p3-table b small, .p3-fdm__layers rect, .p3-fdm__head, .p3-fdm__sweep, .p3-sla__lift, .p3-sla__scan,
   .p3-mats i::after, [class^="p3-tip"] *, #price .hp-plan--pick::after, .p3-copy::after, #quote .btn .arr, .p3-top .btn .arr { animation: none !important; }
   .js .p3-ico [pathLength] { stroke-dashoffset: 0; }

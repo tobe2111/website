@@ -345,27 +345,29 @@
     const cv = box.querySelector("canvas"), sec = box.closest("section") || d;
     const tabs = [...sec.querySelectorAll("[data-p3-model]")];
     const gl = cv.getContext("webgl2", { antialias: true, alpha: true });
-    const solo = box.dataset.p3Src || "", zoom = Number(box.dataset.p3Zoom) || 1;
+    const solo = box.dataset.p3Src || "", zoom = Number(box.dataset.p3Zoom) || 1, build = box.hasAttribute("data-p3-build") && !reduce;
+    const pct = build ? (box.closest(".p3-slicer") || d).querySelector("[data-p3-pct]") : null; let t0 = 0, lastPct = -1;
     if (!gl || (!tabs.length && !solo)) { box.classList.add("is-off"); return; }
     const sh = (type, src) => { const o = gl.createShader(type); gl.shaderSource(o, src); gl.compileShader(o); return o; };
     const prog = gl.createProgram();
     gl.attachShader(prog, sh(gl.VERTEX_SHADER, `#version 300 es
-      in vec3 aP; in float aL; uniform vec3 uMin, uSc, uC; uniform float uInv, uYaw, uPitch, uAsp; out vec3 vP; out float vL;
+      in vec3 aP; in float aL; uniform vec3 uMin, uSc, uC; uniform float uInv, uYaw, uPitch, uAsp; out vec3 vP; out float vL; out float vH;
       void main() { vec3 p = (aP * uSc + uMin - uC) * uInv; float c = cos(uYaw), s = sin(uYaw); p = vec3(c * p.x + s * p.z, p.y, c * p.z - s * p.x);
-        c = cos(uPitch); s = sin(uPitch); p = vec3(p.x, c * p.y - s * p.z, s * p.y + c * p.z); p.z -= 3.4; vP = p; vL = aL;
+        c = cos(uPitch); s = sin(uPitch); p = vec3(p.x, c * p.y - s * p.z, s * p.y + c * p.z); p.z -= 3.4; vP = p; vL = aL; vH = aP.y / 65535.0;
         float f = 2.6; gl_Position = vec4(p.x * f / max(uAsp, 1.0), p.y * f * min(uAsp, 1.0), (p.z * 10.5 + 10.0) / -9.5, -p.z); }`));
     gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, `#version 300 es
-      precision highp float; in vec3 vP; in float vL; out vec4 o;
-      void main() { vec3 n = normalize(cross(dFdx(vP), dFdy(vP))); if (n.z < 0.0) n = -n;
+      precision highp float; in vec3 vP; in float vL; in float vH; uniform float uClip; out vec4 o;
+      void main() { if (vH > uClip) discard; vec3 n = normalize(cross(dFdx(vP), dFdy(vP))); if (n.z < 0.0) n = -n;
         float k = .34 + .62 * max(dot(n, normalize(vec3(.35, .65, .68))), 0.0) + .16 * max(dot(n, normalize(vec3(-.7, .1, .5))), 0.0);
-        vec3 base = vL > 4.5 && vL < 5.5 ? vec3(.13, .14, .16) : (vL > 3.5 ? vec3(.62, .64, .68) : vec3(.93, .89, .80));
+        vec3 base = vL > 7.5 ? vec3(.96, .62, .22) : vL > 6.5 ? vec3(.16, .36, .95) : vL > 4.5 && vL < 5.5 ? vec3(.13, .14, .16) : (vL > 3.5 ? vec3(.62, .64, .68) : vec3(.93, .89, .80));
+        if (uClip < 1.0 && uClip - vH < .02) base = mix(base, vec3(1.0), .55); // 지금 쌓이는 층
         o = vec4(base * k, 1.0); }`));
     gl.linkProgram(prog);
     if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) { box.classList.add("is-off"); return; }
     gl.useProgram(prog); gl.enable(gl.DEPTH_TEST); gl.clearColor(0, 0, 0, 0);
     const U = (n) => gl.getUniformLocation(prog, n), aP = gl.getAttribLocation(prog, "aP"), aL = gl.getAttribLocation(prog, "aL");
     const cache = new Map();
-    let cur = null, yaw = 1.05, pitch = 0.12, drag = null, seen = false, idle = 0, raf = 0, want = "";
+    let cur = null, yaw = 1.05, pitch = Number(box.dataset.p3Pitch) || 0.12, drag = null, seen = false, idle = 0, raf = 0, want = "";
     const load = (url) => {
       if (cache.has(url)) return Promise.resolve(cache.get(url));
       return fetch(url).then((r) => { if (!r.ok) throw 0; return r.arrayBuffer(); }).then((buf) => {
@@ -390,8 +392,12 @@
       gl.bindVertexArray(cur.vao);
       gl.uniform3fv(U("uMin"), cur.mn); gl.uniform3fv(U("uSc"), cur.sc); gl.uniform3fv(U("uC"), cur.c);
       gl.uniform1f(U("uInv"), cur.inv * zoom); gl.uniform1f(U("uYaw"), yaw); gl.uniform1f(U("uPitch"), pitch); gl.uniform1f(U("uAsp"), w / h);
+      // 출력 미리보기: 7초 동안 아래에서 위로 쌓이고, 3초 동안 다 된 모습으로 머문다
+      let clip = 2;
+      if (build) { if (!t0) t0 = performance.now(); clip = Math.min(1, ((performance.now() - t0) % 10000) / 7000); if (clip >= 1) clip = 2; const n = Math.round(Math.min(1, clip) * 100); if (pct && n !== lastPct) { lastPct = n; pct.textContent = n; } }
+      gl.uniform1f(U("uClip"), clip);
       gl.drawElements(gl.TRIANGLES, cur.count, gl.UNSIGNED_SHORT, 0);
-      if (seen && !drag && !reduce && performance.now() > idle) { yaw += 0.006; kick(); }
+      if (seen && !drag && !reduce && performance.now() > idle) { yaw += 0.006; kick(); } else if (seen && build) kick();
     };
     const kick = () => { if (!raf) raf = requestAnimationFrame(draw); };
     const pick = (t) => {
