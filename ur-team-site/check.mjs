@@ -77,7 +77,7 @@ const englishReady = existsSync(join(DIST, "en", "index.html"));
 for (let [from, to] of Object.entries(site.redirects)) {
   if (!englishReady && to.startsWith("/en/")) to = "/"; // 영어판이 올라가기 전에는 한국어 첫 화면으로 보낸다
   if (!existsSync(join(DIST, from, "index.html"))) bad.push(`예전 주소 ${from} 가 이어지지 않음`);
-  if (!existsSync(resolve(to))) bad.push(`예전 주소 ${from} → ${to} 의 새 페이지가 없음`);
+  if (!existsSync(resolve(to.replace(/[#?].*$/, "")))) bad.push(`예전 주소 ${from} → ${to} 의 새 페이지가 없음`);
 }
 // 제목 · 설명 겹침
 for (const key of ["title", "desc"]) {
