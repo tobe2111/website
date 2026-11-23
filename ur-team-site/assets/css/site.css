@@ -1963,7 +1963,11 @@ a.prod:hover b { color: var(--accent); }
 .p3-roll img { width: 200px; height: 250px; object-fit: cover; display: block; }
 .p3-roll figcaption { margin-top: 8px; font-size: 13px; color: #b4bbc5; }
 @keyframes p3-roll { to { transform: translateX(calc(-50% - 8px)); } }
-.p3-roll__note { margin-top: 14px; font-size: 13px; color: var(--muted); }
+.p3-copy { margin-top: 20px; padding: 16px 20px; border: 1px solid var(--line-2); border-left: 3px solid var(--ink); background: var(--bg-2); font-size: 14px; color: var(--ink-2); }
+.p3-copy b { display: block; margin-bottom: 4px; color: var(--ink); }
+.p3-copy small { display: block; margin-top: 6px; font-size: 13px; color: var(--muted); }
+.p3-view__copy { margin-top: 6px; opacity: .8; }
+.p3-viewer__mark { position: absolute; right: 16px; top: 14px; font-size: 12px; color: rgba(255, 255, 255, .5); pointer-events: none; }
 /* 장비: 프린터 41대가 차례로 켜지는 점판 + 장비 표 */
 .p3-fleet { display: grid; grid-template-columns: 5fr 7fr; gap: clamp(28px, 4vw, 72px); align-items: center; }
 .p3-fleet .lead { margin-top: 16px; }
