@@ -332,6 +332,14 @@
       }
     });
   });
+  // ── 3D프린팅: 맨 위에 읽은 만큼 차오르는 줄
+  if (d.querySelector(".p3-top") && !reduce) {
+    const bar = d.createElement("div"); bar.className = "p3-progress"; bar.setAttribute("aria-hidden", "true"); d.body.appendChild(bar);
+    let tick = 0;
+    const paint = () => { tick = 0; const max = root.scrollHeight - innerHeight; bar.style.transform = `scaleX(${max > 0 ? Math.min(1, scrollY / max) : 0})`; };
+    addEventListener("scroll", () => { if (!tick) tick = requestAnimationFrame(paint); }, { passive: true });
+    paint();
+  }
   // ── 3D프린팅: 3D 모델 뷰어 (WebGL2, 라이브러리 없음). 화면에 들어올 때 모델을 받아 오고, 끌면 돌아간다
   d.querySelectorAll("[data-p3-viewer]").forEach((box) => {
     const cv = box.querySelector("canvas"), sec = box.closest("section") || d;
