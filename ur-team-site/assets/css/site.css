@@ -2143,3 +2143,7 @@ a.prod:hover b { color: var(--accent); }
 @media (min-width: 861px) and (max-width: 1180px) { .hero__idx--4 { grid-template-columns: repeat(2, 1fr); } .hero__idx--4 a:nth-child(3) { padding-left: 0; border-left: 0; } .hero__idx--4 a:nth-child(n+3) { border-top: 1px solid rgba(255, 255, 255, .22); } }
 .bx-tabs { transition: top .35s var(--ease); background: #fff; box-shadow: 0 6px 18px rgba(15,25,50,.06); }
 .hd.is-hidden ~ main .bx-tabs { top: 0; }
+
+/* 어두운 첫 화면 위라도 조금 내리면 머리글에 어두운 바탕을 깐다 (본문 글씨가 로고 뒤로 비쳐 겹치지 않게) */
+.hd.is-over.is-scrolled { background: rgba(13, 16, 20, .86); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
+@media (max-width: 560px) { .bx-door small { display: revert; } .bx-door__tx > small { display: none; } }

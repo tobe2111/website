@@ -46,6 +46,7 @@
       if (!d.body.classList.contains("menu-open")) hd?.classList.toggle("is-hidden", y > 500 && y > lastY + 4);
       if (y < lastY - 4) hd?.classList.remove("is-hidden");
       float?.classList.toggle("is-off", y < 300);
+      hd?.classList.toggle("is-scrolled", y > 8);
       lastY = y; ticking = false;
     });
   }, { passive: true });
