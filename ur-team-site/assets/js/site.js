@@ -331,6 +331,76 @@
       }
     });
   });
+  // ── 3D프린팅: 3D 모델 뷰어 (WebGL2, 라이브러리 없음). 화면에 들어올 때 모델을 받아 오고, 끌면 돌아간다
+  d.querySelectorAll("[data-p3-viewer]").forEach((box) => {
+    const cv = box.querySelector("canvas"), sec = box.closest("section") || d;
+    const tabs = [...sec.querySelectorAll("[data-p3-model]")];
+    const gl = cv.getContext("webgl2", { antialias: true, alpha: true });
+    if (!gl || !tabs.length) { box.classList.add("is-off"); return; }
+    const sh = (type, src) => { const o = gl.createShader(type); gl.shaderSource(o, src); gl.compileShader(o); return o; };
+    const prog = gl.createProgram();
+    gl.attachShader(prog, sh(gl.VERTEX_SHADER, `#version 300 es
+      in vec3 aP; in float aL; uniform vec3 uMin, uSc, uC; uniform float uInv, uYaw, uPitch, uAsp; out vec3 vP; out float vL;
+      void main() { vec3 p = (aP * uSc + uMin - uC) * uInv; float c = cos(uYaw), s = sin(uYaw); p = vec3(c * p.x + s * p.z, p.y, c * p.z - s * p.x);
+        c = cos(uPitch); s = sin(uPitch); p = vec3(p.x, c * p.y - s * p.z, s * p.y + c * p.z); p.z -= 3.4; vP = p; vL = aL;
+        float f = 2.6; gl_Position = vec4(p.x * f / max(uAsp, 1.0), p.y * f * min(uAsp, 1.0), (p.z * 10.5 + 10.0) / -9.5, -p.z); }`));
+    gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, `#version 300 es
+      precision highp float; in vec3 vP; in float vL; out vec4 o;
+      void main() { vec3 n = normalize(cross(dFdx(vP), dFdy(vP))); if (n.z < 0.0) n = -n;
+        float k = .34 + .62 * max(dot(n, normalize(vec3(.35, .65, .68))), 0.0) + .16 * max(dot(n, normalize(vec3(-.7, .1, .5))), 0.0);
+        vec3 base = vL > 4.5 && vL < 5.5 ? vec3(.13, .14, .16) : (vL > 3.5 ? vec3(.62, .64, .68) : vec3(.93, .89, .80));
+        o = vec4(base * k, 1.0); }`));
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) { box.classList.add("is-off"); return; }
+    gl.useProgram(prog); gl.enable(gl.DEPTH_TEST); gl.clearColor(0, 0, 0, 0);
+    const U = (n) => gl.getUniformLocation(prog, n), aP = gl.getAttribLocation(prog, "aP"), aL = gl.getAttribLocation(prog, "aL");
+    const cache = new Map();
+    let cur = null, yaw = 1.05, pitch = 0.12, drag = null, seen = false, idle = 0, raf = 0, want = "";
+    const load = (url) => {
+      if (cache.has(url)) return Promise.resolve(cache.get(url));
+      return fetch(url).then((r) => { if (!r.ok) throw 0; return r.arrayBuffer(); }).then((buf) => {
+        const h = new DataView(buf), n = h.getUint32(0, true), m = h.getUint32(4, true), f = (i) => h.getFloat32(8 + i * 4, true);
+        const mn = [f(0), f(1), f(2)], sc = [f(3), f(4), f(5)], ext = sc.map((v) => v * 65535);
+        const vao = gl.createVertexArray(); gl.bindVertexArray(vao);
+        gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer()); gl.bufferData(gl.ARRAY_BUFFER, new Uint16Array(buf, 32, n * 3), gl.STATIC_DRAW);
+        gl.enableVertexAttribArray(aP); gl.vertexAttribPointer(aP, 3, gl.UNSIGNED_SHORT, false, 0, 0);
+        gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer()); gl.bufferData(gl.ARRAY_BUFFER, new Uint8Array(buf, 32 + n * 6, n), gl.STATIC_DRAW);
+        gl.enableVertexAttribArray(aL); gl.vertexAttribPointer(aL, 1, gl.UNSIGNED_BYTE, false, 0, 0);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.createBuffer()); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(buf, 32 + n * 7 + (n % 2), m * 3), gl.STATIC_DRAW);
+        const mdl = { vao, count: m * 3, mn, sc, c: mn.map((v, i) => v + ext[i] / 2), inv: 2 / Math.hypot(ext[0], ext[1], ext[2]) * 1.15 };
+        cache.set(url, mdl); return mdl;
+      });
+    };
+    const draw = () => {
+      raf = 0;
+      if (!cur) return;
+      const r = Math.min(devicePixelRatio || 1, 2), w = Math.round(cv.clientWidth * r), h = Math.round(cv.clientHeight * r);
+      if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+      gl.viewport(0, 0, w, h); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+      gl.bindVertexArray(cur.vao);
+      gl.uniform3fv(U("uMin"), cur.mn); gl.uniform3fv(U("uSc"), cur.sc); gl.uniform3fv(U("uC"), cur.c);
+      gl.uniform1f(U("uInv"), cur.inv); gl.uniform1f(U("uYaw"), yaw); gl.uniform1f(U("uPitch"), pitch); gl.uniform1f(U("uAsp"), w / h);
+      gl.drawElements(gl.TRIANGLES, cur.count, gl.UNSIGNED_SHORT, 0);
+      if (seen && !drag && !reduce && performance.now() > idle) { yaw += 0.006; kick(); }
+    };
+    const kick = () => { if (!raf) raf = requestAnimationFrame(draw); };
+    const pick = (t) => {
+      tabs.forEach((x) => x.setAttribute("aria-selected", String(x === t)));
+      for (const k of ["name", "sci", "size"]) { const el = box.querySelector(`[data-p3-${k}]`); if (el) el.textContent = t.dataset[k] || ""; }
+      want = t.dataset.p3Model;
+      if (!seen) return;
+      const url = want;
+      load(url).then((m) => { if (url !== want) return; cur = m; box.classList.add("is-ready"); kick(); }).catch(() => { if (!cur) box.classList.add("is-off"); });
+    };
+    tabs.forEach((t) => t.addEventListener("click", () => pick(t)));
+    cv.addEventListener("pointerdown", (e) => { drag = { x: e.clientX, y: e.clientY }; cv.setPointerCapture(e.pointerId); });
+    cv.addEventListener("pointermove", (e) => { if (!drag) return; yaw += (e.clientX - drag.x) * 0.01; pitch = Math.max(-0.6, Math.min(0.9, pitch + (e.clientY - drag.y) * 0.006)); drag = { x: e.clientX, y: e.clientY }; kick(); });
+    const up = () => { drag = null; idle = performance.now() + 2500; kick(); };
+    cv.addEventListener("pointerup", up); cv.addEventListener("pointercancel", up);
+    addEventListener("resize", kick);
+    new IntersectionObserver((es) => { seen = es[0].isIntersecting; if (seen) { cur ? kick() : pick(tabs.find((t) => t.getAttribute("aria-selected") === "true") || tabs[0]); } }, { rootMargin: "200px" }).observe(box);
+    want = tabs[0].dataset.p3Model;
+  });
   // ── 홈페이지 제작: 창 안의 실제 화면을 업종별로 갈아 끼운다(5초마다, 누르면 그 업종에서 멈춤)
   d.querySelectorAll("[data-hp-stage]").forEach((st) => {
     const tabs = [...st.querySelectorAll("[data-hp-tab]")], url = st.querySelector("[data-hp-url]");
