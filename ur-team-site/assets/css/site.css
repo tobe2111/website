@@ -1897,3 +1897,54 @@ a.prod:hover b { color: var(--accent); }
   .nav > a, .nav__group > a { padding: 0 10px; font-size: 14px; }
   .nav > a::after, .nav__group > a::after { left: 10px; right: 10px; }
 }
+
+/* ── 유통 · 수출 한 페이지: 첫 화면(왼쪽 글 + 오른쪽 두 문 카드) + 붙어 다니는 탭 줄 */
+.bx-hero { align-items: center; min-height: 0; padding-bottom: clamp(48px, 6vw, 88px);
+  background: radial-gradient(900px 480px at 85% 20%, rgba(23,71,230,.28), transparent 60%), radial-gradient(700px 420px at 0% 100%, rgba(23,71,230,.14), transparent 60%), var(--dark); }
+.bx-hero__in { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); gap: clamp(32px, 5vw, 72px); align-items: center; width: 100%; }
+.bx-hero .h1 em { font-style: normal; color: #a9bdff; }
+.bx-flow { list-style: none; margin: 26px 0 0; padding: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 26px; font-size: 13px; font-weight: 600; color: rgba(255,255,255,.86); }
+.bx-flow li { padding: 7px 12px; border: 1px solid rgba(255,255,255,.22); border-radius: 999px; background: rgba(255,255,255,.06); }
+.bx-flow li + li::before { content: "→"; position: absolute; left: -19px; top: 50%; transform: translateY(-50%); color: #a9bdff; }
+.bx-flow li + li { position: relative; }
+.bx-doors { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.bx-door { position: relative; display: grid; grid-template-rows: auto 1fr; color: #fff; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.16); border-radius: var(--r); overflow: hidden;
+  transition: transform .5s var(--ease), border-color .5s var(--ease), background .5s var(--ease), box-shadow .5s var(--ease); }
+.bx-door__img { display: block; aspect-ratio: 16 / 10; overflow: hidden; }
+.bx-door__img img { width: 100%; height: 100%; object-fit: cover; transition: transform .8s var(--ease); }
+.bx-door__tx { display: grid; align-content: start; gap: 6px; padding: 18px 18px 20px; }
+.bx-door .k { font-size: 13px; font-weight: 700; color: #a9bdff; }
+.bx-door b { font-size: 19px; font-weight: 700; letter-spacing: -.02em; line-height: 1.35; }
+.bx-door small { font-size: 13px; color: rgba(255,255,255,.7); line-height: 1.5; }
+.bx-door ul { list-style: none; margin: 10px 0 0; padding: 12px 0 0; border-top: 1px solid rgba(255,255,255,.14); display: grid; gap: 10px; }
+.bx-door li { display: grid; gap: 1px; }
+.bx-door li b { font-size: 26px; font-weight: 700; line-height: 1.1; }
+.bx-door li b small { font-size: .5em; color: #fff; margin-left: 2px; }
+.bx-door li > span { font-size: 12.5px; color: rgba(255,255,255,.68); line-height: 1.45; }
+.bx-door .go { margin-top: 8px; font-size: 13px; font-weight: 700; color: #fff; }
+.bx-door:hover { transform: translateY(-4px); border-color: rgba(255,255,255,.4); background: rgba(255,255,255,.1); }
+.bx-door:hover .bx-door__img img { transform: scale(1.05); }
+.bx-door.is-on { border-color: #6f8dff; box-shadow: 0 0 0 1px #6f8dff, 0 18px 40px rgba(0,0,0,.3); background: rgba(23,71,230,.16); }
+.bx-door.is-on .go { color: #a9bdff; }
+.bx-tabs { position: sticky; top: var(--hd); z-index: 20; background: rgba(255,255,255,.94); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+.bx-tabs .wrap { display: flex; gap: 6px; }
+.bx-tabs a { position: relative; padding: 16px 18px; font-size: 16px; font-weight: 700; color: var(--muted); transition: color .3s var(--ease); }
+.bx-tabs a::after { content: ""; position: absolute; left: 18px; right: 18px; bottom: -1px; height: 3px; background: var(--accent); transform: scaleX(0); transition: transform .4s var(--ease); }
+.bx-tabs a:hover, .bx-tabs a.is-on { color: var(--ink); }
+.bx-tabs a.is-on::after { transform: scaleX(1); }
+.bx-panel[hidden] { display: none; }
+@media (max-width: 960px) {
+  .bx-hero__in { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+  .bx-doors { gap: 10px; }
+  .bx-door__tx { padding: 12px 12px 14px; gap: 4px; }
+  .bx-door b { font-size: 15px; }
+  .bx-door small { display: none; }
+  .bx-door li:nth-child(2) { display: none; }
+  .bx-door li b { font-size: 22px; }
+  .bx-door .go { font-size: 12px; }
+  .bx-flow { font-size: 12px; }
+  .bx-tabs a { flex: 1; text-align: center; padding: 14px 8px; font-size: 15px; }
+}
+@media (prefers-reduced-motion: reduce) { .bx-door, .bx-door:hover { transform: none; } }

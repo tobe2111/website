@@ -159,7 +159,7 @@ const BLOG_NAME = { ko: "유어팀 블로그", en: "UrTeam Insights" };
 // 검색엔진 · AI 가 "누가 · 무엇을 · 어디서" 를 기계로 읽게 한다. 회사 정보는 site.json 의 org 에서 온다.
 const SERVICE = /^\/(distribution|export|marketing)\/([\w-]+\/)?$/;
 const AREA = {
-  "/export/": { ko: ["대한민국", "미국", "인도", "중국", "동남아시아", "중동", "일본", "유럽"], en: ["South Korea", "United States", "India", "China", "Southeast Asia", "Middle East", "Japan", "Europe"] },
+  "/distribution/": { ko: ["대한민국", "미국", "인도", "중국", "동남아시아", "중동", "일본", "유럽"], en: ["South Korea", "United States", "India", "China", "Southeast Asia", "Middle East", "Japan", "Europe"] },
   "/marketing/global-patients/": { ko: ["대한민국", "중국"], en: ["South Korea", "China"] },
 };
 // 날짜만 적힌 글은 한국 시간 오전 9시로 알린다 (시간대가 없으면 Google 이 경고한다)
@@ -267,10 +267,11 @@ function jsonld(ctx) {
     page.mainEntity = { "@id": canonical + "#article" };
   }
   // 자주 묻는 질문(<section id="faq"> 안의 <details>)은 검색엔진이 질문 · 답으로 읽게 한다
-  const faqSec = body.match(/<section[^>]*id="faq"[\s\S]*?<\/section>/);
-  if (faqSec) {
+  // 한 페이지에 질문 구역이 여럿이면(id="faq", id="faq-export") 모두 모은다
+  const faqSecs = [...body.matchAll(/<section[^>]*id="faq[\w-]*"[\s\S]*?<\/section>/g)];
+  if (faqSecs.length) {
     const text = (h) => h.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
-    const qa = [...faqSec[0].matchAll(/<summary>(?:<span[^>]*>[^<]*<\/span>)?([\s\S]*?)<\/summary>\s*<div class="acc__body">([\s\S]*?)<\/div>/g)]
+    const qa = [...faqSecs.map((m) => m[0]).join("").matchAll(/<summary>(?:<span[^>]*>[^<]*<\/span>)?([\s\S]*?)<\/summary>\s*<div class="acc__body">([\s\S]*?)<\/div>/g)]
       .map(([, q, a]) => ({ "@type": "Question", name: text(q), acceptedAnswer: { "@type": "Answer", text: text(a) } }));
     if (qa.length) graph.push({ "@type": "FAQPage", "@id": canonical + "#faq", inLanguage: lang, mainEntity: qa });
   }
@@ -419,12 +420,15 @@ const PAGE_TOPIC = {
   "/marketing/press/": ["블로그 · 콘텐츠", (p) => /press/.test(p.slug)],
   "/marketing/hospital/": ["병원 마케팅", (p) => p.category === "병원 마케팅" && !/global-patient|foreign-patient|xiaohongshu/.test(p.slug)],
   "/marketing/global-patients/": ["병원 마케팅", (p) => /global-patient|foreign-patient|xiaohongshu|douyin|wanghong/.test(p.slug)],
-  "/distribution/": ["국내 유통", (p) => p.category === "국내 유통"],
-  "/export/": ["해외 수출", (p) => p.category === "해외 수출"],
+  "/distribution/": [["국내 유통", (p) => p.category === "국내 유통"], ["해외 수출", (p) => p.category === "해외 수출"]],
 };
 function topicPosts(path, lang) {
   if (lang !== "ko" || !PAGE_TOPIC[path]) return "";
-  const [topic, pickFn] = PAGE_TOPIC[path];
+  // 한 페이지가 두 분야를 다루면(유통 · 수출) 분야마다 한 줄씩
+  if (Array.isArray(PAGE_TOPIC[path][0])) return PAGE_TOPIC[path].map((tp) => topicSection(tp, lang)).join("");
+  return topicSection(PAGE_TOPIC[path], lang);
+}
+function topicSection([topic, pickFn], lang) {
   const all = posts(lang);
   const same = all.filter((p) => p.category === topic);
   const pick = [...new Set([...all.filter(pickFn), ...same])].slice(0, 3);

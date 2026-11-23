@@ -68,7 +68,7 @@
   "redirects": {
     "/home": "/",
     "/kr/distribution": "/distribution/",
-    "/kr/export": "/export/",
+    "/kr/export": "/distribution/#export",
     "/kr/contact": "/contact/",
     "/hospital": "/marketing/hospital/",
     "/37": "/marketing/global-patients/",
@@ -145,7 +145,9 @@
     "/kr/blog": "/blog/",
     "/kr/hospital": "/marketing/hospital/",
     "/kr/brochure": "/brochures/",
-    "/en/hospital": "/en/marketing/hospital/"
+    "/en/hospital": "/en/marketing/hospital/",
+    "/export": "/distribution/#export",
+    "/en/export": "/en/distribution/#export"
   },
   "i18n": {
     "ko": {

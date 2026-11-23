@@ -372,6 +372,56 @@
     new IntersectionObserver(([en]) => { alive = en.isIntersecting; if (alive) run(); }, { threshold: 0.3 }).observe(box);
   });
 
+  // ── 유통 · 수출 페이지: 위의 두 카드와 탭 줄이 아래 내용(국내 유통 / 해외 수출)을 바꾼다
+  // 자바스크립트가 없으면 두 내용이 차례로 다 보인다. 주소 끝 #export(또는 그 안의 #rt3 같은 칸)로 들어오면 수출이 열린다.
+  (function bizTabs() {
+    const panels = [...document.querySelectorAll("[data-bizpanel]")];
+    if (panels.length < 2) return;
+    const tabs = [...document.querySelectorAll("[data-biztab]")];
+    const bar = document.querySelector(".bx-tabs");
+    const which = (hash) => {
+      const id = decodeURIComponent((hash || "").slice(1));
+      if (!id) return null;
+      const el = document.getElementById(id);
+      const p = el && (el.matches("[data-bizpanel]") ? el : el.closest("[data-bizpanel]"));
+      return p ? { key: p.dataset.bizpanel, el, inner: el !== p } : null;
+    };
+    function show(key) {
+      panels.forEach((p) => { p.hidden = p.dataset.bizpanel !== key; });
+      tabs.forEach((t) => {
+        const on = t.dataset.biztab === key;
+        if (t.getAttribute("role") === "tab") t.setAttribute("aria-selected", on ? "true" : "false");
+        else if (on) t.setAttribute("aria-current", "true"); else t.removeAttribute("aria-current");
+        t.classList.toggle("is-on", on);
+      });
+    }
+    const goTop = () => { const y = (bar ? bar.getBoundingClientRect().top + scrollY : 0) - (parseInt(getComputedStyle(document.documentElement).getPropertyValue("--hd")) || 68); scrollTo({ top: Math.max(0, y), behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }); };
+    tabs.forEach((t) => t.addEventListener("click", (e) => {
+      e.preventDefault();
+      show(t.dataset.biztab);
+      history.replaceState(null, "", t.dataset.biztab === "export" ? "#export" : location.pathname + location.search);
+      goTop();
+    }));
+    function fromHash(scroll) {
+      const w = which(location.hash);
+      show(w ? w.key : "domestic");
+      if (w && scroll) requestAnimationFrame(() => (w.inner ? w.el.scrollIntoView() : goTop()));
+    }
+    // 같은 페이지 안의 #export · #domestic 링크(자주 묻는 질문 속 링크 등)
+    document.addEventListener("click", (e) => {
+      const a = e.target.closest('a[href^="#"]');
+      if (!a || a.hasAttribute("data-biztab")) return;
+      const w = which(a.getAttribute("href"));
+      if (!w) return;
+      e.preventDefault();
+      show(w.key);
+      history.replaceState(null, "", a.getAttribute("href"));
+      requestAnimationFrame(() => (w.inner ? w.el.scrollIntoView({ behavior: "smooth" }) : goTop()));
+    });
+    addEventListener("hashchange", () => fromHash(true));
+    fromHash(!!location.hash);
+  })();
+
   function sessionStorageGet(k) { try { return sessionStorage.getItem("ut_" + k); } catch { return null; } }
   function sessionStorageSet(k, v) { try { sessionStorage.setItem("ut_" + k, v); } catch { /* 저장 못 해도 접수는 된다 */ } }
 })();
