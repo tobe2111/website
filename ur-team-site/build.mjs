@@ -548,6 +548,8 @@ function redirects() {
     // 영어판이 아직 없으면 영어 주소는 한국어 첫 화면으로
     if (!ENGLISH_READY && to.startsWith("/en/")) to = "/";
     lines.push(`${from} ${to} 301`);
+    // 끝에 / 를 붙여 들어와도 같은 곳으로 (안 그러면 이동 안내 페이지가 200 으로 먼저 열린다)
+    if (!from.endsWith("/") && !site.redirects[from + "/"]) lines.push(`${from}/ ${to} 301`);
     const dest = join(DIST, from.replace(/^\//, ""), "index.html");
     if (existsSync(dest)) continue;
     mkdirSync(dirname(dest), { recursive: true });
