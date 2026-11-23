@@ -336,7 +336,8 @@
     const cv = box.querySelector("canvas"), sec = box.closest("section") || d;
     const tabs = [...sec.querySelectorAll("[data-p3-model]")];
     const gl = cv.getContext("webgl2", { antialias: true, alpha: true });
-    if (!gl || !tabs.length) { box.classList.add("is-off"); return; }
+    const solo = box.dataset.p3Src || "", zoom = Number(box.dataset.p3Zoom) || 1;
+    if (!gl || (!tabs.length && !solo)) { box.classList.add("is-off"); return; }
     const sh = (type, src) => { const o = gl.createShader(type); gl.shaderSource(o, src); gl.compileShader(o); return o; };
     const prog = gl.createProgram();
     gl.attachShader(prog, sh(gl.VERTEX_SHADER, `#version 300 es
@@ -379,7 +380,7 @@
       gl.viewport(0, 0, w, h); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
       gl.bindVertexArray(cur.vao);
       gl.uniform3fv(U("uMin"), cur.mn); gl.uniform3fv(U("uSc"), cur.sc); gl.uniform3fv(U("uC"), cur.c);
-      gl.uniform1f(U("uInv"), cur.inv); gl.uniform1f(U("uYaw"), yaw); gl.uniform1f(U("uPitch"), pitch); gl.uniform1f(U("uAsp"), w / h);
+      gl.uniform1f(U("uInv"), cur.inv * zoom); gl.uniform1f(U("uYaw"), yaw); gl.uniform1f(U("uPitch"), pitch); gl.uniform1f(U("uAsp"), w / h);
       gl.drawElements(gl.TRIANGLES, cur.count, gl.UNSIGNED_SHORT, 0);
       if (seen && !drag && !reduce && performance.now() > idle) { yaw += 0.006; kick(); }
     };
@@ -398,8 +399,8 @@
     const up = () => { drag = null; idle = performance.now() + 2500; kick(); };
     cv.addEventListener("pointerup", up); cv.addEventListener("pointercancel", up);
     addEventListener("resize", kick);
-    new IntersectionObserver((es) => { seen = es[0].isIntersecting; if (seen) { cur ? kick() : pick(tabs.find((t) => t.getAttribute("aria-selected") === "true") || tabs[0]); } }, { rootMargin: "200px" }).observe(box);
-    want = tabs[0].dataset.p3Model;
+    new IntersectionObserver((es) => { seen = es[0].isIntersecting; if (seen) { cur ? kick() : tabs.length ? pick(tabs.find((t) => t.getAttribute("aria-selected") === "true") || tabs[0]) : load(solo).then((m) => { cur = m; box.classList.add("is-ready"); kick(); }).catch(() => box.classList.add("is-off")); } }, { rootMargin: "200px" }).observe(box);
+    want = tabs.length ? tabs[0].dataset.p3Model : solo;
   });
   // ── 홈페이지 제작: 창 안의 실제 화면을 업종별로 갈아 끼운다(5초마다, 누르면 그 업종에서 멈춤)
   d.querySelectorAll("[data-hp-stage]").forEach((st) => {

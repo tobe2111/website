@@ -1899,14 +1899,26 @@ a.prod:hover b { color: var(--accent); }
 }
 
 /* ── 3D프린팅 제작 (/3d-printing/) ──
-   첫 화면은 홈페이지 제작(.hp-hero)의 틀을 같이 쓰고, 오른쪽에 아득 · 온등 사진이 차례로 바뀐다 */
-.p3-reel { position: relative; aspect-ratio: 3 / 2; background: var(--dark); overflow: hidden; box-shadow: 0 30px 60px -30px rgba(15, 18, 22, .45); }
-.p3-reel figure { position: absolute; inset: 0; margin: 0; opacity: 0; animation: p3-reel 20s linear infinite both; animation-delay: calc(var(--i) * 5s); }
-.p3-reel img { width: 100%; height: 100%; object-fit: cover; display: block; animation: p3-zoom 20s linear infinite both; animation-delay: inherit; }
-.p3-reel figcaption { position: absolute; left: 0; right: 0; bottom: 0; padding: 48px 22px 18px; font-size: 14px; color: #e6e9ee; background: linear-gradient(transparent, rgba(8, 10, 14, .78)); }
-.p3-reel figcaption b { display: inline-block; margin-right: 10px; padding-right: 10px; border-right: 1px solid rgba(255, 255, 255, .4); font-weight: 600; color: #fff; }
-@keyframes p3-reel { 0% { opacity: 0; } 3%, 25% { opacity: 1; } 30%, 100% { opacity: 0; } }
-@keyframes p3-zoom { 0% { transform: scale(1); } 30%, 100% { transform: scale(1.07); } }
+   첫 화면은 어두운 전시실: 오른쪽에서 3D 모델이 돌고, 아래에 숫자 네 칸 */
+.p3-top { display: block; min-height: 0; padding-bottom: 0; background: radial-gradient(58% 62% at 74% 40%, #26324d 0%, #131822 46%, var(--dark) 76%); }
+.p3-top::before { content: ""; position: absolute; inset: 0; z-index: -1; background: linear-gradient(rgba(255, 255, 255, .05) 1px, transparent 1px) 0 0 / 72px 72px, linear-gradient(90deg, rgba(255, 255, 255, .05) 1px, transparent 1px) 0 0 / 72px 72px; -webkit-mask-image: radial-gradient(65% 70% at 74% 40%, #000, transparent 78%); mask-image: radial-gradient(65% 70% at 74% 40%, #000, transparent 78%); }
+.p3-top__in { display: grid; grid-template-columns: 5fr 7fr; gap: clamp(16px, 2vw, 40px); align-items: center; }
+.p3-top .h1 em { font-style: normal; color: #a9bdff; }
+.p3-top__model { position: relative; aspect-ratio: 4 / 3; margin-right: calc(var(--gut) * -.5); }
+.p3-top__model canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; touch-action: pan-y; opacity: 0; transition: opacity .6s; }
+.p3-top__model canvas:active { cursor: grabbing; }
+.p3-top__model.is-ready canvas { opacity: 1; }
+.p3-top__model .p3-viewer__poster { opacity: .9; -webkit-mask-image: radial-gradient(60% 60% at 50% 50%, #000 40%, transparent 78%); mask-image: radial-gradient(60% 60% at 50% 50%, #000 40%, transparent 78%); }
+.p3-top__model.is-ready .p3-viewer__poster { opacity: 0; }
+.p3-top__tag { position: absolute; right: 8%; bottom: 6%; display: flex; align-items: center; gap: 10px; font-size: 13px; color: rgba(255, 255, 255, .7); pointer-events: none; }
+.p3-top__tag b { padding: 4px 9px; border: 1px solid rgba(255, 255, 255, .35); border-radius: 2px; font-weight: 600; color: #fff; }
+.p3-top__nums { display: grid; grid-template-columns: repeat(4, 1fr); margin-top: clamp(20px, 3vw, 44px); border-top: 1px solid rgba(255, 255, 255, .2); }
+.p3-top__nums > div { padding: 24px 24px 30px 0; border-right: 1px solid rgba(255, 255, 255, .12); }
+.p3-top__nums > div + div { padding-left: 24px; }
+.p3-top__nums > div:last-child { border-right: 0; }
+.p3-top__nums b { display: block; font-size: clamp(30px, 3vw, 42px); font-weight: 500; letter-spacing: -.04em; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.p3-top__nums small { font-size: .42em; font-weight: 500; margin-left: 3px; letter-spacing: -.02em; }
+.p3-top__nums > div > span { display: block; margin-top: 8px; font-size: 14px; color: rgba(255, 255, 255, .68); }
 .p3-svc { display: grid; grid-template-columns: repeat(2, 1fr); border-top: 1px solid var(--ink); background: #fff; }
 .p3-svc article { padding: 28px 32px 32px; border-bottom: 1px solid var(--line); }
 .p3-svc article:nth-child(odd) { border-right: 1px solid var(--line); }
@@ -2010,6 +2022,8 @@ a.prod:hover b { color: var(--accent); }
 .form input[type="file"] { padding: 10px 12px; min-height: 52px; cursor: pointer; }
 .form input[type="file"]::file-selector-button { margin-right: 12px; padding: 6px 14px; border: 1px solid var(--line-2); border-radius: var(--r); background: var(--bg-2); font: inherit; font-size: 14px; font-weight: 600; color: var(--ink); cursor: pointer; }
 @media (max-width: 960px) {
+  .p3-top__in { grid-template-columns: 1fr; }
+  .p3-top__model { margin: 0 calc(var(--gut) * -.5); max-height: 420px; }
   .p3-view__in, .p3-fleet, .p3-class, .p3-flows { grid-template-columns: 1fr; }
   .p3-case, .p3-case--ondeung { grid-template-columns: 1fr; }
   .p3-case--ondeung .p3-case__main { order: -1; }
@@ -2017,6 +2031,11 @@ a.prod:hover b { color: var(--accent); }
   .p3-notes { grid-template-columns: 1fr 1fr; }
 }
 @media (max-width: 760px) {
+  .p3-top__nums { grid-template-columns: 1fr 1fr; }
+  .p3-top__nums > div { padding: 16px 12px 18px 0; }
+  .p3-top__nums > div:nth-child(odd) { padding-left: 0; }
+  .p3-top__nums > div:nth-child(even) { border-right: 0; }
+  .p3-top__nums > div:nth-child(n+3) { border-top: 1px solid rgba(255, 255, 255, .12); }
   .p3-svc { grid-template-columns: 1fr; }
   .p3-svc article { padding: 22px 20px 24px; }
   .p3-svc article:nth-child(odd) { border-right: 0; }
@@ -2033,8 +2052,7 @@ a.prod:hover b { color: var(--accent); }
   .p3-dots { grid-template-columns: repeat(11, 1fr); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .p3-roll__track, .p3-reel figure, .p3-reel img { animation: none; }
-  .p3-reel figure:first-child { opacity: 1; }
+  .p3-roll__track { animation: none; }
   .p3-dots i { animation: none; background: var(--accent); }
   .p3-roll { overflow-x: auto; }
 }
