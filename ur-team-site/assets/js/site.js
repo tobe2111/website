@@ -305,7 +305,7 @@
         e.preventDefault();
         const utm = ["utm_source", "utm_medium", "utm_campaign"].map(v).filter(Boolean).join(" / ");
         // 메일은 대표님이 읽기 쉽게: 한국어 항목 이름, 빈 칸은 빼고, 중요한 것부터
-        const KO = { "Areas of interest": "관심 분야", "Inquiry": "문의 내용", "Company URL": "회사 URL", "Marketing services": "마케팅 상품",
+        const KO = { "Service needed": "필요한 일", "Item": "만들 물건", "Quantity": "수량", "Size": "크기", "Needed by": "필요한 날짜", "File link": "파일 링크", "Areas of interest": "관심 분야", "Inquiry": "문의 내용", "Company URL": "회사 URL", "Marketing services": "마케팅 상품",
           "Preferred channels": "희망 채널", "Current challenges": "업체 문제점", "Strengths": "업체 차별점" };
         const part = new Map([...groups].map(([k, list]) => [KO[k] || k, list.join(", ")]));
         const interest = part.get("관심 분야") || "";
