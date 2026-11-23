@@ -11,6 +11,7 @@ import { kindOf } from "./kinds.js";
 import { ensureSchema } from "./schema.js";
 import { withStoredKeys } from "./keys.js";
 import { runCron } from "./scheduled.js";
+import * as service from "./homepageSite.js";
 import { resolveSessionSecret } from "./secrets.js";
 
 // 나가는 스타일시트에서 주석만 뗀다(아이솔레이트마다 한 번).
@@ -44,6 +45,11 @@ export const GLOBAL = [
   ["GET", "/esign", pages.esignLanding],
   // 홈페이지 제작(프랜차이즈 가맹점 모집 랜딩) 제품 소개
   ["GET", "/homepage", pages.homepageLanding],
+  // 홈페이지 제작 서비스의 판매 사이트(유어팀). 결제대행사 심사용으로 마케팅과 분리된 사이트 — homepageSite.js
+  ["GET", "/service", service.serviceLanding],
+  ["GET", "/service/terms", service.serviceTerms],
+  ["GET", "/service/refund", service.serviceRefund],
+  ["GET", "/service/privacy", service.servicePrivacy],
   ["GET", "/login", pages.loginForm],
   ["POST", "/login", api.login],
   ["POST", "/logout", api.logout, "USER"],
@@ -608,6 +614,13 @@ async function handle(request, env) {
   }
 
   const baseCtx = { env, db, url, query: url.searchParams, user, csrf, form, addCookie, isProd, ip, request };
+
+  // 홈페이지 제작 서비스 전용 도메인(SERVICE_HOST)으로 들어오면 첫 화면 · 약관 · 환불 정책을 그 사이트로 보인다
+  const svcPath = service.serviceHostPath(url.hostname, env.SERVICE_HOST, pathname);
+  if (svcPath) {
+    const h = { "/service": service.serviceLanding, "/service/terms": service.serviceTerms, "/service/refund": service.serviceRefund, "/service/privacy": service.servicePrivacy }[svcPath];
+    return finalize(await h({ ...baseCtx, params: {} }), setCookies, env, timing, url.origin + pathname);
+  }
 
   // 테넌트 라우트 — ① BASE_DOMAIN 서브도메인/경로(/t/:slug) ② 상인회별 개별 도메인(custom_domain)
   let t = resolveTenant(env, url.hostname, pathname);
