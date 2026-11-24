@@ -137,6 +137,24 @@
         <img src="/assets/img/p3/ondeung-d-crown.webp" alt="온등 — 신라 금관" width="800" height="800" loading="lazy">
         <img src="/assets/img/p3/ondeung-d-maebyeong.webp" alt="온등 — 청자 운학문 매병" width="800" height="800" loading="lazy">
       </div>
+      <div class="p3-lamp" data-p3-lamp>
+        <div class="p3-lamp__stage">
+          <canvas aria-label="온등 실조명 3D 미리보기. 끌어서 돌릴 수 있습니다" role="img"></canvas>
+          <p class="p3-lamp__tip">끌어서 돌리기</p>
+          <label class="p3-lamp__prog">출력 진행 <input type="range" min="2" max="100" value="100" data-p3-lamp-prog> <output data-p3-lamp-pct>100%</output></label>
+        </div>
+        <div class="p3-lamp__tx">
+          <h3 class="h3">실조명</h3>
+          <p>실을 감은 듯한 무늬의 조명입니다. 다각형 고리와 그 사이를 건너는 실을 번갈아 쌓고, 한 단마다 조금씩 돌려 나선 무늬를 만듭니다. 일반 3D 모델을 자르는 것이 아니라 노즐이 지나갈 길을 직접 설계합니다.</p>
+          <div class="p3-lamp__sizes" role="group" aria-label="크기 고르기">
+            <button type="button" aria-pressed="false" data-p3-lamp-size="s">소 <small>Ø150 × 149 mm</small></button>
+            <button type="button" aria-pressed="true" data-p3-lamp-size="m">중 <small>Ø190 × 180 mm</small></button>
+            <button type="button" aria-pressed="false" data-p3-lamp-size="l">장 <small>Ø170 × 196 mm</small></button>
+          </div>
+          <button type="button" class="p3-lamp__lit" aria-pressed="true" data-p3-lamp-lit>불 켜기</button>
+          <p class="p3-lamp__note">설계 단계의 모델입니다. 화면의 선 하나하나가 실제로 노즐이 지나가는 길입니다.</p>
+        </div>
+      </div>
     </article>
 
     <article class="p3-case p3-case--adeuk">

@@ -137,6 +137,24 @@
         <img src="/assets/img/p3/ondeung-d-crown.webp" alt="Ondeung: Silla gold crown" width="800" height="800" loading="lazy">
         <img src="/assets/img/p3/ondeung-d-maebyeong.webp" alt="Ondeung: Celadon crane vase" width="800" height="800" loading="lazy">
       </div>
+      <div class="p3-lamp" data-p3-lamp>
+        <div class="p3-lamp__stage">
+          <canvas aria-label="3D preview of the Ondeung string lamp. Drag to rotate" role="img"></canvas>
+          <p class="p3-lamp__tip">Drag to rotate</p>
+          <label class="p3-lamp__prog">Print progress <input type="range" min="2" max="100" value="100" data-p3-lamp-prog> <output data-p3-lamp-pct>100%</output></label>
+        </div>
+        <div class="p3-lamp__tx">
+          <h3 class="h3">String lamp</h3>
+          <p>A lamp that looks wound from thread. Polygon rings and the strings bridging between them are stacked in turn, and each step is rotated a little to form the spiral. Instead of slicing a 3D model, we design the path the nozzle travels.</p>
+          <div class="p3-lamp__sizes" role="group" aria-label="Choose a size">
+            <button type="button" aria-pressed="false" data-p3-lamp-size="s">Small <small>Ø150 × 149 mm</small></button>
+            <button type="button" aria-pressed="true" data-p3-lamp-size="m">Medium <small>Ø190 × 180 mm</small></button>
+            <button type="button" aria-pressed="false" data-p3-lamp-size="l">Tall <small>Ø170 × 196 mm</small></button>
+          </div>
+          <button type="button" class="p3-lamp__lit" aria-pressed="true" data-p3-lamp-lit>Light on</button>
+          <p class="p3-lamp__note">A model still in design. Every line on screen is a path the nozzle actually travels.</p>
+        </div>
+      </div>
     </article>
 
     <article class="p3-case p3-case--adeuk">
