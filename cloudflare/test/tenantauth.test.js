@@ -54,7 +54,7 @@ test("상인회 로그인 화면에는 그 상인회가 보인다 — 남의 회
   const env = makeEnv(); await seed(env);
   const html = await (await get(env, jar(), "/t/bb/login")).text();
   assert.match(html, /방배카페골목/, "상인회 이름이 떠야");
-  assert.doesNotMatch(html, /리스터코퍼레이션/, "플랫폼 이름이 뜨면 다른 사이트로 넘어간 것처럼 보인다");
+  assert.doesNotMatch(html, /로그인 · 유어팀/, "플랫폼 이름이 뜨면 다른 사이트로 넘어간 것처럼 보인다");
   assert.match(html, /\/t\/bb\/register/, "가입 길이 같은 상인회 안에 있어야");
   assert.match(html, /action="\/t\/bb\/login"/, "로그인도 상인회 주소로 보내야");
 });

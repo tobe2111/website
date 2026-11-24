@@ -92,7 +92,7 @@ export function layout({ title, assoc, base = "", user = null, body, activeNav =
     : product && product.nav !== false ? productNav(user, activeNav, product) : "";
   // 상인회에 속하지 않은 화면의 이름: 제품이 지정되면 그 제품, 아니면 운영사.
   // 예전 기본값("상인회 플랫폼")은 전자계약 고객에게 남의 서비스 간판으로 보였다.
-  const brand = assoc ? esc(assoc.name) : product ? esc(product.name) : "리스터코퍼레이션";
+  const brand = assoc ? esc(assoc.name) : product ? esc(product.name) : "유어팀";
   const mark = assoc || (product && product.mark === "storefront") || (!product && !assoc) ? STOREFRONT_SVG : ESIGN_SVG;
   const meta = description ? `<meta name="description" content="${esc(description)}" />` : "";
   // 카카오톡·SNS 공유 미리보기 (og:image 는 절대 URL 필수)
@@ -306,7 +306,7 @@ const BNAV_ICON = {
 //
 // 저작권 줄 아래, 저작권 줄보다 작게. 이건 상인회의 홈페이지이지 우리 홈페이지가 아니라,
 // 우리 이름이 상인회 이름보다 크면 안 됩니다.
-const HOST_NAME = "리스터코퍼레이션";
+const HOST_NAME = "유어팀";
 const HOST_EMAIL = "jiwon@ur-team.com";
 // 로그인·가입처럼 **비밀번호를 치는 화면에는 붙이지 않습니다.** 그 자리에서 남의 회사
 // 이름을 보면 "다른 사이트로 넘어갔나" 싶어지고, 그 순간 비밀번호를 치던 손이 멈춥니다
