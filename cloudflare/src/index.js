@@ -50,6 +50,9 @@ export const GLOBAL = [
   ["GET", "/service/terms", service.serviceTerms],
   ["GET", "/service/refund", service.serviceRefund],
   ["GET", "/service/privacy", service.servicePrivacy],
+  // 신청 · 결제(선불): 요금제 선택 → 신청서 → 곧바로 카드 등록 · 결제 화면
+  ["GET", "/service/order", service.serviceOrderForm],
+  ["POST", "/service/order", api.serviceOrder],
   ["GET", "/login", pages.loginForm],
   ["POST", "/login", api.login],
   ["POST", "/logout", api.logout, "USER"],
@@ -618,7 +621,7 @@ async function handle(request, env) {
   // 홈페이지 제작 서비스 전용 도메인(SERVICE_HOST)으로 들어오면 첫 화면 · 약관 · 환불 정책을 그 사이트로 보인다
   const svcPath = service.serviceHostPath(url.hostname, env.SERVICE_HOST, pathname);
   if (svcPath) {
-    const h = { "/service": service.serviceLanding, "/service/terms": service.serviceTerms, "/service/refund": service.serviceRefund, "/service/privacy": service.servicePrivacy }[svcPath];
+    const h = { "/service": service.serviceLanding, "/service/terms": service.serviceTerms, "/service/refund": service.serviceRefund, "/service/privacy": service.servicePrivacy, "/service/order": service.serviceOrderForm }[svcPath];
     return finalize(await h({ ...baseCtx, params: {} }), setCookies, env, timing, url.origin + pathname);
   }
 

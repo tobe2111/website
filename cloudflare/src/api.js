@@ -3999,6 +3999,46 @@ export async function esignSignup(ctx) {
   return redirect(`/t/${slug}/admin/documents?msg=${encodeURIComponent("환영합니다! 서식을 고르면 첫 계약서를 바로 만들 수 있습니다.")}`);
 }
 
+// 홈페이지 제작 서비스 신청(선불) — 조직 · 관리자 계정 · 결제 안내를 만들고 곧바로 결제 화면으로 보낸다.
+// 결제대행사가 후불(만든 뒤 청구)을 받지 않아, 신청하는 그 자리에서 결제까지 이어지게 한다.
+// 결제 전에는 빈 조직만 생긴다 — 제작은 결제가 확인된 뒤 운영사가 시작한다.
+export async function serviceOrder(ctx) {
+  const { db, env, form, ip, addCookie, isProd } = ctx;
+  const { PRICE, ORDER_PLANS } = await import("./homepageSite.js");
+  const planKey = ORDER_PLANS[form.get("plan")] ? form.get("plan") : "";
+  const to = `/service/order${planKey ? `?plan=${planKey}` : ""}`;
+  if (!(await turnstileVerify(env, form.get("cf-turnstile-response"), ip))) return back(to, "봇 확인에 실패했습니다. 다시 시도해 주세요.", true);
+  const name = cap((form.get("name") || "").replace(/[\x00-\x1f\x7f]/g, " ").trim(), 100);
+  const adminName = cap((form.get("admin_name") || "").trim(), 60);
+  const email = cap((form.get("email") || "").toLowerCase().trim(), 120);
+  const password = form.get("password") || "";
+  const phone = D.normalizePhone(form.get("phone") || "");
+  if (!planKey) return back(to, "요금제를 골라 주세요.", true);
+  if (!name) return back(to, "업체명을 입력해 주세요.", true);
+  if (!adminName) return back(to, "담당자 이름을 입력해 주세요.", true);
+  if (!D.isValidPhone(phone)) return back(to, "휴대폰 번호를 확인해 주세요.", true);
+  if (!EMAIL_RE.test(email)) return back(to, "이메일 형식을 확인해 주세요.", true);
+  if (password.length < 8 || password.length > 200) return back(to, "비밀번호는 8자 이상이어야 합니다.", true);
+  if (form.get("agree") !== "1") return back(to, "약관 · 환불 정책 · 개인정보처리방침 동의가 필요합니다.", true);
+  if (await D.getUserByEmail(db, email)) return back(to, "이미 신청하신 이메일입니다. 로그인하면 결제 화면으로 이어집니다.", true);
+  if ((await D.countAssociationsSince(db, "-1 day")) >= SIGNUP_DAILY_MAX) return back(to, "오늘 신청이 많아 잠시 후 다시 시도해 주세요. 급하시면 전화나 카카오톡으로 연락 주세요.", true);
+
+  const plan = ORDER_PLANS[planKey];
+  let base = slugify(name) || "hp";
+  if (RESERVED_SLUGS.has(base)) base = base + "-co";
+  let slug = base, n = 1;
+  while (await D.getAssociationBySlug(db, slug)) slug = `${base}-${++n}`;
+  const assoc = await D.createAssociation(db, { slug, name, kind: plan.kind, preset: plan.preset });
+  const { hash, salt } = await hashPassword(password);
+  const user = await D.createUser(db, { email, passwordHash: hash, salt, name: adminName, role: "ADMIN", associationId: assoc.id, phone });
+  await B.saveOffer(db, assoc.id, { plan: "basic", monthly: PRICE.monthly, setup: PRICE.setup });
+  await D.createNotification(db, { associationId: null, kind: "signup",
+    message: `홈페이지 제작 신청: ${name} · ${plan.label} (${adminName} ${phone})`, link: `/super/org/${assoc.id}` }).catch(() => {});
+  await D.logAudit(db, { associationId: assoc.id, userId: user.id, actorName: adminName, action: "홈페이지신청", detail: `${plan.label} (/t/${slug})` });
+  addCookie(sessionCookie(await sessionTokenForUser(user, env.SESSION_SECRET), isProd));
+  return redirect(`/t/${slug}/admin/billing?msg=${encodeURIComponent("신청이 접수되었습니다. 아래에서 카드를 등록하면 결제되고, 결제가 끝나면 제작을 시작합니다.")}`);
+}
+
 // 슈퍼: 셀프 가입 켜기/끄기 + 체험 크레딧
 export async function superSignupSettings(ctx) {
   const { db, form } = ctx;
