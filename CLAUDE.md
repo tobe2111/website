@@ -32,7 +32,13 @@
 
 - "Workers Builds: website" 실패 알림은 두 번째 계정의 일입니다. ur-team.com 계정에는 `website` 가 없습니다.
 - 그 계정에 `homepage-bridge` 같은 이름이 보여도 `website` 와는 다른 것이니 건드리지 않습니다.
-- 2026-11 부터 `website` 빌드가 "빌드 토큰이 지워짐"으로 실패 중입니다. 사용자가 tobe211167 계정 → Workers & Pages → website → Settings → Build → API token 을 새로 골라야 풀립니다.
+- 실제 사이트로 나가는 갈래(Production branch)는 `claude/seocho-merchant-website-muv3ws` 입니다.
+  홈페이지 제작 서비스 화면(`/service`)은 이 갈래에만 있습니다.
+- **주의:** 이 프로젝트는 '다른 갈래도 빌드'가 켜져 있고 Version command 가 `npx wrangler deploy` 입니다.
+  그래서 다른 갈래(예: 라이브 홈페이지 갈래)에 푸시하면 그 갈래의 엔진이 **실제 사이트를 덮어씁니다.**
+  2026-11-24 에 이 일로 homepage.ur-team.com 이 잠깐 404 가 됐고, 위 갈래를 다시 빌드해 되살렸습니다.
+  사용자에게 'Builds for non-production branches' 를 끄거나 Version command 를 `npx wrangler versions upload` 로
+  바꾸도록 안내했습니다. 바뀌었는지 확인되기 전에는 이 갈래 밖의 푸시 뒤 homepage.ur-team.com 을 꼭 열어 봅니다.
 
 ## 스타일시트를 합칠 때 (읽지 않고 넘어가면 화면이 죽습니다)
 
