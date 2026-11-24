@@ -17,7 +17,7 @@ import { hashPassword } from "../src/crypto.js";
 
 const B = "http://localhost";
 const get = async (env, p) => worker.fetch(new Request(B + p), env);
-const HOST = "호스트사 : 리스터코퍼레이션";
+const HOST = "호스트사 : 유어팀";
 const MAIL = "jiwon@ur-team.com";
 
 async function seed(env, kind, slug) {
