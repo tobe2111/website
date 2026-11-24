@@ -11,25 +11,33 @@
     </div>
 
     <!-- 출력 미리보기: 슬라이서 화면처럼 한 층씩 쌓이고, 아래 막대로 레이어를 직접 넘겨 볼 수 있다 -->
-    <div class="p3-sl" data-p3-slicer data-src="/assets/models/s-gear.bin" data-layers="175" data-lh="0.2">
-      <div class="p3-sl__bar"><b>gear_set.stl</b><span>120 × 90 × 35 mm</span><em>Sample preview</em></div>
+    <div class="p3-sl" data-p3-slicer>
+      <div class="p3-sl__bar">
+        <div class="p3-sl__tabs" role="tablist" aria-label="Printing process">
+          <button type="button" role="tab" aria-selected="true" data-p3-tab="fdm" data-layers="100" data-lh="0.2" data-file="gear_set.stl" data-size="112 × 78 × 20 mm">FDM filament</button>
+          <button type="button" role="tab" aria-selected="false" data-p3-tab="sla" data-layers="958" data-lh="0.05" data-file="rook.stl" data-size="Ø 30 × 48 mm">SLA resin</button>
+        </div>
+        <b data-p3-file>gear_set.stl</b><span data-p3-size>112 × 78 × 20 mm</span><em>Sample preview</em>
+      </div>
       <div class="p3-sl__body">
         <div class="p3-sl__view">
-          <canvas aria-label="Print preview of a gear part building layer by layer. Drag to rotate the view" role="img"></canvas>
+          <canvas aria-label="Print preview. The part builds layer by layer; drag to rotate the view" role="img"></canvas>
           <svg class="p3-sl__axes" viewBox="0 0 64 64" aria-hidden="true"><path d="M20 44 54 50" stroke="#d64545"/><path d="M20 44 20 10" stroke="#2f9e5b"/><path d="M20 44 6 56" stroke="#1747e6"/><text x="56" y="54">X</text><text x="17" y="8">Z</text><text x="0" y="62">Y</text></svg>
+          <p class="p3-sl__note" data-p3-panel="fdm">Melted filament is laid down layer by layer. The cut face shows the walls and the infill.</p>
+          <p class="p3-sl__note" data-p3-panel="sla" hidden>Light cures the resin at the bottom of the vat, and the part grows upside down as the platform rises.</p>
           <p class="p3-sl__hint">Drag to rotate</p>
           <p class="p3-sl__load" data-p3-load>Loading</p>
         </div>
         <aside class="p3-sl__panel">
           <h2>Slice settings</h2>
-          <dl><div><dt>Material</dt><dd>PLA</dd></div><div><dt>Nozzle</dt><dd>0.4 mm</dd></div><div><dt>Layer height</dt><dd>0.2 mm</dd></div><div><dt>Walls</dt><dd>3 lines</dd></div><div><dt>Infill</dt><dd>15 % grid</dd></div><div><dt>Supports</dt><dd>None</dd></div><div><dt>Layers</dt><dd>175</dd></div></dl>
-          <p class="p3-sl__g"><span>Material used</span><b>about 51 g</b><small>Your quote is based on this weight.</small></p>
+          <div data-p3-panel="fdm"><dl><div><dt>Process</dt><dd>FDM filament</dd></div><div><dt>Material</dt><dd>PLA 1.75 mm</dd></div><div><dt>Nozzle</dt><dd>0.4 mm</dd></div><div><dt>Layer height</dt><dd>0.2 mm</dd></div><div><dt>Walls</dt><dd>3 lines (1.2 mm)</dd></div><div><dt>Infill</dt><dd>15 % grid</dd></div><div><dt>Supports</dt><dd>None</dd></div><div><dt>Layers</dt><dd>100</dd></div><div><dt>Filament length</dt><dd>about 9.3 m</dd></div></dl><p class="p3-sl__g"><span>Material used</span><b>about 28 g</b><small>Your quote is based on this weight.</small></p></div>
+          <div data-p3-panel="sla" hidden><dl><div><dt>Process</dt><dd>SLA resin</dd></div><div><dt>Material</dt><dd>Photopolymer resin</dd></div><div><dt>Layer height</dt><dd>0.05 mm</dd></div><div><dt>Orientation</dt><dd>Hanging from the platform</dd></div><div><dt>Supports</dt><dd>19 + raft</dd></div><div><dt>Layers</dt><dd>958</dd></div><div><dt>Resin volume</dt><dd>about 8.3 mL</dd></div></dl><p class="p3-sl__g"><span>Material used</span><b>about 9 g</b><small>Your quote is based on this weight.</small></p></div>
         </aside>
       </div>
       <div class="p3-sl__foot">
         <button type="button" data-p3-play aria-label="Play / pause" data-label-play="Play" data-label-pause="Pause"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="p3-sl__ico-pause" d="M7 5h4v14H7zM13 5h4v14h-4z"/><path class="p3-sl__ico-play" d="M8 5v14l11-7z"/></svg></button>
-        <input type="range" min="0" max="175" value="175" step="1" data-p3-layer aria-label="Scrub through layers">
-        <output><span>Layer <b data-p3-n>175</b> / 175</span><span>Height <b data-p3-h>35.0</b> mm</span></output>
+        <input type="range" min="0" max="100" value="100" step="1" data-p3-layer aria-label="Scrub through layers">
+        <output><span>Layer <b data-p3-n>100</b> / <i data-p3-total>100</i></span><span>Height <b data-p3-h>20.0</b> mm</span></output>
       </div>
     </div>
 

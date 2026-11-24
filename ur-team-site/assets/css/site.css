@@ -1908,12 +1908,19 @@ a.prod:hover b { color: var(--accent); }
 .p3-top .btns { margin-top: 22px; }
 /* 슬라이서 창: 뷰포트(왼쪽) · 설정(오른쪽) · 레이어 막대(아래) */
 .p3-sl { margin-top: clamp(28px, 4vw, 52px); border: 1px solid #1d2229; background: #1d2229; color: #e8ebef; }
-.p3-sl__bar { display: flex; align-items: baseline; gap: 14px; padding: 11px 16px; font-size: 13px; border-bottom: 1px solid #343b45; }
+.p3-sl__bar { display: flex; align-items: center; gap: 14px; padding: 0 16px 0 0; font-size: 13px; border-bottom: 1px solid #343b45; }
+.p3-sl__tabs { display: flex; align-self: stretch; margin-right: 6px; }
+.p3-sl__tabs button { padding: 13px 18px; border: 0; border-right: 1px solid #343b45; background: none; color: #9aa3ae; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+.p3-sl__tabs button:hover { color: #fff; }
+.p3-sl__tabs button[aria-selected="true"] { background: #e9edf2; color: #0f1216; }
+.p3-sl__tabs button:focus-visible { outline: 2px solid #8fa8ff; outline-offset: -2px; }
+.p3-sl__foot output i { font-style: normal; }
+.p3-sl__note { position: absolute; left: 12px; top: 12px; max-width: min(30em, calc(100% - 24px)); padding: 8px 12px; background: rgba(255, 255, 255, .86); font-size: 13px; line-height: 1.55; color: #2b323b; pointer-events: none; }
 .p3-sl__bar b { font-weight: 600; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 12.5px; }
 .p3-sl__bar span { color: #9aa3ae; font-variant-numeric: tabular-nums; }
 .p3-sl__bar em { margin-left: auto; font-style: normal; color: #9aa3ae; }
 .p3-sl__body { display: grid; grid-template-columns: minmax(0, 1fr) 272px; }
-.p3-sl__view { position: relative; min-height: clamp(300px, 40vw, 520px); background: linear-gradient(#eef1f5, #dfe4ea); }
+.p3-sl__view { position: relative; min-height: clamp(320px, 42vw, 560px); background: radial-gradient(90% 80% at 50% 38%, #f3f5f8, #d6dce4); }
 .p3-sl__view canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; touch-action: pan-y; }
 .p3-sl__view canvas:active { cursor: grabbing; }
 .p3-sl__axes { position: absolute; left: 14px; bottom: 12px; width: 56px; height: 56px; fill: none; stroke-width: 2.5; stroke-linecap: round; pointer-events: none; }
@@ -2191,7 +2198,9 @@ a.prod:hover b { color: var(--accent); }
   .p3-mats article, .p3-mats article + article { padding: 18px 12px 18px 0; border-left: 0; border-bottom: 1px solid var(--line); }
   .p3-works { grid-template-columns: 1fr; }
   .p3-works img { height: 200px; }
-  .p3-sl__bar span { display: none; }
+  .p3-sl__bar span, .p3-sl__bar em { display: none; }
+  .p3-sl__tabs button { padding: 12px 12px; font-size: 13px; }
+  .p3-sl__note { font-size: 12px; }
   .p3-sl__foot { grid-template-columns: auto minmax(0, 1fr); }
   .p3-sl__foot output { grid-column: 1 / -1; }
   .p3-svc { grid-template-columns: 1fr; }
