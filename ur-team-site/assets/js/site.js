@@ -332,14 +332,6 @@
       }
     });
   });
-  // ── 3D프린팅: 맨 위에 읽은 만큼 차오르는 줄
-  if (d.querySelector(".p3-top") && !reduce) {
-    const bar = d.createElement("div"); bar.className = "p3-progress"; bar.setAttribute("aria-hidden", "true"); d.body.appendChild(bar);
-    let tick = 0;
-    const paint = () => { tick = 0; const max = root.scrollHeight - innerHeight; bar.style.transform = `scaleX(${max > 0 ? Math.min(1, scrollY / max) : 0})`; };
-    addEventListener("scroll", () => { if (!tick) tick = requestAnimationFrame(paint); }, { passive: true });
-    paint();
-  }
   // ── 3D프린팅 첫 화면: 슬라이서처럼 만든 출력 미리보기 (WebGL2, 라이브러리 없음)
   //    FDM: 출력판 위에 기어 세트가 한 층씩 쌓인다 — 잘린 면에 외벽과 속 채움, 노즐이 지나간 경로, 움직이는 프린터 헤드, 바닥 그림자
   //    SLA: 수지 수조 위로 플랫폼이 올라가며 부품이 거꾸로 자란다 — 서포트 · 래프트, 수조 바닥의 빛
@@ -348,6 +340,7 @@
     const cv = box.querySelector("canvas"), $ = (q) => box.querySelector(q);
     const range = $("[data-p3-layer]"), outN = $("[data-p3-n]"), outH = $("[data-p3-h]"), outT = $("[data-p3-total]"), playBtn = $("[data-p3-play]");
     const tabs = [...box.querySelectorAll("[data-p3-tab]")];
+    const sliceCv = $("[data-p3-slice]"), sctx = sliceCv ? sliceCv.getContext("2d") : null, cmp = d.querySelector("[data-p3-cmp]"); let slices = null;
     const gl = cv.getContext("webgl2", { antialias: true, alpha: true, stencil: true });
     if (!gl) { box.classList.add("is-ready"); return; }
     const sh = (type, src) => { const o = gl.createShader(type); gl.shaderSource(o, src); gl.compileShader(o); return o; };
@@ -375,7 +368,7 @@
         if (uMode == 4) { if (!is(1.)) discard; o = vec4(0., 0., 0., .2); return; }               // 출력판 위 그림자
         if (uMode == 5) {                                                                          // 수조 바닥의 빛
           float r = length(vW.xz - uGlow.xy) / uGlow.z, scan = .55 + .45 * sin(vW.x * .9 - uTime * 9.);
-          if (r > 1.3) discard; float g = smoothstep(1.3, .1, r) * scan; o = vec4(vec3(.50, .40, 1.) * g, g * .6); return; }
+          if (r > 1.3) discard; float g = smoothstep(1.3, .1, r) * (uGlow.z < 10. ? 1.6 : scan * .7); o = vec4(vec3(.52, .42, 1.) * g, g * .6); return; }
         if (uMode == 6) { o = vec4(1., .97, .82, 1.); return; }                                    // 방금 짜낸 줄
         vec3 n = normalize(cross(dFdx(vP), dFdy(vP))); if (n.z < 0.) n = -n;
         vec3 L = normalize(vec3(.38, .72, .58)); float df = max(dot(n, L), 0.), fill = max(dot(n, normalize(vec3(-.7, .15, .5))), 0.);
@@ -436,17 +429,35 @@
         // 외곽선을 선분 목록으로: 노즐이 일정한 속도로 따라 돌 수 있게 누적 길이를 함께 둔다
         path = j.sections.map((s) => { const seg = []; let len = 0;
           for (const lp of s.loops) for (let i = 0; i + 3 < lp.length; i += 2) { const d0 = Math.hypot(lp[i + 2] - lp[i], lp[i + 3] - lp[i + 1]); seg.push([lp[i], lp[i + 1], lp[i + 2], lp[i + 3], len, d0]); len += d0; }
-          return { y0: s.y0, y1: s.y1, seg, len }; });
-      }) : [])));
+          return { y0: s.y0, y1: s.y1, loops: s.loops, seg, len }; });
+      }) : fetch(B + "sla-slices.json").then((r) => r.json()).then((j) => { slices = j; }))));
+    // 이번 층 단면(위에서 본 모양). FDM: 외벽과 속 채움, SLA: 빛을 쬐는 영역(흰색)
+    const drawSlice = () => {
+      if (!sctx) return; const W = sliceCv.width, H2 = layer * LH; sctx.setTransform(1, 0, 0, 1, 0, 0); sctx.fillStyle = "#12161b"; sctx.fillRect(0, 0, W, W);
+      const ring = (lp) => { sctx.moveTo(lp[0], lp[1]); for (let i = 2; i < lp.length; i += 2) sctx.lineTo(lp[i], lp[i + 1]); sctx.closePath(); };
+      if (mode === "fdm" && path) {
+        if (layer <= 0) return; const sec = path.find((x) => H2 > x.y0 && H2 <= x.y1) || path[path.length - 1], k = W / 124;
+        sctx.setTransform(k, 0, 0, k, W / 2 - 18 * k, W / 2); sctx.beginPath(); sec.loops.forEach(ring);
+        const solid = H2 - sec.y0 < 0.85 || sec.y1 - H2 < 0.85;
+        sctx.fillStyle = solid ? "#2f5bff" : "#0b1436"; sctx.fill("evenodd");
+        if (!solid) { sctx.save(); sctx.clip("evenodd"); sctx.strokeStyle = "#4f74ff"; sctx.lineWidth = 0.5; sctx.beginPath(); for (let v = -160; v < 160; v += 5) { sctx.moveTo(v - 100, -100); sctx.lineTo(v + 100, 100); sctx.moveTo(v + 100, -100); sctx.lineTo(v - 100, 100); } sctx.stroke(); sctx.restore(); }
+        sctx.beginPath(); sec.loops.forEach(ring); sctx.strokeStyle = "#7f9bff"; sctx.lineWidth = 1.5; sctx.stroke();
+      } else if (mode === "sla" && slices) {
+        if (layer <= 0 || layer >= N) return; const i = Math.max(0, Math.min(slices.slices.length - 1, Math.round((H2 - slices.u0) / slices.step))), k = W / 36;
+        sctx.setTransform(k, 0, 0, k, W / 2, W / 2); sctx.beginPath(); slices.slices[i].forEach(ring); sctx.fillStyle = "#f4f1ff"; sctx.fill("evenodd");
+      }
+    };
     const paintUi = () => {
       const n = Math.round(layer); if (n === shown) return; shown = n;
       if (outN) outN.textContent = n; if (outH) outH.textContent = (n * LH).toFixed(1); if (range && d.activeElement !== range) range.value = n;
+      drawSlice();
     };
     const setPlaying = (v) => { playing = v; box.classList.toggle("is-playing", v); if (playBtn) playBtn.setAttribute("aria-label", v ? playBtn.dataset.labelPause : playBtn.dataset.labelPlay); last = 0; kick(); };
     const setMode = (k, auto) => {
       mode = k; const t = tabs.find((x) => x.dataset.p3Tab === k);
       tabs.forEach((x) => x.setAttribute("aria-selected", String(x === t)));
       box.querySelectorAll("[data-p3-panel]").forEach((el) => { el.hidden = el.dataset.p3Panel !== k; });
+      if (cmp) cmp.dataset.on = k;
       N = Number(t.dataset.layers); LH = Number(t.dataset.lh); if (range) range.max = N; if (outT) outT.textContent = N;
       const fe = $("[data-p3-file]"), se = $("[data-p3-size]"); if (fe) fe.textContent = t.dataset.file; if (se) se.textContent = t.dataset.size;
       layer = reduce ? N : 0; hold = 0; shown = -1; yaw = SC[k].yaw; pitch = SC[k].pitch;
@@ -488,7 +499,8 @@
         drawM(M["fdm-part"], { clip });
         if (H > 0.3) { gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false); drawM(M["fdm-part"], { mode: 4, shadow: 1, clip }); gl.depthMask(true); gl.disable(gl.BLEND); }
         if (!done && layer > 0) {
-          capPass(M["fdm-part"], clip, 2, H); capPass(M["fdm-inner"], clip, 3, H + 0.01);
+          const sec0 = path.find((x) => H >= x.y0 && H < x.y1) || path[path.length - 1];
+          capPass(M["fdm-part"], clip, 2, H); if (H - sec0.y0 >= 0.85 && sec0.y1 - H >= 0.85) capPass(M["fdm-inner"], clip, 3, H + 0.01);
           // 노즐: 지금 층의 외곽선을 따라 돌고, 방금 지나온 길은 밝은 줄로 남는다
           const sec = path.find((s) => H >= s.y0 && H < s.y1) || path[path.length - 1], pos = travel % sec.len;
           let lo = 0, hi = sec.seg.length - 1; while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (sec.seg[mid][4] <= pos) lo = mid; else hi = mid - 1; }
@@ -506,7 +518,7 @@
         drawM(M["sla-part"], { flip: -1, lift, clip });
         drawM(M["sla-plat"], { off: [0, lift, 0] });
         gl.enable(gl.BLEND); gl.depthMask(false);
-        if (!done) { gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA); gl.uniform3f(U("uGlow"), 0, 0, 18); drawM(quad, { mode: 5, off: [0, 0.2, 0] }); }
+        if (!done) { gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA); const ga = (t || 0) / 1000 * 3.1; gl.uniform3f(U("uGlow"), 11 * Math.cos(ga), 11 * Math.sin(ga), 6); drawM(quad, { mode: 5, off: [0, 0.25, 0] }); gl.uniform3f(U("uGlow"), 0, 0, 19); drawM(quad, { mode: 5, off: [0, 0.2, 0] }); }
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
         drawM(M["sla-rig"], { only: 34 }); drawM(M["sla-rig"], { only: 31 });
         gl.depthMask(true); gl.disable(gl.BLEND);
