@@ -2004,6 +2004,24 @@ a.prod:hover b { color: var(--accent); }
 .p3-shop small { margin-left: 8px; padding: 2px 7px; font-size: 12px; font-weight: 600; border: 1px solid currentColor; border-radius: 2px; }
 .p3-case__thumbs { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; }
 .p3-case__thumbs img { width: 100%; aspect-ratio: 3 / 2; object-fit: cover; display: block; }
+/* 온등 실조명: 왼쪽 어두운 무대에서 빛나는 조명, 오른쪽에 설명과 크기 고르기 */
+.p3-lamp { grid-column: 1 / -1; display: grid; grid-template-columns: 7fr 5fr; background: #0b0d12; color: #f3e6d2; }
+.p3-lamp__stage { position: relative; aspect-ratio: 6 / 5; max-height: 560px; }
+.p3-lamp__stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; touch-action: pan-y; }
+.p3-lamp__stage canvas:active { cursor: grabbing; }
+.p3-lamp__tip { position: absolute; left: 16px; top: 12px; font-size: 12.5px; color: #9a917f; pointer-events: none; }
+.p3-lamp__prog { position: absolute; left: 16px; right: 16px; bottom: 12px; display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: #9a917f; }
+.p3-lamp__prog input { flex: 1; min-width: 0; accent-color: #ffb454; }
+.p3-lamp__prog output { min-width: 3em; text-align: right; font-variant-numeric: tabular-nums; }
+.p3-lamp__tx { padding: clamp(24px, 3vw, 44px); display: grid; align-content: center; gap: 14px; border-left: 1px solid rgba(255, 255, 255, .1); }
+.p3-lamp__tx p { margin: 0; opacity: .8; }
+.p3-lamp__sizes { display: grid; gap: 6px; }
+.p3-lamp__sizes button, .p3-lamp__lit { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 10px 14px; border: 1px solid rgba(255, 255, 255, .22); background: none; color: inherit; font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; text-align: left; }
+.p3-lamp__sizes small { font-size: 13px; font-weight: 400; opacity: .7; font-variant-numeric: tabular-nums; }
+.p3-lamp__sizes button[aria-pressed="true"], .p3-lamp__lit[aria-pressed="true"] { background: #ffb454; border-color: #ffb454; color: #1a1205; }
+.p3-lamp__lit { justify-self: start; }
+.p3-lamp button:focus-visible, .p3-lamp input:focus-visible { outline: 2px solid #ffb454; outline-offset: 2px; }
+.p3-lamp__note { font-size: 13px; }
 .p3-roll { margin-top: 24px; overflow: hidden; background: #15181b; padding: 20px 0; }
 .p3-roll__track { display: flex; gap: 16px; width: max-content; animation: p3-roll 70s linear infinite; }
 .p3-roll:hover .p3-roll__track { animation-play-state: paused; }
@@ -2105,6 +2123,8 @@ a.prod:hover b { color: var(--accent); }
   .p3-sl__panel dl { display: grid; grid-template-columns: 1fr 1fr; column-gap: 20px; }
   .p3-view__in, .p3-fleet, .p3-class, .p3-flows { grid-template-columns: 1fr; }
   .p3-case, .p3-case--ondeung { grid-template-columns: 1fr; }
+  .p3-lamp { grid-template-columns: 1fr; }
+  .p3-lamp__tx { border-left: 0; border-top: 1px solid rgba(255, 255, 255, .1); }
   .p3-case--ondeung .p3-case__main { order: -1; }
   .p3-case__main { min-height: 0; }
   .p3-notes { grid-template-columns: 1fr 1fr; }

@@ -537,6 +537,61 @@
     new IntersectionObserver((es) => { seen = es[0].isIntersecting; last = 0; if (seen) kick(); }).observe(box);
     setMode("fdm", true); fetchScene("fdm").then(() => fetchScene("sla")).catch(() => {});
   });
+  // ── 3D프린팅: 온등 실조명 미리보기. 노즐이 지나가는 길(선분)을 직접 계산해 그린다
+  //    형상 계산은 '온등 실조명 공방'의 것을 옮겼다: 다각형 고리 3층 + 그 사이를 지그재그로 건너는 실 3층을 한 단으로 쌓고, 단마다 조금씩 돌린다
+  d.querySelectorAll("[data-p3-lamp]").forEach((box) => {
+    const cv = box.querySelector("canvas"), ctx = cv.getContext("2d"), D2R = Math.PI / 180;
+    const SIZES = { s: { outerD: 150, innerD: 90, height: 149.4, shape: "straight", amt: 0 }, m: { outerD: 190, innerD: 110, height: 180, shape: "barrel", amt: 14 }, l: { outerD: 170, innerD: 100, height: 196.2, shape: "hourglass", amt: 10 } };
+    const build = (o) => {
+      const N = 16, G = 3, lh = 0.3, step = 360 / N, cycH = 2 * G * lh, cycles = Math.max(2, Math.round(o.height / cycH)), twist = 3, sr = 22, B = Math.max(1, Math.round(9 / cycH));
+      const out = []; let X = 0, Y = 0, Z = lh;
+      const pt = (r, a) => [r * Math.cos(a * D2R), r * Math.sin(a * D2R)];
+      const ext = (x, y) => { out.push(X, Y, Z, x, y, Z); X = x; Y = y; };
+      const trav = (x, y, z) => { X = x; Y = y; Z = z; };
+      const prof = (t) => o.shape === "barrel" ? o.outerD / 2 - o.amt * (1 - Math.sin(Math.PI * t)) : o.shape === "hourglass" ? o.outerD / 2 - o.amt * Math.sin(Math.PI * t) : o.outerD / 2;
+      const Ro = [], ang = []; let a = step;
+      for (let c = 0; c <= cycles; c++) { Ro.push(prof(Math.min(1, c / (cycles - 1)))); ang.push(a); a += twist; }
+      const ring = (R, a0, z1) => { const [sx, sy] = pt(R, a0); for (let j = 0; j < G; j++) { trav(sx, sy, z1 + j * lh); for (let k = 1; k <= N; k++) { const q = pt(R, a0 + k * step); ext(q[0], q[1]); } } };
+      const zig = (rA, aA, rB, aB, z1) => { const [sx, sy] = pt(rA, aA); for (let j = 0; j < G; j++) { trav(sx, sy, z1 + j * lh); for (let k = 0; k < N; k++) { let q = pt(rB, aB + k * step); ext(q[0], q[1]); q = pt(rA, aA + (k + 1) * step); ext(q[0], q[1]); } } };
+      const Ri = o.innerD / 2;
+      for (let c = 0; c < cycles; c++) {
+        const zB = c * cycH, z1 = zB + lh, zTop = zB + (G + 1) * lh;
+        ring(Ro[c], ang[c], z1); ring(Ri, ang[c], z1);
+        if (c < B) for (let j = 0; j < G; j++) for (const r of [sr + 0.4, sr, sr - 0.4]) { trav(r, 0, z1 + j * lh); for (let k = 1; k <= 48; k++) { const q = pt(r, k * 7.5); ext(q[0], q[1]); } }
+        if (c < B - 1) zig(sr - 0.4, ang[c], Ri + 1, ang[c] + 0.1 / D2R, zTop);
+        const aS = ang[c + 1] + 0.4375; zig(Ri - 2, aS, Ro[c + 1] + 0.5, aS, zTop);
+      }
+      return { segs: new Float32Array(out), n: out.length / 6, H: cycles * cycH, R: Math.max(...Ro) + 0.5 };
+    };
+    let L = null, yaw = 0.5, pitch = 1.12, lit = true, prog = 1, drag = null, seen = false, dirty = true, last = 0, raf = 0;
+    const draw = () => {
+      const dpr = Math.min(2, devicePixelRatio || 1), w = cv.clientWidth, h = cv.clientHeight;
+      if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.globalCompositeOperation = "source-over"; ctx.fillStyle = "#0b0d12"; ctx.fillRect(0, 0, w, h);
+      if (!L) return;
+      const H = L.H, R = L.R, cy0 = Math.cos(yaw), sy0 = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
+      const ex = Math.max(H * sp + 2 * R * cp, 2 * R) * 1.08, sc = Math.min(w / (2 * R * 1.12), (h - 46) / ex), ox = w / 2, oy = (h - 30) / 2 + (H / 2 * sp) * sc, cam = Math.max(H, R * 2) * 3.2;
+      if (lit) { const gy = oy - (H * 0.5 * sp) * sc, gr = ctx.createRadialGradient(ox, gy, 2, ox, gy, R * sc * 1.5); gr.addColorStop(0, "rgba(255,214,150,.55)"); gr.addColorStop(.25, "rgba(255,170,80,.20)"); gr.addColorStop(1, "rgba(255,150,60,0)"); ctx.fillStyle = gr; ctx.fillRect(0, 0, w, h); }
+      ctx.globalCompositeOperation = "lighter"; ctx.lineWidth = Math.max(.6, 0.45 * sc * .7); ctx.lineCap = "round"; ctx.strokeStyle = lit ? "rgba(255,205,150,.17)" : "rgba(255,122,48,.42)";
+      const n = Math.floor(L.n * prog), sg = L.segs;
+      for (let i = 0; i < n; i += 96) { ctx.beginPath(); const e = Math.min(n, i + 96);
+        for (let j = i; j < e; j++) { const o = j * 6;
+          let x = sg[o], y = sg[o + 1], z = sg[o + 2], Xr = x * cy0 - y * sy0, Yr = x * sy0 + y * cy0, k = cam / (cam - Yr * cp * 0.5); ctx.moveTo(ox + Xr * sc * k, oy - (z * sp - Yr * cp) * sc * k);
+          x = sg[o + 3]; y = sg[o + 4]; z = sg[o + 5]; Xr = x * cy0 - y * sy0; Yr = x * sy0 + y * cy0; k = cam / (cam - Yr * cp * 0.5); ctx.lineTo(ox + Xr * sc * k, oy - (z * sp - Yr * cp) * sc * k); }
+        ctx.stroke(); }
+    };
+    const loop = (t) => { raf = 0; if (!seen) return; if (!reduce && !drag) { yaw += Math.min(50, t - last) * 0.00018; dirty = true; } last = t; if (dirty) { dirty = false; draw(); } if (!reduce || dirty) raf = requestAnimationFrame(loop); };
+    const kick = () => { dirty = true; if (!raf && seen) raf = requestAnimationFrame(loop); };
+    const pick = (k) => { box.querySelectorAll("[data-p3-lamp-size]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.p3LampSize === k))); L = build(SIZES[k]); kick(); };
+    box.querySelectorAll("[data-p3-lamp-size]").forEach((b) => b.addEventListener("click", () => pick(b.dataset.p3LampSize)));
+    const litBtn = box.querySelector("[data-p3-lamp-lit]"); if (litBtn) litBtn.addEventListener("click", () => { lit = !lit; litBtn.setAttribute("aria-pressed", String(lit)); kick(); });
+    const pr = box.querySelector("[data-p3-lamp-prog]"), po = box.querySelector("[data-p3-lamp-pct]"); if (pr) pr.addEventListener("input", () => { prog = pr.value / 100; if (po) po.textContent = pr.value + "%"; kick(); });
+    cv.addEventListener("pointerdown", (e) => { drag = { x: e.clientX, y: e.clientY }; cv.setPointerCapture(e.pointerId); });
+    cv.addEventListener("pointermove", (e) => { if (!drag) return; yaw += (e.clientX - drag.x) * 0.008; pitch = Math.max(0.15, Math.min(1.5, pitch + (e.clientY - drag.y) * 0.006)); drag = { x: e.clientX, y: e.clientY }; kick(); });
+    const up = () => { drag = null; }; cv.addEventListener("pointerup", up); cv.addEventListener("pointercancel", up);
+    addEventListener("resize", kick);
+    new IntersectionObserver((es) => { seen = es[0].isIntersecting; if (seen) { if (!L) pick("m"); last = performance.now(); kick(); } }, { rootMargin: "200px" }).observe(box);
+  });
   // ── 3D프린팅: 3D 모델 뷰어 (WebGL2, 라이브러리 없음). 화면에 들어올 때 모델을 받아 오고, 끌면 돌아간다
   d.querySelectorAll("[data-p3-viewer]").forEach((box) => {
     const cv = box.querySelector("canvas"), sec = box.closest("section") || d;
