@@ -2052,6 +2052,11 @@ a.prod:hover b { color: var(--accent); }
 .p3-rows dt small { display: block; margin-top: 4px; font-size: 14px; color: var(--muted); }
 .p3-rows dd { margin: 0; max-width: 40em; color: var(--ink-2); }
 .p3-rows dd a { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+.p3-fig { margin: clamp(28px, 4vw, 48px) 0 0; }
+.p3-fig img { width: 100%; height: auto; display: block; background: #2f2f2f; }
+.p3-fig figcaption, .p3-shot figcaption { margin-top: 10px; font-size: 14px; color: var(--muted); }
+.p3-shot { margin: 28px 0 0; max-width: 300px; }
+.p3-shot img { width: 100%; height: auto; display: block; background: var(--bg-3); }
 /* FDM · SLA 비교표: 미리보기에서 고른 방식의 열에 표시가 붙는다 */
 .p3-cmp { margin-top: clamp(36px, 5vw, 64px); }
 .p3-cmp > p { margin-top: 8px; max-width: 44em; color: var(--muted); }
