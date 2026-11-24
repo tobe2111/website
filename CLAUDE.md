@@ -23,6 +23,17 @@
 
 코드는 `cloudflare/` 아래가 전부입니다. 저장소 루트의 초기 Node.js 레퍼런스 구현은 제거되었습니다.
 
+## Cloudflare 계정은 두 개입니다 (헷갈리지 말 것)
+
+| 무엇 | Cloudflare 프로젝트 | 계정 | 계정 번호 앞자리 |
+| --- | --- | --- | --- |
+| ur-team.com 홈페이지 (`ur-team-site/`) | Pages `urteam-homepage` | ur-team.com 이 있는 계정 | `1a2c006f` |
+| 엔진 · 결제 (`cloudflare/`, `wrangler.toml`) — homepage.ur-team.com 이 여기로 이어짐 | Workers `website` (`website.tobe211167.workers.dev`) | **tobe211167@gmail.com 로 로그인하는 계정** | `7bdf7a88` |
+
+- "Workers Builds: website" 실패 알림은 두 번째 계정의 일입니다. ur-team.com 계정에는 `website` 가 없습니다.
+- 그 계정에 `homepage-bridge` 같은 이름이 보여도 `website` 와는 다른 것이니 건드리지 않습니다.
+- 2026-11 부터 `website` 빌드가 "빌드 토큰이 지워짐"으로 실패 중입니다. 사용자가 tobe211167 계정 → Workers & Pages → website → Settings → Build → API token 을 새로 골라야 풀립니다.
+
 ## 스타일시트를 합칠 때 (읽지 않고 넘어가면 화면이 죽습니다)
 
 `cloudflare/public/css/app.css` 는 **한 파일 6천 줄**입니다. 여러 갈래가 동시에 이 파일을
