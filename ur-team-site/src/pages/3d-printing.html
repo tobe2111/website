@@ -11,25 +11,33 @@
     </div>
 
     <!-- 출력 미리보기: 슬라이서 화면처럼 한 층씩 쌓이고, 아래 막대로 레이어를 직접 넘겨 볼 수 있다 -->
-    <div class="p3-sl" data-p3-slicer data-src="/assets/models/s-gear.bin" data-layers="175" data-lh="0.2">
-      <div class="p3-sl__bar"><b>gear_set.stl</b><span>120 × 90 × 35 mm</span><em>미리보기 예시</em></div>
+    <div class="p3-sl" data-p3-slicer>
+      <div class="p3-sl__bar">
+        <div class="p3-sl__tabs" role="tablist" aria-label="출력 방식">
+          <button type="button" role="tab" aria-selected="true" data-p3-tab="fdm" data-layers="100" data-lh="0.2" data-file="gear_set.stl" data-size="112 × 78 × 20 mm">FDM 필라멘트</button>
+          <button type="button" role="tab" aria-selected="false" data-p3-tab="sla" data-layers="958" data-lh="0.05" data-file="rook.stl" data-size="Ø 30 × 48 mm">SLA 레진</button>
+        </div>
+        <b data-p3-file>gear_set.stl</b><span data-p3-size>112 × 78 × 20 mm</span><em>미리보기 예시</em>
+      </div>
       <div class="p3-sl__body">
         <div class="p3-sl__view">
-          <canvas aria-label="기어 부품의 출력 미리보기. 한 층씩 쌓이며, 끌어서 시점을 돌릴 수 있습니다" role="img"></canvas>
+          <canvas aria-label="출력 미리보기. 부품이 한 층씩 만들어지며, 끌어서 시점을 돌릴 수 있습니다" role="img"></canvas>
           <svg class="p3-sl__axes" viewBox="0 0 64 64" aria-hidden="true"><path d="M20 44 54 50" stroke="#d64545"/><path d="M20 44 20 10" stroke="#2f9e5b"/><path d="M20 44 6 56" stroke="#1747e6"/><text x="56" y="54">X</text><text x="17" y="8">Z</text><text x="0" y="62">Y</text></svg>
+          <p class="p3-sl__note" data-p3-panel="fdm">녹인 필라멘트를 노즐로 짜내 한 층씩 쌓습니다. 잘린 면에 외벽과 속 채움이 보입니다.</p>
+          <p class="p3-sl__note" data-p3-panel="sla" hidden>수조 바닥에서 빛으로 수지를 굳히고, 플랫폼이 올라가며 부품이 거꾸로 자랍니다.</p>
           <p class="p3-sl__hint">끌어서 시점 회전</p>
           <p class="p3-sl__load" data-p3-load>불러오는 중</p>
         </div>
         <aside class="p3-sl__panel">
           <h2>슬라이스 설정</h2>
-          <dl><div><dt>재료</dt><dd>PLA</dd></div><div><dt>노즐</dt><dd>0.4 mm</dd></div><div><dt>적층 높이</dt><dd>0.2 mm</dd></div><div><dt>벽</dt><dd>3줄</dd></div><div><dt>채움</dt><dd>15 % 격자</dd></div><div><dt>서포트</dt><dd>없음</dd></div><div><dt>레이어 수</dt><dd>175</dd></div></dl>
-          <p class="p3-sl__g"><span>재료 사용량</span><b>약 51 g</b><small>견적은 이 무게를 기준으로 산정합니다.</small></p>
+          <div data-p3-panel="fdm"><dl><div><dt>방식</dt><dd>FDM 필라멘트 적층</dd></div><div><dt>재료</dt><dd>PLA 1.75 mm</dd></div><div><dt>노즐</dt><dd>0.4 mm</dd></div><div><dt>적층 높이</dt><dd>0.2 mm</dd></div><div><dt>외벽</dt><dd>3줄 (1.2 mm)</dd></div><div><dt>채움</dt><dd>15 % 격자</dd></div><div><dt>서포트</dt><dd>없음</dd></div><div><dt>레이어 수</dt><dd>100</dd></div><div><dt>필라멘트 길이</dt><dd>약 9.3 m</dd></div></dl><p class="p3-sl__g"><span>재료 사용량</span><b>약 28 g</b><small>견적은 이 무게를 기준으로 산정합니다.</small></p></div>
+          <div data-p3-panel="sla" hidden><dl><div><dt>방식</dt><dd>SLA 레진 광경화</dd></div><div><dt>재료</dt><dd>광경화성 수지</dd></div><div><dt>적층 높이</dt><dd>0.05 mm</dd></div><div><dt>출력 방향</dt><dd>플랫폼에 거꾸로 매달림</dd></div><div><dt>서포트</dt><dd>19개 + 래프트</dd></div><div><dt>레이어 수</dt><dd>958</dd></div><div><dt>수지 부피</dt><dd>약 8.3 mL</dd></div></dl><p class="p3-sl__g"><span>재료 사용량</span><b>약 9 g</b><small>견적은 이 무게를 기준으로 산정합니다.</small></p></div>
         </aside>
       </div>
       <div class="p3-sl__foot">
         <button type="button" data-p3-play aria-label="재생 / 일시정지" data-label-play="재생" data-label-pause="일시정지"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="p3-sl__ico-pause" d="M7 5h4v14H7zM13 5h4v14h-4z"/><path class="p3-sl__ico-play" d="M8 5v14l11-7z"/></svg></button>
-        <input type="range" min="0" max="175" value="175" step="1" data-p3-layer aria-label="레이어 넘겨 보기">
-        <output><span>레이어 <b data-p3-n>175</b> / 175</span><span>높이 <b data-p3-h>35.0</b> mm</span></output>
+        <input type="range" min="0" max="100" value="100" step="1" data-p3-layer aria-label="레이어 넘겨 보기">
+        <output><span>레이어 <b data-p3-n>100</b> / <i data-p3-total>100</i></span><span>높이 <b data-p3-h>20.0</b> mm</span></output>
       </div>
     </div>
 

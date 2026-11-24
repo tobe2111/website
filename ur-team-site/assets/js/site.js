@@ -341,113 +341,189 @@
     paint();
   }
   // ── 3D프린팅 첫 화면: 슬라이서처럼 만든 출력 미리보기 (WebGL2, 라이브러리 없음)
-  //    부품이 한 층씩 쌓이고, 잘린 면에는 속 채움 무늬가 보이며, 노즐이 그 층을 따라 돈다. 아래 막대로 레이어를 직접 넘겨 볼 수 있다.
+  //    FDM: 출력판 위에 기어 세트가 한 층씩 쌓인다 — 잘린 면에 외벽과 속 채움, 노즐이 지나간 경로, 움직이는 프린터 헤드, 바닥 그림자
+  //    SLA: 수지 수조 위로 플랫폼이 올라가며 부품이 거꾸로 자란다 — 서포트 · 래프트, 수조 바닥의 빛
+  //    형상은 assets/models/ 의 fdm-* · sla-* 파일(계산해 만든 예시 형상)
   d.querySelectorAll("[data-p3-slicer]").forEach((box) => {
-    const cv = box.querySelector("canvas"), N = Number(box.dataset.layers) || 100, LH = Number(box.dataset.lh) || 0.2;
-    const range = box.querySelector("[data-p3-layer]"), outN = box.querySelector("[data-p3-n]"), outH = box.querySelector("[data-p3-h]"), playBtn = box.querySelector("[data-p3-play]");
+    const cv = box.querySelector("canvas"), $ = (q) => box.querySelector(q);
+    const range = $("[data-p3-layer]"), outN = $("[data-p3-n]"), outH = $("[data-p3-h]"), outT = $("[data-p3-total]"), playBtn = $("[data-p3-play]");
+    const tabs = [...box.querySelectorAll("[data-p3-tab]")];
     const gl = cv.getContext("webgl2", { antialias: true, alpha: true, stencil: true });
     if (!gl) { box.classList.add("is-ready"); return; }
     const sh = (type, src) => { const o = gl.createShader(type); gl.shaderSource(o, src); gl.compileShader(o); return o; };
     const prog = gl.createProgram();
     gl.attachShader(prog, sh(gl.VERTEX_SHADER, `#version 300 es
-      in vec3 aP; in float aL; uniform vec3 uMin, uSc, uC, uOff; uniform float uInv, uYaw, uPitch, uAsp; out vec3 vP; out vec3 vM; out float vL;
-      void main() { vM = aP * uSc + uMin + uOff; vec3 p = (vM - uC) * uInv; float c = cos(uYaw), s = sin(uYaw); p = vec3(c * p.x + s * p.z, p.y, c * p.z - s * p.x);
+      in vec3 aP; in float aL; uniform vec3 uMin, uSc, uC, uOff; uniform float uInv, uYaw, uPitch, uAsp, uFlip, uLift, uShadow; out vec3 vP; out vec3 vW; out float vY; out float vL;
+      void main() { vec3 m = aP * uSc + uMin; vec3 w = vec3(m.x, uFlip * m.y + uLift, m.z); vec3 off = uOff; if (aL > 13.5 && aL < 14.5) off.x = 0.0; w += off; vY = w.y;
+        if (uShadow > .5) { w.x += w.y * .34; w.z -= w.y * .26; w.y = .08; }
+        vW = w; vec3 p = (w - uC) * uInv; float c = cos(uYaw), s = sin(uYaw); p = vec3(c * p.x + s * p.z, p.y, c * p.z - s * p.x);
         c = cos(uPitch); s = sin(uPitch); p = vec3(p.x, c * p.y - s * p.z, s * p.y + c * p.z); p.z -= 3.4; vP = p; vL = aL;
         float f = 2.6; gl_Position = vec4(p.x * f / max(uAsp, 1.0), p.y * f * min(uAsp, 1.0), (p.z * 10.5 + 10.0) / -9.5, -p.z); }`));
     gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, `#version 300 es
-      precision highp float; in vec3 vP; in vec3 vM; in float vL; uniform float uClipY; uniform int uMode; out vec4 o;
+      precision highp float; in vec3 vP; in vec3 vW; in float vY; in float vL; out vec4 o;
+      uniform int uMode, uOnly; uniform vec2 uClip; uniform float uRidge, uTime; uniform vec3 uGlow;
+      bool is(float a) { return abs(vL - a) < .5; }
       void main() {
-        bool plate = vL > 4.5 && vL < 5.5;
-        if (uMode == 1) { if (plate || vM.y > uClipY) discard; o = vec4(0.0); return; }          // 잘린 면이 어디인지 세는 단계
-        if (uMode == 2) {                                                                           // 잘린 면: 속 채움(격자)
-          vec2 q = vec2(vM.x + vM.z, vM.x - vM.z) * .7071;
-          float g = min(abs(fract(q.x / 5.0) - .5), abs(fract(q.y / 5.0) - .5)) * 5.0;
-          o = vec4(g < .5 ? vec3(.42, .58, 1.0) : vec3(.06, .12, .32), 1.0); return; }
-        if (uMode == 0 && !plate && vM.y > uClipY) discard;
-        vec3 n = normalize(cross(dFdx(vP), dFdy(vP))); if (n.z < 0.0) n = -n;
-        float k = .40 + .58 * max(dot(n, normalize(vec3(.35, .65, .68))), 0.0) + .14 * max(dot(n, normalize(vec3(-.7, .1, .5))), 0.0);
-        vec3 base;
-        if (uMode == 3) base = vL > .5 ? vec3(.80, .64, .30) : vec3(.27, .30, .35);              // 노즐(황동) · 히터 블록
-        else if (plate) { base = vec3(.83, .85, .88);                                               // 출력판: 10mm 눈금
-          if (vM.y > -.05) { float gx = abs(fract(vM.x / 10.0 + .5) - .5) * 10.0, gz = abs(fract(vM.z / 10.0 + .5) - .5) * 10.0; if (min(gx, gz) < .2) base = vec3(.64, .67, .72); } }
-        else { base = vec3(.10, .29, .92); k *= .92 + .08 * smoothstep(0.0, .2, fract(vM.y));      // 부품: 층 결
-          if (uClipY - vM.y < .45) base = vec3(.60, .74, 1.0); }                                    // 지금 쌓는 층
-        o = vec4(base * k, 1.0); }`));
+        bool part = is(1.) || is(20.) || is(21.);
+        if (uOnly > 0 ? !is(float(uOnly)) : (uOnly < 0 && (is(31.) || is(34.)))) discard;
+        if (part && (vY < uClip.x || vY > uClip.y)) discard;
+        if (uMode == 1) { if (!part) discard; o = vec4(0.); return; }                              // 잘린 면 세기
+        if (uMode == 2) { o = vec4(.20, .42, 1., 1.); return; }                                    // 잘린 면: 외벽
+        if (uMode == 3) {                                                                          // 잘린 면: 속 채움(격자)
+          vec2 q = vec2(vW.x + vW.z, vW.x - vW.z) * .7071; float g = min(abs(fract(q.x / 5.) - .5), abs(fract(q.y / 5.) - .5)) * 5.;
+          o = vec4(g < .42 ? vec3(.33, .52, 1.) : vec3(.035, .075, .21), 1.); return; }
+        if (uMode == 4) { if (!is(1.)) discard; o = vec4(0., 0., 0., .2); return; }               // 출력판 위 그림자
+        if (uMode == 5) {                                                                          // 수조 바닥의 빛
+          float r = length(vW.xz - uGlow.xy) / uGlow.z, scan = .55 + .45 * sin(vW.x * .9 - uTime * 9.);
+          if (r > 1.3) discard; float g = smoothstep(1.3, .1, r) * scan; o = vec4(vec3(.50, .40, 1.) * g, g * .6); return; }
+        if (uMode == 6) { o = vec4(1., .97, .82, 1.); return; }                                    // 방금 짜낸 줄
+        vec3 n = normalize(cross(dFdx(vP), dFdy(vP))); if (n.z < 0.) n = -n;
+        vec3 L = normalize(vec3(.38, .72, .58)); float df = max(dot(n, L), 0.), fill = max(dot(n, normalize(vec3(-.7, .15, .5))), 0.);
+        float sp = pow(max(dot(n, normalize(L + vec3(0., 0., 1.))), 0.), 42.);
+        vec3 base = vec3(.5); float gloss = .18, a = 1.;
+        if (is(1.)) { base = vec3(.09, .30, .95); gloss = .30; }
+        else if (is(5.)) { base = vec3(.17, .18, .20); gloss = .10;
+          if (vY > -.05) { vec2 g = abs(fract(vW.xz / 10. + .5) - .5) * 10., G = abs(fract(vW.xz / 50. + .5) - .5) * 50.;
+            if (min(G.x, G.y) < .35) base = vec3(.40, .42, .46); else if (min(g.x, g.y) < .16) base = vec3(.27, .28, .31); } }
+        else if (is(6.)) base = vec3(.09, .095, .11);
+        else if (is(10.)) { base = vec3(.14, .15, .17); gloss = .25; }
+        else if (is(11.)) { base = vec3(.74, .76, .79); gloss = .7; }
+        else if (is(12.)) { base = vec3(.83, .64, .26); gloss = .8; }
+        else if (is(13.)) { base = vec3(.88, .90, .93); gloss = .2; }
+        else if (is(14.)) { base = vec3(.52, .55, .59); gloss = .55; }
+        else if (is(15.)) { base = vec3(.62, .17, .12); gloss = .1; }
+        else if (is(20.)) { base = vec3(.80, .82, .86); gloss = .45; }
+        else if (is(21.)) { base = vec3(.70, .73, .78); gloss = .35; }
+        else if (is(30.)) { base = vec3(.12, .13, .15); gloss = .3; }
+        else if (is(32.)) { base = vec3(.34, .36, .40); gloss = .6; }
+        else if (is(33.)) { base = vec3(.22, .24, .27); gloss = .3; }
+        else if (is(35.)) { base = vec3(.42, .40, .36); gloss = .5; }
+        else if (is(31.)) { base = vec3(1., .55, .12); a = .13; gloss = .9; }
+        else if (is(34.)) { base = vec3(.80, .42, .06); a = .36; gloss = .4; }
+        float k = .34 + .60 * df + .16 * fill;
+        if (part && uRidge > 0.) { float fw = fwidth(vY) / uRidge; k *= 1. - .11 * (.5 + .5 * cos(vY / uRidge * 6.2832)) * clamp(1. - fw * 1.6, 0., 1.); }
+        if (is(1.) && uClip.y < 1e5 && uClip.y - vY < .4) base = vec3(.62, .76, 1.);              // 지금 쌓는 층
+        o = vec4(base * k + sp * gloss, a); }`));
     gl.linkProgram(prog);
     if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) { box.classList.add("is-ready"); return; }
     gl.useProgram(prog); gl.clearColor(0, 0, 0, 0);
-    const U = (n) => gl.getUniformLocation(prog, n), aP = gl.getAttribLocation(prog, "aP"), aL = gl.getAttribLocation(prog, "aL");
+    const loc = {}, U = (n) => loc[n] || (loc[n] = gl.getUniformLocation(prog, n)), aP = gl.getAttribLocation(prog, "aP"), aL = gl.getAttribLocation(prog, "aL");
     const mesh = (pos, type, lab, idx) => {
-      const vao = gl.createVertexArray(); gl.bindVertexArray(vao);
-      gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer()); gl.bufferData(gl.ARRAY_BUFFER, pos, gl.STATIC_DRAW);
+      const vao = gl.createVertexArray(); gl.bindVertexArray(vao); const vb = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, vb); gl.bufferData(gl.ARRAY_BUFFER, pos, gl.DYNAMIC_DRAW);
       gl.enableVertexAttribArray(aP); gl.vertexAttribPointer(aP, 3, type, false, 0, 0);
       if (lab) { gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer()); gl.bufferData(gl.ARRAY_BUFFER, lab, gl.STATIC_DRAW); gl.enableVertexAttribArray(aL); gl.vertexAttribPointer(aL, 1, gl.UNSIGNED_BYTE, false, 0, 0); }
-      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.createBuffer()); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STATIC_DRAW);
-      return { vao, count: idx.length, lab: !!lab };
+      if (idx) { gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.createBuffer()); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STATIC_DRAW); }
+      return { vao, vb, count: idx ? idx.length : 0, lab: !!lab, mn: [0, 0, 0], sc: [1, 1, 1] };
     };
-    // 잘린 면을 덮는 넓은 판, 그리고 노즐(원뿔 + 원통)
-    const cap = mesh(new Float32Array([-400, 0, -400, 400, 0, -400, 400, 0, 400, -400, 0, 400]), gl.FLOAT, null, new Uint16Array([0, 1, 2, 0, 2, 3]));
-    const nz = (() => {
-      const P = [0, 0, 0], Lb = [1], I = [], S = 20, ring = (r, y, l) => { const b = P.length / 3; for (let i = 0; i < S; i++) { const a = i / S * Math.PI * 2; P.push(r * Math.cos(a), y, r * Math.sin(a)); Lb.push(l); } return b; };
-      const r1 = ring(3, 6, 1), r2 = ring(5.5, 6, 0), r3 = ring(5.5, 19, 0); P.push(0, 19, 0); Lb.push(0); const top = P.length / 3 - 1;
-      for (let i = 0; i < S; i++) { const j = (i + 1) % S; I.push(0, r1 + i, r1 + j, r1 + i, r2 + i, r1 + j, r1 + j, r2 + i, r2 + j, r2 + i, r3 + i, r2 + j, r2 + j, r3 + i, r3 + j, r3 + i, top, r3 + j); }
-      return mesh(new Float32Array(P), gl.FLOAT, new Uint8Array(Lb), new Uint16Array(I));
-    })();
-    let model = null, yaw = 0.62, pitch = 0.58, drag = null, seen = true, raf = 0, layer = reduce ? N : 0, playing = !reduce, last = 0, hold = 0, shown = -1;
+    const loadBin = (url) => fetch(url).then((r) => { if (!r.ok) throw 0; return r.arrayBuffer(); }).then((buf) => {
+      const hd = new DataView(buf), n = hd.getUint32(0, true), m = hd.getUint32(4, true), f = (i) => hd.getFloat32(8 + i * 4, true);
+      const o = mesh(new Uint16Array(buf, 32, n * 3), gl.UNSIGNED_SHORT, new Uint8Array(buf, 32 + n * 6, n), new Uint16Array(buf, 32 + n * 7 + (n % 2), m * 3));
+      o.mn = [f(0), f(1), f(2)]; o.sc = [f(3), f(4), f(5)]; return o;
+    });
+    const quad = mesh(new Float32Array([-400, 0, -400, 400, 0, -400, 400, 0, 400, -400, 0, 400]), gl.FLOAT, null, new Uint16Array([0, 1, 2, 0, 2, 3]));
+    const trail = mesh(new Float32Array(6 * 400), gl.FLOAT, null, null);
+    const B = "/assets/models/", M = {};
+    const SC = {
+      fdm: { files: ["fdm-part", "fdm-inner", "fdm-head"], c: [18, 6, 2], span: 112, yaw: 0.55, pitch: 0.66, ridge: 1.0 },
+      sla: { files: ["sla-part", "sla-rig", "sla-plat"], c: [0, 22, -6], span: 100, yaw: 0.62, pitch: 0.26, ridge: 0.5 },
+    };
+    let mode = "fdm", N = 100, LH = 0.2, layer = reduce ? N : 0, playing = !reduce, touched = false, last = 0, hold = 0, shown = -1, raf = 0, seen = true, drag = null;
+    let yaw = SC.fdm.yaw, pitch = SC.fdm.pitch, path = null, travel = 0;
+    const ready = (k) => SC[k].files.every((f) => M[f]) && (k !== "fdm" || path);
+    const fetchScene = (k) => SC[k].p || (SC[k].p = Promise.all(SC[k].files.map((f) => M[f] ? 0 : loadBin(B + f + ".bin").then((m) => { M[f] = m; })).concat(
+      k === "fdm" ? fetch(B + "fdm-path.json").then((r) => r.json()).then((j) => {
+        // 외곽선을 선분 목록으로: 노즐이 일정한 속도로 따라 돌 수 있게 누적 길이를 함께 둔다
+        path = j.sections.map((s) => { const seg = []; let len = 0;
+          for (const lp of s.loops) for (let i = 0; i + 3 < lp.length; i += 2) { const d0 = Math.hypot(lp[i + 2] - lp[i], lp[i + 3] - lp[i + 1]); seg.push([lp[i], lp[i + 1], lp[i + 2], lp[i + 3], len, d0]); len += d0; }
+          return { y0: s.y0, y1: s.y1, seg, len }; });
+      }) : [])));
     const paintUi = () => {
       const n = Math.round(layer); if (n === shown) return; shown = n;
       if (outN) outN.textContent = n; if (outH) outH.textContent = (n * LH).toFixed(1); if (range && d.activeElement !== range) range.value = n;
     };
     const setPlaying = (v) => { playing = v; box.classList.toggle("is-playing", v); if (playBtn) playBtn.setAttribute("aria-label", v ? playBtn.dataset.labelPause : playBtn.dataset.labelPlay); last = 0; kick(); };
-    const drawMesh = (m, mode, off) => {
-      gl.bindVertexArray(m.vao); if (!m.lab) gl.vertexAttrib1f(aL, 0);
-      gl.uniform1i(U("uMode"), mode); gl.uniform3fv(U("uOff"), off || [0, 0, 0]);
-      const own = m === model; gl.uniform3fv(U("uMin"), own ? model.mn : [0, 0, 0]); gl.uniform3fv(U("uSc"), own ? model.sc : [1, 1, 1]);
-      gl.drawElements(gl.TRIANGLES, m.count, gl.UNSIGNED_SHORT, 0);
+    const setMode = (k, auto) => {
+      mode = k; const t = tabs.find((x) => x.dataset.p3Tab === k);
+      tabs.forEach((x) => x.setAttribute("aria-selected", String(x === t)));
+      box.querySelectorAll("[data-p3-panel]").forEach((el) => { el.hidden = el.dataset.p3Panel !== k; });
+      N = Number(t.dataset.layers); LH = Number(t.dataset.lh); if (range) range.max = N; if (outT) outT.textContent = N;
+      const fe = $("[data-p3-file]"), se = $("[data-p3-size]"); if (fe) fe.textContent = t.dataset.file; if (se) se.textContent = t.dataset.size;
+      layer = reduce ? N : 0; hold = 0; shown = -1; yaw = SC[k].yaw; pitch = SC[k].pitch;
+      fetchScene(k).then(() => { box.classList.add("is-ready"); if (!auto || !reduce) setPlaying(!reduce); kick(); }).catch(() => box.classList.add("is-ready"));
+      kick();
+    };
+    const drawM = (m, o) => {
+      gl.bindVertexArray(m.vao); if (!m.lab) gl.vertexAttrib1f(aL, o.lab || 0);
+      gl.uniform3fv(U("uMin"), m.mn); gl.uniform3fv(U("uSc"), m.sc); gl.uniform1i(U("uMode"), o.mode || 0); gl.uniform1i(U("uOnly"), o.only || 0);
+      gl.uniform3fv(U("uOff"), o.off || [0, 0, 0]); gl.uniform1f(U("uFlip"), o.flip || 1); gl.uniform1f(U("uLift"), o.lift || 0); gl.uniform1f(U("uShadow"), o.shadow ? 1 : 0);
+      gl.uniform2fv(U("uClip"), o.clip || [-1e6, 1e6]);
+      if (o.lines) gl.drawArrays(gl.LINES, 0, o.lines); else gl.drawElements(gl.TRIANGLES, m.count, gl.UNSIGNED_SHORT, 0);
+    };
+    const capPass = (solid, clip, capMode, y) => {   // 잘린 부품의 앞 · 뒷면을 모두 세어 홀수 번 겹친 곳(속)에만 판을 그린다
+      gl.clear(gl.STENCIL_BUFFER_BIT); gl.enable(gl.STENCIL_TEST); gl.disable(gl.DEPTH_TEST); gl.colorMask(false, false, false, false); gl.depthMask(false);
+      gl.stencilFunc(gl.ALWAYS, 0, 0xff); gl.stencilOp(gl.KEEP, gl.KEEP, gl.INVERT); drawM(solid, { mode: 1, clip });
+      gl.colorMask(true, true, true, true); gl.depthMask(true); gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL);
+      gl.stencilFunc(gl.NOTEQUAL, 0, 0xff); gl.stencilOp(gl.KEEP, gl.KEEP, gl.KEEP); drawM(quad, { mode: capMode, off: [0, y, 0] });
+      gl.disable(gl.STENCIL_TEST);
     };
     const draw = (t) => {
-      raf = 0; if (!model) return;
+      raf = 0; if (!ready(mode)) return;
+      const dt = last ? Math.min(80, t - last) : 0; last = t;
       if (playing) {
-        const dt = last ? Math.min(80, t - last) : 0; last = t;
-        if (layer >= N) { hold += dt; if (hold > 2600) { hold = 0; layer = 0; } } else layer = Math.min(N, layer + dt * N / 17000);
+        if (layer >= N) { hold += dt; if (hold > 2800) { hold = 0; if (!touched) return setMode(mode === "fdm" ? "sla" : "fdm", true); layer = 0; } }
+        else layer = Math.min(N, layer + dt * N / 18000);
+        travel += dt * 0.26;
       }
       paintUi();
       const r = Math.min(devicePixelRatio || 1, 2), w = Math.round(cv.clientWidth * r), h = Math.round(cv.clientHeight * r);
       if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
       gl.viewport(0, 0, w, h); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
-      const clipY = layer * LH, done = layer >= N;
-      gl.uniform3fv(U("uC"), model.c); gl.uniform1f(U("uInv"), model.inv * Math.min(1, 0.55 + 0.25 * (w / h))); gl.uniform1f(U("uYaw"), yaw); gl.uniform1f(U("uPitch"), pitch); gl.uniform1f(U("uAsp"), w / h);
-      gl.uniform1f(U("uClipY"), done ? 1e6 : clipY);
-      if (!done && layer > 0) {
-        // 잘린 면 찾기: 잘린 부품의 앞 · 뒷면을 모두 그려 홀수 번 겹친 곳이 '속'이다
-        gl.enable(gl.STENCIL_TEST); gl.disable(gl.DEPTH_TEST); gl.colorMask(false, false, false, false); gl.depthMask(false);
-        gl.stencilFunc(gl.ALWAYS, 0, 0xff); gl.stencilOp(gl.KEEP, gl.KEEP, gl.INVERT); drawMesh(model, 1);
-        gl.colorMask(true, true, true, true); gl.depthMask(true); gl.enable(gl.DEPTH_TEST);
-        gl.stencilFunc(gl.NOTEQUAL, 0, 0xff); gl.stencilOp(gl.KEEP, gl.KEEP, gl.KEEP); drawMesh(cap, 2, [0, clipY, 0]);
-        gl.disable(gl.STENCIL_TEST);
-      }
-      gl.enable(gl.DEPTH_TEST); drawMesh(model, 0);
-      if (!done) {   // 노즐: 큰 기어 둘레와 작은 기어 둘레를 번갈아 돈다
-        const tt = (t || 0) / 1000, big = Math.floor(tt / 2.4) % 2 === 0, a = tt * 2.6, cx = big ? 0 : 51, rr = big ? 30 : 15;
-        gl.uniform1f(U("uClipY"), 1e6); drawMesh(nz, 3, [cx + rr * Math.cos(a), clipY, rr * Math.sin(a)]);
+      gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LESS); gl.depthMask(true); gl.disable(gl.BLEND);
+      const S0 = SC[mode], done = layer >= N, H = layer * LH;
+      gl.uniform3fv(U("uC"), S0.c); gl.uniform1f(U("uInv"), 2 / S0.span * Math.min(1, 0.5 + 0.27 * (w / h))); gl.uniform1f(U("uYaw"), yaw); gl.uniform1f(U("uPitch"), pitch); gl.uniform1f(U("uAsp"), w / h);
+      gl.uniform1f(U("uRidge"), S0.ridge); gl.uniform1f(U("uTime"), (t || 0) / 1000);
+      if (mode === "fdm") {
+        const clip = [-1e6, done ? 1e6 : H];
+        drawM(M["fdm-part"], { clip });
+        if (H > 0.3) { gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false); drawM(M["fdm-part"], { mode: 4, shadow: 1, clip }); gl.depthMask(true); gl.disable(gl.BLEND); }
+        if (!done && layer > 0) {
+          capPass(M["fdm-part"], clip, 2, H); capPass(M["fdm-inner"], clip, 3, H + 0.01);
+          // 노즐: 지금 층의 외곽선을 따라 돌고, 방금 지나온 길은 밝은 줄로 남는다
+          const sec = path.find((s) => H >= s.y0 && H < s.y1) || path[path.length - 1], pos = travel % sec.len;
+          let lo = 0, hi = sec.seg.length - 1; while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (sec.seg[mid][4] <= pos) lo = mid; else hi = mid - 1; }
+          const sg = sec.seg[lo], f = sg[5] ? (pos - sg[4]) / sg[5] : 0, nx = sg[0] + (sg[2] - sg[0]) * f, nzz = sg[1] + (sg[3] - sg[1]) * f;
+          const buf = new Float32Array(6 * 400); let c = 0, back = 46;
+          buf.set([sg[0], 0, sg[1], nx, 0, nzz], 0); c = 2;
+          for (let i = lo - 1; i >= 0 && pos - sec.seg[i][4] < back && c < 798; i--) { const q = sec.seg[i]; if (Math.hypot(q[2] - sec.seg[i + 1][0], q[3] - sec.seg[i + 1][1]) > 0.6) break; buf.set([q[0], 0, q[1], q[2], 0, q[3]], c * 3); c += 2; }
+          gl.bindBuffer(gl.ARRAY_BUFFER, trail.vb); gl.bufferSubData(gl.ARRAY_BUFFER, 0, buf.subarray(0, c * 3));
+          gl.depthFunc(gl.LEQUAL); drawM(trail, { mode: 6, off: [0, H + 0.06, 0], lines: c }); gl.depthFunc(gl.LESS);
+          drawM(M["fdm-head"], { off: [nx, H + 0.3, nzz] });
+        }
+      } else {
+        const lift = H, clip = [0, 1e6];
+        drawM(M["sla-rig"], { only: -1 });
+        drawM(M["sla-part"], { flip: -1, lift, clip });
+        drawM(M["sla-plat"], { off: [0, lift, 0] });
+        gl.enable(gl.BLEND); gl.depthMask(false);
+        if (!done) { gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA); gl.uniform3f(U("uGlow"), 0, 0, 18); drawM(quad, { mode: 5, off: [0, 0.2, 0] }); }
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+        drawM(M["sla-rig"], { only: 34 }); drawM(M["sla-rig"], { only: 31 });
+        gl.depthMask(true); gl.disable(gl.BLEND);
       }
       if (seen && playing) kick();
     };
     const kick = () => { if (!raf) raf = requestAnimationFrame(draw); };
-    fetch(box.dataset.src).then((r) => { if (!r.ok) throw 0; return r.arrayBuffer(); }).then((buf) => {
-      const hd = new DataView(buf), n = hd.getUint32(0, true), m = hd.getUint32(4, true), f = (i) => hd.getFloat32(8 + i * 4, true);
-      const mn = [f(0), f(1), f(2)], sc = [f(3), f(4), f(5)], ext = sc.map((v) => v * 65535);
-      model = mesh(new Uint16Array(buf, 32, n * 3), gl.UNSIGNED_SHORT, new Uint8Array(buf, 32 + n * 6, n), new Uint16Array(buf, 32 + n * 7 + (n % 2), m * 3));
-      Object.assign(model, { mn, sc, c: [mn[0] + ext[0] / 2, mn[1] + ext[1] / 2 - 3, mn[2] + ext[2] / 2], inv: 2 / Math.hypot(ext[0], ext[1], ext[2]) * 1.95 });
-      box.classList.add("is-ready"); setPlaying(playing); kick();
-    }).catch(() => box.classList.add("is-ready"));
-    if (range) range.addEventListener("input", () => { layer = Number(range.value); hold = 0; if (playing) setPlaying(false); shown = -1; kick(); });
-    if (playBtn) playBtn.addEventListener("click", () => { if (!playing && layer >= N) layer = 0; setPlaying(!playing); });
-    cv.addEventListener("pointerdown", (e) => { drag = { x: e.clientX, y: e.clientY }; cv.setPointerCapture(e.pointerId); });
-    cv.addEventListener("pointermove", (e) => { if (!drag) return; yaw += (e.clientX - drag.x) * 0.01; pitch = Math.max(0.12, Math.min(1.3, pitch + (e.clientY - drag.y) * 0.006)); drag = { x: e.clientX, y: e.clientY }; kick(); });
+    const touch = () => { touched = true; };
+    tabs.forEach((t) => t.addEventListener("click", () => { touch(); setMode(t.dataset.p3Tab); }));
+    if (range) range.addEventListener("input", () => { touch(); layer = Number(range.value); hold = 0; if (playing) setPlaying(false); shown = -1; kick(); });
+    if (playBtn) playBtn.addEventListener("click", () => { touch(); if (!playing && layer >= N) layer = 0; setPlaying(!playing); });
+    cv.addEventListener("pointerdown", (e) => { touch(); drag = { x: e.clientX, y: e.clientY }; cv.setPointerCapture(e.pointerId); });
+    cv.addEventListener("pointermove", (e) => { if (!drag) return; yaw += (e.clientX - drag.x) * 0.01; pitch = Math.max(0.08, Math.min(1.35, pitch + (e.clientY - drag.y) * 0.006)); drag = { x: e.clientX, y: e.clientY }; kick(); });
     const up = () => { drag = null; }; cv.addEventListener("pointerup", up); cv.addEventListener("pointercancel", up);
     addEventListener("resize", kick);
     new IntersectionObserver((es) => { seen = es[0].isIntersecting; last = 0; if (seen) kick(); }).observe(box);
+    setMode("fdm", true); fetchScene("fdm").then(() => fetchScene("sla")).catch(() => {});
   });
   // ── 3D프린팅: 3D 모델 뷰어 (WebGL2, 라이브러리 없음). 화면에 들어올 때 모델을 받아 오고, 끌면 돌아간다
   d.querySelectorAll("[data-p3-viewer]").forEach((box) => {
