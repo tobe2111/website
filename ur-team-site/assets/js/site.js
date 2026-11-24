@@ -340,6 +340,115 @@
     addEventListener("scroll", () => { if (!tick) tick = requestAnimationFrame(paint); }, { passive: true });
     paint();
   }
+  // ── 3D프린팅 첫 화면: 슬라이서처럼 만든 출력 미리보기 (WebGL2, 라이브러리 없음)
+  //    부품이 한 층씩 쌓이고, 잘린 면에는 속 채움 무늬가 보이며, 노즐이 그 층을 따라 돈다. 아래 막대로 레이어를 직접 넘겨 볼 수 있다.
+  d.querySelectorAll("[data-p3-slicer]").forEach((box) => {
+    const cv = box.querySelector("canvas"), N = Number(box.dataset.layers) || 100, LH = Number(box.dataset.lh) || 0.2;
+    const range = box.querySelector("[data-p3-layer]"), outN = box.querySelector("[data-p3-n]"), outH = box.querySelector("[data-p3-h]"), playBtn = box.querySelector("[data-p3-play]");
+    const gl = cv.getContext("webgl2", { antialias: true, alpha: true, stencil: true });
+    if (!gl) { box.classList.add("is-ready"); return; }
+    const sh = (type, src) => { const o = gl.createShader(type); gl.shaderSource(o, src); gl.compileShader(o); return o; };
+    const prog = gl.createProgram();
+    gl.attachShader(prog, sh(gl.VERTEX_SHADER, `#version 300 es
+      in vec3 aP; in float aL; uniform vec3 uMin, uSc, uC, uOff; uniform float uInv, uYaw, uPitch, uAsp; out vec3 vP; out vec3 vM; out float vL;
+      void main() { vM = aP * uSc + uMin + uOff; vec3 p = (vM - uC) * uInv; float c = cos(uYaw), s = sin(uYaw); p = vec3(c * p.x + s * p.z, p.y, c * p.z - s * p.x);
+        c = cos(uPitch); s = sin(uPitch); p = vec3(p.x, c * p.y - s * p.z, s * p.y + c * p.z); p.z -= 3.4; vP = p; vL = aL;
+        float f = 2.6; gl_Position = vec4(p.x * f / max(uAsp, 1.0), p.y * f * min(uAsp, 1.0), (p.z * 10.5 + 10.0) / -9.5, -p.z); }`));
+    gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, `#version 300 es
+      precision highp float; in vec3 vP; in vec3 vM; in float vL; uniform float uClipY; uniform int uMode; out vec4 o;
+      void main() {
+        bool plate = vL > 4.5 && vL < 5.5;
+        if (uMode == 1) { if (plate || vM.y > uClipY) discard; o = vec4(0.0); return; }          // 잘린 면이 어디인지 세는 단계
+        if (uMode == 2) {                                                                           // 잘린 면: 속 채움(격자)
+          vec2 q = vec2(vM.x + vM.z, vM.x - vM.z) * .7071;
+          float g = min(abs(fract(q.x / 5.0) - .5), abs(fract(q.y / 5.0) - .5)) * 5.0;
+          o = vec4(g < .5 ? vec3(.42, .58, 1.0) : vec3(.06, .12, .32), 1.0); return; }
+        if (uMode == 0 && !plate && vM.y > uClipY) discard;
+        vec3 n = normalize(cross(dFdx(vP), dFdy(vP))); if (n.z < 0.0) n = -n;
+        float k = .40 + .58 * max(dot(n, normalize(vec3(.35, .65, .68))), 0.0) + .14 * max(dot(n, normalize(vec3(-.7, .1, .5))), 0.0);
+        vec3 base;
+        if (uMode == 3) base = vL > .5 ? vec3(.80, .64, .30) : vec3(.27, .30, .35);              // 노즐(황동) · 히터 블록
+        else if (plate) { base = vec3(.83, .85, .88);                                               // 출력판: 10mm 눈금
+          if (vM.y > -.05) { float gx = abs(fract(vM.x / 10.0 + .5) - .5) * 10.0, gz = abs(fract(vM.z / 10.0 + .5) - .5) * 10.0; if (min(gx, gz) < .2) base = vec3(.64, .67, .72); } }
+        else { base = vec3(.10, .29, .92); k *= .92 + .08 * smoothstep(0.0, .2, fract(vM.y));      // 부품: 층 결
+          if (uClipY - vM.y < .45) base = vec3(.60, .74, 1.0); }                                    // 지금 쌓는 층
+        o = vec4(base * k, 1.0); }`));
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) { box.classList.add("is-ready"); return; }
+    gl.useProgram(prog); gl.clearColor(0, 0, 0, 0);
+    const U = (n) => gl.getUniformLocation(prog, n), aP = gl.getAttribLocation(prog, "aP"), aL = gl.getAttribLocation(prog, "aL");
+    const mesh = (pos, type, lab, idx) => {
+      const vao = gl.createVertexArray(); gl.bindVertexArray(vao);
+      gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer()); gl.bufferData(gl.ARRAY_BUFFER, pos, gl.STATIC_DRAW);
+      gl.enableVertexAttribArray(aP); gl.vertexAttribPointer(aP, 3, type, false, 0, 0);
+      if (lab) { gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer()); gl.bufferData(gl.ARRAY_BUFFER, lab, gl.STATIC_DRAW); gl.enableVertexAttribArray(aL); gl.vertexAttribPointer(aL, 1, gl.UNSIGNED_BYTE, false, 0, 0); }
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.createBuffer()); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STATIC_DRAW);
+      return { vao, count: idx.length, lab: !!lab };
+    };
+    // 잘린 면을 덮는 넓은 판, 그리고 노즐(원뿔 + 원통)
+    const cap = mesh(new Float32Array([-400, 0, -400, 400, 0, -400, 400, 0, 400, -400, 0, 400]), gl.FLOAT, null, new Uint16Array([0, 1, 2, 0, 2, 3]));
+    const nz = (() => {
+      const P = [0, 0, 0], Lb = [1], I = [], S = 20, ring = (r, y, l) => { const b = P.length / 3; for (let i = 0; i < S; i++) { const a = i / S * Math.PI * 2; P.push(r * Math.cos(a), y, r * Math.sin(a)); Lb.push(l); } return b; };
+      const r1 = ring(3, 6, 1), r2 = ring(5.5, 6, 0), r3 = ring(5.5, 19, 0); P.push(0, 19, 0); Lb.push(0); const top = P.length / 3 - 1;
+      for (let i = 0; i < S; i++) { const j = (i + 1) % S; I.push(0, r1 + i, r1 + j, r1 + i, r2 + i, r1 + j, r1 + j, r2 + i, r2 + j, r2 + i, r3 + i, r2 + j, r2 + j, r3 + i, r3 + j, r3 + i, top, r3 + j); }
+      return mesh(new Float32Array(P), gl.FLOAT, new Uint8Array(Lb), new Uint16Array(I));
+    })();
+    let model = null, yaw = 0.62, pitch = 0.58, drag = null, seen = true, raf = 0, layer = reduce ? N : 0, playing = !reduce, last = 0, hold = 0, shown = -1;
+    const paintUi = () => {
+      const n = Math.round(layer); if (n === shown) return; shown = n;
+      if (outN) outN.textContent = n; if (outH) outH.textContent = (n * LH).toFixed(1); if (range && d.activeElement !== range) range.value = n;
+    };
+    const setPlaying = (v) => { playing = v; box.classList.toggle("is-playing", v); if (playBtn) playBtn.setAttribute("aria-label", v ? playBtn.dataset.labelPause : playBtn.dataset.labelPlay); last = 0; kick(); };
+    const drawMesh = (m, mode, off) => {
+      gl.bindVertexArray(m.vao); if (!m.lab) gl.vertexAttrib1f(aL, 0);
+      gl.uniform1i(U("uMode"), mode); gl.uniform3fv(U("uOff"), off || [0, 0, 0]);
+      const own = m === model; gl.uniform3fv(U("uMin"), own ? model.mn : [0, 0, 0]); gl.uniform3fv(U("uSc"), own ? model.sc : [1, 1, 1]);
+      gl.drawElements(gl.TRIANGLES, m.count, gl.UNSIGNED_SHORT, 0);
+    };
+    const draw = (t) => {
+      raf = 0; if (!model) return;
+      if (playing) {
+        const dt = last ? Math.min(80, t - last) : 0; last = t;
+        if (layer >= N) { hold += dt; if (hold > 2600) { hold = 0; layer = 0; } } else layer = Math.min(N, layer + dt * N / 17000);
+      }
+      paintUi();
+      const r = Math.min(devicePixelRatio || 1, 2), w = Math.round(cv.clientWidth * r), h = Math.round(cv.clientHeight * r);
+      if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+      gl.viewport(0, 0, w, h); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
+      const clipY = layer * LH, done = layer >= N;
+      gl.uniform3fv(U("uC"), model.c); gl.uniform1f(U("uInv"), model.inv * Math.min(1, 0.55 + 0.25 * (w / h))); gl.uniform1f(U("uYaw"), yaw); gl.uniform1f(U("uPitch"), pitch); gl.uniform1f(U("uAsp"), w / h);
+      gl.uniform1f(U("uClipY"), done ? 1e6 : clipY);
+      if (!done && layer > 0) {
+        // 잘린 면 찾기: 잘린 부품의 앞 · 뒷면을 모두 그려 홀수 번 겹친 곳이 '속'이다
+        gl.enable(gl.STENCIL_TEST); gl.disable(gl.DEPTH_TEST); gl.colorMask(false, false, false, false); gl.depthMask(false);
+        gl.stencilFunc(gl.ALWAYS, 0, 0xff); gl.stencilOp(gl.KEEP, gl.KEEP, gl.INVERT); drawMesh(model, 1);
+        gl.colorMask(true, true, true, true); gl.depthMask(true); gl.enable(gl.DEPTH_TEST);
+        gl.stencilFunc(gl.NOTEQUAL, 0, 0xff); gl.stencilOp(gl.KEEP, gl.KEEP, gl.KEEP); drawMesh(cap, 2, [0, clipY, 0]);
+        gl.disable(gl.STENCIL_TEST);
+      }
+      gl.enable(gl.DEPTH_TEST); drawMesh(model, 0);
+      if (!done) {   // 노즐: 큰 기어 둘레와 작은 기어 둘레를 번갈아 돈다
+        const tt = (t || 0) / 1000, big = Math.floor(tt / 2.4) % 2 === 0, a = tt * 2.6, cx = big ? 0 : 51, rr = big ? 30 : 15;
+        gl.uniform1f(U("uClipY"), 1e6); drawMesh(nz, 3, [cx + rr * Math.cos(a), clipY, rr * Math.sin(a)]);
+      }
+      if (seen && playing) kick();
+    };
+    const kick = () => { if (!raf) raf = requestAnimationFrame(draw); };
+    fetch(box.dataset.src).then((r) => { if (!r.ok) throw 0; return r.arrayBuffer(); }).then((buf) => {
+      const hd = new DataView(buf), n = hd.getUint32(0, true), m = hd.getUint32(4, true), f = (i) => hd.getFloat32(8 + i * 4, true);
+      const mn = [f(0), f(1), f(2)], sc = [f(3), f(4), f(5)], ext = sc.map((v) => v * 65535);
+      model = mesh(new Uint16Array(buf, 32, n * 3), gl.UNSIGNED_SHORT, new Uint8Array(buf, 32 + n * 6, n), new Uint16Array(buf, 32 + n * 7 + (n % 2), m * 3));
+      Object.assign(model, { mn, sc, c: [mn[0] + ext[0] / 2, mn[1] + ext[1] / 2 - 3, mn[2] + ext[2] / 2], inv: 2 / Math.hypot(ext[0], ext[1], ext[2]) * 1.95 });
+      box.classList.add("is-ready"); setPlaying(playing); kick();
+    }).catch(() => box.classList.add("is-ready"));
+    if (range) range.addEventListener("input", () => { layer = Number(range.value); hold = 0; if (playing) setPlaying(false); shown = -1; kick(); });
+    if (playBtn) playBtn.addEventListener("click", () => { if (!playing && layer >= N) layer = 0; setPlaying(!playing); });
+    cv.addEventListener("pointerdown", (e) => { drag = { x: e.clientX, y: e.clientY }; cv.setPointerCapture(e.pointerId); });
+    cv.addEventListener("pointermove", (e) => { if (!drag) return; yaw += (e.clientX - drag.x) * 0.01; pitch = Math.max(0.12, Math.min(1.3, pitch + (e.clientY - drag.y) * 0.006)); drag = { x: e.clientX, y: e.clientY }; kick(); });
+    const up = () => { drag = null; }; cv.addEventListener("pointerup", up); cv.addEventListener("pointercancel", up);
+    addEventListener("resize", kick);
+    new IntersectionObserver((es) => { seen = es[0].isIntersecting; last = 0; if (seen) kick(); }).observe(box);
+  });
   // ── 3D프린팅: 3D 모델 뷰어 (WebGL2, 라이브러리 없음). 화면에 들어올 때 모델을 받아 오고, 끌면 돌아간다
   d.querySelectorAll("[data-p3-viewer]").forEach((box) => {
     const cv = box.querySelector("canvas"), sec = box.closest("section") || d;
