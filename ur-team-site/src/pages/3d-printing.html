@@ -1,39 +1,43 @@
 <!-- {"title": "3D프린팅 제작 대행 · 3D 모델링 · 시제품 · 강의", "name": "3D프린팅 제작", "description": "3D 모델링부터 3D프린팅, 소량 · 대량 생산, 강의까지 합니다. 3D프린터 41대를 운용하는 유어팀이 시제품 · 졸업 작품 · 굿즈를 만들어 드립니다. 비용은 그램당으로 받습니다.", "nav": "print3d", "image": "/assets/img/p3/adeuk-tx.webp"} -->
 <section class="p3-top">
-  <div class="wrap p3-top__in">
-    <div class="p3-top__tx">
-      <p class="crumb" data-reveal><a href="/">홈</a><span aria-hidden="true">/</span><span>3D프린팅 제작</span></p>
-      <p class="eyebrow" data-reveal>3D 모델링 · 3D프린팅 · 소량 생산</p>
-      <h1 class="h1" data-reveal style="--i:1">도면에서 실물까지,<br><span class="blue">3D프린팅 제작</span></h1>
-      <p class="lead" data-reveal style="--i:2">시제품, 기구 부품, 굿즈, 조형물을 제작합니다. 파일을 보내 주시면 검토 후 견적을 드리고, 도면이 없으면 모델링부터 진행합니다.</p>
-      <ul class="p3-spec" data-stagger>
-        <li><b><span data-count="41">41</span>대</b><span>FDM · SLA 장비</span></li>
-        <li><b>3~7일</b><span>평균 납기</span></li>
-        <li><b>g당</b><span>재료 중량 기준 견적</span></li>
-        <li><b>1개~</b><span>단품부터 대량까지</span></li>
-      </ul>
-      <div class="btns" data-reveal style="--i:3"><a class="btn btn--blue btn--lg" href="#quote">견적 문의 <span class="arr">→</span></a><a class="btn btn--ghost btn--lg" href="#machines">장비 · 재료 보기</a></div>
-    </div>
-    <div class="p3-slicer" data-reveal="right" style="--i:2">
-      <div class="p3-slicer__bar"><i></i><i></i><i></i><span>출력 미리보기</span><b>예시 화면</b></div>
-      <div class="p3-slicer__view" data-p3-viewer data-p3-src="/assets/models/s-gear.bin" data-p3-build data-p3-zoom="1.5" data-p3-pitch="0.5">
-        <canvas aria-label="기어 부품이 한 층씩 출력되는 3D 미리보기 — 끌어서 돌릴 수 있습니다" role="img"></canvas>
-        <p class="p3-slicer__hint">드래그로 회전</p>
-      </div>
-      <dl class="p3-slicer__meta">
-        <div><dt>방식</dt><dd>FDM</dd></div>
-        <div><dt>재료</dt><dd>PLA</dd></div>
-        <div><dt>적층 높이</dt><dd>0.2 mm</dd></div>
-        <div><dt>진행</dt><dd><span data-p3-pct>100</span>%</dd></div>
-      </dl>
-    </div>
-  </div>
   <div class="wrap">
-    <div class="p3-works" data-stagger>
-      <a href="#brands"><img src="/assets/img/p3/ondeung-set.webp" alt="온등 — 전통 조명 4종" width="1000" height="625" loading="lazy"><span><b>조명 · 소품</b>두께로 빛을 조절하는 투광 설계</span></a>
-      <a href="#brands"><img src="/assets/img/p3/ondeung-d-phoenix.webp" alt="온등 — 금동대향로 봉황 세부" width="800" height="800" loading="lazy"><span><b>정밀 조형</b>깃털 결까지 살린 세부 표현</span></a>
-      <a href="#viewer"><img src="/assets/img/p3/adeuk-mm.webp" alt="아득 — 털매머드 화석 조립 모형" width="1000" height="667" loading="lazy"><span><b>조립 구조물</b>무접착 결합 · 분할 설계</span></a>
+    <p class="crumb"><a href="/">홈</a><span aria-hidden="true">/</span><span>3D프린팅 제작</span></p>
+    <div class="p3-top__head">
+      <h1 class="h1">도면에서 실물까지,<br>3D프린팅으로 제작합니다</h1>
+      <div>
+        <p class="lead">시제품, 기구 부품, 굿즈, 조형물을 만듭니다. FDM과 SLA 장비 41대로 보통 3~7일 안에 출고하고, 견적은 사용한 재료의 무게로 산정합니다.</p>
+        <div class="btns"><a class="btn btn--blue btn--lg" href="#quote">견적 문의</a><a class="btn btn--ghost btn--lg" href="#machines">장비와 재료</a></div>
+      </div>
     </div>
+
+    <!-- 출력 미리보기: 슬라이서 화면처럼 한 층씩 쌓이고, 아래 막대로 레이어를 직접 넘겨 볼 수 있다 -->
+    <div class="p3-sl" data-p3-slicer data-src="/assets/models/s-gear.bin" data-layers="175" data-lh="0.2">
+      <div class="p3-sl__bar"><b>gear_set.stl</b><span>120 × 90 × 35 mm</span><em>미리보기 예시</em></div>
+      <div class="p3-sl__body">
+        <div class="p3-sl__view">
+          <canvas aria-label="기어 부품의 출력 미리보기. 한 층씩 쌓이며, 끌어서 시점을 돌릴 수 있습니다" role="img"></canvas>
+          <svg class="p3-sl__axes" viewBox="0 0 64 64" aria-hidden="true"><path d="M20 44 54 50" stroke="#d64545"/><path d="M20 44 20 10" stroke="#2f9e5b"/><path d="M20 44 6 56" stroke="#1747e6"/><text x="56" y="54">X</text><text x="17" y="8">Z</text><text x="0" y="62">Y</text></svg>
+          <p class="p3-sl__hint">끌어서 시점 회전</p>
+          <p class="p3-sl__load" data-p3-load>불러오는 중</p>
+        </div>
+        <aside class="p3-sl__panel">
+          <h2>슬라이스 설정</h2>
+          <dl><div><dt>재료</dt><dd>PLA</dd></div><div><dt>노즐</dt><dd>0.4 mm</dd></div><div><dt>적층 높이</dt><dd>0.2 mm</dd></div><div><dt>벽</dt><dd>3줄</dd></div><div><dt>채움</dt><dd>15 % 격자</dd></div><div><dt>서포트</dt><dd>없음</dd></div><div><dt>레이어 수</dt><dd>175</dd></div></dl>
+          <p class="p3-sl__g"><span>재료 사용량</span><b>약 51 g</b><small>견적은 이 무게를 기준으로 산정합니다.</small></p>
+        </aside>
+      </div>
+      <div class="p3-sl__foot">
+        <button type="button" data-p3-play aria-label="재생 / 일시정지" data-label-play="재생" data-label-pause="일시정지"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="p3-sl__ico-pause" d="M7 5h4v14H7zM13 5h4v14h-4z"/><path class="p3-sl__ico-play" d="M8 5v14l11-7z"/></svg></button>
+        <input type="range" min="0" max="175" value="175" step="1" data-p3-layer aria-label="레이어 넘겨 보기">
+        <output><span>레이어 <b data-p3-n>175</b> / 175</span><span>높이 <b data-p3-h>35.0</b> mm</span></output>
+      </div>
+    </div>
+
+    <ul class="p3-works">
+      <li><a href="#brands"><img src="/assets/img/p3/ondeung-set.webp" alt="온등 전통 조명 네 종" width="1000" height="625" loading="lazy"><b>조명과 소품</b><span>벽 두께로 빛의 세기를 조절한 조명</span></a></li>
+      <li><a href="#brands"><img src="/assets/img/p3/ondeung-d-phoenix.webp" alt="금동대향로 조명의 봉황 세부" width="800" height="800" loading="lazy"><b>정밀 조형</b><span>깃털 결까지 표현한 세부</span></a></li>
+      <li><a href="#viewer"><img src="/assets/img/p3/adeuk-mm.webp" alt="털매머드 화석 조립 모형" width="1000" height="667" loading="lazy"><b>조립 구조물</b><span>접착 없이 끼워 맞추는 분할 설계</span></a></li>
+    </ul>
   </div>
 </section>
 
