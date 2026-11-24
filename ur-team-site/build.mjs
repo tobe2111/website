@@ -122,21 +122,28 @@ const pagesOf = (lang) => walk(join(LANGS[lang].dir, "pages")).filter((f) => f.e
 
 // 조회수: 글마다 정해진 시작 숫자(1,000~35,000, 오래된 글일수록 큰 편) + 실제로 센 조회수(_worker.js · /api/views)
 // 시작 숫자는 글 주소로 정해지므로 빌드할 때마다 바뀌지 않는다
+const VIEWS_T0 = Date.UTC(2026, 10, 18);
 function viewsBase(slug, date) {
   let h = 2166136261; for (const c of slug) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619) >>> 0; }
   const r = (h % 100000) / 100000;
+  // 최근 글은 현실적으로 몇백 회에서 시작한다: 조회수를 단 날(2026-11-18) 이후 글은 30~150회,
+  // 그 전 60일 안의 글은 오래될수록 150~1,000회 사이. 그보다 오래된 글은 예전 그대로(1,000~35,000회)
+  const days = (VIEWS_T0 - Date.parse(date)) / 864e5;
+  if (days <= 0) return Math.round(30 + 120 * r);
+  if (days < FRESH_DAYS) return Math.round(150 + 750 * (days / FRESH_DAYS) + 100 * r);
   const t0 = Date.UTC(2021, 0, 1), t1 = Date.UTC(2026, 10, 18);
   const age = Math.min(1, Math.max(0, (t1 - Date.parse(date)) / (t1 - t0)));
   return Math.round(1000 + 34000 * Math.min(1, 0.5 * age + 0.5 * Math.pow(r, 1.4)));
 }
-// 하루에 늘어나는 수: 글마다 4~24회로 정해 둔다. 기준일(2026-11-18 또는 글이 올라간 날)부터 날마다 더해진다
-const VIEWS_T0 = Date.UTC(2026, 10, 18);
-function viewsRate(key) {
+const FRESH_DAYS = 60;
+// 하루에 늘어나는 수: 오래된 글은 4~24회, 최근 60일 안의 글은 2~8회(몇백 단위가 천천히 오르게).
+// 기준일(2026-11-18 또는 글이 올라간 날)부터 날마다 더해진다
+function viewsRate(key, date) {
   let h = 5381; for (const c of key) h = (Math.imul(h, 33) ^ c.charCodeAt(0)) >>> 0;
-  return 4 + (h % 21);
+  return (VIEWS_T0 - Date.parse(date)) / 864e5 < FRESH_DAYS ? 2 + (h % 7) : 4 + (h % 21);
 }
 function viewsTag(p, lang, hit) {
-  const key = (lang === "en" ? "en/" : "") + p.slug, base = viewsBase(key, p.date), rate = viewsRate(key);
+  const key = (lang === "en" ? "en/" : "") + p.slug, base = viewsBase(key, p.date), rate = viewsRate(key, p.date);
   const t0 = Math.max(VIEWS_T0, Date.parse(p.date));
   const n = base + Math.max(0, Math.floor((Date.now() - t0) / 864e5)) * rate;
   return ` · <span class="views" data-views="${key}" data-base="${base}" data-rate="${rate}" data-t0="${t0}"${hit ? " data-views-hit" : ""}>${lang === "en" ? "Views" : "조회"} ${n.toLocaleString("en-US")}</span>`;
