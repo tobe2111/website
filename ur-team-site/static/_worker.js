@@ -16,7 +16,7 @@ const J = (o, cache) => new Response(JSON.stringify(o), { headers: { "content-ty
 // ur-team.com 본 사이트는 이 분기를 타지 않는다(주소가 다르면 아래 원래 흐름 그대로).
 const BRIDGE_HOST = "homepage.ur-team.com";
 const UPSTREAM = "https://website.tobe211167.workers.dev";
-const BRIDGE_MAP = { "/": "/service", "/terms": "/service/terms", "/refund": "/service/refund", "/privacy": "/service/privacy" };
+const BRIDGE_MAP = { "/": "/service", "/terms": "/service/terms", "/refund": "/service/refund", "/privacy": "/service/privacy", "/order": "/service/order" };
 async function bridge(req, url) {
   const here = url.origin;
   const path = BRIDGE_MAP[url.pathname] || url.pathname;
