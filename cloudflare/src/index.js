@@ -12,6 +12,7 @@ import { ensureSchema } from "./schema.js";
 import { withStoredKeys } from "./keys.js";
 import { runCron } from "./scheduled.js";
 import * as service from "./homepageSite.js";
+import * as print from "./print.js";
 import { resolveSessionSecret } from "./secrets.js";
 
 // 나가는 스타일시트에서 주석만 뗀다(아이솔레이트마다 한 번).
@@ -53,6 +54,10 @@ export const GLOBAL = [
   // 신청 · 결제(선불): 요금제 선택 → 신청서 → 곧바로 카드 등록 · 결제 화면
   ["GET", "/service/order", service.serviceOrderForm],
   ["POST", "/service/order", api.serviceOrder],
+  // 3D프린팅 제작 대행 — 손님 견적 문의(print.js). /service(결제 심사용 사이트)와는 일부러 떼어 둔다.
+  ["GET", "/print", print.printLanding],
+  ["POST", "/print", print.printSubmit],
+  ["GET", "/print/done", print.printDone],
   ["GET", "/login", pages.loginForm],
   ["POST", "/login", api.login],
   ["POST", "/logout", api.logout, "USER"],
@@ -88,6 +93,13 @@ export const GLOBAL = [
   ["GET", "/.well-known/esign-anchors", pages.esignAnchors],
   ["GET", "/super", pages.superConsole, "SUPERADMIN"],
   ["GET", "/super/org/:id", pages.superOrg, "SUPERADMIN"],
+  ["GET", "/super/print", print.superPrintList, "SUPERADMIN"],
+  ["GET", "/super/print/settings", print.superPrintSettings, "SUPERADMIN"],
+  ["POST", "/super/print/settings", print.superPrintSettingsSave, "SUPERADMIN"],
+  ["GET", "/super/print/:id", print.superPrintDetail, "SUPERADMIN"],
+  ["POST", "/super/print/:id", print.superPrintUpdate, "SUPERADMIN"],
+  ["POST", "/super/print/:id/reorder", print.superPrintReorder, "SUPERADMIN"],
+  ["GET", "/super/print/:id/file/:fid", print.superPrintFile, "SUPERADMIN"],
   ["POST", "/super/association", api.superCreateAssociation, "SUPERADMIN"],
   ["POST", "/super/association/clone", api.superCloneAssociation, "SUPERADMIN"],
   ["POST", "/super/association/:id/toggle", api.superToggleAssociation, "SUPERADMIN"],

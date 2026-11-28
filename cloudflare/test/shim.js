@@ -67,7 +67,7 @@ export function makeAssets() {
         ".svg": "image/svg+xml", ".png": "image/png",
         ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".json": "application/json",
         ".webmanifest": "application/manifest+json", ".ttf": "font/ttf", ".woff2": "font/woff2",
-        ".bcmap": "application/octet-stream", ".pfb": "application/octet-stream" }[ext] || "application/octet-stream";
+        ".bcmap": "application/octet-stream", ".pfb": "application/octet-stream", ".wasm": "application/wasm" }[ext] || "application/octet-stream";
       return new Response(fs.readFileSync(fp), { headers: { "content-type": type } });
     },
   };

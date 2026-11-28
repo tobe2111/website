@@ -260,6 +260,7 @@ function superNav() {
   // 계정 설정은 여기에 둔다. 고객사 콘솔에서 뺐기 때문에(그 화면은 그 상인회의 것이다)
   // 운영자가 자기 계정으로 가는 길은 자기 콘솔에 있어야 한다.
   return `<a href="/" class="nav-out" target="_blank" rel="noopener">랜딩페이지 ↗</a>`
+    + `<a href="/super/print">3D프린팅 문의</a>`
     + `<a href="/account">내 계정</a>`
     + `<form method="post" action="/logout" class="nav-logout"><button class="btn btn-ghost btn-sm">로그아웃</button></form>`;
 }
