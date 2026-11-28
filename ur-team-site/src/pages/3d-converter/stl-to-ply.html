@@ -1,0 +1,125 @@
+<!-- {"title": "STL PLY 변환 · STL to PLY 무료 온라인 변환", "name": "STL → PLY", "description": "STL 파일을 PLY 로 무료 변환합니다. 설치 · 회원가입 없이 브라우저에서 바로, 파일은 서버로 올라가지 않습니다. 부품이 여럿 든 파일도 나눠 받을 수 있고, 변환한 모델은 3D프린팅 견적까지 이어집니다.", "nav": "print3d", "image": "/assets/img/p3/adeuk-tx.webp", "app": true, "keywords": ["STL PLY 변환", "STL to PLY", "STL 파일 변환", "무료 3D 파일 변환기", "3D 파일 변환", "온라인 3D 뷰어", "3D 파일 분할 압축", "3D 파일 용량 줄이기", "STL 변환", "STL 파일 열기", "3D프린팅"]} -->
+<section class="tl-top">
+  <div class="wrap">
+    <p class="crumb"><a href="/">홈</a><span aria-hidden="true">/</span><a href="/3d-printing/">3D프린팅 제작</a><span aria-hidden="true">/</span><a href="/3d-converter/">3D 파일 변환</a><span aria-hidden="true">/</span><span>STL → PLY</span></p>
+    <h1 class="h1">STL 를 PLY 로 변환</h1>
+    <p class="lead">STL 파일을 PLY 로 바꿉니다. PLY 는 3D 스캔 프로그램이 많이 쓰는 형식입니다. 파일은 서버로 올라가지 않고 이 브라우저 안에서만 처리됩니다.</p>
+  </div>
+</section>
+<section class="tl" data-p3tool data-preset="ply">
+  <div class="wrap">
+    <div class="tl__grid">
+      <div class="tl__left">
+        <label class="tl__drop" data-drop>
+          <input type="file" multiple accept=".stl,.obj,.ply,.off,.3mf,.glb,.gltf,.amf">
+          <b>3D 파일을 여기에 끌어 놓거나 눌러서 고르세요</b>
+          <span>STL · OBJ · 3MF · PLY · OFF · GLB · glTF · AMF. 파일 여러 개, 부품이 여럿 든 파일도 한 번에 엽니다.</span>
+        </label>
+        <div class="tl__view"><canvas data-view aria-label="3D 모델 보기. 끌어서 돌리고, 휠로 확대합니다" role="img"></canvas><p class="tl__hint">끌어서 돌리기 · 휠로 확대</p></div>
+        <p class="tl__msg" data-msg role="status" aria-live="polite">파일은 서버로 올라가지 않고, 이 브라우저 안에서만 처리됩니다.</p>
+        <div class="tl__offer" data-offer hidden>
+          <b>3D 프린팅은 유어팀에서 합리적이고 전문적으로 진행하세요.</b>
+          <p>FDM · SLA 장비 41대로 시제품 · 부품 · 굿즈를 만들고, 견적은 실제로 쓰인 재료 무게로 산정합니다. 방금 연 모델의 크기와 부피는 견적 문의서에 미리 채워 드립니다.</p>
+          <div class="tl__offer-btns"><a class="btn btn--blue" href="/3d-printing/#quote">이 모델로 출력 견적 받기</a><a class="btn btn--ghost" href="/3d-printing/">3D프린팅 제작 보기</a><button type="button" class="tl__x" data-offer-close>닫기</button></div>
+        </div>
+      </div>
+      <div class="tl__right">
+        <div class="tl__parts" data-parts-wrap hidden>
+          <h2 class="tl__h">부품 <small data-parts-count></small></h2>
+          <div class="tl__pbar"><button type="button" data-all>모두 보기</button><button type="button" data-none>모두 끄기</button><button type="button" class="is-key" data-islands hidden>떨어진 조각으로 나누기</button></div>
+          <ul class="tl__plist" data-parts></ul>
+        </div>
+        <h2 class="tl__h">모델 정보</h2>
+        <dl class="tl__info" data-info data-info-open><div><dt>크기</dt><dd>파일을 열면 표시됩니다</dd></div></dl>
+        <h2 class="tl__h">변환</h2>
+        <div class="tl__form">
+          <label>바꿀 형식<select data-to><option value="stl">STL (이진, 3D프린팅 표준)</option><option value="stla">STL (문자)</option><option value="obj">OBJ</option><option value="3mf">3MF (3D프린팅용, 압축됨)</option><option value="glb">GLB (웹 · AR)</option><option value="ply" selected>PLY</option><option value="off">OFF</option></select></label>
+          <label data-each-wrap hidden>부품<select data-each><option value="one">한 파일에 모두 담기</option><option value="each">부품마다 따로 (ZIP 하나로 묶음)</option></select></label>
+          <label>원본 단위<select data-scale><option value="1">mm (대부분의 STL · OBJ)</option><option value="10">cm</option><option value="25.4">inch</option><option value="1000">m</option></select></label>
+          <label>압축<select data-pack><option value="none">압축 안 함</option><option value="zip">ZIP 으로 압축</option></select></label>
+          <label>분할 <small>(큰 파일을 나눠 받기)</small><select data-split><option value="0">나누지 않음</option><option value="10">10 MB 씩</option><option value="25">25 MB 씩</option><option value="50">50 MB 씩</option><option value="100">100 MB 씩</option></select></label>
+          <button type="button" class="btn btn--blue" data-go>변환해서 내려받기</button>
+          <button type="button" class="btn btn--ghost" data-png>화면을 PNG 로 저장</button>
+        </div>
+        <p class="tl__small">3MF · OBJ · GLB · 문자 STL 은 부품을 나눈 채로 한 파일에 담깁니다. 분할한 파일은 반디집 · 7-Zip 에서 첫 파일(.001)을 열면 하나로 합쳐집니다.</p>
+        <div class="tl__next">
+          <b>3D 프린팅은 유어팀에서 합리적이고 전문적으로 진행하세요</b>
+          <p>열어 본 모델 그대로 출력해 드립니다. 크기와 부피를 견적 문의서에 미리 채워 드리니 파일만 보내 주시면 됩니다.</p>
+          <a class="btn btn--blue" href="/3d-printing/#quote">출력 견적 받기</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+<script defer src="/assets/js/p3-tools.js"></script>
+<section class="sec" id="how">
+  <div class="wrap">
+    <h2 class="h2">STL 를 PLY 로 바꾸는 방법</h2>
+    <ol class="tl__steps">
+      <li>위 상자에 STL 파일을 끌어 놓습니다. 여러 파일을 한 번에 골라도 됩니다.</li>
+      <li>'바꿀 형식'이 PLY 인지 확인합니다.</li>
+      <li>부품이 여럿이면 목록에서 받을 부품만 남기고, 한 파일로 받을지 부품마다 따로 받을지 고릅니다.</li>
+      <li>'변환해서 내려받기'를 누릅니다. 큰 파일은 ZIP 압축이나 분할을 고를 수 있습니다.</li>
+    </ol>
+  </div>
+</section>
+<section class="sec" id="compare">
+  <div class="wrap">
+    <h2 class="h2">STL 와 PLY 의 차이</h2>
+    <div class="tl__fmt"><table><thead><tr><th scope="col">항목</th><th scope="col">STL</th><th scope="col">PLY</th></tr></thead><tbody><tr><th scope="row">주로 쓰는 곳</th><td>3D프린터 · 슬라이서 표준</td><td>3D 스캔 결과</td></tr><tr><th scope="row">단위</th><td>기록 안 됨 (보통 mm 로 읽음)</td><td>기록 안 됨</td></tr><tr><th scope="row">색 · 재질</th><td>없음</td><td>점마다 색 가능</td></tr><tr><th scope="row">여러 부품</th><td>이진은 한 덩어리, 문자는 여러 개(solid) 가능</td><td>한 덩어리</td></tr><tr><th scope="row">용량</th><td>큼 (삼각형마다 꼭짓점을 따로 적음)</td><td>중간</td></tr></tbody></table></div>
+    <h3 class="tl__h3">바꿀 때 알아 둘 점</h3>
+    <ul class="tl__notes"></ul>
+  </div>
+</section>
+<section class="sec" id="formats">
+  <div class="wrap">
+    <h2 class="h2">지원 형식</h2>
+    <p class="lead">많이 쓰는 3D프린팅 · 웹 형식은 이 페이지에서 바로 바꿉니다. CAD · 게임 · 건축 · 스캔 형식은 파일을 보내 주시면 변환할 수 있는지 확인해 드립니다.</p>
+    <div class="tl__fmt">
+      <table>
+        <thead><tr><th scope="col">분류</th><th scope="col">형식</th><th scope="col">이 페이지에서</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">3D프린팅 · 메시</th><td>STL, OBJ, 3MF, PLY, OFF, AMF</td><td>바로 보기 · 바로 변환</td></tr>
+          <tr><th scope="row">웹 · AR</th><td>GLB, glTF</td><td>바로 보기 · 바로 변환 (glTF 는 데이터가 파일 안에 든 것만)</td></tr>
+          <tr><th scope="row">산업용 CAD</th><td>STEP, STP, IGES, IGS, SAT, X_T, 3DM, DXF, DWG</td><td>파일을 보내 주시면 확인</td></tr>
+          <tr><th scope="row">CAD 원본</th><td>SLDPRT, SLDASM, IPT, IAM, F3D, FCSTD, PRT, PAR</td><td>파일을 보내 주시면 확인 (원본 프로그램에서 STEP · STL 로 내보내는 것이 가장 정확합니다)</td></tr>
+          <tr><th scope="row">게임 · 애니메이션</th><td>FBX, DAE, ABC, USD, USDZ, BLEND, MAX, MA, MB, C4D</td><td>파일을 보내 주시면 확인</td></tr>
+          <tr><th scope="row">건축 · BIM</th><td>SKP, IFC, RVT, PLN, VWX</td><td>파일을 보내 주시면 확인</td></tr>
+          <tr><th scope="row">3D 스캔 · 점 데이터</th><td>E57, LAS, LAZ, PCD, XYZ, PTS</td><td>파일을 보내 주시면 확인 (점 데이터는 면을 만드는 작업이 필요합니다)</td></tr>
+          <tr><th scope="row">프린터 출력 파일</th><td>GCODE, BGCODE, 3MF(프로젝트), CTB, PHOTON, SL1</td><td>이미 특정 프린터용으로 잘린 파일이라 다른 형식으로 되돌릴 수 없습니다. 원본 모델을 보내 주세요.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+<section class="sec sec--soft" id="faq">
+  <div class="wrap faq">
+    <div class="head"><h2 class="h2">자주 묻는 질문</h2></div>
+    <div class="acc">
+      <details open><summary><span class="l">Q1</span>STL 를 PLY 로 바꾸면 무엇이 달라지나요?</summary><div class="acc__body"><p>형상은 그대로이고 담는 방식만 바뀝니다.</p></div></details>
+      <details><summary><span class="l">Q2</span>3D 파일 용량이 너무 커서 메일 · 카톡으로 못 보내요.</summary><div class="acc__body"><p>'분할'에서 10 · 25 · 50 · 100 MB 를 고르면 3D 파일을 ZIP 으로 압축한 뒤 정한 크기로 나눠(분할 압축) 내려받습니다. 받는 사람은 반디집 · 7-Zip 으로 첫 조각(.001)을 열면 됩니다. STL 을 3MF 로 바꾸기만 해도 용량이 보통 크게 줄어듭니다.</p></div></details>
+      <details><summary><span class="l">Q3</span>파일이 서버에 올라가나요?</summary><div class="acc__body"><p>아닙니다. 변환과 미리보기는 모두 지금 쓰시는 브라우저 안에서 처리되고, 파일은 어디에도 전송되지 않습니다. 회사 도면처럼 밖으로 내보내기 어려운 파일도 안심하고 쓰실 수 있습니다.</p></div></details>
+      <details><summary><span class="l">Q4</span>파일 하나에 부품이 여러 개 들어 있으면 어떻게 되나요?</summary><div class="acc__body"><p>3MF 의 여러 물체, OBJ 의 물체 · 그룹(o · g), GLB · glTF 의 노드, 문자 STL 의 여러 solid 를 부품으로 나눠 목록에 보여 줍니다. 부품마다 색이 다르고, 체크를 끄면 화면과 내려받기에서 빠집니다. 내려받을 때는 한 파일에 모두 담거나 부품마다 따로 받을 수 있습니다. 한 덩어리로 저장된 STL 안에 떨어진 조각이 여럿이면 '떨어진 조각으로 나누기' 단추가 나타납니다.</p></div></details>
+      <details><summary><span class="l">Q5</span>무료인가요? 용량 제한이 있나요?</summary><div class="acc__body"><p>무료이고 회원가입도 필요 없습니다. 용량 제한은 따로 없지만, 브라우저 메모리 안에서 처리하므로 수백 MB 를 넘는 파일은 컴퓨터 사양에 따라 느리거나 멈출 수 있습니다.</p></div></details>
+      <details><summary><span class="l">Q6</span>변환하면 색이나 재질도 옮겨지나요?</summary><div class="acc__body"><p>아니요. 이 도구는 형상(모양)만 옮깁니다. 색 · 재질 · 텍스처는 빠집니다. 3D프린팅에는 형상만 있으면 충분합니다.</p></div></details>
+      <details><summary><span class="l">Q7</span>'열린 모서리'가 있다고 나오면 어떻게 하나요?</summary><div class="acc__body"><p>모델에 구멍이 있거나 면이 맞물리지 않은 곳이 있다는 뜻입니다. 이대로는 출력이 잘못될 수 있습니다. 파일을 보내 주시면 수정해서 출력해 드립니다.</p></div></details>
+      <details><summary><span class="l">Q8</span>분할 파일은 어떻게 합치나요?</summary><div class="acc__body"><p>같은 폴더에 모든 조각(.001, .002 …)을 둔 뒤, 반디집이나 7-Zip 에서 첫 조각(.001)을 열고 압축을 풀면 원래 파일이 나옵니다.</p></div></details>
+      <details><summary><span class="l">Q9</span>STEP · SolidWorks · Fusion 360 파일도 되나요?</summary><div class="acc__body"><p>이 페이지에서는 아직 안 됩니다. 파일을 보내 주시면 변환과 출력을 함께 도와드립니다. 원본 프로그램이 있으시면 '내보내기'에서 STL 이나 3MF 로 저장하는 것이 가장 정확합니다.</p></div></details>
+      <details><summary><span class="l">Q10</span>변환한 파일을 실제로 출력할 수 있나요?</summary><div class="acc__body"><p>네. 유어팀이 FDM · SLA 장비 41대로 출력해 드립니다. 견적은 실제로 쓰인 재료 무게로 산정하고, 보통 3~7일 안에 출고합니다. 변환기에서 연 모델의 크기와 부피는 견적 문의서에 자동으로 채워집니다.</p></div></details>
+    </div>
+  </div>
+</section>
+<section class="sec" id="more">
+  <div class="wrap">
+    <h2 class="h2">다른 변환 · 뷰어</h2>
+    <ul class="tl__links"><li><a href="/3d-converter/stl-to-obj/">STL → OBJ</a></li><li><a href="/3d-converter/obj-to-stl/">OBJ → STL</a></li><li><a href="/3d-converter/stl-to-3mf/">STL → 3MF</a></li><li><a href="/3d-converter/3mf-to-stl/">3MF → STL</a></li><li><a href="/3d-converter/stl-to-glb/">STL → GLB</a></li><li><a href="/3d-converter/glb-to-stl/">GLB → STL</a></li><li><a href="/3d-converter/obj-to-glb/">OBJ → GLB</a></li><li><a href="/3d-converter/obj-to-3mf/">OBJ → 3MF</a></li><li><a href="/3d-converter/ply-to-stl/">PLY → STL</a></li><li><a href="/3d-converter/gltf-to-stl/">glTF → STL</a></li><li><a href="/3d-converter/3mf-to-obj/">3MF → OBJ</a></li><li><a href="/3d-converter/glb-to-obj/">GLB → OBJ</a></li><li><a href="/3d-converter/3mf-to-glb/">3MF → GLB</a></li><li><a href="/3d-converter/amf-to-stl/">AMF → STL</a></li><li><a href="/3d-converter/off-to-stl/">OFF → STL</a></li></ul>
+    <ul class="tl__links"><li><a href="/3d-converter/">3D 파일 변환기 (모든 형식)</a></li><li><a href="/3d-viewer/">3D 뷰어 (모든 형식)</a></li><li><a href="/3d-converter/split-zip/">3D 파일 분할 압축</a></li><li><a href="/3d-viewer/stl/">STL 뷰어</a></li><li><a href="/3d-viewer/obj/">OBJ 뷰어</a></li><li><a href="/3d-viewer/3mf/">3MF 뷰어</a></li><li><a href="/3d-viewer/glb/">GLB 뷰어</a></li><li><a href="/3d-viewer/ply/">PLY 뷰어</a></li></ul>
+  </div>
+</section>
+<section class="cta">
+  <div class="wrap">
+    <h2 class="h2">3D 프린팅은 유어팀에서 합리적이고 전문적으로</h2>
+    <p class="lead">변환한 파일 그대로 출력해 드립니다. FDM · SLA 장비 41대로 시제품 · 부품 · 굿즈를 만들고, 견적은 재료 무게로 산정합니다.</p>
+    <div class="btns"><a class="btn btn--blue btn--lg" href="/3d-printing/#quote">출력 견적 받기</a><a class="btn btn--ghost btn--lg" href="/3d-printing/">3D프린팅 제작 보기</a></div>
+  </div>
+</section>
