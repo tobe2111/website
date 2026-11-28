@@ -1,0 +1,84 @@
+<!-- {"title": "3D 뷰어 · STL OBJ 3MF GLB 파일 온라인으로 열기", "name": "3D 뷰어", "description": "STL · OBJ · 3MF · GLB · PLY 파일을 설치 없이 브라우저에서 열어 봅니다. 크기 · 부피 · 출력 무게 · 열린 모서리를 확인하고 PNG 로 저장할 수 있습니다.", "nav": "print3d", "image": "/assets/img/p3/adeuk-tx.webp", "app": true} -->
+<section class="tl-top">
+  <div class="wrap">
+    <p class="crumb"><a href="/">홈</a><span aria-hidden="true">/</span><a href="/3d-printing/">3D프린팅 제작</a><span aria-hidden="true">/</span><span>3D 뷰어</span></p>
+    <h1 class="h1">3D 뷰어</h1>
+    <p class="lead">STL · OBJ · 3MF · GLB · PLY 파일을 바로 열어 돌려 봅니다. 크기와 부피, 출력에 드는 재료 무게, 구멍 난 곳(열린 모서리)을 함께 확인합니다.</p>
+  </div>
+</section>
+<section class="tl" data-p3tool data-preset="stl">
+  <div class="wrap">
+    <div class="tl__grid">
+      <div class="tl__left">
+        <label class="tl__drop" data-drop>
+          <input type="file" multiple accept=".stl,.obj,.ply,.off,.3mf,.glb,.gltf,.amf">
+          <b>3D 파일을 여기에 끌어 놓거나 눌러서 고르세요</b>
+          <span>STL · OBJ · 3MF · PLY · OFF · GLB · glTF · AMF. 여러 개를 고르면 하나로 합칩니다.</span>
+        </label>
+        <div class="tl__view"><canvas data-view aria-label="3D 모델 보기. 끌어서 돌리고, 휠로 확대합니다" role="img"></canvas><p class="tl__hint">끌어서 돌리기 · 휠로 확대</p></div>
+        <p class="tl__msg" data-msg role="status" aria-live="polite">파일은 서버로 올라가지 않고, 이 브라우저 안에서만 처리됩니다.</p>
+      </div>
+      <div class="tl__right">
+        <h2 class="tl__h">모델 정보</h2>
+        <dl class="tl__info" data-info data-info-open><div><dt>크기</dt><dd>파일을 열면 표시됩니다</dd></div></dl>
+        <h2 class="tl__h">내려받기</h2>
+        <div class="tl__form">
+          <label>바꿀 형식<select data-to><option value="stl" selected>STL (이진, 3D프린팅 표준)</option><option value="stla">STL (문자)</option><option value="obj">OBJ</option><option value="3mf">3MF (3D프린팅용, 압축됨)</option><option value="glb">GLB (웹 · AR)</option><option value="ply">PLY</option><option value="off">OFF</option></select></label>
+          <label>원본 단위<select data-scale><option value="1">mm (대부분의 STL · OBJ)</option><option value="10">cm</option><option value="25.4">inch</option><option value="1000">m</option></select></label>
+          <label>압축<select data-pack><option value="none">압축 안 함</option><option value="zip">ZIP 으로 압축</option></select></label>
+          <label>분할 <small>(큰 파일을 나눠 받기)</small><select data-split><option value="0">나누지 않음</option><option value="10">10 MB 씩</option><option value="25">25 MB 씩</option><option value="50">50 MB 씩</option><option value="100">100 MB 씩</option></select></label>
+          <button type="button" class="btn btn--blue" data-go>변환해서 내려받기</button>
+          <button type="button" class="btn btn--ghost" data-png>화면을 PNG 로 저장</button>
+        </div>
+        <p class="tl__small">분할한 파일은 반디집 · 7-Zip 에서 첫 파일(.001)을 열면 하나로 합쳐집니다.</p>
+        <div class="tl__next">
+          <b>이 파일로 실제 출력해 보시겠습니까?</b>
+          <p>크기와 부피를 견적 문의서에 미리 채워 드립니다. 파일만 보내 주시면 됩니다.</p>
+          <a class="btn btn--blue" href="/3d-printing/#quote">출력 견적 받기</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+<script defer src="/assets/js/p3-tools.js"></script>
+<section class="sec" id="formats">
+  <div class="wrap">
+    <h2 class="h2">지원 형식</h2>
+    <p class="lead">많이 쓰는 3D프린팅 · 웹 형식은 이 페이지에서 바로 바꿉니다. CAD · 게임 · 건축 · 스캔 형식은 파일을 보내 주시면 변환할 수 있는지 확인해 드립니다.</p>
+    <div class="tl__fmt">
+      <table>
+        <thead><tr><th scope="col">분류</th><th scope="col">형식</th><th scope="col">이 페이지에서</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">3D프린팅 · 메시</th><td>STL, OBJ, 3MF, PLY, OFF, AMF</td><td>바로 보기 · 바로 변환</td></tr>
+          <tr><th scope="row">웹 · AR</th><td>GLB, glTF</td><td>바로 보기 · 바로 변환 (glTF 는 데이터가 파일 안에 든 것만)</td></tr>
+          <tr><th scope="row">산업용 CAD</th><td>STEP, STP, IGES, IGS, SAT, X_T, 3DM, DXF, DWG</td><td>파일을 보내 주시면 확인</td></tr>
+          <tr><th scope="row">CAD 원본</th><td>SLDPRT, SLDASM, IPT, IAM, F3D, FCSTD, PRT, PAR</td><td>파일을 보내 주시면 확인 (원본 프로그램에서 STEP · STL 로 내보내는 것이 가장 정확합니다)</td></tr>
+          <tr><th scope="row">게임 · 애니메이션</th><td>FBX, DAE, ABC, USD, USDZ, BLEND, MAX, MA, MB, C4D</td><td>파일을 보내 주시면 확인</td></tr>
+          <tr><th scope="row">건축 · BIM</th><td>SKP, IFC, RVT, PLN, VWX</td><td>파일을 보내 주시면 확인</td></tr>
+          <tr><th scope="row">3D 스캔 · 점 데이터</th><td>E57, LAS, LAZ, PCD, XYZ, PTS</td><td>파일을 보내 주시면 확인 (점 데이터는 면을 만드는 작업이 필요합니다)</td></tr>
+          <tr><th scope="row">프린터 출력 파일</th><td>GCODE, BGCODE, 3MF(프로젝트), CTB, PHOTON, SL1</td><td>이미 특정 프린터용으로 잘린 파일이라 다른 형식으로 되돌릴 수 없습니다. 원본 모델을 보내 주세요.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+<section class="sec sec--soft" id="faq">
+  <div class="wrap faq">
+    <div class="head"><h2 class="h2">자주 묻는 질문</h2></div>
+    <div class="acc">
+      <details open><summary><span class="l">Q1</span>파일이 서버에 올라가나요?</summary><div class="acc__body"><p>아닙니다. 변환과 미리보기는 모두 지금 쓰시는 브라우저 안에서 처리되고, 파일은 어디에도 전송되지 않습니다. 회사 도면처럼 밖으로 내보내기 어려운 파일도 안심하고 쓰실 수 있습니다.</p></div></details>
+      <details><summary><span class="l">Q2</span>무료인가요? 용량 제한이 있나요?</summary><div class="acc__body"><p>무료이고 회원가입도 필요 없습니다. 용량 제한은 따로 없지만, 브라우저 메모리 안에서 처리하므로 수백 MB 를 넘는 파일은 컴퓨터 사양에 따라 느리거나 멈출 수 있습니다.</p></div></details>
+      <details><summary><span class="l">Q3</span>변환하면 색이나 재질도 옮겨지나요?</summary><div class="acc__body"><p>아니요. 이 도구는 형상(모양)만 옮깁니다. 색 · 재질 · 텍스처는 빠집니다. 3D프린팅에는 형상만 있으면 충분합니다.</p></div></details>
+      <details><summary><span class="l">Q4</span>'열린 모서리'가 있다고 나오면 어떻게 하나요?</summary><div class="acc__body"><p>모델에 구멍이 있거나 면이 맞물리지 않은 곳이 있다는 뜻입니다. 이대로는 출력이 잘못될 수 있습니다. 파일을 보내 주시면 수정해서 출력해 드립니다.</p></div></details>
+      <details><summary><span class="l">Q5</span>분할 파일은 어떻게 합치나요?</summary><div class="acc__body"><p>같은 폴더에 모든 조각(.001, .002 …)을 둔 뒤, 반디집이나 7-Zip 에서 첫 조각(.001)을 열고 압축을 풀면 원래 파일이 나옵니다.</p></div></details>
+      <details><summary><span class="l">Q6</span>STEP · SolidWorks · Fusion 360 파일도 되나요?</summary><div class="acc__body"><p>이 페이지에서는 아직 안 됩니다. 파일을 보내 주시면 변환과 출력을 함께 도와드립니다. 원본 프로그램이 있으시면 '내보내기'에서 STL 이나 3MF 로 저장하는 것이 가장 정확합니다.</p></div></details>
+    </div>
+  </div>
+</section>
+<section class="cta">
+  <div class="wrap">
+    <h2 class="h2">변환한 파일, 그대로 출력해 드립니다</h2>
+    <p class="lead">FDM · SLA 장비 41대로 시제품 · 부품 · 굿즈를 만듭니다. 견적은 재료 무게로 산정합니다.</p>
+    <div class="btns"><a class="btn btn--blue btn--lg" href="/3d-printing/#quote">출력 견적 받기</a><a class="btn btn--ghost btn--lg" href="/3d-printing/">3D프린팅 제작 보기</a></div>
+  </div>
+</section>

@@ -246,6 +246,10 @@
     };
     interest.forEach((el) => el.addEventListener("change", syncMore));
     syncMore();
+    // 3D 파일 변환기에서 넘어왔으면 크기 · 물건을 미리 채운다
+    try { const pre = JSON.parse(sessionStorage.getItem("p3-prefill") || "null");
+      if (pre) for (const [k, v] of [["크기", pre.size], ["Size", pre.size], ["만들 물건", pre.item], ["Item", pre.item]]) { const el = f.querySelector(`[data-msg-part="${k}"]`); if (el && !el.value && v) el.value = v; }
+    } catch (e) {}
     if (q.get("sent")) say(q.get("sent"), true);
     if (q.get("err")) say(q.get("err"), false);
     // 어디서 왔는지(광고 링크의 utm, 들어오기 전 페이지) — 어떤 광고가 상담을 만들었는지 보려고

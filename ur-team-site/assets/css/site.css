@@ -2221,3 +2221,45 @@ a.prod:hover b { color: var(--accent); }
 /* 어두운 첫 화면 위라도 조금 내리면 머리글에 어두운 바탕을 깐다 (본문 글씨가 로고 뒤로 비쳐 겹치지 않게) */
 .hd.is-over.is-scrolled { background: rgba(13, 16, 20, .86); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
 @media (max-width: 560px) { .bx-door small { display: revert; } .bx-door__tx > small { display: none; } }
+
+/* ── 3D 파일 변환기 · 뷰어 (/3d-converter/ · /3d-viewer/) */
+.tl-top { padding: calc(var(--hd) + clamp(28px, 4vw, 56px)) 0 clamp(20px, 3vw, 36px); }
+.tl-top .h1 { font-size: clamp(32px, 4.6vw, 56px); letter-spacing: -.04em; font-weight: 600; }
+.tl-top .lead { margin-top: 14px; max-width: 40em; }
+.tl { padding-bottom: clamp(48px, 6vw, 88px); }
+.tl__grid { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 4fr); gap: clamp(16px, 2.4vw, 32px); align-items: start; }
+.tl__drop { position: relative; display: grid; gap: 4px; padding: 18px 20px; border: 2px dashed var(--line-2); background: var(--bg-2); cursor: pointer; transition: border-color .2s, background .2s; }
+.tl__drop:hover, .tl__drop.is-over { border-color: var(--accent); background: #f2f5ff; }
+.tl__drop input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.tl__drop:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tl__drop span { font-size: 14px; color: var(--muted); }
+.tl__view { position: relative; margin-top: 12px; aspect-ratio: 4 / 3; background: radial-gradient(90% 80% at 50% 40%, #f6f8fb, #dfe4ea); border: 1px solid var(--line); }
+.tl__view canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; touch-action: pan-y; }
+.tl__hint { position: absolute; right: 12px; bottom: 10px; font-size: 12px; color: var(--muted); pointer-events: none; }
+.tl__msg { margin-top: 10px; font-size: 14px; color: var(--muted); }
+.tl__msg.is-bad { color: #a32020; font-weight: 600; }
+.tl__h { font-size: 15px; font-weight: 600; color: var(--muted); margin-top: 22px; }
+.tl__h:first-child { margin-top: 0; }
+.tl__info { margin: 8px 0 0; border-top: 1px solid var(--ink); }
+.tl__info div { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 14.5px; }
+.tl__info dt { color: var(--muted); }
+.tl__info dd { margin: 0; font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+.tl__info.is-bad div:last-child dd { color: #a32020; }
+.tl__form { display: grid; gap: 10px; margin-top: 8px; }
+.tl__form label { display: grid; gap: 4px; font-size: 14px; font-weight: 600; }
+.tl__form small { font-weight: 400; color: var(--muted); }
+.tl__form select { min-height: 42px; padding: 0 10px; border: 1px solid var(--line-2); border-radius: var(--r); background: #fff; font: inherit; font-size: 15px; }
+.tl__small { margin-top: 8px; font-size: 13px; color: var(--muted); }
+.tl__next { margin-top: 20px; padding: 16px; background: var(--bg-2); border-left: 3px solid var(--accent); display: grid; gap: 6px; }
+.tl__next p { font-size: 14px; color: var(--muted); }
+.tl__next .btn { justify-self: start; margin-top: 4px; }
+.tl.is-done .tl__next { background: #eef3ff; }
+.tl__fmt { margin-top: 20px; overflow-x: auto; }
+.tl__fmt table { width: 100%; min-width: 620px; border-collapse: collapse; font-size: 15px; }
+.tl__fmt th, .tl__fmt td { padding: 12px 14px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+.tl__fmt thead th { border-bottom: 1px solid var(--ink); font-size: 14px; color: var(--muted); font-weight: 600; }
+.tl__fmt tbody th { width: 10em; font-weight: 600; padding-left: 0; }
+.tl__steps { margin: 16px 0 0; padding-left: 1.3em; display: grid; gap: 8px; max-width: 44em; }
+@media (max-width: 860px) {
+  .tl__grid { grid-template-columns: 1fr; }
+}

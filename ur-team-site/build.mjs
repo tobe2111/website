@@ -167,7 +167,7 @@ const BLOG_NAME = { ko: "유어팀 블로그", en: "UrTeam Insights" };
 
 // ── 구조화 데이터 (JSON-LD) ───────────────────────────────
 // 검색엔진 · AI 가 "누가 · 무엇을 · 어디서" 를 기계로 읽게 한다. 회사 정보는 site.json 의 org 에서 온다.
-const SERVICE = /^\/(distribution|export|marketing)\/([\w-]+\/)?$/;
+const SERVICE = /^\/(distribution|export|marketing|3d-printing)\/([\w-]+\/)?$/;
 const AREA = {
   "/distribution/": { ko: ["대한민국", "미국", "인도", "중국", "동남아시아", "중동", "일본", "유럽"], en: ["South Korea", "United States", "India", "China", "Southeast Asia", "Middle East", "Japan", "Europe"] },
   "/marketing/global-patients/": { ko: ["대한민국", "중국"], en: ["South Korea", "China"] },
@@ -251,10 +251,24 @@ function jsonld(ctx) {
       "@type": "OfferCatalog", name: shortName(meta, lang),
       itemListElement: kids.map(([p, m]) => ({ "@type": "Offer", itemOffered: { "@type": "Service", name: shortName(m, lang), url: BASE + P + p, description: m.description } })),
     };
+    // 3D프린팅: 시작 가격을 기계가 읽게 (원화, 부가세 포함 여부는 페이지 본문 기준)
+    if (path === "/3d-printing/") {
+      svc.serviceType = lang === "en" ? "3D printing service" : "3D프린팅 출력 대행";
+      svc.offers = [["3D프린팅", "3D printing", 5000], ["3D 모델링 + 프린팅", "3D modeling + printing", 80000]].map(([ko, en, price]) => ({
+        "@type": "Offer", name: lang === "en" ? en : ko, priceCurrency: "KRW", priceSpecification: { "@type": "PriceSpecification", minPrice: price, priceCurrency: "KRW" }, url: canonical + "#price" }));
+      svc.isRelatedTo = { "@type": "WebApplication", name: lang === "en" ? "3D file converter" : "3D 파일 변환기", url: BASE + "/3d-converter/" };
+    }
     graph.push(svc);
     page.mainEntity = { "@id": svc["@id"] };
   }
 
+  // 3D 파일 변환기 · 뷰어: 무료 웹 도구로 읽게
+  if (meta.app) {
+    const app = { "@type": "WebApplication", "@id": canonical + "#app", name: meta.name || meta.title, url: canonical, description: meta.description,
+      applicationCategory: "MultimediaApplication", operatingSystem: "Any (web browser)", browserRequirements: "WebGL 2",
+      offers: { "@type": "Offer", price: 0, priceCurrency: "KRW" }, provider: { "@id": ORG_ID }, inLanguage: lang };
+    graph.push(app); page.mainEntity = { "@id": app["@id"] };
+  }
   // 블로그 목록 · 글
   const blogId = BASE + P + "/blog/#blog";
   if (path === "/blog/") {
