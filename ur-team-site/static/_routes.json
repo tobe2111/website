@@ -1,6 +1,8 @@
 {
   "version": 1,
-  "include": ["/*"],
+  "include": [
+    "/*"
+  ],
   "exclude": [
     "/assets/*",
     "/blog/*",
@@ -20,6 +22,7 @@
     "/3d-printing/*",
     "/3d-converter/*",
     "/3d-viewer/*",
+    "/3d-tools/*",
     "/37/*",
     "/product/*",
     "/product-*",

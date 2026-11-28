@@ -479,6 +479,7 @@
       $("[data-islands]").hidden = !loose;
       if (loose) $("[data-islands]").textContent = L.splitN(loose + parts.length);
       say(parts.length > 1 ? L.manyParts(parts.length) : L.done);
+      setTimeout(() => { if ($("[data-check-out]")) resultCheck(); else if ($("[data-calc]")) resultCalc(); }, 350);
     } catch (e) { say(L.fail + (e.message || e), true); }
   }
   function refresh() { // 보이는 부품만으로 정보를 다시 계산한다
@@ -515,6 +516,7 @@
     if (parts.length > 1) rows.unshift([L.partsLabel, `${chosen().length} / ${parts.length}`]);
     for (const [a, b] of rows) { const r = d.createElement("div"), dt = d.createElement("dt"), dd = d.createElement("dd"); dt.textContent = a; dd.textContent = b; r.append(dt, dd); dl.appendChild(r); }
     $("[data-info-open]").classList.toggle("is-bad", !!info.open);
+    const lg = $("[data-longest]"); if (lg && d.activeElement !== lg) lg.value = +Math.max(...info.size).toFixed(2);
     const on = chosen();
     try { sessionStorage.setItem("p3-prefill", JSON.stringify({ size: `${Math.round(s[0])} × ${Math.round(s[1])} × ${Math.round(s[2])} mm`, item: `${baseName}${on.length > 1 ? ` (${L.partsLabel} ${on.length}${L.partsUnit})` : ""} (${fmt(info.vol / 1000, 1)} cm³)` })); } catch (e) {}
   }
@@ -544,12 +546,13 @@
   }
   // 변환이 끝나면 출력 제안을 띄운다
   // 내려받기가 시작된 뒤 잠깐 있다가 팝업으로 띄운다. 파일을 새로 열 때까지 한 번만
-  let offered = false;
+  let offered = false, offerT = 0;
   function offer(on) {
     const o = $("[data-offer]"); if (!o || !o.showModal) return;
+    clearTimeout(offerT);
     if (!on) { offered = false; if (o.open) o.close(); return; }
     if (offered) return; offered = true;
-    setTimeout(() => { if (!o.open) o.showModal(); }, 600);
+    offerT = setTimeout(() => { if (offered && !o.open) o.showModal(); }, 600);
   }
   const pick = $("input[type=file]"), zone = $("[data-drop]");
   pick.addEventListener("change", () => load(pick.files));
@@ -586,6 +589,7 @@
 
   // ── 무게 · 재료 계산 ([data-calc] 가 있는 페이지) ─────────────────────
   const MAT = { pla: [1.24, "PLA"], petg: [1.27, "PETG"], abs: [1.04, "ABS"], asa: [1.07, "ASA"], tpu: [1.21, "TPU"], resin: [1.12, EN ? "Resin (SLA)" : "레진 (SLA)"] };
+  let lastCalc = null, lastCheck = null;
   function calc() {
     const box = $("[data-calc]"); if (!box) return;
     const out = $("[data-calc-out]");
@@ -597,6 +601,7 @@
     const rows = [[EN ? "Material used" : "쓰이는 재료", `${fmt(cm3, 2)} cm³`], [EN ? "Weight (1 pc)" : "무게 (1개)", `${fmt(g, 1)} g`],
       resin ? [EN ? "Resin" : "레진 양", `${fmt(cm3, 1)} ml`] : [EN ? "Filament length" : "필라멘트 길이", `${fmt(len, 2)} m`]];
     if (qty > 1) rows.push([EN ? `Total for ${qty}` : `${qty}개 합계`, `${fmt(g * qty, 1)} g`]);
+    lastCalc = { g: g * qty, one: g, mat: MAT[m][1], qty };
     out.textContent = "";
     for (const [a, b] of rows) { const r2 = d.createElement("div"), dt = d.createElement("dt"), dd = d.createElement("dd"); dt.textContent = a; dd.textContent = b; r2.append(dt, dd); out.appendChild(r2); }
     try { const pf = JSON.parse(sessionStorage.getItem("p3-prefill") || "{}"); pf.item = `${pf.item || baseName} · ${MAT[m][1]} ${EN ? "about" : "약"} ${fmt(g * qty, 0)} g${qty > 1 ? ` (${qty}${EN ? " pcs" : "개"})` : ""}`; sessionStorage.setItem("p3-prefill", JSON.stringify(pf)); } catch (e) {}
@@ -635,7 +640,34 @@
     const ul = d.createElement("ul"); ul.className = "tl__ck";
     for (const [k, t, msg] of items) { const li = d.createElement("li"), b = d.createElement("b"), sp = d.createElement("span"), em = d.createElement("em"); li.className = "is-" + k; em.textContent = K[k]; b.textContent = t; sp.textContent = msg; li.append(em, b, sp); ul.appendChild(li); }
     box.appendChild(ul);
+    lastCheck = { head: head.textContent, bad, warn };
   }
+
+  // ── 결과 팝업 (무게 계산 · 출력 검사) ─────────────────────────────
+  function showResult(k, h, node, p, cta) {
+    const dlg = $("[data-result]"); if (!dlg || !dlg.showModal) return;
+    $("[data-result-k]").textContent = k; $("[data-result-h]").textContent = h; $("[data-result-p]").textContent = p; $("[data-result-cta]").textContent = cta;
+    const body = $("[data-result-body]"); body.textContent = ""; if (node) body.appendChild(node.cloneNode(true));
+    if (offerT) clearTimeout(offerT); const off = $("[data-offer]"); if (off?.open) off.close();
+    if (!dlg.open) dlg.showModal();
+  }
+  function resultCalc() {
+    if (!info || !lastCalc) return;
+    showResult(EN ? "Estimate" : "계산 결과", EN ? `About ${fmt(lastCalc.g, 1)} g of ${lastCalc.mat}` : `${lastCalc.mat} 약 ${fmt(lastCalc.g, 1)} g`, $("[data-calc-out]"),
+      EN ? "Supports and brims are not included; real prints are usually 10–30 % heavier. Send the file and we will review it and quote by the actual material weight." : "받침(서포트)과 바닥판은 빠진 값이라 실제로는 보통 10~30% 더 나옵니다. 파일을 보내 주시면 출력 전에 검토해 피드백을 드리고, 실제로 쓰인 재료 무게로 정확히 견적해 드립니다.",
+      EN ? "Get a print quote" : "이 무게로 출력 견적 받기");
+  }
+  function resultCheck() {
+    if (!info || !lastCheck) return;
+    showResult(EN ? "Check result" : "검사 결과", lastCheck.head, $("[data-check-out] ul"),
+      lastCheck.bad ? (EN ? "We can review and fix the file, then print it." : "문제가 있는 파일도 괜찮습니다. 유어팀이 파일을 검토해 문제점을 피드백 드리고, 바로잡은 모델로 출력까지 진행합니다.")
+        : (EN ? "Automatic checks cannot see thin walls or support needs. We review every file by hand before printing." : "자동 검사로는 부분적으로 얇은 벽, 받침이 필요한 기울기까지는 알 수 없습니다. 출력 전에 사람이 직접 한 번 더 검토해 드립니다."),
+      lastCheck.bad ? (EN ? "Ask us to review and fix" : "파일 검토 · 수정 요청하기") : (EN ? "Get a print quote" : "이 모델 출력 견적 받기"));
+  }
+  root.querySelectorAll("[data-result-close]").forEach((b) => b.addEventListener("click", () => $("[data-result]").close()));
+  $("[data-result]")?.addEventListener("click", (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
+  $("[data-calc-go]")?.addEventListener("click", resultCalc);
+  $("[data-check-go]")?.addEventListener("click", resultCheck);
   const preset = root.dataset.preset; if (preset && W[preset]) $("[data-to]").value = preset;
   if (root.dataset.presetSplit) $("[data-split]").value = root.dataset.presetSplit;
 })();
