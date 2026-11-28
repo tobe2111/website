@@ -18,6 +18,8 @@
     "/main/*",
     "/homepage/*",
     "/3d-printing/*",
+    "/3d-converter/*",
+    "/3d-viewer/*",
     "/37/*",
     "/product/*",
     "/product-*",

@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>매입 · 매출 장부 | 유어팀 관리자</title>
+<style>
+:root{--bg:#f4f5f7;--card:#fff;--ink:#0f1216;--ink2:#353b44;--muted:#646b75;--line:#dfe3e8;--line2:#c9ced6;--accent:#1747e6;--bad:#a32020;--good:#11683a}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 Pretendard,system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif}
+header{display:flex;align-items:center;gap:16px;padding:12px 20px;background:#0f1216;color:#fff}
+header b{font-size:16px}header nav{display:flex;gap:4px;margin-left:12px;flex-wrap:wrap}
+header nav button{padding:8px 12px;border:0;background:none;color:#b4bbc5;font:inherit;font-weight:600;cursor:pointer;border-radius:4px}
+header nav button[aria-selected=true]{background:#fff;color:#0f1216}
+header a{margin-left:auto;color:#b4bbc5;font-size:14px}
+main{max-width:1180px;margin:0 auto;padding:20px 16px 60px}
+.note{padding:10px 14px;border-left:3px solid var(--accent);background:#fff;margin-bottom:16px;font-size:14px}
+.note.warn{border-color:#c77700;background:#fff8ec}
+[hidden]{display:none!important}
+label>input,label>select,label>textarea{width:100%;min-width:0}
+h2{font-size:18px;margin:0 0 12px}
+h3{font-size:15px;margin:22px 0 8px;color:var(--ink2)}
+.card{background:var(--card);border:1px solid var(--line);padding:18px;margin-bottom:16px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+label{display:grid;gap:4px;font-size:13px;font-weight:600;color:var(--ink2)}
+input,select,textarea{min-height:40px;padding:0 10px;border:1px solid var(--line2);border-radius:4px;background:#fff;font:inherit;font-size:15px;color:var(--ink)}
+textarea{padding:8px 10px;min-height:60px}
+input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.btn{min-height:40px;padding:0 16px;border:1px solid var(--ink);border-radius:4px;background:#fff;font:inherit;font-weight:600;cursor:pointer}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.sm{min-height:32px;padding:0 10px;font-size:13px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:end}
+.chk{display:flex;align-items:center;gap:6px;font-weight:500}
+.chk input,label.chk>input{min-height:0;width:18px;height:18px;flex:none}
+table{width:100%;border-collapse:collapse;font-size:14px;background:#fff}
+th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{font-size:12.5px;color:var(--muted);font-weight:600;background:#fafbfc;position:sticky;top:0}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.scroll{overflow:auto;max-height:62vh;border:1px solid var(--line)}
+.tag{display:inline-block;padding:1px 7px;border-radius:2px;font-size:12px;font-weight:600}
+.tag.sale{background:#e9f0ff;color:#0f36b8}.tag.buy{background:#fff1e6;color:#8a4500}.tag.cost{background:#eef0f2;color:#353b44}
+.sum{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.sum div{background:#fff;border:1px solid var(--line);padding:14px}
+.sum small{display:block;color:var(--muted);font-size:13px}
+.sum b{display:block;font-size:22px;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.sum b.bad{color:var(--bad)}.sum b.good{color:var(--good)}
+.calc td:first-child{color:var(--ink2)}
+.calc tr.tot td{font-weight:700;border-top:2px solid var(--ink)}
+.muted{color:var(--muted);font-size:13px}
+@media(max-width:700px){header{flex-wrap:wrap}header nav{margin-left:0;width:100%}}
+</style>
+</head>
+<body>
+<header><b>유어팀 관리자</b><nav role="tablist" aria-label="메뉴">
+  <button role="tab" aria-selected="true" data-tab="add">기록 입력</button>
+  <button role="tab" aria-selected="false" data-tab="list">장부</button>
+  <button role="tab" aria-selected="false" data-tab="tax">세금 계산</button>
+  <button role="tab" aria-selected="false" data-tab="set">설정 · 백업</button>
+</nav><a href="logout">로그아웃</a></header>
+<main>
+<p class="note" id="where">불러오는 중…</p>
+
+<section data-panel="add">
+  <div class="card">
+    <h2 id="formTitle">매입 · 매출 기록</h2>
+    <form id="f">
+      <div class="grid">
+        <label>날짜<input type="date" name="date" required></label>
+        <label>구분<select name="kind"><option value="sale">매출 (판 것)</option><option value="buy">매입 (산 것 · 부가세 있음)</option><option value="cost">기타 경비 (부가세 없음: 인건비 · 보험료 · 이자 등)</option></select></label>
+        <label>사업<select name="biz"><option>3D프린팅</option><option>마케팅</option><option>유통 · 수출</option><option>홈페이지 제작</option><option>공통</option></select></label>
+        <label>거래처<input name="partner" maxlength="60" placeholder="예: 다알주식회사"></label>
+        <label>품목 · 내용<input name="item" maxlength="80" placeholder="예: PLA 목업 출력 1개"></label>
+      </div>
+      <div class="grid" style="margin-top:12px">
+        <label>입력 방식<select name="mode"><option value="total">합계 금액으로 (부가세 포함)</option><option value="supply">공급가액으로 (부가세 별도)</option></select></label>
+        <label><span id="amtLabel">합계 금액 (원)</span><input name="amount" inputmode="numeric" required placeholder="0"></label>
+        <label id="vatWrap">부가세<select name="vatType"><option value="10">과세 10%</option><option value="0">면세 · 영세율 (0%)</option></select></label>
+        <label>증빙<select name="evidence"></select></label>
+        <label class="chk" id="ndWrap" style="align-self:center"><input type="checkbox" name="nodeduct"> 매입세액 불공제 (접대비 · 개인 사용 등)</label>
+      </div>
+      <p class="muted" id="preview" style="margin:10px 0 0"></p>
+      <label style="margin-top:12px">메모<textarea name="memo" maxlength="300"></textarea></label>
+      <div class="row" style="margin-top:14px"><button class="btn pri" type="submit" id="saveBtn">기록하기</button><button class="btn" type="button" id="cancelEdit" hidden>수정 취소</button><span class="muted" id="saved" role="status"></span></div>
+    </form>
+  </div>
+</section>
+
+<section data-panel="list" hidden>
+  <div class="card">
+    <div class="row" style="margin-bottom:12px">
+      <label>연도<select id="ly"></select></label>
+      <label>월<select id="lm"><option value="">전체</option></select></label>
+      <label>구분<select id="lk"><option value="">전체</option><option value="sale">매출</option><option value="buy">매입</option><option value="cost">기타 경비</option></select></label>
+      <label>사업<select id="lb"><option value="">전체</option><option>3D프린팅</option><option>마케팅</option><option>유통 · 수출</option><option>홈페이지 제작</option><option>공통</option></select></label>
+      <button class="btn" type="button" id="csv">엑셀(CSV)로 받기</button>
+    </div>
+    <div class="sum" id="listSum"></div>
+    <div class="scroll" style="margin-top:12px"><table><thead><tr><th>날짜</th><th>구분</th><th>사업</th><th>거래처 · 내용</th><th>증빙</th><th class="n">공급가액</th><th class="n">부가세</th><th class="n">합계</th><th></th></tr></thead><tbody id="rows"></tbody></table></div>
+  </div>
+</section>
+
+<section data-panel="tax" hidden>
+  <div class="card">
+    <div class="row"><label>연도<select id="ty"></select></label><label>과세 유형<select id="ttype"><option value="general">일반과세자</option><option value="simple">간이과세자</option></select></label>
+      <label id="rateWrap" hidden>업종 부가가치율<select id="trate"><option value="15">15% (소매 · 음식점)</option><option value="20" selected>20% (제조업 · 농임어업)</option><option value="25">25% (숙박업)</option><option value="30">30% (건설 · 운수 · 정보통신)</option><option value="40">40% (그 밖의 서비스)</option></select></label>
+      <label>부양가족 수 (본인 포함)<input id="tfam" type="number" min="1" max="20" value="1" style="width:110px"></label>
+      <label>그 밖의 소득공제 (원)<input id="tded" inputmode="numeric" value="0" style="width:150px"></label>
+      <label class="chk" style="align-self:center"><input type="checkbox" id="tcard" checked> 카드 · 현금영수증 매출 세액공제 적용</label></div>
+    <div class="sum" id="taxSum" style="margin-top:16px"></div>
+    <h3>부가가치세 (반기마다 신고)</h3>
+    <div id="vatTables" class="grid" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr))"></div>
+    <h3>종합소득세 (다음 해 5월 신고)</h3>
+    <table class="calc" id="incomeTable"></table>
+    <p class="muted" style="margin-top:14px">이 계산은 장부에 적은 금액만으로 만든 <b>추정치</b>입니다. 근로 · 다른 사업 소득, 감가상각, 각종 세액공제 · 감면, 중간예납, 기납부세액은 반영하지 않았습니다. 실제 신고 전에는 세무사 확인을 받으세요.
+      개인 일반과세자는 4월 · 10월에 부가세 예정고지(직전 기 납부세액의 절반)가 나올 수 있습니다.</p>
+  </div>
+</section>
+
+<section data-panel="set" hidden>
+  <div class="card"><h2>백업</h2>
+    <p class="muted">장부 전체를 파일 하나로 받아 두고, 다른 기기에서 불러올 수 있습니다.</p>
+    <div class="row"><button class="btn" type="button" id="bk">백업 파일 받기</button><label class="btn" style="display:inline-flex;align-items:center">백업 파일 불러오기<input type="file" id="rs" accept=".json" hidden></label></div>
+  </div>
+  <div class="card" id="pwCard"><h2>비밀번호 바꾸기</h2>
+    <form id="pw" class="row"><label>지금 비밀번호<input type="password" name="current" autocomplete="current-password" required></label><label>새 비밀번호 (10자 이상)<input type="password" name="next" minlength="10" autocomplete="new-password" required></label><button class="btn pri">바꾸기</button><span class="muted" id="pwMsg" role="status"></span></form>
+  </div>
+</section>
+</main>
+<script>
+(() => {
+const $ = (q) => document.querySelector(q), $$ = (q) => [...document.querySelectorAll(q)];
+const won = (n) => Math.round(n || 0).toLocaleString("ko-KR");
+const num = (s) => Math.round(Number(String(s).replace(/[^\d.-]/g, "")) || 0);
+const EV = { sale: [["tax_invoice", "세금계산서 발행"], ["card", "카드 결제"], ["cash_receipt", "현금영수증 발행"], ["platform", "플랫폼 정산 (크몽 · 스마트스토어 등)"], ["none", "증빙 없음 (현금 등)"]],
+  buy: [["tax_invoice", "세금계산서 받음"], ["card", "사업용 카드"], ["cash_receipt", "현금영수증 (지출증빙)"], ["simple", "간이영수증"], ["none", "증빙 없음"]],
+  cost: [["payroll", "급여 · 원천징수"], ["insurance", "4대보험 · 보험료"], ["interest", "이자"], ["bill", "청구서 · 계약서"], ["none", "증빙 없음"]] };
+const EVN = Object.fromEntries(Object.values(EV).flat());
+const KN = { sale: "매출", buy: "매입", cost: "기타 경비" };
+let DB = { version: 1, rows: [] }, server = false, editing = null, saveT = 0;
+
+// ── 저장: 서버(KV)가 연결돼 있으면 서버에, 아니면 이 브라우저에 ─────────
+async function boot() {
+  try { const r = await fetch("/api/admin/data", { credentials: "same-origin" }); if (r.status === 401) return location.reload(); const j = await r.json();
+    if (j.kv) { server = true; if (j.data) DB = j.data; }
+  } catch (e) {}
+  if (!server) { try { const l = JSON.parse(localStorage.getItem("ut-ledger") || "null"); if (l) DB = l; } catch (e) {} }
+  $("#where").className = "note" + (server ? "" : " warn");
+  $("#where").textContent = server ? "장부는 서버에 저장됩니다. 어느 기기에서 로그인해도 같은 장부가 보입니다." : "지금은 장부가 이 브라우저에만 저장됩니다. 다른 기기에서는 보이지 않고, 브라우저 기록을 지우면 사라집니다. '설정 · 백업'에서 백업 파일을 자주 받아 두세요. (서버 저장을 켜려면 Cloudflare 에서 저장 공간 연결이 필요합니다)";
+  $("#pwCard").hidden = !server;
+  years(); render();
+}
+function persist() {
+  if (!server) { try { localStorage.setItem("ut-ledger", JSON.stringify(DB)); } catch (e) {} return; }
+  clearTimeout(saveT); saveT = setTimeout(async () => {
+    const r = await fetch("/api/admin/data", { method: "PUT", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify(DB) });
+    $("#saved").textContent = r.ok ? "서버에 저장했습니다." : "서버 저장 실패. 잠시 후 다시 기록해 주세요.";
+  }, 400);
+}
+
+// ── 입력 ────────────────────────────────────────────────
+const F = $("#f");
+const evFill = () => { const k = F.kind.value, cur = F.evidence.value; F.evidence.innerHTML = EV[k].map(([v, t]) => `<option value="${v}">${t}</option>`).join(""); if (EV[k].some(([v]) => v === cur)) F.evidence.value = cur;
+  $("#vatWrap").hidden = k === "cost"; $("#ndWrap").hidden = k !== "buy"; preview(); };
+function calcRow() {
+  const k = F.kind.value, amt = num(F.amount.value), rate = k === "cost" ? 0 : Number(F.vatType.value) / 100;
+  const supply = F.mode.value === "total" ? Math.round(amt / (1 + rate)) : amt, vat = F.mode.value === "total" ? amt - supply : Math.round(supply * rate);
+  return { supply, vat };
+}
+function preview() { const { supply, vat } = calcRow(); $("#amtLabel").textContent = F.mode.value === "total" ? "합계 금액 (원)" : "공급가액 (원)";
+  $("#preview").textContent = num(F.amount.value) ? `공급가액 ${won(supply)}원 + 부가세 ${won(vat)}원 = 합계 ${won(supply + vat)}원` : ""; }
+["kind"].forEach((n) => F[n].addEventListener("change", evFill));
+["mode", "vatType", "amount"].forEach((n) => F[n].addEventListener("input", preview));
+F.addEventListener("submit", (e) => {
+  e.preventDefault(); const { supply, vat } = calcRow(); if (!supply && !vat) return;
+  const row = { id: editing || crypto.randomUUID(), date: F.date.value, kind: F.kind.value, biz: F.biz.value, partner: F.partner.value.trim(), item: F.item.value.trim(),
+    supply, vat, evidence: F.evidence.value, nodeduct: F.kind.value === "buy" && F.nodeduct.checked, memo: F.memo.value.trim(), at: Date.now() };
+  const i = DB.rows.findIndex((r) => r.id === row.id); if (i >= 0) DB.rows[i] = row; else DB.rows.push(row);
+  persist(); $("#saved").textContent = (editing ? "수정했습니다: " : "기록했습니다: ") + `${KN[row.kind]} ${won(row.supply + row.vat)}원`;
+  const keep = { date: F.date.value, kind: F.kind.value, biz: F.biz.value, mode: F.mode.value };
+  F.reset(); Object.assign(F, {}); for (const [k, v] of Object.entries(keep)) F[k].value = v; evFill(); editing = null; $("#cancelEdit").hidden = true; $("#saveBtn").textContent = "기록하기"; years(); render();
+});
+$("#cancelEdit").addEventListener("click", () => { editing = null; F.reset(); F.date.value = today(); evFill(); $("#cancelEdit").hidden = true; $("#saveBtn").textContent = "기록하기"; });
+const today = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+F.date.value = today(); evFill();
+
+// ── 장부 ────────────────────────────────────────────────
+function years() {
+  const ys = [...new Set(DB.rows.map((r) => r.date.slice(0, 4)).concat(today().slice(0, 4)))].sort().reverse();
+  for (const id of ["#ly", "#ty"]) { const s = $(id), cur = s.value; s.innerHTML = ys.map((y) => `<option>${y}</option>`).join(""); if (ys.includes(cur)) s.value = cur; }
+  if ($("#lm").options.length < 2) $("#lm").innerHTML += Array.from({ length: 12 }, (_, i) => `<option value="${String(i + 1).padStart(2, "0")}">${i + 1}월</option>`).join("");
+}
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+function listRows() {
+  const y = $("#ly").value, m = $("#lm").value, k = $("#lk").value, b = $("#lb").value;
+  return DB.rows.filter((r) => r.date.startsWith(y + (m ? "-" + m : "")) && (!k || r.kind === k) && (!b || r.biz === b)).sort((a, c) => c.date.localeCompare(a.date) || c.at - a.at);
+}
+function render() {
+  const rows = listRows(), s = (k, f) => rows.filter((r) => r.kind === k).reduce((t, r) => t + f(r), 0);
+  const sale = s("sale", (r) => r.supply), buy = s("buy", (r) => r.supply), cost = s("cost", (r) => r.supply);
+  $("#listSum").innerHTML = `<div><small>매출 (공급가액)</small><b>${won(sale)}원</b></div><div><small>매입 (공급가액)</small><b>${won(buy)}원</b></div><div><small>기타 경비</small><b>${won(cost)}원</b></div><div><small>남은 금액 (매출 − 매입 − 경비)</small><b class="${sale - buy - cost < 0 ? "bad" : "good"}">${won(sale - buy - cost)}원</b></div>`;
+  $("#rows").innerHTML = rows.map((r) => `<tr><td>${r.date}</td><td><span class="tag ${r.kind}">${KN[r.kind]}</span></td><td>${esc(r.biz || "")}</td><td>${esc(r.partner)}${r.item ? "<br><span class=muted>" + esc(r.item) + "</span>" : ""}${r.memo ? "<br><span class=muted>" + esc(r.memo) + "</span>" : ""}</td><td>${EVN[r.evidence] || ""}${r.nodeduct ? "<br><span class=muted>불공제</span>" : ""}</td><td class="n">${won(r.supply)}</td><td class="n">${won(r.vat)}</td><td class="n">${won(r.supply + r.vat)}</td><td><button class="btn sm" data-edit="${r.id}">수정</button> <button class="btn sm" data-del="${r.id}">삭제</button></td></tr>`).join("") || `<tr><td colspan="9" class="muted">이 기간에 기록이 없습니다. '기록 입력'에서 첫 기록을 남겨 주세요.</td></tr>`;
+  tax();
+}
+["#ly", "#lm", "#lk", "#lb"].forEach((q) => $(q).addEventListener("change", render));
+$("#rows").addEventListener("click", (e) => {
+  const d = e.target.dataset;
+  if (d.del && confirm("이 기록을 지울까요?")) { DB.rows = DB.rows.filter((r) => r.id !== d.del); persist(); render(); }
+  if (d.edit) { const r = DB.rows.find((x) => x.id === d.edit); editing = r.id; F.date.value = r.date; F.kind.value = r.kind; evFill(); F.biz.value = r.biz || "공통"; F.partner.value = r.partner; F.item.value = r.item || "";
+    F.mode.value = "supply"; F.amount.value = r.supply; F.vatType.value = r.vat ? "10" : "0"; F.evidence.value = r.evidence; F.nodeduct.checked = !!r.nodeduct; F.memo.value = r.memo || ""; preview();
+    $("#cancelEdit").hidden = false; $("#saveBtn").textContent = "수정 저장"; tab("add"); }
+});
+$("#csv").addEventListener("click", () => {
+  const head = ["날짜", "구분", "사업", "거래처", "품목", "증빙", "매입세액 불공제", "공급가액", "부가세", "합계", "메모"];
+  const lines = [head].concat(listRows().map((r) => [r.date, KN[r.kind], r.biz, r.partner, r.item, EVN[r.evidence], r.nodeduct ? "예" : "", r.supply, r.vat, r.supply + r.vat, r.memo]));
+  const csv = "﻿" + lines.map((l) => l.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\r\n");
+  dl(new Blob([csv], { type: "text/csv" }), `유어팀_장부_${$("#ly").value}${$("#lm").value ? "-" + $("#lm").value : ""}.csv`);
+});
+const dl = (b, n) => { const a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = n; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 3000); };
+
+// ── 세금 계산 (추정) ──────────────────────────────────────
+// 종합소득세 세율 (2023년 귀속부터 적용 중인 구간)
+const BR = [[14e6, .06, 0], [50e6, .15, 1.26e6], [88e6, .24, 5.76e6], [150e6, .35, 15.44e6], [300e6, .38, 19.94e6], [500e6, .40, 25.94e6], [1e9, .42, 35.94e6], [Infinity, .45, 65.94e6]];
+const incomeTax = (base) => { if (base <= 0) return { tax: 0, rate: 0 }; const b = BR.find(([up]) => base <= up); return { tax: Math.max(0, base * b[1] - b[2]), rate: b[1] }; };
+function tax() {
+  const y = $("#ty").value, simple = $("#ttype").value === "simple", rate = Number($("#trate").value) / 100;
+  $("#rateWrap").hidden = !simple;
+  const inYear = DB.rows.filter((r) => r.date.startsWith(y));
+  const half = (h) => inYear.filter((r) => (Number(r.date.slice(5, 7)) <= 6) === (h === 1));
+  const deductible = (r) => r.kind === "buy" && !r.nodeduct && ["tax_invoice", "card", "cash_receipt"].includes(r.evidence);
+  let cardLeft = 10e6, vatTotal = 0;
+  const vatHtml = [1, 2].map((h) => {
+    const rs = half(h), saleVat = rs.filter((r) => r.kind === "sale").reduce((t, r) => t + r.vat, 0), saleAll = rs.filter((r) => r.kind === "sale").reduce((t, r) => t + r.supply + r.vat, 0);
+    const buyVat = rs.filter(deductible).reduce((t, r) => t + r.vat, 0), buyAll = rs.filter((r) => r.kind === "buy" && ["tax_invoice", "card", "cash_receipt"].includes(r.evidence)).reduce((t, r) => t + r.supply + r.vat, 0);
+    const cardSales = rs.filter((r) => r.kind === "sale" && ["card", "cash_receipt", "platform"].includes(r.evidence)).reduce((t, r) => t + r.supply + r.vat, 0);
+    let lines, due;
+    if (!simple) {
+      const pre = saleVat - buyVat, card = $("#tcard").checked ? Math.min(cardSales * 0.013, cardLeft, Math.max(0, pre)) : 0; cardLeft -= card; due = pre - card;
+      lines = [["매출세액 (받은 부가세)", saleVat], ["매입세액 공제 (낸 부가세 중 증빙 있는 것)", -buyVat], ["카드 · 현금영수증 매출 공제 (1.3%)", -card]];
+    } else {
+      const base = saleAll * rate * 0.1, cr = buyAll * 0.005; due = Math.max(0, base - cr);
+      lines = [["납부세액 = 매출(부가세 포함) × 부가가치율 × 10%", base], ["매입 세금계산서 등 공제 (0.5%)", -cr]];
+      if (saleAll < 48e6) lines.push(["연 매출 4,800만 원 미만이면 납부 면제일 수 있음", 0]);
+    }
+    vatTotal += Math.max(0, due);
+    const when = h === 1 ? `${y}년 7월 25일까지 신고` : `${Number(y) + 1}년 1월 25일까지 신고`;
+    return `<table class="calc"><tr><th colspan="2">${h}기 (${h === 1 ? "1 ~ 6월" : "7 ~ 12월"}) · ${when}</th></tr>${lines.map(([a, v]) => `<tr><td>${a}</td><td class="n">${won(v)}원</td></tr>`).join("")}<tr class="tot"><td>${due < 0 ? "돌려받을 부가세 (환급)" : "낼 부가세"}</td><td class="n">${won(Math.abs(due))}원</td></tr></table>`;
+  }).join("");
+  $("#vatTables").innerHTML = vatHtml;
+  const rev = inYear.filter((r) => r.kind === "sale").reduce((t, r) => t + r.supply, 0);
+  const exp = inYear.filter((r) => r.kind !== "sale").reduce((t, r) => t + r.supply + (r.kind === "buy" && !deductible(r) ? r.vat : 0), 0) + (simple ? inYear.filter((r) => r.kind === "buy").reduce((t, r) => t + (deductible(r) ? r.vat : 0), 0) : 0);
+  const inc = Math.max(0, rev - exp), ded = Number($("#tfam").value || 1) * 1.5e6 + num($("#tded").value), base = Math.max(0, inc - ded), it = incomeTax(base), local = it.tax * 0.1;
+  $("#incomeTable").innerHTML = [["수입금액 (매출 공급가액 합계)", rev], ["필요경비 (매입 · 경비, 공제받지 못한 부가세 포함)", -exp], ["사업소득금액", inc], [`인적공제 (1인당 150만 원) + 그 밖의 공제`, -ded], ["과세표준", base], [`산출세액 (세율 ${Math.round(it.rate * 100)}% 구간)`, it.tax], ["지방소득세 (소득세의 10%)", local]]
+    .map(([a, v]) => `<tr><td>${a}</td><td class="n">${won(v)}원</td></tr>`).join("") + `<tr class="tot"><td>예상 종합소득세 + 지방소득세</td><td class="n">${won(it.tax + local)}원</td></tr>`;
+  $("#taxSum").innerHTML = `<div><small>${y}년 매출 (공급가액)</small><b>${won(rev)}원</b></div><div><small>${y}년 예상 부가세 (1기 + 2기)</small><b>${won(vatTotal)}원</b></div><div><small>${y}년 예상 종합소득세 + 지방소득세</small><b>${won(it.tax + local)}원</b></div><div><small>세금 낸 뒤 남는 돈 (추정)</small><b class="${inc - it.tax - local < 0 ? "bad" : "good"}">${won(inc - it.tax - local)}원</b></div>`;
+}
+["#ty", "#ttype", "#trate", "#tfam", "#tded", "#tcard"].forEach((q) => $(q).addEventListener("input", tax));
+
+// ── 백업 · 비밀번호 ─────────────────────────────────────────
+$("#bk").addEventListener("click", () => dl(new Blob([JSON.stringify(DB, null, 1)], { type: "application/json" }), `유어팀_장부_백업_${today()}.json`));
+$("#rs").addEventListener("change", async (e) => { const f = e.target.files[0]; if (!f) return; try { const j = JSON.parse(await f.text()); if (!Array.isArray(j.rows)) throw 0;
+  if (!confirm(`백업의 기록 ${j.rows.length}건으로 지금 장부(${DB.rows.length}건)를 바꿀까요?`)) return; DB = j; persist(); years(); render(); alert("불러왔습니다."); } catch { alert("백업 파일이 아닙니다."); } });
+$("#pw").addEventListener("submit", async (e) => { e.preventDefault(); const f = e.target;
+  const r = await fetch("/api/admin/password", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ current: f.current.value, next: f.next.value }) });
+  const j = await r.json().catch(() => ({})); $("#pwMsg").textContent = r.ok ? "바꿨습니다. 다음 로그인부터 새 비밀번호를 쓰세요." : j.error === "current" ? "지금 비밀번호가 맞지 않습니다." : j.error === "short" ? "새 비밀번호는 10자 이상이어야 합니다." : "바꾸지 못했습니다."; if (r.ok) f.reset(); });
+
+// ── 탭 ─────────────────────────────────────────────────
+function tab(k) { $$("[data-tab]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === k))); $$("[data-panel]").forEach((p) => { p.hidden = p.dataset.panel !== k; }); }
+$$("[data-tab]").forEach((b) => b.addEventListener("click", () => tab(b.dataset.tab)));
+boot();
+})();
+</script>
+</body>
+</html>
