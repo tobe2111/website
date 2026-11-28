@@ -266,7 +266,8 @@ function jsonld(ctx) {
   if (meta.app) {
     const app = { "@type": "WebApplication", "@id": canonical + "#app", name: meta.name || meta.title, url: canonical, description: meta.description,
       applicationCategory: "MultimediaApplication", operatingSystem: "Any (web browser)", browserRequirements: "WebGL 2",
-      offers: { "@type": "Offer", price: 0, priceCurrency: "KRW" }, provider: { "@id": ORG_ID }, inLanguage: lang };
+      offers: { "@type": "Offer", price: 0, priceCurrency: "KRW" }, provider: { "@id": ORG_ID }, inLanguage: lang,
+      ...(meta.keywords ? { keywords: meta.keywords.join(", ") } : {}) };
     graph.push(app); page.mainEntity = { "@id": app["@id"] };
   }
   // 블로그 목록 · 글
