@@ -307,9 +307,9 @@
       if (!quick && I.length < 9e6) for (const [p, q] of [[I[t], I[t + 1]], [I[t + 1], I[t + 2]], [I[t + 2], I[t]]]) { const k = p < q ? p * 4294967296 + q : q * 4294967296 + p; edges.set(k, (edges.get(k) || 0) + 1); }
     }
     let open = 0; for (const c of edges.values()) if (c !== 2) open++;
-    vol = Math.abs(vol);
+    const signed = vol; vol = Math.abs(vol);
     const solid = vol / 1000 * 1.24, shell = Math.min(vol, area * 1.2), est = (shell + (vol - shell) * 0.15) / 1000 * 1.24;
-    return { mn, mx, size: mx.map((v, k) => v - mn[k]), vol, area, open, tris: I.length / 3, verts: P.length / 3, solid, est };
+    return { mn, mx, size: mx.map((v, k) => v - mn[k]), vol, signed, area, open, tris: I.length / 3, verts: P.length / 3, solid, est };
   }
 
   // ── 쓰기: 부품 목록을 받는다. 3MF · OBJ · GLB · 문자 STL 은 부품을 따로 담고, 나머지는 하나로 합친다 ─────
@@ -471,7 +471,7 @@
       }
       const s = +$("[data-scale]").value;
       if (s !== 1) for (const p of list) for (let i = 0; i < p.pos.length; i++) p.pos[i] *= s;
-      parts = list; parts.forEach((p) => { p.on = true; });
+      parts = list; parts.forEach((p) => { p.on = true; }); scaleNow = 1; if ($("[data-resize]")) $("[data-resize]").value = 100;
       baseName = files[0].name.replace(/\.[^.]+$/, "") + (files.length > 1 ? "_merged" : "");
       upload(); refresh(); root.classList.add("is-ready");
       // 하나로 보이는 부품 안에 떨어진 조각이 여럿이면 나눌지 묻는다
@@ -484,7 +484,7 @@
   function refresh() { // 보이는 부품만으로 정보를 다시 계산한다
     const on = chosen();
     info = on.length ? analyze(on.length > 1 ? merge(on) : on[0]) : null;
-    list(); show(); kick();
+    list(); show(); calc(); check(); kick();
   }
   function list() {
     const box = $("[data-parts]"), wrap = $("[data-parts-wrap]");
@@ -569,6 +569,73 @@
   });
   root.querySelectorAll("[data-offer-close]").forEach((b) => b.addEventListener("click", () => $("[data-offer]").close()));
   $("[data-offer]")?.addEventListener("click", (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); }); // 바깥 어두운 곳을 누르면 닫기
+
+  // ── 크기 조절 (%, 또는 가장 긴 변 mm) ─────────────────────────────
+  let scaleNow = 1;
+  function rescale(f) {
+    if (!parts.length || !(f > 0)) return;
+    const r = f / scaleNow; scaleNow = f;
+    for (const p of parts) { for (let i = 0; i < p.pos.length; i++) p.pos[i] *= r; p.st = null; }
+    upload(); refresh();
+    const rz = $("[data-resize]"), lg = $("[data-longest]");
+    if (rz) rz.value = +(f * 100).toFixed(2);
+    if (lg && info) lg.value = +Math.max(...info.size).toFixed(2);
+  }
+  $("[data-resize]")?.addEventListener("change", (e) => rescale(+e.target.value / 100));
+  $("[data-longest]")?.addEventListener("change", (e) => { if (info) rescale(scaleNow * +e.target.value / Math.max(...info.size)); });
+
+  // ── 무게 · 재료 계산 ([data-calc] 가 있는 페이지) ─────────────────────
+  const MAT = { pla: [1.24, "PLA"], petg: [1.27, "PETG"], abs: [1.04, "ABS"], asa: [1.07, "ASA"], tpu: [1.21, "TPU"], resin: [1.12, EN ? "Resin (SLA)" : "레진 (SLA)"] };
+  function calc() {
+    const box = $("[data-calc]"); if (!box) return;
+    const out = $("[data-calc-out]");
+    if (!info) { out.textContent = EN ? "Open a model to see the estimate." : "모델을 열면 계산됩니다."; return; }
+    const m = $("[data-mat]").value, fill = +$("[data-fill]").value / 100, walls = +$("[data-walls]").value, qty = Math.max(1, +$("[data-qty]").value || 1);
+    const resin = m === "resin", t = resin ? 2 : walls * 0.42;
+    const shell = Math.min(info.vol, info.area * t), cm3 = (fill >= 1 ? info.vol : shell + (info.vol - shell) * fill) / 1000, g = cm3 * MAT[m][0];
+    const r = $("[data-dia]")?.value === "2.85" ? 0.1425 : 0.0875, len = cm3 / (Math.PI * r * r) / 100;
+    const rows = [[EN ? "Material used" : "쓰이는 재료", `${fmt(cm3, 2)} cm³`], [EN ? "Weight (1 pc)" : "무게 (1개)", `${fmt(g, 1)} g`],
+      resin ? [EN ? "Resin" : "레진 양", `${fmt(cm3, 1)} ml`] : [EN ? "Filament length" : "필라멘트 길이", `${fmt(len, 2)} m`]];
+    if (qty > 1) rows.push([EN ? `Total for ${qty}` : `${qty}개 합계`, `${fmt(g * qty, 1)} g`]);
+    out.textContent = "";
+    for (const [a, b] of rows) { const r2 = d.createElement("div"), dt = d.createElement("dt"), dd = d.createElement("dd"); dt.textContent = a; dd.textContent = b; r2.append(dt, dd); out.appendChild(r2); }
+    try { const pf = JSON.parse(sessionStorage.getItem("p3-prefill") || "{}"); pf.item = `${pf.item || baseName} · ${MAT[m][1]} ${EN ? "about" : "약"} ${fmt(g * qty, 0)} g${qty > 1 ? ` (${qty}${EN ? " pcs" : "개"})` : ""}`; sessionStorage.setItem("p3-prefill", JSON.stringify(pf)); } catch (e) {}
+  }
+  root.querySelectorAll("[data-mat],[data-fill],[data-walls],[data-qty],[data-dia]").forEach((x) => x.addEventListener("input", calc));
+  $("[data-mat]")?.addEventListener("change", () => { const r = $("[data-mat]").value === "resin"; $("[data-walls-wrap]").hidden = r; });
+
+  // ── 출력 가능 검사 ([data-check] 가 있는 페이지) ──────────────────────
+  function check() {
+    const box = $("[data-check-out]"); if (!box) return;
+    box.textContent = "";
+    if (!info) return;
+    const s = info.size, mx = Math.max(...s), mnD = Math.min(...s), on = chosen();
+    let loose = 0; if (on.length < 400) for (const p of on) if (p.idx.length < 6e6) loose += islands(p).size; else loose += 1;
+    const flipped = on.filter((p) => (p.st || analyze(p, true)).signed < 0).length;
+    const K = EN ? {
+      ok: "OK", warn: "Check", bad: "Fix needed",
+    } : { ok: "통과", warn: "확인", bad: "수정 필요" };
+    const items = [
+      info.open ? ["bad", EN ? "Holes / open edges" : "구멍 · 열린 모서리", EN ? `${fmt(info.open, 0)} open edges. The slicer may fill or skip these areas.` : `열린 모서리 ${fmt(info.open, 0)}개. 슬라이서가 이 부분을 비우거나 잘못 채울 수 있습니다.`]
+        : ["ok", EN ? "Closed shape" : "닫힌 형상", EN ? "No holes found. The model is watertight." : "구멍이 없습니다. 안이 꽉 막힌 형상입니다."],
+      flipped ? ["bad", EN ? "Inverted faces" : "뒤집힌 면", EN ? `${flipped} part(s) have faces pointing inward.` : `부품 ${flipped}개의 면이 안쪽을 향합니다. 출력 시 안팎이 바뀔 수 있습니다.`]
+        : ["ok", EN ? "Face direction" : "면 방향", EN ? "Faces point outward." : "면이 바깥을 향합니다."],
+      mx > 2000 || mx < 3 ? ["warn", EN ? "Unit" : "단위", EN ? `Longest side is ${fmt(mx)} mm. The file may be in m or inch. Change 'Original unit'.` : `가장 긴 변이 ${fmt(mx)} mm 입니다. 원래 m · inch 로 만든 파일일 수 있습니다. '원본 단위'를 바꿔 보세요.`]
+        : ["ok", EN ? "Unit" : "단위", EN ? `${fmt(s[0])} × ${fmt(s[1])} × ${fmt(s[2])} mm looks reasonable.` : `${fmt(s[0])} × ${fmt(s[1])} × ${fmt(s[2])} mm, 자연스러운 크기입니다.`],
+      mx > 256 ? ["warn", EN ? "Build size" : "출력 크기", EN ? "Larger than a typical 256 mm printer. It will be printed in pieces and joined." : "일반 프린터(256 mm)보다 큽니다. 나눠 출력한 뒤 붙여야 합니다. 분할 설계도 도와드립니다."]
+        : ["ok", EN ? "Build size" : "출력 크기", EN ? "Fits a typical printer in one piece." : "일반 프린터에서 한 번에 출력할 수 있는 크기입니다."],
+      mnD > 0 && mnD < 1.2 ? ["warn", EN ? "Very thin" : "아주 얇음", EN ? `The thinnest side is ${fmt(mnD, 2)} mm. Below about 1.2 mm may break or not print.` : `가장 얇은 방향이 ${fmt(mnD, 2)} mm 입니다. 1.2 mm 보다 얇으면 부러지거나 출력되지 않을 수 있습니다.`] : null,
+      loose > on.length ? ["warn", EN ? "Loose pieces" : "떨어진 조각", EN ? `${loose} separate pieces. Small floating pieces need support or may be lost.` : `서로 떨어진 조각이 ${loose}개입니다. 공중에 뜬 작은 조각은 받침이 필요하거나 떨어져 나갈 수 있습니다.`] : null,
+      info.tris > 2e6 ? ["warn", EN ? "File weight" : "용량", EN ? `${fmt(info.tris, 0)} triangles. Slicers get slow; it can be simplified.` : `삼각형이 ${fmt(info.tris, 0)}개로 무겁습니다. 슬라이서가 느려질 수 있어 줄이는 편이 좋습니다.`] : null,
+    ].filter(Boolean);
+    const bad = items.filter((x) => x[0] === "bad").length, warn = items.filter((x) => x[0] === "warn").length;
+    const head = d.createElement("p"); head.className = "tl__ck-sum " + (bad ? "is-bad" : warn ? "is-warn" : "is-ok");
+    head.textContent = bad ? (EN ? `${bad} problem(s) to fix before printing.` : `출력 전에 고쳐야 할 문제가 ${bad}개 있습니다.`) : warn ? (EN ? `Printable, ${warn} item(s) to check.` : `출력은 가능하고, 확인할 점이 ${warn}개 있습니다.`) : (EN ? "Ready to print." : "바로 출력할 수 있는 상태입니다.");
+    box.appendChild(head);
+    const ul = d.createElement("ul"); ul.className = "tl__ck";
+    for (const [k, t, msg] of items) { const li = d.createElement("li"), b = d.createElement("b"), sp = d.createElement("span"), em = d.createElement("em"); li.className = "is-" + k; em.textContent = K[k]; b.textContent = t; sp.textContent = msg; li.append(em, b, sp); ul.appendChild(li); }
+    box.appendChild(ul);
+  }
   const preset = root.dataset.preset; if (preset && W[preset]) $("[data-to]").value = preset;
   if (root.dataset.presetSplit) $("[data-split]").value = root.dataset.presetSplit;
 })();
