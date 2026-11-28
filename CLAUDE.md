@@ -1,5 +1,15 @@
 # 이 저장소에서 일할 때
 
+## 사용자에게 말할 때 — 무조건 한글로 (가장 먼저 지킬 것)
+
+**사용자에게 보내는 모든 답변은 처음부터 끝까지 한국어로 씁니다.** 예외가 없습니다.
+작업 보고, 진행 상황, 오류 설명, 알림(자동 검사 · PR 소식)에 대한 짧은 답, 화면 안내까지 전부입니다.
+
+- 사용자는 개발자가 아닙니다. 쉽고 자세하게, 전문 용어는 풀어서 씁니다.
+- 화면에 영어로 적힌 버튼 이름(예: "Save and Deploy")은 그대로 적되, 설명 문장은 한국어로 씁니다.
+- 영어로 쓴 답을 내보냈다면 다음 답에서 사과하고 한국어로 다시 씁니다.
+  이 저장소에서 영어 답변이 여러 번 나가 사용자가 거듭 지적한 일이 있었습니다.
+
 ## 프로젝트 한 줄
 
 한 엔진(Cloudflare Workers + D1 + R2, 외부 의존성 0개) 위에서 **세 개의 제품**이 갈립니다.
@@ -12,6 +22,21 @@
 | `franchise` | 모집 랜딩 + 상담 DB | `/homepage` |
 
 코드는 `cloudflare/` 아래가 전부입니다. 저장소 루트의 초기 Node.js 레퍼런스 구현은 제거되었습니다.
+
+## Cloudflare 계정은 두 개입니다 (헷갈리지 말 것)
+
+| 무엇 | Cloudflare 프로젝트 | 계정 | 계정 번호 앞자리 |
+| --- | --- | --- | --- |
+| ur-team.com 홈페이지 (`ur-team-site/`) | Pages `urteam-homepage` | ur-team.com 이 있는 계정 | `1a2c006f` |
+| 엔진 · 결제 (`cloudflare/`, `wrangler.toml`) — homepage.ur-team.com 이 여기로 이어짐 | Workers `website` (`website.tobe211167.workers.dev`) | **tobe211167@gmail.com 로 로그인하는 계정** | `7bdf7a88` |
+
+- "Workers Builds: website" 실패 알림은 두 번째 계정의 일입니다. ur-team.com 계정에는 `website` 가 없습니다.
+- 그 계정에 `homepage-bridge` 같은 이름이 보여도 `website` 와는 다른 것이니 건드리지 않습니다.
+- 실제 사이트로 나가는 갈래(Production branch)는 `claude/seocho-merchant-website-muv3ws` 입니다.
+  홈페이지 제작 서비스 화면(`/service`)은 이 갈래에만 있습니다.
+- 2026-11-24 에 'Builds for non-production branches' 를 껐습니다. 이제 라이브 홈페이지 갈래에 푸시해도
+  결제 엔진은 빌드되지 않습니다(그 전에는 다른 갈래 빌드가 실제 사이트를 덮어써 homepage.ur-team.com 이 404 가 된 적이 있음).
+  이 설정을 다시 켜려면 Version command 를 먼저 `npx wrangler versions upload` 로 바꿔야 합니다.
 
 ## 스타일시트를 합칠 때 (읽지 않고 넘어가면 화면이 죽습니다)
 

@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "include": [
+    "/*"
+  ],
+  "exclude": [
+    "/assets/*",
+    "/blog/*",
+    "/en/*",
+    "/marketing/*",
+    "/distribution/*",
+    "/export/*",
+    "/brochures/*",
+    "/cases/*",
+    "/contact/*",
+    "/glossary/*",
+    "/hospital/*",
+    "/kr/*",
+    "/home/*",
+    "/main/*",
+    "/homepage/*",
+    "/3d-printing/*",
+    "/3d-converter/*",
+    "/3d-viewer/*",
+    "/3d-tools/*",
+    "/37/*",
+    "/product/*",
+    "/product-*",
+    "/favicon.ico",
+    "/llms.txt",
+    "/llms-full.txt",
+    "/sitemap.xml"
+  ]
+}

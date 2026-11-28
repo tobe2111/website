@@ -1,0 +1,438 @@
+<!-- {"title": "3D프린팅 제작 대행 · 3D 모델링 · 시제품 · 강의", "name": "3D프린팅 제작", "description": "3D 모델링부터 3D프린팅, 소량 · 대량 생산, 강의까지 합니다. 3D프린터 41대를 운용하는 유어팀이 시제품 · 졸업 작품 · 굿즈를 만들어 드립니다. 비용은 그램당으로 받습니다.", "nav": "print3d", "image": "/assets/img/p3/adeuk-tx.webp"} -->
+<section class="p3-top">
+  <div class="wrap">
+    <p class="crumb"><a href="/">홈</a><span aria-hidden="true">/</span><span>3D프린팅 제작</span></p>
+    <div class="p3-top__head">
+      <h1 class="h1">도면에서 실물까지,<br>3D프린팅으로 제작합니다</h1>
+      <div>
+        <p class="lead">시제품, 기구 부품, 굿즈, 조형물을 만듭니다. FDM과 SLA 장비 41대로 보통 3~7일 안에 출고하고, 견적은 사용한 재료의 무게로 산정합니다.</p>
+        <div class="btns"><a class="btn btn--blue btn--lg" href="#quote">견적 문의</a><a class="btn btn--ghost btn--lg" href="/3d-converter/">3D 파일 변환 · 뷰어</a></div>
+      </div>
+    </div>
+
+    <!-- 출력 미리보기: 슬라이서 화면처럼 한 층씩 쌓이고, 아래 막대로 레이어를 직접 넘겨 볼 수 있다 -->
+    <div class="p3-sl" data-p3-slicer>
+      <div class="p3-sl__bar">
+        <div class="p3-sl__tabs" role="tablist" aria-label="출력 방식">
+          <button type="button" role="tab" aria-selected="true" data-p3-tab="fdm" data-layers="100" data-lh="0.2" data-file="gear_set.stl" data-size="112 × 78 × 20 mm">FDM 필라멘트</button>
+          <button type="button" role="tab" aria-selected="false" data-p3-tab="sla" data-layers="958" data-lh="0.05" data-file="rook.stl" data-size="Ø 30 × 48 mm">SLA 레진</button>
+        </div>
+        <b data-p3-file>gear_set.stl</b><span data-p3-size>112 × 78 × 20 mm</span><em>미리보기 예시</em>
+      </div>
+      <div class="p3-sl__body">
+        <div class="p3-sl__view">
+          <canvas aria-label="출력 미리보기. 부품이 한 층씩 만들어지며, 끌어서 시점을 돌릴 수 있습니다" role="img"></canvas>
+          <svg class="p3-sl__axes" viewBox="0 0 64 64" aria-hidden="true"><path d="M20 44 54 50" stroke="#d64545"/><path d="M20 44 20 10" stroke="#2f9e5b"/><path d="M20 44 6 56" stroke="#1747e6"/><text x="56" y="54">X</text><text x="17" y="8">Z</text><text x="0" y="62">Y</text></svg>
+          <p class="p3-sl__note" data-p3-panel="fdm">녹인 필라멘트를 노즐로 짜내 한 층씩 쌓습니다. 잘린 면에 외벽과 속 채움이 보입니다.</p>
+          <p class="p3-sl__note" data-p3-panel="sla" hidden>수조 바닥에서 빛으로 수지를 굳히고, 플랫폼이 올라가며 부품이 거꾸로 자랍니다.</p>
+          <figure class="p3-sl__slice"><canvas data-p3-slice width="296" height="296" aria-hidden="true"></canvas><figcaption>이번 층 단면</figcaption></figure>
+          <p class="p3-sl__hint">끌어서 시점 회전</p>
+          <p class="p3-sl__load" data-p3-load>불러오는 중</p>
+        </div>
+        <aside class="p3-sl__panel">
+          <h2>슬라이스 설정</h2>
+          <div data-p3-panel="fdm"><dl><div><dt>방식</dt><dd>FDM 필라멘트 적층</dd></div><div><dt>재료</dt><dd>PLA 1.75 mm</dd></div><div><dt>노즐</dt><dd>0.4 mm</dd></div><div><dt>적층 높이</dt><dd>0.2 mm</dd></div><div><dt>외벽</dt><dd>3줄 (1.2 mm)</dd></div><div><dt>채움</dt><dd>15 % 격자</dd></div><div><dt>서포트</dt><dd>없음</dd></div><div><dt>레이어 수</dt><dd>100</dd></div><div><dt>필라멘트 길이</dt><dd>약 9.3 m</dd></div></dl><p class="p3-sl__g"><span>재료 사용량</span><b>약 28 g</b><small>견적은 이 무게를 기준으로 산정합니다.</small></p></div>
+          <div data-p3-panel="sla" hidden><dl><div><dt>방식</dt><dd>SLA 레진 광경화</dd></div><div><dt>재료</dt><dd>광경화성 수지</dd></div><div><dt>적층 높이</dt><dd>0.05 mm</dd></div><div><dt>출력 방향</dt><dd>플랫폼에 거꾸로 매달림</dd></div><div><dt>서포트</dt><dd>19개 + 래프트</dd></div><div><dt>레이어 수</dt><dd>958</dd></div><div><dt>수지 부피</dt><dd>약 8.3 mL</dd></div></dl><p class="p3-sl__g"><span>재료 사용량</span><b>약 9 g</b><small>견적은 이 무게를 기준으로 산정합니다.</small></p></div>
+        </aside>
+      </div>
+      <div class="p3-sl__foot">
+        <button type="button" data-p3-play aria-label="재생 / 일시정지" data-label-play="재생" data-label-pause="일시정지"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="p3-sl__ico-pause" d="M7 5h4v14H7zM13 5h4v14h-4z"/><path class="p3-sl__ico-play" d="M8 5v14l11-7z"/></svg></button>
+        <input type="range" min="0" max="100" value="100" step="1" data-p3-layer aria-label="레이어 넘겨 보기">
+        <output><span>레이어 <b data-p3-n>100</b> / <i data-p3-total>100</i></span><span>높이 <b data-p3-h>20.0</b> mm</span></output>
+      </div>
+    </div>
+
+    <div class="p3-cmp" data-p3-cmp data-on="fdm">
+      <h2 class="h3">FDM과 SLA는 이렇게 다릅니다</h2>
+      <p>위 미리보기에서 탭을 바꾸면 해당 방식의 열이 표시됩니다. 어느 방식이 맞는지는 파일을 보고 제안드립니다.</p>
+      <div class="p3-cmp__scroll"><table>
+        <thead><tr><td></td><th scope="col">FDM 필라멘트</th><th scope="col">SLA 레진</th></tr></thead>
+        <tbody><tr><th scope="row">원리</th><td>플라스틱 실(필라멘트)을 녹여 노즐로 한 층씩 쌓습니다</td><td>액체 수지를 빛으로 한 층씩 굳힙니다</td></tr><tr><th scope="row">적층 높이</th><td>0.1 ~ 0.3 mm</td><td>0.025 ~ 0.1 mm</td></tr><tr><th scope="row">표면</th><td>층 결이 보입니다</td><td>매끄럽고 세밀합니다</td></tr><tr><th scope="row">강도</th><td>질기고 충격에 강해 실제로 쓰는 부품에 맞습니다</td><td>단단하지만 충격에는 약한 편이고, 햇빛에 오래 두면 약해집니다</td></tr><tr><th scope="row">크기</th><td>큰 부품에 유리합니다 (최대 330 × 330 × 457 mm)</td><td>작고 정밀한 부품에 맞습니다 (최대 Ø 180 × 180 mm)</td></tr><tr><th scope="row">비용</th><td>재료비가 낮아 경제적입니다</td><td>FDM보다 높습니다</td></tr><tr><th scope="row">출력 후 작업</th><td>서포트 제거</td><td>세척, 추가 경화, 서포트 제거</td></tr><tr><th scope="row">맞는 물건</th><td>시제품, 케이스, 기구 부품, 큰 조형물</td><td>피규어, 작은 정밀 부품, 외관이 중요한 제품</td></tr></tbody>
+      </table></div>
+    </div>
+
+    <ul class="p3-works">
+      <li><a href="#brands"><img src="/assets/img/p3/ondeung-set.webp" alt="온등 전통 조명 네 종" width="1000" height="625" loading="lazy"><b>조명과 소품</b><span>벽 두께로 빛의 세기를 조절한 조명</span></a></li>
+      <li><a href="#what"><img src="/assets/img/p3/model-bust-front.webp" alt="인물 흉상 3D 모델링" width="800" height="1089" loading="lazy"><b>인물 모델링</b><span>얼굴과 옷 주름까지 만든 흉상</span></a></li>
+      <li><a href="#viewer"><img src="/assets/img/p3/adeuk-mm.webp" alt="털매머드 화석 조립 모형" width="1000" height="667" loading="lazy"><b>조립 구조물</b><span>접착 없이 끼워 맞추는 분할 설계</span></a></li>
+    </ul>
+  </div>
+</section>
+
+<section class="sec" id="who">
+  <div class="wrap">
+    <div class="head">
+      <h2 class="h2">주요 의뢰 유형</h2>
+      <p class="lead">수량 1개부터 접수합니다. 견적 확인 후 진행 여부를 결정하시면 됩니다.</p>
+    </div>
+    <dl class="p3-rows">
+      <div><dt><b>시제품 · 목업</b><small>창업 · 제품 개발</small></dt><dd>양산 전 외형 · 조립성 · 치수 검증용 시제품. 수정 사항은 도면에 반영해 재출력합니다.</dd></div>
+      <div><dt><b>졸업 작품 · 공모전 출품작</b><small>대학 · 연구</small></dt><dd>마감 일정에 맞춰 제작합니다. 미완성 도면은 모델링을 보완한 뒤 출력합니다.</dd></div>
+      <div><dt><b>기구 부품 · 프로토타입</b><small>설비 · 기계</small></dt><dd>기어, 브래킷, 하우징 등 치수가 중요한 부품. 조립과 동작을 실물로 확인할 수 있습니다.</dd></div>
+      <div><dt><b>굿즈 · 소품 · 조형물</b><small>브랜드 · 매장</small></dt><dd>굿즈, 인테리어 소품, 조명, 전시 조형물. 아이디어 단계에서 모델링부터 진행합니다.</dd></div>
+    </dl>
+  </div>
+</section>
+
+<section class="sec sec--blue p3-view" id="viewer">
+  <div class="wrap p3-view__in">
+    <div class="p3-view__tx">
+      <h2 class="h2">출력 전, 화면으로 먼저 확인합니다</h2>
+      <p class="lead">의뢰하신 형상도 이와 같이 3D로 검수한 뒤 출력합니다. 아래는 시연용 예시 형상과 자체 설계 모델(아득 화석 조립 모형 15종)입니다.</p>
+      <div class="p3-vtabs" role="tablist" aria-label="공룡 고르기"><small>시연용 예시 형상</small><button type="button" role="tab" aria-selected="true" data-p3-model="/assets/models/s-vase.bin" data-name="트위스트 화병" data-sci="시연용 예시 형상" data-size="지름 120mm · 높이 160mm">트위스트 화병</button><button type="button" role="tab" aria-selected="false" data-p3-model="/assets/models/s-gear.bin" data-name="기어 세트" data-sci="시연용 예시 형상" data-size="120 × 90 × 35mm">기어 세트</button><button type="button" role="tab" aria-selected="false" data-p3-model="/assets/models/s-impeller.bin" data-name="임펠러" data-sci="시연용 예시 형상" data-size="지름 120mm · 높이 38mm">임펠러</button><small>자체 설계 · 아득 화석 모형 15종</small><button type="button" role="tab" aria-selected="false" data-p3-model="/assets/models/trex.bin" data-name="티라노사우루스 · 걷기" data-sci="Tyrannosaurus rex" data-size="길이 611mm · 높이 266mm">티라노사우루스 · 걷기</button><button type="button" role="tab" aria-selected="false" data-p3-model="/assets/models/tr.bin" data-name="티라노사우루스 · 포효" data-sci="Tyrannosaurus rex" data-size="길이 610mm · 높이 327mm">티라노사우루스 · 포효</button><button type="button" role="tab" aria-selected="false" data-p3-model="/assets/models/gg.bin" data-name="기가노토사우루스" data-sci="Giganotosaurus" data-size="길이 630mm · 높이 229mm">기가노토사우루스</button><button type="button" role="tab" aria-selected="false" data-p3-model="/assets/models/allo.bin" data-name="알로사우루스" data-sci="Allosaurus" data-size="길이 443mm · 높이 138mm">알로사우루스</button><button type="button" role="tab" aria-selected="false" data-p3-model="/assets/models/carno.bin" data-name="카르노타우루스" data-sci="Carnotaurus sastrei" data-size="길이 450mm · 높이 176mm">카르노타우루스</button><button type="button" role="tab" aria-selected="false" data-p3-model="/assets/models/spinosn.bin" data-name="스피노사우루스" data-sci="Spinosaurus" data-size="길이 580mm · 높이 263mm">스피노사우루스</button><button type="button" role="tab" aria-selected="false" data-p3-model="/assets/models/raptor.bin" data-name="벨로키랍토르" data-sci="Velociraptor" data-size="길이 442mm · 높이 200mm">벨로키랍토르</button><button type="button" role="tab" aria-selected="false" data-p3-model="/assets/models/deino.bin" data-name="데이노니쿠스" data-sci="Deinonychus antirrhopus" data-size="길이 500mm · 높이 286mm">데이노니쿠스</button><button type="button" role="tab" aria-selected="false" data-p3-model="/assets/models/trice.bin" data-name="트리케라톱스" data-sci="Triceratops" data-size="길이 396mm · 높이 203mm">트리케라톱스</button><button type="button" role="tab" aria-selected="false" data-p3-model="/assets/models/stego.bin" data-name="스테고사우루스" data-sci="Stegosaurus" data-size="길이 386mm · 높이 225mm">스테고사우루스</button><button type="button" role="tab" aria-selected="false" data-p3-model="/assets/models/ankylo.bin" data-name="안킬로사우루스" data-sci="Ankylosaurus" data-size="길이 366mm · 높이 159mm">안킬로사우루스</button><button type="button" role="tab" aria-selected="false" data-p3-model="/assets/models/brachiot.bin" data-name="브라키오사우루스 · 네 발" data-sci="Brachiosaurus" data-size="길이 624mm · 높이 565mm">브라키오사우루스 · 네 발</button><button type="button" role="tab" aria-selected="false" data-p3-model="/assets/models/brachiotrear.bin" data-name="브라키오사우루스 · 일어선 자세" data-sci="Brachiosaurus" data-size="길이 392mm · 높이 684mm">브라키오사우루스 · 일어선</button><button type="button" role="tab" aria-selected="false" data-p3-model="/assets/models/diplo.bin" data-name="디플로도쿠스" data-sci="Diplodocus" data-size="길이 620mm · 높이 126mm">디플로도쿠스</button><button type="button" role="tab" aria-selected="false" data-p3-model="/assets/models/mammoth.bin" data-name="털매머드" data-sci="Mammuthus primigenius" data-size="길이 502mm · 높이 335mm">털매머드</button></div>
+      <p class="p3-view__hint">드래그로 회전합니다. 이름을 선택하면 모델이 바뀝니다.</p>
+      <p class="p3-view__hint p3-view__copy">ⓒ 유어팀. 자체 설계 모델은 저작권 보호를 받으며 무단 복제 · 출력 · 판매를 금합니다.</p>
+    </div>
+    <div class="p3-viewer" data-p3-viewer>
+      <canvas aria-label="3D 모델 — 끌어서 돌릴 수 있습니다" role="img"></canvas>
+      <div class="p3-viewer__info"><b data-p3-name>트위스트 화병</b><small><i data-p3-sci>시연용 예시 형상</i> · <span data-p3-size>지름 120mm · 높이 160mm</span></small></div>
+      <p class="p3-viewer__load" data-p3-load>불러오는 중…</p>
+      <span class="p3-viewer__mark" aria-hidden="true">ⓒ 유어팀</span>
+    </div>
+  </div>
+</section>
+
+<section class="sec sec--soft" id="what">
+  <div class="wrap">
+    <div class="head">
+      <h2 class="h2">모델링 · 출력 · 생산,<br>필요한 공정만 의뢰하실 수 있습니다</h2>
+    </div>
+    <dl class="p3-rows">
+      <div><dt><b>3D 모델링</b><small>스케치 · 사진 기반 모델링</small></dt><dd>도면이 없어도 스케치, 사진, 치수 메모로 3D 데이터를 제작합니다. 화면 검수와 수정을 거쳐 최종 파일을 전달합니다.</dd></div>
+      <div><dt><b>3D프린팅</b><small>보유 파일 출력</small></dt><dd>접수한 파일의 출력 가능 여부를 먼저 검토합니다. 출고 전 완성품 사진으로 확인 절차를 거칩니다.</dd></div>
+      <div><dt><b>소량 · 대량 생산</b><small>다수 장비 동시 출력</small></dt><dd>41대 장비에 물량을 분산해 납기를 단축합니다. 수량과 납기에 맞춰 가동 일정을 배정합니다.</dd></div>
+      <div><dt><b>강의</b><small>3D 모델링 · 프린팅 교육</small></dt><dd>현업 작업자가 직접 강의합니다. 학교 · 기관 · 기업 출강이 가능합니다. <a href="#class">강의 안내 보기</a></dd></div>
+    </dl>
+    <figure class="p3-fig">
+      <img src="/assets/img/p3/model-bust.webp" alt="인물 흉상 3D 모델링을 세 방향에서 본 모습" width="1400" height="788" loading="lazy">
+      <figcaption>3D 모델링 작업 예시. 인물 흉상을 세 방향에서 본 모습입니다. 당사자 동의를 받아 공개합니다.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section class="sec p3-brandsec" id="brands">
+  <div class="wrap">
+    <div class="head">
+      <h2 class="h2">설계부터 제작까지<br>직접 운영하는 브랜드</h2>
+      <p class="lead">의뢰 제작과 같은 장비, 같은 공정으로 자체 제품을 개발하고 있습니다. 제품 개발에서 쌓은 설계 · 출력 기준을 의뢰 작업에 그대로 적용합니다.</p>
+    </div>
+
+    <article class="p3-case p3-case--ondeung">
+      <div class="p3-case__tx">
+        <img class="p3-case__logo p3-case__logo--wide" src="/assets/img/p3/ondeung-logo.webp" alt="온등 ONDEUNG" width="800" height="333" loading="lazy">
+        <span class="k">온등 · 한국 전통 조명</span>
+        <h3 class="h3">따뜻한 빛, 온등</h3>
+        <p>청자, 달항아리, 첨성대, 한옥 문살을 조명으로 재해석했습니다. 현재 52종.</p>
+        <ul class="ticks">
+          <li>두께 차이로 무늬를 표현하는 투광 설계</li>
+          <li>서포트 없이 출력되는 일체형 형상</li>
+          <li>점등 상태 기준 검수</li>
+        </ul>
+        {{ondeungShop}}
+      </div>
+      <div class="p3-case__main"><img src="/assets/img/p3/ondeung-scene.webp" alt="온등 — 한옥 방에 놓은 조명" width="1000" height="611" loading="lazy"></div>
+      <div class="p3-case__thumbs">
+        <img src="/assets/img/p3/ondeung-d-yunseul.webp" alt="온등 — 윤슬" width="800" height="800" loading="lazy">
+        <img src="/assets/img/p3/ondeung-d-chang.webp" alt="온등 — 창살 사방등" width="800" height="800" loading="lazy">
+        <img src="/assets/img/p3/ondeung-d-crown.webp" alt="온등 — 신라 금관" width="800" height="800" loading="lazy">
+        <img src="/assets/img/p3/ondeung-d-maebyeong.webp" alt="온등 — 청자 운학문 매병" width="800" height="800" loading="lazy">
+      </div>
+      <div class="p3-lamp" data-p3-lamp>
+        <div class="p3-lamp__stage">
+          <canvas aria-label="온등 실조명 3D 미리보기. 끌어서 돌릴 수 있습니다" role="img"></canvas>
+          <p class="p3-lamp__tip">끌어서 돌리기</p>
+          <label class="p3-lamp__prog">출력 진행 <input type="range" min="2" max="100" value="100" data-p3-lamp-prog> <output data-p3-lamp-pct>100%</output></label>
+        </div>
+        <div class="p3-lamp__tx">
+          <h3 class="h3">실조명</h3>
+          <p>실을 감은 듯한 무늬의 조명입니다. 다각형 고리와 그 사이를 건너는 실을 번갈아 쌓고, 한 단마다 조금씩 돌려 나선 무늬를 만듭니다. 일반 3D 모델을 자르는 것이 아니라 노즐이 지나갈 길을 직접 설계합니다.</p>
+          <div class="p3-lamp__sizes" role="group" aria-label="크기 고르기">
+            <button type="button" aria-pressed="false" data-p3-lamp-size="s">소 <small>Ø150 × 149 mm</small></button>
+            <button type="button" aria-pressed="true" data-p3-lamp-size="m">중 <small>Ø190 × 180 mm</small></button>
+            <button type="button" aria-pressed="false" data-p3-lamp-size="l">장 <small>Ø170 × 196 mm</small></button>
+          </div>
+          <button type="button" class="p3-lamp__lit" aria-pressed="true" data-p3-lamp-lit>불 켜기</button>
+          <p class="p3-lamp__note">설계 단계의 모델입니다. 화면의 선 하나하나가 실제로 노즐이 지나가는 길입니다.</p>
+        </div>
+      </div>
+    </article>
+
+    <article class="p3-case p3-case--adeuk">
+      <div class="p3-case__main"><img src="/assets/img/p3/adeuk-tx.webp" alt="아득 — 티라노사우루스 화석 조립 모형" width="1000" height="667" loading="lazy"></div>
+      <div class="p3-case__tx">
+        <img class="p3-case__logo" src="/assets/img/p3/adeuk-logo-ivory.webp" alt="아득 Adeuk" width="600" height="331" loading="lazy">
+        <span class="k">아득 · 공룡 화석 조립 모형</span>
+        <h3 class="h3">뼈를 하나씩 끼워 세우는 화석</h3>
+        <p>티라노사우루스, 털매머드 등 15종. 뼈대는 레진(SLA), 받침판은 PLA(FDM)로 출력합니다.</p>
+        <ul class="ticks">
+          <li>뼈 경계 기준 분할 설계</li>
+          <li>무접착 핀 · 소켓 결합</li>
+          <li>전도 방지 무게중심 설계</li>
+        </ul>
+        {{adeukShop}}
+      </div>
+      <div class="p3-case__thumbs">
+        <img src="/assets/img/p3/adeuk-mm.webp" alt="아득 — 털매머드" width="1000" height="667" loading="lazy">
+        <img src="/assets/img/p3/adeuk-vr.webp" alt="아득 — 벨로키랍토르" width="1000" height="667" loading="lazy">
+        <img src="/assets/img/p3/adeuk-head.webp" alt="아득 — 티라노사우루스 머리뼈" width="1000" height="667" loading="lazy">
+        <img src="/assets/img/p3/adeuk-home.webp" alt="아득 — 책장에 놓은 모습" width="1000" height="667" loading="lazy">
+      </div>
+    </article>
+  </div>
+  <div class="p3-roll" aria-label="온등 조명 모음">
+    <div class="p3-roll__track"><figure><img src="/assets/img/p3/ondeung-c15.webp" alt="온등 조명 — 백제 금동대향로" width="600" height="750" loading="lazy"><figcaption>백제 금동대향로</figcaption></figure><figure><img src="/assets/img/p3/ondeung-c05.webp" alt="온등 조명 — 백자 달항아리" width="600" height="750" loading="lazy"><figcaption>백자 달항아리</figcaption></figure><figure><img src="/assets/img/p3/ondeung-c24.webp" alt="온등 조명 — 청사초롱" width="600" height="750" loading="lazy"><figcaption>청사초롱</figcaption></figure><figure><img src="/assets/img/p3/ondeung-c07.webp" alt="온등 조명 — 첨성대" width="600" height="750" loading="lazy"><figcaption>첨성대</figcaption></figure><figure><img src="/assets/img/p3/ondeung-c21.webp" alt="온등 조명 — 창살 사방등" width="600" height="750" loading="lazy"><figcaption>창살 사방등</figcaption></figure><figure><img src="/assets/img/p3/ondeung-c02.webp" alt="온등 조명 — 청자 운학문 매병" width="600" height="750" loading="lazy"><figcaption>청자 운학문 매병</figcaption></figure><figure><img src="/assets/img/p3/ondeung-c11.webp" alt="온등 조명 — 신라 금관" width="600" height="750" loading="lazy"><figcaption>신라 금관</figcaption></figure><figure><img src="/assets/img/p3/ondeung-c28.webp" alt="온등 조명 — 윤슬" width="600" height="750" loading="lazy"><figcaption>윤슬</figcaption></figure><figure><img src="/assets/img/p3/ondeung-c23.webp" alt="온등 조명 — 연꽃등" width="600" height="750" loading="lazy"><figcaption>연꽃등</figcaption></figure><figure><img src="/assets/img/p3/ondeung-c52.webp" alt="온등 조명 — 백자 운룡문 항아리" width="600" height="750" loading="lazy"><figcaption>백자 운룡문 항아리</figcaption></figure><figure><img src="/assets/img/p3/ondeung-c30.webp" alt="온등 조명 — 꽃살 투각" width="600" height="750" loading="lazy"><figcaption>꽃살 투각</figcaption></figure><figure><img src="/assets/img/p3/ondeung-c08.webp" alt="온등 조명 — 성덕대왕신종" width="600" height="750" loading="lazy"><figcaption>성덕대왕신종</figcaption></figure><figure aria-hidden="true"><img src="/assets/img/p3/ondeung-c15.webp" alt="" width="600" height="750" loading="lazy"><figcaption>백제 금동대향로</figcaption></figure><figure aria-hidden="true"><img src="/assets/img/p3/ondeung-c05.webp" alt="" width="600" height="750" loading="lazy"><figcaption>백자 달항아리</figcaption></figure><figure aria-hidden="true"><img src="/assets/img/p3/ondeung-c24.webp" alt="" width="600" height="750" loading="lazy"><figcaption>청사초롱</figcaption></figure><figure aria-hidden="true"><img src="/assets/img/p3/ondeung-c07.webp" alt="" width="600" height="750" loading="lazy"><figcaption>첨성대</figcaption></figure><figure aria-hidden="true"><img src="/assets/img/p3/ondeung-c21.webp" alt="" width="600" height="750" loading="lazy"><figcaption>창살 사방등</figcaption></figure><figure aria-hidden="true"><img src="/assets/img/p3/ondeung-c02.webp" alt="" width="600" height="750" loading="lazy"><figcaption>청자 운학문 매병</figcaption></figure><figure aria-hidden="true"><img src="/assets/img/p3/ondeung-c11.webp" alt="" width="600" height="750" loading="lazy"><figcaption>신라 금관</figcaption></figure><figure aria-hidden="true"><img src="/assets/img/p3/ondeung-c28.webp" alt="" width="600" height="750" loading="lazy"><figcaption>윤슬</figcaption></figure><figure aria-hidden="true"><img src="/assets/img/p3/ondeung-c23.webp" alt="" width="600" height="750" loading="lazy"><figcaption>연꽃등</figcaption></figure><figure aria-hidden="true"><img src="/assets/img/p3/ondeung-c52.webp" alt="" width="600" height="750" loading="lazy"><figcaption>백자 운룡문 항아리</figcaption></figure><figure aria-hidden="true"><img src="/assets/img/p3/ondeung-c30.webp" alt="" width="600" height="750" loading="lazy"><figcaption>꽃살 투각</figcaption></figure><figure aria-hidden="true"><img src="/assets/img/p3/ondeung-c08.webp" alt="" width="600" height="750" loading="lazy"><figcaption>성덕대왕신종</figcaption></figure></div>
+  </div>
+  <div class="wrap"><p class="p3-copy" role="note"><b>ⓒ 유어팀 · 무단 사용 금지</b>아득 · 온등의 디자인, 3D 모델, 이미지, 로고는 유어팀의 저작물입니다. 허락 없이 복제 · 출력 · 판매 · 배포하거나 2차 저작물로 만들 수 없으며, 위반 시 저작권법에 따라 법적 책임을 물을 수 있습니다. <small>사진은 출력용 3D 모델을 그린 그림(렌더)입니다.</small></p></div>
+</section>
+
+<section class="sec sec--soft" id="machines">
+  <div class="wrap p3-fleet">
+    <div>
+      <h2 class="h2">FDM · SLA 장비<br>41대 운용</h2>
+      <p class="lead">형상의 크기와 용도에 따라 장비를 배정합니다. 대형 출력은 Z18, 복합 소재는 Bambu, 정밀 · 고품질 표면은 SLA로 진행합니다.</p>
+      <div class="p3-dots" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <p class="p3-dots__cap" aria-hidden="true">1칸 = 장비 1대</p>
+      <figure class="p3-shot">
+        <img src="/assets/img/p3/workshop-machine.webp" alt="유어팀 작업실의 장비" width="900" height="1579" loading="lazy">
+        <figcaption>유어팀 작업실</figcaption>
+      </figure>
+    </div>
+    <div class="p3-table" role="table" aria-label="운용 장비">
+      <div role="row" class="p3-table__head"><span role="columnheader">장비</span><span role="columnheader">재료</span><span role="columnheader">최대 출력 크기 (mm)</span></div>
+      <div role="row"><b role="cell">Replicator+ <small>FDM</small></b><span role="cell">PLA</span><span role="cell">295 × 195 × 165</span></div>
+      <div role="row"><b role="cell">Z18 <small>FDM</small></b><span role="cell">PLA</span><span role="cell">305 × 305 × 457</span></div>
+      <div role="row"><b role="cell">M350-Moment <small>FDM</small></b><span role="cell">PLA</span><span role="cell">330 × 330 × 330</span></div>
+      <div role="row"><b role="cell">Bambu <small>FDM</small></b><span role="cell">여러 소재 · 카본/유리섬유 강화 소재 가능</span><span role="cell">256 × 256 × 256</span></div>
+      <div role="row"><b role="cell">XFAB-DWS <small>SLA</small></b><span role="cell">광경화성 수지(레진) · 별도 문의</span><span role="cell">Ø180 × 180</span></div>
+      <p class="p3-table__note"><strong>FDM</strong>은 플라스틱 실을 녹여 한 층씩 쌓는 방식, <strong>SLA</strong>는 액체 수지를 빛으로 굳히는 방식입니다. 후가공(표면 연마 · 도색)은 현재 제공하지 않습니다.</p>
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="guide">
+  <div class="wrap">
+    <div class="head">
+      <h2 class="h2">의뢰 전 참고 사항</h2>
+      <p class="lead">출력 방식과 재료는 접수 후 저희가 제안합니다. 아래 내용은 원하는 결과물을 설명하실 때 참고하시면 됩니다.</p>
+    </div>
+
+    <h3 class="h3 p3-gh">재료 선택</h3>
+    <div class="p3-mats">
+      <article><i style="background:#dfe3e8"></i><b>PLA</b><p>기본 재료. 형상 확인용 시제품과 전시물에 적합합니다. 고온 환경에는 부적합합니다.</p></article>
+      <article><i style="background:#353b44"></i><b>ABS</b><p>PLA 대비 내열성 · 내충격성이 높습니다. 실사용 케이스와 기능 부품에 사용합니다.</p></article>
+      <article><i style="background:#e39a3b"></i><b>레진</b><p>미세 표현이 필요한 소형 출력물에 사용합니다. 표면이 매끄럽고, 장기 직사광선 노출은 피해야 합니다.</p></article>
+      <article><i style="background:#0f1216"></i><b>카본 · 유리섬유 강화</b><p>강성이 높고 변형이 적습니다. 하중을 받는 기구 부품에 사용합니다.</p></article>
+    </div>
+
+    <h3 class="h3 p3-gh">설계 시 유의 사항</h3>
+    <div class="p3-tips">
+      <article>
+        <svg class="p3-tip1" viewBox="0 0 200 120" aria-hidden="true"><path d="M40 100V30h120v70" fill="none" stroke="#1747e6" stroke-width="10"/><path d="M20 100h160" stroke="currentColor" stroke-width="3"/><path d="M166 52h22M166 52l6-4M166 52l6 4" stroke="currentColor" stroke-width="2" fill="none"/></svg>
+        <b>최소 벽 두께 1.5mm</b><p>얇은 벽은 출력 중 파손 · 변형이 생깁니다. 1.5~2mm 이상을 권장합니다.</p>
+      </article>
+      <article>
+        <svg class="p3-tip2" viewBox="0 0 200 120" aria-hidden="true"><path d="M20 100h160" stroke="currentColor" stroke-width="3"/><path d="M60 100V60l50-50h30" fill="none" stroke="#1747e6" stroke-width="10" stroke-linejoin="round"/><path d="M60 60h44" stroke="currentColor" stroke-width="2" stroke-dasharray="4 4"/><path d="M84 60a24 24 0 0 0-7-17" fill="none" stroke="currentColor" stroke-width="2"/><text x="90" y="52" font-size="13" fill="currentColor">45°</text></svg>
+        <b>45° 이상 오버행은 서포트 필요</b><p>허공에 뜨는 면은 서포트를 세워 출력한 뒤 제거합니다. 제거 부위에 자국이 남을 수 있습니다.</p>
+      </article>
+      <article>
+        <svg class="p3-tip3" viewBox="0 0 200 120" aria-hidden="true"><path d="M20 100h160" stroke="currentColor" stroke-width="3"/><path d="M40 100V40h44v60M116 100V40h44v60" fill="none" stroke="#1747e6" stroke-width="8"/><path d="M90 30v-8M110 30v-8M90 26h20" stroke="currentColor" stroke-width="2"/><text x="84" y="16" font-size="12" fill="currentColor">틈</text></svg>
+        <b>조립 부품은 공차 확보</b><p>동일 치수로 설계하면 조립되지 않습니다. 통상 0.5mm 내외의 틈을 둡니다.</p>
+      </article>
+    </div>
+    <p class="p3-gnote">위 수치는 일반 기준이며 장비 · 재료에 따라 달라집니다. 접수 파일 검토 후 적정 값을 안내합니다.</p>
+  </div>
+</section>
+
+<section class="sec" id="flow">
+  <div class="wrap">
+    <div class="head">
+      <h2 class="h2">진행 절차</h2>
+    </div>
+    <div class="p3-flows">
+      <div class="p3-flow">
+        <h3 class="h3">3D 모델링</h3>
+        <ol>
+          <li><b>상담</b><span>제작 대상 · 용도 확인</span></li>
+          <li><b>간단한 도면 작성</b><span>치수 · 형상 정리</span></li>
+          <li><b>방향 협의</b><span>형상 · 분할 방식 결정</span></li>
+          <li><b>모델링 작업</b><span>3D 데이터 제작</span></li>
+          <li><b>확인 · 수정</b><span>화면 검수 · 수정 반영</span></li>
+          <li><b>최종 파일 전달</b><span>확정 파일 전달</span></li>
+        </ol>
+      </div>
+      <div class="p3-flow">
+        <h3 class="h3">3D프린팅</h3>
+        <ol>
+          <li><b>상담</b><span>수량 · 크기 · 용도 확인</span></li>
+          <li><b>파일 공유</b><span>3D 파일(STL 등) 접수</span></li>
+          <li><b>제작 방향 결정</b><span>장비 · 재료 · 금액 · 일정</span></li>
+          <li><b>출력</b><span>장비 배정 · 출력</span></li>
+          <li><b>사진으로 사전 확인</b><span>출고 전 완성품 사진 확인</span></li>
+          <li><b>출력물 전달</b><span>포장 · 발송</span></li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="sec sec--soft" id="price">
+  <div class="wrap">
+    <div class="head center">
+      <h2 class="h2">재료 중량 기준 견적</h2>
+      <p class="lead">출력 시간이 아닌 사용 재료의 무게(g)로 산정합니다. 아래는 최저 기준가이며 크기 · 난이도에 따라 달라집니다.</p>
+    </div>
+    <div class="hp-price">
+      <article class="hp-plan">
+        <span class="k">3D프린팅</span>
+        <dl><div><dt>시작 가격</dt><dd><b data-count="5000">5,000</b>원부터</dd></div><div><dt>작업일</dt><dd><b>2</b>일부터</dd></div></dl>
+        <ul class="ticks"><li>FDM · SLA 출력</li><li>재료 PLA · ABS 등</li><li>발송 전 사진 확인</li></ul>
+      </article>
+      <article class="hp-plan hp-plan--pick">
+        <span class="k">3D 모델링 + 프린팅</span>
+        <dl><div><dt>시작 가격</dt><dd><b data-count="80000">80,000</b>원부터</dd></div><div><dt>작업일</dt><dd><b>4</b>일부터</dd></div></dl>
+        <ul class="ticks"><li>3D 도면 제작 + 출력</li><li>3D 파일 · 렌더링 이미지 제공</li><li>수정 2회 포함</li></ul>
+      </article>
+      <article class="hp-plan">
+        <span class="k">대량 생산 · 강의</span>
+        <dl><div><dt>가격</dt><dd><b>별도</b> 견적</dd></div><div><dt>일정</dt><dd><b>협의</b></dd></div></dl>
+        <ul class="ticks"><li>수량 · 납기에 맞춘 가동 일정</li><li>학교 · 기관 · 회사 출강</li><li>문의 시 일정 · 금액 안내</li></ul>
+      </article>
+    </div>
+    <div class="hp-pay">
+      <b>타사 견적 보유 시</b>
+      <p>기존 견적서를 전달해 주시면 단가 조정을 검토합니다. 견적 요청은 무료입니다.</p>
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="class">
+  <div class="wrap p3-class">
+    <div>
+      <h2 class="h2">교육 · 강의</h2>
+      <p class="lead">3D 모델링과 장비 운용 교육을 진행합니다. 대상과 시간에 맞춰 커리큘럼을 구성합니다.</p>
+      <div class="btns" style="margin-top:28px"><a class="btn btn--blue btn--lg" href="#quote">강의 문의</a></div>
+    </div>
+    <div class="p3-lessons">
+      <article><h3>3D 모델링 기초</h3><p>아이디어를 3D 데이터로 만드는 과정. 입문자 대상.</p></article>
+      <article><h3>장비 운용</h3><p>출력 준비(슬라이싱), 재료 선택, 주요 불량 유형과 대응.</p></article>
+      <article><h3>실습 제작</h3><p>직접 설계한 형상을 출력해 완성합니다.</p></article>
+      <article><h3>출강</h3><p>학교 · 기관 · 기업 · 동아리 대상. 일정과 인원은 협의합니다.</p></article>
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="free-tools">
+  <div class="wrap">
+    <h2 class="h2">출력 전에 무료로 확인해 보세요</h2>
+    <p class="lead">파일 변환, 오류 검사, 무게 계산을 브라우저에서 바로 할 수 있습니다. 설치 · 회원가입 없이 무료이고, 파일은 서버로 올라가지 않습니다.</p>
+    <ul class="tl__links"><li><a href="/3d-converter/">3D 파일 변환기</a></li><li><a href="/3d-viewer/">3D 뷰어</a></li><li><a href="/3d-tools/stl-check/">STL 오류 검사</a></li><li><a href="/3d-tools/print-weight/">3D프린팅 무게 계산기</a></li><li><a href="/3d-tools/stl-resize/">STL 크기 조절</a></li><li><a href="/3d-tools/filament-calculator/">필라멘트 계산기</a></li><li><a href="/3d-converter/split-zip/">3D 파일 분할 압축</a></li><li><a href="/3d-tools/">무료 3D 도구 모음</a></li></ul>
+  </div>
+</section>
+<section class="sec sec--light" id="quote">
+  <div class="wrap contact">
+    <aside class="contact__side">
+      <h2 class="h3">견적 산정에 필요한 정보</h2>
+      <div class="p3-tip"><b>크기</b><span>가로 · 세로 · 높이 (대략 가능)</span></div>
+      <div class="p3-tip"><b>수량</b><span>단품 / 다수 여부</span></div>
+      <div class="p3-tip"><b>용도</b><span>전시용 · 실사용 · 야외용 여부</span></div>
+      <div class="p3-tip"><b>타사 견적</b><span>보유 시 함께 전달해 주십시오.</span></div>
+      <a class="quick quick--kakao" href="{{kakao}}" target="_blank" rel="noopener"><b>카카오톡으로 파일 보내기</b><span>대용량 파일 접수 →</span></a>
+      <a class="quick" href="mailto:{{email}}"><b>이메일로 보내기</b><span>{{email}}</span></a>
+    </aside>
+
+    <form class="form" id="form" method="post" action="{{formAction}}" data-lead novalidate>
+      <h2 class="h3">3D프린팅 견적 문의</h2>
+      {{formOff}}
+      <p class="msg" data-msg role="status" aria-live="polite"></p>
+      <input type="hidden" name="return" value="/3d-printing/">
+      <input type="hidden" name="message" value="">
+      <input type="hidden" name="utm_source"><input type="hidden" name="utm_medium"><input type="hidden" name="utm_campaign"><input type="hidden" name="referrer">
+      <input type="hidden" value="3D프린팅 제작" data-msg-part="관심 분야">
+
+      <p class="fstep"><i>1</i>무엇이 필요하세요?</p>
+      <fieldset class="chips">
+        <legend>필요한 일 <small>여러 개 골라도 됩니다</small></legend>
+        <label><input type="checkbox" value="출력만" data-msg-part="필요한 일"><span>파일 있음 · 출력만</span></label>
+        <label><input type="checkbox" value="모델링부터" data-msg-part="필요한 일"><span>도면 없음 · 모델링부터</span></label>
+        <label><input type="checkbox" value="소량 생산" data-msg-part="필요한 일"><span>여러 개 생산</span></label>
+        <label><input type="checkbox" value="강의 문의" data-msg-part="필요한 일"><span>강의 문의</span></label>
+        <label><input type="checkbox" value="아직 모르겠어요" data-msg-part="필요한 일"><span>아직 모르겠어요</span></label>
+      </fieldset>
+
+      <p class="fstep"><i>2</i>만들 물건</p>
+      <label>어떤 물건인가요<textarea rows="3" maxlength="800" data-msg-part="만들 물건" placeholder="예: 카페 계산대에 둘 로고 조형물, 손바닥 크기, 흰색"></textarea></label>
+      <div class="f2">
+        <label>수량<input maxlength="40" data-msg-part="수량" placeholder="예: 1개 / 50개"></label>
+        <label>크기 (대략)<input maxlength="60" data-msg-part="크기" placeholder="예: 가로 10 × 세로 8 × 높이 15cm"></label>
+      </div>
+      <label>필요한 날짜<input maxlength="60" data-msg-part="필요한 날짜" placeholder="예: 12월 20일까지 / 급하지 않음"></label>
+
+      <p class="fstep"><i>3</i>파일 · 스케치 <small class="p3-opt">없으면 비워 두셔도 됩니다</small></p>
+      <label>파일 첨부 <small class="p3-hint">5MB 이하 한 개 · STL, STEP, OBJ, 3MF, 사진, PDF, ZIP</small>
+        <input type="file" name="attachment" data-max-mb="5" accept=".stl,.step,.stp,.obj,.3mf,.zip,.pdf,.png,.jpg,.jpeg,.webp"></label>
+      <label>파일 링크 <small class="p3-hint">파일이 크거나 여러 개면 구글 드라이브 · 네이버 MYBOX 공유 주소를 붙여 주세요</small>
+        <input type="url" maxlength="300" data-msg-part="파일 링크" placeholder="https://"></label>
+
+      <p class="fstep"><i>4</i>연락받으실 곳</p>
+      <div class="f2">
+        <label><span>이름 · 업체명 <b aria-hidden="true">*</b></span><input name="name" required maxlength="60" autocomplete="name" placeholder="예: 홍길동 / 유어팀"></label>
+        <label><span>연락처 <b aria-hidden="true">*</b></span><input name="phone" type="tel" required maxlength="20" inputmode="tel" autocomplete="tel" placeholder="010-0000-0000"></label>
+      </div>
+      <label>이메일<input name="email" type="email" maxlength="120" autocomplete="email" placeholder="name@company.com"></label>
+
+      <input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+      <label class="agree"><input type="checkbox" name="agree" value="1" required>
+        <span>개인정보 수집 · 이용에 동의합니다. <b aria-hidden="true">*</b>
+          <details><summary>내용 보기</summary>
+            <p><strong>수집 항목</strong> 이름 · 업체명, 연락처, 이메일, 문의 내용(만들 물건, 수량, 크기 등 적어 주신 것), 첨부 파일</p>
+            <p><strong>이용 목적</strong> 견적 산정과 회신, 제작 진행</p>
+            <p><strong>전달 방법</strong> 문의 내용과 첨부 파일은 메일 전달 서비스(FormSubmit)를 거쳐 유어팀 담당자 메일로 전달됩니다.</p>
+            <p><strong>보유 기간</strong> 상담이 끝난 뒤 {{retention}}일까지 보관하고 지체 없이 파기합니다.</p>
+            <p>자세한 내용은 <a href="/privacy/" target="_blank">개인정보처리방침</a>에서 보실 수 있습니다. 동의하지 않으실 수 있으며, 이 경우 온라인 문의가 어렵습니다. 전화나 카카오톡으로 문의하실 수 있습니다.</p>
+          </details>
+        </span>
+      </label>
+      {{turnstile}}
+      <button class="btn btn--blue btn--lg btn--block" type="submit">견적 문의 보내기</button>
+    </form>
+  </div>
+</section>
+
+<section class="sec" id="faq">
+  <div class="wrap faq">
+    <div class="head"><h2 class="h2">자주 묻는 질문</h2></div>
+    <div class="acc">
+      <details open><summary><span class="l">Q1</span>복잡한 형상이나 도면이 없는 경우도 가능한가요?</summary><div class="acc__body"><p>가능합니다. 도면이 없으면 스케치나 사진을 기준으로 모델링을 진행합니다. 복잡한 형상은 접수 후 출력 방식과 분할 여부를 함께 제안드립니다.</p></div></details>
+      <details><summary><span class="l">Q2</span>납기는 얼마나 걸리나요?</summary><div class="acc__body"><p>크기와 난이도에 따라 통상 3~7일입니다. 복잡한 형상은 추가 기간이 필요할 수 있으며, 견적 시 예상 납기를 함께 안내합니다.</p></div></details>
+      <details><summary><span class="l">Q3</span>대량 주문이 가능한가요?</summary><div class="acc__body"><p>가능합니다. 3D프린터 41대를 운용하고 있으며, 접수 후 가동 일정을 배정합니다.</p></div></details>
+      <details><summary><span class="l">Q4</span>수정 시 추가 비용이 있나요?</summary><div class="acc__body"><p>모델링은 수정 2회를 포함합니다. 이후 수정은 소요 시간과 재료에 따라 비용이 발생할 수 있으며, 경미한 수정은 무상으로 진행합니다.</p></div></details>
+      <details><summary><span class="l">Q5</span>모델링 또는 출력만 의뢰할 수 있나요?</summary><div class="acc__body"><p>가능합니다. 후가공(표면 연마 · 도색)은 현재 제공하지 않습니다.</p></div></details>
+      <details><summary><span class="l">Q6</span>어떤 파일을 보내면 되나요?</summary><div class="acc__body"><p>STL · STEP · OBJ · 3MF 를 접수합니다. 형식이 불분명하면 보유 파일을 그대로 보내 주시면 확인 후 안내합니다. 문의서에는 5MB 이하 1개를 첨부할 수 있으며, 대용량은 공유 링크 · 카카오톡 · 이메일로 접수합니다.</p></div></details>
+      <details><summary><span class="l">Q7</span>주말 작업이 가능한가요?</summary><div class="acc__body"><p>토요일 12시 이전 접수 건은 당일 작업합니다.</p></div></details>
+      <details><summary><span class="l">Q8</span>사용 장비는 무엇인가요?</summary><div class="acc__body"><p>FDM 은 Replicator+, MOMENT2, M350-MOMENT, Z18, BAMBU 를 운용합니다. SLA 는 별도 문의 바랍니다. 장비별 출력 크기는 <a href="#machines">장비 표</a>를 참고해 주십시오.</p></div></details>
+    </div>
+  </div>
+</section>
+
+<section class="sec sec--soft sec--tight" id="notes">
+  <div class="wrap">
+    <div class="p3-notes">
+      <div><b>저작권은 의뢰인에게</b><p>확정해서 보내 드린 제작물의 저작권은 의뢰인께 있습니다.</p></div>
+      <div><b>포트폴리오는 허락받고</b><p>작업물은 의뢰인이 허락하신 경우에만 포트폴리오로 씁니다.</p></div>
+      <div><b>파일은 2시간 안에 파기</b><p>거래가 끝난 작업 파일은 2시간 안에 지웁니다.</p></div>
+      <div><b>비용은 건마다 다릅니다</b><p>난이도와 작업량에 따라 달라질 수 있습니다.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="cta">
+  <div class="cta__bg" aria-hidden="true"><img src="/assets/img/i/cta-photo.webp" alt="" loading="lazy" data-parallax="0.12" width="1600" height="900"></div>
+  <div class="wrap">
+    <h2 class="h2">견적부터 받아 보십시오</h2>
+    <p class="lead">파일 또는 스케치를 보내 주시면 제작 가능 여부와 견적을 회신드립니다.</p>
+    <div class="btns">
+      <a class="btn btn--blue btn--lg" href="#quote">견적 문의</a>
+      <a class="btn btn--ghost btn--lg" href="{{kakao}}" target="_blank" rel="noopener">카카오톡으로 문의</a>
+    </div>
+  </div>
+</section>

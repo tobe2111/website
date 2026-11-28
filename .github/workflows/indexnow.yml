@@ -1,0 +1,68 @@
+# 검색엔진에 새 · 바뀐 페이지를 바로 알린다 (IndexNow — Bing · 네이버 · Yandex 등이 함께 받는다).
+# 실제 사이트 갈래에 ur-team-site/ 가 바뀌어 올라오면, 배포가 끝나기를 기다렸다가
+# 사이트맵에서 오늘(또는 어제) 바뀐 주소만 골라 보낸다. 손으로 돌리면 전체를 보낼 수도 있다.
+# 열쇠 파일: ur-team-site/static/22fa6e8084f0e8334006d608e6ce3266.txt (사이트 맨 위에 올라가 소유 확인에 쓰인다)
+
+name: 검색엔진에 바뀐 페이지 알리기
+
+on:
+  push:
+    branches: [claude/awesome-faraday-oj6c93]
+    paths: ["ur-team-site/src/**", "ur-team-site/site.json"]
+  workflow_dispatch:
+    inputs:
+      all:
+        description: "모든 페이지를 보낼까요? (true/false)"
+        default: "false"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: indexnow
+  cancel-in-progress: true
+
+jobs:
+  indexnow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      KEY: 22fa6e8084f0e8334006d608e6ce3266
+      HOST: ur-team.com
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # 페이지마다 마지막 수정일을 git 기록에서 읽는다
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 빌드 (사이트맵 만들기)
+        run: node ur-team-site/build.mjs
+
+      - name: 배포가 끝나기를 기다림
+        run: |
+          for i in $(seq 60); do
+            if [ "$(curl -s https://$HOST/$KEY.txt)" = "$KEY" ]; then echo "열쇠 파일 확인"; break; fi
+            sleep 10
+          done
+          sleep 90   # 새 페이지가 퍼질 시간을 조금 더 준다
+
+      - name: 바뀐 주소 보내기
+        run: |
+          node -e '
+            const fs = require("fs"), all = process.argv[1] === "true";
+            const xml = fs.readFileSync("ur-team-site/dist/sitemap.xml", "utf8");
+            const day = (n) => new Date(Date.now() - n * 864e5 + 9 * 36e5).toISOString().slice(0, 10);
+            const recent = new Set([day(0), day(1)]);
+            const urls = [...xml.matchAll(/<loc>([^<]+)<\/loc>\s*<lastmod>([^<]+)<\/lastmod>/g)]
+              .filter(([, , d]) => all || recent.has(d.slice(0, 10))).map(([, u]) => u).slice(0, 10000);
+            fs.writeFileSync("urls.json", JSON.stringify({ host: process.env.HOST, key: process.env.KEY, keyLocation: "https://" + process.env.HOST + "/" + process.env.KEY + ".txt", urlList: urls }));
+            console.log(urls.length + "개 주소"); urls.slice(0, 50).forEach((u) => console.log(" " + u));
+          ' "${{ github.event.inputs.all || 'false' }}"
+          if [ "$(node -p 'require("./urls.json").urlList.length')" = "0" ]; then echo "보낼 주소 없음"; exit 0; fi
+          for ep in https://api.indexnow.org/indexnow https://searchadvisor.naver.com/indexnow; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$ep" -H 'content-type: application/json; charset=utf-8' --data @urls.json)
+            echo "$ep → $code (200 · 202 이면 접수)"
+          done

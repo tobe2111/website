@@ -1,0 +1,111 @@
+<!-- {"title": "Contact us · Free Consultation", "name": "Contact us", "description": "Request a consultation on domestic distribution, global export or marketing. Every consultation includes free Naver ad consulting or setup.", "nav": "contact"} -->
+<section class="phero phero--media" style="min-height:52svh">
+  <div class="phero__bg" aria-hidden="true"><img fetchpriority="high" src="/assets/img/f/UjTdxLuVBXfOzB3kYb5j8CeBhK4.webp" alt="" width="1200" height="1019"></div>
+  <div class="wrap">
+    <p class="crumb" data-reveal><a href="/en/">Home</a><span aria-hidden="true">/</span><span>Contact us</span></p>
+    <h1 class="h1" data-reveal style="--i:1">Tell us where you are.<br>We will map the next step.</h1>
+    <p class="lead" data-reveal style="--i:2">Leave us a message and we will get back to you promptly.<br>We are currently offering <strong style="color:#fff">free Naver ad consulting or setup with every consultation</strong>.</p>
+  </div>
+</section>
+
+<section class="sec sec--light">
+  <div class="wrap contact">
+    <aside class="contact__side" data-reveal="left">
+      <h2 class="h3">Want to talk now?</h2>
+      <a class="quick quick--kakao" href="{{kakao}}" target="_blank" rel="noopener"><b>Chat on KakaoTalk</b><span>Start a live chat →</span></a>
+      <a class="quick quick--call" href="tel:+8250371514726"><b>Call +82 503-7151-4726</b><span>Weekdays 9:00-19:00 (KST)</span></a>
+      <a class="quick" href="mailto:{{email}}"><b>Email and partnership inquiries</b><span>{{email}}</span></a>
+      <div class="contact__map">
+        <iframe title="Map of UrTeam headquarters" src="https://maps.google.com/maps?q=14%20Nambusunhwan-ro%20359-gil%2C%20Gangnam-gu%2C%20Seoul&amp;output=embed&amp;hl=en" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
+        <p>Headquarters · 3F, 14 Nambusunhwan-ro 359-gil, Gangnam-gu, Seoul</p>
+      </div>
+    </aside>
+
+    <form class="form" id="form" method="post" action="{{formAction}}" data-lead data-reveal="right" novalidate>
+      <h2 class="h3">Request a consultation online</h2>
+      {{formOff}}
+      <p class="msg" data-msg role="status" aria-live="polite"></p>
+      <input type="hidden" name="return" value="/en/contact/">
+      <input type="hidden" name="message" value="">
+      <input type="hidden" name="utm_source"><input type="hidden" name="utm_medium"><input type="hidden" name="utm_campaign"><input type="hidden" name="referrer">
+
+      <p class="fstep"><i>1</i>What would you like to discuss?</p>
+      <fieldset class="chips">
+        <legend>Areas of interest <small>(select all that apply)</small></legend>
+        <label><input type="checkbox" value="General Marketing" data-msg-part="Areas of interest"><span>General Marketing</span></label>
+        <label><input type="checkbox" value="Hospital Marketing" data-msg-part="Areas of interest"><span>Hospital Marketing</span></label>
+        <label><input type="checkbox" value="International Patients" data-msg-part="Areas of interest"><span>International Patients</span></label>
+        <label><input type="checkbox" value="Domestic Distribution" data-msg-part="Areas of interest"><span>Domestic Distribution</span></label>
+        <label><input type="checkbox" value="Global Export" data-msg-part="Areas of interest"><span>Global Export</span></label>
+        <label><input type="checkbox" value="3D Printing" data-msg-part="Areas of interest"><span>3D Printing</span></label>
+      </fieldset>
+
+      <p class="fstep"><i>2</i>How can we reach you?</p>
+      <div class="f2">
+        <label><span>Company and contact name <b aria-hidden="true">*</b></span><input name="name" required maxlength="60" autocomplete="organization" placeholder="e.g. UrTeam / Alex Kim"></label>
+        <label><span>Phone <b aria-hidden="true">*</b></span><input name="phone" type="tel" required maxlength="20" inputmode="tel" autocomplete="tel" placeholder="010-0000-0000"></label>
+      </div>
+      <label>Email<input name="email" type="email" maxlength="120" autocomplete="email" placeholder="name@company.com"></label>
+
+      <p class="fstep"><i>3</i>Tell us briefly what you need</p>
+      <label>Your inquiry<textarea rows="3" maxlength="800" data-msg-part="Inquiry"></textarea></label>
+
+      <details class="fmore">
+        <summary><b>Add more detail</b><small>Optional · helps us prepare a sharper first call</small></summary>
+        <div class="fmore__body">
+      <div class="f2">
+        <label>Monthly ad budget<input name="budget" maxlength="40" placeholder="e.g. KRW 3 million"></label>
+        <label>Company URL<input type="url" maxlength="200" data-msg-part="Company URL" placeholder="https://"></label>
+      </div>
+      <label>How did you hear about us?<input name="funnel" maxlength="40" placeholder="e.g. Naver search, referral"></label>
+
+      <fieldset class="chips" data-for="mk">
+        <legend>Marketing services of interest <small>(for marketing inquiries)</small></legend>
+        <label><input type="checkbox" value="Naver Ads" data-msg-part="Marketing services"><span>Naver Ads</span></label>
+        <label><input type="checkbox" value="Google Ads" data-msg-part="Marketing services"><span>Google Ads</span></label>
+        <label><input type="checkbox" value="Blog Marketing" data-msg-part="Marketing services"><span>Blog Marketing</span></label>
+        <label><input type="checkbox" value="Daangn" data-msg-part="Marketing services"><span>Daangn</span></label>
+        <label><input type="checkbox" value="Mom Cafes" data-msg-part="Marketing services"><span>Mom Cafes</span></label>
+        <label><input type="checkbox" value="Place and Reviews" data-msg-part="Marketing services"><span>Place and Reviews</span></label>
+        <label><input type="checkbox" value="Reviewer Programs" data-msg-part="Marketing services"><span>Reviewer Programs</span></label>
+        <label><input type="checkbox" value="Press" data-msg-part="Marketing services"><span>Press</span></label>
+        <label><input type="checkbox" value="Hospital Marketing" data-msg-part="Marketing services"><span>Hospital Marketing</span></label>
+        <label><input type="checkbox" value="International Patients" data-msg-part="Marketing services"><span>International Patients</span></label>
+        <label><input type="checkbox" value="Not sure yet" data-msg-part="Marketing services"><span>Not sure yet</span></label>
+      </fieldset>
+
+      <fieldset class="chips" data-for="dist">
+        <legend>Preferred sales channels <small>(for distribution and export inquiries)</small></legend>
+        <label><input type="checkbox" value="Toss Shopping" data-msg-part="Preferred channels"><span>Toss Shopping</span></label>
+        <label><input type="checkbox" value="Olive Young" data-msg-part="Preferred channels"><span>Olive Young</span></label>
+        <label><input type="checkbox" value="Live commerce" data-msg-part="Preferred channels"><span>Live commerce</span></label>
+        <label><input type="checkbox" value="Group buying" data-msg-part="Preferred channels"><span>Group buying</span></label>
+        <label><input type="checkbox" value="Members-only malls" data-msg-part="Preferred channels"><span>Members-only malls</span></label>
+        <label><input type="checkbox" value="Hypermarkets" data-msg-part="Preferred channels"><span>Hypermarkets</span></label>
+        <label><input type="checkbox" value="Duty-free shops" data-msg-part="Preferred channels"><span>Duty-free shops</span></label>
+        <label><input type="checkbox" value="Offline placement (hospitals)" data-msg-part="Preferred channels"><span>Offline placement (hospitals)</span></label>
+        <label><input type="checkbox" value="Global Export" data-msg-part="Preferred channels"><span>Global Export</span></label>
+      </fieldset>
+
+      <label>Current challenges<textarea rows="3" maxlength="600" data-msg-part="Current challenges" placeholder="Tell us what frustrates you most right now."></textarea></label>
+      <label>Strengths and differentiators<textarea rows="3" maxlength="600" data-msg-part="Strengths" placeholder="Tell us what makes your product or service stand out."></textarea></label>
+        </div>
+      </details>
+
+      <input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+      <label class="agree"><input type="checkbox" name="agree" value="1" required>
+        <span>I agree to the collection and use of my personal information. <b aria-hidden="true">*</b>
+          <details><summary>View details</summary>
+            <p><strong>Information collected</strong> Company and contact name, phone number, email, and inquiry details (budget, company URL, referral source and anything else you provide)</p>
+            <p><strong>Purpose</strong> To confirm and respond to your consultation request</p>
+            <p><strong>Delivery</strong> Your request is forwarded to UrTeam by email through the FormSubmit email delivery service.</p>
+            <p><strong>Retention</strong> Kept for {{retention}} days after the consultation ends, then destroyed without delay.</p>
+            <p>See our <a href="/en/privacy/" target="_blank">Privacy Policy</a> for details. You may decline. In that case, we cannot accept your online request, but you can still reach us by phone or KakaoTalk.</p>
+          </details>
+        </span>
+      </label>
+      {{turnstile}}
+      <button class="btn btn--blue btn--lg btn--block" type="submit">Contact us <span class="arr">→</span></button>
+    </form>
+  </div>
+</section>

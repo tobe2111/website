@@ -1,0 +1,171 @@
+{
+  "name": "유어팀",
+  "fullTitle": "유어팀 UrTeam | 국내 유통 · 해외 수출 · 마케팅 파트너",
+  "description": "국내 매출과 해외 확장, 그리고 마케팅까지 한 팀이 설계합니다. 고객사의 순수익을 목표로 일하는 유어팀입니다.",
+  "url": "https://ur-team.com",
+  "ogImage": "/assets/img/og.jpg",
+  "phone": "0503-7151-4726",
+  "email": "jiwon@ur-team.com",
+  "kakao": "https://pf.kakao.com/_AITdn/chat",
+  "urdeal": "https://urdeal.kr/",
+  "shops": {
+    "adeuk": "",
+    "ondeung": ""
+  },
+  "org": {
+    "legalName": "유어팀",
+    "legalNameEn": "UrTeam",
+    "alternateName": [
+      "유어팀",
+      "UrTeam"
+    ],
+    "ceo": "정지원",
+    "ceoEn": "Jiwon Jung",
+    "businessNumber": "479-09-02930",
+    "logo": {
+      "url": "/assets/img/urteam_black.png",
+      "width": 760,
+      "height": 144
+    },
+    "address": {
+      "ko": {
+        "streetAddress": "남부순환로359길 14, 3F",
+        "addressLocality": "강남구",
+        "addressRegion": "서울특별시"
+      },
+      "en": {
+        "streetAddress": "3F, 14 Nambusunhwan-ro 359-gil",
+        "addressLocality": "Gangnam-gu",
+        "addressRegion": "Seoul"
+      }
+    },
+    "logistics": {
+      "ko": {
+        "name": "인천 물류센터",
+        "address": {
+          "streetAddress": "주부토로 236, U1센터 C동 109호",
+          "addressLocality": "부평구",
+          "addressRegion": "인천광역시"
+        }
+      },
+      "en": {
+        "name": "Incheon logistics center",
+        "address": {
+          "streetAddress": "C-109, U1 Center, 236 Jubuto-ro",
+          "addressLocality": "Bupyeong-gu",
+          "addressRegion": "Incheon"
+        }
+      }
+    },
+    "sameAs": []
+  },
+  "verification": {
+    "google": "",
+    "naver": "",
+    "bing": ""
+  },
+  "form": {
+    "endpoint": "https://formsubmit.co/ajax/jiwon@ur-team.com",
+    "turnstileSiteKey": "",
+    "retentionDays": 365
+  },
+  "redirects": {
+    "/home": "/",
+    "/kr/distribution": "/distribution/",
+    "/kr/export": "/distribution/#export",
+    "/kr/contact": "/contact/",
+    "/hospital": "/marketing/hospital/",
+    "/37": "/marketing/global-patients/",
+    "/product": "/marketing/naver/",
+    "/product-1": "/marketing/naver/",
+    "/product-2": "/marketing/google/",
+    "/product-3": "/marketing/blog-marketing/",
+    "/product-4": "/marketing/daangn/",
+    "/product-5": "/marketing/momcafe/",
+    "/product-6": "/marketing/place/",
+    "/product-7": "/marketing/",
+    "/product-8": "/marketing/experience/",
+    "/product-9": "/marketing/press/",
+    "/en/home": "/en/",
+    "/service": "/contact/",
+    "/service/": "/contact/",
+    "/blog/2026-10-20-china-export-b2b-vs-cross-border": "/blog/2024-07-09-china-export-b2b-vs-cross-border/",
+    "/en/blog/2026-10-20-china-export-b2b-vs-cross-border": "/en/blog/2024-07-09-china-export-b2b-vs-cross-border/",
+    "/blog/2026-10-21-hospital-content-patient-questions": "/blog/2024-08-15-hospital-content-patient-questions/",
+    "/en/blog/2026-10-21-hospital-content-patient-questions": "/en/blog/2024-08-15-hospital-content-patient-questions/",
+    "/blog/2026-10-23-naver-blog-search-intent": "/blog/2024-09-13-naver-blog-search-intent/",
+    "/en/blog/2026-10-23-naver-blog-search-intent": "/en/blog/2024-09-13-naver-blog-search-intent/",
+    "/blog/2026-10-24-export-quote-incoterms": "/blog/2024-10-24-export-quote-incoterms/",
+    "/en/blog/2026-10-24-export-quote-incoterms": "/en/blog/2024-10-24-export-quote-incoterms/",
+    "/blog/2026-10-26-place-review-replies": "/blog/2024-11-19-place-review-replies/",
+    "/en/blog/2026-10-26-place-review-replies": "/en/blog/2024-11-19-place-review-replies/",
+    "/blog/2026-10-27-group-buy-live-commerce-prep": "/blog/2024-12-30-group-buy-live-commerce-prep/",
+    "/en/blog/2026-10-27-group-buy-live-commerce-prep": "/en/blog/2024-12-30-group-buy-live-commerce-prep/",
+    "/blog/2026-10-28-hospital-inquiry-to-booking": "/blog/2025-02-05-hospital-inquiry-to-booking/",
+    "/en/blog/2026-10-28-hospital-inquiry-to-booking": "/en/blog/2025-02-05-hospital-inquiry-to-booking/",
+    "/blog/2026-10-30-short-form-video-small-business": "/blog/2025-03-03-short-form-video-small-business/",
+    "/en/blog/2026-10-30-short-form-video-small-business": "/en/blog/2025-03-03-short-form-video-small-business/",
+    "/blog/2026-10-31-douyin-vs-xiaohongshu": "/blog/2025-04-09-douyin-vs-xiaohongshu/",
+    "/en/blog/2026-10-31-douyin-vs-xiaohongshu": "/en/blog/2025-04-09-douyin-vs-xiaohongshu/",
+    "/blog/2026-11-02-landing-page-conversion-mistakes": "/blog/2025-05-07-landing-page-conversion-mistakes/",
+    "/en/blog/2026-11-02-landing-page-conversion-mistakes": "/en/blog/2025-05-07-landing-page-conversion-mistakes/",
+    "/blog/2026-11-03-press-coverage-expectations": "/blog/2025-06-20-press-coverage-expectations/",
+    "/en/blog/2026-11-03-press-coverage-expectations": "/en/blog/2025-06-20-press-coverage-expectations/",
+    "/blog/2026-11-05-google-business-profile-foreign-visitors": "/blog/2025-07-21-google-business-profile-foreign-visitors/",
+    "/en/blog/2026-11-05-google-business-profile-foreign-visitors": "/en/blog/2025-07-21-google-business-profile-foreign-visitors/",
+    "/blog/2026-11-06-excess-inventory-price-protection": "/blog/2025-08-25-excess-inventory-price-protection/",
+    "/en/blog/2026-11-06-excess-inventory-price-protection": "/en/blog/2025-08-25-excess-inventory-price-protection/",
+    "/blog/2026-11-09-choosing-marketing-agency-questions": "/blog/2025-09-29-choosing-marketing-agency-questions/",
+    "/en/blog/2026-11-09-choosing-marketing-agency-questions": "/en/blog/2025-09-29-choosing-marketing-agency-questions/",
+    "/blog/2026-11-10-us-b2b-buyer-preparation": "/blog/2025-10-28-us-b2b-buyer-preparation/",
+    "/en/blog/2026-11-10-us-b2b-buyer-preparation": "/en/blog/2025-10-28-us-b2b-buyer-preparation/",
+    "/blog/2026-11-11-naver-place-ranking-checklist": "/blog/2025-12-08-naver-place-ranking-checklist/",
+    "/en/blog/2026-11-11-naver-place-ranking-checklist": "/en/blog/2025-12-08-naver-place-ranking-checklist/",
+    "/blog/2026-11-12-reading-ctr-cvr-roas": "/blog/2026-01-05-reading-ctr-cvr-roas/",
+    "/en/blog/2026-11-12-reading-ctr-cvr-roas": "/en/blog/2026-01-05-reading-ctr-cvr-roas/",
+    "/blog/2026-11-14-hospital-ad-medical-law-checklist": "/blog/2026-02-12-hospital-ad-medical-law-checklist/",
+    "/en/blog/2026-11-14-hospital-ad-medical-law-checklist": "/en/blog/2026-02-12-hospital-ad-medical-law-checklist/",
+    "/blog/2026-11-15-why-skip-open-markets-protect-price": "/blog/2026-03-23-why-skip-open-markets-protect-price/",
+    "/en/blog/2026-11-15-why-skip-open-markets-protect-price": "/en/blog/2026-03-23-why-skip-open-markets-protect-price/",
+    "/blog/2026-11-16-naver-power-link-bid-quality-score": "/blog/2026-04-16-naver-power-link-bid-quality-score/",
+    "/en/blog/2026-11-16-naver-power-link-bid-quality-score": "/en/blog/2026-04-16-naver-power-link-bid-quality-score/",
+    "/blog/2026-11-23-global-patient-attraction-checklist": "/blog/2026-05-25-global-patient-attraction-checklist/",
+    "/en/blog/2026-11-23-global-patient-attraction-checklist": "/en/blog/2026-05-25-global-patient-attraction-checklist/",
+    "/blog/2026-11-30-export-voucher-basics": "/blog/2026-06-22-export-voucher-basics/",
+    "/en/blog/2026-11-30-export-voucher-basics": "/en/blog/2026-06-22-export-voucher-basics/",
+    "/blog/2026-12-07-momcafe-daangn-local-marketing": "/blog/2026-08-04-momcafe-daangn-local-marketing/",
+    "/en/blog/2026-12-07-momcafe-daangn-local-marketing": "/en/blog/2026-08-04-momcafe-daangn-local-marketing/",
+    "/blog/2026-12-14-running-blog-experience-groups": "/blog/2026-09-02-running-blog-experience-groups/",
+    "/en/blog/2026-12-14-running-blog-experience-groups": "/en/blog/2026-09-02-running-blog-experience-groups/",
+    "/blog/2026-12-21-google-ads-vs-naver-search-ads": "/blog/2026-10-07-google-ads-vs-naver-search-ads/",
+    "/en/blog/2026-12-21-google-ads-vs-naver-search-ads": "/en/blog/2026-10-07-google-ads-vs-naver-search-ads/",
+    "/blog/2026-12-28-naver-brand-search-ads": "/blog/2026-11-10-naver-brand-search-ads/",
+    "/en/blog/2026-12-28-naver-brand-search-ads": "/en/blog/2026-11-10-naver-brand-search-ads/",
+    "/kr": "/",
+    "/kr/home": "/",
+    "/kr/index": "/",
+    "/main": "/",
+    "/kr/marketing": "/marketing/",
+    "/kr/blog": "/blog/",
+    "/kr/hospital": "/marketing/hospital/",
+    "/kr/brochure": "/brochures/",
+    "/en/hospital": "/en/marketing/hospital/",
+    "/export": "/distribution/#export",
+    "/en/export": "/en/distribution/#export"
+  },
+  "i18n": {
+    "ko": {
+      "formOffText": "온라인 접수는 준비 중입니다. 지금은 카카오톡이나 전화(0503-7151-4726)로 문의해 주세요.",
+      "blogEmpty": "아직 올라온 글이 없습니다. 곧 유어팀의 이야기를 전해 드릴게요.",
+      "blogDefaultCategory": "소식"
+    },
+    "en": {
+      "name": "UrTeam",
+      "fullTitle": "UrTeam | Distribution, Export and Marketing Partner",
+      "description": "One team designs your domestic distribution, global export and marketing. UrTeam works toward your net profit, not just revenue.",
+      "formOffText": "Online submissions are not open yet. Please reach us by KakaoTalk or phone (+82 503-7151-4726).",
+      "blogEmpty": "Our English articles are on the way. Please check back soon.",
+      "blogDefaultCategory": "News"
+    }
+  }
+}

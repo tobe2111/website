@@ -1,0 +1,431 @@
+<!-- {"title": "3D Printing Service · 3D Modeling · Prototypes · Classes", "name": "3D Printing", "description": "3D modeling, 3D printing, small and large production runs, and classes. UrTeam runs 41 3D printers in Korea and builds prototypes, graduation projects and merchandise. Pricing is by material weight, per gram.", "nav": "print3d", "image": "/assets/img/p3/adeuk-tx.webp"} -->
+<section class="p3-top">
+  <div class="wrap">
+    <p class="crumb"><a href="/en/">Home</a><span aria-hidden="true">/</span><span>3D Printing</span></p>
+    <div class="p3-top__head">
+      <h1 class="h1">From a file to a finished part,<br>made by 3D printing</h1>
+      <div>
+        <p class="lead">We make prototypes, mechanical parts, merchandise and sculptures. With 41 FDM and SLA printers most orders ship in 3 to 7 days, and quotes are based on the weight of material used.</p>
+        <div class="btns"><a class="btn btn--blue btn--lg" href="#quote">Get a quote</a><a class="btn btn--ghost btn--lg" href="#machines">Machines and materials</a></div>
+      </div>
+    </div>
+
+    <!-- 출력 미리보기: 슬라이서 화면처럼 한 층씩 쌓이고, 아래 막대로 레이어를 직접 넘겨 볼 수 있다 -->
+    <div class="p3-sl" data-p3-slicer>
+      <div class="p3-sl__bar">
+        <div class="p3-sl__tabs" role="tablist" aria-label="Printing process">
+          <button type="button" role="tab" aria-selected="true" data-p3-tab="fdm" data-layers="100" data-lh="0.2" data-file="gear_set.stl" data-size="112 × 78 × 20 mm">FDM filament</button>
+          <button type="button" role="tab" aria-selected="false" data-p3-tab="sla" data-layers="958" data-lh="0.05" data-file="rook.stl" data-size="Ø 30 × 48 mm">SLA resin</button>
+        </div>
+        <b data-p3-file>gear_set.stl</b><span data-p3-size>112 × 78 × 20 mm</span><em>Sample preview</em>
+      </div>
+      <div class="p3-sl__body">
+        <div class="p3-sl__view">
+          <canvas aria-label="Print preview. The part builds layer by layer; drag to rotate the view" role="img"></canvas>
+          <svg class="p3-sl__axes" viewBox="0 0 64 64" aria-hidden="true"><path d="M20 44 54 50" stroke="#d64545"/><path d="M20 44 20 10" stroke="#2f9e5b"/><path d="M20 44 6 56" stroke="#1747e6"/><text x="56" y="54">X</text><text x="17" y="8">Z</text><text x="0" y="62">Y</text></svg>
+          <p class="p3-sl__note" data-p3-panel="fdm">Melted filament is laid down layer by layer. The cut face shows the walls and the infill.</p>
+          <p class="p3-sl__note" data-p3-panel="sla" hidden>Light cures the resin at the bottom of the vat, and the part grows upside down as the platform rises.</p>
+          <figure class="p3-sl__slice"><canvas data-p3-slice width="296" height="296" aria-hidden="true"></canvas><figcaption>This layer</figcaption></figure>
+          <p class="p3-sl__hint">Drag to rotate</p>
+          <p class="p3-sl__load" data-p3-load>Loading</p>
+        </div>
+        <aside class="p3-sl__panel">
+          <h2>Slice settings</h2>
+          <div data-p3-panel="fdm"><dl><div><dt>Process</dt><dd>FDM filament</dd></div><div><dt>Material</dt><dd>PLA 1.75 mm</dd></div><div><dt>Nozzle</dt><dd>0.4 mm</dd></div><div><dt>Layer height</dt><dd>0.2 mm</dd></div><div><dt>Walls</dt><dd>3 lines (1.2 mm)</dd></div><div><dt>Infill</dt><dd>15 % grid</dd></div><div><dt>Supports</dt><dd>None</dd></div><div><dt>Layers</dt><dd>100</dd></div><div><dt>Filament length</dt><dd>about 9.3 m</dd></div></dl><p class="p3-sl__g"><span>Material used</span><b>about 28 g</b><small>Your quote is based on this weight.</small></p></div>
+          <div data-p3-panel="sla" hidden><dl><div><dt>Process</dt><dd>SLA resin</dd></div><div><dt>Material</dt><dd>Photopolymer resin</dd></div><div><dt>Layer height</dt><dd>0.05 mm</dd></div><div><dt>Orientation</dt><dd>Hanging from the platform</dd></div><div><dt>Supports</dt><dd>19 + raft</dd></div><div><dt>Layers</dt><dd>958</dd></div><div><dt>Resin volume</dt><dd>about 8.3 mL</dd></div></dl><p class="p3-sl__g"><span>Material used</span><b>about 9 g</b><small>Your quote is based on this weight.</small></p></div>
+        </aside>
+      </div>
+      <div class="p3-sl__foot">
+        <button type="button" data-p3-play aria-label="Play / pause" data-label-play="Play" data-label-pause="Pause"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="p3-sl__ico-pause" d="M7 5h4v14H7zM13 5h4v14h-4z"/><path class="p3-sl__ico-play" d="M8 5v14l11-7z"/></svg></button>
+        <input type="range" min="0" max="100" value="100" step="1" data-p3-layer aria-label="Scrub through layers">
+        <output><span>Layer <b data-p3-n>100</b> / <i data-p3-total>100</i></span><span>Height <b data-p3-h>20.0</b> mm</span></output>
+      </div>
+    </div>
+
+    <div class="p3-cmp" data-p3-cmp data-on="fdm">
+      <h2 class="h3">How FDM and SLA differ</h2>
+      <p>Switch tabs in the preview above and the matching column is marked. We will suggest the right process once we see your file.</p>
+      <div class="p3-cmp__scroll"><table>
+        <thead><tr><td></td><th scope="col">FDM filament</th><th scope="col">SLA resin</th></tr></thead>
+        <tbody><tr><th scope="row">How it works</th><td>Melts plastic filament and lays it down layer by layer</td><td>Cures liquid resin with light, layer by layer</td></tr><tr><th scope="row">Layer height</th><td>0.1 ~ 0.3 mm</td><td>0.025 ~ 0.1 mm</td></tr><tr><th scope="row">Surface</th><td>Layer lines are visible</td><td>Smooth and finely detailed</td></tr><tr><th scope="row">Strength</th><td>Tough and impact resistant, suited to working parts</td><td>Rigid but more brittle, and weakens with long sun exposure</td></tr><tr><th scope="row">Size</th><td>Good for large parts (up to 330 × 330 × 457 mm)</td><td>Suited to small precise parts (up to Ø 180 × 180 mm)</td></tr><tr><th scope="row">Cost</th><td>Economical, materials cost less</td><td>Higher than FDM</td></tr><tr><th scope="row">After printing</th><td>Support removal</td><td>Washing, post-curing, support removal</td></tr><tr><th scope="row">Best for</th><td>Prototypes, enclosures, mechanical parts, large objects</td><td>Figures, small precise parts, products where appearance matters</td></tr></tbody>
+      </table></div>
+    </div>
+
+    <ul class="p3-works">
+      <li><a href="#brands"><img src="/assets/img/p3/ondeung-set.webp" alt="Four Ondeung heritage lamps" width="1000" height="625" loading="lazy"><b>Lighting and decor</b><span>Lamps where wall thickness sets the light</span></a></li>
+      <li><a href="#what"><img src="/assets/img/p3/model-bust-front.webp" alt="3D model of a portrait bust" width="800" height="1089" loading="lazy"><b>Portrait modeling</b><span>A bust modeled down to the folds of the shirt</span></a></li>
+      <li><a href="#viewer"><img src="/assets/img/p3/adeuk-mm.webp" alt="Woolly mammoth fossil kit" width="1000" height="667" loading="lazy"><b>Assemblies</b><span>Split into parts that join without glue</span></a></li>
+    </ul>
+  </div>
+</section>
+
+<section class="sec" id="who">
+  <div class="wrap">
+    <div class="head">
+      <h2 class="h2">If this is you,<br>we can help</h2>
+      <p class="lead">Just ask first. You can decide after you see the quote.</p>
+    </div>
+    <dl class="p3-rows">
+      <div><dt><b>You need a prototype fast</b><small>Founders</small></dt><dd>A sample for an investor meeting or a trade show. If something needs fixing, we change the file and print again.</dd></div>
+      <div><dt><b>Graduation project or competition deadline</b><small>Students</small></dt><dd>The deadline is close and you are short on hands. Even with an unfinished model, we will finish it with you.</dd></div>
+      <div><dt><b>You need a mechanical prototype</b><small>Machinery</small></dt><dd>Gears and other meshing parts, parts where dimensions matter. Assemble a real one before you commit.</dd></div>
+      <div><dt><b>You are planning a product or merchandise</b><small>Decor · Merchandise</small></dt><dd>Interior pieces, merchandise, lighting. Even if it is only an idea, we can start from modeling.</dd></div>
+    </dl>
+  </div>
+</section>
+
+<section class="sec sec--blue p3-view" id="viewer">
+  <div class="wrap p3-view__in">
+    <div class="p3-view__tx">
+      <h2 class="h2">Checked on screen before printing</h2>
+      <p class="lead">Your part is reviewed in 3D like this before it is printed. Below are demo shapes and our own designs (15 Adeuk fossil model kits).</p>
+      <div class="p3-vtabs" role="tablist" aria-label="Choose a dinosaur"><small>Demo shapes</small><button type="button" role="tab" aria-selected="true" data-p3-model="/assets/models/s-vase.bin" data-name="Twisted vase" data-sci="Demo shape" data-size="Ø 120 mm · Height 160 mm">Twisted vase</button><button type="button" role="tab" aria-selected="false" data-p3-model="/assets/models/s-gear.bin" data-name="Gear pair" data-sci="Demo shape" data-size="120 × 90 × 35 mm">Gear pair</button><button type="button" role="tab" aria-selected="false" data-p3-model="/assets/models/s-impeller.bin" data-name="Impeller" data-sci="Demo shape" data-size="Ø 120 mm · Height 38 mm">Impeller</button><small>Our designs · 15 Adeuk fossil kits</small><button type="button" role="tab" aria-selected="false" data-p3-model="/assets/models/trex.bin" data-name="Tyrannosaurus · walking" data-sci="Tyrannosaurus rex" data-size="Length 611 mm · Height 266 mm">Tyrannosaurus · walking</button><button type="button" role="tab" aria-selected="false" data-p3-model="/assets/models/tr.bin" data-name="Tyrannosaurus · roaring" data-sci="Tyrannosaurus rex" data-size="Length 610 mm · Height 327 mm">Tyrannosaurus · roaring</button><button type="button" role="tab" aria-selected="false" data-p3-model="/assets/models/gg.bin" data-name="Giganotosaurus" data-sci="Giganotosaurus" data-size="Length 630 mm · Height 229 mm">Giganotosaurus</button><button type="button" role="tab" aria-selected="false" data-p3-model="/assets/models/allo.bin" data-name="Allosaurus" data-sci="Allosaurus" data-size="Length 443 mm · Height 138 mm">Allosaurus</button><button type="button" role="tab" aria-selected="false" data-p3-model="/assets/models/carno.bin" data-name="Carnotaurus" data-sci="Carnotaurus sastrei" data-size="Length 450 mm · Height 176 mm">Carnotaurus</button><button type="button" role="tab" aria-selected="false" data-p3-model="/assets/models/spinosn.bin" data-name="Spinosaurus" data-sci="Spinosaurus" data-size="Length 580 mm · Height 263 mm">Spinosaurus</button><button type="button" role="tab" aria-selected="false" data-p3-model="/assets/models/raptor.bin" data-name="Velociraptor" data-sci="Velociraptor" data-size="Length 442 mm · Height 200 mm">Velociraptor</button><button type="button" role="tab" aria-selected="false" data-p3-model="/assets/models/deino.bin" data-name="Deinonychus" data-sci="Deinonychus antirrhopus" data-size="Length 500 mm · Height 286 mm">Deinonychus</button><button type="button" role="tab" aria-selected="false" data-p3-model="/assets/models/trice.bin" data-name="Triceratops" data-sci="Triceratops" data-size="Length 396 mm · Height 203 mm">Triceratops</button><button type="button" role="tab" aria-selected="false" data-p3-model="/assets/models/stego.bin" data-name="Stegosaurus" data-sci="Stegosaurus" data-size="Length 386 mm · Height 225 mm">Stegosaurus</button><button type="button" role="tab" aria-selected="false" data-p3-model="/assets/models/ankylo.bin" data-name="Ankylosaurus" data-sci="Ankylosaurus" data-size="Length 366 mm · Height 159 mm">Ankylosaurus</button><button type="button" role="tab" aria-selected="false" data-p3-model="/assets/models/brachiot.bin" data-name="Brachiosaurus · on all fours" data-sci="Brachiosaurus" data-size="Length 624 mm · Height 565 mm">Brachiosaurus · on all fours</button><button type="button" role="tab" aria-selected="false" data-p3-model="/assets/models/brachiotrear.bin" data-name="Brachiosaurus · rearing" data-sci="Brachiosaurus" data-size="Length 392 mm · Height 684 mm">Brachiosaurus · rearing</button><button type="button" role="tab" aria-selected="false" data-p3-model="/assets/models/diplo.bin" data-name="Diplodocus" data-sci="Diplodocus" data-size="Length 620 mm · Height 126 mm">Diplodocus</button><button type="button" role="tab" aria-selected="false" data-p3-model="/assets/models/mammoth.bin" data-name="Woolly mammoth" data-sci="Mammuthus primigenius" data-size="Length 502 mm · Height 335 mm">Woolly mammoth</button></div>
+      <p class="p3-view__hint">Drag to rotate. Pick a name to switch models.</p>
+      <p class="p3-view__hint p3-view__copy">© UrTeam. Our own designs are protected by copyright. Do not copy, print or sell them without permission.</p>
+    </div>
+    <div class="p3-viewer" data-p3-viewer>
+      <canvas aria-label="3D model, drag to rotate" role="img"></canvas>
+      <div class="p3-viewer__info"><b data-p3-name>Twisted vase</b><small><i data-p3-sci>Demo shape</i> · <span data-p3-size>Ø 120 mm · Height 160 mm</span></small></div>
+      <p class="p3-viewer__load" data-p3-load>Loading…</p>
+      <span class="p3-viewer__mark" aria-hidden="true">© UrTeam</span>
+    </div>
+  </div>
+</section>
+
+<section class="sec sec--soft" id="what">
+  <div class="wrap">
+    <div class="head">
+      <h2 class="h2">Modeling only, printing only.<br>Either is fine</h2>
+    </div>
+    <dl class="p3-rows">
+      <div><dt><b>3D modeling</b><small>An idea is enough. No drawing needed</small></dt><dd>A sketch, a photo or a few dimensions will do. The more complex the shape, the better. You review it on screen, we revise, then you get the final file.</dd></div>
+      <div><dt><b>3D printing</b><small>Send the file and we print</small></dt><dd>We check that the file is printable first. Before shipping, we send photos of the finished part for your approval.</dd></div>
+      <div><dt><b>Small and large runs</b><small>Many printers at once</small></dt><dd>Large quantities are split across printers, so lead time stays short. Ask and we will book machine time.</dd></div>
+      <div><dt><b>Classes</b><small>We also teach 3D modeling and printing</small></dt><dd>Taught by people who run printers every day. We also come to schools, institutions and companies. <a href="#class">See classes</a></dd></div>
+    </dl>
+    <figure class="p3-fig">
+      <img src="/assets/img/p3/model-bust.webp" alt="A portrait bust 3D model seen from three angles" width="1400" height="788" loading="lazy">
+      <figcaption>A 3D modeling example: a portrait bust seen from three angles. Shown with the subject's consent.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section class="sec p3-brandsec" id="brands">
+  <div class="wrap">
+    <div class="head">
+      <h2 class="h2">Brands we design<br>and build ourselves</h2>
+      <p class="lead">We develop our own products on the same machines and process used for client work, and apply the same design and print standards to both.</p>
+    </div>
+
+    <article class="p3-case p3-case--ondeung">
+      <div class="p3-case__tx">
+        <img class="p3-case__logo p3-case__logo--wide" src="/assets/img/p3/ondeung-logo.webp" alt="Ondeung" width="800" height="333" loading="lazy">
+        <span class="k">Ondeung · Korean heritage lighting</span>
+        <h3 class="h3">Ondeung, a warm light</h3>
+        <p>Celadon, moon jars, Cheomseongdae and hanok lattice doors, turned into lamps. 52 designs so far.</p>
+        <ul class="ticks">
+          <li>Patterns that glow through varying wall thickness</li>
+          <li>Shaped to print in one go without supports</li>
+          <li>Refined with the light switched on</li>
+        </ul>
+        {{ondeungShop}}
+      </div>
+      <div class="p3-case__main"><img src="/assets/img/p3/ondeung-scene.webp" alt="Ondeung: lamps in a hanok room" width="1000" height="611" loading="lazy"></div>
+      <div class="p3-case__thumbs">
+        <img src="/assets/img/p3/ondeung-d-yunseul.webp" alt="Ondeung: Yunseul" width="800" height="800" loading="lazy">
+        <img src="/assets/img/p3/ondeung-d-chang.webp" alt="Ondeung: Lattice lantern" width="800" height="800" loading="lazy">
+        <img src="/assets/img/p3/ondeung-d-crown.webp" alt="Ondeung: Silla gold crown" width="800" height="800" loading="lazy">
+        <img src="/assets/img/p3/ondeung-d-maebyeong.webp" alt="Ondeung: Celadon crane vase" width="800" height="800" loading="lazy">
+      </div>
+      <div class="p3-lamp" data-p3-lamp>
+        <div class="p3-lamp__stage">
+          <canvas aria-label="3D preview of the Ondeung string lamp. Drag to rotate" role="img"></canvas>
+          <p class="p3-lamp__tip">Drag to rotate</p>
+          <label class="p3-lamp__prog">Print progress <input type="range" min="2" max="100" value="100" data-p3-lamp-prog> <output data-p3-lamp-pct>100%</output></label>
+        </div>
+        <div class="p3-lamp__tx">
+          <h3 class="h3">String lamp</h3>
+          <p>A lamp that looks wound from thread. Polygon rings and the strings bridging between them are stacked in turn, and each step is rotated a little to form the spiral. Instead of slicing a 3D model, we design the path the nozzle travels.</p>
+          <div class="p3-lamp__sizes" role="group" aria-label="Choose a size">
+            <button type="button" aria-pressed="false" data-p3-lamp-size="s">Small <small>Ø150 × 149 mm</small></button>
+            <button type="button" aria-pressed="true" data-p3-lamp-size="m">Medium <small>Ø190 × 180 mm</small></button>
+            <button type="button" aria-pressed="false" data-p3-lamp-size="l">Tall <small>Ø170 × 196 mm</small></button>
+          </div>
+          <button type="button" class="p3-lamp__lit" aria-pressed="true" data-p3-lamp-lit>Light on</button>
+          <p class="p3-lamp__note">A model still in design. Every line on screen is a path the nozzle actually travels.</p>
+        </div>
+      </div>
+    </article>
+
+    <article class="p3-case p3-case--adeuk">
+      <div class="p3-case__main"><img src="/assets/img/p3/adeuk-tx.webp" alt="Adeuk: Tyrannosaurus fossil model kit" width="1000" height="667" loading="lazy"></div>
+      <div class="p3-case__tx">
+        <img class="p3-case__logo" src="/assets/img/p3/adeuk-logo-ivory.webp" alt="Adeuk" width="600" height="331" loading="lazy">
+        <span class="k">Adeuk · Dinosaur fossil model kits</span>
+        <h3 class="h3">A fossil you build bone by bone</h3>
+        <p>Fifteen kits, from Tyrannosaurus to woolly mammoth. Bones are printed in resin for detail, bases in PLA for strength.</p>
+        <ul class="ticks">
+          <li>Parts split along real bone boundaries</li>
+          <li>Pins and sockets that fit without glue</li>
+          <li>Balanced so it does not tip over</li>
+        </ul>
+        {{adeukShop}}
+      </div>
+      <div class="p3-case__thumbs">
+        <img src="/assets/img/p3/adeuk-mm.webp" alt="Adeuk: woolly mammoth" width="1000" height="667" loading="lazy">
+        <img src="/assets/img/p3/adeuk-vr.webp" alt="Adeuk: Velociraptor" width="1000" height="667" loading="lazy">
+        <img src="/assets/img/p3/adeuk-head.webp" alt="Adeuk: Tyrannosaurus skull" width="1000" height="667" loading="lazy">
+        <img src="/assets/img/p3/adeuk-home.webp" alt="Adeuk: on a bookshelf" width="1000" height="667" loading="lazy">
+      </div>
+    </article>
+  </div>
+  <div class="p3-roll" aria-label="Ondeung lamp designs">
+    <div class="p3-roll__track"><figure><img src="/assets/img/p3/ondeung-c15.webp" alt="Ondeung lamp: Baekje gilt-bronze incense burner" width="600" height="750" loading="lazy"><figcaption>Baekje gilt-bronze incense burner</figcaption></figure><figure><img src="/assets/img/p3/ondeung-c05.webp" alt="Ondeung lamp: White porcelain moon jar" width="600" height="750" loading="lazy"><figcaption>White porcelain moon jar</figcaption></figure><figure><img src="/assets/img/p3/ondeung-c24.webp" alt="Ondeung lamp: Cheongsachorong lantern" width="600" height="750" loading="lazy"><figcaption>Cheongsachorong lantern</figcaption></figure><figure><img src="/assets/img/p3/ondeung-c07.webp" alt="Ondeung lamp: Cheomseongdae observatory" width="600" height="750" loading="lazy"><figcaption>Cheomseongdae observatory</figcaption></figure><figure><img src="/assets/img/p3/ondeung-c21.webp" alt="Ondeung lamp: Lattice lantern" width="600" height="750" loading="lazy"><figcaption>Lattice lantern</figcaption></figure><figure><img src="/assets/img/p3/ondeung-c02.webp" alt="Ondeung lamp: Celadon crane-and-cloud vase" width="600" height="750" loading="lazy"><figcaption>Celadon crane-and-cloud vase</figcaption></figure><figure><img src="/assets/img/p3/ondeung-c11.webp" alt="Ondeung lamp: Silla gold crown" width="600" height="750" loading="lazy"><figcaption>Silla gold crown</figcaption></figure><figure><img src="/assets/img/p3/ondeung-c28.webp" alt="Ondeung lamp: Yunseul (glittering water)" width="600" height="750" loading="lazy"><figcaption>Yunseul (glittering water)</figcaption></figure><figure><img src="/assets/img/p3/ondeung-c23.webp" alt="Ondeung lamp: Lotus lantern" width="600" height="750" loading="lazy"><figcaption>Lotus lantern</figcaption></figure><figure><img src="/assets/img/p3/ondeung-c52.webp" alt="Ondeung lamp: Dragon-and-cloud porcelain jar" width="600" height="750" loading="lazy"><figcaption>Dragon-and-cloud porcelain jar</figcaption></figure><figure><img src="/assets/img/p3/ondeung-c30.webp" alt="Ondeung lamp: Openwork flower lattice" width="600" height="750" loading="lazy"><figcaption>Openwork flower lattice</figcaption></figure><figure><img src="/assets/img/p3/ondeung-c08.webp" alt="Ondeung lamp: Bell of King Seongdeok" width="600" height="750" loading="lazy"><figcaption>Bell of King Seongdeok</figcaption></figure><figure aria-hidden="true"><img src="/assets/img/p3/ondeung-c15.webp" alt="" width="600" height="750" loading="lazy"><figcaption>Baekje gilt-bronze incense burner</figcaption></figure><figure aria-hidden="true"><img src="/assets/img/p3/ondeung-c05.webp" alt="" width="600" height="750" loading="lazy"><figcaption>White porcelain moon jar</figcaption></figure><figure aria-hidden="true"><img src="/assets/img/p3/ondeung-c24.webp" alt="" width="600" height="750" loading="lazy"><figcaption>Cheongsachorong lantern</figcaption></figure><figure aria-hidden="true"><img src="/assets/img/p3/ondeung-c07.webp" alt="" width="600" height="750" loading="lazy"><figcaption>Cheomseongdae observatory</figcaption></figure><figure aria-hidden="true"><img src="/assets/img/p3/ondeung-c21.webp" alt="" width="600" height="750" loading="lazy"><figcaption>Lattice lantern</figcaption></figure><figure aria-hidden="true"><img src="/assets/img/p3/ondeung-c02.webp" alt="" width="600" height="750" loading="lazy"><figcaption>Celadon crane-and-cloud vase</figcaption></figure><figure aria-hidden="true"><img src="/assets/img/p3/ondeung-c11.webp" alt="" width="600" height="750" loading="lazy"><figcaption>Silla gold crown</figcaption></figure><figure aria-hidden="true"><img src="/assets/img/p3/ondeung-c28.webp" alt="" width="600" height="750" loading="lazy"><figcaption>Yunseul (glittering water)</figcaption></figure><figure aria-hidden="true"><img src="/assets/img/p3/ondeung-c23.webp" alt="" width="600" height="750" loading="lazy"><figcaption>Lotus lantern</figcaption></figure><figure aria-hidden="true"><img src="/assets/img/p3/ondeung-c52.webp" alt="" width="600" height="750" loading="lazy"><figcaption>Dragon-and-cloud porcelain jar</figcaption></figure><figure aria-hidden="true"><img src="/assets/img/p3/ondeung-c30.webp" alt="" width="600" height="750" loading="lazy"><figcaption>Openwork flower lattice</figcaption></figure><figure aria-hidden="true"><img src="/assets/img/p3/ondeung-c08.webp" alt="" width="600" height="750" loading="lazy"><figcaption>Bell of King Seongdeok</figcaption></figure></div>
+  </div>
+  <div class="wrap"><p class="p3-copy" role="note"><b>© UrTeam · All rights reserved</b>The designs, 3D models, images and logos of Adeuk and Ondeung are the copyrighted work of UrTeam. They may not be copied, printed, sold, distributed or adapted without permission, and violations may lead to legal action under copyright law. <small>Images are renders of the printable 3D models.</small></p></div>
+</section>
+
+<section class="sec sec--soft" id="machines">
+  <div class="wrap p3-fleet">
+    <div>
+      <h2 class="h2">41 FDM and SLA<br>printers in operation</h2>
+      <p class="lead">We pick the machine for the job: the Z18 for tall parts, Bambu for multiple materials, SLA when the surface has to be smooth and fine.</p>
+      <div class="p3-dots" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <p class="p3-dots__cap" aria-hidden="true">One square is one printer</p>
+      <figure class="p3-shot">
+        <img src="/assets/img/p3/workshop-machine.webp" alt="Equipment in the UrTeam workshop" width="900" height="1579" loading="lazy">
+        <figcaption>UrTeam workshop</figcaption>
+      </figure>
+    </div>
+    <div class="p3-table" role="table" aria-label="Equipment">
+      <div role="row" class="p3-table__head"><span role="columnheader">Machine</span><span role="columnheader">Material</span><span role="columnheader">Max build size (mm)</span></div>
+      <div role="row"><b role="cell">Replicator+ <small>FDM</small></b><span role="cell">PLA</span><span role="cell">295 × 195 × 165</span></div>
+      <div role="row"><b role="cell">Z18 <small>FDM</small></b><span role="cell">PLA</span><span role="cell">305 × 305 × 457</span></div>
+      <div role="row"><b role="cell">M350-Moment <small>FDM</small></b><span role="cell">PLA</span><span role="cell">330 × 330 × 330</span></div>
+      <div role="row"><b role="cell">Bambu <small>FDM</small></b><span role="cell">Multiple materials, incl. carbon and glass fiber reinforced</span><span role="cell">256 × 256 × 256</span></div>
+      <div role="row"><b role="cell">XFAB-DWS <small>SLA</small></b><span role="cell">Photopolymer resin · on request</span><span role="cell">Ø180 × 180</span></div>
+      <p class="p3-table__note"><strong>FDM</strong> melts plastic filament and builds it up layer by layer. <strong>SLA</strong> cures liquid resin with light. We do not currently offer post-processing such as sanding or painting.</p>
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="guide">
+  <div class="wrap">
+    <div class="head">
+      <h2 class="h2">Know these basics<br>and we can move faster</h2>
+      <p class="lead">You do not have to. Send a file or sketch and we will choose for you. Knowing the following just makes it easier to describe what you want.</p>
+    </div>
+
+    <h3 class="h3 p3-gh">Choose the material by how it will be used</h3>
+    <div class="p3-mats">
+      <article><i style="background:#dfe3e8"></i><b>PLA</b><p>The default material. Good for form-check prototypes and display pieces. Not for hot environments.</p></article>
+      <article><i style="background:#353b44"></i><b>ABS</b><p>Handles heat and impact better than PLA. Used for working enclosures and functional parts.</p></article>
+      <article><i style="background:#e39a3b"></i><b>Resin</b><p>For small parts that need fine detail. Smooth surface. Avoid long-term sun exposure.</p></article>
+      <article><i style="background:#0f1216"></i><b>Carbon · glass fiber reinforced</b><p>Stiff and resistant to bending. Used for load-bearing mechanical parts.</p></article>
+    </div>
+
+    <h3 class="h3 p3-gh">Three rules if you model it yourself</h3>
+    <div class="p3-tips">
+      <article>
+        <svg class="p3-tip1" viewBox="0 0 200 120" aria-hidden="true"><path d="M40 100V30h120v70" fill="none" stroke="#1747e6" stroke-width="10"/><path d="M20 100h160" stroke="currentColor" stroke-width="3"/><path d="M166 52h22M166 52l6-4M166 52l6 4" stroke="currentColor" stroke-width="2" fill="none"/></svg>
+        <b>Keep walls at 1.5 mm or more</b><p>Walls that are too thin break or warp during printing. We recommend 1.5–2 mm.</p>
+      </article>
+      <article>
+        <svg class="p3-tip2" viewBox="0 0 200 120" aria-hidden="true"><path d="M20 100h160" stroke="currentColor" stroke-width="3"/><path d="M60 100V60l50-50h30" fill="none" stroke="#1747e6" stroke-width="10" stroke-linejoin="round"/><path d="M60 60h44" stroke="currentColor" stroke-width="2" stroke-dasharray="4 4"/><path d="M84 60a24 24 0 0 0-7-17" fill="none" stroke="currentColor" stroke-width="2"/><text x="90" y="52" font-size="13" fill="currentColor">45°</text></svg>
+        <b>Overhangs beyond 45° need supports</b><p>Anything hanging in the air is printed on supports that are removed afterwards. They can leave marks.</p>
+      </article>
+      <article>
+        <svg class="p3-tip3" viewBox="0 0 200 120" aria-hidden="true"><path d="M20 100h160" stroke="currentColor" stroke-width="3"/><path d="M40 100V40h44v60M116 100V40h44v60" fill="none" stroke="#1747e6" stroke-width="8"/><path d="M90 30v-8M110 30v-8M90 26h20" stroke="currentColor" stroke-width="2"/><text x="84" y="16" font-size="12" fill="currentColor">gap</text></svg>
+        <b>Leave a gap between mating parts</b><p>Parts drawn to the exact same size will not fit. A gap of around 0.5 mm is typical.</p>
+      </article>
+    </div>
+    <p class="p3-gnote">These are common rules of thumb. They vary by machine and material, so we will tell you the right values once we see your file.</p>
+  </div>
+</section>
+
+<section class="sec" id="flow">
+  <div class="wrap">
+    <div class="head">
+      <h2 class="h2">How it works</h2>
+    </div>
+    <div class="p3-flows">
+      <div class="p3-flow">
+        <h3 class="h3">3D modeling</h3>
+        <ol>
+          <li><b>Consultation</b><span>We hear what you want to make</span></li>
+          <li><b>Rough drawing</b><span>Dimensions and shape on paper</span></li>
+          <li><b>Direction</b><span>Agree on the shape and how to split it</span></li>
+          <li><b>Modeling</b><span>We build the 3D model</span></li>
+          <li><b>Review · revise</b><span>You check on screen, we revise</span></li>
+          <li><b>Final file</b><span>You receive the approved 3D file</span></li>
+        </ol>
+      </div>
+      <div class="p3-flow">
+        <h3 class="h3">3D printing</h3>
+        <ol>
+          <li><b>Consultation</b><span>Quantity, size and use</span></li>
+          <li><b>Send the file</b><span>STL or another 3D format</span></li>
+          <li><b>Plan</b><span>Machine, material, price, schedule</span></li>
+          <li><b>Printing</b><span>We print it</span></li>
+          <li><b>Photo check</b><span>Photos of the finished part before shipping</span></li>
+          <li><b>Delivery</b><span>Packed and shipped</span></li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="sec sec--soft" id="price">
+  <div class="wrap">
+    <div class="head center">
+      <h2 class="h2">Priced per gram</h2>
+      <p class="lead">We do not charge for machine time, only for the weight of material used. Prices below are starting points and vary with size and difficulty.</p>
+    </div>
+    <div class="hp-price">
+      <article class="hp-plan">
+        <span class="k">3D printing</span>
+        <dl><div><dt>From</dt><dd>KRW <b data-count="5000">5,000</b></dd></div><div><dt>Lead time</dt><dd>from <b>2</b> days</dd></div></dl>
+        <ul class="ticks"><li>FDM and SLA printing</li><li>PLA, ABS and more</li><li>Photo check before shipping</li></ul>
+      </article>
+      <article class="hp-plan hp-plan--pick">
+        <span class="k">3D modeling + printing</span>
+        <dl><div><dt>From</dt><dd>KRW <b data-count="80000">80,000</b></dd></div><div><dt>Lead time</dt><dd>from <b>4</b> days</dd></div></dl>
+        <ul class="ticks"><li>3D model + print</li><li>3D file and render images included</li><li>2 revisions included</li></ul>
+      </article>
+      <article class="hp-plan">
+        <span class="k">Large runs · Classes</span>
+        <dl><div><dt>Price</dt><dd><b>Custom</b> quote</dd></div><div><dt>Schedule</dt><dd><b>By agreement</b></dd></div></dl>
+        <ul class="ticks"><li>Machine time booked to your quantity and deadline</li><li>On-site classes for schools and companies</li><li>Ask and we will reply right away</li></ul>
+      </article>
+    </div>
+    <div class="hp-pay">
+      <b>Already have a quote from someone else?</b>
+      <p>Show us and we may be able to adjust our price. Asking for a quote costs nothing.</p>
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="class">
+  <div class="wrap p3-class">
+    <div>
+      <h2 class="h2">We teach, too</h2>
+      <p class="lead">We teach 3D modeling and how to run a 3D printer. Content is tailored to the audience and time available, so get in touch first.</p>
+      <div class="btns" style="margin-top:28px"><a class="btn btn--blue btn--lg" href="#quote">Ask about classes</a></div>
+    </div>
+    <div class="p3-lessons">
+      <article><h3>3D modeling basics</h3><p>How to turn a shape in your head into a 3D model. Beginners welcome.</p></article>
+      <article><h3>Running a 3D printer</h3><p>Print preparation, choosing materials, common failures and how to fix them.</p></article>
+      <article><h3>Make your own object</h3><p>Print what you designed and take it home.</p></article>
+      <article><h3>On-site classes</h3><p>Schools, institutions, companies, clubs. Scheduled around your dates and group size.</p></article>
+    </div>
+  </div>
+</section>
+
+<section class="sec sec--light" id="quote">
+  <div class="wrap contact">
+    <aside class="contact__side">
+      <h2 class="h3">Tell us these and the quote comes faster</h2>
+      <div class="p3-tip"><b>Size</b><span>Width, depth, height. Rough numbers are fine.</span></div>
+      <div class="p3-tip"><b>Quantity</b><span>One piece or many.</span></div>
+      <div class="p3-tip"><b>Use</b><span>For display, for handling, or for outdoors.</span></div>
+      <div class="p3-tip"><b>Other quotes</b><span>If you have a quote from elsewhere, tell us. We can adjust.</span></div>
+      <a class="quick quick--kakao" href="{{kakao}}" target="_blank" rel="noopener"><b>Send files by KakaoTalk</b><span>Easier for large files →</span></a>
+      <a class="quick" href="mailto:{{email}}"><b>Send by email</b><span>{{email}}</span></a>
+    </aside>
+
+    <form class="form" id="form" method="post" action="{{formAction}}" data-lead novalidate>
+      <h2 class="h3">Request a 3D printing quote</h2>
+      {{formOff}}
+      <p class="msg" data-msg role="status" aria-live="polite"></p>
+      <input type="hidden" name="return" value="/en/3d-printing/">
+      <input type="hidden" name="message" value="">
+      <input type="hidden" name="utm_source"><input type="hidden" name="utm_medium"><input type="hidden" name="utm_campaign"><input type="hidden" name="referrer">
+      <input type="hidden" value="3D프린팅 제작" data-msg-part="관심 분야">
+
+      <p class="fstep"><i>1</i>What do you need?</p>
+      <fieldset class="chips">
+        <legend>Service <small>(select all that apply)</small></legend>
+        <label><input type="checkbox" value="출력만" data-msg-part="Service needed"><span>I have a file · print only</span></label>
+        <label><input type="checkbox" value="모델링부터" data-msg-part="Service needed"><span>No file · model it first</span></label>
+        <label><input type="checkbox" value="소량 생산" data-msg-part="Service needed"><span>Production run</span></label>
+        <label><input type="checkbox" value="강의 문의" data-msg-part="Service needed"><span>Classes</span></label>
+        <label><input type="checkbox" value="아직 모르겠어요" data-msg-part="Service needed"><span>Not sure yet</span></label>
+      </fieldset>
+
+      <p class="fstep"><i>2</i>What to make</p>
+      <label>What is it?<textarea rows="3" maxlength="800" data-msg-part="Item" placeholder="e.g. a logo sculpture for a cafe counter, palm-sized, white"></textarea></label>
+      <div class="f2">
+        <label>Quantity<input maxlength="40" data-msg-part="Quantity" placeholder="e.g. 1 / 50"></label>
+        <label>Size (approx.)<input maxlength="60" data-msg-part="Size" placeholder="e.g. 10 × 8 × 15 cm"></label>
+      </div>
+      <label>Needed by<input maxlength="60" data-msg-part="Needed by" placeholder="e.g. by Dec 20 / no rush"></label>
+
+      <p class="fstep"><i>3</i>File or sketch <small class="p3-opt">optional</small></p>
+      <label>Attach a file <small class="p3-hint">One file up to 5 MB · STL, STEP, OBJ, 3MF, image, PDF, ZIP</small>
+        <input type="file" name="attachment" data-max-mb="5" accept=".stl,.step,.stp,.obj,.3mf,.zip,.pdf,.png,.jpg,.jpeg,.webp"></label>
+      <label>File link <small class="p3-hint">For large or multiple files, paste a Google Drive or other share link</small>
+        <input type="url" maxlength="300" data-msg-part="File link" placeholder="https://"></label>
+
+      <p class="fstep"><i>4</i>How can we reach you?</p>
+      <div class="f2">
+        <label><span>Name and company <b aria-hidden="true">*</b></span><input name="name" required maxlength="60" autocomplete="name" placeholder="e.g. Alex Kim / UrTeam"></label>
+        <label><span>Phone <b aria-hidden="true">*</b></span><input name="phone" type="tel" required maxlength="20" inputmode="tel" autocomplete="tel" placeholder="010-0000-0000"></label>
+      </div>
+      <label>Email<input name="email" type="email" maxlength="120" autocomplete="email" placeholder="name@company.com"></label>
+
+      <input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+      <label class="agree"><input type="checkbox" name="agree" value="1" required>
+        <span>I agree to the collection and use of my personal information. <b aria-hidden="true">*</b>
+          <details><summary>View details</summary>
+            <p><strong>Information collected</strong> Name and company, phone number, email, inquiry details (item, quantity, size and anything else you provide), attached file</p>
+            <p><strong>Purpose</strong> To prepare and send a quote and carry out the work</p>
+            <p><strong>Delivery</strong> Your request and attachment are forwarded to UrTeam by email through the FormSubmit email delivery service.</p>
+            <p><strong>Retention</strong> Kept for {{retention}} days after the consultation ends, then destroyed without delay.</p>
+            <p>See our <a href="/en/privacy/" target="_blank">Privacy Policy</a> for details. You may decline. In that case, we cannot accept your online request, but you can still reach us by phone or KakaoTalk.</p>
+          </details>
+        </span>
+      </label>
+      {{turnstile}}
+      <button class="btn btn--blue btn--lg btn--block" type="submit">Send quote request</button>
+    </form>
+  </div>
+</section>
+
+<section class="sec" id="faq">
+  <div class="wrap faq">
+    <div class="head"><h2 class="h2">Frequently asked questions</h2></div>
+    <div class="acc">
+      <details open><summary><span class="l">Q1</span>Can you do complex shapes? Can you model from just an idea?</summary><div class="acc__body"><p>Yes. Complex shapes are a chance to show what we can do, so they are always welcome. Without a drawing, a sketch or photo is enough for us to model it.</p></div></details>
+      <details><summary><span class="l">Q2</span>When will I receive it?</summary><div class="acc__body"><p>It depends on size and difficulty, usually 3 to 7 days. Complex shapes can take longer, but we stand behind the quality.</p></div></details>
+      <details><summary><span class="l">Q3</span>Do you take large orders?</summary><div class="acc__body"><p>Yes. We run 41 3D printers. Ask and we will book machine time right away.</p></div></details>
+      <details><summary><span class="l">Q4</span>Do revisions cost extra?</summary><div class="acc__body"><p>Modeling includes two revisions. After that there may be a charge depending on time and cost. Simple fixes are free.</p></div></details>
+      <details><summary><span class="l">Q5</span>Can I order only modeling or only printing?</summary><div class="acc__body"><p>Yes. We do not currently offer post-processing such as sanding or painting.</p></div></details>
+      <details><summary><span class="l">Q6</span>What file should I send?</summary><div class="acc__body"><p>We accept STL, STEP, OBJ and 3MF. If you are not sure of the format, just send what you have. The form takes one file up to 5 MB. For anything larger, use a share link, KakaoTalk or email.</p></div></details>
+      <details><summary><span class="l">Q7</span>Do you work on weekends?</summary><div class="acc__body"><p>If you contact us before noon on Saturday (Korea time), we work that Saturday.</p></div></details>
+      <details><summary><span class="l">Q8</span>Which machines do you use?</summary><div class="acc__body"><p>For FDM: Replicator+, MOMENT2, M350-MOMENT, Z18 and Bambu. Ask us about SLA. Build sizes are in the <a href="#machines">equipment table</a>.</p></div></details>
+    </div>
+  </div>
+</section>
+
+<section class="sec sec--soft sec--tight" id="notes">
+  <div class="wrap">
+    <div class="p3-notes">
+      <div><b>You own the copyright</b><p>Copyright in the finished, delivered work belongs to the client.</p></div>
+      <div><b>Portfolio use only with consent</b><p>We show client work in our portfolio only with the client's permission.</p></div>
+      <div><b>Files deleted within 2 hours</b><p>Working files are deleted within two hours of a completed order.</p></div>
+      <div><b>Price varies by job</b><p>It depends on difficulty and the amount of work.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="cta">
+  <div class="cta__bg" aria-hidden="true"><img src="/assets/img/i/cta-photo.webp" alt="" loading="lazy" data-parallax="0.12" width="1600" height="900"></div>
+  <div class="wrap">
+    <h2 class="h2">Just ask first</h2>
+    <p class="lead">We will tell you whether it can be made and what it costs.</p>
+    <div class="btns">
+      <a class="btn btn--blue btn--lg" href="#quote">Get a quote</a>
+      <a class="btn btn--ghost btn--lg" href="{{kakao}}" target="_blank" rel="noopener">Ask on KakaoTalk</a>
+    </div>
+  </div>
+</section>
