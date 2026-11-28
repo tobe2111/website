@@ -44,6 +44,7 @@
           <label>바꿀 형식<select data-to><option value="stl">STL (이진, 3D프린팅 표준)</option><option value="stla">STL (문자)</option><option value="obj">OBJ</option><option value="3mf">3MF (3D프린팅용, 압축됨)</option><option value="glb">GLB (웹 · AR)</option><option value="ply" selected>PLY</option><option value="off">OFF</option></select></label>
           <label data-each-wrap hidden>부품<select data-each><option value="one">한 파일에 모두 담기</option><option value="each">부품마다 따로 (ZIP 하나로 묶음)</option></select></label>
           <label>원본 단위<select data-scale><option value="1">mm (대부분의 STL · OBJ)</option><option value="10">cm</option><option value="25.4">inch</option><option value="1000">m</option></select></label>
+          <div class="tl__two"><label>크기 (%)<input type="number" data-resize value="100" min="1" step="any" inputmode="decimal"></label><label>가장 긴 변 (mm)<input type="number" data-longest min="0.1" step="any" inputmode="decimal" placeholder="파일을 열면 표시"></label></div>
           <label>압축<select data-pack><option value="none">압축 안 함</option><option value="zip">ZIP 으로 압축</option></select></label>
           <label>분할 <small>(큰 파일을 나눠 받기)</small><select data-split><option value="0">나누지 않음</option><option value="10">10 MB 씩</option><option value="25">25 MB 씩</option><option value="50">50 MB 씩</option><option value="100">100 MB 씩</option></select></label>
           <button type="button" class="btn btn--blue" data-go>변환해서 내려받기</button>
@@ -119,7 +120,8 @@
 </section>
 <section class="sec" id="more">
   <div class="wrap">
-    <h2 class="h2">다른 변환 · 뷰어</h2>
+    <h2 class="h2">다른 무료 3D 도구</h2>
+    <ul class="tl__links"><li><a href="/3d-tools/">무료 3D 도구 모음</a></li><li><a href="/3d-tools/print-weight/">3D프린팅 무게 계산기</a></li><li><a href="/3d-tools/stl-check/">STL 오류 검사</a></li><li><a href="/3d-tools/stl-resize/">STL 크기 조절</a></li><li><a href="/3d-tools/filament-calculator/">필라멘트 길이 · 무게 계산기</a></li></ul>
     <ul class="tl__links"><li><a href="/3d-converter/stl-to-obj/">STL → OBJ</a></li><li><a href="/3d-converter/obj-to-stl/">OBJ → STL</a></li><li><a href="/3d-converter/stl-to-3mf/">STL → 3MF</a></li><li><a href="/3d-converter/3mf-to-stl/">3MF → STL</a></li><li><a href="/3d-converter/stl-to-glb/">STL → GLB</a></li><li><a href="/3d-converter/glb-to-stl/">GLB → STL</a></li><li><a href="/3d-converter/obj-to-glb/">OBJ → GLB</a></li><li><a href="/3d-converter/obj-to-3mf/">OBJ → 3MF</a></li><li><a href="/3d-converter/ply-to-stl/">PLY → STL</a></li><li><a href="/3d-converter/gltf-to-stl/">glTF → STL</a></li><li><a href="/3d-converter/3mf-to-obj/">3MF → OBJ</a></li><li><a href="/3d-converter/glb-to-obj/">GLB → OBJ</a></li><li><a href="/3d-converter/3mf-to-glb/">3MF → GLB</a></li><li><a href="/3d-converter/amf-to-stl/">AMF → STL</a></li><li><a href="/3d-converter/off-to-stl/">OFF → STL</a></li></ul>
     <ul class="tl__links"><li><a href="/3d-converter/">3D 파일 변환기 (모든 형식)</a></li><li><a href="/3d-viewer/">3D 뷰어 (모든 형식)</a></li><li><a href="/3d-converter/split-zip/">3D 파일 분할 압축</a></li><li><a href="/3d-viewer/stl/">STL 뷰어</a></li><li><a href="/3d-viewer/obj/">OBJ 뷰어</a></li><li><a href="/3d-viewer/3mf/">3MF 뷰어</a></li><li><a href="/3d-viewer/glb/">GLB 뷰어</a></li><li><a href="/3d-viewer/ply/">PLY 뷰어</a></li></ul>
   </div>

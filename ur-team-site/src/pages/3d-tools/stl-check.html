@@ -1,0 +1,122 @@
+<!-- {"title": "STL 오류 검사 · 3D프린팅 출력 가능 여부 무료 확인", "name": "STL 오류 검사", "description": "STL · OBJ · 3MF 파일을 올리면 구멍(열린 모서리), 뒤집힌 면, 단위 오류, 출력 크기, 얇은 곳, 떨어진 조각, 과한 용량을 자동으로 검사하는 무료 STL 오류 검사 도구입니다. 결과는 팝업으로 보여 주고, 문제가 있으면 유어팀이 검토 · 수정 후 출력해 드립니다.", "nav": "print3d", "image": "/assets/img/p3/adeuk-tx.webp", "app": true, "keywords": ["STL 오류 검사", "STL 파일 검사", "3D프린팅 출력 가능 확인", "STL 구멍 찾기", "메시 오류 검사", "STL 수리", "무료 3D 파일 변환기", "온라인 3D 뷰어", "3D프린팅 견적"]} -->
+<section class="tl-top">
+  <div class="wrap">
+    <p class="crumb"><a href="/">홈</a><span aria-hidden="true">/</span><a href="/3d-printing/">3D프린팅 제작</a><span aria-hidden="true">/</span><a href="/3d-tools/">무료 3D 도구</a><span aria-hidden="true">/</span><span>STL 오류 검사</span></p>
+    <h1 class="h1">STL 오류 검사 · 출력 가능 여부 확인</h1>
+    <p class="lead">3D프린팅 전에 STL 파일에 문제가 없는지 자동으로 검사합니다. 구멍 난 곳, 뒤집힌 면, 단위 실수, 프린터보다 큰 크기, 너무 얇은 곳, 떨어진 조각을 찾아 결과를 팝업으로 보여 드립니다. 무료이고 파일은 서버로 올라가지 않습니다.</p>
+  </div>
+</section>
+<section class="tl" data-p3tool data-preset="stl">
+  <div class="wrap">
+    <div class="tl__grid">
+      <div class="tl__left">
+        <label class="tl__drop" data-drop>
+          <input type="file" multiple accept=".stl,.obj,.ply,.off,.3mf,.glb,.gltf,.amf">
+          <b>3D 파일을 여기에 끌어 놓거나 눌러서 고르세요</b>
+          <span>STL · OBJ · 3MF · PLY · OFF · GLB · glTF · AMF. 파일 여러 개, 부품이 여럿 든 파일도 한 번에 엽니다.</span>
+        </label>
+        <div class="tl__view"><canvas data-view aria-label="3D 모델 보기. 끌어서 돌리고, 휠로 확대합니다" role="img"></canvas><p class="tl__hint">끌어서 돌리기 · 휠로 확대</p></div>
+        <p class="tl__msg" data-msg role="status" aria-live="polite">파일은 서버로 올라가지 않고, 이 브라우저 안에서만 처리됩니다.</p>
+        <dialog class="tl__pop" data-offer aria-labelledby="tl-pop-h">
+          <button type="button" class="tl__pop-x" data-offer-close aria-label="닫기">×</button>
+          <p class="tl__pop-k">변환이 끝났습니다</p>
+          <h2 id="tl-pop-h">3D 프린팅은 유어팀에서 합리적이고 전문적으로 진행하세요</h2>
+          <p>보내 주신 모델 파일을 출력 전에 먼저 검토합니다. 구멍 난 곳, 너무 얇은 벽, 받침이 필요한 곳 같은 문제점을 짚어 피드백을 드리고, 바로잡은 모델로 출력까지 진행합니다.</p>
+          <ul>
+            <li>모델 파일 문제점 검토 · 피드백 (출력 전에)</li>
+            <li>고칠 곳이 많으면 3D 모델링 수정 · 제작까지 (모델링 + 출력 8만 원부터)</li>
+            <li>FDM · SLA 장비 41대, 보통 3~7일 안에 출고</li>
+            <li>견적은 실제로 쓰인 재료 무게로 산정</li>
+          </ul>
+          <div class="tl__pop-btns"><a class="btn btn--blue" href="/3d-printing/#quote" autofocus>파일 검토 · 출력 견적 받기</a><button type="button" class="btn btn--ghost" data-offer-close>다음에 할게요</button></div>
+        </dialog>
+        <dialog class="tl__pop" data-result aria-labelledby="tl-res-h">
+          <button type="button" class="tl__pop-x" data-result-close aria-label="닫기">×</button>
+          <p class="tl__pop-k" data-result-k></p>
+          <h2 id="tl-res-h" data-result-h></h2>
+          <div class="tl__pop-body" data-result-body></div>
+          <p data-result-p></p>
+          <div class="tl__pop-btns"><a class="btn btn--blue" href="/3d-printing/#quote" autofocus data-result-cta>출력 견적 받기</a><button type="button" class="btn btn--ghost" data-result-close>닫기</button></div>
+        </dialog>
+      </div>
+      <div class="tl__right">
+        <div class="tl__parts" data-parts-wrap hidden>
+          <h2 class="tl__h">부품 <small data-parts-count></small></h2>
+          <div class="tl__pbar"><button type="button" data-all>모두 보기</button><button type="button" data-none>모두 끄기</button><button type="button" class="is-key" data-islands hidden>떨어진 조각으로 나누기</button></div>
+          <ul class="tl__plist" data-parts></ul>
+        </div>
+        <h2 class="tl__h">출력 가능 검사</h2>
+        <div class="tl__ckbox" data-check-out><p class="tl__small">모델을 열면 바로 검사합니다. 구멍, 뒤집힌 면, 단위, 출력 크기, 얇은 곳, 떨어진 조각, 용량을 봅니다.</p></div>
+        <button type="button" class="btn btn--blue tl__ckgo" data-check-go>검사 결과 보기</button>
+        <h2 class="tl__h">모델 정보</h2>
+        <dl class="tl__info" data-info data-info-open><div><dt>크기</dt><dd>파일을 열면 표시됩니다</dd></div></dl>
+        <h2 class="tl__h">내려받기</h2>
+        <div class="tl__form">
+          <label>바꿀 형식<select data-to><option value="stl" selected>STL (이진, 3D프린팅 표준)</option><option value="stla">STL (문자)</option><option value="obj">OBJ</option><option value="3mf">3MF (3D프린팅용, 압축됨)</option><option value="glb">GLB (웹 · AR)</option><option value="ply">PLY</option><option value="off">OFF</option></select></label>
+          <label data-each-wrap hidden>부품<select data-each><option value="one">한 파일에 모두 담기</option><option value="each">부품마다 따로 (ZIP 하나로 묶음)</option></select></label>
+          <label>원본 단위<select data-scale><option value="1">mm (대부분의 STL · OBJ)</option><option value="10">cm</option><option value="25.4">inch</option><option value="1000">m</option></select></label>
+          <div class="tl__two"><label>크기 (%)<input type="number" data-resize value="100" min="1" step="any" inputmode="decimal"></label><label>가장 긴 변 (mm)<input type="number" data-longest min="0.1" step="any" inputmode="decimal" placeholder="파일을 열면 표시"></label></div>
+          <label>압축<select data-pack><option value="none">압축 안 함</option><option value="zip">ZIP 으로 압축</option></select></label>
+          <label>분할 <small>(큰 파일을 나눠 받기)</small><select data-split><option value="0">나누지 않음</option><option value="10">10 MB 씩</option><option value="25">25 MB 씩</option><option value="50">50 MB 씩</option><option value="100">100 MB 씩</option></select></label>
+          <button type="button" class="btn btn--blue" data-go>변환해서 내려받기</button>
+          <button type="button" class="btn btn--ghost" data-png>화면을 PNG 로 저장</button>
+        </div>
+        <p class="tl__small">3MF · OBJ · GLB · 문자 STL 은 부품을 나눈 채로 한 파일에 담깁니다. 분할한 파일은 반디집 · 7-Zip 에서 첫 파일(.001)을 열면 하나로 합쳐집니다.</p>
+        <div class="tl__next">
+          <b>3D 프린팅은 유어팀에서 합리적이고 전문적으로 진행하세요</b>
+          <p>출력 전에 모델 파일의 문제점을 검토해 피드백을 드리고, 바로잡은 모델로 출력까지 진행합니다. 크기와 부피는 견적 문의서에 미리 채워 드립니다.</p>
+          <a class="btn btn--blue" href="/3d-printing/#quote">파일 검토 · 출력 견적 받기</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+<script defer src="/assets/js/p3-tools.js"></script>
+<section class="sec" id="how">
+  <div class="wrap">
+    <h2 class="h2">검사하는 항목</h2>
+    <div class="tl__fmt"><table><thead><tr><th scope="col">항목</th><th scope="col">무엇을 보나</th><th scope="col">문제가 있으면</th></tr></thead><tbody>
+      <tr><th scope="row">구멍 · 열린 모서리</th><td>면이 맞물리지 않아 틈이 난 곳</td><td>슬라이서가 그 부분을 비우거나 잘못 채웁니다. 메시 수리가 필요합니다.</td></tr>
+      <tr><th scope="row">뒤집힌 면</th><td>면의 바깥 · 안쪽 방향</td><td>안팎이 바뀌어 출력이 비거나 깨집니다.</td></tr>
+      <tr><th scope="row">단위</th><td>크기가 지나치게 작거나 큰지</td><td>m · inch 로 만든 파일일 수 있습니다. '원본 단위'로 바로잡습니다.</td></tr>
+      <tr><th scope="row">출력 크기</th><td>일반 프린터(256 mm)에 들어가는지</td><td>나눠 출력한 뒤 붙이는 분할 설계가 필요합니다.</td></tr>
+      <tr><th scope="row">아주 얇음</th><td>가장 얇은 방향이 1.2 mm 미만인지</td><td>부러지거나 출력되지 않을 수 있어 두께를 늘립니다.</td></tr>
+      <tr><th scope="row">떨어진 조각</th><td>본체와 붙지 않은 조각</td><td>공중에 뜬 조각은 받침이 필요하거나 떨어져 나갑니다.</td></tr>
+      <tr><th scope="row">용량</th><td>삼각형 200만 개 이상</td><td>슬라이서가 느려져, 모양을 유지한 채 줄입니다.</td></tr>
+    </tbody></table></div>
+    <p class="tl__small" style="margin-top:12px">벽 두께가 부분적으로 얇은 곳, 받침이 필요한 기울기, 맞물림 공차처럼 형상을 봐야 하는 문제는 자동 검사로 다 찾지 못합니다. 파일을 보내 주시면 출력 전에 사람이 직접 검토해 피드백을 드립니다.</p>
+  </div>
+</section>
+<section class="sec sec--soft" id="faq">
+  <div class="wrap faq">
+    <div class="head"><h2 class="h2">자주 묻는 질문</h2></div>
+    <div class="acc">
+      <details open><summary><span class="l">Q1</span>STL 오류는 어떻게 고치나요?</summary><div class="acc__body"><p>구멍 · 뒤집힌 면은 Meshmixer, Blender 의 3D Print Toolbox, 슬라이서의 자동 수리 기능으로 고칠 수 있습니다. 고치기 어렵거나 형상까지 손봐야 하면 파일을 보내 주세요. 유어팀이 검토해 바로잡은 뒤 출력합니다.</p></div></details>
+      <details><summary><span class="l">Q2</span>검사를 통과하면 무조건 출력되나요?</summary><div class="acc__body"><p>큰 문제는 없다는 뜻이지만, 받침이 필요한 기울기 · 얇은 벽 · 조립 공차는 형상을 봐야 압니다. 출력 전에 사람이 직접 한 번 더 검토해 드립니다.</p></div></details>
+      <details><summary><span class="l">Q3</span>3D 파일 용량이 너무 커서 메일 · 카톡으로 못 보내요.</summary><div class="acc__body"><p>'분할'에서 10 · 25 · 50 · 100 MB 를 고르면 3D 파일을 ZIP 으로 압축한 뒤 정한 크기로 나눠(분할 압축) 내려받습니다. 받는 사람은 반디집 · 7-Zip 으로 첫 조각(.001)을 열면 됩니다. STL 을 3MF 로 바꾸기만 해도 용량이 보통 크게 줄어듭니다.</p></div></details>
+      <details><summary><span class="l">Q4</span>파일이 서버에 올라가나요?</summary><div class="acc__body"><p>아닙니다. 변환과 미리보기는 모두 지금 쓰시는 브라우저 안에서 처리되고, 파일은 어디에도 전송되지 않습니다. 회사 도면처럼 밖으로 내보내기 어려운 파일도 안심하고 쓰실 수 있습니다.</p></div></details>
+      <details><summary><span class="l">Q5</span>파일 하나에 부품이 여러 개 들어 있으면 어떻게 되나요?</summary><div class="acc__body"><p>3MF 의 여러 물체, OBJ 의 물체 · 그룹(o · g), GLB · glTF 의 노드, 문자 STL 의 여러 solid 를 부품으로 나눠 목록에 보여 줍니다. 부품마다 색이 다르고, 체크를 끄면 화면과 내려받기에서 빠집니다. 내려받을 때는 한 파일에 모두 담거나 부품마다 따로 받을 수 있습니다. 한 덩어리로 저장된 STL 안에 떨어진 조각이 여럿이면 '떨어진 조각으로 나누기' 단추가 나타납니다.</p></div></details>
+      <details><summary><span class="l">Q6</span>무료인가요? 용량 제한이 있나요?</summary><div class="acc__body"><p>무료이고 회원가입도 필요 없습니다. 용량 제한은 따로 없지만, 브라우저 메모리 안에서 처리하므로 수백 MB 를 넘는 파일은 컴퓨터 사양에 따라 느리거나 멈출 수 있습니다.</p></div></details>
+      <details><summary><span class="l">Q7</span>변환하면 색이나 재질도 옮겨지나요?</summary><div class="acc__body"><p>아니요. 이 도구는 형상(모양)만 옮깁니다. 색 · 재질 · 텍스처는 빠집니다. 3D프린팅에는 형상만 있으면 충분합니다.</p></div></details>
+      <details><summary><span class="l">Q8</span>'열린 모서리'가 있다고 나오면 어떻게 하나요?</summary><div class="acc__body"><p>모델에 구멍이 있거나 면이 맞물리지 않은 곳이 있다는 뜻입니다. 이대로는 출력이 잘못될 수 있습니다. 파일을 보내 주시면 수정해서 출력해 드립니다.</p></div></details>
+      <details><summary><span class="l">Q9</span>분할 파일은 어떻게 합치나요?</summary><div class="acc__body"><p>같은 폴더에 모든 조각(.001, .002 …)을 둔 뒤, 반디집이나 7-Zip 에서 첫 조각(.001)을 열고 압축을 풀면 원래 파일이 나옵니다.</p></div></details>
+      <details><summary><span class="l">Q10</span>STEP · SolidWorks · Fusion 360 파일도 되나요?</summary><div class="acc__body"><p>이 페이지에서는 아직 안 됩니다. 파일을 보내 주시면 변환과 출력을 함께 도와드립니다. 원본 프로그램이 있으시면 '내보내기'에서 STL 이나 3MF 로 저장하는 것이 가장 정확합니다.</p></div></details>
+      <details><summary><span class="l">Q11</span>변환한 파일을 실제로 출력할 수 있나요?</summary><div class="acc__body"><p>네. 유어팀이 출력 전에 모델 파일의 문제점(구멍, 얇은 벽, 받침이 필요한 곳 등)을 검토해 피드백을 드리고, FDM · SLA 장비 41대로 출력해 드립니다. 견적은 실제로 쓰인 재료 무게로 산정하고, 보통 3~7일 안에 출고합니다. 변환기에서 연 모델의 크기와 부피는 견적 문의서에 자동으로 채워집니다.</p></div></details>
+    </div>
+  </div>
+</section>
+<section class="sec" id="more">
+  <div class="wrap">
+    <h2 class="h2">다른 무료 3D 도구</h2>
+    <ul class="tl__links"><li><a href="/3d-tools/">무료 3D 도구 모음</a></li><li><a href="/3d-tools/print-weight/">3D프린팅 무게 계산기</a></li><li><a href="/3d-tools/stl-resize/">STL 크기 조절</a></li><li><a href="/3d-tools/filament-calculator/">필라멘트 길이 · 무게 계산기</a></li></ul>
+    <ul class="tl__links"><li><a href="/3d-converter/stl-to-obj/">STL → OBJ</a></li><li><a href="/3d-converter/obj-to-stl/">OBJ → STL</a></li><li><a href="/3d-converter/stl-to-3mf/">STL → 3MF</a></li><li><a href="/3d-converter/3mf-to-stl/">3MF → STL</a></li><li><a href="/3d-converter/stl-to-glb/">STL → GLB</a></li><li><a href="/3d-converter/glb-to-stl/">GLB → STL</a></li><li><a href="/3d-converter/obj-to-glb/">OBJ → GLB</a></li><li><a href="/3d-converter/obj-to-3mf/">OBJ → 3MF</a></li><li><a href="/3d-converter/ply-to-stl/">PLY → STL</a></li><li><a href="/3d-converter/gltf-to-stl/">glTF → STL</a></li><li><a href="/3d-converter/3mf-to-obj/">3MF → OBJ</a></li><li><a href="/3d-converter/glb-to-obj/">GLB → OBJ</a></li><li><a href="/3d-converter/3mf-to-glb/">3MF → GLB</a></li><li><a href="/3d-converter/amf-to-stl/">AMF → STL</a></li><li><a href="/3d-converter/off-to-stl/">OFF → STL</a></li><li><a href="/3d-converter/stl-to-ply/">STL → PLY</a></li></ul>
+    <ul class="tl__links"><li><a href="/3d-converter/">3D 파일 변환기 (모든 형식)</a></li><li><a href="/3d-viewer/">3D 뷰어 (모든 형식)</a></li><li><a href="/3d-converter/split-zip/">3D 파일 분할 압축</a></li><li><a href="/3d-viewer/stl/">STL 뷰어</a></li><li><a href="/3d-viewer/obj/">OBJ 뷰어</a></li><li><a href="/3d-viewer/3mf/">3MF 뷰어</a></li><li><a href="/3d-viewer/glb/">GLB 뷰어</a></li><li><a href="/3d-viewer/ply/">PLY 뷰어</a></li></ul>
+  </div>
+</section>
+<section class="cta">
+  <div class="wrap">
+    <h2 class="h2">3D 프린팅은 유어팀에서 합리적이고 전문적으로</h2>
+    <p class="lead">출력 전에 모델 파일의 문제점을 검토해 피드백을 드리고, 바로잡은 모델로 출력까지 진행합니다. FDM · SLA 장비 41대로 시제품 · 부품 · 굿즈를 만들고, 견적은 재료 무게로 산정합니다.</p>
+    <div class="btns"><a class="btn btn--blue btn--lg" href="/3d-printing/#quote">파일 검토 · 출력 견적 받기</a><a class="btn btn--ghost btn--lg" href="/3d-printing/">3D프린팅 제작 보기</a></div>
+  </div>
+</section>
