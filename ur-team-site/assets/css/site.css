@@ -2228,6 +2228,8 @@ a.prod:hover b { color: var(--accent); }
 .tl-top .lead { margin-top: 14px; max-width: 40em; }
 .tl { padding-bottom: clamp(48px, 6vw, 88px); }
 .tl__grid { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 4fr); gap: clamp(16px, 2.4vw, 32px); align-items: start; }
+/* 오른쪽 설정 칸이 더 길 때 왼쪽이 비지 않게, 3D 화면이 스크롤을 따라온다 */
+@media (min-width: 861px) { .tl__left { position: sticky; top: calc(var(--hd) + 16px); } }
 .tl__drop { position: relative; display: grid; gap: 4px; padding: 18px 20px; border: 2px dashed var(--line-2); background: var(--bg-2); cursor: pointer; transition: border-color .2s, background .2s; }
 .tl__drop:hover, .tl__drop.is-over { border-color: var(--accent); background: #f2f5ff; }
 .tl__drop input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
