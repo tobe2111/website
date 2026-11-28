@@ -452,6 +452,7 @@ const PAGE_TOPIC = {
   "/marketing/blog-marketing/": ["블로그 · 콘텐츠", (p) => /blog/.test(p.slug) && p.category === "블로그 · 콘텐츠"],
   "/marketing/experience/": ["블로그 · 콘텐츠", (p) => /experience|influencer/.test(p.slug)],
   "/marketing/press/": ["블로그 · 콘텐츠", (p) => /press/.test(p.slug)],
+  "/3d-printing/": ["3D프린팅", (p) => p.category === "3D프린팅"],
   "/marketing/hospital/": ["병원 마케팅", (p) => p.category === "병원 마케팅" && !/global-patient|foreign-patient|xiaohongshu/.test(p.slug)],
   "/marketing/global-patients/": ["병원 마케팅", (p) => /global-patient|foreign-patient|xiaohongshu|douyin|wanghong/.test(p.slug)],
   "/distribution/": [["국내 유통", (p) => p.category === "국내 유통"], ["해외 수출", (p) => p.category === "해외 수출"]],
@@ -484,7 +485,7 @@ function blogList(lang) {
   if (!list.length) return `<p class="empty">${t.blogEmpty}</p>`;
   // 분류 버튼: 글이 많아져도 원하는 주제만 골라 보게
   // 버튼 순서는 여기 적힌 대로(광고 → 지역 → 콘텐츠 → 전략 → 병원 → 유통 → 수출). 목록에 없는 분류는 뒤에 붙는다
-  const ORDER = ["네이버 광고", "구글 · 인스타그램 광고", "당근 · 지역 마케팅", "블로그 · 콘텐츠", "마케팅 전략 · 성과", "병원 마케팅", "국내 유통", "해외 수출"];
+  const ORDER = ["네이버 광고", "구글 · 인스타그램 광고", "당근 · 지역 마케팅", "블로그 · 콘텐츠", "마케팅 전략 · 성과", "병원 마케팅", "국내 유통", "해외 수출", "3D프린팅"];
   const rank = (c) => { const i = ORDER.indexOf(c); return i < 0 ? ORDER.length : i; };
   const cats = [...list.reduce((m, p) => m.set(p.category || t.blogDefaultCategory, (m.get(p.category || t.blogDefaultCategory) || 0) + 1), new Map())].sort((a, b) => rank(a[0]) - rank(b[0]));
   const bar = cats.length > 1 ? `<div class="pfilter" role="group" aria-label="${lang === "en" ? "Filter by topic" : "주제별로 보기"}"><button type="button" aria-pressed="true" data-f="all">${lang === "en" ? "All" : "전체"} <span>${list.length}</span></button>` +
