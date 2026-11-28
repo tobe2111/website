@@ -993,12 +993,58 @@ CREATE TABLE IF NOT EXISTS billing_payments (
   created_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_billpay_assoc ON billing_payments(association_id, id);
+
+-- 3D프린팅 제작 대행 견적 문의(유어팀 자체 상품 · print.js). 조직(associations)과 무관한 운영사 장부.
+-- 파일은 R2 'print/…' 키에 비공개로 둔다(공개 미디어 경로로는 열리지 않는다).
+CREATE TABLE IF NOT EXISTS print_requests (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  code          TEXT NOT NULL UNIQUE,
+  status        TEXT NOT NULL DEFAULT 'new',
+  name          TEXT NOT NULL,
+  company       TEXT NOT NULL DEFAULT '',
+  phone         TEXT NOT NULL DEFAULT '',
+  email         TEXT NOT NULL DEFAULT '',
+  material      TEXT NOT NULL DEFAULT 'pla',
+  color         TEXT NOT NULL DEFAULT '',
+  deadline      TEXT NOT NULL DEFAULT '',
+  memo          TEXT NOT NULL DEFAULT '',
+  est_low       INTEGER NOT NULL DEFAULT 0,
+  est_high      INTEGER NOT NULL DEFAULT 0,
+  vendor        TEXT NOT NULL DEFAULT '',
+  fx            REAL NOT NULL DEFAULT 0,
+  ship_usd      REAL NOT NULL DEFAULT 0,
+  duty_pct      REAL NOT NULL DEFAULT 0,
+  domestic_krw  INTEGER NOT NULL DEFAULT 0,
+  margin_pct    REAL NOT NULL DEFAULT 0,
+  quote_total   INTEGER NOT NULL DEFAULT 0,
+  vendor_order_no TEXT NOT NULL DEFAULT '',
+  tracking_no   TEXT NOT NULL DEFAULT '',
+  admin_memo    TEXT NOT NULL DEFAULT '',
+  parent_id     INTEGER,
+  ip            TEXT NOT NULL DEFAULT '',
+  created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_print_status ON print_requests(status, id);
+CREATE TABLE IF NOT EXISTS print_files (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  request_id  INTEGER NOT NULL REFERENCES print_requests(id) ON DELETE CASCADE,
+  filename    TEXT NOT NULL,
+  r2_key      TEXT NOT NULL DEFAULT '',
+  size        INTEGER NOT NULL DEFAULT 0,
+  qty         INTEGER NOT NULL DEFAULT 1,
+  volume      REAL NOT NULL DEFAULT 0,
+  size_mm     TEXT NOT NULL DEFAULT '',
+  cost_usd    REAL NOT NULL DEFAULT 0,
+  unit_price  INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_print_files_req ON print_files(request_id);
 `;
 
 // 표가 없으면 DDL 을 적용 (idempotent). 이미 있으면 새 컬럼만 경량 마이그레이션.
 // 마이그레이션 세대 — migrateColumns 에 단계를 추가할 때마다 +1
 // 36 = 두 갈래(트렁크 33 · 모집형 35)를 합친 세대. 양쪽 DB 모두 다시 한 번 마이그레이션을 타게 한다.
-export const SCHEMA_VERSION = "57";
+export const SCHEMA_VERSION = "58";
 
 // ⚠️ 이 숫자를 올리는 걸 잊으면 **마이그레이션이 통째로 안 돈다.**
 //
@@ -1688,6 +1734,50 @@ async function migrateColumns(db) {
   created_at     TEXT NOT NULL DEFAULT (datetime('now')))`).run();
   await db.prepare("CREATE INDEX IF NOT EXISTS idx_sub_due ON subscriptions(status, next_charge_on)").run();
   await db.prepare("CREATE INDEX IF NOT EXISTS idx_billpay_assoc ON billing_payments(association_id, id)").run();
+  // v58: 3D프린팅 견적 문의 (print.js)
+  await db.prepare(`CREATE TABLE IF NOT EXISTS print_requests (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  code          TEXT NOT NULL UNIQUE,
+  status        TEXT NOT NULL DEFAULT 'new',
+  name          TEXT NOT NULL,
+  company       TEXT NOT NULL DEFAULT '',
+  phone         TEXT NOT NULL DEFAULT '',
+  email         TEXT NOT NULL DEFAULT '',
+  material      TEXT NOT NULL DEFAULT 'pla',
+  color         TEXT NOT NULL DEFAULT '',
+  deadline      TEXT NOT NULL DEFAULT '',
+  memo          TEXT NOT NULL DEFAULT '',
+  est_low       INTEGER NOT NULL DEFAULT 0,
+  est_high      INTEGER NOT NULL DEFAULT 0,
+  vendor        TEXT NOT NULL DEFAULT '',
+  fx            REAL NOT NULL DEFAULT 0,
+  ship_usd      REAL NOT NULL DEFAULT 0,
+  duty_pct      REAL NOT NULL DEFAULT 0,
+  domestic_krw  INTEGER NOT NULL DEFAULT 0,
+  margin_pct    REAL NOT NULL DEFAULT 0,
+  quote_total   INTEGER NOT NULL DEFAULT 0,
+  vendor_order_no TEXT NOT NULL DEFAULT '',
+  tracking_no   TEXT NOT NULL DEFAULT '',
+  admin_memo    TEXT NOT NULL DEFAULT '',
+  parent_id     INTEGER,
+  ip            TEXT NOT NULL DEFAULT '',
+  created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
+)`).run();
+  await db.prepare("CREATE INDEX IF NOT EXISTS idx_print_status ON print_requests(status, id)").run();
+  await db.prepare(`CREATE TABLE IF NOT EXISTS print_files (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  request_id  INTEGER NOT NULL REFERENCES print_requests(id) ON DELETE CASCADE,
+  filename    TEXT NOT NULL,
+  r2_key      TEXT NOT NULL DEFAULT '',
+  size        INTEGER NOT NULL DEFAULT 0,
+  qty         INTEGER NOT NULL DEFAULT 1,
+  volume      REAL NOT NULL DEFAULT 0,
+  size_mm     TEXT NOT NULL DEFAULT '',
+  cost_usd    REAL NOT NULL DEFAULT 0,
+  unit_price  INTEGER NOT NULL DEFAULT 0
+)`).run();
+  await db.prepare("CREATE INDEX IF NOT EXISTS idx_print_files_req ON print_files(request_id)").run();
 
   await romanizeSlugs(db);
 

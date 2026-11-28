@@ -28,7 +28,8 @@
     "clinic:build": "node clinic/build.mjs",
     "test:clinic": "node --test clinic/test/*.test.mjs",
     "clinic:og": "node clinic/scripts/og.mjs",
-    "clinic:a11y": "node clinic/scripts/a11y.mjs"
+    "clinic:a11y": "node clinic/scripts/a11y.mjs",
+    "test:print": "node --experimental-sqlite cloudflare/test-e2e/print-drill.mjs"
   },
   "license": "MIT"
 }

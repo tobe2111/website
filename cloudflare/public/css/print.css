@@ -1,0 +1,53 @@
+/* 3D프린팅 견적 화면(/print) 전용 — hp.css 위에 이 화면에 필요한 것만 더한다.
+   app.css(엔진 6천 줄)는 건드리지 않는다. 운영자 화면 조각(.pr-calc 등)은 print-admin 에서 인라인으로 쓴다. */
+.pr-hero { padding: calc(var(--hd) + clamp(40px, 6vw, 88px)) 0 clamp(24px, 3vw, 40px); }
+.pr-hero .h1 { margin: 0 0 18px; }
+.pr-grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 32px; align-items: start; }
+.pr-form { margin: 0; }
+.pr-alert { margin: 0; padding: 12px 14px; border-left: 3px solid var(--accent); background: var(--bg); font-weight: 600; }
+.pr-alert--err { border-left-color: #c62828; }
+.pr-drop { position: relative; display: grid; gap: 4px; justify-items: center; padding: 28px 16px; text-align: center;
+  border: 1.5px dashed var(--line-2); background: var(--bg); cursor: pointer; transition: border-color .2s; }
+.pr-drop:hover, .pr-drop:focus-within { border-color: var(--accent); }
+.pr-drop input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.form .pr-drop b { font-size: 16px; color: var(--accent); }
+.pr-drop span { font-size: 13px; font-weight: 400; color: var(--muted); }
+.pr-files { display: grid; gap: 8px; }
+.pr-file { display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: var(--bg); border: 1px solid var(--line); }
+.pr-file__n { flex: 1; min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
+.pr-file__d { display: block; font-weight: 400; color: var(--muted); }
+.form .pr-file__q { display: flex; align-items: center; gap: 6px; font-weight: 400; }
+.pr-file__q input { width: 84px; }
+.form select { width: 100%; min-height: 52px; padding: 12px 16px; font: inherit; font-size: 16px; font-weight: 400; color: var(--ink);
+  background: var(--bg); border: 1px solid var(--line-2); border-radius: var(--r); }
+.pr-note { margin: -12px 0 0; font-size: 13px; color: var(--muted); }
+.pr-est { position: sticky; top: calc(var(--hd) + 16px); padding: 24px; background: var(--dark); color: var(--on-dark); }
+.pr-est__k { margin: 0; font-size: 13px; color: var(--on-dark-2); }
+.pr-est__v { margin: 6px 0 2px; font-size: 24px; font-weight: 700; letter-spacing: -.02em; line-height: 1.35; }
+.pr-est__s { margin: 0 0 14px; font-size: 13px; color: var(--on-dark-2); }
+.pr-est__list { margin: 0 0 12px; padding: 12px 0 0; list-style: none; border-top: 1px solid rgba(255,255,255,.14); font-size: 13px; }
+.pr-est__list li { padding: 3px 0; overflow-wrap: anywhere; }
+.pr-est__warn { margin: 0 0 12px; padding: 10px; font-size: 13px; background: rgba(255, 196, 0, .14); color: #ffe08a; }
+.pr-est__fine { margin: 0; font-size: 12px; line-height: 1.6; color: var(--on-dark-2); }
+.pr-steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin: 24px 0 0; padding: 0; list-style: none; counter-reset: s; }
+.pr-steps li { counter-increment: s; padding: 20px; background: var(--bg-2); }
+.pr-steps li::before { content: counter(s); display: block; font-size: 13px; color: var(--accent); font-weight: 700; margin-bottom: 6px; }
+.pr-steps b { display: block; font-size: 16px; }
+.pr-steps span { font-size: 14px; color: var(--muted); }
+.pr-mats { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-top: 24px; }
+.pr-mat { padding: 18px; border: 1px solid var(--line); }
+.pr-mat b { font-size: 16px; }
+.pr-mat__p { margin-left: 8px; font-size: 12px; color: var(--muted); }
+.pr-mat p { margin: 6px 0 0; font-size: 14px; color: var(--ink-2); }
+.pr-faq { border-bottom: 1px solid var(--line); padding: 16px 0; }
+.pr-faq summary { cursor: pointer; font-weight: 600; font-size: 16px; }
+.pr-faq p { margin: 10px 0 0; color: var(--ink-2); }
+@media (max-width: 900px) {
+  .pr-grid { grid-template-columns: 1fr; }
+  .pr-est { position: static; order: -1; }
+  .pr-steps { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 520px) {
+  .pr-steps { grid-template-columns: 1fr; }
+  .pr-file { flex-wrap: wrap; }
+}
