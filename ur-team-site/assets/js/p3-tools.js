@@ -543,7 +543,14 @@
     } catch (e) { say(L.fail + (e.message || e), true); }
   }
   // 변환이 끝나면 출력 제안을 띄운다
-  function offer(on) { const o = $("[data-offer]"); if (!o) return; o.hidden = !on; if (on) o.scrollIntoView({ block: "nearest", behavior: "smooth" }); }
+  // 내려받기가 시작된 뒤 잠깐 있다가 팝업으로 띄운다. 파일을 새로 열 때까지 한 번만
+  let offered = false;
+  function offer(on) {
+    const o = $("[data-offer]"); if (!o || !o.showModal) return;
+    if (!on) { offered = false; if (o.open) o.close(); return; }
+    if (offered) return; offered = true;
+    setTimeout(() => { if (!o.open) o.showModal(); }, 600);
+  }
   const pick = $("input[type=file]"), zone = $("[data-drop]");
   pick.addEventListener("change", () => load(pick.files));
   zone.addEventListener("dragover", (e) => { e.preventDefault(); zone.classList.add("is-over"); });
@@ -560,7 +567,8 @@
       parts = next; upload(); refresh(); $("[data-islands]").hidden = true; say(L.manyParts(parts.length));
     }, 20);
   });
-  $("[data-offer-close]")?.addEventListener("click", () => offer(false));
+  root.querySelectorAll("[data-offer-close]").forEach((b) => b.addEventListener("click", () => $("[data-offer]").close()));
+  $("[data-offer]")?.addEventListener("click", (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); }); // 바깥 어두운 곳을 누르면 닫기
   const preset = root.dataset.preset; if (preset && W[preset]) $("[data-to]").value = preset;
   if (root.dataset.presetSplit) $("[data-split]").value = root.dataset.presetSplit;
 })();

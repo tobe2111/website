@@ -2260,11 +2260,20 @@ a.prod:hover b { color: var(--accent); }
 .tl__fmt thead th { border-bottom: 1px solid var(--ink); font-size: 14px; color: var(--muted); font-weight: 600; }
 .tl__fmt tbody th { width: 10em; font-weight: 600; padding-left: 0; }
 .tl__steps { margin: 16px 0 0; padding-left: 1.3em; display: grid; gap: 8px; max-width: 44em; }
-.tl__offer { margin-top: 12px; padding: 16px 18px; background: #eef3ff; border-left: 3px solid var(--accent); display: grid; gap: 6px; }
-.tl__offer b { font-size: 17px; letter-spacing: -.02em; }
-.tl__offer p { font-size: 14px; color: var(--ink-2, #353b44); }
-.tl__offer-btns { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 4px; }
-.tl__x { margin-left: auto; padding: 6px 8px; border: 0; background: none; font: inherit; font-size: 13px; color: var(--muted); cursor: pointer; text-decoration: underline; }
+.tl__pop { width: min(520px, calc(100% - 32px)); max-height: calc(100% - 32px); padding: 32px 28px 26px; border: 0; border-top: 4px solid var(--accent); background: #fff; color: var(--ink); box-shadow: 0 24px 60px rgba(15, 18, 22, .28); }
+.tl__pop::backdrop { background: rgba(15, 18, 22, .55); }
+.tl__pop[open] { animation: tlpop .22s ease-out; }
+@keyframes tlpop { from { opacity: 0; transform: translateY(12px); } }
+@media (prefers-reduced-motion: reduce) { .tl__pop[open] { animation: none; } }
+.tl__pop-k { font-size: 14px; font-weight: 600; color: var(--accent); }
+.tl__pop h2 { margin-top: 6px; font-size: clamp(21px, 3vw, 25px); line-height: 1.35; letter-spacing: -.03em; font-weight: 700; }
+.tl__pop > p:not(.tl__pop-k) { margin-top: 10px; font-size: 15px; color: var(--ink-2); }
+.tl__pop ul { margin: 14px 0 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
+.tl__pop li { padding: 9px 0 9px 18px; border-bottom: 1px solid var(--line); font-size: 14.5px; position: relative; }
+.tl__pop li::before { content: ""; position: absolute; left: 2px; top: 17px; width: 6px; height: 6px; background: var(--accent); }
+.tl__pop-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+.tl__pop-btns .btn { flex: 1 1 180px; justify-content: center; }
+.tl__pop-x { position: absolute; top: 8px; right: 10px; width: 40px; height: 40px; border: 0; background: none; font-size: 26px; line-height: 1; color: var(--muted); cursor: pointer; }
 .tl__parts { margin-bottom: 4px; }
 .tl__h small { font-weight: 400; margin-left: 6px; }
 .tl__pbar { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
